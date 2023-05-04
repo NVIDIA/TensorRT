@@ -74,7 +74,7 @@ void dumpBuffer(void const* buffer, std::string const& separator, std::ostream& 
 
 void loadFromFile(std::string const& fileName, char* dst, size_t size);
 
-std::vector<std::string> splitToStringVec(std::string const& option, char separator);
+std::vector<std::string> splitToStringVec(std::string const& option, char separator, int64_t maxSplit = -1);
 
 bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings, bool isInput = true);
 
@@ -99,6 +99,28 @@ void sparsifyMatMulKernelWeights(
 
 template <typename T>
 void transpose2DWeights(void* dst, void const* src, int32_t const m, int32_t const n);
+
+//! A helper function to match a target string with a pattern where the pattern can contain up to one wildcard ('*')
+//! character that matches to any strings.
+bool matchStringWithOneWildcard(std::string const& pattern, std::string const& target);
+
+//! A helper method to find an item from an unordered_map. If the exact match exists, this is identical to
+//! map.find(target). If the exact match does not exist, it returns the first plausible match, taking up to one wildcard
+//! into account. If there is no plausible match, then it returns map.end().
+template <typename T>
+typename std::unordered_map<std::string, T>::const_iterator findPlausible(
+    std::unordered_map<std::string, T> const& map, std::string const& target)
+{
+    auto res = map.find(target);
+    if (res == map.end())
+    {
+        res = std::find_if(
+            map.begin(), map.end(), [&](typename std::unordered_map<std::string, T>::value_type const& item) {
+                return matchStringWithOneWildcard(item.first, target);
+            });
+    }
+    return res;
+}
 
 } // namespace sample
 

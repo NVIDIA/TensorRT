@@ -38,6 +38,7 @@
 #include "NvInfer.h"
 
 #include "ErrorRecorder.h"
+#include "bfloat16.h"
 #include "logger.h"
 #include "sampleDevice.h"
 #include "sampleEngines.h"
@@ -50,8 +51,7 @@ namespace sample
 {
 
 template <class MapType, class EngineType>
-bool validateTensorNames(
-    MapType const& map, EngineType const* engine, int32_t const endBindingIndex)
+bool validateTensorNames(MapType const& map, EngineType const* engine, int32_t const endBindingIndex)
 {
     // Check if the provided input tensor names match the input tensors of the engine.
     // Throw an error if the provided input tensor names cannot be found because it implies a potential typo.
@@ -60,7 +60,7 @@ bool validateTensorNames(
         bool tensorNameFound{false};
         for (int32_t b = 0; b < endBindingIndex; ++b)
         {
-            if (engine->bindingIsInput(b) && engine->getBindingName(b) == item.first)
+            if (engine->bindingIsInput(b) && matchStringWithOneWildcard(item.first, engine->getBindingName(b)))
             {
                 tensorNameFound = true;
                 break;
@@ -96,7 +96,7 @@ private:
         auto const* bindingInOutStr = tensorInfo.isInput ? "Input" : "Output";
         for (auto& binding : bindings)
         {
-            auto const input = inputs.find(name);
+            auto const input = findPlausible(inputs, name);
             if (tensorInfo.isInput && input != inputs.end())
             {
                 sample::gLogInfo << "Using values loaded from " << input->second << " for input " << name << std::endl;
@@ -166,14 +166,14 @@ template <>
 void FillBindingClosure<nvinfer1::ICudaEngine, nvinfer1::IExecutionContext>::getTensorInfo(TensorInfo& tensorInfo)
 {
     auto const b = tensorInfo.bindingIndex;
-    auto const name = engine->getBindingName(b);
+    auto const name = engine->getIOTensorName(b);
     tensorInfo.name = name;
     if (engine->hasImplicitBatchDimension())
     {
         tensorInfo.dims = context->getBindingDimensions(b);
-        tensorInfo.comps = engine->getBindingComponentsPerElement(b);
+        tensorInfo.comps = engine->getTensorComponentsPerElement(name);
         tensorInfo.strides = context->getStrides(b);
-        tensorInfo.vectorDimIndex = engine->getBindingVectorizedDim(b);
+        tensorInfo.vectorDimIndex = engine->getTensorVectorizedDim(name);
         tensorInfo.isInput = engine->bindingIsInput(b);
         tensorInfo.dataType = engine->getBindingDataType(b);
     }
@@ -263,6 +263,26 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     // Release serialized blob to save memory space.
     iEnv.engine.releaseBlob();
 
+    int32_t const nbOptProfiles = engine->getNbOptimizationProfiles();
+
+    if (inference.optProfileIndex >= nbOptProfiles)
+    {
+        sample::gLogError << "Selected profile index " << inference.optProfileIndex
+                          << " exceeds the number of profiles that the engine holds. " << std::endl;
+        return false;
+    }
+
+    if (nbOptProfiles > 1 && !inference.setOptProfile)
+    {
+        sample::gLogWarning << nbOptProfiles
+                            << " profiles detected but not set. Running with profile 0. Please use "
+                               "--dumpOptimizationProfile to see all available profiles."
+                            << std::endl;
+    }
+
+    cudaStream_t setOptProfileStream;
+    CHECK(cudaStreamCreate(&setOptProfileStream));
+
     for (int32_t s = 0; s < inference.infStreams; ++s)
     {
         auto ec = engine->createExecutionContext();
@@ -278,9 +298,27 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
         sample::gLogInfo << "Setting persistentCacheLimit to " << persistentCacheLimit << " bytes." << std::endl;
         ec->setPersistentCacheLimit(persistentCacheLimit);
 
+        auto setProfile = ec->setOptimizationProfileAsync(inference.optProfileIndex, setOptProfileStream);
+        CHECK(cudaStreamSynchronize(setOptProfileStream));
+
+        if (!setProfile)
+        {
+            sample::gLogError << "Set optimization profile failed. " << std::endl;
+            if (inference.infStreams > 1)
+            {
+                sample::gLogError
+                    << "Please ensure that the engine is built with preview feature profileSharing0806 enabled. "
+                    << std::endl;
+            }
+            return false;
+        }
+
         iEnv.contexts.emplace_back(ec);
         iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
     }
+
+    CHECK(cudaStreamDestroy(setOptProfileStream));
+
     if (iEnv.profiler)
     {
         iEnv.contexts.front()->setProfiler(iEnv.profiler.get());
@@ -288,13 +326,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
         iEnv.contexts.front()->setEnqueueEmitsProfile(false);
     }
 
-    int32_t const nbOptProfiles = engine->getNbOptimizationProfiles();
     int32_t const endBindingIndex = engine->getNbIOTensors();
-
-    if (nbOptProfiles > 1)
-    {
-        sample::gLogWarning << "Multiple profiles are currently not supported. Running with one profile." << std::endl;
-    }
 
     // Make sure that the tensor names provided in command-line args actually exist in any of the engine bindings
     // to avoid silent typos.
@@ -318,16 +350,9 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
         {
             Dims const dims = iEnv.contexts.front()->getTensorShape(name);
             bool isShapeInferenceIO{false};
-            if (useEnqueueV3)
-            {
-                isShapeInferenceIO = engine->isShapeInferenceIO(name);
-            }
-            else
-            {
-                isShapeInferenceIO = engine->isShapeBinding(b);
-            }
+            isShapeInferenceIO = engine->isShapeInferenceIO(name);
             bool const hasRuntimeDim = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; });
-            auto const shape = inference.shapes.find(name);
+            auto const shape = findPlausible(inference.shapes, name);
             if (hasRuntimeDim || isShapeInferenceIO)
             {
                 // Set shapeData to either dimensions of the input (if it has a dynamic shape)
@@ -385,6 +410,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                     {
                         if (isShapeInferenceIO)
                         {
+                            sample::gLogInfo << "Set input shape tensor " << name << " to: " << shapeData << std::endl;
                             if (!c->setTensorAddress(name, shapeTensorData))
                             {
                                 return false;
@@ -392,6 +418,8 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                         }
                         else
                         {
+                            sample::gLogInfo << "Set shape of input tensor " << name << " to: " << shapeData
+                                             << std::endl;
                             if (!c->setInputShape(name, toDims(shapeData)))
                             {
                                 return false;
@@ -402,6 +430,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                     {
                         if (isShapeInferenceIO)
                         {
+                            sample::gLogInfo << "Set input shape tensor " << name << " to: " << shapeData << std::endl;
                             if (!c->setInputShapeBinding(b, shapeTensorData))
                             {
                                 return false;
@@ -424,6 +453,8 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                 {
                     if (!c->setInputShape(name, toDims(shape->second)))
                     {
+                        sample::gLogError << "The engine was built with static shapes for input tensor " << name
+                                          << " but the provided shapes do not match the static shapes!" << std::endl;
                         return false;
                     }
                 }
@@ -658,6 +689,7 @@ public:
     }
 
     nvinfer1::safe::IExecutionContext& mContext;
+
 private:
     Bindings const& mBindings;
 };
@@ -922,7 +954,6 @@ private:
             mGraph.endCapture(stream);
             mEnqueue = EnqueueFunction(EnqueueGraphSafe(mGraph));
         }
-
     }
 
     Bindings& mBindings;
@@ -1006,7 +1037,8 @@ bool inferenceLoop(std::vector<std::unique_ptr<Iteration<ContextType>>>& iStream
 
 template <class ContextType>
 void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment& iEnv, SyncStruct& sync,
-    int32_t const threadIdx, int32_t const streamsPerThread, int32_t device, std::vector<InferenceTrace>& trace) noexcept
+    int32_t const threadIdx, int32_t const streamsPerThread, int32_t device,
+    std::vector<InferenceTrace>& trace) noexcept
 {
     try
     {
@@ -1039,8 +1071,8 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
         }
 
         std::vector<InferenceTrace> localTrace;
-        if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs, localTrace,
-                inference.skipTransfers, inference.idle))
+        if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs,
+                localTrace, inference.skipTransfers, inference.idle))
         {
             sync.mutex.lock();
             iEnv.error = true;
@@ -1059,7 +1091,7 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
         trace.insert(trace.end(), localTrace.begin(), localTrace.end());
         sync.mutex.unlock();
     }
-    catch(...)
+    catch (...)
     {
         sync.mutex.lock();
         iEnv.error = true;
@@ -1198,9 +1230,10 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
         engine.reset(nullptr);
         safeEngine.reset(nullptr);
         auto startClock = std::chrono::high_resolution_clock::now();
+        auto& engineBlob = iEnv.engine.getBlob();
         if (iEnv.safe)
         {
-            safeEngine.reset(safeRT->deserializeCudaEngine(iEnv.engine.getBlob().data(), iEnv.engine.getBlob().size()));
+            safeEngine.reset(safeRT->deserializeCudaEngine(engineBlob.data, engineBlob.size));
             deserializeOK = (safeEngine != nullptr);
         }
         else
@@ -1209,8 +1242,7 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
             {
                 rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
             }
-            engine.reset(
-                rt->deserializeCudaEngine(iEnv.engine.getBlob().data(), iEnv.engine.getBlob().size(), nullptr));
+            engine.reset(rt->deserializeCudaEngine(engineBlob.data, engineBlob.size));
             deserializeOK = (engine != nullptr);
         }
         auto endClock = std::chrono::high_resolution_clock::now();
@@ -1301,6 +1333,11 @@ void Binding::fill()
         fillBuffer<int32_t>(buffer->getHostBuffer(), volume, -128, 127);
         break;
     }
+    case nvinfer1::DataType::kINT64:
+    {
+        fillBuffer<int64_t>(buffer->getHostBuffer(), volume, -128, 127);
+        break;
+    }
     case nvinfer1::DataType::kINT8:
     {
         fillBuffer<int8_t>(buffer->getHostBuffer(), volume, -128, 127);
@@ -1314,6 +1351,11 @@ void Binding::fill()
     case nvinfer1::DataType::kHALF:
     {
         fillBuffer<__half>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
+        break;
+    }
+    case nvinfer1::DataType::kBF16:
+    {
+        fillBuffer<BFloat16>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
         break;
     }
     case nvinfer1::DataType::kUINT8:
@@ -1364,12 +1406,18 @@ void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim,
         dumpBuffer<__half>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
+    case nvinfer1::DataType::kBF16:
+    {
+        dumpBuffer<BFloat16>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
     case nvinfer1::DataType::kUINT8:
     {
         dumpBuffer<uint8_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
     case nvinfer1::DataType::kFP8: ASSERT(!"FP8 is not supported");
+    case nvinfer1::DataType::kINT64: ASSERT(false && "Unsupported data type");
     }
 }
 
@@ -1474,13 +1522,14 @@ void Bindings::transferOutputToHost(TrtCudaStream& stream)
 }
 
 template <>
-void Bindings::dumpBindingValues<nvinfer1::IExecutionContext>(nvinfer1::IExecutionContext const& context, int32_t binding, std::ostream& os,
-    std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
+void Bindings::dumpBindingValues<nvinfer1::IExecutionContext>(nvinfer1::IExecutionContext const& context,
+    int32_t binding, std::ostream& os, std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
 {
     Dims dims = context.getBindingDimensions(binding);
     Dims strides = context.getStrides(binding);
-    int32_t vectorDim = context.getEngine().getBindingVectorizedDim(binding);
-    int32_t const spv = context.getEngine().getBindingComponentsPerElement(binding);
+    auto const tensorName = context.getEngine().getIOTensorName(binding);
+    int32_t vectorDim = context.getEngine().getTensorVectorizedDim(tensorName);
+    int32_t const spv = context.getEngine().getTensorComponentsPerElement(tensorName);
 
     if (context.getEngine().hasImplicitBatchDimension())
     {
@@ -1507,7 +1556,8 @@ void Bindings::dumpBindingValues<nvinfer1::IExecutionContext>(nvinfer1::IExecuti
     mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
 }
 
-namespace {
+namespace
+{
 
 std::string genFilenameSafeString(std::string const& s)
 {
@@ -1539,21 +1589,6 @@ template <>
 Dims getBindingDimensions(nvinfer1::safe::IExecutionContext const& context, int32_t binding)
 {
     return context.getEngine().getBindingDimensions(binding);
-}
-
-inline std::ostream& operator<<(std::ostream& o, nvinfer1::DataType dt)
-{
-    switch (dt)
-    {
-    case DataType::kINT32: o << "Int32"; break;
-    case DataType::kFLOAT: o << "Float"; break;
-    case DataType::kHALF: o << "Half"; break;
-    case DataType::kINT8: o << "Int8"; break;
-    case DataType::kUINT8: o << "UInt8"; break;
-    case DataType::kBOOL: o << "Bool"; break;
-    case DataType::kFP8: o << "Float8"; break;
-    }
-    return o;
 }
 
 } // namespace
@@ -1590,10 +1625,11 @@ void Bindings::dumpRawBindingToFiles(ContextType const& context, std::ostream& o
         std::string const bindingTypeStr = (binding.isInput ? "input" : "output");
 
         std::stringstream fileName;
-        fileName << genFilenameSafeString(name) << "." << bindingTypeStr << "." << dimsStr << "." << binding.dataType << ".raw";
+        fileName << genFilenameSafeString(name) << "." << bindingTypeStr << "." << dimsStr << "." << binding.dataType
+                 << ".raw";
 
         os << "Writing file for " << bindingTypeStr << " binding " << name << " (with datatype " << binding.dataType
-            << " and dimensions " << dimsStr << ") to " << fileName.str() << std::endl;
+           << " and dimensions " << dimsStr << ") to " << fileName.str() << std::endl;
 
         std::ofstream f(fileName.str(), std::ios::out | std::ios::binary);
         ASSERT(f && "Cannot open file for write");
@@ -1602,11 +1638,12 @@ void Bindings::dumpRawBindingToFiles(ContextType const& context, std::ostream& o
     }
 }
 
-template
-void Bindings::dumpRawBindingToFiles<nvinfer1::IExecutionContext>(nvinfer1::IExecutionContext const& context, std::ostream& os) const;
+template void Bindings::dumpRawBindingToFiles<nvinfer1::IExecutionContext>(
+    nvinfer1::IExecutionContext const& context, std::ostream& os) const;
 
 template <>
-void Bindings::dumpBindingDimensions<nvinfer1::IExecutionContext>(int binding, nvinfer1::IExecutionContext const& context, std::ostream& os) const
+void Bindings::dumpBindingDimensions<nvinfer1::IExecutionContext>(
+    int binding, nvinfer1::IExecutionContext const& context, std::ostream& os) const
 {
     auto const dims = context.getBindingDimensions(binding);
     // Do not add a newline terminator, because the caller may be outputting a JSON string.
@@ -1614,7 +1651,8 @@ void Bindings::dumpBindingDimensions<nvinfer1::IExecutionContext>(int binding, n
 }
 
 template <>
-void Bindings::dumpBindingDimensions<nvinfer1::safe::IExecutionContext>(int binding, nvinfer1::safe::IExecutionContext const& context, std::ostream& os) const
+void Bindings::dumpBindingDimensions<nvinfer1::safe::IExecutionContext>(
+    int binding, nvinfer1::safe::IExecutionContext const& context, std::ostream& os) const
 {
     auto const dims = context.getEngine().getBindingDimensions(binding);
     // Do not add a newline terminator, because the caller may be outputting a JSON string.
@@ -1622,19 +1660,20 @@ void Bindings::dumpBindingDimensions<nvinfer1::safe::IExecutionContext>(int bind
 }
 
 template <>
-void Bindings::dumpBindingValues<nvinfer1::safe::IExecutionContext>(nvinfer1::safe::IExecutionContext const& context, int32_t binding, std::ostream& os,
-    std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
+void Bindings::dumpBindingValues<nvinfer1::safe::IExecutionContext>(nvinfer1::safe::IExecutionContext const& context,
+    int32_t binding, std::ostream& os, std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
 {
     Dims const dims = context.getEngine().getBindingDimensions(binding);
     Dims const strides = context.getStrides(binding);
-    int32_t const vectorDim = context.getEngine().getBindingVectorizedDim(binding);
-    int32_t const spv = context.getEngine().getBindingComponentsPerElement(binding);
+    auto const tensorName = context.getEngine().getIOTensorName(binding);
+    int32_t const vectorDim = context.getEngine().getTensorVectorizedDim(tensorName);
+    int32_t const spv = context.getEngine().getTensorComponentsPerElement(tensorName);
 
     mBindings[binding].dump(os, dims, strides, vectorDim, spv, separator);
 }
 
-template
-void Bindings::dumpRawBindingToFiles<nvinfer1::safe::IExecutionContext>(nvinfer1::safe::IExecutionContext const& context, std::ostream& os) const;
+template void Bindings::dumpRawBindingToFiles<nvinfer1::safe::IExecutionContext>(
+    nvinfer1::safe::IExecutionContext const& context, std::ostream& os) const;
 
 std::unordered_map<std::string, int> Bindings::getBindings(std::function<bool(Binding const&)> predicate) const
 {

@@ -28,7 +28,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class LReLU : public nvinfer1::pluginInternal::BasePlugin
+class TRT_DEPRECATED LReLU : public nvinfer1::pluginInternal::BasePlugin
 {
 public:
     LReLU(float negSlope);
@@ -72,7 +72,7 @@ private:
     int32_t mBatchDim;
 };
 
-class LReluPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED LReluPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     LReluPluginCreator();
@@ -85,7 +85,7 @@ public:
 
     PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
+    TRT_DEPRECATED IPluginV2* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
 
     IPluginV2* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;
 

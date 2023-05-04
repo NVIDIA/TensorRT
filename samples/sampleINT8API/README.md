@@ -113,11 +113,13 @@ After the engine has been built, it can be used just like an FP32 engine. For ex
 	```
 
 2.  Copy the data from the host input buffers to the device input buffers.
-    `buffers.copyInputToDeviceAsync(stream);`
+	```
+	buffers.copyInputToDeviceAsync(stream);
+	```
 
 3.  Enqueue the inference work and perform actual inference.
 	```
-	context->enqueue(batchSize, buffers.getDeviceBindings().data(), input_stream, nullptr))
+	context->enqueueV3(input_stream))
 	```
 
 4.  Copy data from the device output buffers to the host output buffers.

@@ -210,6 +210,33 @@ constexpr const char* descr = R"trtdoc(
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc";
 
+// remove md
+#if ENABLE_MDTRT
+constexpr char const* add_instance_id = R"trtdoc(
+    Set that this tensor's data exists on the instance ID.
+
+    In multi-device TensorRT, tensors can exist on different instances. To specify the instances
+    a tensor exists on, use this method. When an input tensor to a layer exists on different
+    instances than its corresponding output tensor, TensorRT will insert data transfers to move
+    the data from its current instances to the correct locations.
+    By default the instance ID is set to -1. The -1 instance id corresponds to a wildcard that
+    will be inferred by TensorRT based on the graph structure.
+
+    :arg id: The instance ID to add to this Tensor.
+    :returns: true if adding the id to the tensors set succeeds, false otherwise.
+)trtdoc";
+constexpr char const* has_instance_id = R"trtdoc(
+    Check if the tensor contains the instance id.
+
+    :arg id: the instance id to check if the tensor is assigned to it.
+    :returns: true if the tensor contains the instance id, false otherwise.
+)trtdoc";
+constexpr char const* del_instance_id = R"trtdoc(
+    Remove the instance id from the tensor
+    :arg id: the instance id to remove from the tensor.
+    :returns: true if the id was removed from the tensor, false otherwise.
+)trtdoc";
+#endif // ENABLE_MDTRT
 constexpr const char* set_dynamic_range = R"trtdoc(
     Set dynamic range for the tensor.
     NOTE: It is suggested to use ``tensor.dynamic_range = (min, max)`` instead.
@@ -1702,6 +1729,17 @@ constexpr const char* get_operation = R"trtdoc(
     get the fill operation for the layer.
 )trtdoc";
 
+constexpr const char* set_to_type = R"trtdoc(
+    set the output data type for the layer.
+    only applied if alpha and beta are static.
+
+    :arg to_type: the output data type for the layer.
+)trtdoc";
+
+constexpr const char* get_to_type = R"trtdoc(
+    get the user specified output data type for the layer.
+)trtdoc";
+
 constexpr const char* set_alpha = R"trtdoc(
     set the alpha parameter (must be finite).
 
@@ -2023,6 +2061,15 @@ constexpr const char* descr = R"trtdoc(
     :ivar has_implicit_batch_dimension: :class:`bool` Whether the network was created with an implicit batch dimension. This is a network-wide property. Either all tensors in the network have an implicit batch dimension or none of them do. This is True when the INetworkDefinition is created with default flags: ``create_network()``. To specify explicit batch, set the flag: ``create_network(flags=1 << int(tensorrt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))``.
     :ivar has_explicit_precision: :class:`bool` True if and only if this :class:`INetworkDefinition` was created with ``NetworkDefinitionCreationFlag.EXPLICIT_PRECISION`` set: ``create_network(flags=(1 << int(NetworkDefinitionCreationFlag.EXPLICIT_PRECISION)))``.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
+    :flags: :int: A bitset of the ``NetworkDefinitionCreationFlag`` s set for this network.
+)trtdoc";
+
+constexpr const char* get_flag = R"trtdoc(
+    Returns true if the specified ``NetworkDefinitionCreationFlag`` is set.
+
+    :arg flag: The ``NetworkDefinitionCreationFlag`` .
+
+    :returns: Whether the flag is set. 
 )trtdoc";
 
 constexpr const char* add_input = R"trtdoc(
@@ -2544,6 +2591,7 @@ constexpr const char* add_fill = R"trtdoc(
 
     :arg dimensions: The output tensor dimensions.
     :arg op: The fill operation that the layer applies.
+    :arg output_type: The datatype of the output tensor. Specifying output_type is optional (default value tensorrt.float32).
 
     :returns: The new fill layer, or :class:`None` if it could not be created.
 )trtdoc";
@@ -2663,6 +2711,7 @@ constexpr const char* add_quantize = R"trtdoc(
 
     :arg input: A tensor to quantize.
     :arg scale: A tensor with the scale coefficients.
+    :arg output_type: The datatype of the output tensor. Specifying output_type is optional (default value tensorrt.int8).
 
     :returns: The new quantization layer, or :class:`None` if it could not be created.
 )trtdoc";
@@ -2673,6 +2722,7 @@ constexpr const char* add_dequantize = R"trtdoc(
 
     :arg input: A tensor to quantize.
     :arg scale: A tensor with the scale coefficients.
+    :arg output_type: The datatype of the output tensor. Specifying output_type is optional (default value tensorrt.float32).
 
     :returns: The new dequantization layer, or :class:`None` if it could not be created.
 )trtdoc";

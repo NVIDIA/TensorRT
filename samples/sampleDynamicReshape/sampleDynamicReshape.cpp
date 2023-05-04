@@ -229,12 +229,14 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
         return false;
     }
 
+     auto const tensorName = mPreprocessorEngine->getIOTensorName(0);
+
     sample::gLogInfo << "Profile dimensions in preprocessor engine:" << std::endl;
-    sample::gLogInfo << "    Minimum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kMIN)
+    sample::gLogInfo << "    Minimum = " << mPreprocessorEngine->getProfileShape(tensorName, 0, OptProfileSelector::kMIN)
                      << std::endl;
-    sample::gLogInfo << "    Optimum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kOPT)
+    sample::gLogInfo << "    Optimum = " << mPreprocessorEngine->getProfileShape(tensorName, 0, OptProfileSelector::kOPT)
                      << std::endl;
-    sample::gLogInfo << "    Maximum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kMAX)
+    sample::gLogInfo << "    Maximum = " << mPreprocessorEngine->getProfileShape(tensorName, 0, OptProfileSelector::kMAX)
                      << std::endl;
 
 
@@ -292,6 +294,10 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
+    }
+    if (mParams.bf16)
+    {
+        config->setFlag(BuilderFlag::kBF16);
     }
     config->setProfileStream(profileStream);
 
@@ -497,6 +503,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.outputTensorNames.push_back("Plus214_Output_0");
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
+    params.bf16 = args.runInBf16;
     return params;
 }
 
@@ -514,6 +521,7 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--int8          Run in Int8 mode." << std::endl;
     std::cout << "--fp16          Run in FP16 mode." << std::endl;
+    std::cout << "--bf16          Run in BF16 mode." << std::endl;
 }
 
 int main(int argc, char** argv)

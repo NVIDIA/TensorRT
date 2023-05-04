@@ -75,11 +75,12 @@ public:
     }
 
     virtual void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream)
+        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas)
         = 0;
 
     virtual void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
         = 0;
 
     virtual size_t getSerializationSize() const noexcept;
@@ -151,6 +152,8 @@ public:
     // IPluginV2Ext Methods
     nvinfer1::DataType getOutputDataType(
         int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    void attachToContext(
+        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
 
     // IPluginV2 Methods
     char const* getPluginType() const noexcept override;
@@ -177,15 +180,16 @@ private:
     // used for other sequence, precision fp32 and fp16
     std::unique_ptr<MHARunner> unfusedDispatcher;
 
-    int32_t mS;
-    int32_t mB;
-    int32_t mSM;
-    int32_t mHeadSize;
+    int32_t mS{};
+    int32_t mB{};
+    int32_t mSM{};
+    int32_t mHeadSize{};
     int32_t mHiddenSize;
-    int32_t mNumHeads;
-    bool mHasImask;
-    nvinfer1::DataType mType;
-    float mDqProbs;
+    int32_t mNumHeads{};
+    bool mHasImask{};
+    nvinfer1::DataType mType{};
+    float mDqProbs{};
+    cublasHandle_t mCublas{};
 
     using IPluginV2::getOutputDimensions;
     using IPluginV2::getWorkspaceSize;
@@ -248,6 +252,8 @@ public:
     // IPluginV2Ext Methods
     nvinfer1::DataType getOutputDataType(
         int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    void attachToContext(
+        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
 
     // IPluginV2 Methods
     char const* getPluginType() const noexcept override;
@@ -271,20 +277,21 @@ private:
     std::unique_ptr<MHARunner> dispatcher;
     std::unique_ptr<QkvPaddingRunner> patcher;
 
-    int32_t mS;
-    int32_t mB;
-    int32_t mSM;
-    int32_t mHeadSize;
-    int32_t mHiddenSize;
-    int32_t mNumHeads;
-    bool mHasImask;
-    nvinfer1::DataType mType;
+    int32_t mS{};
+    int32_t mB{};
+    int32_t mSM{};
+    int32_t mHeadSize{};
+    int32_t mHiddenSize{};
+    int32_t mNumHeads{};
+    bool mHasImask{};
+    nvinfer1::DataType mType{};
 
-    float mDqProbs;
+    float mDqProbs{};
 
-    int32_t mHdim;
-    bool mUseVarSeqlen;
+    int32_t mHdim{};
+    bool mUseVarSeqlen{};
     bool mUseInt8ScaleMax{true};
+    cublasHandle_t mCublas{};
 
     using IPluginV2::getOutputDimensions;
     using IPluginV2::getWorkspaceSize;
@@ -328,10 +335,12 @@ public:
     virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
+        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     size_t getWorkspaceSize() const override;
 
@@ -341,11 +350,10 @@ public:
     bool isValid(int32_t s) const override;
 
 private:
-    bool mIsBestAlgoFound;
-    int32_t mAlgoBatchedEx1;
-    int32_t mAlgoBatchedEx2;
-    cublasHandle_t mCublas;
-    int32_t mSm;
+    bool mIsBestAlgoFound{};
+    int32_t mAlgoBatchedEx1{};
+    int32_t mAlgoBatchedEx2{};
+    int32_t mSm{};
 };
 
 class FusedMHARunnerFP16 : public MHARunner
@@ -357,10 +365,12 @@ public:
     virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
+        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     size_t getWorkspaceSize() const override;
 
@@ -383,10 +393,12 @@ public:
     virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
+        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     size_t getWorkspaceSize() const override;
 
@@ -410,10 +422,12 @@ public:
     virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
+        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     size_t getWorkspaceSize() const override;
 
@@ -437,10 +451,12 @@ public:
     virtual void setup(const int32_t S, const int32_t B) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream) override;
+        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) override;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
+        cublasHandle_t cublas) override;
 
     size_t getWorkspaceSize() const override;
 

@@ -36,7 +36,7 @@ namespace nvinfer1
 {
 namespace plugin
 {
-class SplitPlugin final : public nvinfer1::IPluginV2DynamicExt
+class TRT_DEPRECATED SplitPlugin final : public nvinfer1::IPluginV2DynamicExt
 {
     int32_t _axis;
     std::vector<int32_t> _output_lengths;
@@ -71,12 +71,18 @@ public:
         : _axis(axis)
         , _output_lengths(std::vector<int32_t>(output_lengths, output_lengths + noutput))
     {
+        gLogWarning << "SplitPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addSlice() to add an "
+                       "ISliceLayer to perform a split."
+                    << std::endl;
         PLUGIN_ASSERT(axis <= nvinfer1::Dims::MAX_DIMS);
     }
     SplitPlugin(int32_t axis, std::vector<int32_t> output_lengths)
         : _axis(axis)
         , _output_lengths(output_lengths)
     {
+        gLogWarning << "SplitPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addSlice() to add an "
+                       "ISliceLayer to perform a split."
+                    << std::endl;
         PLUGIN_ASSERT(axis <= nvinfer1::Dims::MAX_DIMS);
     }
     SplitPlugin(void const* serialData, size_t serialLength)
@@ -134,7 +140,7 @@ public:
     void detachFromContext() noexcept override {}
 };
 
-class SplitPluginCreator : public nvinfer1::IPluginCreator
+class TRT_DEPRECATED SplitPluginCreator : public nvinfer1::IPluginCreator
 {
 public:
     SplitPluginCreator() {}
@@ -167,6 +173,9 @@ public:
     nvinfer1::IPluginV2DynamicExt* deserializePlugin(
         char const* /*name*/, void const* serialData, size_t serialLength) noexcept override
     {
+        gLogWarning << "SplitPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addSlice() to add an "
+                       "ISliceLayer to perform a split."
+                    << std::endl;
         return new SplitPlugin{serialData, serialLength};
     }
 

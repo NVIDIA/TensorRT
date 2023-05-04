@@ -41,6 +41,7 @@ macro(configure_protobuf VERSION)
             -DCMAKE_CXX_FLAGS=${PROTOBUF_CXXFLAGS}
             -DCMAKE_INSTALL_PREFIX=${Protobuf_INSTALL_DIR}/${Protobuf_TARGET}
             -Dprotobuf_BUILD_TESTS=OFF
+            -Dprotobuf_MSVC_STATIC_RUNTIME=OFF # For Windows
         SOURCE_SUBDIR cmake
         BINARY_DIR ${Protobuf_INSTALL_DIR}/${Protobuf_TARGET}/src/${Protobuf_TARGET}
     )
@@ -56,13 +57,13 @@ macro(configure_protobuf VERSION)
     set(Protobuf_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/${Protobuf_TARGET}/include")
     set(Protobuf_PROTOC_EXECUTABLE  "${Protobuf_BIN_DIR}/protoc")
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(Protobuf_LIBRARY "${Protobuf_LIB_DIR}/libprotobufd.a")
-        set(Protobuf_PROTOC_LIBRARY "${Protobuf_LIB_DIR}/libprotocd.a")
-        set(Protobuf_LITE_LIBRARY "${Protobuf_LIB_DIR}/libprotobuf-lited.a")
+        set(Protobuf_LIBRARY "${Protobuf_LIB_DIR}/libprotobufd.${STATIC_LIB_EXT}")
+        set(Protobuf_PROTOC_LIBRARY "${Protobuf_LIB_DIR}/libprotocd.${STATIC_LIB_EXT}")
+        set(Protobuf_LITE_LIBRARY "${Protobuf_LIB_DIR}/libprotobuf-lited.${STATIC_LIB_EXT}")
     else()
-        set(Protobuf_LIBRARY "${Protobuf_LIB_DIR}/libprotobuf.a")
-        set(Protobuf_PROTOC_LIBRARY "${Protobuf_LIB_DIR}/libprotoc.a")
-        set(Protobuf_LITE_LIBRARY "${Protobuf_LIB_DIR}/libprotobuf-lite.a")
+        set(Protobuf_LIBRARY "${Protobuf_LIB_DIR}/libprotobuf.${STATIC_LIB_EXT}")
+        set(Protobuf_PROTOC_LIBRARY "${Protobuf_LIB_DIR}/libprotoc.${STATIC_LIB_EXT}")
+        set(Protobuf_LITE_LIBRARY "${Protobuf_LIB_DIR}/libprotobuf-lite.${STATIC_LIB_EXT}")
     endif()
     set(protolibType STATIC)
 
@@ -204,7 +205,7 @@ function(protobuf_generate_cpp SRCS HDRS)
         add_custom_command(
             OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${PROTO_DIR}/${PROTO_SRC}"
                    "${CMAKE_CURRENT_BINARY_DIR}/${PROTO_DIR}/${PROTO_HEADER}"
-            COMMAND LIBRARY_PATH=${Protobuf_LIB_DIR} ${Protobuf_PROTOC_EXECUTABLE}
+            COMMAND ${Protobuf_PROTOC_EXECUTABLE}
             ARGS --cpp_out ${CMAKE_CURRENT_BINARY_DIR}/${PROTO_DIR} -I${CMAKE_CURRENT_SOURCE_DIR}/${PROTO_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/${proto}
             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
             DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${proto}" protobuf::libprotobuf Protobuf protobuf::protoc

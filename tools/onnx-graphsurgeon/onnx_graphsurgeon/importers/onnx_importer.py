@@ -26,7 +26,7 @@ from onnx_graphsurgeon.importers.base_importer import BaseImporter
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
-from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.logger.logger import G_LOGGER, LogMode
 from onnx_graphsurgeon.util import misc
 
 # Maps values from the AttributeType enum to their string representations, e.g., {1: "FLOAT"}
@@ -62,14 +62,66 @@ def get_onnx_tensor_shape(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorPro
     return shape
 
 
-def get_onnx_tensor_dtype(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]) -> np.dtype:
+def get_dtype_name(onnx_type):
+    return {val: key for key, val in onnx.TensorProto.DataType.items()}[onnx_type]
+
+
+def get_itemsize(dtype):
+    np_dtype = get_numpy_type(dtype)
+    if np_dtype is not None:
+        return np.dtype(np_dtype).itemsize
+
+    if dtype == onnx.TensorProto.BFLOAT16:
+        return 2
+
+    if dtype in [
+        onnx.TensorProto.FLOAT8E4M3FN,
+        onnx.TensorProto.FLOAT8E4M3FNUZ,
+        onnx.TensorProto.FLOAT8E5M2,
+        onnx.TensorProto.FLOAT8E5M2FNUZ,
+    ]:
+        return 1
+    G_LOGGER.critical(f"Unsupported type: {dtype}")
+
+
+def get_numpy_type(onnx_type):
+    if not isinstance(onnx_type, int):
+        # Already a NumPy type
+        return onnx_type
+
+    numpy_unsupported_types = [
+        onnx.TensorProto.BFLOAT16,
+        onnx.TensorProto.FLOAT8E4M3FN,
+        onnx.TensorProto.FLOAT8E4M3FNUZ,
+        onnx.TensorProto.FLOAT8E5M2,
+        onnx.TensorProto.FLOAT8E5M2FNUZ,
+    ]
+
+    # TENSOR_TYPE_TO_NP_TYPE maps types unsupported by NumPy to random other types.
+    # This obviously breaks things, so we need to treat this as a special case.
+    if onnx_type not in numpy_unsupported_types and onnx_type in onnx.mapping.TENSOR_TYPE_TO_NP_TYPE:
+        return onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_type]
+    return None
+
+
+def get_onnx_tensor_dtype(
+    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]
+) -> Union[np.dtype, "onnx.TensorProto.DataType"]:
     if isinstance(onnx_tensor, onnx.TensorProto):
         onnx_type = onnx_tensor.data_type
     else:
         onnx_type = onnx_tensor.type.tensor_type.elem_type
-    if onnx_type in onnx.mapping.TENSOR_TYPE_TO_NP_TYPE:
-        return onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_type]
-    return None
+
+    dtype = get_numpy_type(onnx_type)
+    if dtype is not None:
+        return dtype
+
+    G_LOGGER.warning(
+        f"Could not convert: {get_dtype_name(onnx_type)} to a corresponding NumPy type. "
+        f"The original ONNX type will be preserved. ",
+        mode=LogMode.ONCE,
+    )
+    return onnx_type
 
 
 class OnnxImporter(BaseImporter):

@@ -1,0 +1,314 @@
+[BLOOM.all.default.all.generate]
+
+input = '''
+TensorRT is a Deep Learning compiler used for deep learning.
+'''
+
+[BLOOM.all."bigscience/bloom-560m".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\nThe code is written in Python and is available at https://github.com/davidmiller/pytorch-compiler\nThe code is written in Python and is available at https://github.com/davidmiller/pytorch-compiler\nThe code is written in Python and is available at https://github.com/davidmiller/pytorch-compiler\nThe code is written in Python and is available at https://github.com/davidm
+'''
+
+[BLOOM.all."bigscience/bloom-1b1".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\nThe TensorRT compiler is a toolkit for building deep learning models. It is based on the TensorFlow library and is designed to be used with TensorFlow and TensorRT. TensorRT is a toolkit for building deep learning models. It is based on the TensorFlow library and is designed to be used with TensorFlow and TensorRT. TensorRT is a toolkit for building deep learning models. It is based on the TensorFlow library
+'''
+
+[BLOOM.all."bigscience/bloom-1b7".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\nThe TensorRT compiler is a tool for building and running deep learning models. It is a tool for building and running deep learning models. It is a tool for building and running deep learning models. It is a tool for building and running deep learning models. It is a tool for building and running deep learning models. It is a tool for building and running deep learning models. It is a tool for building and running deep learning models. It
+'''
+
+[BLOOM.all."bigscience/bloom-3b".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\nTensorRT is a deep learning compiler for TensorFlow. It is a tool for building and running deep learning models on GPUs. TensorRT is a tool for building and running deep learning models on GPUs. TensorRT is a tool for building and running deep learning models on GPUs. TensorRT is a tool for building and running deep learning models on GPUs. TensorRT is a tool for building and running deep learning models on GPU
+'''
+
+[BLOOM.all."bigscience/bloom-7b1".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n *\n * Copyright (C) 2016 The TensorFlow Authors\n *\n * Licensed under the Apache License, Version 2.0 (the "License");\n * you may not use this file except in compliance with the License.\n * You may obtain a copy of the License at\n *\n * http://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software\n *
+'''
+
+[BLOOM.all."bigscience/bloomz-560m".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n It is a tool for building neural networks
+'''
+
+[BLOOM.all."bigscience/bloomz-1b1".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\nIt is a tool for building deep learning models and training them on GPUs.
+'''
+
+[BLOOM.all."bigscience/bloomz-1b7".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n TensorRT is a library for building and training neural networks.
+'''
+
+[BLOOM.all."bigscience/bloomz-3b".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n # Author: Alexandre B. Ribeiro <alexandre.b.ribeiro@gmail.com>\n#\n# License: BSD (3-clause)\n\nimport tensorflow as tf\n\nimport numpy as np\n\nimport matplotlib.pyplot as plt\n\nimport mpl_toolkits.mplot3d.axes3d as mpl_axes3d\n\nimport matplotlib.patches as patches\n\nimport matplotlib.cm as cm\n\nimport matplotlib.colors
+'''
+
+[BLOOM.all."bigscience/bloomz-7b1".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n #!/usr/bin/env python\n# -*- coding: utf-8 -*-\n\nimport tensorflow as tf\nimport numpy as np\nimport matplotlib.pyplot as plt\nimport os\nimport sys\nimport math\nimport copy\nimport pickle\nimport itertools\nimport datetime\nimport time\nimport re\nimport copy\nimport math\nimport copy\nimport itertools\nimport datetime\nimport time\nimport re\nimport copy\nimport math\nimport copy\n
+'''
+
+[BLOOM.all.default.all.generate_b]
+
+input = '''
+BLOOM is a transformer based model pretrained on a large corpus.
+'''
+
+[BLOOM.all."bigscience/bloom-560m".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on a large corpus of sentences from the Wikipedia article "Blowout," which contains a large number of sentences containing the word "blowout". The Wikipedia article is a large corpus of sentences containing the word "blowout". The Wikipedia article contains a large number of sentences containing the word "blowout". The Wikipedia article contains a large number of sentences containing the word "blow
+'''
+
+[BLOOM.all."bigscience/bloom-1b1".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on the dataset of the BERT corpus, which is a large dataset of English text. The BERT corpus is a large dataset of English text, which is composed of a large number of sentences. The BERT corpus is composed of a large number of sentences, which is composed of a large number of words. The BERT corpus is composed of a large number of words, which is composed of
+'''
+
+[BLOOM.all."bigscience/bloom-1b7".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\nBLOOM is a transformer based model pretrained on a large corpus. It is a model that can be used to predict the probability of a word given its context. The model is trained on a large corpus of text and is able to predict the probability of a word given its context. The model is trained on a large corpus of text and is able to predict the probability of a word given its context. The
+'''
+
+[BLOOM.all."bigscience/bloom-3b".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes
+'''
+
+[BLOOM.all."bigscience/bloom-7b1".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of
+'''
+
+[BLOOM.all."bigscience/bloomz-560m".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\n It is a pretrained model that is trained on a large corpus of data.
+'''
+
+[BLOOM.all."bigscience/bloomz-1b1".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on the same data as the original model, but with a different set of features.
+'''
+
+[BLOOM.all."bigscience/bloomz-1b7".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\n # Authors: Alexandre Guenne
+'''
+
+[BLOOM.all."bigscience/bloomz-3b".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\n # TODO: Replace <FILL IN> with appropriate code\n# TODO: Replace <FILL IN> with appropriate code
+'''
+
+[BLOOM.all."bigscience/bloomz-7b1".all.generate_b]
+
+label = '''
+BLOOM is a transformer based model pretrained on a large corpus.\nBERT is a transformer based model pretrained on a small corpus.
+'''
+
+[BLOOM.all.default.all.generate_c]
+
+input = '''
+If I fall asleep then I am going to wake up in 8 hours.
+'''
+
+[BLOOM.all."bigscience/bloom-560m".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\n
+'''
+
+[BLOOM.all."bigscience/bloom-1b1".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI
+'''
+
+[BLOOM.all."bigscience/bloom-1b7".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake
+'''
+
+[BLOOM.all."bigscience/bloom-3b".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake
+'''
+
+[BLOOM.all."bigscience/bloom-7b1".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake
+'''
+
+[BLOOM.all."bigscience/bloomz-560m".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.
+'''
+
+[BLOOM.all."bigscience/bloomz-1b1".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.
+'''
+
+[BLOOM.all."bigscience/bloomz-1b7".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.
+'''
+
+[BLOOM.all."bigscience/bloomz-3b".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nI will wake up in 8 hours.
+'''
+
+[BLOOM.all."bigscience/bloomz-7b1".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\nYes
+'''
+
+[BLOOM.all.default.all.generate_d]
+
+input = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.
+''']
+label = [
+'''
+Default BLOOM Label d0
+''' ,
+'''
+Default BLOOM Label d1
+''']
+
+[BLOOM.all."bigscience/bloom-560m".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on a large corpus of sentences from the Wikipedia article \"Blowout,\" which contains a large number of sentences containing the word \"blowout\". The Wikipedia article is a large corpus of sentences containing the word \"blowout\". The Wikipedia article contains a large number of sentences containing the word \"blowout\". The Wikipedia article contains a large number of sentences containing the word \"blow
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\nI am not going to sleep.\nI am going to wake up in 8 hours.\n
+''']
+
+[BLOOM.all."bigscience/bloom-1b1".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on the dataset of the BERT corpus, which is a large dataset of English text. The BERT corpus is a large dataset of English text, which is composed of a large number of sentences. The BERT corpus is composed of a large number of sentences, which is composed of a large number of words. The BERT corpus is composed of a large number of words, which is composed of
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI don't know what to do.\nI
+''']
+
+[BLOOM.all."bigscience/bloom-1b7".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\nBLOOM is a transformer based model pretrained on a large corpus. It is a model that can be used to predict the probability of a word given its context. The model is trained on a large corpus of text and is able to predict the probability of a word given its context. The model is trained on a large corpus of text and is able to predict the probability of a word given its context. The
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake
+''']
+
+[BLOOM.all."bigscience/bloom-3b".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes. The model is trained on a large corpus of images with a large number of classes
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake
+''']
+
+[BLOOM.all."bigscience/bloom-7b1".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of a word given a context. The model is trained to predict the probability of
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake up in 8 hours.\nI am going to wake
+''']
+
+[BLOOM.all."bigscience/bloomz-560m".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\n It is a pretrained model that is trained on a large corpus of data.
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.
+''']
+
+[BLOOM.all."bigscience/bloomz-1b1".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\nThe model is trained on the same data as the original model, but with a different set of features.
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.
+''']
+
+[BLOOM.all."bigscience/bloomz-1b7".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\n # Authors: Alexandre Guenne
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI am going to wake up in 8 hours.
+''']
+
+[BLOOM.all."bigscience/bloomz-3b".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\n # TODO: Replace <FILL IN> with appropriate code\n# TODO: Replace <FILL IN> with appropriate code
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nI will wake up in 8 hours.
+''']
+
+[BLOOM.all."bigscience/bloomz-7b1".all.generate_d]
+
+label = [
+'''
+BLOOM is a transformer based model pretrained on a large corpus.\nBERT is a transformer based model pretrained on a small corpus.
+''' ,
+'''
+If I fall asleep then I am going to wake up in 8 hours.\nYes
+''']

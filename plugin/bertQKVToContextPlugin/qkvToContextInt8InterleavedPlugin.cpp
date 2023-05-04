@@ -20,6 +20,7 @@
 #include "common/bertCommon.h"
 #include "common/plugin.h"
 #include "common/serialize.hpp"
+
 #include <cstring>
 #include <cuda.h>
 #include <iostream>

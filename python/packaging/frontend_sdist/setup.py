@@ -41,55 +41,24 @@ def run_pip_command(args, call_func):
 
 class InstallCommand(install):
     def run(self):
-        # pip-inside-pip hack ref #3080
-        run_pip_command(
-            [
-                "install",
-                "--extra-index-url",
-                nvidia_pip_index_url,
-                *tensorrt_submodules,
-            ],
-            subprocess.check_call,
-        )
+        def install_dep(package_name):
+            status = sp.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "{:}==##TENSORRT_PYTHON_VERSION##".format(package_name),
+                    "--index-url",
+                    "https://pypi.nvidia.com",
+                ]
+            )
+            status.check_returncode()
 
-        super().run()
+        install_dep("{:}_libs".format(tensorrt_module))
+        install_dep("{:}_bindings".format(tensorrt_module))
 
-
-def pip_config_list():
-    """Get the current pip config (env vars, config file, etc)."""
-    return run_pip_command(["config", "list"], subprocess.check_output).decode()
-
-
-def parent_command_line():
-    """Get the command line of the parent PID."""
-    pid = os.getppid()
-    # try retrieval using psutil
-    try:
-        import psutil
-
-        return " ".join(psutil.Process(pid).cmdline())
-    except ModuleNotFoundError:
-        pass
-    # fall back to shell
-    try:
-        return subprocess.check_output(
-            ["ps", "-p", str(pid), "-o", "command", "--no-headers"]
-        ).decode()
-    except subprocess.CalledProcessError:
-        return ""
-
-
-# use pip-inside-pip hack only if the nvidia index is not set in the environment
-if (
-    disable_internal_pip
-    or nvidia_pip_index_url in pip_config_list()
-    or nvidia_pip_index_url in parent_command_line()
-):
-    install_requires = tensorrt_submodules
-    cmdclass = {}
-else:
-    install_requires = []
-    cmdclass = {"install": InstallCommand}
+        install.run(self)
 
 
 setup(

@@ -76,15 +76,25 @@ class TestOnnxExporter(object):
             onnx_shape.append(dim.dim_value)
         assert tuple(onnx_shape) == shape
 
-    def test_export_variable_tensor(self):
+    @pytest.mark.parametrize(
+        "dtype, expected_type",
+        [
+            (np.float32, onnx.TensorProto.FLOAT),
+            (onnx.TensorProto.BFLOAT16, onnx.TensorProto.BFLOAT16),
+            (onnx.TensorProto.FLOAT8E4M3FN, onnx.TensorProto.FLOAT8E4M3FN),
+            (onnx.TensorProto.FLOAT8E4M3FNUZ, onnx.TensorProto.FLOAT8E4M3FNUZ),
+            (onnx.TensorProto.FLOAT8E5M2, onnx.TensorProto.FLOAT8E5M2),
+            (onnx.TensorProto.FLOAT8E5M2FNUZ, onnx.TensorProto.FLOAT8E5M2FNUZ),
+        ],
+    )
+    def test_export_variable_tensor(self, dtype, expected_type):
         name = "variable_tensor"
         shape = (3, 224, 224)
-        dtype = np.float32
 
         tensor = Variable(dtype=dtype, shape=shape, name=name)
         onnx_tensor = OnnxExporter.export_value_info_proto(tensor, do_type_check=True)
         assert onnx_tensor.name == name
-        assert onnx_tensor.type.tensor_type.elem_type == onnx.TensorProto.FLOAT
+        assert onnx_tensor.type.tensor_type.elem_type == expected_type
 
         onnx_shape = []
         for dim in onnx_tensor.type.tensor_type.shape.dim:

@@ -1330,6 +1330,9 @@ cudaError_t argMaxGroup(cudaStream_t stream, int N, nvinfer1::DataType dtype, in
             samples, 0, NClass, inScore, inBbox, validSamples, outScore, outLabel, outBbox);
         break;
     case nvinfer1::DataType::kHALF: break;
+    case nvinfer1::DataType::kBF16:
+    case nvinfer1::DataType::kINT64: PLUGIN_FAIL("Unsupported data type");
+
     default: PLUGIN_ASSERT(false);
     }
 
@@ -1352,6 +1355,9 @@ cudaError_t argMaxWOBackground(cudaStream_t stream, int N, nvinfer1::DataType dt
             samples, 1, NClass, inScore, inBbox, validSamples, outScore, outLabel, outBbox);
         break;
     case nvinfer1::DataType::kHALF: break;
+    case nvinfer1::DataType::kBF16:
+    case nvinfer1::DataType::kINT64: PLUGIN_FAIL("Unsupported data type");
+
     default: PLUGIN_ASSERT(false);
     }
 

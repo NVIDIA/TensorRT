@@ -10,7 +10,7 @@
     The structure of the `tests` directory closely mirrors that of the main source directory (`onnx_graphsurgeon`),
     so in general, for every source file you change, you'll need to modify the corresponding test file.
 
-    When addiing new examples, be sure to add an entry in `test_examples.py`. The test will parse the README
+    When adding new examples, be sure to add an entry in `test_examples.py`. The test will parse the README
     to execute any commands specified. If your example creates any additional files, specify each of them in
     the test case as an `Artifact`.
 

@@ -49,6 +49,12 @@ int32_t stringToValue<int32_t>(const std::string& option)
 }
 
 template <>
+size_t stringToValue<size_t>(const std::string& option)
+{
+    return std::stoi(option);
+}
+
+template <>
 float stringToValue<float>(const std::string& option)
 {
     return std::stof(option);
@@ -82,8 +88,8 @@ template <>
 nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
 {
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
-        {"fp16", nvinfer1::DataType::kHALF}, {"int8", nvinfer1::DataType::kINT8}, {"fp8", nvinfer1::DataType::kFP8},
-        {"int32", nvinfer1::DataType::kINT32}};
+        {"fp16", nvinfer1::DataType::kHALF}, {"bf16", nvinfer1::DataType::kBF16}, {"int8", nvinfer1::DataType::kINT8},
+        {"fp8", nvinfer1::DataType::kFP8}, {"int32", nvinfer1::DataType::kINT32}, {"bool", nvinfer1::DataType::kBOOL}};
     const auto& dt = strToDT.find(option);
     if (dt == strToDT.end())
     {
@@ -159,6 +165,13 @@ SparsityFlag stringToValue<SparsityFlag>(std::string const& option)
     {
         throw std::invalid_argument(std::string("Unknown sparsity mode: ") + option);
     }
+    if (search->second == SparsityFlag::kFORCE)
+    {
+        sample::gLogWarning << "--sparsity=force has been deprecated. "
+                            << "Please use <polygraphy surgeon prune> to rewrite the weights to a sparsity pattern "
+                            << "and then run with --sparsity=enable" << std::endl;
+    }
+
     return search->second;
 }
 
@@ -244,11 +257,52 @@ bool getAndDelOption(Arguments& arguments, const std::string& option, T& value)
     const auto match = arguments.find(option);
     if (match != arguments.end())
     {
-        value = stringToValue<T>(match->second);
+        value = stringToValue<T>(match->second.first);
         arguments.erase(match);
         return true;
     }
 
+    return false;
+}
+
+//! Check if input option exists in input arguments.
+//! If it does: return its value and position, erase the argument and return true.
+//! If it does not: return false.
+template <typename T_>
+bool getAndDelOptionWithPosition(Arguments& arguments, std::string const& option, T_& value, int32_t& pos)
+{
+    auto const match = arguments.find(option);
+    if (match != arguments.end())
+    {
+        value = stringToValue<T_>(match->second.first);
+        pos = match->second.second;
+        arguments.erase(match);
+        return true;
+    }
+
+    return false;
+}
+
+//! Check if input option exists in input arguments behind the position spcecified by pos.
+//! If it does: return its value, erase the argument and return true.
+//! If it does not: return false.
+template <typename T_>
+bool getAndDelOptionBehind(Arguments& arguments, std::string const& option, int32_t pos, T_& value)
+{
+    auto const match = arguments.equal_range(option);
+    if (match.first == match.second)
+    {
+        return false;
+    }
+    for (auto i = match.first; i != match.second; ++i)
+    {
+        if (i->second.second - pos == 1)
+        {
+            value = stringToValue<T_>(i->second.first);
+            arguments.erase(i);
+            return true;
+        }
+    }
     return false;
 }
 
@@ -279,7 +333,7 @@ bool getAndDelRepeatedOption(Arguments& arguments, const std::string& option, st
     }
 
     auto addToValues
-        = [&values](Arguments::value_type& argValue) { values.emplace_back(stringToValue<T>(argValue.second)); };
+        = [&values](Arguments::value_type& argValue) { values.emplace_back(stringToValue<T>(argValue.second.first)); };
     std::for_each(match.first, match.second, addToValues);
     arguments.erase(match.first, match.second);
 
@@ -494,8 +548,81 @@ void processShapes(BuildOptions::ShapeProfile& shapes, bool minShapes, bool optS
     shapes = newShapes;
 }
 
+bool getOptimizationProfiles(
+    Arguments& arguments, std::vector<BuildOptions::ShapeProfile>& optProfiles, char const* argument)
+{
+    bool retValue{false};
+    int32_t pos{};
+    size_t profileIndex{};
+
+    auto getShapes
+        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector) {
+              std::vector<std::string> shapeList{splitToStringVec(list, ',')};
+              for (auto const& s : shapeList)
+              {
+                  auto nameDimsPair = splitNameAndValue<std::vector<int32_t>>(s);
+                  auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
+                  auto dims = nameDimsPair.second;
+                  insertShapesBuild(shapes, selector, tensorName, dims);
+              }
+          };
+
+    while (getAndDelOptionWithPosition(arguments, argument, profileIndex, pos))
+    {
+        BuildOptions::ShapeProfile optProfile{};
+        bool minShapes{false}, maxShapes{false}, optShapes{false};
+        for (int32_t i = 0; i < nvinfer1::EnumMax<nvinfer1::OptProfileSelector>(); i++, pos++)
+        {
+            std::string value;
+
+            if (!minShapes && getAndDelOptionBehind(arguments, "--minShapes", pos, value))
+            {
+                minShapes = true;
+                getShapes(optProfile, value, nvinfer1::OptProfileSelector::kMIN);
+            }
+            else if (!maxShapes && getAndDelOptionBehind(arguments, "--maxShapes", pos, value))
+            {
+                maxShapes = true;
+                getShapes(optProfile, value, nvinfer1::OptProfileSelector::kMAX);
+            }
+            else if (!optShapes && getAndDelOptionBehind(arguments, "--optShapes", pos, value))
+            {
+                optShapes = true;
+                getShapes(optProfile, value, nvinfer1::OptProfileSelector::kOPT);
+            }
+            else
+            {
+                break;
+            }
+        }
+        processShapes(optProfile, minShapes, optShapes, maxShapes, false);
+        if (profileIndex >= optProfiles.size())
+        {
+            optProfiles.resize(profileIndex + 1);
+        }
+        if (!optProfiles[profileIndex].empty())
+        {
+            throw std::invalid_argument("Optimization profile index cannot be the same.");
+        }
+        optProfiles[profileIndex] = optProfile;
+        retValue = true;
+    }
+
+    profileIndex = 0;
+    for (auto const& optProfile : optProfiles)
+    {
+        if (optProfile.empty())
+        {
+            throw std::invalid_argument(std::string("Found invalid or missing shape spec at profile index ")
+                + std::to_string(profileIndex) + std::string(". "));
+        }
+        ++profileIndex;
+    }
+    return retValue;
+}
+
 template <typename T>
-void printShapes(std::ostream& os, const char* phase, const T& shapes)
+void printShapes(std::ostream& os, char const* phase, T const& shapes, int32_t profileIndex)
 {
     if (shapes.empty())
     {
@@ -503,9 +630,12 @@ void printShapes(std::ostream& os, const char* phase, const T& shapes)
     }
     else
     {
-        for (const auto& s : shapes)
+        std::string profileString = (profileIndex != -1 && strcmp(phase, "build") == 0)
+            ? "(profile " + std::to_string(profileIndex) + ")"
+            : "";
+        for (auto const& s : shapes)
         {
-            os << "Input " << phase << " shape: " << s.first << "=" << s.second << std::endl;
+            os << "Input " << phase << " shape " << profileString << ": " << s.first << "=" << s.second << std::endl;
         }
     }
 }
@@ -558,6 +688,10 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
     if (options.fp16)
     {
         os << "+FP16";
+    }
+    if (options.bf16)
+    {
+        os << "+BF16";
     }
     if (options.int8)
     {
@@ -688,11 +822,11 @@ Arguments argsToArgumentsMap(int32_t argc, char* argv[])
         if (valuePtr)
         {
             std::string value{valuePtr + 1};
-            arguments.emplace(std::string(argv[i], valuePtr - argv[i]), value);
+            arguments.emplace(std::string(argv[i], valuePtr - argv[i]), std::make_pair(value, i));
         }
         else
         {
-            arguments.emplace(argv[i], "");
+            arguments.emplace(argv[i], std::make_pair(std::string(""), i));
         }
     }
     return arguments;
@@ -704,36 +838,6 @@ void BaseModelOptions::parse(Arguments& arguments)
     {
         format = ModelFormat::kONNX;
     }
-    else if (getAndDelOption(arguments, "--uff", model))
-    {
-        format = ModelFormat::kUFF;
-    }
-    else if (getAndDelOption(arguments, "--model", model))
-    {
-        format = ModelFormat::kCAFFE;
-    }
-}
-
-void UffInput::parse(Arguments& arguments)
-{
-    getAndDelOption(arguments, "--uffNHWC", NHWC);
-    std::vector<std::string> args;
-    if (getAndDelRepeatedOption(arguments, "--uffInput", args))
-    {
-        for (const auto& i : args)
-        {
-            std::vector<std::string> values{splitToStringVec(i, ',')};
-            if (values.size() == 4)
-            {
-                nvinfer1::Dims3 dims{std::stoi(values[1]), std::stoi(values[2]), std::stoi(values[3])};
-                inputs.emplace_back(values[0], dims);
-            }
-            else
-            {
-                throw std::invalid_argument(std::string("Invalid uffInput ") + i);
-            }
-        }
-    }
 }
 
 void ModelOptions::parse(Arguments& arguments)
@@ -742,51 +846,14 @@ void ModelOptions::parse(Arguments& arguments)
 
     switch (baseModel.format)
     {
-    case ModelFormat::kCAFFE:
-    {
-        getAndDelOption(arguments, "--deploy", prototxt);
-        break;
-    }
-    case ModelFormat::kUFF:
-    {
-        uffInputs.parse(arguments);
-        if (uffInputs.inputs.empty())
-        {
-            throw std::invalid_argument("Uff models require at least one input");
-        }
-        break;
-    }
-    case ModelFormat::kONNX: break;
+    case ModelFormat::kONNX:
     case ModelFormat::kANY:
     {
-        if (getAndDelOption(arguments, "--deploy", prototxt))
-        {
-            baseModel.format = ModelFormat::kCAFFE;
-        }
         break;
     }
     }
 
-    // The --output flag should only be used with Caffe and UFF. It has no effect on ONNX.
-    std::vector<std::string> outArgs;
-    if (getAndDelRepeatedOption(arguments, "--output", outArgs))
-    {
-        for (const auto& o : outArgs)
-        {
-            for (auto& v : splitToStringVec(o, ','))
-            {
-                outputs.emplace_back(std::move(v));
-            }
-        }
-    }
-    if (baseModel.format == ModelFormat::kCAFFE || baseModel.format == ModelFormat::kUFF)
-    {
-        if (outputs.empty())
-        {
-            throw std::invalid_argument("Caffe and Uff models require at least one output");
-        }
-    }
-    else if (baseModel.format == ModelFormat::kONNX)
+    if (baseModel.format == ModelFormat::kONNX)
     {
         if (!outputs.empty())
         {
@@ -867,10 +934,33 @@ void BuildOptions::parse(Arguments& arguments)
                             << "shapes are provided when the engine is built." << std::endl;
     }
 
-    bool minShapes = getShapesBuild(arguments, shapes, "--minShapes", nvinfer1::OptProfileSelector::kMIN);
-    bool optShapes = getShapesBuild(arguments, shapes, "--optShapes", nvinfer1::OptProfileSelector::kOPT);
-    bool maxShapes = getShapesBuild(arguments, shapes, "--maxShapes", nvinfer1::OptProfileSelector::kMAX);
-    processShapes(shapes, minShapes, optShapes, maxShapes, false);
+    bool getCalibProfile = getAndDelOption(arguments, "--calibProfile", calibProfile);
+    if (!getOptimizationProfiles(arguments, optProfiles, "--profile"))
+    {
+        ShapeProfile shapes;
+        bool minShapes = getShapesBuild(arguments, shapes, "--minShapes", nvinfer1::OptProfileSelector::kMIN);
+        bool optShapes = getShapesBuild(arguments, shapes, "--optShapes", nvinfer1::OptProfileSelector::kOPT);
+        bool maxShapes = getShapesBuild(arguments, shapes, "--maxShapes", nvinfer1::OptProfileSelector::kMAX);
+        processShapes(shapes, minShapes, optShapes, maxShapes, false);
+        optProfiles.emplace_back(shapes);
+    }
+
+    if (calibProfile >= optProfiles.size())
+    {
+        throw std::invalid_argument(
+            std::string("--calibProfile shouldn't greater than the size of optimization profile."));
+    }
+
+    BuildOptions::ShapeProfile dummyShapes;
+
+    bool remainingMinShapes = getShapesBuild(arguments, dummyShapes, "--minShapes", nvinfer1::OptProfileSelector::kMIN);
+    bool remainingOptShapes = getShapesBuild(arguments, dummyShapes, "--optShapes", nvinfer1::OptProfileSelector::kOPT);
+    bool remainingMaxShapes = getShapesBuild(arguments, dummyShapes, "--maxShapes", nvinfer1::OptProfileSelector::kMAX);
+    if (remainingMinShapes || remainingOptShapes || remainingMaxShapes)
+    {
+        throw std::invalid_argument("Multiple --minShapes/--optShapes/--maxShapes without --profile are not allowed. ");
+    }
+
     bool minShapesCalib
         = getShapesBuild(arguments, shapesCalib, "--minShapesCalib", nvinfer1::OptProfileSelector::kMIN);
     bool optShapesCalib
@@ -925,7 +1015,6 @@ void BuildOptions::parse(Arguments& arguments)
         }
     }
 
-    getAndDelOption(arguments, "--maxBatch", maxBatch);
     getAndDelOption(arguments, "--minTiming", minTiming);
     getAndDelOption(arguments, "--avgTiming", avgTiming);
 
@@ -935,6 +1024,12 @@ void BuildOptions::parse(Arguments& arguments)
     {
         int8 = true;
         fp16 = true;
+
+        // BF16 only supported on Ampere+
+        if (samplesCommon::getSMVersion() >= 0x0800)
+        {
+            bf16 = true;
+        }
     }
 
     getAndDelOption(arguments, "--refit", refittable);
@@ -950,8 +1045,28 @@ void BuildOptions::parse(Arguments& arguments)
 
     getAndDelNegOption(arguments, "--noTF32", tf32);
     getAndDelOption(arguments, "--fp16", fp16);
+    getAndDelOption(arguments, "--bf16", bf16);
     getAndDelOption(arguments, "--int8", int8);
     getAndDelOption(arguments, "--fp8", fp8);
+    getAndDelOption(arguments, "--stronglyTyped", stronglyTyped);
+    if (stronglyTyped)
+    {
+        auto disableAndLog = [](bool& flag, std::string mode, std::string type) {
+            if (flag)
+            {
+                flag = false;
+                sample::gLogWarning << "Invalid usage, setting " << mode
+                                    << " mode is not allowed when strongly typed mode is "
+                                       "enabled. Disabling BuilderFlag::"
+                                    << type << "." << std::endl;
+            }
+        };
+        disableAndLog(fp16, "fp16", "kFP16");
+        disableAndLog(int8, "int8", "kINT8");
+        disableAndLog(bf16, "bf16", "kBF16");
+        disableAndLog(fp8, "fp8", "kFP8");
+    }
+
     if (fp8 && int8)
     {
         throw std::invalid_argument("Invalid usage, fp8 and int8 aren't allowed to be enabled together.");
@@ -1007,9 +1122,15 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--sparsity", sparsity);
 
     bool calibCheck = getAndDelOption(arguments, "--calib", calibration);
-    if (int8 && calibCheck && !shapes.empty() && shapesCalib.empty())
+    if (int8 && calibCheck && !optProfiles[calibProfile].empty() && shapesCalib.empty())
     {
-        shapesCalib = shapes;
+        shapesCalib = optProfiles[calibProfile];
+    }
+    else if (!shapesCalib.empty() && getCalibProfile)
+    {
+        sample::gLogWarning
+            << "--calibProfile have no effect when --minShapesCalib/--optShapesCalib/--maxShapesCalib is set."
+            << std::endl;
     }
 
     std::string profilingVerbosityString;
@@ -1053,6 +1174,8 @@ void BuildOptions::parse(Arguments& arguments)
     {
         load = true;
     }
+    getAndDelOption(arguments, "--getPlanVersionOnly", getPlanVersionOnly);
+
     if (getAndDelOption(arguments, "--saveEngine", engine))
     {
         save = true;
@@ -1147,6 +1270,7 @@ void BuildOptions::parse(Arguments& arguments)
     {
         timingCacheMode = TimingCacheMode::kLOCAL;
     }
+    getAndDelOption(arguments, "--errorOnTimingCacheMiss", errorOnTimingCacheMiss);
     if (getAndDelOption(arguments, "--heuristic", heuristic))
     {
         sample::gLogWarning << "--heuristic flag has been deprecated, use --builderOptimizationLevel=<N> flag instead "
@@ -1308,7 +1432,7 @@ void InferenceOptions::parse(Arguments& arguments)
     splitInsertKeyValue(inputsList, inputs);
 
     getShapesInference(arguments, shapes, "--shapes");
-    getAndDelOption(arguments, "--batch", batch);
+    setOptProfile = getAndDelOption(arguments, "--useProfile", optProfileIndex);
 }
 
 void ReportingOptions::parse(Arguments& arguments)
@@ -1320,6 +1444,7 @@ void ReportingOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--dumpRawBindingsToFile", dumpRawBindings);
     getAndDelOption(arguments, "--dumpProfile", profile);
     getAndDelOption(arguments, "--dumpLayerInfo", layerInfo);
+    getAndDelOption(arguments, "--dumpOptimizationProfile", optProfileInfo);
     getAndDelOption(arguments, "--exportTimes", exportTimes);
     getAndDelOption(arguments, "--exportOutput", exportOutput);
     getAndDelOption(arguments, "--exportProfile", exportProfile);
@@ -1364,7 +1489,8 @@ void AllOptions::parse(Arguments& arguments)
 
     // Use explicitBatch when input model is ONNX or when dynamic shapes are used.
     const bool isOnnx{model.baseModel.format == ModelFormat::kONNX};
-    const bool hasDynamicShapes{!build.shapes.empty() || !inference.shapes.empty()};
+    const bool hasDynamicShapes{
+        (!build.optProfiles.empty() && !build.optProfiles[0].empty()) || !inference.shapes.empty()};
     const bool detectedExplicitBatch = isOnnx || hasDynamicShapes;
 
     // Throw an error if user tries to use --batch or --maxBatch when the engine has explicit batch dim.
@@ -1403,23 +1529,30 @@ void AllOptions::parse(Arguments& arguments)
         }
     }
 
-    // Propagate shape profile between builder and inference
-    for (auto const& s : build.shapes)
+    if (inference.optProfileIndex < static_cast<int32_t>(build.optProfiles.size()))
     {
-        if (inference.shapes.find(s.first) == inference.shapes.end())
+        // Propagate shape profile between builder and inference
+        for (auto const& s : build.optProfiles[inference.optProfileIndex])
         {
-            insertShapesInference(
-                inference.shapes, s.first, s.second[static_cast<size_t>(nvinfer1::OptProfileSelector::kOPT)]);
+            if (inference.shapes.find(s.first) == inference.shapes.end())
+            {
+                insertShapesInference(
+                    inference.shapes, s.first, s.second[static_cast<size_t>(nvinfer1::OptProfileSelector::kOPT)]);
+            }
         }
-    }
-    for (auto const& s : inference.shapes)
-    {
-        if (build.shapes.find(s.first) == build.shapes.end())
+        for (auto const& s : inference.shapes)
         {
-            // assume min/opt/max all the same
-            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kMIN, s.first, s.second);
-            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kOPT, s.first, s.second);
-            insertShapesBuild(build.shapes, nvinfer1::OptProfileSelector::kMAX, s.first, s.second);
+            if (build.optProfiles[inference.optProfileIndex].find(s.first)
+                == build.optProfiles[inference.optProfileIndex].end())
+            {
+                // assume min/opt/max all the same
+                insertShapesBuild(build.optProfiles[inference.optProfileIndex], nvinfer1::OptProfileSelector::kMIN,
+                    s.first, s.second);
+                insertShapesBuild(build.optProfiles[inference.optProfileIndex], nvinfer1::OptProfileSelector::kOPT,
+                    s.first, s.second);
+                insertShapesBuild(build.optProfiles[inference.optProfileIndex], nvinfer1::OptProfileSelector::kMAX,
+                    s.first, s.second);
+            }
         }
     }
 
@@ -1544,19 +1677,9 @@ std::ostream& operator<<(std::ostream& os, const BaseModelOptions& options)
     os << "Format: ";
     switch (options.format)
     {
-    case ModelFormat::kCAFFE:
-    {
-        os << "Caffe";
-        break;
-    }
     case ModelFormat::kONNX:
     {
         os << "ONNX";
-        break;
-    }
-    case ModelFormat::kUFF:
-    {
-        os << "UFF";
         break;
     }
     case ModelFormat::kANY: os << "*"; break;
@@ -1566,32 +1689,11 @@ std::ostream& operator<<(std::ostream& os, const BaseModelOptions& options)
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const UffInput& input)
-{
-    os << "Uff Inputs Layout: " << (input.NHWC ? "NHWC" : "NCHW") << std::endl;
-    for (const auto& i : input.inputs)
-    {
-        os << "Input: " << i.first << "," << i.second.d[0] << "," << i.second.d[1] << "," << i.second.d[2] << std::endl;
-    }
-
-    return os;
-}
-
 std::ostream& operator<<(std::ostream& os, const ModelOptions& options)
 {
     os << options.baseModel;
     switch (options.baseModel.format)
     {
-    case ModelFormat::kCAFFE:
-    {
-        os << "Prototxt: " << options.prototxt << std::endl;
-        break;
-    }
-    case ModelFormat::kUFF:
-    {
-        os << options.uffInputs;
-        break;
-    }
     case ModelFormat::kONNX: // Fallthrough: No options to report for ONNX or the generic case
     case ModelFormat::kANY: break;
     }
@@ -1620,6 +1722,11 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
         os << "fp16";
         break;
     }
+    case nvinfer1::DataType::kBF16:
+    {
+        os << "bf16";
+        break;
+    }
     case nvinfer1::DataType::kINT8:
     {
         os << "int8";
@@ -1645,6 +1752,7 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
         os << "fp8";
         break;
     }
+    case nvinfer1::DataType::kINT64: ASSERT(false && "Unsupported data type");
     }
     return os;
 }
@@ -1819,10 +1927,12 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Tactic sources: ";   printTacticSources(os, options.enabledTactics, options.disabledTactics)                 << std::endl <<
           "timingCacheMode: ";  printTimingCache(os, options.timingCacheMode)                                           << std::endl <<
           "timingCacheFile: " << options.timingCacheFile                                                                << std::endl <<
+          "errorOnTimingCacheMiss: "  << boolToEnabled(options.errorOnTimingCacheMiss)                                  << std::endl <<
           "Heuristic: "       << boolToEnabled(options.heuristic)                                                       << std::endl <<
           "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl <<
           "MaxAuxStreams: "   << options.maxAuxStreams                                                                  << std::endl <<
-          "BuilderOptimizationLevel: " << options.builderOptimizationLevel                                              << std::endl;
+          "BuilderOptimizationLevel: " << options.builderOptimizationLevel                                              << std::endl <<
+          "Calibration Profile Index: "<< options.calibProfile                                                  << std::endl;
     // clang-format on
 
     auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
@@ -1841,8 +1951,11 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
 
     printIOFormats(os, "Input(s)", options.inputFormats);
     printIOFormats(os, "Output(s)", options.outputFormats);
-    printShapes(os, "build", options.shapes);
-    printShapes(os, "calibration", options.shapesCalib);
+    for (size_t i = 0; i < options.optProfiles.size(); i++)
+    {
+        printShapes(os, "build", options.optProfiles[i], i);
+    }
+    printShapes(os, "calibration", options.shapesCalib, -1);
 
     return os;
 }
@@ -1899,7 +2012,7 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
     {
                           os << "Explicit"                                << std::endl;
     }
-    printShapes(os, "inference", options.shapes);
+    printShapes(os, "inference", options.shapes, options.optProfileIndex);
     os << "Iterations: "                << options.iterations                                   << std::endl <<
           "Duration: "                  << options.duration   << "s (+ "
                                         << options.warmup     << "ms warm up)"                  << std::endl <<
@@ -1915,7 +2028,8 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
           "Time Deserialize: "          << boolToEnabled(options.timeDeserialize)               << std::endl <<
           "Time Refit: "                << boolToEnabled(options.timeRefit)                     << std::endl <<
           "NVTX verbosity: "            << static_cast<int32_t>(options.nvtxVerbosity)          << std::endl <<
-          "Persistent Cache Ratio: "    << static_cast<float>(options.persistentCacheRatio)   << std::endl;
+          "Persistent Cache Ratio: "    << static_cast<float>(options.persistentCacheRatio)     << std::endl <<
+          "Optimization Profile Index: "<< options.optProfileIndex                     << std::endl;
     // clang-format on
 
     os << "Inputs:" << std::endl;
@@ -2002,19 +2116,7 @@ std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
 void BaseModelOptions::help(std::ostream& os)
 {
     // clang-format off
-    os << "  --uff=<file>                UFF model"                                             << std::endl <<
-          "  --onnx=<file>               ONNX model"                                            << std::endl <<
-          "  --model=<file>              Caffe model (default = no model, random weights used)" << std::endl;
-    // clang-format on
-}
-
-void UffInput::help(std::ostream& os)
-{
-    // clang-format off
-    os << "  --uffInput=<name>,X,Y,Z     Input blob name and its dimensions (X,Y,Z=C,H,W), it can be specified "
-                                                       "multiple times; at least one is required for UFF models" << std::endl <<
-          "  --uffNHWC                   Set if inputs are in the NHWC layout instead of NCHW (use "             <<
-                                                                    "X,Y,Z=H,W,C order in --uffInput)"           << std::endl;
+    os << "  --onnx=<file>               ONNX model"                                            << std::endl;
     // clang-format on
 }
 
@@ -2023,10 +2125,6 @@ void ModelOptions::help(std::ostream& os)
     // clang-format off
     os << "=== Model Options ==="                                                                                 << std::endl;
     BaseModelOptions::help(os);
-    os << "  --deploy=<file>             Caffe prototxt file"                                                     << std::endl <<
-          "  --output=<name>[,<name>]*   Output names (it can be specified multiple times); at least one output "
-                                                                                  "is required for UFF and Caffe" << std::endl;
-    UffInput::help(os);
     // clang-format on
 }
 
@@ -2034,8 +2132,6 @@ void BuildOptions::help(std::ostream& os)
 {
     // clang-format off
     os << "=== Build Options ==="                                                                                                                   "\n"
-          "  --maxBatch                         Set max batch size and build an implicit batch engine (default = same size as --batch)"             "\n"
-          "                                     This option should not be used when the input model is ONNX or when dynamic shapes are provided."   "\n"
           "  --minShapes=spec                   Build with dynamic shapes using a profile with the min shapes provided"                             "\n"
           "  --optShapes=spec                   Build with dynamic shapes using a profile with the opt shapes provided"                             "\n"
           "  --maxShapes=spec                   Build with dynamic shapes using a profile with the max shapes provided"                             "\n"
@@ -2050,7 +2146,8 @@ void BuildOptions::help(std::ostream& os)
           "                                     Each input shape is supplied as a key-value pair where key is the input name and"                   "\n"
           "                                     value is the dimensions (including the batch dimension) to be used for that input."                 "\n"
           "                                     Each key-value pair has the key and value separated using a colon (:)."                             "\n"
-          "                                     Multiple input shapes can be provided via comma-separated key-value pairs."                         "\n"
+          "                                     Multiple input shapes can be provided via comma-separated key-value pairs, and each input name can" "\n"
+          "                                     contain at most one wildcard ('*') character."                                                      "\n"
           "  --inputIOFormats=spec              Type and format of each of the input tensors (default = all inputs in fp32:chw)"                    "\n"
           "                                     See --outputIOFormats help for the grammar of type and format list."                                "\n"
           "                                     Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
@@ -2062,7 +2159,7 @@ void BuildOptions::help(std::ostream& os)
           "                                           needs specifying IO format) or set the type and format once for broadcasting."                "\n"
           R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                            "\n"
           "                                                 IOfmt ::= type:fmt"                                                                     "\n"
-          R"(                                               type  ::= "fp32"|"fp16"|"int32"|"int8")"                                                "\n"
+          R"(                                               type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int8"|"bool")"                                  "\n"
           R"(                                               fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
           R"(                                                          "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                            "\n"
           "  --workspace=N                      Set workspace size in MiB."                                                                         "\n"
@@ -2098,11 +2195,15 @@ void BuildOptions::help(std::ostream& os)
           "                                                     considered if the weights have the right sparsity pattern)"                         "\n"
           "                                           force   = enable sparse tactics in the builder and force-overwrite the weights to have"       "\n"
           "                                                     a sparsity pattern (even if you loaded a model yourself)"                           "\n"
+          "                                                     [Deprecated] this knob has been deprecated."                                        "\n"
+          "                                                     Please use <polygraphy surgeon prune> to rewrite the weights."                      "\n"
           "  --noTF32                           Disable tf32 precision (default is to enable tf32, in addition to fp32)"                            "\n"
           "  --fp16                             Enable fp16 precision, in addition to fp32 (default = disabled)"                                    "\n"
+          "  --bf16                             Enable bf16 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --int8                             Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --fp8                              Enable fp8 precision, in addition to fp32 (default = disabled)"                                     "\n"
           "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
+          "  --stronglyTyped                    Create network with strongly typed mode (default = disabled)"                                       "\n"
           "  --directIO                         Avoid reformatting at network boundaries. (default = disabled)"                                     "\n"
           "  --precisionConstraints=spec        Control precision constraint setting. (default = none)"                                             "\n"
           R"(                                       Precision Constraints: spec ::= "none" | "obey" | "prefer")"                                    "\n"
@@ -2112,19 +2213,19 @@ void BuildOptions::help(std::ostream& os)
           "                                                otherwise"                                                                               "\n"
           "  --layerPrecisions=spec             Control per-layer precision constraints. Effective only when precisionConstraints is set to"        "\n"
           R"(                                   "obey" or "prefer". (default = none))"                                                              "\n"
-          R"(                                   The specs are read left-to-right, and later ones override earlier ones. "*" can be used as a)"      "\n"
-          "                                     layerName to specify the default precision for all the unspecified layers."                         "\n"
+          R"(                                   The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
+          "                                     contain at most one wildcard ('*') character."                                                      "\n"
           R"(                                   Per-layer precision spec ::= layerPrecision[","spec])"                                              "\n"
           R"(                                                       layerPrecision ::= layerName":"precision)"                                      "\n"
-          R"(                                                       precision ::= "fp32"|"fp16"|"int32"|"int8")"                                    "\n"
+          R"(                                                       precision ::= "fp32"|"fp16"|"bf16"|"int32"|"int8")"                             "\n"
           "  --layerOutputTypes=spec            Control per-layer output type constraints. Effective only when precisionConstraints is set to"      "\n"
           R"(                                   "obey" or "prefer". (default = none)"                                                               "\n"
-          R"(                                   The specs are read left-to-right, and later ones override earlier ones. "*" can be used as a)"      "\n"
-          "                                     layerName to specify the default precision for all the unspecified layers. If a layer has more than""\n"
+          R"(                                   The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
+          "                                     contain at most one wildcard ('*') character. If a layer has more than"                             "\n"
           R"(                                   one output, then multiple types separated by "+" can be provided for this layer.)"                  "\n"
           R"(                                   Per-layer output type spec ::= layerOutputTypes[","spec])"                                          "\n"
           R"(                                                         layerOutputTypes ::= layerName":"type)"                                       "\n"
-          R"(                                                         type ::= "fp32"|"fp16"|"int32"|"int8"["+"type])"                              "\n"
+          R"(                                                         type ::= "fp32"|"fp16"|"bf16"|"int32"|"int8"["+"type])"                       "\n"
           "  --layerDeviceTypes=spec            Specify layer-specific device type."                                                                "\n"
           "                                     The specs are read left-to-right, and later ones override earlier ones. If a layer does not have"   "\n"
           "                                     a device type specified, the layer will opt for the default device type."                           "\n"
@@ -2143,6 +2244,8 @@ void BuildOptions::help(std::ostream& os)
           "  --restricted                       Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
           "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
           "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
+          "  --getPlanVersionOnly               Print TensorRT version when loaded plan was created. Works without deserialization of the plan."    "\n"
+          "                                     Use together with --loadEngine. Supported only for engines created with 8.6 and forward."           "\n"
           "  --tacticSources=tactics            Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             "\n"
           "                                     tactic sources (default = all available tactics)."                                                  "\n"
           "                                     Note: Currently only cuDNN, cuBLAS, cuBLAS-LT, and edge mask convolutions are listed as optional"   "\n"
@@ -2153,6 +2256,7 @@ void BuildOptions::help(std::ostream& os)
           R"(                                                               |"JIT_CONVOLUTIONS")"                                                   "\n"
           "                                     For example, to disable cudnn and enable cublas: --tacticSources=-CUDNN,+CUBLAS"                    "\n"
           "  --noBuilderCache                   Disable timing cache in builder (default is to enable timing cache)"                                "\n"
+          "  --errorOnTimingCacheMiss           Emit error when a tactic being timed is not present in the timing cache (default = false)"          "\n"
           "  --heuristic                        Enable tactic selection heuristic in builder (default is to disable the heuristic)"                 "\n"
           "  --timingCacheFile=<file>           Save/load the serialized global timing cache"                                                       "\n"
           "  --preview=features                 Specify preview feature to be used by adding (+) or removing (-) preview features from the default" "\n"
@@ -2177,10 +2281,15 @@ void BuildOptions::help(std::ostream& os)
           "                                                filesystem (in the directory given by --tempdir)."                                       "\n"
           "                                     For example, to allow in-memory files and disallow temporary files:"                                "\n"
           "                                         --tempfileControls=in_memory:allow,temporary:deny"                                              "\n"
-          R"(                                   If a flag is unspecified, the default behavior is "allow".)"                                        "\n"
+          R"(                                     If a flag is unspecified, the default behavior is "allow".)"                                      "\n"
           "  --maxAuxStreams=N                  Set maximum number of auxiliary streams per inference stream that TRT is allowed to use to run "    "\n"
           "                                     kernels in parallel if the network contains ops that can run in parallel, with the cost of more "   "\n"
           "                                     memory usage. Set this to 0 for optimal memory usage. (default = using heuristics)"                 "\n"
+          "  --profile                          Build with dynamic shapes using a profile with the min/max/opt shapes provided. Can be specified"   "\n"
+          "                                         multiple times to create multiple profiles with contiguous index."                              "\n"
+          "                                     (ex: --profile=0 --minShapes=<spec> --optShapes=<spec> --maxShapes=<spec> --profile=1 ...)"         "\n"
+          "  --calibProfile                     Select the optimization profile to calibrate by index. (default = "
+                                                                                                                << defaultOptProfileIndex << ")"    "\n"
           ;
     // clang-format on
     os << std::flush;
@@ -2205,16 +2314,14 @@ void InferenceOptions::help(std::ostream& os)
 {
     // clang-format off
     os << "=== Inference Options ==="                                                                                                << std::endl <<
-          "  --batch=N                   Set batch size for implicit batch engines (default = "              << defaultBatch << ")"  << std::endl <<
-          "                              This option should not be used when the engine is built from an ONNX model or when dynamic" << std::endl <<
-          "                              shapes are provided when the engine is built."                                              << std::endl <<
           "  --shapes=spec               Set input shapes for dynamic shapes inference inputs."                                      << std::endl <<
           R"(                              Note: Input names can be wrapped with escaped single quotes (ex: 'Input:0').)"            << std::endl <<
           "                              Example input shapes spec: input0:1x3x256x256, input1:1x3x128x128"                          << std::endl <<
           "                              Each input shape is supplied as a key-value pair where key is the input name and"           << std::endl <<
           "                              value is the dimensions (including the batch dimension) to be used for that input."         << std::endl <<
           "                              Each key-value pair has the key and value separated using a colon (:)."                     << std::endl <<
-          "                              Multiple input shapes can be provided via comma-separated key-value pairs."                 << std::endl <<
+          "                              Multiple input shapes can be provided via comma-separated key-value pairs, and each input " << std::endl <<
+          "                              name can contain at most one wildcard ('*') character."                                     << std::endl <<
           "  --loadInputs=spec           Load input values from files (default = generate random inputs). Input names can be "
                                                                                        "wrapped with single quotes (ex: 'Input:0')"  << std::endl <<
           R"(                            Input values spec ::= Ival[","spec])"                                                       << std::endl <<
@@ -2229,7 +2336,8 @@ void InferenceOptions::help(std::ostream& os)
                                                                                                "(default = " << defaultSleep << ")"  << std::endl <<
           "  --idleTime=N                Sleep N milliseconds between two continuous iterations"
                                                                                                "(default = " << defaultIdle << ")"   << std::endl <<
-          "  --infStreams=N              Instantiate N engines to run inference concurrently (default = "  << defaultStreams << ")"  << std::endl <<
+          "  --infStreams=N              Instantiate N execution contexts to run inference concurrently "
+                                                                                             "(default = " << defaultStreams << ")"  << std::endl <<
           "  --exposeDMA                 Serialize DMA transfers to and from device (default = disabled)."                           << std::endl <<
           "  --noDataTransfers           Disable DMA transfers to and from device (default = enabled)."                              << std::endl <<
           "  --useManagedMemory          Use managed memory instead of separate host and device allocations (default = disabled)."   << std::endl <<
@@ -2246,7 +2354,9 @@ void InferenceOptions::help(std::ostream& os)
           "  --skipInference             Exit after the engine has been built and skip inference perf measurement "
                                                                                                              "(default = disabled)"  << std::endl <<
           "  --persistentCacheRatio      Set the persistentCacheLimit in ratio, 0.5 represent half of max persistent L2 size "
-                                                                                                                    "(default = 0)"  << std::endl;
+                                                                                                                    "(default = 0)"  << std::endl <<
+          "  --useProfile                Set the optimization profile for the inference context "
+                                                                          "(default = " << defaultOptProfileIndex << " )."  << std::endl;
     // clang-format on
 }
 
@@ -2268,6 +2378,8 @@ void ReportingOptions::help(std::ostream& os)
                                                                                   "(default = disabled)" << std::endl <<
           "  --dumpProfile               Print profile information per layer (default = disabled)"       << std::endl <<
           "  --dumpLayerInfo             Print layer information of the engine to console "
+                                                                                "(default = disabled)"   << std::endl <<
+          "  --dumpOptimizationProfile   Print the optimization profile(s) information "
                                                                                 "(default = disabled)"   << std::endl <<
           "  --exportTimes=<file>        Write the timing results in a json file (default = disabled)"   << std::endl <<
           "  --exportOutput=<file>       Write the output tensors to a json file (default = disabled)"   << std::endl <<

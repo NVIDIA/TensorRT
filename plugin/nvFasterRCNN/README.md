@@ -11,7 +11,7 @@
 
 ## Description
 
-The `NvPluginFasterRCNN` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT and used in [sampleFasterRCNN](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#fasterrcnn_sample) to perform inference.
+The `NvPluginFasterRCNN` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT.
 
 `NvPluginFasterRCNN` decodes predicted bounding boxes, extracts their corresponding objectness score, extracts region of interest from predicted bounding boxes using non maximum suppression, and extracts the feature map of region of interest (ROI) using ROI pooling for downstreaming object classification tasks.
 

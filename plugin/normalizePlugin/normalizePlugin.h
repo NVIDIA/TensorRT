@@ -28,7 +28,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class Normalize : public IPluginV2Ext
+class TRT_DEPRECATED Normalize : public IPluginV2Ext
 {
 public:
     Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpatial, bool channelShared, float eps);
@@ -107,7 +107,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class NormalizePluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED NormalizePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     NormalizePluginCreator();

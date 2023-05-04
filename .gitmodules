@@ -9,4 +9,4 @@
 [submodule "parsers/onnx"]
 	path = parsers/onnx
 	url = https://github.com/onnx/onnx-tensorrt.git
-	branch = main
+	branch = 9.0-EA

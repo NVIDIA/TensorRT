@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from typing import Sequence
+
 import numpy as np
 import onnx
 import onnx.numpy_helper
@@ -24,9 +26,34 @@ from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 
+from typing import Union
 
-def dtype_to_onnx(dtype: np.dtype) -> int:
+
+def dtype_to_onnx(dtype: Union[np.dtype, "onnx.TensorProto.DataType"]) -> int:
+    if isinstance(dtype, int):
+        return dtype
     return onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(dtype)]
+
+
+def check_duplicate_node_names(nodes: Sequence[Node], level=G_LOGGER.WARNING):
+    # Check if node names are unique. If not, log based on severity.
+
+    # Note:
+    # Empty string or None attribute values are not considered duplicates.
+    name_map = {}
+    for node in nodes:
+        if not node.name:
+            continue
+        if node.name in name_map:
+            msg = "Found distinct Nodes that share the same name:\n[id: {:}]:\n {:}---\n[id: {:}]:\n {:}\n".format(
+                id(name_map[node.name]),
+                name_map[node.name],
+                id(node),
+                node,
+            )
+            G_LOGGER.log(msg, level)
+        else:
+            name_map[node.name] = node
 
 
 class OnnxExporter(BaseExporter):
@@ -92,7 +119,9 @@ class OnnxExporter(BaseExporter):
             graph (Graph): The graph to export.
 
             do_type_check (bool): Whether to check that input and output tensors have data types defined, and fail if not.
+                                  Defaults to True.
         """
+        check_duplicate_node_names(graph.nodes, level=G_LOGGER.WARNING)
         nodes = [OnnxExporter.export_node(node, do_type_check) for node in graph.nodes]
         inputs = [OnnxExporter.export_value_info_proto(inp, do_type_check) for inp in graph.inputs]
         outputs = [OnnxExporter.export_value_info_proto(out, do_type_check) for out in graph.outputs]
@@ -135,6 +164,7 @@ def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto"
         graph (Graph): The graph to export
 
         do_type_check (bool): Whether to check that input and output tensors have data types defined, and fail if not.
+                              Defaults to True.
         kwargs: Additional arguments to onnx.helper.make_model
 
     Returns:

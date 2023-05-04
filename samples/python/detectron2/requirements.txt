@@ -1,5 +1,6 @@
 onnx==1.9.0; python_version<"3.8"
-onnx==1.12.0; python_version>="3.8"
+onnx==1.12.0; python_version>="3.8" and python_version<"3.11"
+onnx==1.13.0; python_version>="3.11"
 onnxruntime==1.8.1; python_version<"3.8"
 onnxruntime==1.12.1; python_version>="3.8"
 Pillow

@@ -131,6 +131,10 @@ void ModulatedDeformableConvPluginDynamic::configurePlugin(nvinfer1::DynamicPlug
 {
     try
     {
+        if (mCublasHandle == nullptr)
+        {
+            PLUGIN_CUBLASASSERT(cublasCreate(&mCublasHandle));
+        }
         if (nbInputs == 5)
         {
             mWithBias = true;
@@ -251,12 +255,12 @@ void ModulatedDeformableConvPluginDynamic::destroy() noexcept
 }
 
 void ModulatedDeformableConvPluginDynamic::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) noexcept
-{
-    mCublasHandle = cublasContext;
-}
+    cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) noexcept {}
 
-void ModulatedDeformableConvPluginDynamic::detachFromContext() noexcept {}
+void ModulatedDeformableConvPluginDynamic::detachFromContext() noexcept
+{
+    PLUGIN_CUBLASASSERT(cublasDestroy(mCublasHandle));
+}
 
 void ModulatedDeformableConvPluginDynamic::setPluginNamespace(char const* libNamespace) noexcept
 {

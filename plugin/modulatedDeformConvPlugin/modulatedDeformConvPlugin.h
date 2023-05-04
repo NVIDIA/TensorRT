@@ -97,7 +97,7 @@ private:
     int32_t mGroup;
     bool mWithBias;
 
-    cublasHandle_t mCublasHandle;
+    cublasHandle_t mCublasHandle{nullptr};
 };
 
 class ModulatedDeformableConvPluginDynamicCreator : public nvinfer1::IPluginCreator

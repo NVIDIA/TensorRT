@@ -31,8 +31,8 @@
 #define dllGetSym(handle, name) dlsym(handle, name)
 #endif
 
+#include "common/cudaDriverWrapper.h"
 #include "common/plugin.h"
-#include "cudaDriverWrapper.h"
 #include <cstdint>
 #include <cstdio>
 #include <cuda.h>

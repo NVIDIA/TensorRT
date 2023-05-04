@@ -40,23 +40,32 @@ from torch import load, save
 from torch.nn import Module
 
 # tensorrt
-from tensorrt import PreviewFeature, MemoryPoolType
+from tensorrt import PreviewFeature, MemoryPoolType, ProfilingVerbosity
 
 # TRT-HuggingFace
-from NNDF.networks import NetworkMetadata
+from NNDF.networks import NetworkMetadata, NNConfig
 from NNDF.logger import G_LOGGER
+
+
+def _calculate_polygraphy_verbosity():
+    if G_LOGGER.level == G_LOGGER.DEBUG:
+        return PG_LOGGER.EXTRA_VERBOSE
+    elif G_LOGGER.level == G_LOGGER.INFO:
+        return PG_LOGGER.INFO
+    else:
+        return PG_LOGGER.WARNING
 
 
 class ModelFileConverter:
     """Abstract class for converting one model format to another."""
 
-    def __init__(self, onnx_class, torch_class, trt_engine_class):
-        self.onnx_class = onnx_class
+    def __init__(self, torch_class, onnx_class, trt_engine_class):
         self.torch_class = torch_class
+        self.onnx_class = onnx_class
         self.trt_engine_class = trt_engine_class
 
     def torch_to_onnx(
-        self, output_fpath: str, model: Module, network_metadata: NetworkMetadata
+        self, output_fpath: str, model: Module, network_metadata: NetworkMetadata, config: NNConfig
     ):
         """
         Converts a torch.Model into an ONNX model on disk specified at output_fpath.
@@ -98,6 +107,8 @@ class ModelFileConverter:
         network_metadata: NetworkMetadata,
         profiles: List[Profile],
         preview_features: List[PreviewFeature],
+        nvtx_verbose: bool,
+        timing_cache: str,
     ):
         """
         Converts ONNX file to TRT engine.
@@ -116,37 +127,51 @@ class ModelFileConverter:
         """
         result = self.trt_engine_class(output_fpath, network_metadata)
 
-        G_LOGGER.info("Using optimization profiles: {:}".format(profiles))
+        profiling_verbosity = ProfilingVerbosity.DETAILED if nvtx_verbose else ProfilingVerbosity.LAYER_NAMES_ONLY
 
         try:
             self.trt_inference_config = CreateConfig(
                 tf32=True,
                 fp16=network_metadata.precision.fp16,
-                memory_pool_limits = {MemoryPoolType.WORKSPACE: result.max_trt_workspace * 1024 * 1024},
                 profiles=profiles,
                 precision_constraints=("obey" if result.use_obey_precision_constraints() else None),
-                preview_features=preview_features
+                preview_features=preview_features,
+                load_timing_cache=timing_cache,
+                profiling_verbosity=profiling_verbosity,
             )
         except TypeError as e:
             G_LOGGER.error(f"This demo may have an outdated polygraphy. Please see requirements.txt for more details.")
             raise e
 
-        if G_LOGGER.level == G_LOGGER.DEBUG:
-            g_logger_verbosity = PG_LOGGER.EXTRA_VERBOSE
-        elif G_LOGGER.level == G_LOGGER.INFO:
-            g_logger_verbosity = PG_LOGGER.INFO
-        else:
-            g_logger_verbosity = PG_LOGGER.WARNING
+        pg_logger_verbosity = _calculate_polygraphy_verbosity()
 
-        with PG_LOGGER.verbosity(g_logger_verbosity):
+        with PG_LOGGER.verbosity(pg_logger_verbosity):
             network_definition = result.get_network_definition(network_from_onnx_path(input_fpath))
 
             trt_engine = engine_from_network(
-                network_definition, config=self.trt_inference_config
+                network_definition,
+                config=self.trt_inference_config,
+                save_timing_cache=timing_cache
             )
             save_engine(trt_engine, output_fpath)
 
         return result
+
+    def post_process_onnx(self, output_fpath):
+        """
+        Post process ONNX file using onnx_graphsurgeon. For some models in fp16, the model from HuggingFace
+        may have addition after layernorm which can cause overflow or underflow.
+
+        Therefore we need to clamp the weight to fp16 and move the operations to avoid them. This operation
+        differs from model to model, so different class could overwrite this function to fit the need.
+
+        Args:
+            output_fpath(str): Path for the onnx file
+
+        Returns:
+            None. The model is changed in place.
+        """
+        pass
 
 
 class NNModelFile(metaclass=ABCMeta):
@@ -186,7 +211,7 @@ class NNModelFile(metaclass=ABCMeta):
         Converts ONNX file into torch.Model which is written to disk.
         Uses provided converter to convert object or default_convert is used instead if available.
 
-        Arg:
+        Args:
             output_fpath (str): File location of the generated torch file.
             converter (ModelFileConverter): Class to convert current model instance into another.
             force_overwrite (bool): If the file already exists, tell whether or not to overwrite.
@@ -204,6 +229,7 @@ class NNModelFile(metaclass=ABCMeta):
         output_fpath: str,
         converter: ModelFileConverter = None,
         force_overwrite: bool = False,
+        config: NNConfig = None,
     ):
         """
         Converts current model into an ONNX model.
@@ -228,7 +254,9 @@ class NNModelFile(metaclass=ABCMeta):
         converter: ModelFileConverter = None,
         force_overwrite: bool = False,
         profiles: List[Profile] = [],
-        preview_features: List[PreviewFeature] = []
+        preview_features: List[PreviewFeature] = [],
+        nvtx_verbose: bool = False,
+        timing_cache: str = None,
     ):
         """
         Converts current model into an TRT engine.
@@ -241,9 +269,10 @@ class NNModelFile(metaclass=ABCMeta):
                                     Since torch models folders, can potentially erase entire folders.
             profiles (List[polygraphy.backend.trt.Profile]): The optimization profiles used to build the engine.
             preview_features (List[tensorrt.PreviewFeature]): The preview features to enable when building the engine.
+            max_workspace_size (int): The maximum scratch space for TRT. This is to track the memory usage for TRT engine build.
 
         Returns:
-            TRTEngineFile: Newly generated ONNXModelFile
+            TRTEngineFile: Newly generated TRTEngineFile
         """
         raise NotImplementedError(
             "Current model does not support exporting to trt engine."
@@ -255,6 +284,8 @@ class NNModelFile(metaclass=ABCMeta):
 
 
 class TorchModelFile(NNModelFile):
+
+
     def __init__(
         self,
         model: Union[str, Module],
@@ -266,7 +297,7 @@ class TorchModelFile(NNModelFile):
         we provide a similar option here. Arguments can either be a path on disk or from model itself.
 
         Args:
-            model (Union[str, torch.Model]): Location of the model as fpath OR loaded torch.Model object.
+            model (Union[str, torch.Model]): Location of the model as fpath OR loaded torch.Module object.
         """
         super().__init__(default_converter, network_metadata)
 
@@ -301,6 +332,7 @@ class TorchModelFile(NNModelFile):
         output_fpath: str,
         converter: ModelFileConverter = None,
         force_overwrite: bool = False,
+        config: NNConfig = None,
     ):
         """
         Converts the torch model into an onnx model.
@@ -310,6 +342,7 @@ class TorchModelFile(NNModelFile):
             converter (ModelFileConverter): Class to convert current model instance into another.
             force_overwrite (bool): If the file already exists, tell whether or not to overwrite.
                                     Since torch models folders, can potentially erase entire folders.
+            config (NNConfig): The NNConfig class that passed into torch_to_onnx function
         Return:
             (converter.onnx_class): Returns a converted instance of ONNXModelFile.
         """
@@ -318,7 +351,7 @@ class TorchModelFile(NNModelFile):
             return converter.onnx_class(output_fpath, self.network_metadata)
 
         return converter.torch_to_onnx(
-            output_fpath, self.load_model(), self.network_metadata
+            output_fpath, self.load_model(), self.network_metadata, config
         )
 
     def as_torch_model(
@@ -357,6 +390,52 @@ class TorchModelFile(NNModelFile):
         if self.fpath:
             G_LOGGER.debug("Removing saved torch model from location: {}".format(self.fpath))
             rmtree(self.fpath)
+
+
+def _log_fake_perf_metrics(
+    build_time: float = 0.0,
+    peak_cpu_memory: int = 0,
+    peak_cpu_allocator_memory: int = 0,
+    peak_gpu_allocator_memory: int = 0,
+) -> None:
+    """Logs fake perf metrics for internal perf testing.
+
+    Logs "fake" perf metrics for detection in internal tests when engines built in earlier
+    tests (e.g. dynamic batch sized engines) are reused in another test.
+
+    Args:
+            build_time (float, optional): Defaults to 0.0.
+            peak_cpu_memory (int, optional): Defaults to 0.
+            peak_cpu_allocator_memory (int, optional): Defaults to 0.
+            peak_gpu_allocator_memory (int, optional): Defaults to 0.
+
+    Note:
+            This function needs to be modified in case the current TRT and internal perf test
+            specification changes.
+    """
+    pg_logger_verbosity = _calculate_polygraphy_verbosity()
+    perf_metrics = {
+        "BUILD_TIME": (
+            PG_LOGGER.EXTRA_VERBOSE,
+            "Engine generation completed in {} seconds".format(build_time),
+        ),
+        "PEAK_CPU_MEMORY": (
+            PG_LOGGER.VERBOSE,
+            "[MemUsageStats] Peak memory usage during Engine building and serialization: CPU: {} MiB".format(
+                peak_cpu_memory
+            ),
+        ),
+        "PEAK_GPU_MEMORY": (
+            PG_LOGGER.VERBOSE,
+            "[MemUsageStats] Peak memory usage of TRT CPU/GPU memory allocators: CPU {} MiB, GPU {} MiB".format(
+                peak_cpu_allocator_memory, peak_gpu_allocator_memory
+            ),
+        ),
+    }
+
+    with PG_LOGGER.verbosity(pg_logger_verbosity):
+        for metric_severity, metric_msg in perf_metrics.values():
+            PG_LOGGER.log(metric_msg, metric_severity, stack_depth=3, error_ok=True)
 
 
 class ONNXModelFile(NNModelFile):
@@ -419,6 +498,7 @@ class ONNXModelFile(NNModelFile):
         """
         converter = self.default_converter if converter is None else converter()
         if not force_overwrite and os.path.exists(output_fpath):
+            G_LOGGER.debug("ONNX file exists at location {}".format(output_fpath))
             return converter.torch_class(output_fpath, self.network_metadata)
 
         return converter.onnx_to_torch(output_fpath, self.fpath, self.network_metadata)
@@ -432,19 +512,9 @@ class ONNXModelFile(NNModelFile):
 
     def cleanup(self) -> None:
         G_LOGGER.debug("Removing saved ONNX model from location: {}".format(self.fpath))
-        if (not self.network_metadata.other.kv_cache) or ("encoder" in self.fpath):
-            # Clean up any onnx external files by removing integer named values and weight files
-            workspace_path = os.path.split(self.fpath)[0]
-            self._cleanup_onnx_folder(workspace_path)
-
-        else:
-            # In kv cache mode, hard to remove the decoder. Therefore need to search for temporary WAR.
-            decoder_path = os.path.split(self.fpath)[0]
-            decoder_non_kv_path = os.path.join(decoder_path, "non-kv")
-            decoder_kv_path = os.path.join(decoder_path, "kv")
-            # Remove kv and nonkv folder correspondingly.
-            self._cleanup_onnx_folder(decoder_non_kv_path)
-            self._cleanup_onnx_folder(decoder_kv_path)
+        # Some models have external weights, so clean everything in the folder except the TRT Engine.
+        workspace_path = os.path.split(self.fpath)[0]
+        self._cleanup_onnx_folder(workspace_path)
 
     def as_trt_engine(
         self,
@@ -452,7 +522,9 @@ class ONNXModelFile(NNModelFile):
         converter: ModelFileConverter = None,
         force_overwrite: bool = False,
         profiles = [],
-        preview_features = []
+        preview_features = [],
+        nvtx_verbose = False,
+        timing_cache = None,
     ):
         """
         Converts the onnx model into an trt engine.
@@ -464,6 +536,7 @@ class ONNXModelFile(NNModelFile):
                                     Since torch models folders, can potentially erase entire folders.
             profiles (List[polygraphy.backend.trt.Profile]): The optimization profiles used to build the engine.
             preview_features (List[tensorrt.PreviewFeature]): The preview features to set when building the engine.
+            max_workspace_size (int): The max workspace size when building the engine.
         Return:
             (converter.trt_engine_class): Returns a converted instance of TRTEngineFile.
         """
@@ -471,6 +544,8 @@ class ONNXModelFile(NNModelFile):
 
         # TODO: Need to check if the old engine file is compatible with current setting
         if not force_overwrite and os.path.exists(output_fpath):
+            G_LOGGER.debug("TRT Engine exists at location {}.".format(output_fpath))
+            _log_fake_perf_metrics()
             return converter.trt_engine_class(output_fpath, self.network_metadata)
 
         return converter.onnx_to_trt(
@@ -478,21 +553,13 @@ class ONNXModelFile(NNModelFile):
             self.fpath,
             self.network_metadata,
             profiles,
-            preview_features
+            preview_features,
+            nvtx_verbose,
+            timing_cache,
         )
 
 
 class TRTEngineFile(NNModelFile):
-
-    @abstractmethod
-    def use_obey_precision_constraints(self):
-        pass
-
-    # get_network_definition can be overloaded to alter the network definition.
-    # For example, this function can be used to change the precisions of ops or
-    # data type of intermediate tensors.
-    def get_network_definition(self, network_definition):
-        return network_definition
 
     def __init__(
         self,
@@ -503,6 +570,18 @@ class TRTEngineFile(NNModelFile):
         super().__init__(default_converter, network_metadata)
         self.fpath = model
         self.max_trt_workspace = 3072
+
+    @abstractmethod
+    def use_obey_precision_constraints(self):
+        pass
+
+    def get_network_definition(self, network_definition):
+        """
+        get_network_definition can be overloaded to alter the network definition.
+        For example, this function can be used to change the precisions of ops or
+        data type of intermediate tensors.
+        """
+        return network_definition
 
     def cleanup(self) -> None:
         G_LOGGER.debug("Removing saved engine model from location: {}".format(self.fpath))

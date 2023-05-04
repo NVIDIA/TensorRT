@@ -39,27 +39,32 @@ size_t size(nvinfer1::DataType type)
     case nvinfer1::DataType::kHALF: return 2;
     case nvinfer1::DataType::kINT8: return 1;
     case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kINT64: return 8;
     case nvinfer1::DataType::kBOOL: return 1;
     case nvinfer1::DataType::kUINT8: return 1;
     case nvinfer1::DataType::kFP8: return 1;
+    case nvinfer1::DataType::kBF16: return 2;
     }
     return -1;
 }
 
-// Converts a TRT datatype to its corresponding numpy dtype.
-py::dtype nptype(nvinfer1::DataType type)
+std::unique_ptr<py::dtype> nptype(nvinfer1::DataType type)
 {
+    auto const makeDtype = [](char const* typeStr) { return std::make_unique<py::dtype>(typeStr); };
+
     switch (type)
     {
-    case nvinfer1::DataType::kFLOAT: return py::dtype("f4");
-    case nvinfer1::DataType::kHALF: return py::dtype("f2");
-    case nvinfer1::DataType::kINT8: return py::dtype("i1");
-    case nvinfer1::DataType::kINT32: return py::dtype("i4");
-    case nvinfer1::DataType::kBOOL: return py::dtype("b1");
-    case nvinfer1::DataType::kUINT8: return py::dtype("u1");
-    case nvinfer1::DataType::kFP8: return py::dtype("f1");
+    case nvinfer1::DataType::kFLOAT: return makeDtype("f4");
+    case nvinfer1::DataType::kHALF: return makeDtype("f2");
+    case nvinfer1::DataType::kINT8: return makeDtype("i1");
+    case nvinfer1::DataType::kINT32: return makeDtype("i4");
+    case nvinfer1::DataType::kINT64: return makeDtype("i8");
+    case nvinfer1::DataType::kBOOL: return makeDtype("b1");
+    case nvinfer1::DataType::kUINT8: return makeDtype("u1");
+    case nvinfer1::DataType::kFP8: return makeDtype("f1");
+    case nvinfer1::DataType::kBF16: return nullptr;
     }
-    return py::dtype("unknown");
+    return nullptr;
 }
 
 nvinfer1::DataType type(py::dtype const& type)
@@ -71,6 +76,10 @@ nvinfer1::DataType type(py::dtype const& type)
     else if (type.is(py::dtype("f2")))
     {
         return nvinfer1::DataType::kHALF;
+    }
+    else if (type.is(py::dtype("i8")))
+    {
+        return nvinfer1::DataType::kINT64;
     }
     else if (type.is(py::dtype("i4")))
     {

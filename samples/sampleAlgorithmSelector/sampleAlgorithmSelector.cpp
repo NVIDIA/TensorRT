@@ -470,6 +470,10 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
     {
         config->setFlag(BuilderFlag::kFP16);
     }
+    if (mParams.bf16)
+    {
+        config->setFlag(BuilderFlag::kBF16);
+    }
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
@@ -487,6 +491,7 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
     {
         mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
     }
+
     if (!mRuntime)
     {
         return false;
@@ -639,6 +644,12 @@ bool SampleAlgorithmSelector::infer()
         return false;
     }
 
+    for (int32_t i = 0; i < mEngine->getNbIOTensors(); i++)
+    {
+        auto const name = mEngine->getIOTensorName(i);
+        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
+    }
+
     // Pick a random digit to try to infer.
     srand(time(NULL));
     int32_t const digit = rand() % 10;
@@ -659,7 +670,7 @@ bool SampleAlgorithmSelector::infer()
     buffers.copyInputToDeviceAsync(stream);
 
     // Asynchronously enqueue the inference work
-    if (!context->enqueueV2(buffers.getDeviceBindings().data(), stream, nullptr))
+    if (!context->enqueueV3(stream))
     {
         return false;
     }
@@ -699,6 +710,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const
     params.dlaCore = args.useDLACore;
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
+    params.bf16 = args.runInBf16;
 
     params.onnxFileName = "mnist.onnx";
     params.inputTensorNames.push_back("Input3");
@@ -724,6 +736,7 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--int8          Run in Int8 mode.\n";
     std::cout << "--fp16          Run in FP16 mode.\n";
+    std::cout << "--bf16          Run in BF16 mode.\n";
 }
 
 int32_t main(int32_t argc, char** argv)

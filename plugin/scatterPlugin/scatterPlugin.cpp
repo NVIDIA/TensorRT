@@ -156,6 +156,8 @@ int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc c
     case DataType::kUINT8:
     case DataType::kBOOL: elementSizeInBytes = 1; break;
     case DataType::kFP8: PLUGIN_FAIL("FP8 not supported"); break;
+    case DataType::kBF16:
+    case DataType::kINT64: PLUGIN_FAIL("Unsupported data type");
     }
 
     for (int32_t i = indexRank; i < dataDims.nbDims; i++)

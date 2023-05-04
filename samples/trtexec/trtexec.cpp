@@ -55,38 +55,21 @@ using LibraryPtr = std::unique_ptr<DynamicLibrary>;
 std::string const kNVINFER_PLUGIN_LIBNAME{"nvinfer_plugin.dll"};
 std::string const kNVINFER_LIBNAME{"nvinfer.dll"};
 std::string const kNVONNXPARSER_LIBNAME{"nvonnxparser.dll"};
-std::string const kNVPARSERS_LIBNAME{"nvparsers.dll"};
 std::string const kNVINFER_LEAN_LIBNAME{"nvinfer_lean.dll"};
 std::string const kNVINFER_DISPATCH_LIBNAME{"nvinfer_dispatch.dll"};
-
-std::string const kMANGLED_UFF_PARSER_CREATE_NAME{"?createUffParser@nvuffparser@@YAPEAVIUffParser@1@XZ"};
-std::string const kMANGLED_CAFFE_PARSER_CREATE_NAME{"?createCaffeParser@nvcaffeparser1@@YAPEAVICaffeParser@1@XZ"};
-std::string const kMANGLED_UFF_PARSER_SHUTDOWN_NAME{"?shutdownProtobufLibrary@nvuffparser@@YAXXZ"};
-std::string const kMANGLED_CAFFE_PARSER_SHUTDOWN_NAME{"?shutdownProtobufLibrary@nvcaffeparser1@@YAXXZ"};
 #else
 std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"libnvinfer_plugin.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_LIBNAME = std::string{"libnvinfer.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVONNXPARSER_LIBNAME = std::string{"libnvonnxparser.so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVPARSERS_LIBNAME = std::string{"libnvparsers.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_LEAN_LIBNAME = std::string{"libnvinfer_lean.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_DISPATCH_LIBNAME
     = std::string{"libnvinfer_dispatch.so."} + std::to_string(NV_TENSORRT_MAJOR);
-
-std::string const kMANGLED_UFF_PARSER_CREATE_NAME{"_ZN11nvuffparser15createUffParserEv"};
-std::string const kMANGLED_CAFFE_PARSER_CREATE_NAME{"_ZN14nvcaffeparser117createCaffeParserEv"};
-std::string const kMANGLED_UFF_PARSER_SHUTDOWN_NAME{"_ZN11nvuffparser23shutdownProtobufLibraryEv"};
-std::string const kMANGLED_CAFFE_PARSER_SHUTDOWN_NAME{"_ZN14nvcaffeparser123shutdownProtobufLibraryEv"};
 #endif
 #endif // !TRT_STATIC
-std::function<void*(void*, int32_t)>
-    pCreateInferRuntimeInternal{};
+std::function<void*(void*, int32_t)> pCreateInferRuntimeInternal{};
 std::function<void*(void*, void*, int32_t)> pCreateInferRefitterInternal{};
 std::function<void*(void*, int32_t)> pCreateInferBuilderInternal{};
 std::function<void*(void*, void*, int)> pCreateNvOnnxParserInternal{};
-std::function<nvuffparser::IUffParser*()> pCreateUffParser{};
-std::function<nvcaffeparser1::ICaffeParser*()> pCreateCaffeParser{};
-std::function<void()> pShutdownUffLibrary{};
-std::function<void(void)> pShutdownCaffeLibrary{};
 
 //! Track runtime used for the execution of trtexec.
 //! Must be tracked as a global variable due to how library init functions APIs are organized.
@@ -170,28 +153,6 @@ bool initNvonnxparser()
 #endif // !TRT_STATIC
 }
 
-bool initNvparsers()
-{
-#if !TRT_STATIC
-    static LibraryPtr libnvparsersPtr{};
-    auto fetchPtrs = [](DynamicLibrary* l) {
-        // TODO: get equivalent Windows symbol names
-        pCreateUffParser = l->symbolAddress<nvuffparser::IUffParser*()>(kMANGLED_UFF_PARSER_CREATE_NAME.c_str());
-        pCreateCaffeParser
-            = l->symbolAddress<nvcaffeparser1::ICaffeParser*()>(kMANGLED_CAFFE_PARSER_CREATE_NAME.c_str());
-        pShutdownUffLibrary = l->symbolAddress<void()>(kMANGLED_UFF_PARSER_SHUTDOWN_NAME.c_str());
-        pShutdownCaffeLibrary = l->symbolAddress<void(void)>(kMANGLED_CAFFE_PARSER_SHUTDOWN_NAME.c_str());
-    };
-    return initLibrary(libnvparsersPtr, kNVPARSERS_LIBNAME, fetchPtrs);
-#else
-    pCreateUffParser = nvuffparser::createUffParser;
-    pCreateCaffeParser = nvcaffeparser1::createCaffeParser;
-    pShutdownUffLibrary = nvuffparser::shutdownProtobufLibrary;
-    pShutdownCaffeLibrary = nvcaffeparser1::shutdownProtobufLibrary;
-    return true;
-#endif // !TRT_STATIC
-}
-
 } // namespace
 
 IRuntime* createRuntime()
@@ -235,46 +196,6 @@ nvonnxparser::IParser* createONNXParser(INetworkDefinition& network)
         pCreateNvOnnxParserInternal(&network, &gLogger.getTRTLogger(), NV_ONNX_PARSER_VERSION));
 }
 
-nvcaffeparser1::ICaffeParser* sampleCreateCaffeParser()
-{
-    if (!initNvparsers())
-    {
-        return {};
-    }
-    ASSERT(pCreateCaffeParser != nullptr);
-    return pCreateCaffeParser();
-}
-
-void shutdownCaffeParser()
-{
-    if (!initNvparsers())
-    {
-        return;
-    }
-    ASSERT(pShutdownCaffeLibrary != nullptr);
-    pShutdownCaffeLibrary();
-}
-
-nvuffparser::IUffParser* sampleCreateUffParser()
-{
-    if (!initNvparsers())
-    {
-        return {};
-    }
-    ASSERT(pCreateUffParser != nullptr);
-    return pCreateUffParser();
-}
-
-void shutdownUffParser()
-{
-    if (!initNvparsers())
-    {
-        return;
-    }
-    ASSERT(pShutdownUffLibrary != nullptr);
-    pShutdownUffLibrary();
-}
-
 using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
 
@@ -308,7 +229,7 @@ int main(int argc, char** argv)
                 {
                     for (auto const& arg : args)
                     {
-                        sample::gLogError << "Unknown option: " << arg.first << " " << arg.second << std::endl;
+                        sample::gLogError << "Unknown option: " << arg.first << " " << arg.second.first << std::endl;
                     }
                     failed = true;
                 }
@@ -381,7 +302,7 @@ int main(int argc, char** argv)
         }
         else if (!options.system.plugins.empty())
         {
-            throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
+            throw std::runtime_error("Plugins require --useRuntime=full.");
         }
 
         if (options.build.safe && !sample::hasSafeRuntime())
@@ -410,13 +331,19 @@ int main(int argc, char** argv)
             return sample::gLogger.reportFail(sampleTest);
         }
 
+        // Exit as version is already printed during getEngineBuildEnv
+        if (options.build.getPlanVersionOnly)
+        {
+            return sample::gLogger.reportPass(sampleTest);
+        }
+
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
 
         sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built") << " in "
                          << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
 
-        if (!options.build.safe && options.build.refittable)
+        if (!options.build.safe && !options.build.buildDLAStandalone && options.build.refittable)
         {
             auto* engine = bEnv->engine.get();
             if (options.reporting.refit)
@@ -443,9 +370,10 @@ int main(int argc, char** argv)
 
         if (options.build.skipInference)
         {
-            if (!options.build.safe)
+            if (!options.build.safe && !options.build.buildDLAStandalone)
             {
                 printLayerInfo(options.reporting, bEnv->engine.get(), nullptr);
+                printOptimizationProfileInfo(options.reporting, bEnv->engine.get());
             }
             sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
             return sample::gLogger.reportPass(sampleTest);
@@ -507,6 +435,7 @@ int main(int argc, char** argv)
         if (!options.build.safe)
         {
             printLayerInfo(options.reporting, iEnv->engine.get(), iEnv->contexts.front().get());
+            printOptimizationProfileInfo(options.reporting, iEnv->engine.get());
         }
 
         std::vector<InferenceTrace> trace;

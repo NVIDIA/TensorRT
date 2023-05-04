@@ -19,10 +19,14 @@ add_custom_target(plugin)
 set(TARGET_NAME nvinfer_plugin)
 set(SHARED_TARGET ${TARGET_NAME})
 set(STATIC_TARGET ${TARGET_NAME}_static)
+set(VFC_TARGET_NAME nvinfer_vc_plugin)
+set(VFC_SHARED_TARGET ${VFC_TARGET_NAME})
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports.map)
 set(PLUGIN_EXPORT_DEF ${TARGET_DIR}/exports.def)
+set(VFC_PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports-vfc_plugin.map)
+set(VFC_PLUGIN_EXPORT_DEF ${TARGET_DIR}/exports-vfc_plugin.def)
 
 if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
@@ -116,6 +120,7 @@ target_include_directories(${SHARED_TARGET}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
     PRIVATE ${PROJECT_SOURCE_DIR}/common
     PUBLIC ${CUDA_INSTALL_DIR}/include
+    PUBLIC ${CUDNN_ROOT_DIR}/include
     PRIVATE ${TARGET_DIR}
 )
 
@@ -169,6 +174,7 @@ target_include_directories(${STATIC_TARGET}
     PUBLIC ${CUB_ROOT_DIR}
     PRIVATE ${PROJECT_SOURCE_DIR}/common
     PUBLIC ${CUDA_INSTALL_DIR}/include
+    PUBLIC ${CUDNN_ROOT_DIR}/include
     PRIVATE ${TARGET_DIR}
 )
 
@@ -189,13 +195,61 @@ set_target_properties(${STATIC_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSI
 
 set_property(TARGET ${STATIC_TARGET} PROPERTY CUDA_STANDARD 14)
 
+################################## VFC SHARED LIBRARY #######################################
+
+set_source_files_properties(${VFC_PLUGIN_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${GENCODES} ${ENABLED_SMS}")
+list(APPEND VFC_PLUGIN_SOURCES "${VFC_PLUGIN_CU_SOURCES}")
+
+add_library(${VFC_SHARED_TARGET} SHARED
+    ${VFC_PLUGIN_SOURCES}
+)
+
+target_include_directories(${VFC_SHARED_TARGET}
+    PUBLIC ${PROJECT_SOURCE_DIR}/include
+    PRIVATE ${PROJECT_SOURCE_DIR}/common
+    PUBLIC ${CUDA_INSTALL_DIR}/include
+    PRIVATE ${TARGET_DIR}
+)
+
+set_target_properties(${VFC_SHARED_TARGET} PROPERTIES
+    CXX_STANDARD "14"
+    CXX_STANDARD_REQUIRED "YES"
+    CXX_EXTENSIONS "NO"
+    ARCHIVE_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+)
+
+if (MSVC)
+    set_target_properties(${VFC_SHARED_TARGET} PROPERTIES LINK_FLAGS "/DEF:${VFC_PLUGIN_EXPORT_DEF}")
+else()
+    set_target_properties(${VFC_SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,-Bsymbolic -Wl,--version-script=${VFC_PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
+endif()
+
+set_target_properties(${VFC_SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
+
+set_target_properties(${VFC_SHARED_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSION ${TRT_SOVERSION} )
+
+set_property(TARGET ${VFC_SHARED_TARGET} PROPERTY CUDA_STANDARD 14)
+
+target_link_libraries(${VFC_SHARED_TARGET}
+    ${CUDART_LIB}
+    ${nvinfer_LIB_PATH}
+    ${CMAKE_DL_LIBS}
+)
+
+# Needed when static linking CUDART
+if (NOT MSVC)
+    target_link_libraries(${VFC_SHARED_TARGET} Threads::Threads ${RT_LIB})
+endif()
+
 #########################################################################################
 
-add_dependencies(plugin ${SHARED_TARGET} ${STATIC_TARGET})
+add_dependencies(plugin ${SHARED_TARGET} ${STATIC_TARGET} ${VFC_SHARED_TARGET})
 
 ################################### INSTALLATION ########################################
 
-install(TARGETS ${TARGET_NAME}
+install(TARGETS ${SHARED_TARGET} ${VFC_SHARED_TARGET}
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib

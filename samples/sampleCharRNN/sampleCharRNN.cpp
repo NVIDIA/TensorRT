@@ -42,7 +42,6 @@
 #include <vector>
 
 #include "NvInfer.h"
-#include "NvUtils.h"
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -220,6 +219,11 @@ private:
     //!
     void copyRNNOutputsToInputs(samplesCommon::BufferManager& buffers);
 
+    //!
+    //! \brief Transposes a sub-buffer of size height * width.
+    //!
+    bool transposeSubBuffers(void* data, int64_t height, int64_t width) noexcept;
+
     std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr}; //!< The TensorRT runtime used to run the network
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
 };
@@ -273,6 +277,46 @@ private:
     nvinfer1::ILayer* addLSTMCell(SampleUniquePtr<nvinfer1::INetworkDefinition>& network, const LstmIO& inputTensors,
         nvinfer1::ITensor* sequenceSize, const LstmParams& params, LstmIO& outputTensors);
 };
+
+//!
+//! \brief Transpose a sub-buffer of size height * width.
+//!
+//! \param data The data to transpose. Serves as both input and output.
+//! \param height The size of the height dimension to transpose.
+//! \param width The size of the width dimension to transpose.
+//!
+//! \return True on success, false on failure.
+//!
+bool SampleCharRNNBase::transposeSubBuffers(void* data, int64_t height, int64_t width) noexcept
+{
+    try
+    {
+        ASSERT(data != nullptr);
+        ASSERT(height > 0);
+        ASSERT(width > 0);
+        int64_t const tmpSize = height * width * sizeof(float);
+        samplesCommon::HostBuffer tmpbuf(tmpSize, DataType::kFLOAT);
+        ASSERT(tmpbuf.data() != nullptr);
+        auto in = static_cast<float*>(data);
+        auto out = static_cast<float*>(tmpbuf.data());
+
+        for (int64_t i{}; i < height; ++i)
+        {
+            for (int64_t j{}; j < width; ++j)
+            {
+                out[j * height + i] = in[i * width + j];
+            }
+        }
+
+        std::copy(static_cast<uint8_t*>(tmpbuf.data()), static_cast<uint8_t*>(tmpbuf.data()) + tmpSize,
+            static_cast<uint8_t*>(data));
+    }
+    catch (...)
+    {
+        return false;
+    }
+    return true;
+}
 
 //!
 //! \brief Creates the network, configures the builder and creates
@@ -454,12 +498,12 @@ nvinfer1::Weights SampleCharRNNBase::convertRNNWeights(nvinfer1::Weights orig, i
     auto mem = new samplesCommon::FloatMemory(input.count);
     weightsMemory.emplace_back(mem);
     auto ptr = mem->raw();
-    const float* data = static_cast<const float*>(input.values);
-    int dimsW[2]{dataSize, 4 * mParams.hiddenSize};
-    int dimsR[2]{mParams.hiddenSize, 4 * mParams.hiddenSize};
+    float const* data = static_cast<float const*>(input.values);
+    int64_t dimsW[2]{dataSize, 4 * mParams.hiddenSize};
+    int64_t dimsR[2]{mParams.hiddenSize, 4 * mParams.hiddenSize};
     std::copy(data, data + input.count, ptr);
-    ASSERT(utils::transposeSubBuffers(ptr, DataType::kFLOAT, 1, dimsW[0], dimsW[1]));
-    ASSERT(utils::transposeSubBuffers(&ptr[dimsW[0] * dimsW[1]], DataType::kFLOAT, 1, dimsR[0], dimsR[1]));
+    ASSERT(transposeSubBuffers(ptr, dimsW[0], dimsW[1]));
+    ASSERT(transposeSubBuffers(&ptr[dimsW[0] * dimsW[1]], dimsR[0], dimsR[1]));
     return nvinfer1::Weights{input.type, ptr, input.count};
 }
 
@@ -777,8 +821,8 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
     auto rnn = addLSTMLayers(network);
 
     // Transpose FC weights since TensorFlow's weights are transposed when compared to TensorRT
-    ASSERT(utils::transposeSubBuffers((void*) mWeightMap[mParams.weightNames.FCW_NAME].values,
-        nvinfer1::DataType::kFLOAT, 1, mParams.hiddenSize, mParams.vocabSize));
+    ASSERT(transposeSubBuffers((void*) mWeightMap[mParams.weightNames.FCW_NAME].values,
+        mParams.hiddenSize, mParams.vocabSize));
 
     // add Constant layers for fully connected weights
     auto fcwts = network->addConstant(
@@ -936,9 +980,20 @@ bool SampleCharRNNBase::stepOnce(
     // Asynchronously copy data from host input buffers to device input buffers
     buffers.copyInputToDeviceAsync(stream);
 
+    bool useEnqueueV3 = mParams.useILoop;
+
+    if (useEnqueueV3)
+    {
+        for (int32_t i = 0; i < mEngine->getNbIOTensors(); i++)
+        {
+            auto const name = mEngine->getIOTensorName(i);
+            context->setTensorAddress(name, buffers.getDeviceBuffer(name));
+        }
+    }
+
     // Asynchronously enqueue the inference work
-    if (mParams.useILoop ? !context->enqueueV2(buffers.getDeviceBindings().data(), stream, nullptr)
-                         : !context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr))
+    if (useEnqueueV3 ? !context->enqueueV3(stream)
+                     : !context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr))
     {
         return false;
     }

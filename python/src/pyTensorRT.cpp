@@ -60,8 +60,6 @@ PYBIND11_MODULE(TENSORRT_MODULE, m)
 #if EXPORT_ALL_BINDINGS
     // Parsers
     bindOnnx(m);
-    bindUff(m);
-    bindCaffe(m);
 #endif
 }
 } // namespace tensorrt

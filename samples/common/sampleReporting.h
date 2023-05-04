@@ -284,6 +284,11 @@ private:
 bool printLayerInfo(
     ReportingOptions const& reporting, nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context);
 
+//!
+//! \brief Print optimization profile info to logger.
+//!
+void printOptimizationProfileInfo(ReportingOptions const& reporting, nvinfer1::ICudaEngine const* engine);
+
 //! Forward declaration.
 struct InferenceEnvironment;
 

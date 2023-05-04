@@ -17,13 +17,12 @@
 
 """Utilities related to Polygraphy"""
 
-from typing import Dict, List
-from functools import reduce
+from typing import List
 from enum import Enum
 
 # polygraphy
 from polygraphy.backend.trt import engine_from_bytes, TrtRunner
-from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx, OnnxrtRunner
+from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
 from polygraphy.backend.common import bytes_from_path
 from polygraphy.logger import G_LOGGER as PG_LOGGER
 
@@ -39,12 +38,25 @@ import onnx_graphsurgeon as gs
 import numpy as np
 
 # NNDF
-from NNDF.networks import NetworkMetadata
+from NNDF.networks import NetworkMetadata, NNConfig
 from NNDF.models import TRTEngineFile
 from NNDF.logger import G_LOGGER
 
 # PyTorch
 import torch
+
+# CUDA Runtime
+from cuda import cudart
+
+def CUASSERT(cuda_ret):
+    if len(cuda_ret) < 1:
+        raise RuntimeError("CUDA ERROR: There is no return value.")
+    err = cuda_ret[0]
+    if err != cudart.cudaError_t.cudaSuccess:
+         raise RuntimeError(f"CUDA ERROR: {err}, error code reference: https://nvidia.github.io/cuda-python/module/cudart.html#cuda.cudart.cudaError_t")
+    if len(cuda_ret) > 1:
+        return cuda_ret[1:]
+    return None
 
 # Helper Functions
 def setup_benchmark_arg(user_input, name, default):
@@ -55,30 +67,6 @@ def setup_benchmark_arg(user_input, name, default):
         G_LOGGER.warning("{} is not provided, default to {}".format(name, default))
         return default
     return user_input
-
-def allocate_binding_buffer(types_dict, shapes_dict):
-    '''
-    Allocate binding buffers for trt based on provided types and shapes dict
-    '''
-    return {
-        k: torch.zeros(reduce(lambda v, a: v*a, shape), dtype=types_dict[k]).cuda()
-        for k, shape in shapes_dict.items()
-    }
-
-
-def set_kv_data(kv_dict, past_or_present, layer_id, segment_value_dict):
-    '''
-    Set the types and shapes dict for kv-cache based on the provided inputs:
-        kv_dict: Dict[str, tuple/torch.dtype], the dict to modify within the function
-        past_or_present: str, either "past" or "present"
-        layer_id: int, need kv cache for each decoder layer
-        segment_value_dict: Dict[str, tuple/torch.dtype], example:
-            kvcache type: {"encoder": torch.float32, "decoder": torch.float32}
-            kvcache shape: {"encoder": cross_attention_kv_shape, "decoder": self_attention_kv_shape}
-    '''
-    for segment, value in segment_value_dict.items():
-        for code in ['key', 'value']:
-            kv_dict[f"{past_or_present}_key_values.{layer_id}.{segment}.{code}"] = value
 
 def clamp_weights_onnx(graph, min: float, max: float, ignore_nodes: List = None):
     """
@@ -103,14 +91,12 @@ def clamp_weights_onnx(graph, min: float, max: float, ignore_nodes: List = None)
 
         if node_attr is not None:
             np.clip(node_attr.values, min, max, out=node_attr.values)
-    
-    return graph
 
+    return graph
 
 def clamp_weights_onnx_to_fp16_bounds(graph, ignore_nodes: List = None):
     upper_bound = 65504
     return clamp_weights_onnx(graph, -upper_bound, upper_bound, ignore_nodes)
-
 
 def move_t5_cast_op(graph):
     """
@@ -123,7 +109,7 @@ def move_t5_cast_op(graph):
     # Version check for backward compatibility
     torch_version_major = int(torch.__version__.split('.')[0])
     torch_version_minor = int(torch.__version__.split('.')[1])
-    version_check = torch_version_major == 1 and torch_version_minor > 12
+    version_check = (torch_version_major == 2) or (torch_version_major == 1 and torch_version_minor > 12)
     for n in cast_nodes:
         # Cast appears at the output of add and feeds into a Pow op.
         if n.i().op == "Add":
@@ -180,7 +166,7 @@ def move_t5_cast_op(graph):
     graph.cleanup().toposort()
     return graph
 
-# The current operations would require loading/unloading onnx files twice, 
+# The current operations would require loading/unloading onnx files twice,
 class OnnxProcessOperation(Enum):
     CLAMP_WEIGHTS = 1
     MOVE_CAST_OP = 2
@@ -204,10 +190,10 @@ def process_onnx(config: List[OnnxProcessOperation], onnx_input_fpath, onnx_outp
                 model_size += os.stat(file_path).st_size
                 if not keep_input:
                     os.unlink(file_path)
-                
+
         except Exception as e:
             print('Failed to delete %s. Reason: %s' % (file_path, e))
-    
+
     # Save the weights as external data only when model > 2GB
     if model_size >= 1.8 * 1024 * 1024 * 1024:
         onnx.save_model(model, onnx_output_fpath, save_as_external_data=True, all_tensors_to_one_file = False, convert_attribute=False)
@@ -217,10 +203,18 @@ def process_onnx(config: List[OnnxProcessOperation], onnx_input_fpath, onnx_outp
 # Helper Classes
 class TRTNativeRunner:
     """TRTNativeRunner avoids the high overheads with Polygraphy runner providing performance comparable to C++ implementation."""
-    def __init__(self, trt_engine_file: TRTEngineFile, network_metadata: NetworkMetadata):
+    def __init__(
+        self,
+        trt_engine_file: TRTEngineFile,
+        network_metadata: NetworkMetadata,
+        config: NNConfig,
+        nvtx_verbose: bool = False,
+    ):
         self.network_metadata = network_metadata
         self.trt_engine_file = trt_engine_file
         self.trt_logger = trt.Logger()
+        self.config = config
+        self.stream = CUASSERT(cudart.cudaStreamCreate())[0]
 
         if G_LOGGER.level == G_LOGGER.DEBUG:
             self.trt_logger.min_severity = trt.Logger.VERBOSE
@@ -234,13 +228,14 @@ class TRTNativeRunner:
             self.trt_runtime = trt.Runtime(self.trt_logger)
             self.trt_engine = self.trt_runtime.deserialize_cuda_engine(f.read())
             self.trt_context = self.trt_engine.create_execution_context()
+            self.trt_context.nvtx_verbosity = trt.ProfilingVerbosity.DETAILED if nvtx_verbose else trt.ProfilingVerbosity.LAYER_NAMES_ONLY
 
         # By default set optimization profile to 0
         self.profile_idx = 0
 
         # Other metadata required by the profile
         self._num_bindings_per_profile = self.trt_engine.num_bindings // self.trt_engine.num_optimization_profiles
-        G_LOGGER.debug("Number of profiles detected in engine: {}".format(self._num_bindings_per_profile))
+        G_LOGGER.debug("Number of bindings detected in engine: {}".format(self._num_bindings_per_profile))
 
     def release(self):
         pass
@@ -259,7 +254,7 @@ class TRTNativeRunner:
                 selected_profile_idx = idx
                 break
 
-        if selected_profile_idx == -1:
+        if selected_profile_idx == None:
             raise RuntimeError("Could not find any profile that matches batch_size={}, sequence_length={}".format(batch_size, sequence_length))
 
         return selected_profile_idx
@@ -271,9 +266,13 @@ class TRTNativeRunner:
 class PolygraphyOnnxRunner:
     def __init__(self, onnx_fpath: str, network_metadata: NetworkMetadata):
         self.network_metadata = network_metadata
-        self.trt_session = SessionFromOnnx(onnx_fpath)
-        self.trt_context = OnnxrtRunner(self.trt_session)
-        self.trt_context.activate()
+
+        # Unable to provide CUDA
+        providers = ["CPUExecutionProvider"]
+
+        self.session = SessionFromOnnx(onnx_fpath, providers=providers)
+        self.runner = OnnxrtRunner(self.session)
+        self.runner.activate()
 
     def __call__(self, *args, **kwargs):
         # hook polygraphy verbosity for inference
@@ -286,7 +285,7 @@ class PolygraphyOnnxRunner:
             return self.forward(*args, **kwargs)
 
     def release(self):
-        self.trt_context.deactivate()
+        self.runner.deactivate()
 
 class TRTPolygraphyRunner:
     """

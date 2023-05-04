@@ -30,7 +30,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class CoordConvACPlugin : public IPluginV2Ext
+class TRT_DEPRECATED CoordConvACPlugin : public IPluginV2Ext
 {
 public:
     CoordConvACPlugin();
@@ -96,7 +96,7 @@ private:
     char const* mPluginNamespace{};
 };
 
-class CoordConvACPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED CoordConvACPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     CoordConvACPluginCreator();

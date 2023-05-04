@@ -1,4 +1,4 @@
-# normalizePlugin
+# normalizePlugin [DEPRECATED]
 
 **Table Of Contents**
 - [Description](#description)
@@ -11,7 +11,9 @@
 
 ## Description
 
-The `normalizePlugin`  is used for the L2 normalization layer, which is generally used in deep learning models such as ParseNet and SSD during TensorRT inference. This plugin is included in TensorRT and used in [sampleSSD](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#sample_ssd) to run SSD.
+> NOTE: This plugin is deprecated since TensorRT 9.0. Its functionality has been superseded by the `INormalizationLayer`.
+
+The `normalizePlugin`  is used for the L2 normalization layer, which is generally used in deep learning models such as ParseNet and SSD during TensorRT inference. This plugin is included in TensorRT.
 
 Specifically, given an array of values `x = [x_0, x_1, ..., x_n]` and a scale factor, the L2 norm `||x||_2 = sqrt(sum({x_0}^2, {x_1}^2, ..., {x_n}^2)` is calculated and each element in the array is divided by the L2 norm and multiplied by the scale factor.
   
@@ -48,6 +50,9 @@ documentation.
 
 
 ## Changelog
+
+May 2023
+Add deprecation note.
 
 May 2019
 This is the first release of this `README.md` file.

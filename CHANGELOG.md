@@ -1,5 +1,44 @@
 # TensorRT OSS Release Changelog
 
+Key Features and Updates:
+
+ - Added the NeMo demo to demonstrate the performance benefit of using E4M3 FP8 data type with the GPT models trained with the [NVIDIA NeMo Toolkit](https://github.com/NVIDIA/NeMo) and [TransformerEngine](https://github.com/NVIDIA/TransformerEngine).
+ - Demo Diffusion updates
+   - Added SDXL 1.0 txt2img pipeline
+   - Added ControlNet pipeline
+   - Huggingface demo updates
+     - Added Flan-T5, OPT, BLOOM, BLOOMZ, GPT-Neo, GPT-NeoX, Cerebras-GPT support with accuracy check
+     - Refactored code and extracted common utils into Seq2Seq class 
+     - Optimized shape-changing overhead and achieved a >30% e2e performance gain
+     - Added stable KV-cache, beam search and fp16 support for all models
+     - Added dynamic batch size TRT inference
+     - Added uneven-length multi-batch inference with attention_mask support
+     - Added `chat` command – interactive CLI
+     - Upgraded PyTorch and HuggingFace version to support Hopper GPU
+     - Updated notebooks with much simplified demo API.
+
+  - Added two new TensorRT samples: sampleProgressMonitor (C++) and simple_progress_reporter (Python) that are examples for using Progress Monitor during engine build.
+  - The following plugins were deprecated:
+     - ``BatchedNMS_TRT``
+     - ``BatchedNMSDynamic_TRT``
+     - ``BatchTilePlugin_TRT``
+     - ``Clip_TRT``
+     - ``CoordConvAC``
+     - ``CropAndResize``
+     - ``EfficientNMS_ONNX_TRT``
+     - ``CustomGeluPluginDynamic``
+     - ``LReLU_TRT``
+     - ``NMSDynamic_TRT``
+     - ``NMS_TRT``
+     - ``Normalize_TRT``
+     - ``Proposal``
+     - ``SingleStepLSTMPlugin``
+     - ``SpecialSlice_TRT``
+     - ``Split``
+
+  - Ubuntu 18.04 has reached end of life and is no longer supported by TensorRT starting with 9.0, and the corresponding Dockerfile(s) have been removed.
+  - Support for aarch64 builds will not be available in this release, and the corresponding Dockerfiles have been removed.
+
 ## [8.6.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-6-1) - 2023-05-02
 
 TensorRT OSS release corresponding to TensorRT 8.6.1.6 GA release.

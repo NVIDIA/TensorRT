@@ -76,6 +76,7 @@ class IPluginRegistry;
 class IPluginV2Layer;
 class IPoolingLayer;
 class IProfiler;
+class IProgressMonitor;
 class IQuantizeLayer;
 class IRaggedSoftMaxLayer;
 class IRecurrenceLayer;
@@ -884,6 +885,13 @@ public:
     virtual double getAlpha() const noexcept = 0;
     virtual void setBeta(double beta) noexcept = 0;
     virtual double getBeta() const noexcept = 0;
+    virtual void setAlphaInt64(int64_t alpha) noexcept = 0;
+    virtual int64_t getAlphaInt64() const noexcept = 0;
+    virtual void setBetaInt64(int64_t beta) noexcept = 0;
+    virtual int64_t getBetaInt64() const noexcept = 0;
+    virtual bool isAlphaBetaInt64() const noexcept = 0;
+    virtual DataType getToType() const noexcept = 0;
+    virtual void setToType(DataType toType) noexcept = 0;
 };
 
 class VQuantizeLayer : public VRoot
@@ -891,6 +899,8 @@ class VQuantizeLayer : public VRoot
 public:
     virtual int32_t getAxis() const noexcept = 0;
     virtual void setAxis(int32_t axis) noexcept = 0;
+    virtual DataType getToType() const noexcept = 0;
+    virtual void setToType(DataType toType) noexcept = 0;
 };
 
 class VDequantizeLayer : public VRoot
@@ -898,6 +908,8 @@ class VDequantizeLayer : public VRoot
 public:
     virtual int32_t getAxis() const noexcept = 0;
     virtual void setAxis(int32_t axis) noexcept = 0;
+    virtual DataType getToType() const noexcept = 0;
+    virtual void setToType(DataType toType) noexcept = 0;
 };
 
 class VScatterLayer : public VRoot
@@ -1055,6 +1067,12 @@ public:
         ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept = 0;
     virtual ICastLayer* addCast(ITensor& input, DataType toType) noexcept = 0;
     virtual IBuilder& getBuilder() const noexcept = 0;
+    virtual NetworkDefinitionCreationFlags getFlags() const noexcept = 0;
+    virtual bool getFlag(NetworkDefinitionCreationFlag networkDefinitionCreationFlag) const noexcept = 0;
+    virtual bool usingStronglyTyped() const noexcept = 0;
+    virtual IQuantizeLayer* addQuantizeV2(ITensor& input, ITensor& scale, DataType outputType) noexcept = 0;
+    virtual IDequantizeLayer* addDequantizeV2(ITensor& input, ITensor& scale, DataType outputType) noexcept = 0;
+    virtual IFillLayer* addFillV2(Dims dimensions, FillOperation op, DataType outputType) noexcept = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot
@@ -1162,6 +1180,8 @@ public:
     virtual int32_t getNbPluginsToSerialize() const noexcept = 0;
     virtual void setMaxAuxStreams(int32_t nbStreams) noexcept = 0;
     virtual int32_t getMaxAuxStreams() const noexcept = 0;
+    virtual void setProgressMonitor(IProgressMonitor* monitor) noexcept = 0;
+    virtual IProgressMonitor* getProgressMonitor() const noexcept = 0;
 };
 
 class VBuilder : public VRoot

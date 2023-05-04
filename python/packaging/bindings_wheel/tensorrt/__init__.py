@@ -16,7 +16,6 @@
 #
 
 import ctypes
-import glob
 import os
 import sys
 import warnings
@@ -52,7 +51,6 @@ if sys.platform.startswith("win"):
         "cudnn64_##CUDNN_MAJOR##.dll",
         "nvinfer_plugin.dll",
         "nvonnxparser.dll",
-        "nvparsers.dll",
     ],
     "tensorrt_dispatch": [
         "nvinfer_dispatch.dll",
@@ -111,15 +109,8 @@ if "##TENSORRT_MODULE##" == "tensorrt":
     INetworkDefinition.__enter__ = common_enter
     INetworkDefinition.__exit__ = common_exit
 
-    UffParser.__enter__ = common_enter
-    UffParser.__exit__ = common_exit
-
-    CaffeParser.__enter__ = common_enter
-    CaffeParser.__exit__ = common_exit
-
     OnnxParser.__enter__ = common_enter
     OnnxParser.__exit__ = common_exit
-
 
     Refitter.__enter__ = common_enter
     Refitter.__exit__ = common_exit
@@ -165,9 +156,10 @@ def nptype(trt_type):
         float16: np.float16,
         int8: np.int8,
         int32: np.int32,
+        int64: np.int64,
         bool: np.bool_,
         uint8: np.uint8,
-        # Note: fp8 has no equivalent numpy type
+        # Note: fp8 and bfloat16 have no equivalent numpy type
     }
     if trt_type in mapping:
         return mapping[trt_type]
@@ -186,8 +178,10 @@ def _itemsize(trt_type):
     mapping = {
         float32: 4,
         float16: 2,
+        bfloat16: 2,
         int8: 1,
         int32: 4,
+        int64: 8,
         bool: 1,
         uint8: 1,
         fp8: 1,

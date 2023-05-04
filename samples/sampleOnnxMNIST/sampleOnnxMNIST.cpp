@@ -201,6 +201,10 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     {
         config->setFlag(BuilderFlag::kFP16);
     }
+    if (mParams.bf16)
+    {
+        config->setFlag(BuilderFlag::kBF16);
+    }
     if (mParams.int8)
     {
         config->setFlag(BuilderFlag::kINT8);
@@ -227,6 +231,12 @@ bool SampleOnnxMNIST::infer()
     if (!context)
     {
         return false;
+    }
+
+    for (int32_t i = 0; i < mEngine->getNbIOTensors(); i++)
+    {
+        auto const name = mEngine->getIOTensorName(i);
+        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
     }
 
     // Read the input data into the managed buffers
@@ -349,6 +359,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.dlaCore = args.useDLACore;
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
+    params.bf16 = args.runInBf16;
 
     return params;
 }
@@ -371,6 +382,7 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--int8          Run in Int8 mode." << std::endl;
     std::cout << "--fp16          Run in FP16 mode." << std::endl;
+    std::cout << "--bf16          Run in BF16 mode." << std::endl;
 }
 
 int main(int argc, char** argv)

@@ -17,9 +17,9 @@
 //! \file NvInferRuntimeCommon.h
 //!
 //! This file provides the nvinfer1::IPluginRegistry interface, which will be moved to the NvInferRuntime.h header
-//! in TensorRT 9.0.
+//! in a future release.
 //!
-//! \warning This file will be removed in TensorRT 9.0.
+//! \warning This file will be removed in a future release.
 //!
 //! \warning Do not directly include this file. Instead include NvInferRuntime.h
 //!

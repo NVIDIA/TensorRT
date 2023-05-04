@@ -21,12 +21,10 @@
 #include <iostream>
 #include <vector>
 
-#include "NvCaffeParser.h"
 #include "NvInfer.h"
 #include "NvInferConsistency.h"
 #include "NvInferSafeRuntime.h"
 #include "NvOnnxParser.h"
-#include "NvUffParser.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
@@ -35,13 +33,29 @@ namespace sample
 
 struct Parser
 {
-    std::unique_ptr<nvcaffeparser1::ICaffeParser> caffeParser;
-    std::unique_ptr<nvuffparser::IUffParser> uffParser;
     std::unique_ptr<nvonnxparser::IParser> onnxParser;
 
     operator bool() const
     {
-        return caffeParser || uffParser || onnxParser;
+        return onnxParser != nullptr;
+    }
+};
+
+//!
+//! \brief Helper struct to faciliate engine serialization and deserialization. It does not own the underlying memory.
+//!
+struct EngineBlob
+{
+    EngineBlob(void* engineData, size_t engineSize)
+        : data(engineData)
+        , size(engineSize)
+    {
+    }
+    void* data{};
+    size_t size{};
+    bool empty() const
+    {
+        return size == 0;
     }
 };
 
@@ -79,6 +93,7 @@ public:
         mVersionCompatible = other.mVersionCompatible;
         mDLACore = other.mDLACore;
         mEngineBlob = std::move(other.mEngineBlob);
+        mEngineBlobHostMemory = std::move(other.mEngineBlobHostMemory);
         mEngine = std::move(other.mEngine);
         mSafeEngine = std::move(other.mSafeEngine);
         mTempdir = std::move(other.mTempdir);
@@ -110,18 +125,37 @@ public:
     //!
     //! \brief Get the underlying blob storing serialized engine.
     //!
-    std::vector<uint8_t> const& getBlob() const
+    EngineBlob const getBlob() const
     {
-        return mEngineBlob;
+        if (!mEngineBlob.empty())
+        {
+            return EngineBlob{const_cast<void*>(static_cast<void const*>(mEngineBlob.data())), mEngineBlob.size()};
+        }
+        if (mEngineBlobHostMemory.get() != nullptr && mEngineBlobHostMemory->size() > 0)
+        {
+            return EngineBlob{mEngineBlobHostMemory->data(), mEngineBlobHostMemory->size()};
+        }
+        ASSERT(false && "Attempting to access an empty engine!");
+        return EngineBlob{nullptr, 0};
     }
 
     //!
-    //! \brief Set the underlying blob storing serialized engine.
+    //! \brief Set the underlying blob storing the serialized engine without duplicating IHostMemory.
     //!
-    void setBlob(void* data, size_t size)
+    void setBlob(std::unique_ptr<nvinfer1::IHostMemory>& data)
     {
-        mEngineBlob.resize(size);
-        std::memcpy(mEngineBlob.data(), data, size);
+        ASSERT(data.get() && data->size() > 0);
+        mEngineBlobHostMemory = std::move(data);
+        mEngine.reset();
+        mSafeEngine.reset();
+    }
+
+    //!
+    //! \brief Set the underlying blob storing the serialized engine without duplicating vector memory.
+    //!
+    void setBlob(std::vector<uint8_t>&& engineBlob)
+    {
+        mEngineBlob = std::move(engineBlob);
         mEngine.reset();
         mSafeEngine.reset();
     }
@@ -132,6 +166,7 @@ public:
     void releaseBlob()
     {
         mEngineBlob.clear();
+        mEngineBlobHostMemory.reset();
     }
 
     //!
@@ -152,6 +187,9 @@ private:
     bool mVersionCompatible{false};
     int32_t mDLACore{-1};
     std::vector<uint8_t> mEngineBlob;
+
+    // Directly use the host memory of a serialized engine instead of duplicating the engine in CPU memory.
+    std::unique_ptr<nvinfer1::IHostMemory> mEngineBlobHostMemory;
 
     std::string mTempdir{};
     nvinfer1::TempfileControlFlags mTempfileControls{getTempfileControlDefaults()};

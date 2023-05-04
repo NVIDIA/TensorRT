@@ -361,6 +361,12 @@ DataType QKVToContextPluginDynamic::getOutputDataType(
     return inputTypes[0];
 }
 
+void QKVToContextPluginDynamic::attachToContext(
+    cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept
+{
+    mCublas = cublas;
+}
+
 // IPluginV2 Methods
 char const* QKVToContextPluginDynamic::getPluginType() const noexcept
 {
@@ -443,12 +449,14 @@ int32_t QKVToContextPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
         void const* const maskPtr = mHasImask ? inputs[1] : nullptr;
         if (fusedDispatcher.get() && fusedDispatcher->isValid(inputDesc->dims.d[SDIM]))
         {
-            fusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+            fusedDispatcher->run(
+                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
         }
         else
         {
             PLUGIN_VALIDATE(unfusedDispatcher.get(), "The Unfused MHARunner is uninitialized, no MHARunner available!");
-            unfusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+            unfusedDispatcher->run(
+                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
         }
     }
     catch (std::exception const& e)
@@ -863,6 +871,12 @@ DataType QKVToContextVarSeqlenPlugin::getOutputDataType(
     return inputTypes[0];
 }
 
+void QKVToContextVarSeqlenPlugin::attachToContext(
+    cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept
+{
+    mCublas = cublas;
+}
+
 // IPluginV2 Methods
 char const* QKVToContextVarSeqlenPlugin::getPluginType() const noexcept
 {
@@ -985,7 +999,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             try
             {
                 this->dispatcher->run(paddingArgs.inputDesc, paddingArgs.outputDesc, paddingArgs.inputs,
-                    paddingArgs.outputs, workspace, stream);
+                    paddingArgs.outputs, workspace, stream, mCublas);
             }
             catch (std::exception const& e)
             {
@@ -1003,7 +1017,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
         {
             try
             {
-                this->dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream);
+                this->dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream, mCublas);
             }
             catch (std::exception const& e)
             {
@@ -1019,7 +1033,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
 
     void const* maskPtr = mHasImask ? inputs[1] : nullptr;
-    this->dispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+    this->dispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
     return cudaGetLastError();
 }
 

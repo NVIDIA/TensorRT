@@ -7,8 +7,6 @@ Then, use your browser to start the Jupyter lab interface by opening the token-p
 Notebook list:
 
 - [gpt2.ipynb](gpt2.ipynb): Step by step walkthrough for building the GPT-2 TensorRT engine.
-- [gpt2-playground.ipynb](gpt2-playground.ipynb): GUI for benchmarking GPT-2 TensorRT engines.
 - [t5.ipynb](t5.ipynb): Step by step walkthrough for building the T5 TensorRT engine.
-- [t5-playground.ipynb](t5-playground.ipynb): GUI for benchmarking T5 TensorRT engines.
 - [bart.ipynb](bart.ipynb): Step by step walkthrough for building the BART TensorRT engine.
-- [bart-playground.ipynb](bart-playground.ipynb): GUI for benchmarking BART TensorRT engines.
+- [playground.ipynb](playground.ipynb): GUI for running customized inputs for a variety of models

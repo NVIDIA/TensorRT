@@ -16,243 +16,129 @@
 #
 
 """
-Contains logic that captures GPT2 HuggingFace models into ONNX models and TRT engines.
+Contains logic that captures HuggingFace models into ONNX models.
 """
 
-from itertools import tee
-import os
-from collections import OrderedDict
+# Huggingface
+from transformers.modeling_outputs import Seq2SeqLMOutput
 
-# tensorrt
-import tensorrt as trt
-
-# polygraphy
-from polygraphy.backend.trt import Profile
-
-# torch
-import torch
-from torch.nn import Module
-
-# # huggingface
-from transformers.generation_utils import GenerationMixin
-from transformers.modeling_outputs import CausalLMOutputWithPast
-from transformers import GPT2Tokenizer
-
-# TRT-HuggingFace
-from GPT2.GPT2ModelConfig import GPT2ModelTRTConfig
-from NNDF.networks import NetworkMetadata, Dims
-from NNDF.logger import G_LOGGER
-from NNDF.models import (
-    TRTEngineFile,
-    TorchModelFile,
-    ONNXModelFile,
-    ModelFileConverter,
+from Seq2Seq.export import (
+    DecoderTorchFile,
+    DecoderONNXFile,
+    DecoderTRTEngine,
+    DecoderConverter,
+    Seq2SeqModelClass
 )
 
-class GPT2TorchFile(TorchModelFile):
-    class TorchModule(Module, GenerationMixin):
+# In gpt-j, torch.repeat_interleave will export SplitToSequence with subgraph. Use transformers==4.27.4 implementation as a patch to avoid it
+# https://github.com/pytorch/pytorch/pull/100575 is merged and is expected to fix this issue in the next PyTorch release.
+from transformers.models.gptj.modeling_gptj import rotate_every_two
+import unittest.mock as mock
+import torch
+
+def duplicate_interleave(m):
+    """
+    A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.
+    """
+    bs = m.shape[0]
+    seq_len = m.shape[1]
+    m = m.reshape(-1,1)  # flatten the matrix
+    m = m.repeat(1,2)  # repeat all elements into the last dimension
+    m = m.view(bs, seq_len, 1, -1)  # reshape into a matrix, interleaving the copy
+    return m
+
+def apply_rotary_pos_emb(tensor, sin, cos):
+    sin = duplicate_interleave(sin[:, :, None, :])
+    cos = duplicate_interleave(cos[:, :, None, :])
+    return (tensor * cos) + (rotate_every_two(tensor) * sin)
+
+# Decoder File Encoding #
+class GPT2DecoderTorchFile(DecoderTorchFile):
+    class TorchModule(DecoderTorchFile.TorchModule):
         """
-        A simplied definition of GPT2 with LM head.
+        A simplied definition of GPT2 Decoder without support for loss.
+        Decoder with lm-head attached.
         """
 
-        def __init__(self, transformer, lm_head, config):
-            super().__init__()
-            self.transformer = transformer
-            self.lm_head = lm_head
-            self.config = config
-            self.device = torch.device('cuda') # WAR to avoid beam search in framework
-            self.main_input_name = "input_ids" # For better HuggingFace version compatibility
+        @mock.patch("transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb", apply_rotary_pos_emb)
+        def forward(
+            self,
+            input_ids,
+            attention_mask = None,
+            encoder_outputs = None,
+            past_key_values = None,
+            use_cache = None,
+            **kwargs,
+        ):
+            # Because GPT2 does not use attention mask and use position_ids to encode positional information,
+            # generate position_ids is required as in https://github.com/huggingface/transformers/blob/v4.29.1/src/transformers/models/gpt2/modeling_gpt2.py#L1021
+            # wrap position_ids generation inside
+            if attention_mask is not None:
+                # TODO: cumsum operation is known to have issue with TensorRT performance. Use an WAR, which assumes only left padding for GPT models.
+                # position_ids = attention_mask.long().cumsum(-1) - 1
+                num_paddings = torch.sum(attention_mask == 0, dim=1, keepdim=True).to(attention_mask.device)
+                position_ids = torch.arange(0, attention_mask.shape[-1]).expand(attention_mask.shape).to(attention_mask.device) - num_paddings
+                position_ids.masked_fill_(attention_mask == 0, 1)
+                position_ids = position_ids.long()
 
-        def prepare_inputs_for_generation(self, input_ids, past = None, use_cache=None, **kwargs):
-            # Todo (@pchadha): add position_ids, token_type_ids support
-            # cut decoder_input_ids if past is used
-            if past is not None:
-                input_ids = input_ids[:, -1:]
+                input_length = input_ids.shape[-1]
+                if past_key_values:
+                    position_ids = position_ids[:, -input_length:].unsqueeze(-1)
+            else:
+                position_ids = None
 
-            return {
-                "input_ids": input_ids,
-                "use_cache": use_cache,
-                "past_key_values": past
-            }
-
-        def forward(self, input_ids, **kwargs):
-            transformer_outputs = self.transformer(input_ids, **kwargs)
-            hidden_states = transformer_outputs[0]
-            lm_logits = self.lm_head(hidden_states)
-
-            return CausalLMOutputWithPast(
-                logits=lm_logits, 
-                past_key_values=transformer_outputs.past_key_values
+            decoder_outputs = self.decoder(
+                input_ids=input_ids,
+                use_cache=use_cache,
+                past_key_values=past_key_values,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                **kwargs
             )
 
-        def _reorder_cache(self, past, beam_idx):
-            """
-            This function is used to re-order the :obj:`past_key_values` cache if
-            :meth:`~transformers.PreTrainedModel.beam_search` or :meth:`~transformers.PreTrainedModel.beam_sample` is
-            called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
-            """
-            return tuple(
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-                for layer_past in past
+            sequence_output = decoder_outputs[0]
+            logits = self.lm_head(sequence_output) if self.lm_head is not None else sequence_output
+            past_key_values = decoder_outputs[1] if use_cache else None
+
+            return Seq2SeqLMOutput(
+                logits=logits,
+                past_key_values=past_key_values
             )
 
-        def __call__(self, *args, **kwargs):
-            return self.forward(*args, **kwargs)
+    def __init__(self, model, network_metadata = None, default_converter = None):
+        if default_converter is None:
+            default_converter = GPT2DecoderConverter
+        super().__init__(model, network_metadata, default_converter)
 
-    def __init__(self, model, network_metadata):
-        super().__init__(model, GPT2Converter, network_metadata)
+class GPT2DecoderONNXFile(DecoderONNXFile):
+    def __init__(self, model, network_metadata = None, default_converter = None):
+        if default_converter is None:
+            default_converter = GPT2DecoderConverter
 
+        super().__init__(model, network_metadata, default_converter)
 
-class GPT2ONNXFile(ONNXModelFile):
-    def __init__(self, model, network_metadata):
-        super().__init__(model, GPT2Converter, network_metadata)
+class GPT2DecoderTRTEngine(DecoderTRTEngine):
+    def __init__(self, model, network_metadata = None, default_converter = None):
+        if default_converter is None:
+            default_converter = GPT2DecoderConverter
 
+        super().__init__(model, network_metadata, default_converter)
 
-# TRT Engine File Encoding #
-class GPT2TRTEngine(TRTEngineFile):
-    def __init__(self, model, network_metadata):
-        super().__init__(model, GPT2Converter, network_metadata)
-
-    def use_obey_precision_constraints(self):
-        return self.network_metadata.precision.fp16
-
-    def get_network_definition(self, network_definition):
-
-        def pairwise(iterable):
-            a, b = tee(iterable)
-            next(b, None)
-            return zip(a, b)
-
-        indices = list(range(0, network_definition[1].num_layers))
-        for i, i_next in pairwise(indices):
-            l = network_definition[1].get_layer(i)
-            l_next = network_definition[1].get_layer(i_next)
-
-            if not all([l.get_output(i).is_execution_tensor for i in range(l.num_outputs)]):
-                continue
-
-            if l.get_output_type(0) != trt.float32:
-                continue
-
-            if l.type == trt.LayerType.ELEMENTWISE and l_next.type == trt.LayerType.REDUCE:
-                l.__class__ = getattr(trt, "IElementWiseLayer")
-                if l.op == trt.ElementWiseOperation.POW:
-                    l.precision = trt.float32
-                    l.set_output_type(0, trt.float32)
-
-                l_next.precision = trt.float32
-                l_next.set_output_type(0, trt.float32)
-
-        if self.network_metadata.precision.fp16:
-            for i in range(network_definition[1].num_inputs):
-                t = network_definition[1].get_input(i)
-                if t.dtype == trt.float32:
-                    t.dtype = trt.float16
-
-            for i in range(network_definition[1].num_outputs):
-                t = network_definition[1].get_output(i)
-                if t.dtype == trt.float32:
-                    t.dtype = trt.float16
-
-        return network_definition
-
-# Converters
-class GPT2Converter(ModelFileConverter):
-    def __init__(self):
-        super().__init__(GPT2TorchFile, GPT2ONNXFile, GPT2TRTEngine)
-
-    def torch_to_onnx(
-        self, output_fpath: str, model: Module, network_metadata: NetworkMetadata
+class GPT2DecoderConverter(DecoderConverter):
+    def __init__(self,
+        torch_class=GPT2DecoderTorchFile,
+        onnx_class=GPT2DecoderONNXFile,
+        trt_engine_class=GPT2DecoderTRTEngine,
     ):
-        """
-        Exports a GPT2LMHead model to ONNX.
+        super().__init__(torch_class=torch_class, onnx_class=onnx_class, trt_engine_class=trt_engine_class)
 
-        Args:
-            output_prefix (str): Path to the onnx file
-            model (torch.Model): Model loaded torch class
+class GPT2ModelClass(Seq2SeqModelClass):
+    """
+    A class to track which class to use for each model type.
+    """
 
-        Returns:
-            GPT2ONNXFile: ONNX GPT2 decoder object.
-        """
-        # Currently does not support exporting GPU models to onnx.
-        device = model.device
-        tokenizer = GPT2Tokenizer.from_pretrained(network_metadata.variant)
-        input_ids = torch.tensor(
-            [
-                tokenizer.encode(
-                    "Here is some text to encode Hello World", add_special_tokens=True
-                )
-            ]
-        ).to(device)
-
-        gpt2_model = GPT2TorchFile.TorchModule(
-            model.transformer, model.lm_head, model.config
-        )
-
-        inputs = GPT2ModelTRTConfig.get_input_dims(network_metadata)[
-            GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME
-        ]
-        outputs = GPT2ModelTRTConfig.get_output_dims(network_metadata)[
-            GPT2ModelTRTConfig.NETWORK_DECODER_SEGMENT_NAME
-        ]
-
-        # Exports to ONNX
-        opt_args={}
-
-        version_major = int((torch.__version__).split('.')[0])
-        version_minor = int((torch.__version__).split('.')[1])
-        if version_major < 1 or (version_major == 1 and version_minor < 11):
-            opt_args['use_external_data_format'] = True
-        if not network_metadata.other.kv_cache:
-            # This code allows for huggingface compatible torch class to use onnx exporter
-            # This code regulates the number of output = 1 if non kv-cache mode is used.
-            # Otherwise it will automatically output key value pairs
-            old_forward = gpt2_model.forward
-            def _export_forward(input_ids, **kwargs):
-                result = old_forward(input_ids, use_cache = False, **kwargs)
-                return result[0]
-            gpt2_model.forward = _export_forward
-
-            torch.onnx.export(
-                gpt2_model,
-                input_ids,
-                output_fpath,
-                opset_version=13,
-                do_constant_folding=True,
-                input_names=inputs.get_names(),
-                output_names=outputs.get_names(),
-                dynamic_axes={
-                    **inputs.get_torch_dynamic_axis_encoding(),
-                    **outputs.get_torch_dynamic_axis_encoding(),
-                },
-                training=torch.onnx.TrainingMode.EVAL,
-                **opt_args
-            )
-        else:
-            decoder_output = gpt2_model(input_ids, use_cache = True)
-            past_key_values = decoder_output[1]
-
-            # Exporting the kv cache engine
-            old_forward = gpt2_model.forward
-            def _export_forward(input_ids, past_key_values, **kwargs):
-                result = old_forward(input_ids, past_key_values=past_key_values, use_cache=True, **kwargs)
-                return (result[0], result[1])
-            gpt2_model.forward = _export_forward
-
-            torch.onnx.export(
-                gpt2_model,
-                (input_ids, past_key_values),
-                output_fpath,
-                opset_version=13,
-                do_constant_folding=True,
-                input_names=inputs.get_names(),
-                output_names=outputs.get_names(),
-                dynamic_axes={
-                    **inputs.get_torch_dynamic_axis_encoding(),
-                    **outputs.get_torch_dynamic_axis_encoding(),
-                },
-                training=torch.onnx.TrainingMode.EVAL,
-                **opt_args
-            )
-
-        return GPT2ONNXFile(output_fpath, network_metadata)
+    decoder_classes = {
+        "torch": GPT2DecoderTorchFile,
+        "onnx": GPT2DecoderONNXFile,
+        "engine": GPT2DecoderTRTEngine
+    }

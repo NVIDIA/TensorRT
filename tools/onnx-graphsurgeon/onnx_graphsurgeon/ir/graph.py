@@ -670,7 +670,8 @@ class Graph(object):
                 def all_tensors_const(tensors):
                     return all([t.name in graph_constants for t in tensors])
 
-                if not all_tensors_const(node.inputs):
+                # Ignore omitted optional inputs.
+                if not all_tensors_const([inp for inp in node.inputs if not inp.is_empty()]):
                     return False
 
                 all_subgraph_foreign_tensors_const = True
@@ -890,6 +891,8 @@ class Graph(object):
         # Otherwise, if all the outputs are foldable, then we can just evaluate the outputs directly.
         # Additionally, if we can determine tensor size, do not evaluate tensors whose sizes exceed the size threshold.
         def should_eval_foldable(tensor):
+            from onnx_graphsurgeon.importers.onnx_importer import get_itemsize
+
             non_const = not isinstance(tensor, Constant)
             is_graph_output = not tensor.outputs
             has_non_foldable_outputs = any(out.name not in graph_constants for out in tensor.outputs)
@@ -898,7 +901,7 @@ class Graph(object):
                 and not misc.is_dynamic_shape(tensor.shape)
                 and tensor.dtype is not None
                 and size_threshold is not None
-            ) and (misc.volume(tensor.shape) * np.dtype(tensor.dtype).itemsize > size_threshold)
+            ) and (misc.volume(tensor.shape) * get_itemsize(tensor.dtype) > size_threshold)
 
             return non_const and (is_graph_output or has_non_foldable_outputs) and not exceeds_size_threshold
 
@@ -1021,9 +1024,14 @@ class Graph(object):
 
         return self
 
-    def _generate_name(self, prefix):
-        name = "{}_{}".format(prefix, self.name_idx)
-        self.name_idx += 1
+    def _generate_name(self, prefix: str, existing_names: set):
+        # `existing_names` will ensure that generated name does not clash existing names.
+        # Generation is done by appending an index to the prefix.
+        while True:
+            name = "{}_{}".format(prefix, self.name_idx)
+            self.name_idx += 1
+            if name not in existing_names:  # Ensure generated name is unique
+                break
         return name
 
     def layer(self, inputs=[], outputs=[], *args, **kwargs):
@@ -1032,19 +1040,21 @@ class Graph(object):
 
         The input and output lists can include various different types:
 
-            - ``Tensor``: Any Tensors provided will be used as-is in the inputs/outputs of the node created.
+            - ``Tensor``:
+                    Any Tensors provided will be used as-is in the inputs/outputs of the node created.
+                    Therefore, you must ensure that the provided Tensors have unique names.
             - ``str``:
                     If a string is provided, this function will generate a new tensor using
                     the string to generate a name. It will append an index to the end of the provided string
-                    to attempt to avoid duplicate tensor names, but since this doesn't guarantee that the name will
-                    be unique, you should try to ensure that the string provided is as unique as possible.
-                    To avoid problems with duplicate names, you can generate names yourself and provide ``Tensor`` s.
+                    to guarantee unique names.
             - ``numpy.ndarray``:
                     If a NumPy array is provided, this function will generate a Constant tensor
-                    using the name prefix: "onnx_graphsurgeon_constant"
+                    using the name prefix: "onnx_graphsurgeon_constant", and append an index to the end
+                    of the prefix to guarantee unique names.
             - ``Union[List[Number], Tuple[Number]]``:
                     If a list or tuple of numbers (int or float) is provided, this function will
-                    generate a Constant tensor using the name prefix: "onnx_graphsurgeon_lst_constant".
+                    generate a Constant tensor using the name prefix: "onnx_graphsurgeon_lst_constant",
+                    and append an index to the end of the prefix to guarantee unique names.
                     The values of the tensor will be a 1D array containing the specified values.
                     The datatype will be either `np.float32` or `np.int64`.
 
@@ -1057,36 +1067,43 @@ class Graph(object):
             List[Tensor]: The output tensors of the node
         """
 
-        def process_io(io):
+        def process_io(io, existing_names):
+            # Note: modifies `existing_names` in-place
             new_io = []
             for elem in io:
                 if isinstance(elem, Tensor):
                     new_io.append(elem)
                 elif isinstance(elem, str):
-                    tensor = Variable(name=self._generate_name(elem))
+                    name = self._generate_name(elem, existing_names)
+                    tensor = Variable(name=name)
                     new_io.append(tensor)
                 elif isinstance(elem, np.ndarray):
-                    new_io.append(Constant(name=self._generate_name("onnx_graphsurgeon_constant"), values=elem))
+                    name = self._generate_name("onnx_graphsurgeon_constant", existing_names)
+                    new_io.append(Constant(name=name, values=elem))
                 elif isinstance(elem, list) or isinstance(elem, tuple) or isinstance(elem, numbers.Number):
                     if isinstance(elem, list) or isinstance(elem, tuple):
                         dtype = np.float32 if any([isinstance(x, float) for x in elem]) else np.int64
                     else:
                         dtype = np.float32 if isinstance(elem, float) else np.int64
                     arr = np.array(elem, dtype=dtype)
-                    new_io.append(Constant(name=self._generate_name("onnx_graphsurgeon_lst_constant"), values=arr))
+                    name = self._generate_name("onnx_graphsurgeon_lst_constant", existing_names)
+                    new_io.append(Constant(name=name, values=arr))
                 else:
                     G_LOGGER.critical(
                         "Unrecognized type passed to Graph.layer: {:}.\n"
                         "\tHint: Did you forget to unpack a list with `*`?\n"
                         "\tPlease use Tensors, strings, or NumPy arrays.".format(elem)
                     )
+                if new_io[-1].name:
+                    existing_names.add(new_io[-1].name)
             return new_io
 
-        inputs = process_io(inputs)
-        outputs = process_io(outputs)
+        existing_names = set(self.tensors().keys())  # set for fast lookup
+        inputs = process_io(inputs, existing_names)
+        outputs = process_io(outputs, existing_names)
 
         if "name" not in kwargs:
-            kwargs["name"] = self._generate_name("onnx_graphsurgeon_node")
+            kwargs["name"] = self._generate_name("onnx_graphsurgeon_node", {node.name for node in self.nodes})
 
         node = Node(*args, **kwargs, inputs=inputs, outputs=outputs)
         self.nodes.append(node)

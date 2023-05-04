@@ -22,6 +22,33 @@ include(cmake/modules/find_library_create_target.cmake)
 set_ifndef(TRT_LIB_DIR ${CMAKE_BINARY_DIR})
 set_ifndef(TRT_OUT_DIR ${CMAKE_BINARY_DIR})
 
+# Converts Windows paths
+if(CMAKE_VERSION VERSION_LESS 3.20)
+    file(TO_CMAKE_PATH "${TRT_LIB_DIR}" TRT_LIB_DIR)
+    file(TO_CMAKE_PATH "${TRT_OUT_DIR}" TRT_OUT_DIR)
+    file(TO_CMAKE_PATH "${CUDNN_ROOT_DIR}" CUDNN_ROOT_DIR)
+else()
+    cmake_path(SET TRT_LIB_DIR ${TRT_LIB_DIR})
+    cmake_path(SET TRT_OUT_DIR ${TRT_OUT_DIR})
+    cmake_path(SET CUDNN_ROOT_DIR ${CUDNN_ROOT_DIR})
+endif()
+
+# Required to export symbols to build *.libs
+if(WIN32)
+    add_compile_definitions(TENSORRT_BUILD_LIB 1)
+endif()
+
+# Set output paths
+set(RUNTIME_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for runtime target files")
+set(LIBRARY_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for library target files")
+set(ARCHIVE_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for archive target files")
+
+if(WIN32)
+    set(STATIC_LIB_EXT "lib")
+else()
+    set(STATIC_LIB_EXT "a")
+endif()
+
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
 
 foreach(TYPE MAJOR MINOR PATCH BUILD)
@@ -88,8 +115,8 @@ endif()
 ############################################################################################
 # Dependencies
 
-set(DEFAULT_CUDA_VERSION 12.0.1)
-set(DEFAULT_CUDNN_VERSION 8.8)
+set(DEFAULT_CUDA_VERSION 12.1.1)
+set(DEFAULT_CUDNN_VERSION 8.9)
 set(DEFAULT_PROTOBUF_VERSION 3.20.1)
 
 # Dependency Version Resolution
@@ -131,7 +158,6 @@ if(BUILD_PARSERS)
 endif()
 
 find_library_create_target(nvinfer nvinfer SHARED ${TRT_LIB_DIR})
-find_library_create_target(nvuffparser nvparsers SHARED ${TRT_LIB_DIR})
 
 find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
 
@@ -207,7 +233,6 @@ endif()
 if(BUILD_PARSERS)
     add_subdirectory(parsers)
 else()
-    find_library_create_target(nvcaffeparser nvparsers SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
     find_library_create_target(nvonnxparser nvonnxparser SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
 endif()
 
