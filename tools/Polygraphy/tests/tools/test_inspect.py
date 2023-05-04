@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -662,6 +662,11 @@ class TestInspectModel:
 
         check_lines_match(actual, expected, should_check_line=lambda line: "Note: Error was:" not in line)
 
+    def test_list_unbounded_dds(self, poly_inspect):
+        cmd = ["model", ONNX_MODELS["unbounded_dds"].path, "--list-unbounded-dds", "--shape-inference"]
+        status = poly_inspect(cmd)
+        assert ("cast_out_6" in status.stdout)
+
     @pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
     def test_trt_sanity(self, run_inspect_model, model):
         import tensorrt as trt
@@ -706,7 +711,10 @@ class TestInspectModel:
         check_lines_match(
             actual,
             expected,
-            should_check_line=lambda exline: "Tactic =" not in exline and "Device Memory" not in exline and "Origin" not in exline,
+            should_check_line=lambda exline: "Tactic =" not in exline
+            and "Device Memory" not in exline
+            and "Origin" not in exline
+            and "Reformat" not in exline,
         )
 
     def test_tf_sanity(self, run_inspect_model):

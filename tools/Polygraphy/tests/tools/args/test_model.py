@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,7 +36,7 @@ class TestModelArgs:
 
         group.parse_args(["model.onnx"])
 
-        assert group.path == os.path.abspath("model.onnx")
+        assert group.path == "model.onnx"
         assert group.model_type.is_onnx()
 
     def test_input_shapes(self, group):
@@ -68,5 +68,5 @@ class TestModelArgs:
     def test_model_with_extra_info(self, group, arg, expected_model, expected_extra_info):
         group.parse_args([arg])
 
-        assert group.path == os.path.abspath(expected_model)
+        assert group.path == expected_model
         assert group.extra_model_info == expected_extra_info

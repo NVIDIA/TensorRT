@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,6 +61,7 @@ class IdentityOnlyRunner(BaseRunner):
             # Like Polygraphy, extension modules should use `G_LOGGER.critical()` for any unrecoverable errors.
             G_LOGGER.critical(f"Invalid speed: {self.speed}. Note: Valid speeds are: {VALID_SPEEDS}")
 
+    @util.check_called_by("activate")
     def activate_impl(self):
         # As with the loader, the `graph` argument could be either a `gs.Graph` or a callable that
         # returns one, such as a loader, so we try to call it.
@@ -71,6 +72,7 @@ class IdentityOnlyRunner(BaseRunner):
     # so we can assume that `self.graph` will be available.
     #
 
+    @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
         # Input metadata is used by Polygraphy's default data loader to determine the required
         # shapes and datatypes of the input buffers.
@@ -79,6 +81,7 @@ class IdentityOnlyRunner(BaseRunner):
             meta.add(tensor.name, tensor.dtype, tensor.shape)
         return meta
 
+    @util.check_called_by("infer")
     def infer_impl(self, feed_dict):
         start = time.time()
 
@@ -115,5 +118,6 @@ class IdentityOnlyRunner(BaseRunner):
         self.inference_time = end - start
         return outputs
 
+    @util.check_called_by("deactivate")
     def deactivate_impl(self):
         del self.graph

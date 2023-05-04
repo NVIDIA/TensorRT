@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,10 +24,11 @@ from polygraphy.tools.args import (
     OnnxInferShapesArgs,
     OnnxLoadArgs,
     TrtConfigArgs,
-    TrtLoadEngineArgs,
+    TrtLoadEngineBytesArgs,
     TrtLoadNetworkArgs,
     TrtLoadPluginsArgs,
-    TrtSaveEngineArgs,
+    TrtOnnxFlagArgs,
+    TrtSaveEngineBytesArgs,
 )
 from polygraphy.tools.base import Tool
 from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
@@ -66,9 +67,10 @@ class BaseCheckerSubtool(Tool):
             DataLoaderArgs(),  # For int8 calibration
             TrtConfigArgs(precision_constraints_default=self._precision_constraints_default),
             TrtLoadPluginsArgs(),
+            TrtOnnxFlagArgs(),
             TrtLoadNetworkArgs(),
-            TrtLoadEngineArgs(),
-            TrtSaveEngineArgs(output_opt=False),
+            TrtLoadEngineBytesArgs(),
+            TrtSaveEngineBytesArgs(output_opt=False),
         ]
 
     def show_start_end_logging_impl(self, args):
@@ -134,7 +136,7 @@ class BaseCheckerSubtool(Tool):
                 self.process_network(network)
 
                 try:
-                    engine = self.arg_groups[TrtLoadEngineArgs].load_engine((builder, network))
+                    serialized_engine = self.arg_groups[TrtLoadEngineBytesArgs].load_engine_bytes((builder, network))
                 except Exception as err:
                     G_LOGGER.warning(
                         f"Failed to create network or engine, continuing to the next iteration.\nNote: Error was: {err}"
@@ -143,9 +145,9 @@ class BaseCheckerSubtool(Tool):
                     self.arg_groups[IterativeDebugArgs].skip_iteration(success=False)
                 else:
                     # Don't need to keep the engine around in memory - just serialize to disk and free it.
-                    with engine:
-                        self.arg_groups[TrtSaveEngineArgs].save_engine(
-                            engine, self.arg_groups[IterativeDebugArgs].iter_artifact_path
+                    with serialized_engine:
+                        self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(
+                            serialized_engine, self.arg_groups[IterativeDebugArgs].iter_artifact_path
                         )
 
             def advance(context):

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,12 +21,13 @@ from polygraphy.tools.args import (
     ModelArgs,
     OnnxLoadArgs,
     TrtConfigArgs,
+    TrtLoadEngineBytesArgs,
     TrtLoadEngineArgs,
     TrtLoadNetworkArgs,
     TrtLoadPluginsArgs,
     TrtRunnerArgs,
+    TrtOnnxFlagArgs,
 )
-from polygraphy.tools.script import Script
 from tests.models.meta import ONNX_MODELS
 from tests.tools.args.helper import ArgGroupTestHelper
 from polygraphy.tools.args import util as args_util
@@ -38,11 +39,13 @@ def trt_runner_args():
         TrtRunnerArgs(),
         deps=[
             ModelArgs(),
+            TrtLoadEngineBytesArgs(),
             TrtLoadEngineArgs(),
             OnnxLoadArgs(allow_shape_inference=False),
             TrtConfigArgs(),
             TrtLoadPluginsArgs(),
             TrtLoadNetworkArgs(),
+            TrtOnnxFlagArgs(),
         ],
     )
 
@@ -54,7 +57,6 @@ class TestTrtRunnerArgs:
 
         assert trt_runner_args.optimization_profile == index
 
-        script = Script()
         runners = args_util.run_script(trt_runner_args.add_to_script)
 
         assert runners[0].optimization_profile == index

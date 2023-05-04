@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,10 +45,12 @@ from polygraphy.tools.args import (
     TrtConfigArgs,
     TrtLegacyRunnerArgs,
     TrtLoadEngineArgs,
+    TrtLoadEngineBytesArgs,
     TrtLoadNetworkArgs,
     TrtLoadPluginsArgs,
+    TrtOnnxFlagArgs,
     TrtRunnerArgs,
-    TrtSaveEngineArgs,
+    TrtSaveEngineBytesArgs,
 )
 from polygraphy.tools.base import Tool
 from polygraphy.tools.script import Script, safe
@@ -127,9 +129,11 @@ class Run(Tool):
             # We run calibration/inference with the same data, so it doesn't really matter if it's random.
             TrtConfigArgs(allow_random_data_calib_warning=False),
             TrtLoadPluginsArgs(),
+            TrtOnnxFlagArgs(),
             TrtLoadNetworkArgs(),
-            TrtSaveEngineArgs(output_opt="save-engine", output_short_opt=False),
-            TrtLoadEngineArgs(allow_saving=True),
+            TrtSaveEngineBytesArgs(output_opt="save-engine", output_short_opt=False),
+            TrtLoadEngineBytesArgs(allow_saving=True),
+            TrtLoadEngineArgs(),
             TrtRunnerArgs(),
             TrtLegacyRunnerArgs(),
             DataLoaderArgs(),

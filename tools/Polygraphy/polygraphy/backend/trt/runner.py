@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -82,8 +82,13 @@ class TrtRunner(BaseRunner):
         self._engine_or_context = engine
         self.optimization_profile = optimization_profile
 
+        # Check compatibility with NumPy before proceeding further
+        trt_util.check_numpy_trt_compatibility()
+
+    @util.check_called_by("activate")
     def activate_impl(self):
         engine_or_context, owning = util.invoke_if_callable(self._engine_or_context)
+
 
         if isinstance(engine_or_context, trt.ICudaEngine):
             self.engine = engine_or_context
@@ -189,9 +194,10 @@ class TrtRunner(BaseRunner):
             if not self.context.set_optimization_profile_async(index, self.stream.ptr):
                 G_LOGGER.critical(f"Failed to set optimization profile to: {index}")
 
+    @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
         if trt_util._should_use_v3_api():
-            return trt_util.get_metadata_from_engine(self.engine, mode=trt.TensorIOMode.INPUT)
+            return trt_util.get_metadata_from_engine(self.engine, self.context, mode=trt.TensorIOMode.INPUT)
         else:
             start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
             # This function always uses binding names of the 0th profile.
@@ -344,13 +350,19 @@ class TrtRunner(BaseRunner):
                         "Please provide either a NumPy array or Polygraphy DeviceView. "
                     )
 
+            # If the format is HWC, make sure array.shape is considered after transposing back to CHW
+            if self.engine.get_tensor_format(name) == trt.TensorFormat.HWC:
+                array_shape = trt_util.get_chw_shape_from_hwc(array.shape, self.context.get_tensor_strides(name))
+            else:
+                array_shape = array.shape
+
             # Only update the input shape/address if something has changed. Otherwise, we'd be
             # doing extra work unnecessarily.
             # We retrieve the semantic shape from the FormattedArray, *not* the underlying array.
-            if self.context.get_tensor_shape(name) != array.shape:
-                G_LOGGER.ultra_verbose(f"Setting {name} input shape to: {array.shape}")
-                if not self.context.set_input_shape(name, array.shape):
-                    G_LOGGER.critical(f"For input: {name}, failed to set shape to: {array.shape}")
+            if self.context.get_tensor_shape(name) != array_shape:
+                G_LOGGER.ultra_verbose(f"Setting {name} input shape to: {array_shape}")
+                if not self.context.set_input_shape(name, array_shape):
+                    G_LOGGER.critical(f"For input: {name}, failed to set shape to: {array_shape}")
 
             if self.context.get_tensor_address(name) != ptr:
                 if not self.context.set_tensor_address(name, ptr):
@@ -365,20 +377,26 @@ class TrtRunner(BaseRunner):
             # Otherwise, we create a view instead with the correct shape/dtype.
             raw_array = self.output_allocator.buffers[name]
             shape = self.output_allocator.shapes[name]
-            dtype = np.dtype(trt.nptype(self.engine.get_tensor_dtype(name)))
+            dtype = trt_util.np_dtype_from_trt(self.engine.get_tensor_dtype(name))
 
-            using_nonlinear_format = self.engine.get_tensor_format(name) != trt.TensorFormat.LINEAR
+            tensor_format = self.engine.get_tensor_format(name)
+
+            # If the format is HWC, make sure the result is shaped accordingly
+            if tensor_format == trt.TensorFormat.HWC:
+                shape = trt_util.get_hwc_shape_from_chw(shape, self.context.get_tensor_strides(name))
+
+            using_vectorized_format = tensor_format != trt.TensorFormat.LINEAR and tensor_format != trt.TensorFormat.HWC
             # The memory allocated by the output allocator may be larger than actually required.
             # If we're using a vectorized format, then we need to copy the whole thing.
             # Otherwise, we can determine how much we actually need.
-            nbytes = raw_array.nbytes if using_nonlinear_format else (util.volume(shape) * dtype.itemsize)
+            nbytes = raw_array.nbytes if using_vectorized_format else (util.volume(shape) * dtype.itemsize)
 
             if copy_outputs_to_host:
                 self.host_output_buffers[name] = util.resize_buffer(self.host_output_buffers[name], (nbytes,))
                 raw_array.view(shape=(nbytes,)).copy_to(self.host_output_buffers[name], stream=self.stream)
                 raw_array = self.host_output_buffers[name]
 
-            if using_nonlinear_format:
+            if using_vectorized_format:
                 array = FormattedArray(raw_array, shape=shape, dtype=dtype)
             else:
                 if copy_outputs_to_host:
@@ -390,6 +408,7 @@ class TrtRunner(BaseRunner):
         self.stream.synchronize()
         return output_buffers
 
+    @util.check_called_by("infer")
     def infer_impl(self, feed_dict, copy_outputs_to_host=None):
         """
         Implementation for running inference with TensorRT.
@@ -427,6 +446,7 @@ class TrtRunner(BaseRunner):
 
         return output_buffers
 
+    @util.check_called_by("deactivate")
     def deactivate_impl(self):
         with contextlib.ExitStack() as stack:
             if self.owns_engine:

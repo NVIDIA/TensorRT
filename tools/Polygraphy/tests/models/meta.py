@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,6 +104,12 @@ ONNX_MODELS = {
         check_runner=check_dynamic_identity,
         input_metadata=TensorMetadata().add("X", dtype=np.float32, shape=(1, 1, -1, -1)),
     ),
+    "identity_multi_ch": Model(
+        path=model_path("identity_multi_ch.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+        input_metadata=TensorMetadata().add("x", dtype=np.float32, shape=(2, 4, 3, 3)),
+    ),
     "empty_tensor_expand": Model(
         path=model_path("empty_tensor_expand.onnx"), LoaderType=BytesFromPath, check_runner=check_empty_tensor_expand
     ),
@@ -167,5 +173,13 @@ ONNX_MODELS = {
         check_runner=no_check_implemented,
     ),
     "nonzero": Model(path=model_path("nonzero.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
-    "inp_dim_val_not_set": Model(path=model_path("inp_dim_val_not_set.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented)
+    "inp_dim_val_not_set": Model(
+        path=model_path("inp_dim_val_not_set.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "multi_output": Model(
+        path=model_path("multi_output.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "unbounded_dds": Model(
+        path=model_path("unbounded_dds.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
 }

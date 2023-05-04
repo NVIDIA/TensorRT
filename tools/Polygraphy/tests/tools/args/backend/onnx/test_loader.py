@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@ import os
 import tempfile
 
 import pytest
+import onnx_graphsurgeon as gs
 from polygraphy import util
 from polygraphy.backend.onnx import onnx_from_path
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoadArgs, OnnxSaveArgs, OnnxInferShapesArgs
@@ -43,6 +44,38 @@ class TestOnnxLoaderArgs:
 
         assert len(model.graph.output) == 1
         assert model.graph.output[0].name == "identity_out_0"
+
+    @pytest.mark.parametrize("global_upper_bound", [None, "2000"])
+    @pytest.mark.parametrize("specified_upper_bound", [None, "cast_out_6:4000"])
+    def test_setting_upper_bounds(self, global_upper_bound, specified_upper_bound):
+        arg_group = ArgGroupTestHelper(OnnxLoadArgs(allow_setting_upper_bounds = True), deps=[ModelArgs(), OnnxInferShapesArgs()])
+
+        cmd = [ONNX_MODELS["unbounded_dds"].path, "--set-unbounded-dds-upper-bound"]
+        upper_bound = "1000"
+        if global_upper_bound:
+            upper_bound = "2000"
+            cmd += [global_upper_bound]
+        if specified_upper_bound:
+            upper_bound = "4000"
+            cmd += [specified_upper_bound]
+        if global_upper_bound is None and specified_upper_bound is None:
+            cmd += [upper_bound]
+        arg_group.parse_args(cmd)
+        model = arg_group.load_onnx()
+        graph = gs.import_onnx(model)
+
+        # Check if there is a Min operator in the modified model
+        find_min = False
+        for node in graph.nodes:
+            if node.op == 'Min':
+                find_min = True
+                # Check if the Min operator's second input is a constant tensor
+                assert isinstance(node.inputs[1], gs.Constant)
+
+                val = node.inputs[1].values
+                # Check if the constant value equals the target upper bound
+                assert str(val) == upper_bound
+        assert (find_min)
 
     def test_external_data(self):
         arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])

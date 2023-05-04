@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,12 +61,15 @@ class TfRunner(BaseRunner):
             self.run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
             self.run_metadata = tf.RunMetadata()
 
+    @util.check_called_by("activate")
     def activate_impl(self):
         (self.sess, self.output_names), _ = util.invoke_if_callable(self._sess)
 
+    @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
         return tf_util.get_input_metadata(self.sess.graph)
 
+    @util.check_called_by("infer")
     def infer_impl(self, feed_dict):
         G_LOGGER.extra_verbose(f"Received feed_dict: {feed_dict}")
         start = time.time()
@@ -94,6 +97,7 @@ class TfRunner(BaseRunner):
 
         return out_dict
 
+    @util.check_called_by("deactivate")
     def deactivate_impl(self):
         self.sess.close()
         del (self.sess, self.output_names)

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +16,8 @@
 #
 from polygraphy import mod
 from polygraphy.tools.args import util as args_util
-from polygraphy.tools.args.base import BaseRunnerArgs
-from polygraphy.tools.args.model import ModelArgs
 from polygraphy.tools.args.backend.trt.loader import TrtLoadEngineArgs
+from polygraphy.tools.args.base import BaseRunnerArgs
 from polygraphy.tools.script import make_invocable
 
 

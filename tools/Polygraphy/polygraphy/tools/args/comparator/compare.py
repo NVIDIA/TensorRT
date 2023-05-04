@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,12 @@ from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.script import inline, make_invocable, make_invocable_if_nondefault, safe
+
+#
+# NOTE: The classes here are expected to use `None` as the default value for all arguments.
+# This is because `ComparatorCompareArgs` will display warnings for any non-`None` arguments
+# present in unselected compare func groups. This requirement is enforced by the test.
+#
 
 
 @mod.export()
@@ -80,6 +86,30 @@ class CompareFuncSimpleArgs(BaseArgs):
             action="store_true",
             default=None,
         )
+        self.group.add_argument(
+            "--save-heatmaps",
+            help="[EXPERIMENTAL] Directory in which to save heatmaps of the absolute and relative error. ",
+            default=None,
+        )
+        self.group.add_argument(
+            "--show-heatmaps",
+            help="[EXPERIMENTAL] Whether to display heatmaps of the absolute and relative error. Defaults to False. ",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
+            "--save-error-metrics-plot",
+            help="[EXPERIMENTAL] Path to directory to save error metrics plot(s). If set, generates plot of absolute and relative error against reference output magnitude."
+            "This directory is created if it does not already exist."
+            "This is useful for finding trends in errors, determining whether accuracy failures are just outliers or deeper problems.",
+            default=None,
+        )
+        self.group.add_argument(
+            "--show-error-metrics-plot",
+            help="[EXPERIMENTAL] Whether to display the error metrics plots. Defaults to False. ",
+            action="store_true",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -91,12 +121,20 @@ class CompareFuncSimpleArgs(BaseArgs):
             atol (Dict[str, float]): Per-tensor absolute tolerance.
             check_error_stat (str): The error metric to check.
             infinities_compare_equal (bool): Whether to allow +-inf to compare as equal.
+            save_heatmaps (str): Directory in which to save heatmaps of error.
+            show_heatmaps (bool): Whether to display heatmaps of error.
+            save_error_metrics_plot (str): Path to store generated error plots.
+            show_error_metrics_plot (bool): Whether to display the error metrics plots.
         """
         self.no_shape_check = args_util.get(args, "no_shape_check")
         self.rtol = args_util.parse_arglist_to_dict(args_util.get(args, "rtol"))
         self.atol = args_util.parse_arglist_to_dict(args_util.get(args, "atol"))
         self.check_error_stat = args_util.parse_arglist_to_dict(args_util.get(args, "check_error_stat"))
         self.infinities_compare_equal = args_util.get(args, "infinities_compare_equal")
+        self.save_heatmaps = args_util.get(args, "save_heatmaps")
+        self.show_heatmaps = args_util.get(args, "show_heatmaps")
+        self.save_error_metrics_plot = args_util.get(args, "save_error_metrics_plot")
+        self.show_error_metrics_plot = args_util.get(args, "show_error_metrics_plot")
 
         # Without this early check, failure would only happen after inference, which is clearly not desirable.
         if self.check_error_stat:
@@ -118,6 +156,10 @@ class CompareFuncSimpleArgs(BaseArgs):
             fail_fast=self.arg_groups[ComparatorCompareArgs].fail_fast,
             check_error_stat=self.check_error_stat,
             infinities_compare_equal=self.infinities_compare_equal,
+            save_heatmaps=self.save_heatmaps,
+            show_heatmaps=self.show_heatmaps,
+            save_error_metrics_plot=self.save_error_metrics_plot,
+            show_error_metrics_plot=self.show_error_metrics_plot,
         )
         compare_func = None
         if compare_func_str:

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -170,7 +170,7 @@ class Sanitize(BaseSurgeonSubtool):
             ),
             DataLoaderArgs(),
             OnnxInferShapesArgs(default=True, allow_force_fallback=True),
-            OnnxLoadArgs(outputs_opt_prefix=""),
+            OnnxLoadArgs(outputs_opt_prefix="", allow_setting_upper_bounds=True),
             OnnxSaveArgs(allow_shape_inference=True, output_opt_required=True),
             ConstFoldArgs(),
         ]

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,7 +45,6 @@ class BaseArgs:
 
             - OtherArgs0
             - OtherArgs1: <additional info: condition under which it is needed, or reason for dependency>
-            - OtherArgs2: [Optional] <behavior if available>
 
         <Optional Additional Documentation>
 
@@ -60,7 +59,7 @@ class BaseArgs:
             - TrtLoadPluginsArgs
             - TrtLoadNetworkArgs: if building engines
             - TrtConfigArgs: if building engines
-            - TrtSaveEngineArgs: if allow_saving == True
+            - TrtSaveEngineBytesArgs: if allow_saving == True
 
     The section header and description will be used to popluate the tool's help output.
     """
@@ -107,6 +106,8 @@ class BaseArgs:
         """
         Add arguments to a command-line parser.
 
+        This method is guaranteed to only be called after `register`.
+
         Args:
             parser (argparse.ArgumentParser): The argument parser.
         """
@@ -118,15 +119,19 @@ class BaseArgs:
                 "See BaseArgs documentation for details."
             )
 
+        num_prev_actions = len(parser._actions)
+
         self.group = parser.add_argument_group(title.strip(), f"Options related to {desc.strip()}")
 
         self.add_parser_args_impl()
+        num_added_actions = len(parser._actions) - num_prev_actions
 
         # Remove empty groups from the parser.
         if self.group._action_groups:
             G_LOGGER.internal_error("Argument groups should not create subgroups!")
 
-        if not self.group._actions:
+        # Remove empty groups from help text
+        if not num_added_actions:
             parser._action_groups.remove(self.group)
             self.group = None
 
@@ -138,6 +143,8 @@ class BaseArgs:
         """
         Parses relevant arguments from command-line arguments and populates corresponding
         attributes of this argument group.
+
+        This method is guaranteed to only be called after `add_parser_args`.
 
         Args:
             args: Arguments provided by argparse.
@@ -153,6 +160,8 @@ class BaseArgs:
         Adds code to the given script that performs the functionality provided by this argument group.
 
         For example, ``TrtConfigArgs`` would add a call to ``CreateConfig``.
+
+        This method is guaranteed to only be called after `parse`.
 
         Args:
             script (polygraphy.tools.script.Script):

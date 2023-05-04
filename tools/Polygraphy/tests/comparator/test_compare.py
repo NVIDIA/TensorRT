@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,7 @@ class TestSimpleCompareFunc:
     @pytest.mark.parametrize(
         "values0, values1, dtype, expected_max_absdiff, expected_max_reldiff",
         [
+            # Low precision arrays should be casted to higher precisions to avoid overflows/underflows.
             ([0], [1], np.uint8, 1, 1.0),
             ([1], [0], np.uint8, 1, np.inf),
             ([0], [1], np.uint16, 1, 1.0),
@@ -34,10 +35,10 @@ class TestSimpleCompareFunc:
             ([1], [0], np.uint32, 1, np.inf),
             ([25], [30], np.int8, 5, 5.0 / 30.0),
             ([25], [30], np.float16, 5, np.array([5.0], dtype=np.float32) / np.array([30.0], dtype=np.float32)),
+            ([1], [0], np.float32, 1, 1 / np.finfo(float).eps),
         ],
     )
-    # Low precision arrays should be casted to higher precisions to avoid overflows/underflows.
-    def test_low_precision_comparison(self, values0, values1, dtype, expected_max_absdiff, expected_max_reldiff):
+    def test_comparison(self, values0, values1, dtype, expected_max_absdiff, expected_max_reldiff):
         iter_result0 = IterationResult(outputs={"output": np.array(values0, dtype=dtype)})
         iter_result1 = IterationResult(outputs={"output": np.array(values1, dtype=dtype)})
 

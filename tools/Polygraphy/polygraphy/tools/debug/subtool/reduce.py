@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -367,6 +367,40 @@ class Reduce(Tool):
 
             setattr(graph, attr, tensors)
             G_LOGGER.info(f"Marking model {attr}: {getattr(graph, attr)}")
+
+            if attr == "inputs":
+                # When marking model inputs, there may be cases where the producer of the
+                # desired input also produces graph outputs like so:
+                #
+                #            Node0
+                #          /      \
+                #     out0         out1 (graph output)
+                #    (desired
+                #     graph input)
+                #     |
+                #    Node1
+                #
+                # In this example, if we don't remove `out1` from the graph outputs,
+                # we'll be left with the following graph after cleanup:
+                #
+                #                          Node0
+                #                             |
+                #     out0           out1 (graph output)
+                #     (graph input)
+                #      |
+                #     Node1
+                #
+                # This will be malformed if `Node0` requires 2 outputs in the ONNX spec.
+                #
+                for tensor in tensors:
+                    if not tensor.inputs:
+                        continue
+
+                    producer = tensor.inputs[0]
+                    for out in producer.outputs:
+                        if out in graph.outputs:
+                            graph.outputs.remove(out)
+
             return graph
 
         def names_from_tensors(tensors):
@@ -382,6 +416,9 @@ class Reduce(Tool):
         # debug_replay is used to provide the debug_replay from previous iterations to subsequent iterations.
         #   Without this, the debug_replay would only contain entries for the final call to `bisect_io`.
         def bisect_io(graph, marker, attr, filter_const=True, debug_replay=None):
+            if attr not in ["inputs", "outputs"]:
+                G_LOGGER.internal_error(f"Invalid attribute specified: {attr}")
+
             G_LOGGER.start(f"Reducing model {attr}")
 
             def make_iter_art(context):

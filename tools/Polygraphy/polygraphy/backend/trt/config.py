@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,6 +58,9 @@ class CreateConfig(BaseLoader):
         builder_optimization_level=None,
         fp8=None,
         hardware_compatibility_level=None,
+        max_aux_streams=None,
+        version_compatible=None,
+        exclude_lean_runtime=None,
     ):
         """
         Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
@@ -160,9 +163,20 @@ class CreateConfig(BaseLoader):
                     Whether to build the engine with FP8 precision enabled.
                     Defaults to False.
             hardware_compatibility_level (trt.HardwareCompatibilityLevel):
-                    The hardware compatibiliity level. This allows engines built on one GPU architecture to work on GPUs
+                    The hardware compatibility level. This allows engines built on one GPU architecture to work on GPUs
                     of other architectures.
                     Defaults to TensorRT's default hardware compatibility level.
+            max_aux_streams (int):
+                    The maximum number of auxiliary streams that TensorRT is allowed to use. If the network contains
+                    operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the
+                    one provided to the IExecutionContext::enqueueV3() call.
+                    The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on
+                    whether enabling multi-stream would improve the performance.
+            version_compatible (bool):
+                    Whether to build an engine that is version compatible.
+            exclude_lean_runtime (bool):
+                    Whether to exclude the lean runtime in version compatible engines.
+                    Requires that version compatibility is enabled.
         """
         self.max_workspace_size = max_workspace_size
         if max_workspace_size is not None:
@@ -191,6 +205,9 @@ class CreateConfig(BaseLoader):
         self.direct_io = util.default(direct_io, False)
         self.builder_optimization_level = builder_optimization_level
         self.hardware_compatibility_level = hardware_compatibility_level
+        self.max_aux_streams = max_aux_streams
+        self.version_compatible = version_compatible
+        self.exclude_lean_runtime = exclude_lean_runtime
 
         if self.calibrator is not None and not self.int8:
             G_LOGGER.warning(
@@ -198,6 +215,7 @@ class CreateConfig(BaseLoader):
                 "Did you mean to set `int8=True` to enable building with int8 precision?"
             )
 
+    @util.check_called_by("__call__")
     def call_impl(self, builder, network):
         """
         Args:
@@ -387,6 +405,27 @@ class CreateConfig(BaseLoader):
 
                 try_run(set_hardware_compatibility_level, "hardware_compatibility_level")
 
+            if self.version_compatible:
+                try_set_flag("VERSION_COMPATIBLE")
+
+            if self.exclude_lean_runtime:
+                if not self.version_compatible:
+                    G_LOGGER.critical(f"Cannot set EXCLUDE_LEAN_RUNTIME if version compatibility is not enabled. ")
+                try_set_flag("EXCLUDE_LEAN_RUNTIME")
+
+            if self.hardware_compatibility_level is not None or self.version_compatible:
+                G_LOGGER.info(
+                    "Version or hardware compatibility was enabled. "
+                    "If you are using an ONNX model, please set the NATIVE_INSTANCENORM ONNX parser flag, e.g. `--onnx-flags NATIVE_INSTANCENORM`"
+                )
+
+            if self.max_aux_streams is not None:
+
+                def set_max_aux_streams():
+                    config.max_aux_streams = self.max_aux_streams
+
+                try_run(set_max_aux_streams, "max_aux_streams")
+
             return config
 
 
@@ -415,6 +454,7 @@ class PostprocessConfig(BaseLoader):
 
         self._func = func
 
+    @util.check_called_by("__call__")
     def call_impl(self, builder, network):
         """
         Args:

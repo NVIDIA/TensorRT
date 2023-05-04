@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -491,6 +491,27 @@ class TestReduce:
                 stdin=responses,
             )
             assert "Did 'polygraphy_debug.onnx' [p]ass or [f]ail?" in status.stdout
+
+    def test_reduce_node_with_multiple_outputs_that_are_graph_outputs(self, poly_debug):
+        # Tests a working model where one of the nodes has multiple outputs which are graph outputs.
+        with tempfile.TemporaryDirectory() as outdir:
+            status = poly_debug(
+                [
+                    "reduce",
+                    ONNX_MODELS["multi_output"].path,
+                    "--output=reduced.onnx",
+                    "--no-reduce-outputs",
+                    "--mode=linear",
+                    "--check",
+                    "polygraphy",
+                    "run",
+                    "polygraphy_debug.onnx",
+                    "--onnxrt",
+                ],
+                cwd=outdir,
+            )
+
+            assert "FAILED" not in (status.stdout + status.stderr)
 
 
 class TestRepeat:

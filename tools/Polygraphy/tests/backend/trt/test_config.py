@@ -35,6 +35,8 @@ class TestCreateConfig:
             assert not config.get_flag(trt.BuilderFlag.INT8)
             if mod.version(trt.__version__) >= mod.version("8.6"):
                 assert not config.get_flag(trt.BuilderFlag.FP8)
+                assert not config.get_flag(trt.BuilderFlag.VERSION_COMPATIBLE)
+                assert not config.get_flag(trt.BuilderFlag.EXCLUDE_LEAN_RUNTIME)
             assert config.num_optimization_profiles == 1
             assert config.int8_calibrator is None
             with contextlib.suppress(AttributeError):
@@ -85,6 +87,20 @@ class TestCreateConfig:
                 assert not obey_set and prefer_set
             else:
                 assert not obey_set and not prefer_set
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported before TRT 8.6")
+    @pytest.mark.parametrize(
+        "kwargs, expected_flag",
+        [
+            ({"version_compatible": True}, "VERSION_COMPATIBLE"),
+            ({"version_compatible": True, "exclude_lean_runtime": True}, "EXCLUDE_LEAN_RUNTIME"),
+        ],
+    )
+    def test_version_compatibility_flags(self, identity_builder_network, kwargs, expected_flag):
+        builder, network = identity_builder_network
+        loader = CreateConfig(**kwargs)
+        with loader(builder, network) as config:
+            assert config.get_flag(getattr(trt.BuilderFlag, expected_flag))
 
     @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported before TRT 8.2")
     def test_direct_io(self, identity_builder_network):
@@ -347,7 +363,7 @@ class TestCreateConfig:
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
     )
-    @pytest.mark.parametrize("level", range(5))
+    @pytest.mark.parametrize("level", range(6))
     def test_builder_optimization_level(self, identity_builder_network, level):
         builder, network = identity_builder_network
         loader = CreateConfig(builder_optimization_level=level)
@@ -368,6 +384,16 @@ class TestCreateConfig:
             loader = CreateConfig(hardware_compatibility_level=level)
             with loader(builder, network) as config:
                 assert config.hardware_compatibility_level == level
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
+    )
+    @pytest.mark.parametrize("num_streams", range(3))
+    def test_max_aux_streams(self, identity_builder_network, num_streams):
+        builder, network = identity_builder_network
+        loader = CreateConfig(max_aux_streams=num_streams)
+        with loader(builder, network) as config:
+            assert config.max_aux_streams == num_streams
 
 
 class TestPostprocessConfig:

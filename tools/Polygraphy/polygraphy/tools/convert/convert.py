@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,10 +27,11 @@ from polygraphy.tools.args import (
     OnnxSaveArgs,
     TfLoadArgs,
     TrtConfigArgs,
-    TrtLoadEngineArgs,
+    TrtLoadEngineBytesArgs,
     TrtLoadNetworkArgs,
     TrtLoadPluginsArgs,
-    TrtSaveEngineArgs,
+    TrtSaveEngineBytesArgs,
+    TrtOnnxFlagArgs,
 )
 from polygraphy.tools.base import Tool
 
@@ -58,8 +59,9 @@ class Convert(Tool):
             TrtConfigArgs(allow_engine_capability=True, allow_tensor_formats=True),
             TrtLoadPluginsArgs(),
             TrtLoadNetworkArgs(allow_tensor_formats=True),
-            TrtLoadEngineArgs(),
-            TrtSaveEngineArgs(output_opt=False),
+            TrtLoadEngineBytesArgs(),
+            TrtSaveEngineBytesArgs(output_opt=False),
+            TrtOnnxFlagArgs(),
         ]
 
     def add_parser_args_impl(self, parser):
@@ -70,16 +72,6 @@ class Convert(Tool):
             "'onnx-like-trt-network' is EXPERIMETNAL and converts a TensorRT network to a format usable for visualization. "
             "See 'OnnxLikeFromNetwork' for details. ",
             choices=["onnx", "trt", "onnx-like-trt-network"],
-        )
-
-        onnx_args = self.arg_groups[OnnxLoadArgs].group
-        onnx_args.add_argument(
-            "--fp-to-fp16",
-            help="Convert all floating point tensors in an ONNX model to 16-bit precision. "
-            "This is *not* needed in order to use TensorRT's fp16 precision, but may be useful for other backends. "
-            "Requires onnxmltools. ",
-            action="store_true",
-            default=None,
         )
 
     def run_impl(self, args):
@@ -101,11 +93,9 @@ class Convert(Tool):
             onnx_backend.save_onnx(onnx_like, args.output)
         elif convert_type.is_onnx():
             model = self.arg_groups[OnnxLoadArgs].load_onnx()
-            if args.fp_to_fp16:
-                model = onnx_backend.convert_to_fp16(model)
             self.arg_groups[OnnxSaveArgs].save_onnx(model, args.output)
         elif convert_type.is_trt():
-            with self.arg_groups[TrtLoadEngineArgs].load_engine() as engine:
-                self.arg_groups[TrtSaveEngineArgs].save_engine(engine, args.output)
+            with self.arg_groups[TrtLoadEngineBytesArgs].load_engine_bytes() as serialized_engine:
+                self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(serialized_engine, args.output)
         else:
             G_LOGGER.critical(f"Cannot convert to model type: {convert_type}")

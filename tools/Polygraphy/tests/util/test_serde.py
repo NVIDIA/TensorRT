@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +18,9 @@
 import numpy as np
 import pytest
 import tensorrt as trt
+
 from polygraphy import constants, util
-from polygraphy.backend.trt import Algorithm, TacticReplayData
+from polygraphy.backend.trt import Algorithm, TacticReplayData, TensorInfo
 from polygraphy.comparator import IterationResult, RunResults
 from polygraphy.exception import PolygraphyException
 from polygraphy.json import Decoder, Encoder, from_json, load_json, to_json
@@ -64,8 +65,11 @@ def make_algo():
         implementation=4,
         tactic=5,
         # Should work even if strides are not set
-        inputs=[(trt.TensorFormat.LINEAR, trt.float32, (1, 2)), (trt.TensorFormat.LINEAR, trt.float32)],
-        outputs=[(trt.TensorFormat.LINEAR, trt.float32, (2, 3))],
+        inputs=[
+            TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2), -1, 1),
+            TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2), -1, 1),
+        ],
+        outputs=[TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (2, 3), -1, 1)],
     )
 
 
@@ -90,17 +94,21 @@ class TestImplementations:
     @pytest.mark.parametrize(
         "obj",
         [
+            TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
             Algorithm(
                 implementation=4,
                 tactic=5,
-                inputs=[(trt.TensorFormat.LINEAR, trt.float32)],
-                outputs=[(trt.TensorFormat.LINEAR, trt.float32)],
+                inputs=[TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1)],
+                outputs=[TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1)],
             ),
             Algorithm(
                 implementation=4,
                 tactic=5,
-                inputs=[(trt.TensorFormat.LINEAR, trt.float32), (trt.TensorFormat.CHW32, trt.int8)],
-                outputs=[(trt.TensorFormat.CHW32, trt.float16)],
+                inputs=[
+                    TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+                    TensorInfo(trt.TensorFormat.CHW32, trt.int8, (1, 2, 3), -1, 1),
+                ],
+                outputs=[TensorInfo(trt.TensorFormat.CHW32, trt.float16, (1, 2, 3), -1, 1)],
             ),
             np.ones((3, 4, 5), dtype=np.int64),
             np.ones(5, dtype=np.int64),

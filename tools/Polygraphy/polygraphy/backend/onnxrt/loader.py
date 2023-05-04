@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,6 +46,7 @@ class SessionFromOnnx(BaseLoader):
         self._model_bytes_or_path = model_bytes
         self.providers = util.default(providers, ["cpu"])
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:

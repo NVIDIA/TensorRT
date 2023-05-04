@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,7 @@ from polygraphy.backend.onnx import (
     OnnxFromPath,
     OnnxFromTfGraph,
     SaveOnnx,
+    SetUpperBound,
     extract_subgraph,
     gs_from_onnx,
     infer_shapes,
@@ -55,6 +56,10 @@ class TestOnnxFromPath:
         model = loader()
         assert isinstance(model, onnx.ModelProto)
         assert len(model.graph.node) == 1
+
+    @pytest.mark.serial
+    def test_warn_if_impl_methods_called(self, check_warnings_on_loader_impl_methods):
+        check_warnings_on_loader_impl_methods(OnnxFromPath(ONNX_MODELS["identity"].path))
 
     def test_external_data(self):
         model = ONNX_MODELS["ext_weights"]
@@ -215,6 +220,49 @@ class TestFoldConstants:
         else:
             assert len(model.graph.node) == 1
             assert model.graph.node[0].op_type == "Tile"
+
+
+class TestSetUpperBound:
+
+    @pytest.mark.parametrize("global_upper_bound", [False, True])
+    @pytest.mark.parametrize("specified_upper_bound", [False, True])
+    def test_set_upper_bound(
+        self,
+        global_upper_bound,
+        specified_upper_bound,
+    ):
+        original_model = onnx_from_path(ONNX_MODELS["unbounded_dds"].path)
+        upper_bound_dict = {}
+        if not global_upper_bound and not specified_upper_bound:
+            upper_bound_dict[""] = 1000
+            upper_bound = 1000
+        if global_upper_bound:
+            upper_bound_dict[""] = 2000
+            upper_bound = 2000
+        if specified_upper_bound:
+            upper_bound_dict["cast_out_6"] = 4000
+            upper_bound = 4000
+
+        loader = SetUpperBound(
+            original_model,
+            upper_bounds=upper_bound_dict,
+        )
+
+        model = loader()
+        graph = gs_from_onnx(model)
+
+        # Check if there is a Min operator in the modified model
+        find_min = False
+        for node in graph.nodes:
+            if node.op == 'Min':
+                find_min = True
+                # Check if the Min operator's second input is a constant tensor
+                assert isinstance(node.inputs[1], gs.Constant)
+
+                val = node.inputs[1].values
+                # Check if the constant value equals the target upper bound
+                assert val == upper_bound
+        assert (find_min)
 
 
 class TestSaveOnnx:

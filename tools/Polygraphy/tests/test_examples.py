@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -264,6 +264,7 @@ CLI_EXAMPLES = [
     Example(["cli", "surgeon", "01_isolating_subgraphs"], artifact_names=["subgraph.onnx"]),
     Example(["cli", "surgeon", "02_folding_constants"], artifact_names=["folded.onnx"]),
     Example(["cli", "surgeon", "03_modifying_input_shapes"], artifact_names=["dynamic_identity.onnx"]),
+    Example(["cli", "surgeon", "04_setting_upper_bounds"], artifact_names=["modified.onnx", "folded.onnx"]),
     # Debug
     Example(
         ["cli", "debug", "01_debugging_flaky_trt_tactics"],

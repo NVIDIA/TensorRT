@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,10 +21,11 @@ from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools.args import util as args_util
+from polygraphy.tools.args.backend.trt.helper import make_trt_enum_val
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import inline_identifier, inline, make_invocable, make_invocable_if_nondefault, safe
+from polygraphy.tools.script import inline, inline_identifier, make_invocable, make_invocable_if_nondefault, safe
 
 
 def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
@@ -192,6 +193,18 @@ class TrtConfigArgs(BaseArgs):
             action="store_true",
             default=None,
         )
+        self.group.add_argument(
+            "--version-compatible",
+            help="Builds an engine designed to be forward TensorRT version compatible.",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
+            "--exclude-lean-runtime",
+            help="Exclude the lean runtime from the plan when version compatibility is enabled. ",
+            action="store_true",
+            default=None,
+        )
 
         self.group.add_argument(
             "--workspace",
@@ -335,7 +348,7 @@ class TrtConfigArgs(BaseArgs):
             dest="preview_features",
             help="Preview features to enable. Values come from the names of the values "
             "in the trt.PreviewFeature enum, and are case-insensitive."
-            "If no arguments are provided, e.g. '--preview-features', then all preview features are disabled."
+            "If no arguments are provided, e.g. '--preview-features', then all preview features are disabled. "
             "Defaults to TensorRT's default preview features.",
             nargs="*",
             default=None,
@@ -343,19 +356,31 @@ class TrtConfigArgs(BaseArgs):
 
         self.group.add_argument(
             "--builder-optimization-level",
-            help="The builder optimization level. Setting a higher optimization"
-            "level allows the optimizer to spend more time searching for optimization opportunities."
-            "The resulting engine may have better performance compared to an engine built with a lower optimization level."
-            "Refer to the TensorRT API documentation for details.",
+            help="The builder optimization level. Setting a higher optimization "
+            "level allows the optimizer to spend more time searching for optimization opportunities. "
+            "The resulting engine may have better performance compared to an engine built with a lower optimization level. "
+            "Refer to the TensorRT API documentation for details. ",
             type=int,
             default=None,
         )
 
         self.group.add_argument(
             "--hardware-compatibility-level",
-            help="The hardware compatibility level to use for the engine. This allows engines built on one GPU architecture to work on GPUs"
+            help="The hardware compatibility level to use for the engine. This allows engines built on one GPU architecture to work on GPUs "
             "of other architectures. Values come from the names of values in the `trt.HardwareCompatibilityLevel` enum and are case-insensitive. "
-            "For example, `--hardware-compatibility-level ampere_plus`",
+            "For example, `--hardware-compatibility-level ampere_plus` ",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--max-aux-streams",
+            help="The maximum number of auxiliary streams that TensorRT is allowed to use. If the network contains "
+            "operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one "
+            "provided to the IExecutionContext.execute_async_v3() call. "
+            "The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on "
+            "whether enabling multi-stream would improve the performance. "
+            "Refer to the TensorRT API documentation for details.",
+            type=int,
             default=None,
         )
 
@@ -363,14 +388,14 @@ class TrtConfigArgs(BaseArgs):
             self.group.add_argument(
                 "--engine-capability",
                 help="The desired engine capability. "
-                "Possible values come from the names of the values in the trt.EngineCapability enum and are case-insensitive.",
+                "Possible values come from the names of the values in the trt.EngineCapability enum and are case-insensitive. ",
                 default=None,
             )
 
         if self._allow_tensor_formats:
             self.group.add_argument(
                 "--direct-io",
-                help="Disallow reformatting layers at network input/output tensors which have user-specified formats.",
+                help="Disallow reformatting layers at network input/output tensors which have user-specified formats. ",
                 action="store_true",
                 default=None,
             )
@@ -409,10 +434,10 @@ class TrtConfigArgs(BaseArgs):
             refittable (bool): Whether the engine should be refittable.
             builder_optimization_level (int): The builder optimization level.
             hardware_compatibility_level (str): A string representing a hardware compatibility level enum value.
+            max_aux_streams (int): The maximum number of auxiliary streams that TensorRT is allowed to use.
+            version_compatible (bool): Whether or not to build a TensorRT forward-compatible.
+            exclude_lean_runtime (bool): Whether to exclude the lean runtime from a version compatible plan.
         """
-
-        def make_enum_val(enum_name, value):
-            return inline(safe("trt.{:}.{:}", inline_identifier(enum_name), inline_identifier(value.upper())))
 
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
         trt_max_shapes = args_util.get(args, "trt_max_shapes", default=[])
@@ -466,7 +491,7 @@ class TrtConfigArgs(BaseArgs):
         tactic_sources = args_util.get(args, "tactic_sources")
         self.tactic_sources = None
         if tactic_sources is not None:
-            self.tactic_sources = [make_enum_val("TacticSource", source) for source in tactic_sources]
+            self.tactic_sources = [make_trt_enum_val("TacticSource", source) for source in tactic_sources]
 
         self.trt_config_script, self.trt_config_func_name = args_util.parse_script_and_func_name(
             args_util.get(args, "trt_config_script"), default_func_name="load_config"
@@ -503,19 +528,19 @@ class TrtConfigArgs(BaseArgs):
         self.memory_pool_limits = None
         if memory_pool_limits is not None:
             self.memory_pool_limits = {
-                make_enum_val("MemoryPoolType", pool_type): pool_size
+                make_trt_enum_val("MemoryPoolType", pool_type): pool_size
                 for pool_type, pool_size in memory_pool_limits.items()
             }
 
         preview_features = args_util.get(args, "preview_features")
         self.preview_features = None
         if preview_features is not None:
-            self.preview_features = [make_enum_val("PreviewFeature", feature) for feature in preview_features]
+            self.preview_features = [make_trt_enum_val("PreviewFeature", feature) for feature in preview_features]
 
         engine_capability = args_util.get(args, "engine_capability")
         self.engine_capability = None
         if engine_capability is not None:
-            self.engine_capability = make_enum_val("EngineCapability", engine_capability)
+            self.engine_capability = make_trt_enum_val("EngineCapability", engine_capability)
 
         self.direct_io = args_util.get(args, "direct_io")
         self.builder_optimization_level = args_util.get(args, "builder_optimization_level")
@@ -523,9 +548,16 @@ class TrtConfigArgs(BaseArgs):
         self.hardware_compatibility_level = None
         hardware_compatibility_level = args_util.get(args, "hardware_compatibility_level")
         if hardware_compatibility_level is not None:
-            self.hardware_compatibility_level = make_enum_val(
+            self.hardware_compatibility_level = make_trt_enum_val(
                 "HardwareCompatibilityLevel", hardware_compatibility_level
             )
+
+        self.max_aux_streams = args_util.get(args, "max_aux_streams")
+        self.version_compatible = args_util.get(args, "version_compatible")
+        self.exclude_lean_runtime = args_util.get(args, "exclude_lean_runtime")
+
+        if self.exclude_lean_runtime and not self.version_compatible:
+            G_LOGGER.critical(f"`--exclude-lean-runtime` requires `--version-compatible` to be enabled.")
 
     def add_to_script_impl(self, script):
         profiles = []
@@ -630,6 +662,9 @@ class TrtConfigArgs(BaseArgs):
                 direct_io=self.direct_io,
                 builder_optimization_level=self.builder_optimization_level,
                 hardware_compatibility_level=self.hardware_compatibility_level,
+                max_aux_streams=self.max_aux_streams,
+                version_compatible=self.version_compatible,
+                exclude_lean_runtime=self.exclude_lean_runtime,
             )
             if config_loader_str is not None:
                 script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")

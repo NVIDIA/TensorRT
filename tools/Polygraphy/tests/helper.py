@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +16,6 @@
 #
 import os
 import time
-
-import tensorrt as trt
-from polygraphy.backend.trt import get_trt_logger
 
 ROOT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), os.path.pardir))
 
@@ -66,6 +63,10 @@ HAS_DLA = None
 def has_dla():
     global HAS_DLA
     if HAS_DLA is None:
+        import tensorrt as trt
+
+        from polygraphy.backend.trt import get_trt_logger
+
         builder = trt.Builder(get_trt_logger())
 
         try:

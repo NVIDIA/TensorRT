@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -350,3 +350,83 @@ def lower_constant_nodes(graph):
         for node_id in sorted(remove_nodes, reverse=True):
             del graph.nodes[node_id]
     return graph
+
+
+def get_unbounded_dds_tensors(graph):
+    graph.toposort()
+    # A dict of operators that might produce a output tensor with unbounded DDS, when the value of the input tensor
+    # at the corresponding index is a runtime value. For example, "Range" => "1" means that if the input 1 of the Range
+    # operator is a runtime value, e.g. not a const tensor or an initializer, then the Range output tensor size is unbounded.
+    dispatcher_dict = {
+        "Range": [1],  # the limit input of the Range operator
+        "Pad": [1],  # the pads input of the Pad operator
+        "Resize": [3],  # the sizes input of the Resize operator
+        "Tile": [1],  # the repeats input of the Tile operator
+        "Expand": [1],  # the shape input of the Expand operator
+    }
+
+    # Check if the given operator produces a output tensor with unbounded DDS.
+    def check_op(node, const_tensor_set):
+        # Check if the operator is inside the dispatcher dict.
+        if node.op in dispatcher_dict:
+            input_idx_list = dispatcher_dict[node.op]
+            for input_idx in input_idx_list:
+                if input_idx < len(node.inputs):
+                    input_tensor = node.inputs[input_idx]
+                    # Check if the corresponding input tensor is a runtime value and its producer is not Min operator.
+                    # If a tensor is produced by a Min operator, its upper bound has already been set.
+                    if input_tensor.name not in const_tensor_set and len(input_tensor.inputs) >= 1 and input_tensor.inputs[0].op != 'Min':
+                        return input_tensor
+        return None
+
+    # Find all constant tensors.
+    def get_const_tensors(graph):
+        return {tensor.name for tensor in graph.tensors().values() if isinstance(tensor, gs.Constant)}
+
+    # Find all dynamic shape symbols, customers will set upper bounds for these symbols when building the model in TensorRT.
+    def get_dynamic_shapes(graph):
+        dynamic_shape_set = set()
+        for tensor in graph.inputs:
+            for shape in tensor.shape:
+                if isinstance(shape, str):
+                    dynamic_shape_set.add(shape)
+        return dynamic_shape_set
+
+    # Find all tensors with unbounded DDS.
+    def get_target_tensors(graph):
+        # Find dynamic shapes, these shapes should have upper bounds in TensorRT.
+        dynamic_shape_set = get_dynamic_shapes(graph)
+
+        # Find const tensors. For those operators in the dispatch dict, constant inputs will not introduce outputs with unbounded DDS.
+        const_tensor_set = get_const_tensors(graph)
+
+        # Our target is to find those input tensors that cause its consumer nodes generated unbounded outputs.
+        # If a tensor has named dimensions that appeared before in its symbolic shape, it means that the shape is *not* data dependent, 
+        # and so will have an upper bound.
+        target_tensor_names = set()
+        target_tensor_list = []
+        for node in graph.nodes:
+            check_node = False
+            # Check if the node's output contains a new introduced dynamic shape.
+            for tensor in node.outputs:
+                # Always check nodes if tensor.shape is None.
+                # This happens when the symbolic inference does not work correctly due to some restrictions.
+                if tensor.shape is None:
+                    check_node = True
+                else:
+                    for shape in tensor.shape:
+                        # If a shape is a dynamic shape, then it is a str.
+                        # Only check the node that first introduced the dynamic shape.
+                        if isinstance(shape, str) and shape not in dynamic_shape_set:
+                            dynamic_shape_set.add(shape)
+                            check_node = True
+            # Check if the node will generate an unbounded output size.
+            if check_node:
+                target_tensor = check_op(node, const_tensor_set)
+                # Avoid duplication.
+                if target_tensor is not None and target_tensor.name not in target_tensor_names:
+                    target_tensor_names.add(target_tensor.name)
+                    target_tensor_list.append(target_tensor)
+        return target_tensor_list
+
+    return get_target_tensors(graph)

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,13 +49,16 @@ class PytRunner(BaseRunner):
         self.input_metadata = input_metadata
         self.output_names = output_names
 
+    @util.check_called_by("activate")
     def activate_impl(self):
         self.model, _ = util.invoke_if_callable(self._model)
         self.model.eval()
 
+    @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
         return self.input_metadata
 
+    @util.check_called_by("infer")
     def infer_impl(self, feed_dict):
         with torch.no_grad():
             inputs = [
@@ -71,5 +74,6 @@ class PytRunner(BaseRunner):
             out_dict[name] = output.cpu().numpy()
         return out_dict, end - start
 
+    @util.check_called_by("deactivate")
     def deactivate_impl(self):
         del self.model

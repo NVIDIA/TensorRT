@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
+import io
 import os
 import random
 import tempfile
@@ -21,6 +23,7 @@ from multiprocessing import Process
 
 import numpy as np
 import pytest
+
 from polygraphy import util
 
 VOLUME_CASES = [
@@ -238,3 +241,30 @@ class TestMakeRepr:
             expected = f"{{'x': {expected}}}"
 
         assert util.make_repr("Example", obj) == (f"Example({expected})", False, True)
+
+
+@pytest.mark.serial
+def test_check_called_by():
+    outfile = io.StringIO()
+    with contextlib.redirect_stdout(outfile):
+
+        warn_msg = "Calling 'test_check_called_by.<locals>.callee()' directly is not recommended. Please use 'caller()' instead."
+
+        @util.check_called_by("caller")
+        def callee():
+            pass
+
+        def caller():
+            return callee()
+
+        # If we call via the caller, no message should be emitted
+        caller()
+        outfile.seek(0)
+        out = outfile.read()
+        assert warn_msg not in out
+
+        # If we call the callee directly, we should see a warning
+        callee()
+        outfile.seek(0)
+        out = outfile.read()
+        assert warn_msg in out

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,6 +112,9 @@ class BaseRunner:
         Returns:
             TensorMetadata: Input names, shapes, and data types.
         """
+        if not self.is_active:
+            G_LOGGER.critical(f"{self.name:35} | Must be activated prior to calling get_input_metadata()")
+
         return self.get_input_metadata_impl()
 
     # Implementation for runner inference. Derived classes should override this function
@@ -155,7 +158,7 @@ class BaseRunner:
 
         if check_inputs:
             input_metadata = self.get_input_metadata()
-            G_LOGGER.verbose(f"Runner input metadata is: {input_metadata}")
+            G_LOGGER.verbose(f"{self.name:35} | Input metadata is: {input_metadata}", mode=LogMode.ONCE)
 
             util.check_sequence_contains(feed_dict.keys(), input_metadata.keys(), name="feed_dict", items_name="inputs")
 

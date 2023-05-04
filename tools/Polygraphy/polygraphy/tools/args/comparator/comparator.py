@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import copy
+
 from polygraphy import constants, mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
@@ -129,6 +131,11 @@ class ComparatorCompareArgs(BaseArgs):
         self._allow_postprocessing = util.default(allow_postprocessing, True)
 
     def add_parser_args_impl(self):
+        self._comparison_func_map = {
+            "simple": self.arg_groups[CompareFuncSimpleArgs],
+            "indices": self.arg_groups[CompareFuncIndicesArgs],
+        }
+
         self.group.add_argument("--validate", help="Check outputs for NaNs and Infs", action="store_true", default=None)
         self.group.add_argument(
             "--fail-fast", help="Fail fast (stop comparing after the first failure)", action="store_true", default=None
@@ -139,7 +146,7 @@ class ComparatorCompareArgs(BaseArgs):
             "--compare-func",
             help="Name of the function to use to perform comparison. See the API documentation for `CompareFunc` for details. "
             "Defaults to 'simple'. ",
-            choices=["simple", "indices"],
+            choices=list(self._comparison_func_map.keys()),
             default="simple",
             dest="compare",
         )
@@ -181,6 +188,17 @@ class ComparatorCompareArgs(BaseArgs):
 
         self.compare_func = args_util.get(args, "compare")
 
+        # Show warnings for any options provided for unselected comparison functions
+        unselected_comparison_funcs = copy.copy(self._comparison_func_map)
+        del unselected_comparison_funcs[self.compare_func]
+        for name, arg_group in unselected_comparison_funcs.items():
+            for action in arg_group.group._group_actions:
+                if args_util.get(args, action.dest) is not None:
+                    G_LOGGER.warning(
+                        f"Option: {'/'.join(action.option_strings)} is only valid for comparison function: '{name}'. "
+                        f"The selected comparison function is: '{self.compare_func}', so this option will be ignored."
+                    )
+
         self.compare_func_script, self.compare_func_name = args_util.parse_script_and_func_name(
             args_util.get(args, "compare_func_script"), default_func_name="compare_outputs"
         )
@@ -221,10 +239,7 @@ class ComparatorCompareArgs(BaseArgs):
                 script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
                 compare_func = make_invocable("InvokeFromScript", self.compare_func_script, name=self.compare_func_name)
             else:
-                compare_func = {
-                    "simple": self.arg_groups[CompareFuncSimpleArgs],
-                    "indices": self.arg_groups[CompareFuncIndicesArgs],
-                }[self.compare_func].add_to_script(script)
+                compare_func = self._comparison_func_map[self.compare_func].add_to_script(script)
 
             compare_accuracy = make_invocable(
                 "Comparator.compare_accuracy", results_name, compare_func=compare_func, fail_fast=self.fail_fast

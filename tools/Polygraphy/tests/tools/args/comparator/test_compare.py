@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +29,9 @@ from tests.tools.args.helper import ArgGroupTestHelper
 class TestCompareFuncSimple:
     @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "elemwise"])
     def test_error_stat(self, check_error_stat):
-        arg_group = ArgGroupTestHelper(CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs()])
+        arg_group = ArgGroupTestHelper(
+            CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+        )
         arg_group.parse_args([f"--check-error-stat={check_error_stat}"])
 
         assert arg_group.check_error_stat == {"": check_error_stat}
@@ -42,7 +44,9 @@ class TestCompareFuncSimple:
         ],
     )
     def test_error_stat_per_output(self, args, expected):
-        arg_group = ArgGroupTestHelper(CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs()])
+        arg_group = ArgGroupTestHelper(
+            CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+        )
         arg_group.parse_args(["--check-error-stat"] + args)
 
         assert arg_group.check_error_stat == expected
@@ -56,12 +60,16 @@ class TestCompareFuncSimple:
     )
     def test_invalid_error_stat(self, args):
         with pytest.raises(PolygraphyException, match="Invalid choice"):
-            arg_group = ArgGroupTestHelper(CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs()])
+            arg_group = ArgGroupTestHelper(
+                CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+            )
             arg_group.parse_args(["--check-error-stat"] + args)
 
     @pytest.mark.parametrize("val", (np.inf, -np.inf))
     def test_infinities_compare_equal(self, val):
-        arg_group = ArgGroupTestHelper(CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs()])
+        arg_group = ArgGroupTestHelper(
+            CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+        )
         arg_group.parse_args([f"--infinities-compare-equal"])
 
         assert arg_group.infinities_compare_equal
@@ -76,9 +84,28 @@ class TestCompareFuncSimple:
 class TestCompareFuncIndices:
     def test_always_adds_to_script(self):
         # Indices is not the default comparison func, so it should always add itself to the script.
-        arg_group = ArgGroupTestHelper(CompareFuncIndicesArgs(), deps=[ComparatorCompareArgs()])
+        arg_group = ArgGroupTestHelper(
+            CompareFuncIndicesArgs(), deps=[ComparatorCompareArgs(), CompareFuncSimpleArgs()]
+        )
         arg_group.parse_args([])
 
         script = Script()
         assert str(arg_group.add_to_script(script)) == "compare_func"
         assert script.suffix
+
+
+class TestDefaultNone:
+    # Ensures that default values for all arguments are `None`.
+    # See the comment in `polygraphy/tools/args/comparator/compare.py` for details.
+    ARG_GROUP_TYPES = [CompareFuncIndicesArgs, CompareFuncSimpleArgs]
+
+    @pytest.mark.parametrize("arg_group_type", ARG_GROUP_TYPES)
+    def test_default_args_are_none(self, arg_group_type):
+        other_group_types = set(TestDefaultNone.ARG_GROUP_TYPES)
+        other_group_types.remove(arg_group_type)
+        arg_group = ArgGroupTestHelper(
+            arg_group_type(), deps=[ComparatorCompareArgs()] + [g() for g in other_group_types]
+        )
+        assert len(arg_group.arg_group.group._group_actions) > 0
+        for action in arg_group.arg_group.group._group_actions:
+            assert action.default is None

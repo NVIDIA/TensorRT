@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,8 +27,8 @@ from polygraphy import mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.logger import G_LOGGER
 
-# For external dependencies besides `polygraphy` or any Polygraphy backends
-# (any backend besides `polygraphy.backend.base`), you should use `mod.lazy_import`.
+# For external dependencies or any Polygraphy backends
+# (besides `polygraphy.backend.base`), you should use `mod.lazy_import`.
 #
 # This will enable Polygraphy to automatically install dependencies at runtime if required, and
 # will avoid creating a hard dependency on external packages.
@@ -84,6 +84,7 @@ class ReplaceReshapes(BaseLoader):
         self.rename_nodes = util.default(rename_nodes, False)
 
     # The `call_impl` method is responsible for doing the actual work of the loader.
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -416,7 +416,7 @@ class TestTrtConfigArgs:
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
     )
-    @pytest.mark.parametrize("level", range(5))
+    @pytest.mark.parametrize("level", range(6))
     def test_builder_optimization_level(self, trt_config_args, level):
         trt_config_args.parse_args(["--builder-optimization-level", str(level)])
         assert trt_config_args.builder_optimization_level == level
@@ -446,3 +446,32 @@ class TestTrtConfigArgs:
 
             with builder, network, trt_config_args.create_config(builder, network=network) as config:
                 assert config.hardware_compatibility_level == expected
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
+    )
+    @pytest.mark.parametrize("num_streams", range(5))
+    def test_max_aux_streams(self, trt_config_args, num_streams):
+        trt_config_args.parse_args(["--max-aux-streams", str(num_streams)])
+        assert trt_config_args.max_aux_streams == num_streams
+
+        builder, network = create_network()
+
+        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            assert config.max_aux_streams == num_streams
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported before TRT 8.6")
+    @pytest.mark.parametrize(
+        "args, attr, expected_flag",
+        [
+            (["--version-compatible"], "version_compatible", "VERSION_COMPATIBLE"),
+            (["--version-compatible", "--exclude-lean-runtime"], "exclude_lean_runtime", "EXCLUDE_LEAN_RUNTIME"),
+        ],
+    )
+    def test_version_compatibility(self, trt_config_args, args, attr, expected_flag):
+        trt_config_args.parse_args(args)
+        assert getattr(trt_config_args, attr)
+
+        builder, network = create_network()
+        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            assert config.get_flag(getattr(trt.BuilderFlag, expected_flag))
