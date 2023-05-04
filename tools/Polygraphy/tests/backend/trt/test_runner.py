@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@ import threading
 import numpy as np
 import pytest
 import tensorrt as trt
+
 from polygraphy import cuda, mod
 from polygraphy.backend.trt import (
     CreateConfig,
@@ -31,8 +32,8 @@ from polygraphy.backend.trt import (
 )
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
-from tests.models.meta import ONNX_MODELS
 from tests.helper import time_func
+from tests.models.meta import ONNX_MODELS
 
 
 class TestLoggerCallbacks:
@@ -65,6 +66,12 @@ class TestTrtRunner:
             model.check_runner(runner)
             assert runner.last_inference_time() is not None
         assert not runner.is_active
+
+    @pytest.mark.serial
+    def test_warn_if_impl_methods_called(self, check_warnings_on_runner_impl_methods):
+        model = ONNX_MODELS["identity"]
+        runner = TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader)))
+        check_warnings_on_runner_impl_methods(runner)
 
     @pytest.mark.skipif(
         mod.version(trt.__version__) <= mod.version("8.5.0.9"), reason="Unsupported for TRT 8.4 and older"
@@ -290,3 +297,32 @@ class TestTrtRunner:
         print(f"Absolute difference: {runner_time - native_time:.5g}")
         print(f"Relative difference: {runner_time / native_time:.5g}")
         assert (runner_time - native_time) < 1e-3 or runner_time <= (native_time * 1.10)
+
+    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.5"), reason="Unsupported before TRT 8.5")
+    @pytest.mark.parametrize("hwc_input", [True, False], ids=["hwc_input", "chw_input"])
+    @pytest.mark.parametrize("hwc_output", [True, False], ids=["hwc_output", "chw_output"])
+    def test_infer_chw_format(self, hwc_input, hwc_output):
+        model = ONNX_MODELS["identity_multi_ch"]
+        inp_shape = model.input_metadata["x"].shape
+        builder, network, parser = network_from_onnx_bytes(model.loader)
+
+        formats = 1 << int(trt.TensorFormat.HWC)
+        if hwc_input:
+            network.get_input(0).allowed_formats = formats
+        if hwc_output:
+            network.get_output(0).allowed_formats = formats
+
+        engine = engine_from_network((builder, network))
+
+        with TrtRunner(engine) as runner:
+            inp = np.random.normal(size=(inp_shape)).astype(np.float32)
+            if hwc_input:
+                inp = inp.transpose(0, 2, 3, 1)
+
+            outputs = runner.infer({"x": inp})
+            if hwc_input == hwc_output:  # output in CHW/HWC format and similarly shaped
+                assert np.allclose(outputs["y"], inp)
+            elif not hwc_input and hwc_output:  # output in HWC format and shaped (N, H, W, C)
+                assert np.allclose(outputs["y"].transpose(0, 3, 1, 2), inp)
+            else:  # hwc_input and not hwc_output: output in CHW format and shaped (N, C, H, W)
+                assert np.allclose(outputs["y"].transpose(0, 2, 3, 1), inp)

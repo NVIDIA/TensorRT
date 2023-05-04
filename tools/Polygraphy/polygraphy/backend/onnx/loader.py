@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,7 @@ from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.onnx import util as onnx_util
 from polygraphy.logger import G_LOGGER, LogMode
 
+np = mod.lazy_import("numpy")
 onnx = mod.lazy_import("onnx>=1.8.1")
 onnxrt = mod.lazy_import("onnxruntime>=1.10.0")
 onnxmltools = mod.lazy_import("onnxmltools==1.11.1", requires=["onnxconverter_common==1.12.2"])
@@ -107,6 +108,7 @@ class GsFromOnnx(BaseLoader):
         """
         self._model = model
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -141,6 +143,7 @@ class OnnxFromPath(BaseLoader):
         self.external_data_dir = external_data_dir
         self.ignore_external_data = util.default(ignore_external_data, False)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -188,6 +191,7 @@ class OnnxFromTfGraph(BaseLoader):
         self.opset = util.default(opset, 11)
         self.optimize = util.default(optimize, True)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -238,6 +242,7 @@ class ModifyOutputs(BaseLoadOnnxCopy):
         self.outputs = outputs
         self.exclude_outputs = exclude_outputs
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -275,6 +280,7 @@ class ConvertToFp16(BaseLoadOnnxCopy):
         """
         super().__init__(model, copy)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -368,6 +374,7 @@ class FoldConstants(BaseLoadOnnxCopy):
         self.size_threshold = size_threshold
         self.allow_onnxruntime_shape_inference = allow_onnxruntime_shape_inference
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -421,6 +428,108 @@ class FoldConstants(BaseLoadOnnxCopy):
                     f"{constants.TAB}Total Nodes | Original: {prefold_num_nodes:5}, "
                     f"After Folding: {postfold_num_nodes:5} | {prefold_num_nodes - postfold_num_nodes:5} Nodes Folded"
                 )
+
+        return model
+
+
+@mod.export(funcify=True)
+class SetUpperBound(BaseLoadOnnxCopy):
+    """
+    Functor that sets upper bounds for tensors with unbounded DDS in an ONNX model.
+
+    Requires that the model has been constant folded and has shapes inferred. 
+    """
+
+    def __init__(
+        self,
+        model,
+        upper_bounds,
+        copy=None,
+    ):
+        """
+        Set upper bounds for tensors with unbounded DDS in an ONNX model.
+
+        Args:
+            model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto]):
+                    An ONNX model or a callable that returns one.
+
+            upper_bounds (Union[int, Dict[str, int]]):
+                    The upper bounds for tensors with unbounded DDS.
+                    If a single integer is provided, it will be used as the default upper bound for all tensors with unbounded DDS.
+                    This can also be provided on a per-tensor basis using a dictionary. In that case, use an empty string ("") as the 
+                    key to specify default upper bound for tensors not explicitly listed.
+            copy (bool):
+                    Whether to create a copy of the model first.
+                    Defaults to False.
+        """
+        super().__init__(model, copy)
+        self.upper_bounds = upper_bounds
+
+    def call_impl(self):
+        """
+        Returns:
+            onnx.ModelProto: The new ONNX model.
+        """
+
+        # Set upper bounds for tensors with unbounded DDS in the onnx model.
+        def set_upper_bound(graph, target_tensor_list):
+            applied_bounds = {}
+            for tensor in target_tensor_list:
+                upper_bound = util.value_or_from_dict(self.upper_bounds, tensor.name)
+                if upper_bound is None:
+                    continue
+                # Insert a min operator to set the upper bound for the target tensor.
+                # A target tensor should always be produced from a single node.
+                assert (len(tensor.inputs) == 1)
+                producer = tensor.inputs[0]
+                producer_idx = producer.outputs.index(tensor)
+                tensor_copy = gs.Variable(
+                    tensor.name + "_copy", dtype=tensor.dtype, shape=tensor.shape)
+                upper_bound_values = np.array(upper_bound)
+                if tensor.shape is not None and len(tensor.shape) > 0:
+                    upper_bound_values = np.array([upper_bound] * len(tensor.shape))
+                tensor_upper_bound = gs.Constant(
+                    tensor.name + "_upper_bound", values=upper_bound_values)
+                min_node = gs.Node(op="Min", inputs=[
+                    tensor_copy, tensor_upper_bound], outputs=[tensor])
+                producer.outputs[producer_idx] = tensor_copy
+                tensor.inputs = [min_node]
+                graph.nodes.append(min_node)
+                applied_bounds[tensor.name] = upper_bound
+            G_LOGGER.info(
+                f"Set tensor upper bounds: {applied_bounds}")
+            return graph
+
+        model = self.load()
+        graph = gs_from_onnx(model)
+
+        target_tensor_list = onnx_util.get_unbounded_dds_tensors(graph)
+
+        tensor_map = graph.tensors()
+        target_names = {tensor.name for tensor in target_tensor_list}
+        if isinstance(self.upper_bounds, dict):
+            input_names = set(self.upper_bounds.keys()) - {""}
+            # Report error when input tensor name is not in the graph.
+            util.check_sequence_contains(
+                set(tensor_map.keys()),
+                input_names,
+                name="the upper bounds dictionary",
+                items_name="tensors",
+                check_extra=False,
+            )
+            # Report warning when input tensor is not a unbounded DDS tensor.
+            util.check_sequence_contains(
+                set(target_names),
+                input_names,
+                name="the upper bounds dictionary",
+                items_name="tensors",
+                log_func=G_LOGGER.warning,
+                check_extra=False,
+            )
+            # Still set upper bound for input tensors with bounded shapes.
+            target_names.update(input_names)
+        graph = set_upper_bound(graph, [tensor_map[name] for name in target_names])
+        model = gs.export_onnx(graph.cleanup(), do_type_check=False)
 
         return model
 
@@ -514,6 +623,7 @@ class InferShapes(BaseLoader):
             model = onnx_from_path(model, external_data_dir=external_data_dir)
         return onnxrt_symbolic_shape_inference.SymbolicShapeInference.infer_shapes(model, auto_merge=True)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -524,26 +634,29 @@ class InferShapes(BaseLoader):
 
         G_LOGGER.verbose("Starting shape inference")
 
-        mod.autoinstall(onnxrt_symbolic_shape_inference)
         try:
-            if self.allow_onnxruntime and mod.has_mod("onnxruntime.tools.symbolic_shape_infer"):
-                G_LOGGER.info(
-                    "Inferring shapes in the model with `onnxruntime.tools.symbolic_shape_infer`.\n"
-                    "Note: To force Polygraphy to use `onnx.shape_inference` instead, set `allow_onnxruntime=False` or "
-                    "use the `--no-onnxruntime-shape-inference` command-line option.",
-                    mode=LogMode.ONCE,
-                )
-
-                model = self._run_onnxruntime_shape_inference(model, external_data_dir)
-            else:
-                if self.allow_onnxruntime:
+            use_onnx_shape_inference = not self.allow_onnxruntime
+            if self.allow_onnxruntime:
+                try:
+                    model = self._run_onnxruntime_shape_inference(model, external_data_dir)
+                    G_LOGGER.verbose(
+                        "Inferred shapes in the model with `onnxruntime.tools.symbolic_shape_infer`.\n"
+                        "Note: To force Polygraphy to use `onnx.shape_inference` instead, set `allow_onnxruntime=False` or "
+                        "use the `--no-onnxruntime-shape-inference` command-line option.",
+                        mode=LogMode.ONCE,
+                    )
+                except:
+                    use_onnx_shape_inference = True
                     G_LOGGER.warning(
-                        "Falling back to `onnx.shape_inference` because `onnxruntime.tools.symbolic_shape_infer` could not be loaded.\n"
+                        "Falling back to `onnx.shape_inference` because `onnxruntime.tools.symbolic_shape_infer` either could not be loaded "
+                        "or did not run successfully.\n"
                         "Note that using ONNX-Runtime for shape inference may be faster and require less memory.\n"
-                        "Consider installing ONNX-Runtime or settting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment "
+                        "Consider installing ONNX-Runtime or setting POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment "
                         "variables to allow Polygraphy to do so automatically.",
                         mode=LogMode.ONCE,
                     )
+
+            if use_onnx_shape_inference:
                 model = self._run_onnx_shape_inference(model, external_data_dir)
         except Exception as err:
             if not self.error_ok:
@@ -591,6 +704,7 @@ class ExtractSubgraph(BaseLoader):
         self.output_metadata = output_metadata
         self.check_meta = util.default(check_meta, True)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -694,6 +808,7 @@ class SaveOnnx(BaseLoader):
         self.size_threshold = size_threshold
         self.all_tensors_to_one_file = all_tensors_to_one_file
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -753,6 +868,7 @@ class BytesFromOnnx(BaseLoader):
         """
         self._model = model
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -778,6 +894,7 @@ class OnnxFromBytes(BaseLoader):
         """
         self._serialized_onnx = serialized_onnx
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:

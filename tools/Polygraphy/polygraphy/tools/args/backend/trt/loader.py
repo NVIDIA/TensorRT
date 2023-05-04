@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import copy
 import os
 
 from polygraphy import mod, util
@@ -22,9 +23,10 @@ from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.backend.onnx.loader import OnnxLoadArgs
 from polygraphy.tools.args.backend.trt.config import TrtConfigArgs
+from polygraphy.tools.args.backend.trt.helper import make_trt_enum_val
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import inline_identifier, inline, make_invocable, make_invocable_if_nondefault_kwargs, safe
+from polygraphy.tools.script import inline, inline_identifier, make_invocable, make_invocable_if_nondefault_kwargs, safe
 
 
 @mod.export()
@@ -60,6 +62,58 @@ class TrtLoadPluginsArgs(BaseArgs):
 
 
 @mod.export()
+class TrtOnnxFlagArgs(BaseArgs):
+    """
+    ONNX-TRT Parser Flags: setting flags for TensorRT's ONNX parser
+
+    Depends on:
+
+        - TrtConfigArgs: If NATIVE_INSTANCENORM should be automatically enabled in VC/HC mode
+    """
+
+    def add_parser_args_impl(self):
+        self.group.add_argument(
+            "--onnx-flags",
+            help="Flag(s) for adjusting the default parsing behavior of the ONNX parser."
+            "Flag values come from the `trt.OnnxParserFlag` enum and are case-insensitve."
+            "For example: --onnx-flags native_instancenorm ",
+            nargs="+",
+            default=None,
+        )
+
+    def parse_impl(self, args):
+        """
+        Parses command-line arguments and populates the following attributes:
+
+        Attributes:
+            flags (List[str]): flags for onnxparser
+        """
+        self._flags = args_util.get(args, "onnx_flags", default=[])
+
+    def get_flags(self):
+        """
+        Updates and returns the ONNX parser flags as necessary.
+        This must be called only in `add_to_script_impl`.
+        Flags should not be accessed directly.
+        """
+        flags = copy.copy(self._flags) or []
+        if (
+            TrtConfigArgs in self.arg_groups
+            and (
+                self.arg_groups[TrtConfigArgs].hardware_compatibility_level is not None
+                or self.arg_groups[TrtConfigArgs].version_compatible
+            )
+            and "native_instancenorm" not in [f.lower() for f in flags]
+        ):
+            G_LOGGER.warning(
+                f"Version or hardware compatibility mode is enabled. Automatically enabling `NATIVE_INSTANCENORM` ONNX parser flag."
+            )
+            flags.append("native_instancenorm")
+
+        return [make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None
+
+
+@mod.export()
 class TrtLoadNetworkArgs(BaseArgs):
     """
     TensorRT Network Loading: loading TensorRT networks.
@@ -69,6 +123,7 @@ class TrtLoadNetworkArgs(BaseArgs):
         - ModelArgs
         - TrtLoadPluginsArgs
         - OnnxLoadArgs: if allow_onnx_loading == True
+        - TrtOnnxFlagArgs
     """
 
     def __init__(
@@ -226,8 +281,11 @@ class TrtLoadNetworkArgs(BaseArgs):
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
         outputs = args_util.get_outputs_for_script(script, self.outputs)
+        parser_flags = self.arg_groups[TrtOnnxFlagArgs].get_flags()
 
-        if any(arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats]):
+        if any(
+            arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats, parser_flags]
+        ):
             script.add_import(imports="tensorrt", imp_as="trt")
 
         if model_type == "trt-network-script":
@@ -247,13 +305,17 @@ class TrtLoadNetworkArgs(BaseArgs):
                     script, disable_custom_outputs=True, serialize_model=True
                 )
                 loader_str = make_invocable(
-                    "NetworkFromOnnxBytes", self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader)
+                    "NetworkFromOnnxBytes",
+                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader),
+                    flags=parser_flags,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
             else:
                 script.add_import(imports=["NetworkFromOnnxPath"], frm="polygraphy.backend.trt")
                 loader_str = make_invocable(
-                    "NetworkFromOnnxPath", self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file)
+                    "NetworkFromOnnxPath",
+                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file),
+                    flags=parser_flags,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:
@@ -300,9 +362,12 @@ class TrtLoadNetworkArgs(BaseArgs):
 
 
 @mod.export()
-class TrtSaveEngineArgs(BaseArgs):
+class TrtSaveEngineBytesArgs(BaseArgs):
     """
     TensorRT Engine Saving: saving TensorRT engines.
+
+    Saves a serialized engine. This should be preferred over `TrtSaveEngineArgs()` since as of TensorRT 8.6,
+    version compatible engines cannot be re-serialized after they have been initially deserialized.
     """
 
     def __init__(self, output_opt: str = None, output_short_opt: str = None):
@@ -339,23 +404,76 @@ class TrtSaveEngineArgs(BaseArgs):
         """
         Args:
             loader_name (str):
-                    The name of the loader which should be consumed by the ``SaveEngine`` loader.
+                    The name of the loader which will generate the serialized engine.
 
         Returns:
-            str: The name of the ``SaveEngine`` loader added to the script.
+            str: The name of the loader added to the script.
         """
         if self.path is None:
             return loader_name
 
-        script.add_import(imports=["SaveEngine"], frm="polygraphy.backend.trt")
-        return script.add_loader(make_invocable("SaveEngine", loader_name, path=self.path), "save_engine")
+        script.add_import(imports=["SaveBytes"], frm="polygraphy.backend.common")
+        return script.add_loader(make_invocable("SaveBytes", loader_name, path=self.path), "save_engine_bytes")
+
+    def save_engine_bytes(self, engine_bytes, path=None):
+        """
+        Saves a serialized TensorRT engine according to arguments provided on the command-line.
+
+        Args:
+            engine_bytes (bytes): The serialized TensorRT engine to save.
+
+            path (str):
+                    The path at which to save the engine.
+                    If no path is provided, it is determined from command-line arguments.
+
+        Returns:
+            bytes: The serialized engine that was saved.
+        """
+        with util.TempAttrChange(self, {"path": path}):
+            loader = args_util.run_script(self.add_to_script, engine_bytes)
+            return loader()
+
+
+@mod.deprecate(remove_in="0.55.0", use_instead="TrtSaveEngineBytesArgs")
+@mod.export()
+class TrtSaveEngineArgs(BaseArgs):
+    """
+    TensorRT Engine Saving: saving TensorRT engines.
+
+    Depends on:
+
+        - TrtSaveEngineBytesArgs
+    """
+
+    # For backwards-compatibility
+    @property
+    def path(self):
+        return self.arg_groups[TrtSaveEngineBytesArgs].path
+
+    def add_to_script_impl(self, script, loader_name):
+        """
+        Args:
+            loader_name (str):
+                    The name of the loader which will generate the engine.
+
+        Returns:
+            str: The name of the loader added to the script.
+        """
+        path = self.arg_groups[TrtSaveEngineBytesArgs].path
+
+        if path is None:
+            return loader_name
+
+        script.add_import(imports=["BytesFromEngine"], frm="polygraphy.backend.trt")
+        loader_name = script.add_loader(make_invocable("BytesFromEngine", loader_name, path=path), "bytes_from_engine")
+        return self.arg_groups[TrtSaveEngineArgs].add_to_script(script, loader_name)
 
     def save_engine(self, engine, path=None):
         """
         Saves a TensorRT engine according to arguments provided on the command-line.
 
         Args:
-            model (onnx.ModelProto): The TensorRT engine to save.
+            engine (trt.ICudaEngine): The TensorRT engine to save.
 
             path (str):
                     The path at which to save the engine.
@@ -370,9 +488,9 @@ class TrtSaveEngineArgs(BaseArgs):
 
 
 @mod.export()
-class TrtLoadEngineArgs(BaseArgs):
+class TrtLoadEngineBytesArgs(BaseArgs):
     """
-    TensorRT Engine: loading TensorRT engines.
+    TensorRT Engine: loading or building TensorRT engines.
 
     Depends on:
 
@@ -380,7 +498,7 @@ class TrtLoadEngineArgs(BaseArgs):
         - TrtLoadPluginsArgs
         - TrtLoadNetworkArgs: if support for building engines is required
         - TrtConfigArgs: if support for building engines is required
-        - TrtSaveEngineArgs: if allow_saving == True
+        - TrtSaveEngineBytesArgs: if allow_saving == True
     """
 
     def __init__(self, allow_saving: bool = None):
@@ -416,27 +534,22 @@ class TrtLoadEngineArgs(BaseArgs):
             network_name (str): The name of a variable in the script pointing to a network loader.
         """
         if self.arg_groups[ModelArgs].model_type == "engine":
-            script.add_import(imports=["EngineFromBytes"], frm="polygraphy.backend.trt")
             script.add_import(imports=["BytesFromPath"], frm="polygraphy.backend.common")
 
-            load_engine = script.add_loader(
-                make_invocable("BytesFromPath", self.arg_groups[ModelArgs].path), "load_engine_bytes"
-            )
             return script.add_loader(
-                make_invocable(
-                    "EngineFromBytes", self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, load_engine)
-                ),
-                "deserialize_engine",
+                make_invocable("BytesFromPath", self.arg_groups[ModelArgs].path), "load_engine_bytes"
             )
 
         network_loader_name = network_name
         if network_loader_name is None:
             network_loader_name = self.arg_groups[TrtLoadNetworkArgs].add_to_script(script)
 
-        script.add_import(imports=["EngineFromNetwork"], frm="polygraphy.backend.trt")
+        script.add_import(imports=["EngineBytesFromNetwork"], frm="polygraphy.backend.trt")
         config_loader_name = self.arg_groups[TrtConfigArgs].add_to_script(script)
+
+        script.add_import(imports=["EngineBytesFromNetwork"], frm="polygraphy.backend.trt")
         loader_str = make_invocable(
-            "EngineFromNetwork",
+            "EngineBytesFromNetwork",
             self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, network_loader_name),
             config=config_loader_name,
             save_timing_cache=self.save_timing_cache,
@@ -444,8 +557,81 @@ class TrtLoadEngineArgs(BaseArgs):
         loader_name = script.add_loader(loader_str, "build_engine")
 
         if self._allow_saving:
-            loader_name = self.arg_groups[TrtSaveEngineArgs].add_to_script(script, loader_name)
+            loader_name = self.arg_groups[TrtSaveEngineBytesArgs].add_to_script(script, loader_name)
         return loader_name
+
+    def load_engine_bytes(self, network=None):
+        """
+        Loads a TensorRT engine according to arguments provided on the command-line.
+
+        Args:
+            network (Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
+                    A tuple containing a TensorRT builder, network and optionally parser.
+
+        Returns:
+            tensorrt.ICudaEngine: The engine.
+        """
+        loader = args_util.run_script(self.add_to_script, network)
+        return loader()
+
+
+@mod.export()
+class TrtLoadEngineArgs(BaseArgs):
+    """
+    TensorRT Engine: loading TensorRT engines.
+
+    Depends on:
+
+        - TrtLoadEngineBytesArgs
+        - TrtLoadPluginsArgs
+    """
+
+    # For backwards-compatibility
+    @property
+    def save_timing_cache(self):
+        return self.arg_groups[TrtLoadEngineBytesArgs].save_timing_cache
+
+    def add_parser_args_impl(self):
+        self.group.add_argument(
+            "--load-runtime",
+            help="Path from which to load a runtime that can be used to load a version compatible "
+            "engine that excludes the lean runtime. ",
+            default=None,
+        )
+
+    def parse_impl(self, args):
+        """
+        Parses command-line arguments and populates the following attributes:
+
+        Attributes:
+            load_runtime (str):
+                    Path rom which to load a runtime that can be used to load a
+                    version compatible engine that excludes the lean runtime.
+        """
+        self.load_runtime = args_util.parse_path(args_util.get(args, "load_runtime"), "Runtime")
+
+    def add_to_script_impl(self, script, network_name=None):
+        """
+        Args:
+            network_name (str): The name of a variable in the script pointing to a network loader.
+        """
+        load_serialized_engine = self.arg_groups[TrtLoadEngineBytesArgs].add_to_script(script, network_name)
+
+        script.add_import(imports=["EngineFromBytes"], frm="polygraphy.backend.trt")
+
+        runtime_loader = None
+        if self.load_runtime is not None:
+            script.add_import(imports=["LoadRuntime"], frm="polygraphy.backend.trt")
+            runtime_loader = script.add_loader(make_invocable("LoadRuntime", self.load_runtime), "load_runtime")
+
+        return script.add_loader(
+            make_invocable(
+                "EngineFromBytes",
+                self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, load_serialized_engine),
+                runtime=runtime_loader,
+            ),
+            "deserialize_engine",
+        )
 
     def load_engine(self, network=None):
         """

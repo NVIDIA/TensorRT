@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,7 +53,7 @@ class TestReadme:
                 assert os.path.pathsep * 2 not in link, "Duplicate slashes break links in GitHub"
                 # NOTE: We cannot use repo-root-relative links in Markdown since Polygraphy is also
                 # a subfolder of the OSS repo.
-                assert not link.startswith('/')
+                assert not link.startswith("/")
                 link_abs_path = os.path.abspath(os.path.join(readme_dir, link))
                 assert os.path.exists(
                     link_abs_path

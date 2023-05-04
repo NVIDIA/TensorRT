@@ -64,11 +64,38 @@ we'll force the `Add` to run in FP16 precision and the subsequent `Sub` to run i
 This will prevent them from being fused and cause the outputs of `Add` to overflow the FP16 range.
 
 
+### Using a Network Postprocessing Script to Constrain Precisions
+
+Another option is to use a TensorRT network postprocessing script to apply precisions on the parsed network.
+
+Use the provided network postprocessing script [add_constraints.py](./add_constraints.py) to constrain precisions in the model:
+
+```
+polygraphy run needs_constraints.onnx --onnxrt --trt --fp16 --precision-constraints obey \
+    --val-range x:[1,2] --check-error-stat median \
+    --trt-network-postprocess-script ./add_constraints.py
+```
+
+*TIP: You can use `--trt-npps` as shorthand for `--trt-network-postprocess-script`.*
+
+By default Polygraphy looks for a function called `postprocess` in the script to execute.  To specify
+a different function to use, suffix the script name with a colon followed by the function name, e.g.
+
+<!-- Polygraphy Test: Ignore Start -->
+```
+polygraphy run ... --trt-npps my_script.py:custom_func
+```
+<!-- Polygraphy Test: Ignore End -->
+
+
 ### Using A Network Loader Script To Constrain Precisions
+
+Alternatively, you can use a network loader script to define the entire network manually,
+as a part of which you can set layer precisions.
 
 The below section assumes you have read through the example on
 [Defining a TensorRT Network or Config Manually](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually)
-and have a basic understanding of how to use the [TensorRT Python API](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/).
+and have a basic understanding of how to use the [TensorRT Python API](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/index.html).
 
 First, run ONNX-Runtime on the model to generate reference inputs and golden outputs:
 
@@ -101,32 +128,6 @@ polygraphy run constrained_network.py --precision-constraints prefer \
     --check-error-stat median
 ```
 
-### Using a Network Postprocessing Script to Constrain Precisions
-
-Another option is to use a TensorRT network postprocessing script to apply precisions on the parsed network.  This allows
-direct comparison of the constrained network with ONNX-Runtime in a single Polygraphy run, without the need to save and load
-reference data.
-
-Use the provided network postprocessing script [add_constraints.py](./add_constraints.py) to constrain precisions in the model:
-
-
-```
-polygraphy run needs_constraints.onnx --onnxrt --trt --fp16 --precision-constraints obey \
-    --val-range x:[1,2] --check-error-stat median \
-    --trt-network-postprocess-script ./add_constraints.py
-```
-
-*TIP: You can use `--trt-npps` as shorthand for `--trt-network-postprocess-script`.*
-
-By default Polygraphy looks for a function called `postprocess` in the script to execute.  To specify
-a different function to use, suffix the script name with a colon followed by the function name, e.g.
-
-<!-- Polygraphy Test: Ignore Start -->
-```
-polygraphy run ... --trt-npps my_script.py:custom_func
-```
-<!-- Polygraphy Test: Ignore End -->
-
 
 ## See Also
 
@@ -134,4 +135,4 @@ polygraphy run ... --trt-npps my_script.py:custom_func
   reduced precision optimizations using Polygraphy.
 * [Defining a TensorRT Network or Config Manually](../../../../examples/cli/run/04_defining_a_tensorrt_network_or_config_manually) for
   instructions on how to create network script templates.
-* [TensorRT Python API Reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/)
+* [TensorRT Python API Reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/index.html)

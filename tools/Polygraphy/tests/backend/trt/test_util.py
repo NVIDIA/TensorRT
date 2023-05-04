@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,7 +60,7 @@ if mod.version(trt.__version__) >= mod.version("8.4"):
             if "Preview Features" not in expected:
                 expected = (
                     dedent(expected).strip()
-                    + "\nPreview Features       | [DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]"
+                    + "\nPreview Features       | [FASTER_DYNAMIC_SHAPES_0805, DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]"
                 )
 
         return expected

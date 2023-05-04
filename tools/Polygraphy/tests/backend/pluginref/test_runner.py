@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,6 +42,12 @@ class TestPluginRefRunner:
             assert runner.is_active
             model.check_runner(runner)
         assert not runner.is_active
+
+    @pytest.mark.serial
+    def test_warn_if_impl_methods_called(self, check_warnings_on_runner_impl_methods):
+        model = ONNX_MODELS["identity"]
+        runner = PluginRefRunner(GsFromOnnx(OnnxFromPath(model.path)))
+        check_warnings_on_runner_impl_methods(runner)
 
     def test_works_on_multiple_nodes(self):
         model = ONNX_MODELS["identity_identity"]

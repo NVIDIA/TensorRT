@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,7 @@ from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.backend.onnx.loader import OnnxLoadArgs
 from polygraphy.tools.args.backend.trt.config import TrtConfigArgs
-from polygraphy.tools.args.backend.trt.loader import TrtLoadPluginsArgs, TrtSaveEngineArgs
+from polygraphy.tools.args.backend.trt.loader import TrtLoadPluginsArgs, TrtSaveEngineBytesArgs
 from polygraphy.tools.args.base import BaseRunnerArgs
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
 from polygraphy.tools.args.model import ModelArgs
@@ -38,7 +38,7 @@ class TrtLegacyRunnerArgs(BaseRunnerArgs):
         - TrtLoadPluginsArgs
         - TrtConfigArgs
         - TfLoadArgs
-        - TrtSaveEngineArgs
+        - TrtSaveEngineBytesArgs
         - DataLoaderArgs
         - OnnxLoadArgs
 
@@ -119,7 +119,7 @@ class TrtLegacyRunnerArgs(BaseRunnerArgs):
             script.add_import(imports=["LoadNetworkFromUff"], frm="polygraphy.backend.trt_legacy")
             if self.arg_groups[ModelArgs].model_type == "uff":
                 script.add_import(imports=["LoadUffFile"], frm="polygraphy.backend.trt_legacy")
-                shapes = {name: shape for name, (_, shape) in self.arg_groups[ModelArgs].input_shapes.items()}
+                shapes = {name: tuple(shape) for name, (_, shape) in self.arg_groups[ModelArgs].input_shapes.items()}
                 loader_name = script.add_loader(
                     make_invocable(
                         "LoadUffFile", self.arg_groups[ModelArgs].path, util.default(shapes, {}), self.trt_outputs
@@ -170,7 +170,7 @@ class TrtLegacyRunnerArgs(BaseRunnerArgs):
             fp16=self.arg_groups[TrtConfigArgs].fp16,
             tf32=self.arg_groups[TrtConfigArgs].tf32,
             load_engine=load_engine,
-            save_engine=self.arg_groups[TrtSaveEngineArgs].path,
+            save_engine=self.arg_groups[TrtSaveEngineBytesArgs].path,
             layerwise=self.trt_outputs == constants.MARK_ALL,
             plugins=self.arg_groups[TrtLoadPluginsArgs].plugins,
             int8=self.arg_groups[TrtConfigArgs].int8,

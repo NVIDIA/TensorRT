@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,7 @@ from polygraphy.tools.args.base import BaseArgs
 ARG_CLASSES = [cls for cls in args_mod.__dict__.values() if inspect.isclass(cls) and issubclass(cls, BaseArgs)]
 
 USES_DEP_PAT = re.compile(r"self.arg_groups\[(.*?)\]")
-MEMBER_PAT = re.compile(r"self.(.*?)[ ,.\[]")
+MEMBER_PAT = re.compile(r"self.(.*?)[ ,.\[}]")
 
 
 class TestDocStrings:
@@ -63,7 +63,7 @@ class TestDocStrings:
     # and doesn't use most members of the class, so this approach is generally ok.
     #
     # There are cases where we may not want to document some members, e.g. if they are deprecated.
-    # In those cases, you can prefix the member with a `_` and it will be ignored by
+    # In those cases, you can prefix the member with a `_` and it will be ignored by this test.
     @pytest.mark.parametrize("arg_group_type", ARG_CLASSES)
     def test_parse_docstring_documents_populated_members(self, arg_group_type):
         code = inspect.getsource(arg_group_type.parse_impl)

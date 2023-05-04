@@ -93,8 +93,7 @@ It is recommended that you read these files in the following order:
      Polygraphy Test -->
 
     ```bash
-    python3 -m pip install extension_module/dist/polygraphy_reshape_destroyer-0.0.1-py3-none-any.whl \
-        --extra-index-url https://pypi.ngc.nvidia.com
+    python3 -m pip install extension_module/dist/polygraphy_reshape_destroyer-0.0.1-py3-none-any.whl
     ```
 
     *TIP: If you make changes to the example extension module, you can update your installed version by*

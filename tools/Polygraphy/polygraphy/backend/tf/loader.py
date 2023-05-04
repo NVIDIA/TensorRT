@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,6 +66,7 @@ class OptimizeGraph(BaseLoader):
         session_config.graph_options.resave_options.CopyFrom(rewriter_config)
         return tf_optimizer.OptimizeGraph(session_config, metagraph, graph_id=b"graph")
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -128,6 +129,7 @@ class GraphFromKeras(BaseLoader):
         """
         self.path = path
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -158,6 +160,7 @@ class GraphFromFrozen(BaseLoader):
         """
         self.path = path
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -189,6 +192,7 @@ class GraphFromCkpt(BaseLoader):
         self.dir = dir
         self.name = name
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -257,6 +261,7 @@ class UseTfTrt(BaseLoader):
         self.is_dynamic_op = is_dynamic_op
         self.minimum_segment_size = util.default(minimum_segment_size, 3)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -319,6 +324,7 @@ class ModifyGraphOutputs(BaseLoader):
         self._graph = graph
         self.outputs = outputs
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -358,6 +364,7 @@ class SaveGraph(BaseLoader):
         self.tensorboard_dir = tensorboard_dir
         self.engine_dir = engine_dir
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -406,6 +413,7 @@ class CreateConfig(BaseLoader):
         self.allow_growth = util.default(allow_growth, False)
         self.use_xla = util.default(use_xla, False)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -444,6 +452,7 @@ class SessionFromGraph(BaseLoader):
         self.graph = graph
         self.config = util.default(config, CreateConfig())
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:

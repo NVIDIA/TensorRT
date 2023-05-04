@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@ import sys
 import numpy as np
 import pytest
 import tensorrt as trt
+
 from polygraphy import constants, mod, util
 from polygraphy.backend.trt import (
     Calibrator,
@@ -27,24 +28,26 @@ from polygraphy.backend.trt import (
     EngineFromBytes,
     EngineFromNetwork,
     LoadPlugins,
+    LoadRuntime,
     ModifyNetworkOutputs,
     NetworkFromOnnxBytes,
     Profile,
     SaveEngine,
     bytes_from_engine,
+    create_config,
+    create_network,
     engine_from_network,
+    get_trt_logger,
     modify_network_outputs,
     network_from_onnx_bytes,
     network_from_onnx_path,
     onnx_like_from_network,
-    set_layer_precisions,
-    create_config,
     postprocess_network,
+    set_layer_precisions,
     set_tensor_datatypes,
     set_tensor_formats,
-    create_network,
 )
-from polygraphy.common.struct import MetadataTuple, BoundedShape
+from polygraphy.common.struct import BoundedShape, MetadataTuple
 from polygraphy.comparator import DataLoader
 from polygraphy.exception import PolygraphyException
 from tests.helper import get_file_size, is_file_non_empty
@@ -61,6 +64,16 @@ def identity_engine():
     engine_loader = EngineFromNetwork(network_loader)
     with engine_loader() as engine:
         yield engine
+
+
+@pytest.fixture(scope="session")
+def identity_vc_engine_bytes():
+    flags = [trt.OnnxParserFlag.NATIVE_INSTANCENORM]
+    config = CreateConfig(version_compatible=True)
+    network_loader = NetworkFromOnnxBytes(ONNX_MODELS["identity"].loader, flags=flags)
+    engine_loader = EngineBytesFromNetwork(network_loader, config=config)
+    with engine_loader() as engine_bytes:
+        yield engine_bytes
 
 
 @pytest.fixture(scope="session")
@@ -135,6 +148,37 @@ class TestSerializedEngineLoader:
             loader = EngineFromBytes(buffer)
             with loader() as engine:
                 assert isinstance(engine, trt.ICudaEngine)
+
+    def test_serialized_engine_loader_custom_runtime(self, identity_engine):
+        with identity_engine.serialize() as buffer:
+            loader = EngineFromBytes(buffer, runtime=trt.Runtime(get_trt_logger()))
+            with loader() as engine:
+                assert isinstance(engine, trt.ICudaEngine)
+
+
+@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6")
+class TestLoadRuntime:
+    def test_load_lean_runtime(self, nvinfer_lean_path):
+        loader = LoadRuntime(nvinfer_lean_path)
+        with loader() as runtime:
+            assert isinstance(runtime, trt.Runtime)
+
+
+@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6")
+class TestSerializedVCEngineLoader:
+    def test_serialized_vc_engine_loader_from_lambda(self, identity_vc_engine_bytes):
+        with util.NamedTemporaryFile() as outpath:
+            with open(outpath.name, "wb") as f:
+                f.write(identity_vc_engine_bytes)
+
+            loader = EngineFromBytes(lambda: open(outpath.name, "rb").read())
+            with loader() as engine:
+                assert isinstance(engine, trt.ICudaEngine)
+
+    def test_serialized_engine_loader_from_buffer(self, identity_vc_engine_bytes):
+        loader = EngineFromBytes(identity_vc_engine_bytes)
+        with loader() as engine:
+            assert isinstance(engine, trt.ICudaEngine)
 
 
 class TestOnnxNetworkLoader:
@@ -272,13 +316,6 @@ class TestSetLayerPrecisions:
             assert network[0].precision == trt.float16
             assert network[1].precision == trt.int8
 
-    def test_non_existent_layer(self, modifiable_network):
-        with pytest.raises(PolygraphyException, match="The following layers were not found"):
-            set_layer_precisions(
-                modifiable_network,
-                layer_precisions={"fake_layer": trt.float16},
-            )
-
 
 class TestSetTensorDatatypes:
     def test_basic(self, modifiable_network):
@@ -296,13 +333,6 @@ class TestSetTensorDatatypes:
             assert network[1].get_input(0).dtype == trt.float32
             assert network[1].get_output(0).dtype == trt.float16
 
-    def test_non_existent_tensor(self, modifiable_network):
-        with pytest.raises(PolygraphyException, match="The following tensors were not found"):
-            set_tensor_datatypes(
-                modifiable_network,
-                tensor_datatypes={"fake_tensor": trt.float16},
-            )
-
 
 class TestSetTensorFormats:
     def test_basic(self, modifiable_network):
@@ -319,13 +349,6 @@ class TestSetTensorFormats:
             )
             assert network[1].get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
 
-    def test_non_existent_tensor(self, modifiable_network):
-        with pytest.raises(PolygraphyException, match="The following tensors were not found"):
-            set_tensor_formats(
-                modifiable_network,
-                tensor_formats={"fake_tensor": trt.float16},
-            )
-
 
 class TestEngineBytesFromNetwork:
     def test_can_build(self, identity_network):
@@ -341,14 +364,20 @@ class TestEngineFromNetwork:
 
     def test_can_build_with_parser_owning(self, identity_network):
         loader = EngineFromNetwork(identity_network)
-        with loader():
-            pass
+        with loader() as engine:
+            assert isinstance(engine, trt.ICudaEngine)
 
     def test_can_build_without_parser_non_owning(self, identity_builder_network):
         builder, network = identity_builder_network
         loader = EngineFromNetwork((builder, network))
-        with loader():
-            pass
+        with loader() as engine:
+            assert isinstance(engine, trt.ICudaEngine)
+
+    def test_custom_runtime(self, identity_builder_network):
+        builder, network = identity_builder_network
+        loader = EngineFromNetwork((builder, network), runtime=trt.Runtime(get_trt_logger()))
+        with loader() as engine:
+            assert isinstance(engine, trt.ICudaEngine)
 
     @pytest.mark.parametrize("use_config_loader, set_calib_profile", [(True, None), (False, False), (False, True)])
     def test_can_build_with_calibrator(self, identity_builder_network, use_config_loader, set_calib_profile):

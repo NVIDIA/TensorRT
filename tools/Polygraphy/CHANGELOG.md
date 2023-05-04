@@ -2,6 +2,82 @@
 
 Dates are in YYYY-MM-DD format.
 
+
+## v0.47.1 (2023-03-29)
+### Changed
+- Updated `TrtOnnxFlagArgs` to automatically enable `NATIVE_INSTANCENORM` when either hardware or
+    version compatibility is enabled in the builder configuration.
+- Downgraded errors for extra layers/tensors in `SetLayerPrecisions`, `SetTensorDatatypes`, and `SetTensorFormats` to warnings.
+
+
+## v0.47.0 (2023-03-28)
+### Added
+- Added experimental support for error heatmaps. These can be visualized and/or saved with the
+    `--show-heatmaps`/`--save-heatmaps` command-line options or `show_heatmaps`/`save_heatmaps`
+    arguments to `CompareFunc.simple`.
+- Added experimental `--show-error-metrics-plot/--save-error-metrics-plot` command-line options and
+    corresponding `show_error_metrics_plot`/`save_error_metrics_plot` arguments to `CompareFunc.simple`.
+    These allow you to generate plots of error vs. magnitude.
+- Added `--version-compatible` flag for building version-compatible engines.
+    Note that for building version compatible engines for ONNX models, `--onnx-flags native_instancenorm` must also be provided.
+- Added `TrtSaveEngineBytesArgs` and `TrtLoadEngineBytesArgs` to allow for avoiding engine deserialization until necessary.
+- Added an `exclude_lean_runtime` parameter to `CreateConfig` and corresponding `--exclude-lean-runtime` CLI option.
+- Added a `runtime` parameter to `EngineFromBytes` and `EngineFromNetwork` to enable deserializing plans with a custom runtime.
+- Added a `LoadRuntime` TensorRT loader that can be used to load a runtime from a path and a corresponding `--load-runtime` CLI option.
+
+### Changed
+- Updated Polygraphy to warn when it detects unsupported TensorRT and NumPy version combinations.
+- `TrtSaveEngineArgs` and `TrtLoadEngineArgs` now depend on `TrtSaveEngineBytesArgs` and `TrtLoadEngineBytesArgs` respectively.
+    Additionally, all command-line options have been migrated to the latter argument groups.
+
+### Fixed
+- Fixed a bug in `debug precision` where Polygraphy would attempt to set the layer precision for layers producing
+    non-activation outputs, which is an error in TensorRT.
+
+
+## v0.46.2 (2023-02-28)
+### Fixed
+- Fixed minor formatting issues in help text
+
+
+## v0.46.1 (2023-02-27)
+### Changed
+- `CompareFunc.simple` will now add a small epsilon when computing relative error to avoid Inf/NaNs.
+
+
+## v0.46.0 (2023-02-10)
+### Changed
+- `polygraphy run` will now print warnings when command-line options are provided for comparison
+    functions types other than the current one specified by `--compare-func`.
+- Added a `TensorInfo` class to the TensorRT backend to track information from `IAlgorithmIOInfo`.
+    The `Algorithm` class now keeps `TensorInfo`s instead of tuples.
+- Changed the format of tactic replay files to include more information about tensor formats where possible.
+    *NOTE: This means that tactic replay files generated with previous versions of Polygraphy are not compatible*
+        *with this version!*
+
+### Fixed
+- Fixed a bug where the `--trt-legacy` runner would not work with `--input-shapes` specified.
+- Fixed a bug where `debug reduce` would not work correctly for models where a node had multiple outputs
+    which were also graph outputs. See the comment in [`reduce.py`](./polygraphy/tools/debug/subtool/reduce.py) for details.
+
+
+## v0.45.3 (2023-01-25)
+### Changed
+- Updated comparison functions so that the output array is now displayed *in addition* to the histogram
+    rather than instead of it.
+
+
+## v0.45.2 (2023-01-25)
+### Changed
+- Updated comparison functions to display the entire output array instead of a histogram if it is small enough.
+
+
+## v0.45.1 (2023-01-19)
+### Added
+- Added `max_aux_streams` to `CreateConfig` for TensorRT and corresponding `--max-aux-streams` command-line option.
+- Added support for HWC I/O formats in `TrtRunner` for TensorRT 8.6+.
+
+
 ## v0.45.0 (2023-01-12)
 ### Added
 - Added an `-n/--num-items` option to `inspect data` to control how many elements of an array are shown.
@@ -1124,8 +1200,8 @@ Dates are in YYYY-MM-DD format.
 - Added a passthrough loader, `LoadPlugins`, that can wrap any other loader, and load plugins
 
 ### Changed
-- `EngineFromNetwork` will no longer free the the builder, network and parser if they are provided directly (as opposed to via a loader).
-- `TrtRunner` will no longer free the the engine if it is provided directly (as opposed to via a loader).
+- `EngineFromNetwork` will no longer free the builder, network and parser if they are provided directly (as opposed to via a loader).
+- `TrtRunner` will no longer free the engine if it is provided directly (as opposed to via a loader).
 - All file saving arguments now take file paths instead of directories. This makes it easier to know exactly where each file is being written.
 - `compare_func` in `Comparator.compare_accuracy` now accepts a function that returns anything convertible to a boolean, rather than requiring a boolean.
 - `basic_compare_func` now will return information about required tolerances after `Comparator.compare_accuracy`.

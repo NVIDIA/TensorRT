@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +33,7 @@ class BytesFromPath(BaseLoader):
         """
         self._path = path
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -59,6 +60,7 @@ class SaveBytes(BaseLoader):
         self._bytes = obj
         self._path = path
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -89,6 +91,7 @@ class InvokeFromScript(BaseLoader):
         self._path = path
         self._name = name
 
+    @util.check_called_by("__call__")
     def call_impl(self, *args, **kwargs):
         """
         Returns:

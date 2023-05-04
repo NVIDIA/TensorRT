@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,8 @@ from polygraphy.common.interface import TypedDict
 from polygraphy.json import Decoder, Encoder, add_json_methods
 from polygraphy.logger import G_LOGGER, LogMode
 
+from typing import Sequence
+
 trt = mod.lazy_import("tensorrt")
 
 
@@ -28,14 +30,102 @@ trt = mod.lazy_import("tensorrt")
 ## Data Structures
 ##
 
+#
 # NOTE: Modifying the structure of the data classes below will break backwards compatiblity
+#
+
+
+def check_is_instance(obj, cls, name):
+    if not isinstance(obj, cls):
+        G_LOGGER.critical(f"'{name}' must be an instance of {cls.__name__}, but is: {obj}.")
+
+
+@mod.export()
+class TensorInfo:
+    """
+    Tracks information about a tensor, such as format and data type.
+    """
+
+    @staticmethod
+    def from_trt(io_info):
+        """
+        Creates a Polygraphy ``TensorInfo`` instance from a TensorRT ``IAlgorithmIOInfo``.
+
+        Args:
+            io_info (trt.IAlgorithmIOInfo): The algorithm I/O information.
+
+        Returns:
+            TensorInfo
+        """
+        return TensorInfo(
+            io_info.tensor_format,
+            io_info.dtype,
+            tuple(io_info.strides),
+            # These fields were added in 8.6
+            util.try_getattr(io_info, "vectorized_dim"),
+            util.try_getattr(io_info, "components_per_element"),
+        )
+
+    def __init__(self, tensor_format, dtype, strides, vectorized_dim, components_per_element):
+        """
+        Args:
+            tensor_format (trt.TensorFormat): The tensor format.
+            dtype (trt.DataType): The data type.
+            strides (Sequence[int]): The strides.
+            vectorized_dim (int): The index of the vectorized dimensions.
+            components_per_element (int): The number of components per element.
+        """
+        check_is_instance(tensor_format, trt.TensorFormat, "tensor_format")
+        check_is_instance(dtype, trt.DataType, "dtype")
+        check_is_instance(strides, Sequence, "strides")
+        if vectorized_dim is not None:
+            check_is_instance(vectorized_dim, int, "vectorized_dim")
+        if components_per_element is not None:
+            check_is_instance(components_per_element, int, "components_per_element")
+
+        self.tensor_format = tensor_format
+        self.dtype = dtype
+        self.strides = tuple(strides)
+        self.vectorized_dim = vectorized_dim
+        self.components_per_element = components_per_element
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __repr__(self):
+        return f"TensorInfo({str(self.tensor_format)}, {str(self.dtype)}, {self.strides}, {self.vectorized_dim}, {self.components_per_element})"
+
+    def __hash__(self):
+        return hash((self.tensor_format, self.dtype, self.strides, self.vectorized_dim, self.components_per_element))
+
+
+@Encoder.register(TensorInfo)
+def encode(tensor_info):
+    return {
+        "tensor_format": str(tensor_info.tensor_format),
+        "dtype": str(tensor_info.dtype),
+        "strides": tensor_info.strides,
+        "vectorized_dim": tensor_info.vectorized_dim,
+        "components_per_element": tensor_info.components_per_element,
+    }
+
+
+@Decoder.register(TensorInfo)
+def decode(dct):
+    return TensorInfo(
+        util.getattr_nested(trt, dct["tensor_format"]),
+        util.getattr_nested(trt, dct["dtype"]),
+        dct["strides"],
+        dct["vectorized_dim"],
+        dct["components_per_element"],
+    )
 
 
 @mod.export()
 class Algorithm:
     """
     Represents a TensorRT algorithm variant, which can be uniquely represented
-    by an implementation ID and tactic ID.
+    by an implementation ID, tactic ID, and I/O tensor information.
     """
 
     @staticmethod
@@ -49,16 +139,16 @@ class Algorithm:
                     The algorithm context corresponding to the layer.
             algorithm (trt.IAlgorithm):
                     The algorithm variant provided by TensorRT.
-        """
 
-        def unpack_io_info(io_info):
-            return (io_info.tensor_format, io_info.dtype, tuple(io_info.strides))
+        Returns:
+            Algorithm
+        """
 
         implementation = algorithm.algorithm_variant.implementation
         tactic = algorithm.algorithm_variant.tactic
-        inputs = tuple(unpack_io_info(algorithm.get_algorithm_io_info(i)) for i in range(context.num_inputs))
+        inputs = tuple(TensorInfo.from_trt(algorithm.get_algorithm_io_info(i)) for i in range(context.num_inputs))
         outputs = tuple(
-            unpack_io_info(algorithm.get_algorithm_io_info(i))
+            TensorInfo.from_trt(algorithm.get_algorithm_io_info(i))
             for i in range(context.num_inputs, context.num_inputs + context.num_outputs)
         )
         return Algorithm(implementation, tactic, inputs, outputs)
@@ -70,54 +160,30 @@ class Algorithm:
                     The implementation for this Algorithm.
             tactic (int):
                     The tactic for this Algorithm.
-            inputs (List[Tuple[trt.TensorFormat, trt.DataType, Sequence[int]]]):
-                    A list of tuples containg a TensorRT tensor format, data type, and strides for each input.
-            outputs (List[Tuple[trt.TensorFormat, trt.DataType, Sequence[int]]]):
-                    A list of tuples containg a TensorRT tensor format, data type, and strides for each output.
+            inputs (Sequence[TensorInfo]):
+                    A sequence of TensorInfos for each input.
+            outputs (Sequence[TensorInfo]):
+                    A sequence of TensorInfos for each output.
         """
-
-        def validate_meta(meta):
-            for index, tup in enumerate(meta):
-                # Fill in empty tuples for missing strides.
-                if len(tup) == 2:
-                    fmt, dtype = tup
-                    strides = tuple()
-                    tup = (fmt, dtype, strides)
-                    meta[index] = tup
-
-                fmt, dtype, strides = tup
-
-                if not isinstance(fmt, trt.TensorFormat):
-                    G_LOGGER.critical(
-                        f"'format' must be an instance of trt.TensorFormat, but is: {fmt}.\nNote: Provided input/output metadata was: {meta}"
-                    )
-                if not isinstance(dtype, trt.DataType):
-                    G_LOGGER.critical(
-                        f"'dtype' must be an instance of trt.DataType, but is: {dtype}.\nNote: Provided input/output metadata was: {meta}"
-                    )
-
-                if not isinstance(strides, tuple):
-                    G_LOGGER.critical(
-                        f"'strides' must be a tuple, but is: {strides}.\nNote: Provided input/output metadata was: {meta}"
-                    )
-            return meta
-
         self.implementation = implementation
         self.tactic = tactic
+
+        def check_io(lst, name):
+            for index, io in enumerate(lst):
+                check_is_instance(io, TensorInfo, f"{name}[{index}]")
+
+        check_io(inputs, "inputs")
+        check_io(outputs, "outputs")
+
         # Use tuples here so the class is hashable.
-        self.inputs = tuple(validate_meta(inputs))
-        self.outputs = tuple(validate_meta(outputs))
+        self.inputs = tuple(inputs)
+        self.outputs = tuple(outputs)
 
     def __str__(self):
-        def io_str(io):
-            return tuple((str(tensor_format), str(dtype), str(strides)) for tensor_format, dtype, strides in io)
-
-        return f"(Implementation: {self.implementation}, Tactic: {self.tactic}) | Inputs: {io_str(self.inputs)} | Outputs: {io_str(self.outputs)}"
+        return f"(Implementation: {self.implementation}, Tactic: {self.tactic}) | Inputs: {self.inputs} | Outputs: {self.outputs}"
 
     def __eq__(self, other):
-        tactic_matches = self.implementation == other.implementation and self.tactic == other.tactic
-        io_matches = self.inputs == other.inputs and self.outputs == other.outputs
-        return tactic_matches and io_matches
+        return self.__dict__ == other.__dict__
 
     def __hash__(self):
         return hash((self.implementation, self.tactic, self.inputs, self.outputs))
@@ -125,37 +191,21 @@ class Algorithm:
 
 @Encoder.register(Algorithm)
 def encode(algo):
-    def encode_algo_io(io_list):
-        encoded = []
-        for fmt, dtype, strides in io_list:
-            encoded.append((str(fmt), str(dtype), strides))
-        return encoded
-
     return {
         "implementation": algo.implementation,
         "tactic": algo.tactic,
-        "inputs": encode_algo_io(algo.inputs),
-        "outputs": encode_algo_io(algo.outputs),
+        "inputs": algo.inputs,
+        "outputs": algo.outputs,
     }
 
 
 @Decoder.register(Algorithm)
 def decode(dct):
-    def decode_algo_io(io_list):
-        decoded = []
-        for tup in io_list:
-            fmt, dtype, strides = util.unpack_args(tup, 3)
-            entry = [util.getattr_nested(trt, fmt), util.getattr_nested(trt, dtype)]
-            if strides is not None:
-                entry.append(tuple(strides))
-            decoded.append(tuple(entry))
-        return decoded
-
     return Algorithm(
         implementation=dct["implementation"],
         tactic=dct["tactic"],
-        inputs=decode_algo_io(dct["inputs"]),
-        outputs=decode_algo_io(dct["outputs"]),
+        inputs=dct["inputs"],
+        outputs=dct["outputs"],
     )
 
 

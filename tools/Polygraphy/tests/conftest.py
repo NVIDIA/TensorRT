@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,8 @@ import copy
 import glob
 import os
 import subprocess as sp
+import sys
+import ctypes.util
 
 import pytest
 
@@ -64,3 +66,96 @@ def sandboxed_install_run(virtualenv, script_runner):
         return status
 
     return run_impl
+
+
+@pytest.fixture()
+def check_warnings_on_runner_impl_methods():
+    """
+    Fixture that ensures warnings are emitted when `_impl` methods of runners are called.
+    """
+
+    def check(runner):
+        import contextlib
+        import io
+
+        import numpy as np
+
+        outfile = io.StringIO()
+        with contextlib.redirect_stdout(outfile), contextlib.redirect_stderr(outfile):
+            runner.activate()
+            metadata = runner.get_input_metadata()
+            runner.infer({name: np.ones(shape, dtype=dtype) for name, (dtype, shape) in metadata.items()})
+            runner.deactivate()
+
+            outfile.seek(0)
+            out = outfile.read()
+
+            def check_warning(method, warning_expected):
+                assert (
+                    f"Calling '{type(runner).__name__}.{method}_impl()' directly is not recommended. Please use '{method}()' instead."
+                    in out
+                ) == warning_expected
+
+            check_warning("get_input_metadata", warning_expected=False)
+            check_warning("activate", warning_expected=False)
+            check_warning("infer", warning_expected=False)
+            check_warning("deactivate", warning_expected=False)
+
+            runner.activate_impl()
+            metadata = runner.get_input_metadata_impl()
+            runner.infer_impl({name: np.ones(shape, dtype=dtype) for name, (dtype, shape) in metadata.items()})
+            runner.deactivate_impl()
+
+            outfile.seek(0)
+            out = outfile.read()
+            print(out)
+
+            check_warning("get_input_metadata", warning_expected=True)
+            check_warning("activate", warning_expected=True)
+            check_warning("infer", warning_expected=True)
+            check_warning("deactivate", warning_expected=True)
+
+    return check
+
+
+@pytest.fixture()
+def check_warnings_on_loader_impl_methods():
+    """
+    Fixture that ensures warnings are emitted when loader `_impl` methods are called.
+    """
+
+    def check(loader):
+        import contextlib
+        import io
+
+        outfile = io.StringIO()
+        with contextlib.redirect_stdout(outfile), contextlib.redirect_stderr(outfile):
+            warning_msg = f"Calling '{type(loader).__name__}.call_impl()' directly is not recommended. Please use '__call__()' instead."
+            loader.__call__()
+
+            outfile.seek(0)
+            out = outfile.read()
+
+            assert warning_msg not in out
+
+            loader.call_impl()
+
+            outfile.seek(0)
+            out = outfile.read()
+            print(out)
+
+            assert warning_msg in out
+
+    return check
+
+
+@pytest.fixture()
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="Fixture has not been updated to work on Windows")
+def nvinfer_lean_path():
+    lean_library_name = ctypes.util.find_library("nvinfer_lean")
+    for dirname in os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep):
+        path = os.path.join(dirname, lean_library_name)
+        if os.path.exists(path):
+            return path
+
+    assert False, "Could not find nvinfer_lean!"

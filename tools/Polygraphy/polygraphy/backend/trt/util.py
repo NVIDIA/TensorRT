@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -157,10 +157,19 @@ def get_layer_class_mapping():
 
     return layer_class_mapping
 
+def check_numpy_trt_compatibility():
+    if mod.version(trt.__version__) < mod.version("8.6") and \
+       mod.version(np.__version__) >= mod.version("1.24"):
+        # TensorRT < 8.6 uses a deprecated alias np.bool that was removed in NumPy >= 1.24
+        G_LOGGER.warning(f"TensorRT version {trt.__version__} and NumPy version {np.__version__} "
+                          "are not compatible.  Consider downgrading your NumPy package to a version < 1.24 "
+                          "or upgrading TensorRT to a version >= 8.6.", mode=LogMode.ONCE)
+
 
 def np_dtype_from_trt(trt_dtype):
     # trt.nptype uses NumPy, so to make autoinstall work, we need to trigger it before that.
     mod.autoinstall(np)
+    check_numpy_trt_compatibility()
     return np.dtype(trt.nptype(trt_dtype))
 
 
@@ -553,18 +562,35 @@ def try_setup_polygraphy_calibrator(config, network, calib_profile=None):
         calibrator.set_input_metadata(input_metadata)
 
 
-def get_metadata_from_engine(engine, mode):
+def get_hwc_shape_from_chw(shape, strides):
+    # The relative size (descending sorted order) of the strides should give the permutation to convert the shape
+    perm = sorted(range(len(strides)), key=strides.__getitem__, reverse=True)
+    return tuple([shape[i] for i in perm])
+
+
+def get_chw_shape_from_hwc(shape, strides):
+    perm = sorted(range(len(strides)), key=strides.__getitem__, reverse=True)
+    inv_perm = sorted(range(len(perm)), key=perm.__getitem__)
+    return tuple([shape[i] for i in inv_perm])
+
+
+def get_metadata_from_engine(engine, context, mode):
     meta = TensorMetadata()
     for idx in range(engine.num_io_tensors):
         name = engine.get_tensor_name(idx)
         if engine.get_tensor_mode(name) != mode:
             continue
 
-        meta.add(name=name, dtype=np_dtype_from_trt(engine.get_tensor_dtype(name)), shape=engine.get_tensor_shape(name))
+        shape = engine.get_tensor_shape(name)
+        # If the input format is HWC, make sure the input is shaped accordingly
+        if engine.get_tensor_format(name) == trt.TensorFormat.HWC:
+            shape = get_hwc_shape_from_chw(shape, context.get_tensor_strides(name))
+
+        meta.add(name=name, dtype=np_dtype_from_trt(engine.get_tensor_dtype(name)), shape=shape)
     return meta
 
 
-def str_from_engine(engine, show_layers=None, show_attrs=None):
+def str_from_engine(engine, context, show_layers=None, show_attrs=None):
     show_layers = util.default(show_layers, False)
     show_attrs = util.default(show_attrs, False)
 
@@ -578,8 +604,8 @@ def str_from_engine(engine, show_layers=None, show_attrs=None):
 
     # Show metadata for the first profile (i.e. the dynamic shapes)
     if _should_use_v3_api():
-        input_metadata = get_metadata_from_engine(engine, mode=trt.TensorIOMode.INPUT)
-        output_metadata = get_metadata_from_engine(engine, mode=trt.TensorIOMode.OUTPUT)
+        input_metadata = get_metadata_from_engine(engine, context, mode=trt.TensorIOMode.INPUT)
+        output_metadata = get_metadata_from_engine(engine, context, mode=trt.TensorIOMode.OUTPUT)
     else:
         input_metadata = get_input_metadata_from_engine(engine, 0, num_io_tensors)
         output_metadata = get_output_metadata_from_engine(engine, 0, num_io_tensors)
