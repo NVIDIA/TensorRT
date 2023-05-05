@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,6 +40,7 @@ class LoadUffFile(BaseLoader):
         self.shapes = shapes
         self.outputs = outputs
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         input_names = list(self.shapes.keys())
         input_shapes = list(self.shapes.values())
@@ -53,6 +54,7 @@ class ConvertToUff(BaseLoader):
         self.uff_path = save_uff
         self.preprocessor = preprocessor
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
 
@@ -87,6 +89,7 @@ class LoadNetworkFromUff(BaseLoader):
         if uff_order:
             self.uff_order = trt.UffInputOrder.NCHW if uff_order.lower() == "nchw" else trt.UffInputOrder.NHWC
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         uff_model, input_names, input_shapes, output_names = self.uff_loader()
 
@@ -130,6 +133,7 @@ class ParseNetworkFromOnnxLegacy(BaseNetworkFromOnnx):
         super().__init__(explicit_batch=False)
         self.onnx_loader = onnx_loader
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         from polygraphy.backend.onnx import util as onnx_util
 
@@ -180,7 +184,8 @@ def _input_metadata_from_network(network):
     input_metadata = TensorMetadata()
     for index in range(network.num_inputs):
         tensor = network.get_input(index)
-        input_metadata.add(name=tensor.name, dtype=np.dtype(trt.nptype(tensor.dtype)), shape=tensor.shape)
+        dtype = trt_util.np_dtype_from_trt(tensor.dtype)
+        input_metadata.add(name=tensor.name, dtype=dtype, shape=tensor.shape)
     return input_metadata
 
 
@@ -226,7 +231,7 @@ class TrtLegacyRunner(BaseRunner):
             max_workspace_size (int): The maximum workspace size.
             max_batch_size (int): The maximum batch size.
             fp16 (bool): Whether to run in fp16 mode
-            fp8  (bool): Whether to run in fp8 mode            
+            fp8  (bool): Whether to run in fp8 mode
             layerwise (bool): Whether to retrieve the outputs of every layer in the network.
             name (str):
                     The human-readable name prefix to use for this runner.
@@ -249,7 +254,7 @@ class TrtLegacyRunner(BaseRunner):
         self.network_loader = network_loader
         self.max_workspace_size = util.default(max_workspace_size, 1 << 24)
         self.fp16 = util.default(fp16, False)
-        self.fp8  = util.default(fp8, False)
+        self.fp8 = util.default(fp8, False)
         self.tf32 = util.default(tf32, False)
         self.load_engine = load_engine
 
@@ -261,6 +266,9 @@ class TrtLegacyRunner(BaseRunner):
         self.calibrator = calibrator
         self.use_dla = use_dla
         self.allow_gpu_fallback = allow_gpu_fallback
+
+        # Check compatibility with NumPy before proceeding further
+        trt_util.check_numpy_trt_compatibility()
 
     def activate_impl(self):
         """

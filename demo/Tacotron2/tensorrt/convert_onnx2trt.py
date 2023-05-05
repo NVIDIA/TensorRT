@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,7 +64,6 @@ def parse_args(parser):
                         required=False)
     parser.add_argument("--disable-preview-dynamic-shapes", action="store_true", help="Disable dynamic shape preview feature.")
     parser.set_defaults(loop=int(trt.__version__[0]) >= 8)
-
     return parser
 
 

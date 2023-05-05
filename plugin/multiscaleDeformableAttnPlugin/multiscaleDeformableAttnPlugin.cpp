@@ -44,7 +44,7 @@ nvinfer1::IPluginV2DynamicExt* MultiscaleDeformableAttnPlugin::clone() const PLU
         plugin->setPluginNamespace(getPluginNamespace());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -140,11 +140,11 @@ int32_t MultiscaleDeformableAttnPlugin::enqueue(nvinfer1::PluginTensorDesc const
     }
     else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
     {
-        const __half* value = static_cast<const __half*>(inputs[0]);
+        __half const* value = static_cast<__half const*>(inputs[0]);
         int32_t const* spatialShapes = static_cast<int32_t const*>(inputs[1]);
         int32_t const* levelStartIndex = static_cast<int32_t const*>(inputs[2]);
-        const __half* samplingLoc = static_cast<const __half*>(inputs[3]);
-        const __half* attnWeight = static_cast<const __half*>(inputs[4]);
+        __half const* samplingLoc = static_cast<__half const*>(inputs[3]);
+        __half const* attnWeight = static_cast<__half const*>(inputs[4]);
         __half* output = static_cast<__half*>(outputs[0]);
 
         rc = ms_deform_attn_cuda_forward(stream, value, spatialShapes, levelStartIndex, samplingLoc, attnWeight, output,
@@ -244,7 +244,7 @@ IPluginV2* MultiscaleDeformableAttnPluginCreator::createPlugin(
         MultiscaleDeformableAttnPlugin* plugin = new MultiscaleDeformableAttnPlugin();
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -260,7 +260,7 @@ IPluginV2* MultiscaleDeformableAttnPluginCreator::deserializePlugin(
         plugin->setPluginNamespace(getPluginNamespace());
         return plugin;
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

@@ -15,50 +15,39 @@
 # limitations under the License.
 #
 
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
-import os
+import sys
+
+from setuptools import setup
+from setuptools.command.install import install
+import subprocess as sp
 
 tensorrt_module = "##TENSORRT_MODULE##"
 
-def is_standalone():
-    return os.environ.get("STANDALONE") == "1"
 
+class InstallCommand(install):
+    def run(self):
+        def install_dep(package_name):
+            status = sp.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "{:}==##TENSORRT_PYTHON_VERSION##".format(package_name),
+                    "--index-url",
+                    "https://pypi.nvidia.com",
+                ]
+            )
+            status.check_returncode()
 
-def is_dla():
-    return os.environ.get("ENABLE_DLA") == "1"
+        install_dep("{:}_libs".format(tensorrt_module))
+        install_dep("{:}_bindings".format(tensorrt_module))
 
+        install.run(self)
 
-def get_requirements():
-    def get_version_range():
-        def get_vers(var):
-            vers = os.environ.get(var).replace("cuda-", "")
-            major, minor = map(int, vers.split("."))
-            return major, minor
-
-        cuda_major, _ = get_vers("CUDA")
-        return "-cu{cuda_major}".format(cuda_major=cuda_major)
-
-    if is_standalone():
-        reqs = [ "nvidia-cuda-runtime" + get_version_range() ]
-        if tensorrt_module == "tensorrt":
-            reqs +=  [
-                "nvidia-cudnn" + get_version_range(),
-                "nvidia-cublas" + get_version_range(),
-            ]
-        return reqs
-    return []
-
-
-name = tensorrt_module
-# Only standalone wheels need to be disambiguated. Otherwise, the entire tar/deb/rpm is DLA/non-DLA.
-if is_standalone() and is_dla():
-    name += "-dla"
 
 setup(
-    name=name,
+    name=tensorrt_module,
     version="##TENSORRT_PYTHON_VERSION##",
     description="A high performance deep learning inference library",
     long_description="A high performance deep learning inference library",
@@ -70,7 +59,6 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     packages=[tensorrt_module],
-    install_requires=get_requirements(),
     extras_require={"numpy": "numpy"},
     package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
     include_package_data=True,
@@ -78,4 +66,5 @@ setup(
     keywords="nvidia tensorrt deeplearning inference",
     url="https://developer.nvidia.com/tensorrt",
     download_url="https://github.com/nvidia/tensorrt/tags",
+    cmdclass={"install": InstallCommand},
 )

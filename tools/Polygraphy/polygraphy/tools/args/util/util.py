@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -106,9 +106,7 @@ def get(args, attr, default=None):
         attr (str): The name of the command-line argument.
         default (obj): The default value to return if the argument is not found. Defaults to None.
     """
-    if hasattr(args, attr):
-        return getattr(args, attr)
-    return default
+    return util.try_getattr(args, attr, default)
 
 
 @mod.export()
@@ -379,3 +377,27 @@ def parse_num_bytes(num_bytes_arg):
             "Please use either an integer (e.g. 16000000), scientific notation (e.g. 16e6), "
             "or a number with a valid suffix: K, M, or G (e.g. 16M)."
         )
+
+
+@mod.export()
+def parse_path(path, name):
+    """
+    Parses a path from a command-line argument.
+
+    If the path does not exist, emits a message using the specified logging function.
+
+    Args:
+        path (str): The path.
+        name (str): Name of what the path refers to.
+
+    Returns:
+        str: The path, converted to an absolute path if it exists.
+    """
+    if path is None:
+        return None
+
+    if os.path.exists(path):
+        path = os.path.abspath(path)
+    else:
+        G_LOGGER.warning(f"{name} path does not exist: {path}")
+    return path

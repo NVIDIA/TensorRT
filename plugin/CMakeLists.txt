@@ -135,7 +135,7 @@ set_target_properties(${SHARED_TARGET} PROPERTIES
 if (MSVC)
     set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "/DEF:${PLUGIN_EXPORT_DEF}")
 else()
-    set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
+    set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,-Bsymbolic -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
 endif()
 
 set_target_properties(${SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})

@@ -51,8 +51,8 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, const DataType type
     if (mHasBias)
     {
         void* cudaMem{nullptr};
-        PLUGIN_CHECK(cudaMalloc(&cudaMem, getWeightsSize(bias, mType)));
-        PLUGIN_CHECK(cudaMemcpy(cudaMem, bias.values, getWeightsSize(bias, mType), cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMalloc(&cudaMem, getWeightsSize(bias, mType)));
+        PLUGIN_CUASSERT(cudaMemcpy(cudaMem, bias.values, getWeightsSize(bias, mType), cudaMemcpyHostToDevice));
         make_cuda_shared(mBiasDev, cudaMem);
     }
 }
@@ -89,15 +89,39 @@ nvinfer1::IPluginV2DynamicExt* GeluPluginDynamic::clone() const noexcept
     return nullptr;
 }
 
-nvinfer1::DimsExprs GeluPluginDynamic::getOutputDimensions(
-    int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs GeluPluginDynamic::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
+    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
-    return inputs[0];
+    try
+    {
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 1);
+        PLUGIN_VALIDATE(outputIndex == 0);
+        return inputs[0];
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return DimsExprs{};
 }
 
 bool GeluPluginDynamic::supportsFormatCombination(
-    int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept
+    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
+    try
+    {
+        PLUGIN_VALIDATE(inOut != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 1);
+        PLUGIN_VALIDATE(nbOutputs == 1);
+        PLUGIN_VALIDATE(pos >= 0);
+        PLUGIN_VALIDATE(pos < nbInputs + nbOutputs);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+        return false;
+    }
 
     PluginTensorDesc const& input = inOut[0];
     if (pos == 0)
@@ -112,77 +136,93 @@ bool GeluPluginDynamic::supportsFormatCombination(
     return false;
 }
 
-void GeluPluginDynamic::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept
+void GeluPluginDynamic::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
     gLogVerbose << "GeluPluginDynamic configurePlugin\n";
-    PLUGIN_ASSERT(mType == in[0].desc.type);
+
+    try
+    {
+        PLUGIN_VALIDATE(in != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 1);
+        PLUGIN_VALIDATE(mType == in[0].desc.type);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
-size_t GeluPluginDynamic::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int nbOutputs) const noexcept
+size_t GeluPluginDynamic::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
     return 0;
 }
-int GeluPluginDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+
+template <typename TDataType>
+int32_t GeluPluginDynamic::enqueueTyped(
+    void const* input_, void* output_, int32_t const inputVolume, cudaStream_t stream) noexcept
 {
-    int const inputVolume = volume(inputDesc[0].dims);
+    TDataType const* input = static_cast<TDataType const*>(input_);
+    TDataType* output = static_cast<TDataType*>(output_);
+    int32_t const cols = inputVolume / mLd;
+    int32_t const rows = mLd;
 
-    int status = -1;
-
-    // Our plugin outputs only one tensor
-    // Launch CUDA kernel wrapper and save its return value
-    if (mType == DataType::kFLOAT)
+    if (mHasBias)
     {
-        float const* input = static_cast<float const*>(inputs[0]);
-        float* output = static_cast<float*>(outputs[0]);
-        if (mHasBias)
-        {
-            float const* bias = static_cast<float*>(mBiasDev.get());
-            int const cols = inputVolume / mLd;
-            int const rows = mLd;
-            status = computeGeluBias(output, input, bias, rows, cols, stream);
-        }
-        else
-        {
-            status = computeGelu(stream, inputVolume, input, output);
-        }
-    }
-    else if (mType == DataType::kHALF)
-    {
-        half const* input = static_cast<half const*>(inputs[0]);
-
-        half* output = static_cast<half*>(outputs[0]);
-
-        if (mHasBias)
-        {
-            half const* bias = static_cast<half*>(mBiasDev.get());
-            int const cols = inputVolume / mLd;
-            int const rows = mLd;
-            status = computeGeluBias(output, input, bias, rows, cols, stream);
-        }
-        else
-        {
-            status = computeGelu(stream, inputVolume, input, output);
-        }
+        TDataType const* bias = static_cast<TDataType*>(mBiasDev.get());
+        return computeGeluBias(output, input, bias, rows, cols, stream);
     }
     else
     {
+        return computeGelu(stream, inputVolume, input, output);
+    }
+}
+
+int32_t GeluPluginDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
+    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
+    cudaStream_t stream) noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(inputDesc != nullptr);
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(outputs != nullptr);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
         return STATUS_FAILURE;
     }
 
-    return status;
+    int32_t const inputVolume = volume(inputDesc[0].dims);
+
+    // Our plugin outputs only one tensor.
+    // Launch CUDA kernel wrapper and save its return value.
+    switch (mType)
+    {
+    case DataType::kFLOAT: return enqueueTyped<float>(inputs[0], outputs[0], inputVolume, stream);
+    case DataType::kHALF: return enqueueTyped<half>(inputs[0], outputs[0], inputVolume, stream);
+    default: return STATUS_FAILURE;
+    }
 }
 
 // IPluginV2Ext Methods
 nvinfer1::DataType GeluPluginDynamic::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    PLUGIN_ASSERT(index == 0);
-    PLUGIN_ASSERT(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
-    return inputTypes[0];
+    try
+    {
+        PLUGIN_VALIDATE(index == 0);
+        PLUGIN_VALIDATE(inputTypes != nullptr);
+        PLUGIN_VALIDATE(inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF);
+        return inputTypes[0];
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return DataType{};
 }
 
 // IPluginV2 Methods
@@ -197,12 +237,12 @@ char const* GeluPluginDynamic::getPluginVersion() const noexcept
     return kGELU_PLUGIN_VERSION;
 }
 
-int GeluPluginDynamic::getNbOutputs() const noexcept
+int32_t GeluPluginDynamic::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int GeluPluginDynamic::initialize() noexcept
+int32_t GeluPluginDynamic::initialize() noexcept
 {
     gLogVerbose << "GeluPluginDynamic initalize\n";
     return 0;
@@ -243,7 +283,15 @@ void GeluPluginDynamic::destroy() noexcept
 
 void GeluPluginDynamic::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 char const* GeluPluginDynamic::getPluginNamespace() const noexcept
@@ -283,6 +331,7 @@ IPluginV2* GeluPluginDynamicCreator::createPlugin(char const* name, PluginFieldC
     try
     {
         gLogVerbose << "GeluPluginDynamicCreator createPlugin\n";
+        PLUGIN_VALIDATE(fc != nullptr);
 
         Weights bias{DataType::kFLOAT, nullptr, 0};
         int32_t typeId = -1;
@@ -290,13 +339,14 @@ IPluginV2* GeluPluginDynamicCreator::createPlugin(char const* name, PluginFieldC
 
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string field_name(fc->fields[i].name);
+            PLUGIN_VALIDATE(fc->fields[i].name != nullptr);
+            std::string fieldName(fc->fields[i].name);
 
-            if (field_name.compare("type_id") == 0)
+            if (fieldName.compare("type_id") == 0)
             {
                 typeId = *static_cast<int32_t const*>(fc->fields[i].data);
             }
-            if (field_name.compare("bias") == 0)
+            if (fieldName.compare("bias") == 0)
             {
                 bias.values = fc->fields[i].data;
                 bias.count = fc->fields[i].length;
@@ -337,7 +387,15 @@ IPluginV2* GeluPluginDynamicCreator::deserializePlugin(
 
 void GeluPluginDynamicCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
-    mNamespace = libNamespace;
+    try
+    {
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 char const* GeluPluginDynamicCreator::getPluginNamespace() const noexcept

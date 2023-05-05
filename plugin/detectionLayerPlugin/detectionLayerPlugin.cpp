@@ -253,14 +253,18 @@ DetectionLayer::DetectionLayer(void const* data, size_t length)
     mType = DataType::kFLOAT;
 }
 
-bool DetectionLayer::checkValidInputs(nvinfer1::Dims const* inputs, int32_t nbInputDims)
+void DetectionLayer::checkValidInputs(nvinfer1::Dims const* inputs, int32_t nbInputDims)
 {
     // classifier_delta_bbox[N, anchors, num_classes*4, 1, 1]
     // classifier_class[N, anchors, num_classes, 1, 1]
     // rpn_rois[N, anchors, 4]
-    return (nbInputDims != 3) && (inputs[0].nbDims == 4 && inputs[0].d[1] == mNbClasses * 4) && // delta_bbox
-        (inputs[1].nbDims == 4 && inputs[1].d[1] == mNbClasses) &&                              // score
-        (inputs[2].nbDims == 2 && inputs[2].d[1] == 4);                                         // roi
+    PLUGIN_VALIDATE(nbInputDims == 3);
+    // delta_bbox
+    PLUGIN_VALIDATE(inputs[0].nbDims == 4 && inputs[0].d[1] == mNbClasses * 4);
+    // score
+    PLUGIN_VALIDATE(inputs[1].nbDims == 4 && inputs[1].d[1] == mNbClasses);
+    // roi
+    PLUGIN_VALIDATE(inputs[2].nbDims == 2 && inputs[2].d[1] == 4);
 }
 
 size_t DetectionLayer::getWorkspaceSize(int32_t batchSize) const noexcept
@@ -271,13 +275,18 @@ size_t DetectionLayer::getWorkspaceSize(int32_t batchSize) const noexcept
 
 Dims DetectionLayer::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
-    if (!(checkValidInputs(inputs, nbInputDims) && (index == 0)))
+    try
     {
-        return Dims{};
+        checkValidInputs(inputs, nbInputDims);
+        PLUGIN_VALIDATE(index == 0);
+        // [N, anchors, (y1, x1, y2, x2, class_id, score)]
+        return {2, {mKeepTopK, 6}};
     }
-
-    // [N, anchors, (y1, x1, y2, x2, class_id, score)]
-    return {2, {mKeepTopK, 6}};
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return Dims{};
 }
 
 int32_t DetectionLayer::enqueue(
@@ -334,12 +343,19 @@ void DetectionLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Di
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
     bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
-    PLUGIN_ASSERT(checkValidInputs(inputDims, nbInputs));
-    PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);
+    try
+    {
+        checkValidInputs(inputDims, nbInputs);
+        PLUGIN_VALIDATE(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);
 
-    mAnchorsCnt = inputDims[2].d[0];
-    mType = inputTypes[0];
-    mMaxBatchSize = maxBatchSize;
+        mAnchorsCnt = inputDims[2].d[0];
+        mType = inputTypes[0];
+        mMaxBatchSize = maxBatchSize;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.

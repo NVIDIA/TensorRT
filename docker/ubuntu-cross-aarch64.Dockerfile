@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +16,12 @@
 #
 
 ARG CUDA_VERSION=11.4.1
-ARG OS_VERSION=20.04
 
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
+# Multi-arch container support available in non-cudnn containers.
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu20.04
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 8.6.0.12
+ENV TRT_VERSION 8.5.2
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG uid=1000
@@ -75,14 +75,16 @@ RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/
 
 # Install CUDA cross compile toolchain
 RUN dpkg -i /pdk_files/cuda-repo-cross-aarch64*.deb /pdk_files/cuda-repo-ubuntu*_amd64.deb \
+    && cp /var/cuda-repo-cross*/cuda-*-keyring.gpg /usr/share/keyrings/ \
+    && cp /var/cuda-repo-ubuntu*/cuda-*-keyring.gpg /usr/share/keyrings/ \
     && apt-get update \
     && apt-get install -y cuda-cross-aarch64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Unpack cudnn
-RUN  dpkg -x /pdk_files/cudnn-local-repo*.deb /pdk_files/cudnn_extract \
-    && dpkg -x /pdk_files/cudnn_extract/var/cudnn-local-repo*/libcudnn[7-8]_*-1+cuda11.[0-9]_arm64.deb /pdk_files/cudnn \
-    && dpkg -x /pdk_files/cudnn_extract/var/cudnn-local-repo*/libcudnn[7-8]-dev_*-1+cuda11.[0-9]_arm64.deb /pdk_files/cudnn \
+RUN  dpkg -x /pdk_files/cudnn-local-tegra-repo*.deb /pdk_files/cudnn_extract \
+    && dpkg -x /pdk_files/cudnn_extract/var/cudnn-local-tegra-repo*/libcudnn[7-8]_*-1+cuda11.[0-9]_arm64.deb /pdk_files/cudnn \
+    && dpkg -x /pdk_files/cudnn_extract/var/cudnn-local-tegra-repo*/libcudnn[7-8]-dev_*-1+cuda11.[0-9]_arm64.deb /pdk_files/cudnn \
     && cd /pdk_files/cudnn/usr/lib/aarch64-linux-gnu \
     && cd /pdk_files/cudnn \
     && ln -s usr/include/aarch64-linux-gnu include \
@@ -98,6 +100,8 @@ RUN  dpkg -x /pdk_files/cudnn-local-repo*.deb /pdk_files/cudnn_extract \
     && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_version_v[7-9].h /usr/include/cudnn_version.h
 
 # Unpack libnvinfer
+RUN dpkg -x /pdk_files/nv-tensorrt-local-repo-l4t-[0-8].[0-9].[0-9]-cuda-11.[0-9]_*_arm64.deb /pdk_files/tensorrt
+RUN mv /pdk_files/tensorrt/var/nv-tensorrt-local-repo-l4t-[0-8].[0-9].[0-9]-cuda-11.[0-9]/*.deb /pdk_files
 RUN dpkg -x /pdk_files/libnvinfer[0-8]_*-1+cuda11.[0-9]_arm64.deb /pdk_files/tensorrt \
     && dpkg -x /pdk_files/libnvinfer-dev_*-1+cuda11.[0-9]_arm64.deb /pdk_files/tensorrt \
     && dpkg -x /pdk_files/libnvparsers[6-8]_*-1+cuda11.[0-9]_arm64.deb /pdk_files/tensorrt \

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 
 from typing import Dict, List
 from functools import reduce
+from enum import Enum
 
 # polygraphy
 from polygraphy.backend.trt import engine_from_bytes, TrtRunner
@@ -28,6 +29,7 @@ from polygraphy.logger import G_LOGGER as PG_LOGGER
 
 # tensorrt
 import tensorrt as trt
+import os
 
 # ONNX
 import onnx
@@ -70,21 +72,19 @@ def set_kv_data(kv_dict, past_or_present, layer_id, segment_value_dict):
         kv_dict: Dict[str, tuple/torch.dtype], the dict to modify within the function
         past_or_present: str, either "past" or "present"
         layer_id: int, need kv cache for each decoder layer
-        segment_value_dict: Dict[str, tuple/torch.dtype], example: 
+        segment_value_dict: Dict[str, tuple/torch.dtype], example:
             kvcache type: {"encoder": torch.float32, "decoder": torch.float32}
             kvcache shape: {"encoder": cross_attention_kv_shape, "decoder": self_attention_kv_shape}
     '''
     for segment, value in segment_value_dict.items():
         for code in ['key', 'value']:
             kv_dict[f"{past_or_present}_key_values.{layer_id}.{segment}.{code}"] = value
-            
 
-def clamp_weights_onnx(onnx_input_fpath: str, onnx_output_fpath: str, min: float, max: float, ignore_nodes: List = None):
+def clamp_weights_onnx(graph, min: float, max: float, ignore_nodes: List = None):
     """
     Clamps given onnx model to targeted upper and lower bounds.
     """
 
-    graph = gs.import_onnx(onnx.load(onnx_input_fpath))
     if ignore_nodes is None:
         ignore_nodes = {}
     else:
@@ -103,24 +103,22 @@ def clamp_weights_onnx(onnx_input_fpath: str, onnx_output_fpath: str, min: float
 
         if node_attr is not None:
             np.clip(node_attr.values, min, max, out=node_attr.values)
+    
+    return graph
 
-    model = gs.export_onnx(graph)
-    onnx.save(model, onnx_output_fpath, save_as_external_data=False)
 
-
-def clamp_weights_onnx_to_fp16_bounds(onnx_input_fpath: str, onnx_output_fpath: str, ignore_nodes: List = None):
+def clamp_weights_onnx_to_fp16_bounds(graph, ignore_nodes: List = None):
     upper_bound = 65504
-    return clamp_weights_onnx(onnx_input_fpath, onnx_output_fpath, -upper_bound, upper_bound, ignore_nodes)
+    return clamp_weights_onnx(graph, -upper_bound, upper_bound, ignore_nodes)
 
 
-def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
+def move_t5_cast_op(graph):
     """
     T5 encoder and decoder have cast ops after residual add operation.
     Moving the cast operation before add helps with FP16 accuracy as addition operation
     can cause overflow in FP16.
     """
 
-    graph = gs.import_onnx(onnx.load(onnx_input_fpath))
     cast_nodes = [node for node in graph.nodes if node.op == "Cast"]
     # Version check for backward compatibility
     torch_version_major = int(torch.__version__.split('.')[0])
@@ -180,13 +178,47 @@ def move_t5_cast_op(onnx_input_fpath: str, onnx_output_fpath: str):
             n.inputs = outs
 
     graph.cleanup().toposort()
+    return graph
+
+# The current operations would require loading/unloading onnx files twice, 
+class OnnxProcessOperation(Enum):
+    CLAMP_WEIGHTS = 1
+    MOVE_CAST_OP = 2
+
+def process_onnx(config: List[OnnxProcessOperation], onnx_input_fpath, onnx_output_fpath, keep_input = False, **kwargs):
+    graph = gs.import_onnx(onnx.load(onnx_input_fpath))
+    folder = os.path.split(onnx_input_fpath)[0]
+    for op in config:
+        if op == OnnxProcessOperation.CLAMP_WEIGHTS:
+            graph = clamp_weights_onnx_to_fp16_bounds(graph, **kwargs)
+        elif op == OnnxProcessOperation.MOVE_CAST_OP:
+            graph = move_t5_cast_op(graph)
+
     model = gs.export_onnx(graph)
-    onnx.save(model, onnx_output_fpath, save_as_external_data=False)
+    folder = os.path.split(onnx_input_fpath)[0]
+    model_size = 0
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                model_size += os.stat(file_path).st_size
+                if not keep_input:
+                    os.unlink(file_path)
+                
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
+    
+    # Save the weights as external data only when model > 2GB
+    if model_size >= 1.8 * 1024 * 1024 * 1024:
+        onnx.save_model(model, onnx_output_fpath, save_as_external_data=True, all_tensors_to_one_file = False, convert_attribute=False)
+    else:
+        onnx.save_model(model, onnx_output_fpath, save_as_external_data=False)
 
 # Helper Classes
 class TRTNativeRunner:
     """TRTNativeRunner avoids the high overheads with Polygraphy runner providing performance comparable to C++ implementation."""
     def __init__(self, trt_engine_file: TRTEngineFile, network_metadata: NetworkMetadata):
+        self.network_metadata = network_metadata
         self.trt_engine_file = trt_engine_file
         self.trt_logger = trt.Logger()
 

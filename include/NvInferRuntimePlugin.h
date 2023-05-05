@@ -636,7 +636,7 @@ public:
     //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
     //!
     //! For this method inputs are numbered 0..(nbInputs-1) and outputs are numbered nbInputs..(nbInputs+nbOutputs-1).
-    //! Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs+nbOutputs-1.
+    //! Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs+nbOutputs.
     //!
     //! TensorRT invokes this method to ask if the input/output indexed by pos supports the format/datatype specified
     //! by inOut[pos].format and inOut[pos].type. The override should return true if that format/datatype at inOut[pos]

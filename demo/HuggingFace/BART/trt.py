@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -278,7 +278,7 @@ class BARTTRTDecoder(TRTHFRunner):
         # non kv-cache mode: False. Then in forward(), trt_context and bindings are set to the default ones
         # kv-cache mode: True. By default 1st decoding step starts with non-kv engine's context and binding; then flag gets updated in prepare_inputs_for_generation()
 
-        self.return_device = "cuda"
+        self.return_device = torch.device('cuda')
 
         self.variant = network_metadata.variant # record variant name to later index the vocab_size in forward()
 
@@ -806,35 +806,21 @@ class BARTTRT(TRTInferenceCommand):
         metadata: NetworkMetadata,
         encoder_input: str,
         decoder_input: str,
+        batch_size: int,
     ):
         if "mbart" not in metadata.variant:
             tokenizer = BartTokenizer.from_pretrained(metadata.variant)
         else:
             tokenizer = MBart50Tokenizer.from_pretrained(metadata.variant, src_lang="en_XX")
 
-        encoder_input_ids = tokenizer([encoder_input], padding=True, return_tensors="pt").input_ids
-        decoder_input_ids = tokenizer([decoder_input], padding=True, return_tensors="pt").input_ids
+        encoder_input_ids = tokenizer([encoder_input] * batch_size, padding=True, return_tensors="pt").input_ids
+        decoder_input_ids = tokenizer([decoder_input] * batch_size, padding=True, return_tensors="pt").input_ids
 
         perplexity = calculate_perplexity(
             self.BART_trt_encoder, self.BART_trt_decoder, tokenizer, encoder_input_ids, decoder_input_ids,
             BARTModelTRTConfig.MAX_SEQUENCE_LENGTH[metadata.variant],
         )
         return perplexity
-
-    def _setup_workspace(self, metadata: NetworkMetadata, working_directory: str) -> NNFolderWorkspace:
-        return NNFolderWorkspace(
-            self.frameworks_cmd.config.network_name, metadata, working_directory
-        )
-
-    def _download_models(
-        self,
-        workspace: NNFolderWorkspace,
-        metadata: NetworkMetadata,
-    ) -> Tuple[NetworkModel]:
-        # No fpath provided for onnx files, download them from HuggingFace repo.
-        return self.frameworks_cmd.generate_and_download_framework(
-            metadata, workspace
-        ).onnx
 
     def _setup_engines(
         self,
@@ -967,7 +953,7 @@ class BARTTRT(TRTInferenceCommand):
         if num_beams > 1:
             engine_tag += "-beam{}".format(num_beams)
 
-        preview_features = []
+        preview_features = [PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]
         if disable_preview_dynamic_shapes:
             engine_tag += "-noPreviewFasterDynamicShapes"
         else:
@@ -1080,7 +1066,7 @@ class BARTTRT(TRTInferenceCommand):
                     else:
                         for ei, di in zip(network_input, perplexity_reference):
                             ppl_results.append(
-                                self.execute_calculate_perplexity(metadata, ei, di)
+                                self.execute_calculate_perplexity(metadata, ei, di, batch_size)
                             )
 
             else:
@@ -1106,7 +1092,7 @@ class BARTTRT(TRTInferenceCommand):
                 assert benchmarking_args.output_seq_len <= benchmarking_args.output_profile_max_len, "output_seq_len should <= output_profile_max_len = {} for benchmarking mode".format(benchmarking_args.output_profile_max_len)
                 assert benchmarking_args.input_profile_max_len <= max_input_seq_len, "Model config restrict input_profile_max_len <= {} for benchmark mode".format(max_input_seq_len)
                 assert benchmarking_args.output_profile_max_len <= max_output_seq_len, "Model config restrict output_profile_max_len <= {} for benchmark mode".format(max_output_seq_len)
-
+                
                 self._setup_engines(metadata, hash_onnx_fpath, batch_size, args.num_beams, disable_preview_dynamic_shapes, benchmarking_args, seq_tag)
                 inference_results = self.execute_inference(
                     metadata, hash_onnx_fpath, None, timing_profile, batch_size, args.num_beams, True, benchmarking_args

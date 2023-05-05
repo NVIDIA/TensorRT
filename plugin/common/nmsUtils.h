@@ -23,8 +23,8 @@ namespace nvinfer1
 {
 namespace plugin
 {
-size_t detectionInferenceWorkspaceSize(bool shareLocation, int N, int C1, int C2, int numClasses, int numPredsPerClass,
-    int topK, nvinfer1::DataType DT_BBOX, nvinfer1::DataType DT_SCORE);
+size_t detectionInferenceWorkspaceSize(bool shareLocation, int32_t N, int32_t C1, int32_t C2, int32_t numClasses,
+    int32_t numPredsPerClass, int32_t topK, nvinfer1::DataType DT_BBOX, nvinfer1::DataType DT_SCORE);
 } // namespace plugin
 } // namespace nvinfer1
 #endif

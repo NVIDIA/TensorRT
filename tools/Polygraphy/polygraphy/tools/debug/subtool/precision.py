@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -211,7 +211,11 @@ class Precision(BaseCheckerSubtool):
                 has_non_execution_output = any(
                     not layer.get_output(i).is_execution_tensor for i in range(layer.num_outputs)
                 )
-                return layer.type in EXCLUDE_LAYERS or has_non_execution_output
+                has_non_activation_output = any(
+                    layer.get_output(i).dtype not in [trt.float32, trt.float16, trt.int8]
+                    for i in range(layer.num_outputs)
+                )
+                return layer.type in EXCLUDE_LAYERS or has_non_execution_output or has_non_activation_output
 
             if not should_exclude():
                 G_LOGGER.extra_verbose(f"Running layer in higher precision: {trt_util.str_from_layer(layer, index)}")

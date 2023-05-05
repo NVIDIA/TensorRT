@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -195,12 +195,7 @@ class ModelArgs(BaseArgs):
         self.extra_model_info = None
 
         self.path, self.extra_model_info = args_util.parse_script_and_func_name(args_util.get(args, "model_file"))
-
-        if self.path is not None:
-            G_LOGGER.verbose(f"Model: {self.path}")
-            if not os.path.exists(self.path):
-                G_LOGGER.warning(f"Model path does not exist: {self.path}")
-            self.path = os.path.abspath(self.path)
+        self.path = args_util.parse_path(self.path, "Model")
 
         model_type_str = self._required_model_type if self._required_model_type else determine_model_type(self.path)
         self.model_type = ModelArgs.ModelType(model_type_str) if model_type_str else None

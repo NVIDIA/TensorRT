@@ -80,9 +80,9 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& 
     deserialize_value(&data, &length, &mUseInt8ScaleMax);
 }
 
-int QKVToContextInterleavedPlugin::getSMVersion() const noexcept
+int32_t QKVToContextInterleavedPlugin::getSMVersion() const noexcept
 {
-    int device{-1};
+    int32_t device{-1};
     PLUGIN_CHECK(cudaGetDevice(&device));
     cudaDeviceProp props;
     PLUGIN_CHECK(cudaGetDeviceProperties(&props, device));
@@ -108,7 +108,7 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextInterleavedPlugin::clone() const noex
 }
 
 DimsExprs QKVToContextInterleavedPlugin::getOutputDimensions(
-    int outputIndex, DimsExprs const* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     // Input SHAPE is 1x(3*N*H)xTotalx1 (NCHW)
     // Output SHAPE is 1x(N*H)xTotalx1
@@ -124,7 +124,7 @@ DimsExprs QKVToContextInterleavedPlugin::getOutputDimensions(
     return output;
 }
 bool QKVToContextInterleavedPlugin::supportsFormatCombination(
-    int pos, PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 3);
     PLUGIN_ASSERT(nbOutputs == 1);
@@ -140,7 +140,7 @@ bool QKVToContextInterleavedPlugin::supportsFormatCombination(
 
     if (pos == 1)
     {
-        // cuSeqlens is a int array of size B+1
+        // cuSeqlens is a int32_t array of size B+1
         auto const* seqlens = &inOut[pos];
         return (seqlens->type == DataType::kINT32) && (seqlens->format == TensorFormat::kLINEAR);
     }
@@ -153,19 +153,19 @@ bool QKVToContextInterleavedPlugin::supportsFormatCombination(
 }
 
 void QKVToContextInterleavedPlugin::configurePlugin(
-    DynamicPluginTensorDesc const* in, int nbInputs, DynamicPluginTensorDesc const* out, int nbOutputs) noexcept
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
 }
 
 size_t QKVToContextInterleavedPlugin::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int nbInputs, PluginTensorDesc const* outputs, int nbOutputs) const noexcept
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
     return 0;
 }
 
 // IPluginV2Ext Methods
 DataType QKVToContextInterleavedPlugin::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return DataType::kINT8;
@@ -182,12 +182,12 @@ char const* QKVToContextInterleavedPlugin::getPluginVersion() const noexcept
     return kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION;
 }
 
-int QKVToContextInterleavedPlugin::getNbOutputs() const noexcept
+int32_t QKVToContextInterleavedPlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int QKVToContextInterleavedPlugin::initialize() noexcept
+int32_t QKVToContextInterleavedPlugin::initialize() noexcept
 {
     return 0;
 }
@@ -227,14 +227,14 @@ char const* QKVToContextInterleavedPlugin::getPluginNamespace() const noexcept
     return mNamespace.c_str();
 }
 
-int QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
-    int const total = inputDesc[0].dims.d[2];
-    int const B = inputDesc[1].dims.d[0] - 1;
-    int const maxS = inputDesc[2].dims.d[0];
-    int S = 384;
+    int32_t const total = inputDesc[0].dims.d[2];
+    int32_t const B = inputDesc[1].dims.d[0] - 1;
+    int32_t const maxS = inputDesc[2].dims.d[0];
+    int32_t S = 384;
     if (maxS <= 128)
     {
         S = 128;
@@ -257,7 +257,7 @@ int QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc, Pl
 
     params.o_ptr = outputs[0];
     params.qkv_ptr = const_cast<void*>(inputs[0]);
-    params.cu_seqlens = static_cast<int*>(const_cast<void*>(inputs[1]));
+    params.cu_seqlens = static_cast<int32_t*>(const_cast<void*>(inputs[1]));
 
     float scaleQkv = inputDesc[0].scale;
     float scaleCtx = outputDesc[0].scale;

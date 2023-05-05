@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +51,7 @@ class GPT2Metadata(_GPT2Metadata, MetadataArgparseInteropMixin):
         network_group.add_argument(
             "--num-beams", type=int, default=1, help="Enables beam search during decoding."
         )
-
+        
         network_group.add_argument(
             "--fp16", action="store_true", help="Enables fp16 TensorRT tactics."
         )

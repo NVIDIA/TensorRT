@@ -37,7 +37,7 @@ class LogStream : public std::ostream
     class Buf : public std::stringbuf
     {
     public:
-        int sync() override;
+        int32_t sync() override;
     };
 
     Buf buffer;
@@ -87,23 +87,23 @@ extern LogStream<ILogger::Severity::kWARNING> gLogWarning;
 extern LogStream<ILogger::Severity::kINFO> gLogInfo;
 extern LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
-void reportValidationFailure(char const* msg, char const* file, int line);
-void reportAssertion(char const* msg, char const* file, int line);
-void logError(char const* msg, char const* file, char const* fn, int line);
+void reportValidationFailure(char const* msg, char const* file, int32_t line);
+void reportAssertion(char const* msg, char const* file, int32_t line);
+void logError(char const* msg, char const* file, char const* fn, int32_t line);
 
 [[noreturn]] void throwCudaError(
-    char const* file, char const* function, int line, int status, char const* msg = nullptr);
+    char const* file, char const* function, int32_t line, int32_t status, char const* msg = nullptr);
 [[noreturn]] void throwCudnnError(
-    char const* file, char const* function, int line, int status, char const* msg = nullptr);
+    char const* file, char const* function, int32_t line, int32_t status, char const* msg = nullptr);
 [[noreturn]] void throwCublasError(
-    char const* file, char const* function, int line, int status, char const* msg = nullptr);
+    char const* file, char const* function, int32_t line, int32_t status, char const* msg = nullptr);
 [[noreturn]] void throwPluginError(
-    char const* file, char const* function, int line, int status, char const* msg = nullptr);
+    char const* file, char const* function, int32_t line, int32_t status, char const* msg = nullptr);
 
 class TRTException : public std::exception
 {
 public:
-    TRTException(char const* fl, char const* fn, int ln, int st, char const* msg, char const* nm)
+    TRTException(char const* fl, char const* fn, int32_t ln, int32_t st, char const* msg, char const* nm)
         : file(fl)
         , function(fn)
         , line(ln)
@@ -121,8 +121,8 @@ public:
 protected:
     char const* file{nullptr};
     char const* function{nullptr};
-    int line{0};
-    int status{0};
+    int32_t line{0};
+    int32_t status{0};
     char const* message{nullptr};
     char const* name{nullptr};
 };
@@ -130,7 +130,7 @@ protected:
 class CudaError : public TRTException
 {
 public:
-    CudaError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
+    CudaError(char const* fl, char const* fn, int32_t ln, int32_t stat, char const* msg = nullptr)
         : TRTException(fl, fn, ln, stat, msg, "Cuda")
     {
     }
@@ -139,7 +139,7 @@ public:
 class CudnnError : public TRTException
 {
 public:
-    CudnnError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
+    CudnnError(char const* fl, char const* fn, int32_t ln, int32_t stat, char const* msg = nullptr)
         : TRTException(fl, fn, ln, stat, msg, "Cudnn")
     {
     }
@@ -148,7 +148,7 @@ public:
 class CublasError : public TRTException
 {
 public:
-    CublasError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
+    CublasError(char const* fl, char const* fn, int32_t ln, int32_t stat, char const* msg = nullptr)
         : TRTException(fl, fn, ln, stat, msg, "cuBLAS")
     {
     }
@@ -157,7 +157,7 @@ public:
 class PluginError : public TRTException
 {
 public:
-    PluginError(char const* fl, char const* fn, int ln, int stat, char const* msg = nullptr)
+    PluginError(char const* fl, char const* fn, int32_t ln, int32_t stat, char const* msg = nullptr)
         : TRTException(fl, fn, ln, stat, msg, "Plugin")
     {
     }
@@ -189,9 +189,9 @@ inline void caughtError(std::exception const& e)
         }                                                                                                              \
     }
 
-#define PLUGIN_API_CHECK_ENUM_RANGE(Type, val) PLUGIN_API_CHECK(int(val) >= 0 && int(val) < EnumMax<Type>())
+#define PLUGIN_API_CHECK_ENUM_RANGE(Type, val) PLUGIN_API_CHECK(int32_t(val) >= 0 && int32_t(val) < EnumMax<Type>())
 #define PLUGIN_API_CHECK_ENUM_RANGE_RETVAL(Type, val, retval)                                                          \
-    PLUGIN_API_CHECK_RETVAL(int(val) >= 0 && int(val) < EnumMax<Type>(), retval)
+    PLUGIN_API_CHECK_RETVAL(int32_t(val) >= 0 && int32_t(val) < EnumMax<Type>(), retval)
 
 #define PLUGIN_CHECK_CUDA(call)                                                                                        \
     do                                                                                                                 \

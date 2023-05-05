@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -288,7 +288,7 @@ class TestSurgeonSanitize:
         no_onnxruntime_shape_inference,
     ):
         with util.NamedTemporaryFile() as outmodel:
-            cmd = ["sanitize", ONNX_MODELS["const_foldable"].path, "-o", outmodel.name, "--fold-constants"]
+            cmd = ["sanitize", ONNX_MODELS["const_foldable"].path, "-o", outmodel.name, "--fold-constants", "-v"]
             if fold_shapes:
                 cmd += [fold_shapes]
             if partitioning:
@@ -299,13 +299,52 @@ class TestSurgeonSanitize:
                 cmd += [no_onnxruntime_shape_inference]
             status = poly_surgeon(cmd)
 
-            assert ("Inferring shapes in the model with `onnxruntime.tools.symbolic_shape_infer`" in status.stdout) == (
+            assert ("Inferred shapes in the model with `onnxruntime.tools.symbolic_shape_infer`" in status.stdout) == (
                 no_onnxruntime_shape_inference is None
             )
 
             onnx_model_sanity_check(outmodel.name)
             model = onnx.load(outmodel.name)
             assert len(model.graph.node) == 1
+
+    @pytest.mark.parametrize("global_upper_bound", [None, "2000"])
+    @pytest.mark.parametrize("specified_upper_bound", [None, "cast_out_6:4000"])
+    def test_set_upper_bound(
+        self,
+        poly_surgeon,
+        global_upper_bound,
+        specified_upper_bound,
+        onnx_model_sanity_check
+    ):
+        with util.NamedTemporaryFile() as outmodel:
+            cmd = ["sanitize", ONNX_MODELS["unbounded_dds"].path, "-o", outmodel.name, "--set-unbounded-dds-upper-bound"]
+            upper_bound = "1000"
+            if global_upper_bound:
+                upper_bound = "2000"
+                cmd += [global_upper_bound]
+            if specified_upper_bound:
+                upper_bound = "4000"
+                cmd += [specified_upper_bound]
+            if global_upper_bound is None and specified_upper_bound is None:
+                cmd += [upper_bound]
+            poly_surgeon(cmd)
+
+            onnx_model_sanity_check(outmodel.name)
+            graph = gs.import_onnx(onnx.load(outmodel.name))
+
+            # Check if there is a Min operator in the modified model
+            find_min = False
+            for node in graph.nodes:
+                if node.op == 'Min':
+                    find_min = True
+                    # Check if the Min operator's second input is a constant tensor
+                    assert isinstance(node.inputs[1], gs.Constant)
+
+                    val = node.inputs[1].values
+                    # Check if the constant value equals the target upper bound
+                    assert str(val) == upper_bound
+            assert (find_min)
+
 
     def test_fold_constants_single_pass(self, poly_surgeon, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:

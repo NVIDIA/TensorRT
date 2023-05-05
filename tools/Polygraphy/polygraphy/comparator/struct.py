@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -118,7 +118,7 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
                     If this is omitted, a default name is generated.
         """
         if outputs and config.ARRAY_SWAP_THRESHOLD_MB < 0:
-            total_size_gb = sum(arr.nbytes for arr in outputs.values() if isinstance(arr, np.ndarray)) / (1024.0 ** 3)
+            total_size_gb = sum(arr.nbytes for arr in outputs.values() if isinstance(arr, np.ndarray)) / (1024.0**3)
             if total_size_gb >= 1:
                 G_LOGGER.warning(
                     f"It looks like the outputs of this network are very large ({total_size_gb:.3f} GiB).\n"

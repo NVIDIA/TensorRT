@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,11 +24,9 @@ class BaseLoader:
     Base class for Polygraphy Loaders.
     """
 
+    # Implementation for ``__call__``. Derived classes should implement this
+    # method rather than ``__call__``.
     def call_impl(self, *args, **kwargs):
-        """
-        Implementation for ``__call__``. Derived classes should implement this
-        method rather than ``__call__``.
-        """
         raise NotImplementedError("BaseLoader is an abstract class")
 
     @func.constantmethod

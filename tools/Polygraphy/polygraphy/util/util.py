@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,9 @@
 #
 import contextlib
 import copy
+import functools
 import glob
+import inspect
 import math
 import os
 import sys
@@ -118,14 +120,14 @@ def check_sequence_contains(
     if check_missing and missing:
         log_func(
             f"The following {items_name} were not found in {name}: {missing}.\n"
-            f"Note: All {items_name} are: {items}, but {items_name} provided were: {sequence}"
+            f"Note: {items_name} requested were: {items}, but all {items_name} are: {sequence}"
         )
 
     extra = sequence - items
     if check_extra and extra:
         log_func(
             f"Extra {items_name} in {name}: {extra}.\n"
-            f"Note: All {items_name} are: {items}, but {items_name} provided were: {sequence}"
+            f"Note: {items_name} requested were: {items}, but all {items_name} are: {sequence}"
         )
 
     return missing, extra
@@ -200,7 +202,7 @@ def unique_list(sequence):
 # >>> y.value
 # ['SHOULD NOT BE IN Y']
 #
-# If we rewrite the class using default value:
+# If we rewrite the class using `default()`:
 #
 # class MyClass:
 #     def __init__(self, value=None):
@@ -663,6 +665,39 @@ def invoke_if_callable(func, *args, **kwargs):
     return func, False
 
 
+@mod.export()
+def check_called_by(expected_caller_name):
+    """
+    Decorator that checks whether a callable was called by a
+    particular function and emits a warning if not.
+
+    Args:
+        func (Callable): The callable to check.
+        expected_caller_name (str): The expected name of the caller.
+    """
+
+    def check_called_by_impl(func):
+        @functools.wraps(func)
+        def wrapped(*args, **kwargs):
+
+            # Skip checks if we're calling these functions internally
+            module = inspect.getmodule(sys._getframe(1))
+            called_from_polygraphy = module.__name__ and module.__name__.split(".")[0] == "polygraphy"
+
+            if not called_from_polygraphy:
+                actual_caller_name = sys._getframe(1).f_code.co_name
+                if actual_caller_name != expected_caller_name:
+                    G_LOGGER.warning(
+                        f"Calling '{func.__qualname__}()' directly is not recommended. Please use '{expected_caller_name}()' instead.",
+                    )
+
+            return func(*args, **kwargs)
+
+        return wrapped
+
+    return check_called_by_impl
+
+
 ##
 ## Shapes
 ##
@@ -1049,3 +1084,18 @@ def getattr_nested(obj, attr):
     for typ in attr.split("."):
         obj = getattr(obj, typ)
     return obj
+
+
+@mod.export()
+def try_getattr(obj, attr, default=None):
+    """
+    Gets an attribute if it exists, otherwise returns a default value.
+
+    Args:
+        obj: The object from which to try to get the attribute.
+        attr (str): The name of the attribute.
+        default (obj): The default value to return if the argument is not found. Defaults to None.
+    """
+    if hasattr(obj, attr):
+        return getattr(obj, attr)
+    return default

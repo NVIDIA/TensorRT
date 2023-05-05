@@ -23,9 +23,9 @@ namespace detail
 {
 
 // Count leading zeros - start from most significant bit.
-int clz(int x)
+int32_t clz(int32_t x)
 {
-    for (int i = 31; i >= 0; --i)
+    for (int32_t i = 31; i >= 0; --i)
     {
         if ((1U << i) & x)
         {
@@ -37,9 +37,9 @@ int clz(int x)
 
 #define CUDNN_IS_POW_2(x) (0 == ((x) & ((x) -1)))
 
-int find_log_2(int x, bool round_up = false)
+int32_t find_log_2(int32_t x, bool round_up = false)
 {
-    int a = 31 - clz(x);
+    int32_t a = 31 - clz(x);
     if (round_up)
     {
         a += !CUDNN_IS_POW_2(x);
@@ -47,7 +47,7 @@ int find_log_2(int x, bool round_up = false)
     return a;
 }
 
-void findDivisor(int denom, unsigned int& mul_coeff, unsigned int& shift_coeff)
+void findDivisor(int32_t denom, uint32_t& mul_coeff, uint32_t& shift_coeff)
 {
     if (denom == 0)
     {
@@ -56,7 +56,7 @@ void findDivisor(int denom, unsigned int& mul_coeff, unsigned int& shift_coeff)
     if (denom == 1)
     {
         // if dividing by 1, reduced math doesn't work because mul_coeff would
-        // need to be 2^32, which doesn't fit into unsigned int.  the div()
+        // need to be 2^32, which doesn't fit into uint32_t.  the div()
         // routine handles this special case separately.
         mul_coeff = 0;
         shift_coeff = 0;

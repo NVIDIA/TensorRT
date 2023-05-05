@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,7 @@ class ReplaceReshapeArgs(BaseArgs):
     #   The description should answer the question: "What is this argument group responsible for?".
     #
     # - If our argument group depends on other argument groups, we must also add a `Depends on:` section
-    #   enumerating our dependencies.
+    #   listing our dependencies.
     #
     # See the `BaseArgs` docstring for more details on the expected format.
     #
@@ -70,6 +70,9 @@ class ReplaceReshapeArgs(BaseArgs):
     # Next, we'll implement parsing code for the arguments we added.
     # This will allow our argument group to be used by other argument groups.
     def parse_impl(self, args):
+        # The docstring for `parse_impl` must document which attributes it populates.
+        # These attributes are considered part of the public interface of the argument group
+        # and may be used by other argument groups and/or command-line tools.
         """
         Parses command-line arguments and populates the following attributes:
 

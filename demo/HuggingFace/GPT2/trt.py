@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -122,7 +122,7 @@ class GPT2TRTDecoder(TRTHFRunner):
     ):
         super().__init__(trt_engine_file, network_metadata, hf_config, batch_size = batch_size)
         self.network_metadata = network_metadata
-        self.data_type = torch.float32
+        self.data_type = torch.float32 if not network_metadata.precision.fp16 else torch.float16
         # In benchmarking mode, if input_profile_max is provided, should use that as max_sequence_length
         if benchmarking_args is not None:
             if benchmarking_args.input_profile_max_len is not None:
@@ -153,7 +153,7 @@ class GPT2TRTDecoder(TRTHFRunner):
 
         if self.config.use_cache:
             self.bindings[self.trt_engine.get_binding_index("logits") + self.num_bindings] = self.logits.data_ptr()
-
+            
             # Setting input and output the same does not work for GPT2. Needs separate cache and copy the memory address after each iteration
             self.self_attention_cache_1 = {}
             self.self_attention_cache_2 = {}
@@ -172,9 +172,9 @@ class GPT2TRTDecoder(TRTHFRunner):
 
                     input_idx = self.trt_engine.get_binding_index("past_" + self_attention_name)
                     output_idx = self.trt_engine.get_binding_index("present_" + self_attention_name)
-
+                    
                     self.bindings[input_idx] = kv_buffer_1.data_ptr() # Generation phase
-                    self.bindings[output_idx] = kv_buffer_2.data_ptr()
+                    self.bindings[output_idx] = kv_buffer_2.data_ptr()  
 
                     # Context mode will always use buffer 1 as output
                     self.bindings[input_idx + self.num_bindings] = 0 # Context phase, should be 0
@@ -184,17 +184,17 @@ class GPT2TRTDecoder(TRTHFRunner):
             self.past_decoder_length = 0
             self.use_cache_1_as_input = True
             self._set_context_mode_trt_context()
-
+        
         self.context_mode = self.config.use_cache
-        self.return_device = "cuda"
-        self.device = "cuda"
+        self.return_device = torch.device('cuda')
+        self.device = torch.device('cuda')
 
     def reset(self):
         '''
         Resets the input specific fields after finishing a task.
         '''
         self.context_mode = self.config.use_cache
-
+    
     def _switch_input_output_binding(self):
         '''
         For kv cache mode, switch input and output pointers to avoid data concurrency issue and D2D copy
@@ -212,7 +212,7 @@ class GPT2TRTDecoder(TRTHFRunner):
                     self.bindings[output_idx] = self.bindings[input_idx]
                     self.bindings[input_idx] = temp
             self.use_cache_1_as_input = not self.use_cache_1_as_input
-
+ 
     def prepare_inputs_for_generation(self, input_ids, past = None, use_cache = None, **kwargs):
         # TODO: add position_ids, token_type_ids support
         if past is not None:
@@ -220,7 +220,7 @@ class GPT2TRTDecoder(TRTHFRunner):
             self.context_mode = False
         else:
             self.context_mode = self.config.use_cache
-
+        
         return {
             "input_ids": input_ids,
             "past_key_values": past,
@@ -244,7 +244,7 @@ class GPT2TRTDecoder(TRTHFRunner):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past
         )
-
+    
     def _set_context_mode_trt_context(self):
         # Create TRT context for context mode (1st decoder run) with optimization profile = 1
         self.context_trt_context = self.trt_engine.create_execution_context()
@@ -260,7 +260,7 @@ class GPT2TRTDecoder(TRTHFRunner):
 
         if is_cpu_mode:
             input_ids = input_ids.int().cuda()
-
+        
         # Set the binding shape of input_ids, which should be (bs, input_length).
         if not self.context_mode:
             self.bindings[0] = input_ids.int().data_ptr()
@@ -269,7 +269,7 @@ class GPT2TRTDecoder(TRTHFRunner):
             self.bindings[self.num_bindings] = input_ids.int().data_ptr()
             self.context_trt_context.set_binding_shape(self.num_bindings, input_ids.shape)
 
-        if self.config.use_cache:
+        if self.config.use_cache:            
             if self.context_mode:
                 self.past_decoder_length = 0
 
@@ -284,7 +284,7 @@ class GPT2TRTDecoder(TRTHFRunner):
                     # Optimization Profile 0 is context phase with kv inputs
                     self.context_trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i + self.num_bindings, self_attention_kv_shape)
                     self.context_trt_context.set_binding_shape(self.kv_cache_binding_offset+2*i + 1 + self.num_bindings, self_attention_kv_shape)
-
+                    
         # Launch TRT inference.
         if not self.context_mode:
             assert self.trt_context.all_binding_shapes_specified
@@ -292,7 +292,7 @@ class GPT2TRTDecoder(TRTHFRunner):
         else:
             assert self.context_trt_context.all_binding_shapes_specified
             self.context_trt_context.execute_v2(bindings=self.bindings)
-
+        
         # For bs > 1, this is required, so cannnot avoid this D2D copy
         logits_length = bs * input_length * self.config.vocab_size
         logits = self.logits.flatten()[:logits_length].view(bs, input_length, self.config.vocab_size)
@@ -306,7 +306,7 @@ class GPT2TRTDecoder(TRTHFRunner):
 
             present_key_values = ()
             self_attention_cache = self.self_attention_cache_1 if self.use_cache_1_as_input or (self.profile_idx == 0) else self.self_attention_cache_2
-
+            
             for i in range(self.num_decoder_layers):
 
                 self_attention_k_output = self_attention_cache[f"key_values.{i}.decoder.key"]
@@ -316,7 +316,7 @@ class GPT2TRTDecoder(TRTHFRunner):
                     self_attention_k_output = self_attention_k_output.cpu()
                     self_attention_v_output = self_attention_v_output.cpu()
 
-                present_key_values += ((self_attention_k_output, self_attention_v_output),)
+                present_key_values += ((self_attention_k_output, self_attention_v_output),) 
 
             self._switch_input_output_binding()
         return CausalLMOutputWithPast(logits=logits.to(self.return_device), past_key_values = present_key_values)
@@ -343,6 +343,33 @@ class GPT2TRT(TRTInferenceCommand):
             self.gpt2_trt_engine.cleanup()
 
         self.frameworks_cmd.cleanup(workspace, keep_onnx_model, keep_torch_model)
+
+    def generate(
+        self,
+        input_ids,
+        min_length: int = None,
+        max_length: int = None,
+        num_beams: int = 1,
+        use_cache: bool = False,
+        early_stopping: bool = True,
+    ):
+        if max_length is None:
+            max_length = GPT2ModelTRTConfig.MAX_OUTPUT_LENGTH[self.metadata.variant]
+
+        if min_length is None:
+            min_length = GPT2ModelTRTConfig.MIN_OUTPUT_LENGTH[self.metadata.variant]
+
+        output = self.gpt2_trt.generate(
+            input_ids,
+            max_length=max_length,
+            min_length=min_length,
+            num_beams=num_beams,
+            use_cache=use_cache,
+            early_stopping=early_stopping
+        )
+
+        self.gpt2_trt.reset()
+        return output
 
     def execute_inference(
         self,
@@ -379,7 +406,7 @@ class GPT2TRT(TRTInferenceCommand):
             timing_profile,
             use_cache = metadata.other.kv_cache,
         )
-
+        
         # get complete decoder inference result and its timing profile
         sample_output, full_e2e_runtime = full_inference(
             self.gpt2_trt,
@@ -439,6 +466,7 @@ class GPT2TRT(TRTInferenceCommand):
         self,
         metadata: NetworkMetadata,
         reference: str,
+        batch_size: int, 
     ):
         tokenizer = GPT2Tokenizer.from_pretrained(metadata.variant)
 
@@ -446,7 +474,7 @@ class GPT2TRT(TRTInferenceCommand):
         # replace with EOS token when using generating mode
         tokenizer.add_special_tokens({"pad_token": "[PAD]"})
         reference = reference.replace("\\n", "\n")
-        ppl_input_ids = tokenizer([reference], padding=False, return_tensors="pt").input_ids
+        ppl_input_ids = tokenizer([reference] * batch_size, padding=False, return_tensors="pt").input_ids
 
         perplexity = calculate_perplexity(
             self.gpt2_trt, ppl_input_ids, GPT2ModelTRTConfig.MAX_LENGTH[metadata.variant]
@@ -495,7 +523,7 @@ class GPT2TRT(TRTInferenceCommand):
             max_output_length = benchmarking_args.output_profile_max_len
             opt_input_seq_len = benchmarking_args.input_seq_len
             opt_output_seq_len = benchmarking_args.output_seq_len
-
+        
         if not hf_config.use_cache:
             # If not using kv cache, only input_ids is passed
             decoder_profiles = [Profile().add(
@@ -531,7 +559,7 @@ class GPT2TRT(TRTInferenceCommand):
                 opt=(batch_size * num_beams, 1),
                 max=(batch_size * num_beams, 1),
             )
-
+            
             self_attention_profile_generation = {
                 "min": (batch_size * num_beams, num_heads, 1, embedding_size_per_head),
                 "opt": (batch_size * num_beams, num_heads, opt_output_seq_len - 1, embedding_size_per_head),
@@ -554,11 +582,11 @@ class GPT2TRT(TRTInferenceCommand):
                     f"past_key_values.{i}.decoder.value",
                     **self_attention_profile_generation
                 )
-
+            
             # TensorRT accepts multiple optimization engines for the same model.
             # Profile 1 is only used in the first decoder iterations.
             decoder_profiles = [dec_profiles_generation, dec_profiles_context]
-
+        
         # Convert ONNX models to TRT engines.
         if benchmarking_args is None:
             engine_tag = "bs{}".format(batch_size)
@@ -572,12 +600,12 @@ class GPT2TRT(TRTInferenceCommand):
         if num_beams > 1:
             engine_tag += "-beam{}".format(num_beams)
 
-        preview_features = []
+        preview_features = [PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]
         if disable_preview_dynamic_shapes:
             engine_tag += "-noPreviewFasterDynamicShapes"
         else:
             preview_features.append(PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)
-
+        
         self.gpt2_trt_engine = GPT2ONNXFile(
             decoder_onnx_fpath, metadata
         ).as_trt_engine(
@@ -606,15 +634,11 @@ class GPT2TRT(TRTInferenceCommand):
         perplexity_reference: List[str] = None,
     ) -> Union[List[NetworkResult], BenchmarkingResult]:
 
-        workspace = NNFolderWorkspace(
-            self.frameworks_cmd.config.network_name, metadata, working_directory
-        )
+        workspace = self._setup_workspace(metadata, working_directory)
 
         # no fpath provided for onnx files, download them
         if len(onnx_fpaths) == 0:
-            onnx_fpaths = self.frameworks_cmd.generate_and_download_framework(
-                metadata, workspace
-            ).onnx
+            onnx_fpaths = self._download_models(workspace, metadata)
         else:
             keep_onnx_model = True
             keep_torch_model = True
@@ -642,7 +666,7 @@ class GPT2TRT(TRTInferenceCommand):
                     else:
                         for r in perplexity_reference:
                             ppl_results.append(
-                                self.execute_calculate_perplexity(metadata, r)
+                                self.execute_calculate_perplexity(metadata, r, batch_size)
                             )
             else:
                 hf_config = AutoConfig.from_pretrained(metadata.variant, use_cache = metadata.other.kv_cache)

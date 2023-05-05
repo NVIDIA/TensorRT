@@ -108,7 +108,7 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(
     return nullptr;
 }
 
-MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, nvinfer1::Dims const& imageSize)
+MultilevelCropAndResize::MultilevelCropAndResize(int32_t pooled_size, nvinfer1::Dims const& imageSize)
     : mPooledSize({pooled_size, pooled_size})
 {
 
@@ -122,12 +122,12 @@ MultilevelCropAndResize::MultilevelCropAndResize(int pooled_size, nvinfer1::Dims
     mThresh = (224 * 224) / (4.0F);
 }
 
-int MultilevelCropAndResize::getNbOutputs() const noexcept
+int32_t MultilevelCropAndResize::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int MultilevelCropAndResize::initialize() noexcept
+int32_t MultilevelCropAndResize::initialize() noexcept
 {
     return 0;
 }
@@ -139,7 +139,7 @@ void MultilevelCropAndResize::destroy() noexcept
     delete this;
 }
 
-size_t MultilevelCropAndResize::getWorkspaceSize(int) const noexcept
+size_t MultilevelCropAndResize::getWorkspaceSize(int32_t) const noexcept
 {
     return 0;
 }
@@ -182,7 +182,7 @@ char const* MultilevelCropAndResize::getPluginNamespace() const noexcept
     return mNameSpace.c_str();
 }
 
-void MultilevelCropAndResize::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims) noexcept
+void MultilevelCropAndResize::check_valid_inputs(nvinfer1::Dims const* inputs, int32_t nbInputDims) noexcept
 {
     // to be compatible with tensorflow node's input:
     // roi: [N, anchors, 4],
@@ -193,7 +193,7 @@ void MultilevelCropAndResize::check_valid_inputs(nvinfer1::Dims const* inputs, i
     PLUGIN_ASSERT(rois.nbDims == 2);
     PLUGIN_ASSERT(rois.d[1] == 4);
 
-    for (int i = 1; i < nbInputDims; ++i)
+    for (int32_t i = 1; i < nbInputDims; ++i)
     {
         nvinfer1::Dims dims = inputs[i];
 
@@ -202,7 +202,7 @@ void MultilevelCropAndResize::check_valid_inputs(nvinfer1::Dims const* inputs, i
     }
 }
 
-Dims MultilevelCropAndResize::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims MultilevelCropAndResize::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
 
     check_valid_inputs(inputs, nbInputDims);
@@ -241,7 +241,8 @@ int32_t MultilevelCropAndResize::enqueue(
 
 size_t MultilevelCropAndResize::getSerializationSize() const noexcept
 {
-    return sizeof(int) * 2 + sizeof(int) * 4 + sizeof(float) + sizeof(int) * 2 * mFeatureMapCount + sizeof(DataType);
+    return sizeof(int32_t) * 2 + sizeof(int32_t) * 4 + sizeof(float) + sizeof(int32_t) * 2 * mFeatureMapCount
+        + sizeof(DataType);
 }
 
 void MultilevelCropAndResize::serialize(void* buffer) const noexcept
@@ -254,7 +255,7 @@ void MultilevelCropAndResize::serialize(void* buffer) const noexcept
     write(d, mInputHeight);
     write(d, mInputWidth);
     write(d, mThresh);
-    for (int i = 0; i < mFeatureMapCount; i++)
+    for (int32_t i = 0; i < mFeatureMapCount; i++)
     {
         write(d, mFeatureSpatialSize[i].y);
         write(d, mFeatureSpatialSize[i].x);
@@ -276,7 +277,7 @@ void MultilevelCropAndResize::deserialize(int8_t const* data, size_t length)
     mInputHeight = read<int32_t>(d);
     mInputWidth = read<int32_t>(d);
     mThresh = read<float>(d);
-    for (int i = 0; i < mFeatureMapCount; i++)
+    for (int32_t i = 0; i < mFeatureMapCount; i++)
     {
         mFeatureSpatialSize[i].y = read<int32_t>(d);
         mFeatureSpatialSize[i].x = read<int32_t>(d);
@@ -287,7 +288,7 @@ void MultilevelCropAndResize::deserialize(int8_t const* data, size_t length)
 
 // Return the DataType of the plugin output at the requested index
 DataType MultilevelCropAndResize::getOutputDataType(
-    int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     // return DataType::kFLOAT;
@@ -300,21 +301,21 @@ DataType MultilevelCropAndResize::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool MultilevelCropAndResize::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool MultilevelCropAndResize::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool MultilevelCropAndResize::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims,
-    int nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(supportsFormat(inputTypes[0], floatFormat));
     check_valid_inputs(inputDims, nbInputs);

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -70,6 +70,37 @@ def tile(self, inp, repeats):
 @gs.Graph.register()
 def nonzero(self, inp):
     return self.layer(op="NonZero", inputs=[inp], outputs=["nonzero_out"])[0]
+
+
+# Name range as onnx_range as range is a python built-in function.
+@gs.Graph.register()
+def onnx_range(self, start, limit, delta, **kwargs):
+    return self.layer(op="Range", inputs=[start, limit, delta], outputs=["range_out"], **kwargs)[0]
+
+
+@gs.Graph.register()
+def cast(self, input, type, **kwargs):
+    return self.layer(op="Cast", inputs=[input], attrs={"to": type}, outputs=["cast_out"], **kwargs)[0]
+
+
+@gs.Graph.register()
+def reduce_max(self, input, keep_dims, **kwargs):
+    return self.layer(op="ReduceMax", inputs=[input], attrs={"keepdims": keep_dims}, outputs=["reduce_max_out"], **kwargs)[0]
+
+
+@gs.Graph.register()
+def conv(self, input, weights, kernel_shape, **kwargs):
+    return self.layer(op="Conv", inputs=[input, weights], attrs={"kernel_shape": kernel_shape}, outputs=["conv_out"], **kwargs)[0]
+
+
+@gs.Graph.register()
+def split(self, inp, split, axis=0):
+    return self.layer(
+        op="Split",
+        inputs=[inp],
+        outputs=[f"split_out_{i}" for i in range(len(split))],
+        attrs={"axis": axis, "split": split},
+    )
 
 
 def save(graph, model_name):
@@ -265,6 +296,7 @@ make_constant_fold_bloater()
 #   NonZero
 #     |
 #    out
+#
 def make_nonzero():
     inp = gs.Variable("input", shape=(4,), dtype=np.int64)
 
@@ -277,3 +309,81 @@ def make_nonzero():
 
 
 make_nonzero()
+
+
+# Generate a model where a node has multiple outputs that are graph outputs
+#
+#     inp
+#      |
+#   Identity
+#      |
+#     id0
+#        \
+#       Split
+#     /       \
+# split_out0   split_out1 (graph output)
+#      |
+#   Identity
+#      |
+#  id1 (graph output)
+#
+#
+def make_multi_output():
+    inp = gs.Variable("input", shape=(4, 5), dtype=np.float32)
+
+    graph = gs.Graph(inputs=[inp])
+    id0 = graph.identity(inp)
+    [split_out0, split_out1] = graph.split(id0, split=[2, 2])
+    id1 = graph.identity(split_out0)
+    graph.outputs = [id1, split_out1]
+
+    for out in graph.outputs:
+        out.dtype = np.float32
+
+    save(graph, "multi_output.onnx")
+
+
+make_multi_output()
+
+
+# Generate a model where a tensor contains unbounded DDS.
+# Use Conv_0 and ReduceMax to generate a DDS scalar tensor, and send to Range as input `limit`.
+# The output of Range has an unbounded shape.
+#
+#     input
+#       |
+#     Conv_0
+#       |
+#    ReduceMax
+#       |
+#     Range
+#       |
+#     Conv_1
+#       |
+#     output
+#
+def make_unbounded_dds():
+    input = gs.Variable("Input", shape=(1, 3, 10, 10), dtype=np.float32)
+    graph = gs.Graph(inputs=[input], opset=13)
+    weights_0 = graph.constant(gs.Constant("Weights_0", values=np.ones((3, 3, 3, 3), dtype=np.float32)))
+    weights_1 = graph.constant(gs.Constant("Weights_1", values=np.ones((4, 1, 1, 1), dtype=np.float32)))
+
+    conv_0 = graph.conv(input, weights_0, [3, 3], name="Conv_0")
+    reduce_max_0 = graph.reduce_max(conv_0, keep_dims=0, name="ReduceMax_0")
+
+    cast_0 = graph.cast(reduce_max_0, getattr(onnx.TensorProto, "INT64"), name="Cast_to_int64")
+    range_0 = graph.onnx_range(np.array(0, dtype=np.int64), cast_0, np.array(1, dtype=np.int64), name="Range")
+    cast_1 = graph.cast(range_0, getattr(onnx.TensorProto, "FLOAT"), name="Cast_to_float")
+
+    reshape_1 = graph.reshape(cast_1, np.array([1, 1, -1, 1], dtype=np.int64), name="Reshape_1")
+    conv_1 = graph.conv(reshape_1, weights_1, [1, 1], name="Conv_1")
+
+    graph.outputs = [conv_1]
+
+    for out in graph.outputs:
+        out.dtype = np.float32
+
+    save(graph, "unbounded_dds.onnx")
+
+
+make_unbounded_dds()

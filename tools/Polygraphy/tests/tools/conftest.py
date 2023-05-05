@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,7 @@ from typing import List
 
 import pytest
 import tensorrt as trt
-from polygraphy.backend.trt import Algorithm, TacticReplayData
+from polygraphy.backend.trt import Algorithm, TacticReplayData, TensorInfo
 from polygraphy.json import save_json
 
 
@@ -60,7 +60,6 @@ FakeAlgorithm = namedtuple("FakeAlgorithm", ["algorithm_variant", "io_info"])
 FakeAlgorithm.get_algorithm_io_info = lambda this, index: this.io_info[index]
 
 FakeAlgorithmVariant = namedtuple("FakeAlgorithmVariant", ["implementation", "tactic"])
-FakeAlgorithmIOInfo = namedtuple("FakeAlgorithmIOInfo", ["tensor_format", "dtype", "strides"])
 
 
 @pytest.fixture(scope="session", params=["", "subdir"])
@@ -71,7 +70,11 @@ def replay_dir(request):
     def fake_algo(
         implementation=6, tactic=0, num_io=2, tensor_format=trt.TensorFormat.LINEAR, dtype=trt.float32, strides=(1, 2)
     ):
-        io_info = [FakeAlgorithmIOInfo(tensor_format=tensor_format, dtype=dtype, strides=strides)] * num_io
+        io_info = [
+            TensorInfo(
+                tensor_format=tensor_format, dtype=dtype, strides=strides, vectorized_dim=-1, components_per_element=1
+            )
+        ] * num_io
         return FakeAlgorithm(algorithm_variant=FakeAlgorithmVariant(implementation, tactic), io_info=io_info)
 
     def make_replay(tactic):
@@ -100,7 +103,7 @@ def replay_dir(request):
             [I] Loaded {num} bad tactic replays.
             [I] Found potentially bad tactics:
             [I] Layer: layer0
-                    Algorithms: ["(Implementation: 0, Tactic: 2) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1, 2)'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1, 2)'),)"]
+                    Algorithms: ['(Implementation: 0, Tactic: 2) | Inputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1, 2), -1, 1),) | Outputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1, 2), -1, 1),)']
             """
         )
         yield dir, EXPECTED_OUTPUT

@@ -33,15 +33,15 @@ namespace plugin
 namespace bert
 {
 
-int computeGelu(cudaStream_t stream, int n, float const* input, float* output);
+int32_t computeGelu(cudaStream_t stream, int32_t n, float const* input, float* output);
 
-int computeGelu(cudaStream_t stream, int n, half const* input, half* output);
+int32_t computeGelu(cudaStream_t stream, int32_t n, half const* input, half* output);
 
-int computeGeluBias(
-    float* output, float const* input, float const* bias, int const ld, int const cols, cudaStream_t stream);
+int32_t computeGeluBias(
+    float* output, float const* input, float const* bias, int32_t const ld, int32_t const cols, cudaStream_t stream);
 
-int computeGeluBias(
-    half* output, half const* input, half const* bias, int const ld, int const cols, cudaStream_t stream);
+int32_t computeGeluBias(
+    half* output, half const* input, half const* bias, int32_t const ld, int32_t const cols, cudaStream_t stream);
 
 class GeluPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
@@ -56,26 +56,26 @@ public:
 
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int outputIndex, nvinfer1::DimsExprs const* inputs, int nbInputs,
+    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, nvinfer1::PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int nbOutputs) const noexcept override;
-    int enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext Methods
     nvinfer1::DataType getOutputDataType(
-        int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     // IPluginV2 Methods
     char const* getPluginType() const noexcept override;
     char const* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -84,6 +84,10 @@ public:
     char const* getPluginNamespace() const noexcept override;
 
 private:
+    // Helper method for enqueue()
+    template <typename TDataType>
+    int32_t enqueueTyped(void const* input, void* output, int32_t const inputVolume, cudaStream_t stream) noexcept;
+
     const std::string mLayerName;
     std::string mNamespace;
 

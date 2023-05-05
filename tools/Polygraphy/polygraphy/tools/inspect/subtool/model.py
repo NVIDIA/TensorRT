@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,17 +20,20 @@ from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (
     ModelArgs,
-    OnnxLoadArgs,
     OnnxInferShapesArgs,
+    OnnxLoadArgs,
     TfLoadArgs,
     TrtLoadEngineArgs,
+    TrtLoadEngineBytesArgs,
     TrtLoadNetworkArgs,
     TrtLoadPluginsArgs,
+    TrtOnnxFlagArgs,
 )
 from polygraphy.tools.base import Tool
 
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
+onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 tf_util = mod.lazy_import("polygraphy.backend.tf.util")
 
 
@@ -50,7 +53,9 @@ class Model(Tool):
             OnnxLoadArgs(outputs_opt_prefix=False),
             TrtLoadPluginsArgs(),
             TrtLoadNetworkArgs(allow_custom_outputs=False),
+            TrtLoadEngineBytesArgs(),
             TrtLoadEngineArgs(),
+            TrtOnnxFlagArgs(),
         ]
 
     def add_parser_args_impl(self, parser):
@@ -74,6 +79,18 @@ class Model(Tool):
             default=[],
         )
 
+        parser.add_argument(
+            "--list-unbounded-dds",
+            help="""
+            List all tensors with unbounded Data-Dependent Shapes (DDS).
+
+            Note that listing unbounded DDS only works for models that have been constant folded and have shapes inferred.
+            """,
+            action="store_true",
+            default=None,
+            dest="show_unbounded_dds"
+        )
+
     def run_impl(self, args):
         def show(aspect):
             return aspect in args.show
@@ -81,7 +98,10 @@ class Model(Tool):
         def inspect_trt():
             if self.arg_groups[ModelArgs].model_type == "engine":
                 with self.arg_groups[TrtLoadEngineArgs].load_engine() as engine:
-                    engine_str = trt_util.str_from_engine(engine, show_layers=show("layers"), show_attrs=show("attrs"))
+                    context = engine.create_execution_context()
+                    engine_str = trt_util.str_from_engine(
+                        engine, context, show_layers=show("layers"), show_attrs=show("attrs")
+                    )
                     G_LOGGER.info(f"==== TensorRT Engine ====\n{engine_str}")
             else:
                 builder, network, parser = util.unpack_args(self.arg_groups[TrtLoadNetworkArgs].load_network(), 3)
@@ -101,6 +121,11 @@ class Model(Tool):
                 onnx_model, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
             ).strip()
             G_LOGGER.info(f"==== ONNX Model ====\n{model_str}")
+            if args.show_unbounded_dds:
+                graph = onnx_backend.gs_from_onnx(onnx_model)
+                unbounded_dds_tensors = onnx_util.get_unbounded_dds_tensors(graph)
+                G_LOGGER.info(f"Found tensors with unbounded DDS: {unbounded_dds_tensors}")
+
 
         def inspect_tf():
             tf_graph, _ = self.arg_groups[TfLoadArgs].load_graph()

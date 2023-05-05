@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -101,7 +101,7 @@ class TfLoadArgs(BaseArgs):
 
         - ModelArgs
         - TfTrtArgs: if allow_tftrt == True
-        - TrtSaveEngineArgs: if allow_tftrt == True
+        - TrtSaveEngineBytesArgs: if allow_tftrt == True
     """
 
     def __init__(self, allow_artifacts: bool = None, allow_custom_outputs: bool = None, allow_tftrt: bool = None):
@@ -216,10 +216,10 @@ class TfLoadArgs(BaseArgs):
 
         engine_dir = None
         if self._allow_tftrt:
-            from polygraphy.tools.args.backend.trt import TrtSaveEngineArgs
+            from polygraphy.tools.args.backend.trt import TrtSaveEngineBytesArgs
 
             loader_name = self.arg_groups[TfTrtArgs].add_to_script(script, loader_name)
-            engine_dir = self.arg_groups[TrtSaveEngineArgs].path
+            engine_dir = self.arg_groups[TrtSaveEngineBytesArgs].path
 
         MODIFY_TF = "ModifyGraphOutputs"
         outputs = None if disable_custom_outputs else args_util.get_outputs_for_script(script, self.outputs)

@@ -241,12 +241,12 @@ int32_t proposalInference_gpu(cudaStream_t stream, void const* rpn_prob, void co
 size_t _get_workspace_size(
     int32_t N, int32_t anc_size_num, int32_t anc_ratio_num, int32_t H, int32_t W, int32_t nmsMaxOut);
 
-void decodeBbox3DLaunch(int32_t const batch_size, float const* cls_input, float* box_input, float const* dir_cls_input,
-    float* anchors, float* anchors_bottom_height, float* bndbox_output, int32_t* object_counter,
-    float const min_x_range, float const max_x_range, float const min_y_range, float const max_y_range,
-    int32_t const feature_x_size, int32_t const feature_y_size, int32_t const num_anchors, int32_t const num_classes,
-    int32_t const num_box_values, float const score_thresh, float const dir_offset, float const dir_limit_offset,
-    int32_t const num_dir_bins, cudaStream_t stream = 0);
+void decodeBbox3DLaunch(int32_t const batch_size, float const* cls_input, float const* box_input,
+    float const* dir_cls_input, float* anchors, float* anchors_bottom_height, float* bndbox_output,
+    int32_t* object_counter, float const min_x_range, float const max_x_range, float const min_y_range,
+    float const max_y_range, int32_t const feature_x_size, int32_t const feature_y_size, int32_t const num_anchors,
+    int32_t const num_classes, int32_t const num_box_values, float const score_thresh, float const dir_offset,
+    float const dir_limit_offset, int32_t const num_dir_bins, cudaStream_t stream = 0);
 
 template <typename Element>
 int32_t pillarScatterKernelLaunch(int32_t batch_size, int32_t max_pillar_num, int32_t num_features,

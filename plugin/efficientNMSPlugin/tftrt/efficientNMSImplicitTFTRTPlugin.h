@@ -47,8 +47,8 @@ public:
     // IPluginV2 methods
     const char* getPluginType() const noexcept override;
     const char* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -56,24 +56,25 @@ public:
     void setPluginNamespace(const char* libNamespace) noexcept override;
     const char* getPluginNamespace() const noexcept override;
 
-    nvinfer1::Dims getOutputDimensions(int outputIndex, const nvinfer1::Dims* inputs, int nbInputs) noexcept override;
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
-    int enqueue(int batchSize, void const* const* inputs, EfficientNMSImplicitTFTRTOutputsDataType outputs,
+    nvinfer1::Dims getOutputDimensions(
+        int32_t outputIndex, const nvinfer1::Dims* inputs, int32_t nbInputs) noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, EfficientNMSImplicitTFTRTOutputsDataType outputs,
         void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext methods
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
     nvinfer1::DataType getOutputDataType(
-        int index, const nvinfer1::DataType* inputType, int nbInputs) const noexcept override;
+        int32_t index, const nvinfer1::DataType* inputType, int32_t nbInputs) const noexcept override;
     nvinfer1::IPluginV2IOExt* clone() const noexcept override;
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
     // IPluginV2IOExt methods
-    bool supportsFormatCombination(
-        int pos, const nvinfer1::PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const noexcept override;
-    void configurePlugin(const nvinfer1::PluginTensorDesc* in, int nbInputs, const nvinfer1::PluginTensorDesc* out,
-        int nbOutputs) noexcept override;
+    bool supportsFormatCombination(int32_t pos, const nvinfer1::PluginTensorDesc* inOut, int32_t nbInputs,
+        int32_t nbOutputs) const noexcept override;
+    void configurePlugin(const nvinfer1::PluginTensorDesc* in, int32_t nbInputs, const nvinfer1::PluginTensorDesc* out,
+        int32_t nbOutputs) noexcept override;
 
 protected:
     void deserialize(int8_t const* data, size_t length);

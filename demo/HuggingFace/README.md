@@ -18,11 +18,13 @@ Currently, this repository supports the following models:
 
 ## Setup
 
+
 Follow the setup steps in the TensorRT OSS repository. It is recommended to experiment inside Docker container.
 For a smoother setup experience, it is recommended to use [Poetry](https://python-poetry.org/) to install requirements and execute:
 
 ```bash
 poetry install # one-time setup
+poetry add <path_to_trt_wheel> # see top level repo README.md on how to get TensorRT wheels.
 poetry run python run.py <args> # execute program
 ```
 
@@ -120,7 +122,7 @@ Notes:
 
 ## How to run with K-V cache
 
-For all the models (GPT2/BART/T5), use `--enable-kv-cache` option to get the same effect of HuggingFace's `use_cache` option. For encoder-decoder models, this option will use key & value cache in decoder for uni-directional self-attention and encoder-decoder cross-attention. KV cache could reduce the size of `input_ids` and improve runtime performance when `input_ids` is long. Current benchmarking result shows that at `input_seq_len = 1024` and `output_seq_len = 1024`, t5-large model with kv cache could achieve 3x faster than without kv cache in single NVIDIA A100 GPU. 
+For all the models (GPT2/BART/T5), use `--enable-kv-cache` option to get the same effect of HuggingFace's `use_cache` option. For encoder-decoder models, this option will use key & value cache in decoder for uni-directional self-attention and encoder-decoder cross-attention. KV cache could reduce the size of `input_ids` and improve runtime performance when `input_ids` is long. Current benchmarking result shows that at `input_seq_len = 1024` and `output_seq_len = 1024`, t5-large model with kv cache could achieve 3x faster than without kv cache in single NVIDIA A100 GPU.
 
 ```python
 python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --working-dir temp --enable-kv-cache
@@ -131,7 +133,7 @@ Notes:
 
 * For BART, we will be porting similar optimization from T5, but currently, K-V cache decoder with TensorRT requires exporting 2 onnx files and building separate engines respectively, called "non-kv" and "kv". For the first decoder run, KV Cache needs to be generated with only `input_ids` and `encoder_hidden_states`(if encoder_decoder), which is named "non-kv". For the other decoder iterations, previous KV Cache and other inputs are passed into the model to generate the updated KV Cache and decoder_hidden_states, which is named "kv". Because current onnx export cannot handle dynamic number of inputs, 2 onnx files with slightly different configurations are used together.
 
-* For GPT2, since it is decoder only, only self attention kv is needed, and it has 2 mode, corresonding to 2 optimization profiles for a single TensorRT engine: context mode which takes in `input_ids` with various length only and outputs `hidden_states` and self attention cache; generation mode, which takes in `input_ids` with seq_len = 1 and entire self attention kv cache, and outputs `hidden_states` with seq_len = 1 and kv cache with cum_seq_len (`past_decoder_length`) + 1. It has some memory concurrency issue that cannot let self attention input and output point to the same memory location, so it requires dual cache. 
+* For GPT2, since it is decoder only, only self attention kv is needed, and it has 2 mode, corresonding to 2 optimization profiles for a single TensorRT engine: context mode which takes in `input_ids` with various length only and outputs `hidden_states` and self attention cache; generation mode, which takes in `input_ids` with seq_len = 1 and entire self attention kv cache, and outputs `hidden_states` with seq_len = 1 and kv cache with cum_seq_len (`past_decoder_length`) + 1. It has some memory concurrency issue that cannot let self attention input and output point to the same memory location, so it requires dual cache.
 
 ## How to run with beam search
 
@@ -179,3 +181,15 @@ pytest
 ```
 
 It is recommended to use Pytest `4.6.x`. Your Python environment must have already had the setup completed.
+
+
+## Troubleshooting
+
+### cuBLAS Errors
+
+```
+CUDA error: CUBLAS_STATUS_INVALID_VALUE when calling `cublasSgemm( handle, opa, opb, m, n, k, &alpha, a, lda, b, ldb, &beta, c, ldc)`
+```
+
+It is possible that your LD_LIBRARY_PATH has a competing CUDA version stored inside, causing PyTorch to read the incorrect library.
+Consider modifying LD_LIBRARY_PATH and removing your CUDA path.

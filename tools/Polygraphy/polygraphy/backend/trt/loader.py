@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,7 @@
 import contextlib
 import ctypes
 import time
+import os
 
 from polygraphy import constants, mod, util
 from polygraphy.backend.base import BaseLoader
@@ -57,6 +58,7 @@ class LoadPlugins(BaseLoader):
         self.plugins = util.default(plugins, [])
         self.obj = obj
 
+    @util.check_called_by("__call__")
     def call_impl(self, *args, **kwargs):
         """
         Returns:
@@ -89,6 +91,7 @@ class CreateNetwork(BaseLoader):
         """
         self.explicit_batch = util.default(explicit_batch, True)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -105,18 +108,31 @@ class CreateNetwork(BaseLoader):
 
 
 class BaseNetworkFromOnnx(BaseLoader):
-    def __init__(self, explicit_batch=None):
+    def __init__(self, explicit_batch=None, flags=None):
         """
         Args:
             explicit_batch (bool):
                     Whether to create the network with explicit batch mode.
                     Defaults to True.
+            flags (List[trt.OnnxParserFlag]):
+                    A list of ``OnnxParserFlag`` s to modify the default parsing
+                    behavior of the ONNX parser.
+                    Defaults to None.
         """
         self.explicit_batch = util.default(explicit_batch, True)
+        self.flags = flags
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         with util.FreeOnException(create_network(explicit_batch=self.explicit_batch)) as (builder, network):
             parser = trt.OnnxParser(network, trt_util.get_trt_logger())
+            # Set flags if applicable
+            if mod.version(trt.__version__) >= mod.version("8.6"):
+                if self.flags:
+                    masked_flags = 0
+                    for f in self.flags:
+                        masked_flags |= 1 << int(f)
+                    parser.flags = masked_flags
             return builder, network, parser
 
 
@@ -126,17 +142,23 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
     Functor that parses an ONNX model to create a trt.INetworkDefinition.
     """
 
-    def __init__(self, model_bytes):
+    def __init__(self, model_bytes, flags=None):
         """
         Parses an ONNX model.
 
         Args:
             model_bytes (Union[bytes, Callable() -> bytes]):
                     A serialized ONNX model or a callable that returns one.
+
+            flags (List[trt.OnnxParserFlag])
+                    A list of ``OnnxParserFlag`` s to modify the default parsing
+                    behavior of the ONNX parser.
+                    Defaults to None.
         """
-        super().__init__()
+        super().__init__(flags=flags)
         self._model_bytes = model_bytes
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -157,16 +179,22 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
     This loader supports models with weights stored in an external location.
     """
 
-    def __init__(self, path):
+    def __init__(self, path, flags=None):
         """
         Parses an ONNX model from a file.
 
         Args:
             path (str): The path from which to load the model.
+
+            flags (List[trt.OnnxParserFlag]):
+                    A list of ``OnnxParserFlag`` s to modify the default parsing
+                    behavior of the ONNX parser.
+                    Defaults to None.
         """
-        super().__init__()
+        super().__init__(flags=flags)
         self.path = path
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -222,6 +250,7 @@ class PostprocessNetwork(BaseLoader):
         self._func = func
         self.name = util.default(name, func_name)
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -295,6 +324,7 @@ class SetLayerPrecisions(PostprocessNetwork):
             name="the network",
             items_name="layers",
             check_extra=False,
+            log_func=G_LOGGER.warning,
         )
 
         for layer in network:
@@ -332,6 +362,7 @@ class SetTensorDatatypes(PostprocessNetwork):
             name="the network",
             items_name="tensors",
             check_extra=False,
+            log_func=G_LOGGER.warning,
         )
 
         for name, dtype in tensor_datatypes.items():
@@ -368,6 +399,7 @@ class SetTensorFormats(PostprocessNetwork):
             name="the network",
             items_name="tensors",
             check_extra=False,
+            log_func=G_LOGGER.warning,
         )
 
         for name, formats in tensor_formats.items():
@@ -390,6 +422,35 @@ class SetTensorFormats(PostprocessNetwork):
         """
         func = lambda network: SetTensorFormats._apply(network, tensor_formats)
         super().__init__(network, func, "SetTensorFormats")
+
+
+@mod.export(funcify=True)
+class LoadRuntime(BaseLoader):
+    """
+    Functor that loads a TensorRT ``IRuntime``.
+    """
+
+    def __init__(self, path):
+        """
+        Loads a TensorRT ``IRuntime``.
+
+        The loaded runtime can be used to execute a version compatible engine
+        that excludes the lean runtime.
+
+        Args:
+            path (str): The path to a shared library from which to load the runtime.
+        """
+        self.path = path
+
+    @util.check_called_by("__call__")
+    def call_impl(self):
+        """
+        Returns:
+            trt.Runtime: The runtime that was loaded.
+        """
+        with trt.Runtime(trt_util.get_trt_logger()) as bootstrap_runtime:
+            G_LOGGER.info(f"Loading TensorRT runtime from: {self.path}")
+            return bootstrap_runtime.load_runtime(self.path)
 
 
 @mod.export(funcify=True)
@@ -421,6 +482,7 @@ class EngineBytesFromNetwork(BaseLoader):
         self._config = util.default(config, CreateConfig())
         self.timing_cache_path = save_timing_cache
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -516,10 +578,35 @@ class EngineBytesFromNetwork(BaseLoader):
 @mod.export(funcify=True)
 class EngineFromNetwork(EngineBytesFromNetwork):
     """
-    Similar to EngineBytesFromNetwork, but returns an ICudaEngine instance
-    instead of a serialized engine.
+    Functor similar to EngineBytesFromNetwork, but deserializes the engine before returning.
     """
 
+    def __init__(self, network, config=None, save_timing_cache=None, runtime=None):
+        """
+        Builds a TensorRT serialized engine and then deserializes it.
+
+        Args:
+            network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
+                    A tuple containing a TensorRT builder, network and optionally parser or a callable that returns one.
+                    To omit the parser, return a tuple containing just the builder and network.
+
+
+            config (Callable(trt.Builder, trt.INetworkDefinition) -> trt.IBuilderConfig):
+                    A TensorRT builder configuration or a callable that returns one. If not supplied,
+                    a `CreateConfig` instance with default parameters is used.
+            save_timing_cache (Union[str, file-like]):
+                    A path or file-like object at which to save a tactic timing cache.
+                    Any existing cache will be appended to.
+                    If a path is provided, the file will be locked for exclusive access to prevent
+                    multiple processes from attempting to update the timing cache at the same time.
+            runtime (Union[trt.Runtime, Callable() -> trt.Runtime]):
+                    The runtime to use when deserializing the engine or a callable that returns one.
+                    If no runtime is provided, one will be created.
+        """
+        super().__init__(network, config, save_timing_cache)
+        self._runtime = runtime
+
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -527,7 +614,7 @@ class EngineFromNetwork(EngineBytesFromNetwork):
         """
         # We do not invoke super().call_impl here because we would otherwise be responsible
         # for freeing it's return values.
-        return engine_from_bytes(super().call_impl)
+        return engine_from_bytes(super().call_impl, runtime=self._runtime)
 
 
 @mod.export(funcify=True)
@@ -536,25 +623,34 @@ class EngineFromBytes(BaseLoader):
     Functor that deserializes an engine from a buffer.
     """
 
-    def __init__(self, serialized_engine):
+    def __init__(self, serialized_engine, runtime=None):
         """
         Deserializes an engine from a buffer.
 
         Args:
             serialized_engine (Union[Union[str, bytes], Callable() -> Union[str, bytes]]):
                     The serialized engine bytes  or a callable that returns them.
+            runtime (Union[trt.Runtime, Callable() -> trt.Runtime]):
+                    The runtime to use when deserializing the engine or a callable that returns one.
+                    If no runtime is provided, one will be created.
         """
         self._serialized_engine = serialized_engine
+        self._runtime = util.default(runtime, lambda: trt.Runtime(trt_util.get_trt_logger()))
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
             trt.ICudaEngine: The deserialized engine.
         """
         buffer, owns_buffer = util.invoke_if_callable(self._serialized_engine)
+        runtime, owns_runtime = util.invoke_if_callable(self._runtime)
 
         trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
-        with contextlib.ExitStack() as stack, trt.Runtime(trt_util.get_trt_logger()) as runtime:
+        with contextlib.ExitStack() as stack:
+            if owns_runtime:
+                stack.enter_context(runtime)
+
             if owns_buffer:
                 try:
                     buffer.__enter__  # IHostMemory is freed only in __exit__
@@ -562,6 +658,12 @@ class EngineFromBytes(BaseLoader):
                     pass
                 else:
                     stack.enter_context(buffer)
+
+            try:
+                # To deserialize version compatible engines, we must signal the runtime that host code is allowed
+                runtime.engine_host_code_allowed = True
+            except AttributeError:
+                pass
 
             engine = runtime.deserialize_cuda_engine(buffer)
             if not engine:
@@ -585,6 +687,7 @@ class BytesFromEngine(BaseLoader):
         """
         self._engine = engine
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -614,12 +717,12 @@ class SaveEngine(BaseLoader):
             engine (Union[trt.ICudaEngine, Callable() -> trt.ICudaEngine]):
                     An engine or a callable that returns one.
 
-
             path (str): The path at which to save the engine.
         """
         self._engine = engine
         self.path = path
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:
@@ -657,6 +760,7 @@ class OnnxLikeFromNetwork(BaseLoader):
         """
         self._network = network
 
+    @util.check_called_by("__call__")
     def call_impl(self):
         """
         Returns:

@@ -1141,9 +1141,10 @@ constexpr char const* descr = R"trtdoc(
     For example, to enable faster dynamic shapes, call :func:`set_preview_feature` with ``PreviewFeature.FASTER_DYNAMIC_SHAPES_0805``
 )trtdoc";
 constexpr char const* FASTER_DYNAMIC_SHAPES_0805 = R"trtdoc(
-    Optimize runtime dimensions with TensorRT's DL Compiler.
+    [DEPRECATED - will be removed in TensorRT 9.0] Optimize runtime dimensions with TensorRT's DL Compiler.
     Potentially reduces run time and decreases device memory usage and engine size.
     Models most likely to benefit from enabling ``FASTER_DYNAMIC_SHAPES_0805`` are transformer-based models, and models containing dynamic control flows.
+    The default value for this flag is on. Turning it off is deprecated. 
 )trtdoc";
 constexpr char const* DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 = R"trtdoc(
     Disable usage of cuDNN/cuBLAS/cuBLASLt tactics in the TensorRT core library.

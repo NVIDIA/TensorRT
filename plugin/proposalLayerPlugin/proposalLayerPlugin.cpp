@@ -117,14 +117,16 @@ IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(char const* name, vo
     return nullptr;
 }
 
-ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold, nvinfer1::Dims const& imageSize)
+ProposalLayer::ProposalLayer(
+    int32_t prenms_topk, int32_t keep_topk, float iou_threshold, nvinfer1::Dims const& imageSize)
     : mPreNMSTopK(prenms_topk)
     , mKeepTopK(keep_topk)
     , mIOUThreshold(iou_threshold)
     , mImageSize(imageSize)
 {
     mBackgroundLabel = -1;
-    PLUGIN_VALIDATE(mPreNMSTopK > 0 && mPreNMSTopK <= 1024);
+    PLUGIN_VALIDATE(mPreNMSTopK > 0);
+    PLUGIN_VALIDATE(mPreNMSTopK <= 1024);
     PLUGIN_VALIDATE(mKeepTopK > 0);
     PLUGIN_VALIDATE(iou_threshold > 0.0F);
     PLUGIN_VALIDATE(mImageSize.nbDims == 3);
@@ -141,26 +143,26 @@ ProposalLayer::ProposalLayer(int prenms_topk, int keep_topk, float iou_threshold
     generate_pyramid_anchors(imageSize);
 }
 
-int ProposalLayer::getNbOutputs() const noexcept
+int32_t ProposalLayer::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int ProposalLayer::initialize() noexcept
+int32_t ProposalLayer::initialize() noexcept
 {
     // Init the mValidCnt of max batch size
-    std::vector<int> tempValidCnt(mMaxBatchSize, mPreNMSTopK);
+    std::vector<int32_t> tempValidCnt(mMaxBatchSize, mPreNMSTopK);
 
-    mValidCnt = std::make_shared<CudaBind<int>>(mMaxBatchSize);
+    mValidCnt = std::make_shared<CudaBind<int32_t>>(mMaxBatchSize);
 
-    PLUGIN_CUASSERT(cudaMemcpy(
-        mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()), sizeof(int) * mMaxBatchSize, cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMemcpy(mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()),
+        sizeof(int32_t) * mMaxBatchSize, cudaMemcpyHostToDevice));
 
     // Init the anchors for batch size:
     mAnchorBoxesDevice = std::make_shared<CudaBind<float>>(mAnchorsCnt * 4 * mMaxBatchSize);
-    int batch_offset = sizeof(float) * mAnchorsCnt * 4;
+    int32_t batch_offset = sizeof(float) * mAnchorsCnt * 4;
     uint8_t* device_ptr = static_cast<uint8_t*>(mAnchorBoxesDevice->mPtr);
-    for (int i = 0; i < mMaxBatchSize; i++)
+    for (int32_t i = 0; i < mMaxBatchSize; i++)
     {
         PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset),
             static_cast<void*>(mAnchorBoxesHost.data()), batch_offset, cudaMemcpyHostToDevice));
@@ -218,7 +220,7 @@ char const* ProposalLayer::getPluginNamespace() const noexcept
 
 size_t ProposalLayer::getSerializationSize() const noexcept
 {
-    return sizeof(int) * 2 + sizeof(float) + sizeof(int) * 2 + sizeof(nvinfer1::Dims);
+    return sizeof(int32_t) * 2 + sizeof(float) + sizeof(int32_t) * 2 + sizeof(nvinfer1::Dims);
 }
 
 void ProposalLayer::serialize(void* buffer) const noexcept
@@ -265,7 +267,7 @@ void ProposalLayer::deserialize(int8_t const* data, size_t length)
     generate_pyramid_anchors(mImageSize);
 }
 
-void ProposalLayer::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims)
+void ProposalLayer::check_valid_inputs(nvinfer1::Dims const* inputs, int32_t nbInputDims)
 {
     // object_score[N, anchors, 2, 1],
     // foreground_delta[N, anchors, 4, 1],
@@ -277,14 +279,14 @@ void ProposalLayer::check_valid_inputs(nvinfer1::Dims const* inputs, int nbInput
     PLUGIN_ASSERT(inputs[1].nbDims == 3 && inputs[1].d[1] == 4);
 }
 
-size_t ProposalLayer::getWorkspaceSize(int batch_size) const noexcept
+size_t ProposalLayer::getWorkspaceSize(int32_t batch_size) const noexcept
 {
 
     ProposalWorkSpace proposal(batch_size, mAnchorsCnt, mPreNMSTopK, mParam, mType);
     return proposal.totalSize;
 }
 
-Dims ProposalLayer::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims ProposalLayer::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
 
     check_valid_inputs(inputs, nbInputDims);
@@ -312,10 +314,10 @@ void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)
     for (size_t s = 0; s < scales.size(); ++s)
     {
         float scale = scales[s];
-        int stride = strides[s];
+        int32_t stride = strides[s];
 
-        for (int y = 0; y < imageDims.d[1]; y += anchor_stride * stride)
-            for (int x = 0; x < imageDims.d[2]; x += anchor_stride * stride)
+        for (int32_t y = 0; y < imageDims.d[1]; y += anchor_stride * stride)
+            for (int32_t x = 0; x < imageDims.d[2]; x += anchor_stride * stride)
                 for (float r : ratios)
                 {
                     float sqrt_r = sqrt(r);
@@ -330,8 +332,8 @@ void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)
     PLUGIN_VALIDATE(anchors.size() % 4 == 0);
 }
 
-int ProposalLayer::enqueue(
-    int batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t ProposalLayer::enqueue(
+    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
 
     void* proposals = outputs[0];
@@ -352,7 +354,8 @@ int ProposalLayer::enqueue(
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType ProposalLayer::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+DataType ProposalLayer::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -360,27 +363,27 @@ DataType ProposalLayer::getOutputDataType(int index, nvinfer1::DataType const* i
 
 // Return true if output tensor is broadcast across a batch.
 bool ProposalLayer::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool ProposalLayer::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool ProposalLayer::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void ProposalLayer::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+void ProposalLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
     PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0]);
 
     mAnchorsCnt = inputDims[0].d[0];
-    PLUGIN_ASSERT(mAnchorsCnt == (int) (mAnchorBoxesHost.size() / 4));
+    PLUGIN_ASSERT(mAnchorsCnt == (int32_t) (mAnchorBoxesHost.size() / 4));
     mMaxBatchSize = maxBatchSize;
 }
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -117,9 +117,10 @@ def run_comparison(func, fail_fast, iter_result0, iter_result1, find_output_func
             G_LOGGER.start(
                 f"Comparing Output: '{out0_name}' (dtype={output0.dtype}, shape={output0.shape}) with '{out1_name}' (dtype={output1.dtype}, shape={output1.shape})"
             )
-            output_status[out0_name] = func(out0_name, output0, out1_name, output1)
-            if fail_fast and not output_status[out0_name]:
-                return output_status
+            with G_LOGGER.indent():
+                output_status[out0_name] = func(out0_name, output0, out1_name, output1)
+                if fail_fast and not output_status[out0_name]:
+                    return output_status
 
     mismatched_output_names = [name for name, matched in output_status.items() if not matched]
     if mismatched_output_names:
@@ -156,6 +157,10 @@ class CompareFunc:
         find_output_func=None,
         check_error_stat=None,
         infinities_compare_equal=None,
+        save_heatmaps=None,
+        show_heatmaps=None,
+        save_error_metrics_plot=None,
+        show_error_metrics_plot=None,
     ):
         """
         Creates a function that compares two IterationResults, and can be used as the `compare_func` argument
@@ -207,6 +212,17 @@ class CompareFunc:
                     If True, then matching +-inf values in the output have an absdiff of 0.
                     If False, then matching +-inf values in the output have an absdiff of NaN.
                     Defaults to False.
+            save_heatmaps (str):
+                    [EXPERIMENTAL] Path to a directory in which to save figures of heatmaps of the absolute and relative error.
+                    Defaults to None.
+            show_heatmaps (bool):
+                    [EXPERIMENTAL] Whether to display heatmaps of the absolute and relative error.
+                    Defaults to False.
+            save_error_metrics_plot (str):
+                    [EXPERIMENTAL] Path to a directory in which to save the error metrics plots.
+                    Defaults to None.
+            show_error_metrics_plot (bool):
+                    [EXPERIMENTAL] Whether to display the error metrics plot.
 
         Returns:
             Callable(IterationResult, IterationResult) -> OrderedDict[str, OutputCompareResult]:
@@ -222,6 +238,8 @@ class CompareFunc:
         default_error_stat = "elemwise"
         check_error_stat = util.default(check_error_stat, default_error_stat)
         infinities_compare_equal = util.default(infinities_compare_equal, False)
+        show_heatmaps = util.default(show_heatmaps, False)
+        show_error_metrics_plot = util.default(show_error_metrics_plot, False)
 
         def check_outputs_match(
             out0,
@@ -274,13 +292,26 @@ class CompareFunc:
                     cond = np.logical_and(out0_infinite, out0 == out1)
                     absdiff = np.where(cond, 0, absdiff)
 
-            with np.testing.suppress_warnings() as sup:
-                sup.filter(RuntimeWarning)
-                reldiff = absdiff / comp_util.cast_up(np.abs(out1))
-                max_reldiff = comp_util.compute_max(reldiff)
-                mean_reldiff = comp_util.compute_mean(reldiff)
-                median_reldiff = comp_util.compute_median(reldiff)
+            # Add a small epsilon (2e-16) to zero values in the array to prevent NaN in relative error.
+            cast_up_out1 = comp_util.cast_up(out1)
 
+            if np.issubdtype(cast_up_out1.dtype, np.floating):
+                if np.any(cast_up_out1 == 0):
+                    G_LOGGER.warning(
+                        f"{runner1_name:35} | Output: {out1_name}: Some values are 0. "
+                        f"Will add a small epsilon quantity to these when computing relative difference. "
+                        f"Note that this may cause some relative differences to be extremely high. ",
+                        mode=LogMode.ONCE,
+                    )
+                cast_up_out1[cast_up_out1 == 0] += np.finfo(float).eps
+
+            reldiff = absdiff / np.abs(cast_up_out1)
+            min_reldiff = comp_util.compute_min(reldiff)
+            max_reldiff = comp_util.compute_max(reldiff)
+            mean_reldiff = comp_util.compute_mean(reldiff)
+            median_reldiff = comp_util.compute_median(reldiff)
+
+            min_absdiff = comp_util.compute_min(absdiff)
             max_absdiff = comp_util.compute_max(absdiff)
             mean_absdiff = comp_util.compute_mean(absdiff)
             median_absdiff = comp_util.compute_median(absdiff)
@@ -337,10 +368,40 @@ class CompareFunc:
                     msg += " (requirements may be lower if both abs/rel tolerances are set)"
                 G_LOGGER.info(msg)
 
+                if save_error_metrics_plot or show_error_metrics_plot:
+                    with G_LOGGER.indent():
+                        comp_util.scatter_plot_error_magnitude(
+                            absdiff,
+                            reldiff,
+                            comp_util.cast_up(out1),
+                            min_reldiff,
+                            max_reldiff,
+                            runner0_name,
+                            runner1_name,
+                            out0_name,
+                            out1_name,
+                            save_dir=save_error_metrics_plot,
+                            show=show_error_metrics_plot,
+                        )
+
+                def build_heatmaps(diff, min_diff, max_diff, prefix, use_lognorm=None):
+                    if save_heatmaps or show_heatmaps:
+                        with G_LOGGER.indent():
+                            comp_util.build_heatmaps(
+                                diff,
+                                min_diff,
+                                max_diff,
+                                prefix=f"{prefix} Error | {out0_name}",
+                                save_dir=save_heatmaps,
+                                show=show_heatmaps,
+                                use_lognorm=use_lognorm,
+                            )
+
                 comp_util.log_output_stats(absdiff, failed, "Absolute Difference")
-                with np.testing.suppress_warnings() as sup:
-                    sup.filter(RuntimeWarning)
-                    comp_util.log_output_stats(reldiff, failed, "Relative Difference")
+                build_heatmaps(absdiff, min_absdiff, max_absdiff, "Absolute")
+
+                comp_util.log_output_stats(reldiff, failed, "Relative Difference")
+                build_heatmaps(reldiff, min_reldiff, max_reldiff, "Relative", use_lognorm=True)
 
             G_LOGGER.extra_verbose(
                 f"Finished comparing: '{out0_name}' (dtype={out0.dtype}, shape={out0.shape}) [{runner0_name}] and '{out1_name}' (dtype={out1.dtype}, shape={out1.shape}) [{runner1_name}]"
@@ -393,46 +454,44 @@ class CompareFunc:
                 per_out_rtol = util.value_or_from_dict(rtol, out0_name, default_rtol)
                 per_out_err_stat = util.value_or_from_dict(check_error_stat, out0_name, default_error_stat)
 
-                with G_LOGGER.indent():
-                    G_LOGGER.info(
-                        f"Tolerance: [abs={per_out_atol:.5g}, rel={per_out_rtol:.5g}] | Checking {per_out_err_stat} error"
+                G_LOGGER.info(
+                    f"Tolerance: [abs={per_out_atol:.5g}, rel={per_out_rtol:.5g}] | Checking {per_out_err_stat} error"
+                )
+                G_LOGGER.extra_verbose(f"Note: Comparing {iter_result0.runner_name} vs. {iter_result1.runner_name}")
+
+                if check_shapes and output0.shape != output1.shape:
+                    G_LOGGER.error(
+                        f"Will not compare outputs of different shapes. Note: Output shapes are {output0.shape} and {output1.shape}."
                     )
-                    G_LOGGER.extra_verbose(f"Note: Comparing {iter_result0.runner_name} vs. {iter_result1.runner_name}")
+                    G_LOGGER.error(
+                        "Note: Use --no-shape-check or set check_shapes=False to " "attempt to compare values anyway.",
+                        mode=LogMode.ONCE,
+                    )
+                    outputs_matched = False
+                else:
+                    output1 = util.try_match_shape(output1, output0.shape)
+                    output0 = output0.reshape(output1.shape)
+                    outputs_matched = check_outputs_match(
+                        output0,
+                        out0_name,
+                        output1,
+                        out1_name,
+                        per_out_rtol=per_out_rtol,
+                        per_out_atol=per_out_atol,
+                        per_out_err_stat=per_out_err_stat,
+                        runner0_name=iter_result0.runner_name,
+                        runner1_name=iter_result1.runner_name,
+                    )
 
-                    if check_shapes and output0.shape != output1.shape:
-                        G_LOGGER.error(
-                            f"Will not compare outputs of different shapes. Note: Output shapes are {output0.shape} and {output1.shape}."
-                        )
-                        G_LOGGER.error(
-                            "Note: Use --no-shape-check or set check_shapes=False to "
-                            "attempt to compare values anyway.",
-                            mode=LogMode.ONCE,
-                        )
-                        outputs_matched = False
-                    else:
-                        output1 = util.try_match_shape(output1, output0.shape)
-                        output0 = output0.reshape(output1.shape)
-                        outputs_matched = check_outputs_match(
-                            output0,
-                            out0_name,
-                            output1,
-                            out1_name,
-                            per_out_rtol=per_out_rtol,
-                            per_out_atol=per_out_atol,
-                            per_out_err_stat=per_out_err_stat,
-                            runner0_name=iter_result0.runner_name,
-                            runner1_name=iter_result1.runner_name,
-                        )
-
-                    # Finally show summary.
-                    if not outputs_matched:
-                        G_LOGGER.error(
-                            f"FAILED | Output: '{out0_name}' | Difference exceeds tolerance (rel={per_out_rtol}, abs={per_out_atol})"
-                        )
-                    else:
-                        G_LOGGER.finish(
-                            f"PASSED | Output: '{out0_name}' | Difference is within tolerance (rel={per_out_rtol}, abs={per_out_atol})"
-                        )
+                # Finally show summary.
+                if not outputs_matched:
+                    G_LOGGER.error(
+                        f"FAILED | Output: '{out0_name}' | Difference exceeds tolerance (rel={per_out_rtol}, abs={per_out_atol})"
+                    )
+                else:
+                    G_LOGGER.finish(
+                        f"PASSED | Output: '{out0_name}' | Difference is within tolerance (rel={per_out_rtol}, abs={per_out_atol})"
+                    )
 
                 return outputs_matched
 
@@ -448,7 +507,7 @@ class CompareFunc:
     def indices(index_tolerance=None, fail_fast=None):
         """
         Creates a function that compares two IterationResults containing indices, and can be used as the `compare_func` argument
-        in ``Comparator.compare_accuracy``.
+        in ``Comparator.compare_accuracy``. This can be useful to compare, for example, the outputs of a Top-K operation.
 
         Outputs with more than one dimension are treated like multiple batches of values. For example, an output of shape (3, 4, 5, 10)
         would be treated like 60 batches (3 x 4 x 5) of 10 values each.
@@ -462,11 +521,19 @@ class CompareFunc:
                         output0 = [0, 1, 2]
                         output1 = [1, 0, 2]
 
-                    With an index tolerance of 0, this would be considered a mismatch. However, with an index tolerance
-                    of 1, it would pass since the mismatched values, 0 and 1, are only one spot apart.
+                    With an index tolerance of 0, this would be considered a mismatch, since the positions of `0` and `1`
+                    are flipped between the two outputs. However, with an index tolerance of 1, it would pass since
+                    the mismatched values are only 1 spot apart. If instead the outputs were:
+                    ::
+
+                        output0 = [0, 1, 2]
+                        output1 = [1, 2, 0]
+
+                    Then we would require an index tolerance of 2, since the `0` value in the two outputs is 2 spots apart.
 
                     When this value is set, the final 'index_tolerance' number of values are ignored for each batch.
                     For example, with an index tolerance of 1, mismatches in the final element are not considered.
+                    If used with a Top-K output, you can compensate for this by instead using a Top-(K + index_tolerance).
 
                     This can be provided on a per-output basis using a dictionary. In that case,
                     use an empty string ("") as the key to specify default tolerance for outputs not explicitly listed.
@@ -529,6 +596,8 @@ class CompareFunc:
                         if index1.size < 1:
                             G_LOGGER.error(f"FAILED | Value: {val0} not found in output")
                             passed = False
+                            if fail_fast:
+                                return False
                             continue
 
                         index1 = index1[0]
@@ -536,6 +605,8 @@ class CompareFunc:
                         if abs(index1 - index0) > per_out_index_tol:
                             G_LOGGER.error(f"FAILED | Difference exceeds index tolerance ({per_out_index_tol})")
                             passed = False
+                            if fail_fast:
+                                return False
                             continue
 
                 # Log information about the outputs
@@ -550,7 +621,8 @@ class CompareFunc:
                     output1, not passed, f"{iter_result1.runner_name}: {out1_name}", hist_range=hist_bin_range
                 )
 
-                G_LOGGER.finish(f"PASSED | Difference is within index tolerance ({per_out_index_tol})")
+                if passed:
+                    G_LOGGER.finish(f"PASSED | Difference is within index tolerance ({per_out_index_tol})")
                 return passed
 
             return run_comparison(

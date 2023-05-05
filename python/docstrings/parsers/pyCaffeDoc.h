@@ -89,7 +89,7 @@ constexpr const char* is_plugin_v2 = R"trtdoc(
 
     :arg layer_name: Name of the layer which the user wishes to validate.
 
-    :returns: True if the the layer configuration is provided by an :class:`IPluginV2` .
+    :returns: True if the layer configuration is provided by an :class:`IPluginV2` .
 )trtdoc";
 
 constexpr const char* create_plugin = R"trtdoc(

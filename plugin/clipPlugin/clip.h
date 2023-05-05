@@ -18,7 +18,7 @@
 #define TRT_CLIP_H
 #include "NvInfer.h"
 
-int clipInference(
-    cudaStream_t stream, int n, float clipMin, float clipMax, void const* input, void* output, nvinfer1::DataType type);
+int32_t clipInference(cudaStream_t stream, int32_t n, float clipMin, float clipMax, void const* input, void* output,
+    nvinfer1::DataType type);
 
 #endif // TRT_CLIP_H

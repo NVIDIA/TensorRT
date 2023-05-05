@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,6 @@
 
 arg_dockerfile=docker/ubuntu-20.04.Dockerfile
 arg_imagename=tensorrt-ubuntu
-arg_cudaversion=12.0.1
 arg_help=0
 
 while [[ "$#" -gt 0 ]]; do case $1 in
@@ -38,7 +37,13 @@ if [ "$arg_help" -eq "1" ]; then
     exit;
 fi
 
-docker_args="-f $arg_dockerfile --build-arg CUDA_VERSION=$arg_cudaversion --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
+if [ -z "$arg_cudaversion" ]
+then
+    echo "--cuda not specified, so not passing in --build-arg CUDA_VERSION to Dockerfile"
+    docker_args="-f $arg_dockerfile --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
+else
+    docker_args="-f $arg_dockerfile --build-arg CUDA_VERSION=$arg_cudaversion --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
+fi
 
 echo "Building container:"
 echo "> docker build $docker_args"

@@ -39,7 +39,7 @@
 
 #define CUDA_KERNEL_LOOP(i, n) for (int32_t i = blockIdx.x * blockDim.x + threadIdx.x; i < (n); i += blockDim.x * gridDim.x)
 
-constexpr int32_t CUDA_NUM_THREADS = 768;
+constexpr int32_t kCUDA_NUM_THREADS{768};
 inline int32_t GET_BLOCKS(int32_t const N, int32_t const numThreads)
 {
     return (N + numThreads - 1) / numThreads;
@@ -98,26 +98,26 @@ __device__ scalar_t ms_deform_attn_im2col_bilinear(scalar_t const*& bottomData, 
 }
 
 template <>
-__device__ __half ms_deform_attn_im2col_bilinear<__half>(const __half*& bottomData, int32_t const& height, int32_t const& width,
-    int32_t const& nHeads, int32_t const& channels, const __half& h, const __half& w, int32_t const& m, int32_t const& c)
+__device__ __half ms_deform_attn_im2col_bilinear<__half>(__half const*& bottomData, int32_t const& height, int32_t const& width,
+    int32_t const& nHeads, int32_t const& channels, __half const& h, __half const& w, int32_t const& m, int32_t const& c)
 {
     int32_t const hLow = __half2int_rd(h);
     int32_t const wLow = __half2int_rd(w);
     int32_t const hHigh = hLow + 1;
     int32_t const wHigh = wLow + 1;
 
-    const __half kZERO = __int2half_rz(0);
-    const __half one = __int2half_rz(1);
+    __half const kZERO = __int2half_rz(0);
+    __half const one = __int2half_rz(1);
 
 #if __CUDA_ARCH__>=530
-    const __half lh = __hsub(h, __int2half_rd(hLow));
-    const __half lw = __hsub(w, __int2half_rd(wLow));
-    const __half hh = __hsub(one, lh), hw = __hsub(one, lw);
+    __half const lh = __hsub(h, __int2half_rd(hLow));
+    __half const lw = __hsub(w, __int2half_rd(wLow));
+    __half const hh = __hsub(one, lh), hw = __hsub(one, lw);
 #else
-    const __half lh = __float2half(__half2float(h) - hLow);
-    const __half lw = __float2half(__half2float(w) - wLow);
-    const __half hh = __float2half(__half2float(one) - __half2float(lh));
-    const __half hw = __float2half(__half2float(one) - __half2float(lw));
+    __half const lh = __float2half(__half2float(h) - hLow);
+    __half const lw = __float2half(__half2float(w) - wLow);
+    __half const hh = __float2half(__half2float(one) - __half2float(lh));
+    __half const hw = __float2half(__half2float(one) - __half2float(lw));
 #endif
     int32_t const wStride = nHeads * channels;
     int32_t const hStride = width * wStride;
@@ -161,7 +161,7 @@ __device__ __half ms_deform_attn_im2col_bilinear<__half>(const __half*& bottomDa
     w1 = __hadd(w1, w2);
     w3 = __hadd(w3, w4);
 
-    const __half val = __hadd(w1, w3);
+    __half const val = __hadd(w1, w3);
 #else
     __half w1 = __float2half((__half2float(hh) * __half2float(hw)) * __half2float(v1));
     __half w2 = __float2half((__half2float(hh) * __half2float(lw)) * __half2float(v2));
@@ -171,7 +171,7 @@ __device__ __half ms_deform_attn_im2col_bilinear<__half>(const __half*& bottomDa
     w1 = __float2half(__half2float(w1) + __half2float(w2));
     w3 = __float2half(__half2float(w3) + __half2float(w4));
 
-    const __half val = __float2half(__half2float(w1) + __half2float(w3));
+    __half const val = __float2half(__half2float(w1) + __half2float(w3));
 #endif 
     return val;
 }
@@ -373,9 +373,9 @@ __global__ void ms_deformable_im2col_gpu_kernel(int32_t const n, scalar_t const*
 }
 
 template <>
-__global__ void ms_deformable_im2col_gpu_kernel<__half>(int32_t const n, const __half* dataValue,
-    int32_t const* dataSpatialShapes, int32_t const* dataLevelStartIndex, const __half* dataSamplingLoc,
-    const __half* dataAttnWeight, int32_t const batchSize, int32_t const spatialSize, int32_t const numHeads, int32_t const channels,
+__global__ void ms_deformable_im2col_gpu_kernel<__half>(int32_t const n, __half const* dataValue,
+    int32_t const* dataSpatialShapes, int32_t const* dataLevelStartIndex, __half const* dataSamplingLoc,
+    __half const* dataAttnWeight, int32_t const batchSize, int32_t const spatialSize, int32_t const numHeads, int32_t const channels,
     int32_t const numLevels, int32_t const numQuery, int32_t const numPoint, __half* dataCol)
 {
     CUDA_KERNEL_LOOP(index, n)
@@ -394,9 +394,9 @@ __global__ void ms_deformable_im2col_gpu_kernel<__half>(int32_t const n, const _
         int32_t dataLocWPtr = dataWeightPtr << 1;
         int32_t const qidStride = numHeads * channels;
         int32_t const dataValuePtrInitOffset = bCol * spatialSize * qidStride;
-        const __half kZERO_POINT_FIVE = __float2half(0.5f);
-        const __half kMINUS_ONE = __float2half(-1.0f);
-        const __half kZERO = __int2half_rz(0);
+        __half const kZERO_POINT_FIVE = __float2half(0.5f);
+        __half const kMINUS_ONE = __float2half(-1.0f);
+        __half const kZERO = __int2half_rz(0);
         __half tpVal = kZERO;
         __half col = kZERO;
 
@@ -406,17 +406,17 @@ __global__ void ms_deformable_im2col_gpu_kernel<__half>(int32_t const n, const _
             int32_t const spatialHPtr = lCol << 1;
             int32_t const spatialH = dataSpatialShapes[spatialHPtr];
             int32_t const spatialW = dataSpatialShapes[spatialHPtr + 1];
-            const __half spatialHHalf = __int2half_rd(spatialH);
-            const __half spatialWHalf = __int2half_rd(spatialW);
-            const __half* dataValuePtr = dataValue + (dataValuePtrInitOffset + levelStartId * qidStride);
+            __half const spatialHHalf = __int2half_rd(spatialH);
+            __half const spatialWHalf = __int2half_rd(spatialW);
+            __half const* dataValuePtr = dataValue + (dataValuePtrInitOffset + levelStartId * qidStride);
             for (int32_t pCol = 0; pCol < numPoint; ++pCol)
             {
-                const __half locW = dataSamplingLoc[dataLocWPtr];
-                const __half locH = dataSamplingLoc[dataLocWPtr + 1];
-                const __half weight = dataAttnWeight[dataWeightPtr];
+                __half const locW = dataSamplingLoc[dataLocWPtr];
+                __half const locH = dataSamplingLoc[dataLocWPtr + 1];
+                __half const weight = dataAttnWeight[dataWeightPtr];
 #if __CUDA_ARCH__ >= 530
-                const __half hIm = __hsub(__hmul(locH, spatialHHalf), kZERO_POINT_FIVE);
-                const __half wIm = __hsub(__hmul(locW, spatialWHalf), kZERO_POINT_FIVE);
+                __half const hIm = __hsub(__hmul(locH, spatialHHalf), kZERO_POINT_FIVE);
+                __half const wIm = __hsub(__hmul(locW, spatialWHalf), kZERO_POINT_FIVE);
 
                 if (__hgt(hIm, kMINUS_ONE) && __hgt(wIm, kMINUS_ONE) && __hlt(hIm, spatialHHalf)
                     && __hlt(wIm, spatialWHalf))
@@ -426,8 +426,8 @@ __global__ void ms_deformable_im2col_gpu_kernel<__half>(int32_t const n, const _
                     col = __hadd(col, __hmul(tpVal, weight));
                 }
 #else
-                const __half hIm = __float2half(__half2float(locH) * __half2float(spatialHHalf) - __half2float(kZERO_POINT_FIVE));
-                const __half wIm = __float2half(__half2float(locW) * __half2float(spatialWHalf) - __half2float(kZERO_POINT_FIVE));
+                __half const hIm = __float2half(__half2float(locH) * __half2float(spatialHHalf) - __half2float(kZERO_POINT_FIVE));
+                __half const wIm = __float2half(__half2float(locW) * __half2float(spatialWHalf) - __half2float(kZERO_POINT_FIVE));
 
                 if((__half2float(hIm)>__half2float(kMINUS_ONE)) && (__half2float(wIm)>__half2float(kMINUS_ONE))
                     && (__half2float(hIm)<__half2float(spatialHHalf)) && (__half2float(wIm)<__half2float(spatialWHalf)))
@@ -996,7 +996,7 @@ void ms_deformable_im2col_cuda(cudaStream_t stream, scalar_t const* dataValue, i
 {
     int32_t const numKernels = batchSize * numQuery * numHeads * channels;
     int32_t const numActualKernels = batchSize * numQuery * numHeads * channels;
-    int32_t const numThreads = CUDA_NUM_THREADS;
+    int32_t const numThreads = kCUDA_NUM_THREADS;
     cudaError_t err = cudaSuccess;
 
     ms_deformable_im2col_gpu_kernel<scalar_t><<<GET_BLOCKS(numActualKernels, numThreads), numThreads, 0, stream>>>(
@@ -1016,7 +1016,7 @@ void ms_deformable_col2im_cuda(cudaStream_t stream, scalar_t const* grad_col, sc
     int32_t const numLevels, int32_t const numQuery, int32_t const numPoint, scalar_t* gradValue, scalar_t* gradSamplingLoc,
     scalar_t* gradAttnWeight)
 {
-    int32_t const numThreads = (channels > CUDA_NUM_THREADS) ? CUDA_NUM_THREADS : channels;
+    int32_t const numThreads = (channels > kCUDA_NUM_THREADS) ? kCUDA_NUM_THREADS : channels;
     int32_t const numKernels = batchSize * numQuery * numHeads * channels;
     int32_t const numActualKernels = batchSize * numQuery * numHeads * channels;
     if (channels > 1024)
@@ -1157,7 +1157,7 @@ __global__ void float2half_input(int32_t const nData1, int32_t const nData2, int
     }
 }
 
-__global__ void half2float_output(int32_t const n_data, const __half* data_half, float* data_float)
+__global__ void half2float_output(int32_t const n_data, __half const* data_half, float* data_float)
 {
     CUDA_KERNEL_LOOP(index, n_data)
     {

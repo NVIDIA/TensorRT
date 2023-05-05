@@ -31,26 +31,26 @@ namespace plugin
 class Normalize : public IPluginV2Ext
 {
 public:
-    Normalize(Weights const* weights, int nbWeights, bool acrossSpatial, bool channelShared, float eps);
+    Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpatial, bool channelShared, float eps);
 
-    Normalize(Weights const* weights, int nbWeights, float scalarScale, bool acrossSpatial, bool channelShared,
-        float eps, int C, int H, int W);
+    Normalize(Weights const* weights, int32_t nbWeights, float scalarScale, bool acrossSpatial, bool channelShared,
+        float eps, int32_t C, int32_t H, int32_t W);
 
     Normalize(void const* buffer, size_t length);
 
     ~Normalize() override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
-    int enqueue(int batchSize, void const* const* inputs, void* const* outputs, void* workspace,
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
 
     size_t getSerializationSize() const noexcept override;
@@ -71,19 +71,20 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     void detachFromContext() noexcept override;
 
@@ -95,14 +96,14 @@ private:
     cublasHandle_t mCublas;
 
     Weights mWeights{}; // mWeights.values is on the device
-    int mNbWeights{};
+    int32_t mNbWeights{};
     float mScalarScale{}; // keep track of scale on the host (for when channelShared is true)
     bool acrossSpatial{};
     bool channelShared{};
     float eps{};
-    int C{};
-    int H{};
-    int W{};
+    int32_t C{};
+    int32_t H{};
+    int32_t W{};
     std::string mPluginNamespace;
 };
 
@@ -128,7 +129,7 @@ private:
     bool mAcrossSpatial{};
     bool mChannelShared{};
     float mEps{};
-    int mNbWeights{};
+    int32_t mNbWeights{};
     static std::vector<PluginField> mPluginAttributes;
 };
 } // namespace plugin

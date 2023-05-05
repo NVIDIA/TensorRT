@@ -74,6 +74,9 @@ if __name__ == "__main__":
     if batch_size > max_batch_size:
         raise ValueError(f"Batch size {len(prompt)} is larger than allowed {max_batch_size}. If dynamic shape is used, then maximum batch size is 4")
 
+    if args.use_cuda_graph and (not args.build_static_batch or args.build_dynamic_shape):
+        raise ValueError(f"Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
+
     # Initialize demo
     demo = Img2ImgPipeline(
         scheduler=args.scheduler,
@@ -94,6 +97,10 @@ if __name__ == "__main__":
         enable_refit=args.build_enable_refit, enable_preview=args.build_preview_features, enable_all_tactics=args.build_all_tactics, \
         timing_cache=args.timing_cache, onnx_refit_dir=args.onnx_refit_dir)
     demo.loadResources(image_height, image_width, batch_size, args.seed)
+
+    if args.use_cuda_graph:
+        # inference once to get cuda graph
+        images = demo.infer(prompt, negative_prompt, input_image, image_height, image_width, strength=0.75, warmup=True)
 
     print("[I] Warming up ..")
     for _ in range(args.num_warmup_runs):

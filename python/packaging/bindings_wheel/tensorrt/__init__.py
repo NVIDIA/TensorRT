@@ -22,34 +22,28 @@ import sys
 import warnings
 
 
-def try_load(library):
-    try:
-        ctypes.CDLL(library)
-    except OSError:
-        pass
-
-
-# Try loading all packaged libraries. This is a nop if there are no libraries packaged.
-CURDIR = os.path.realpath(os.path.dirname(__file__))
-for lib in glob.iglob(os.path.join(CURDIR, "*.so*")):
-    try_load(lib)
-
-
-# On Windows, we need to manually open the TensorRT libraries - otherwise we are unable to
-# load the bindings.
-def find_lib(name):
-    paths = os.environ["PATH"].split(os.path.pathsep)
-    for path in paths:
-        libpath = os.path.join(path, name)
-        if os.path.isfile(libpath):
-            return libpath
-
-    raise FileNotFoundError(
-        "Could not find: {:}. Is it on your PATH?\nNote: Paths searched were:\n{:}".format(name, paths)
-    )
+# For standalone wheels, attempt to import the wheel containing the libraries.
+try:
+    import ##TENSORRT_MODULE##_libs
+except (ImportError, ModuleNotFoundError):
+    pass
 
 
 if sys.platform.startswith("win"):
+    # On Windows, we need to manually open the TensorRT libraries - otherwise we are unable to
+    # load the bindings.
+    def find_lib(name):
+        paths = os.environ["PATH"].split(os.path.pathsep)
+        for path in paths:
+            libpath = os.path.join(path, name)
+            if os.path.isfile(libpath):
+                return libpath
+
+        raise FileNotFoundError(
+            "Could not find: {:}. Is it on your PATH?\nNote: Paths searched were:\n{:}".format(name, paths)
+        )
+
+
     # Order matters here because of dependencies
     LIBRARIES = {"tensorrt": [
         "nvinfer.dll",

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +15,47 @@
 # limitations under the License.
 #
 
+import contextlib
+import io
+
 import pytest
-from polygraphy.tools.args import ComparatorPostprocessArgs
+
+from polygraphy import util
+from polygraphy.tools.args import (
+    ComparatorCompareArgs,
+    ComparatorPostprocessArgs,
+    CompareFuncIndicesArgs,
+    CompareFuncSimpleArgs,
+    LoggerArgs,
+)
 from tests.tools.args.helper import ArgGroupTestHelper
+
+
+class TestComparatorCompareArgs:
+    @pytest.mark.serial
+    @pytest.mark.parametrize(
+        "compare_func, options, option_names, valid_for",
+        [
+            ("simple", ["--index-tolerance=1"], ["--index-tolerance"], "indices"),
+            ("indices", ["--rtol=1"], ["--rtol", "--rel-tol"], "simple"),
+            ("indices", ["--atol=1"], ["--atol", "--abs-tol"], "simple"),
+        ],
+    )
+    def test_compare_func_warnings_for_unused_options(self, compare_func, options, option_names, valid_for):
+        outfile = io.StringIO()
+        with contextlib.redirect_stdout(outfile), contextlib.redirect_stderr(outfile):
+            # Keep logger arguments first they're parsed first so we actually write to the log file.
+            arg_group = ArgGroupTestHelper(
+                ComparatorCompareArgs(), deps=[LoggerArgs(), CompareFuncIndicesArgs(), CompareFuncSimpleArgs()]
+            )
+            arg_group.parse_args([f"--compare-func={compare_func}"] + options)
+
+            outfile.seek(0)
+            logging_out = outfile.read()
+            assert (
+                f"[W] Option: {'/'.join(option_names)} is only valid for comparison function: '{valid_for}'. "
+                f"The selected comparison function is: '{compare_func}', so this option will be ignored." in logging_out
+            )
 
 
 class TestComparatorPostprocess:

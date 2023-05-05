@@ -26,8 +26,8 @@ namespace MaskRCNNConfig
 static const nvinfer1::Dims3 IMAGE_SHAPE{3, 1024, 1024};
 
 // Pooled ROIs
-static int const POOL_SIZE = 7;
-static int const MASK_POOL_SIZE = 14;
+static int32_t const POOL_SIZE = 7;
+static int32_t const MASK_POOL_SIZE = 14;
 
 // Threshold to determine the mask area out of final convolution output
 static float const MASK_THRESHOLD = 0.5F;
@@ -37,7 +37,7 @@ static float const RPN_BBOX_STD_DEV[] = {0.1F, 0.1F, 0.2F, 0.2F};
 static float const BBOX_STD_DEV[] = {0.1F, 0.1F, 0.2F, 0.2F};
 
 // Max number of final detections
-static int const DETECTION_MAX_INSTANCES = 100;
+static int32_t const DETECTION_MAX_INSTANCES = 100;
 
 // Minimum probability value to accept a detected instance
 // ROIs below this threshold are skipped
@@ -51,13 +51,13 @@ static float const DETECTION_NMS_THRESHOLD = 0.3F;
 static const std::vector<float> BACKBONE_STRIDES = {4.F, 8.F, 16.F, 32.F, 64.F};
 
 // Size of the fully-connected layers in the classification graph
-static int const FPN_CLASSIF_FC_LAYERS_SIZE = 1024;
+static int32_t const FPN_CLASSIF_FC_LAYERS_SIZE = 1024;
 
 // Size of the top-down layers used to build the feature pyramid
-static int const TOP_DOWN_PYRAMID_SIZE = 256;
+static int32_t const TOP_DOWN_PYRAMID_SIZE = 256;
 
 // Number of classification classes (including background)
-static int const NUM_CLASSES = 1 + 80; // COCO has 80 classes
+static int32_t const NUM_CLASSES = 1 + 80; // COCO has 80 classes
 
 // Length of square anchor side in pixels
 static const std::vector<float> RPN_ANCHOR_SCALES = {32.F, 64.F, 128.F, 256.F, 512.F};
@@ -69,18 +69,18 @@ static float const RPN_ANCHOR_RATIOS[] = {0.5F, 1.F, 2.F};
 // Anchor stride
 // If 1 then anchors are created for each cell in the backbone feature map.
 // If 2, then anchors are created for every other cell, and so on.
-static int const RPN_ANCHOR_STRIDE = 1;
+static int32_t const RPN_ANCHOR_STRIDE = 1;
 
 // Although Python impementation uses 6000,
 //  TRT fails if this number larger than kMAX_TOPK_K defined in engine/checkMacros.h
-static int const MAX_PRE_NMS_RESULTS = 1024; // 3840;
+static int32_t const MAX_PRE_NMS_RESULTS = 1024; // 3840;
 
 // Non-max suppression threshold to filter RPN proposals.
 // You can increase this during training to generate more propsals.
 static float const RPN_NMS_THRESHOLD = 0.7F;
 
 // ROIs kept after non-maximum suppression (training and inference)
-static int const POST_NMS_ROIS_INFERENCE = 1000;
+static int32_t const POST_NMS_ROIS_INFERENCE = 1000;
 
 // COCO Class names
 static const std::vector<std::string> CLASS_NAMES = {

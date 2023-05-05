@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,95 +20,8 @@ from collections import namedtuple
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
-from polygraphy.backend.trt import Algorithm, TacticRecorder, TacticReplayData, TacticReplayer
+from polygraphy.backend.trt import Algorithm, TacticRecorder, TacticReplayData, TacticReplayer, TensorInfo
 from polygraphy.exception import PolygraphyException
-
-ALGO_EQ_CASES = [
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        True,
-    ),  # Same
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(
-            7, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        False,
-    ),  # Different implementation
-    (
-        Algorithm(
-            6, 2, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        False,
-    ),  # Different tactic
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.CHW32, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        False,
-    ),  # Different input format
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.int8)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]),
-        False,
-    ),  # Different input data type
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.CHW32, trt.float32)]
-        ),
-        False,
-    ),  # Different output format
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.int8)]),
-        False,
-    ),  # Different output data type
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)] * 2, outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        False,
-    ),  # Different number of inputs
-    (
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)] * 2
-        ),
-        Algorithm(
-            6, 1, inputs=[(trt.TensorFormat.LINEAR, trt.float32)], outputs=[(trt.TensorFormat.LINEAR, trt.float32)]
-        ),
-        False,
-    ),  # Different number of outputs
-]
-
-
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
-class TestAlgorithm:
-    @pytest.mark.parametrize("left, right, expected", ALGO_EQ_CASES)
-    def test_equality(self, left, right, expected):
-        assert (left == right) == expected
 
 
 FakeAlgorithmContext = namedtuple("FakeAlgorithmContext", ["name", "num_inputs", "num_outputs"])
@@ -116,22 +29,213 @@ FakeAlgorithm = namedtuple("FakeAlgorithm", ["algorithm_variant", "io_info"])
 FakeAlgorithm.get_algorithm_io_info = lambda this, index: this.io_info[index]
 
 FakeAlgorithmVariant = namedtuple("FakeAlgorithmVariant", ["implementation", "tactic"])
-FakeAlgorithmIOInfo = namedtuple("FakeAlgorithmIOInfo", ["tensor_format", "dtype", "strides"])
 
 
 def fake_context(name):
     return FakeAlgorithmContext(name=name, num_inputs=1, num_outputs=1)
 
 
+def make_tensor_info(
+    tensor_format=trt.TensorFormat.LINEAR,
+    dtype=trt.float32,
+    strides=(1, 2, 3),
+    vectorized_dim=-1,
+    components_per_element=1,
+):
+    return TensorInfo(tensor_format, dtype, strides, vectorized_dim, components_per_element)
+
+
 def fake_algo(implementation=6, tactic=0, io=None):
-    io_info = [FakeAlgorithmIOInfo(tensor_format=trt.TensorFormat.LINEAR, dtype=trt.float32, strides=(4, 5, 6))] * 2
+    io_info = [make_tensor_info()] * 2
     if io:
         io_info = []
         for fmt, dtype, strides in io:
-            io_info.append(FakeAlgorithmIOInfo(tensor_format=fmt, dtype=dtype, strides=strides))
+            io_info.append(
+                TensorInfo(tensor_format=fmt, dtype=dtype, strides=strides, vectorized_dim=-1, components_per_element=1)
+            )
 
     trt_algo = FakeAlgorithm(algorithm_variant=FakeAlgorithmVariant(implementation, tactic), io_info=io_info)
     return trt_algo
+
+
+@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
+class TestTensorInfo:
+    @pytest.mark.parametrize(
+        "left, right, expected",
+        [
+            (
+                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+                True,
+            ),
+            # Different format
+            (
+                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.TensorFormat.HWC, trt.float32, (1, 2, 3), -1, 1),
+                False,
+            ),
+            # Different data type
+            (
+                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.TensorFormat.LINEAR, trt.float16, (1, 2, 3), -1, 1),
+                False,
+            ),
+            # Different vectotrization
+            (
+                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), 0, 2),
+                False,
+            ),
+        ],
+    )
+    def test_equality(self, left, right, expected):
+        assert (left == right) == expected
+
+
+@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
+class TestAlgorithm:
+    @pytest.mark.parametrize(
+        "left, right, expected",
+        [
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                True,
+            ),  # Same
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    7,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                False,
+            ),  # Different implementation
+            (
+                Algorithm(
+                    6,
+                    2,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                False,
+            ),  # Different tactic
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.CHW32, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                False,
+            ),  # Different input format
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.int8)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                False,
+            ),  # Different input data type
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.CHW32, trt.float32)],
+                ),
+                False,
+            ),  # Different output format
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.int8)],
+                ),
+                False,
+            ),  # Different output data type
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)] * 2,
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                False,
+            ),  # Different number of inputs
+            (
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)] * 2,
+                ),
+                Algorithm(
+                    6,
+                    1,
+                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                ),
+                False,
+            ),  # Different number of outputs
+        ],
+    )
+    def test_equality(self, left, right, expected):
+        assert (left == right) == expected
 
 
 @pytest.fixture(params=[True, False], ids=["path", "object"])

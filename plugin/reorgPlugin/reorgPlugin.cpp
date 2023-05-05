@@ -25,7 +25,7 @@ static char const* const kREORG_PLUGIN_NAME{"Reorg_TRT"};
 PluginFieldCollection ReorgPluginCreator::mFC{};
 std::vector<PluginField> ReorgPluginCreator::mPluginAttributes;
 
-Reorg::Reorg(int C, int H, int W, int stride)
+Reorg::Reorg(int32_t C, int32_t H, int32_t W, int32_t stride)
     : C(C)
     , H(H)
     , W(W)
@@ -33,7 +33,7 @@ Reorg::Reorg(int C, int H, int W, int stride)
 {
 }
 
-Reorg::Reorg(int stride)
+Reorg::Reorg(int32_t stride)
     : stride(stride)
 {
 }
@@ -41,27 +41,27 @@ Reorg::Reorg(int stride)
 Reorg::Reorg(void const* buffer, size_t length)
 {
     char const *d = reinterpret_cast<char const*>(buffer), *a = d;
-    C = read<int>(d);
-    H = read<int>(d);
-    W = read<int>(d);
-    stride = read<int>(d);
+    C = read<int32_t>(d);
+    H = read<int32_t>(d);
+    W = read<int32_t>(d);
+    stride = read<int32_t>(d);
     PLUGIN_VALIDATE(d == a + length);
 }
 
-int Reorg::getNbOutputs() const noexcept
+int32_t Reorg::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims Reorg::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims Reorg::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
     return Dims3(inputs[0].d[0] * stride * stride, inputs[0].d[1] / stride, inputs[0].d[2] / stride);
 }
 
-int Reorg::enqueue(
-    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t Reorg::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     void const* inputData = inputs[0];
     void* outputData = outputs[0];
@@ -72,7 +72,7 @@ int Reorg::enqueue(
 size_t Reorg::getSerializationSize() const noexcept
 {
     // C, H, W, stride
-    return sizeof(int) * 4;
+    return sizeof(int32_t) * 4;
 }
 
 void Reorg::serialize(void* buffer) const noexcept
@@ -90,14 +90,14 @@ bool Reorg::supportsFormat(DataType type, PluginFormat format) const noexcept
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-int Reorg::initialize() noexcept
+int32_t Reorg::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
 void Reorg::terminate() noexcept {}
 
-size_t Reorg::getWorkspaceSize(int maxBatchSize) const noexcept
+size_t Reorg::getWorkspaceSize(int32_t maxBatchSize) const noexcept
 {
     return 0;
 }
@@ -129,7 +129,7 @@ char const* Reorg::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType Reorg::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+DataType Reorg::getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     PLUGIN_ASSERT(index == 0);
@@ -139,21 +139,22 @@ DataType Reorg::getOutputDataType(int index, nvinfer1::DataType const* inputType
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool Reorg::isOutputBroadcastAcrossBatch(int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+bool Reorg::isOutputBroadcastAcrossBatch(
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool Reorg::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool Reorg::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void Reorg::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+void Reorg::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(nbInputs == 1);

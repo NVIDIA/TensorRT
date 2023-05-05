@@ -39,24 +39,24 @@ LReLU::LReLU(void const* buffer, size_t length)
 {
     char const *d = reinterpret_cast<char const*>(buffer), *a = d;
     mNegSlope = read<float>(d);
-    mBatchDim = read<int>(d);
+    mBatchDim = read<int32_t>(d);
     PLUGIN_VALIDATE(d == a + length);
 }
 
-int LReLU::getNbOutputs() const noexcept
+int32_t LReLU::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims LReLU::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims LReLU::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 1);
     PLUGIN_ASSERT(index == 0);
     return inputs[0];
 }
 
-int LReLU::enqueue(
-    int batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t LReLU::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     void const* inputData = inputs[0];
     void* outputData = outputs[0];
@@ -67,7 +67,7 @@ int LReLU::enqueue(
 size_t LReLU::getSerializationSize() const noexcept
 {
     // mNegSlope, mBatchDim
-    return sizeof(float) + sizeof(int);
+    return sizeof(float) + sizeof(int32_t);
 }
 
 void LReLU::serialize(void* buffer) const noexcept
@@ -78,13 +78,13 @@ void LReLU::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void LReLU::configureWithFormat(Dims const* inputDims, int /* nbInputs */, Dims const* /* outputDims */, int nbOutputs,
-    DataType type, PluginFormat format, int) noexcept
+void LReLU::configureWithFormat(Dims const* inputDims, int32_t /* nbInputs */, Dims const* /* outputDims */,
+    int32_t nbOutputs, DataType type, PluginFormat format, int32_t) noexcept
 {
     PLUGIN_ASSERT(type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(mBatchDim == 1);
     PLUGIN_ASSERT(nbOutputs == 1);
-    for (int i = 0; i < inputDims[0].nbDims; ++i)
+    for (int32_t i = 0; i < inputDims[0].nbDims; ++i)
     {
         mBatchDim *= inputDims[0].d[i];
     }
@@ -95,14 +95,14 @@ bool LReLU::supportsFormat(DataType type, PluginFormat format) const noexcept
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-int LReLU::initialize() noexcept
+int32_t LReLU::initialize() noexcept
 {
     return 0;
 }
 
 void LReLU::terminate() noexcept {}
 
-size_t LReLU::getWorkspaceSize(int /* maxBatchSize */) const noexcept
+size_t LReLU::getWorkspaceSize(int32_t /* maxBatchSize */) const noexcept
 {
     return 0;
 }

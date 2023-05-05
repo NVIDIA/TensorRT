@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from polygraphy import mod
+from polygraphy import mod, util
 from polygraphy.common.interface import TypedDict
 from polygraphy.json import Decoder, Encoder, add_json_methods
 
@@ -122,10 +122,7 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
     def __repr__(self):
         ret = "TensorMetadata()"
         for name, (dtype, shape) in self.items():
-            shape_str = f"{shape}"
-            if shape is not None:
-                shape_str = f"{list(shape)}, min_shape={shape.min}, max_shape={shape.max}"
-            ret += f".add('{name}', {dtype}, {shape_str})"
+            ret += util.make_repr(".add", name, dtype, list(shape), min_shape=shape.min, max_shape=shape.max)[0]
         return ret
 
     def __str__(self):

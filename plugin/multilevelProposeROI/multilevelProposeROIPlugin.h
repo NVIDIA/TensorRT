@@ -35,24 +35,24 @@ namespace plugin
 class MultilevelProposeROI : public IPluginV2Ext
 {
 public:
-    MultilevelProposeROI(
-        int prenms_topk, int keep_topk, float fg_threshold, float iou_threshold, const nvinfer1::Dims image_size);
+    MultilevelProposeROI(int32_t prenms_topk, int32_t keep_topk, float fg_threshold, float iou_threshold,
+        const nvinfer1::Dims image_size);
 
     MultilevelProposeROI(void const* data, size_t length);
 
     ~MultilevelProposeROI() noexcept override = default;
 
-    int getNbOutputs() const noexcept override;
+    int32_t getNbOutputs() const noexcept override;
 
-    Dims getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
-    int initialize() noexcept override;
+    int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
     void destroy() noexcept override;
 
-    size_t getWorkspaceSize(int maxBatchSize) const noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
 
     int32_t enqueue(int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace,
         cudaStream_t stream) noexcept override;
@@ -73,36 +73,37 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
-        int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept override;
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
-    bool canBroadcastInputAcrossBatch(int inputIndex) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept override;
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
 
     void detachFromContext() noexcept override;
 
 private:
-    void check_valid_inputs(nvinfer1::Dims const* inputs, int nbInputDims) noexcept;
+    void check_valid_inputs(nvinfer1::Dims const* inputs, int32_t nbInputDims) noexcept;
     void generate_pyramid_anchors(nvinfer1::Dims const& imageSize);
 
-    int mBackgroundLabel;
-    int mPreNMSTopK;
-    int mKeepTopK;
-    int mFeatureCnt;
+    int32_t mBackgroundLabel;
+    int32_t mPreNMSTopK;
+    int32_t mKeepTopK;
+    int32_t mFeatureCnt;
     float mFGThreshold;
     float mIOUThreshold;
 
-    int mMaxBatchSize;
-    std::vector<int> mAnchorsCnt;
-    std::shared_ptr<CudaBind<int>> mValidCnt; // valid cnt = number of input roi for every image.
+    int32_t mMaxBatchSize;
+    std::vector<int32_t> mAnchorsCnt;
+    std::shared_ptr<CudaBind<int32_t>> mValidCnt; // valid cnt = number of input roi for every image.
     std::vector<std::shared_ptr<CudaBind<float>>>
         mAnchorBoxesDevice; // [N, anchors(261888 for resnet101 + 1024*1024), (y1, x1, y2, x2)]
     std::vector<std::vector<float>> mAnchorBoxesHost;
@@ -140,8 +141,8 @@ public:
 
 private:
     static PluginFieldCollection mFC;
-    int mPreNMSTopK;
-    int mKeepTopK;
+    int32_t mPreNMSTopK;
+    int32_t mKeepTopK;
     float mFGThreshold;
     float mIOUThreshold;
     static std::vector<PluginField> mPluginAttributes;

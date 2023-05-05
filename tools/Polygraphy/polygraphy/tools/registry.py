@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,9 +44,7 @@ def try_register_tool(module, tool_class):
         ToolClass = getattr(toolmod, tool_class)
         TOOL_REGISTRY.append(ToolClass())
     except Exception as err:
-        G_LOGGER.internal_error(
-            f"Could not load command-line tool: {tool_class.lower()}.\nNote: Error was: {err}"
-        )
+        G_LOGGER.internal_error(f"Could not load command-line tool: {tool_class.lower()}.\nNote: Error was: {err}")
         TOOL_REGISTRY.append(MissingTool(tool_class.lower(), err=err))
 
 

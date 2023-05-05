@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,4 +17,21 @@
 
 
 def version(version_str):
-    return tuple([int(num) for num in version_str.split(".")])
+    def process_version_part(num):
+        try:
+            return [int(num)]
+        except ValueError:
+            VERSION_SUFFIXES = ["a", "b", "rc", "post", "dev"]
+            # One version part can only contain one of the above suffixes
+            for suffix in VERSION_SUFFIXES:
+                if suffix in num:
+                    return num.partition(suffix)
+
+            # For unrecognized suffixes, just return as-is
+            return [num]
+
+    ver_list = []
+    for num in version_str.split("."):
+        ver_list.extend(process_version_part(num))
+
+    return tuple(ver_list)

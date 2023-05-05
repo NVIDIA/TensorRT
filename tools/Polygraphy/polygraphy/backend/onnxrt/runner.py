@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,9 +39,11 @@ class OnnxrtRunner(BaseRunner):
         super().__init__(name=name, prefix="onnxrt-runner")
         self._sess = sess
 
+    @util.check_called_by("activate")
     def activate_impl(self):
         self.sess, _ = util.invoke_if_callable(self._sess)
 
+    @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
         ONNX_RT_TYPE_TO_NP = {
             "tensor(double)": np.float64,
@@ -65,6 +67,7 @@ class OnnxrtRunner(BaseRunner):
             meta.add(node.name, dtype=dtype, shape=node.shape)
         return meta
 
+    @util.check_called_by("infer")
     def infer_impl(self, feed_dict):
         start = time.time()
         inference_outputs = self.sess.run(None, feed_dict)
@@ -76,5 +79,6 @@ class OnnxrtRunner(BaseRunner):
         self.inference_time = end - start
         return out_dict
 
+    @util.check_called_by("deactivate")
     def deactivate_impl(self):
         del self.sess

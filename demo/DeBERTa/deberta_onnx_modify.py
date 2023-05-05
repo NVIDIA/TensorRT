@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,7 +52,7 @@ correctness_check = args.correctness_check
 if args.output is None:
     model_output = os.path.splitext(model_input)[0] + ("_plugin" if use_plugin else "_original") + os.path.splitext(model_input)[-1]
 else:
-    model_output = args.output 
+    model_output = args.output
 
 def remove_uint8_cast(graph):
     '''
@@ -72,7 +72,7 @@ def remove_uint8_cast(graph):
         # node.attrs["to"] = TensorProto.INT64
 
     return graph
- 
+
 @gs.Graph.register()
 def insert_disentangled_attention(self, inputs, outputs, factor, span):
     '''
@@ -80,7 +80,7 @@ def insert_disentangled_attention(self, inputs, outputs, factor, span):
 
     inputs: list of plugin inputs
     outputs: list of plugin outputs
-    factor: scaling factor of disentangled attention, sqrt(3d), converted from a division factor to a multiplying factor 
+    factor: scaling factor of disentangled attention, sqrt(3d), converted from a division factor to a multiplying factor
     span: relative distance span, k
     '''
     # disconnect previous output from flow (the previous subgraph still exists but is effectively dead since it has no link to an output tensor, and thus will be cleaned up)
@@ -102,21 +102,21 @@ def insert_disentangled_attention_all(graph):
     layers = [(nodes[2*i+0], nodes[2*i+1]) for i in range(len(nodes)//2)] # 2 gatherelements in 1 layer
     for l, (left,right) in enumerate(layers):
         print(f"Fusing layer {l}")
-        
+
         # CAVEAT! MUST cast to list() when setting the inputs & outputs. graphsurgeon's default for X.inputs and X.outputs is `onnx_graphsurgeon.util.misc.SynchronizedList`, i.e. 2-way node-tensor updating mechanism. If not cast, when we remove the input nodes of a tensor, the tensor itself will be removed as well...
-        
+
         # inputs: (data0, data1, data2), input tensors for c2c add and 2 gathers
         inputs = list(left.o().o().o().o().i().inputs)[0:1] + list(left.inputs)[0:1] + list(right.inputs)[0:1]
-        
+
         # outputs: (result), output tensors after adding 3 gather results
         outputs = list(left.o().o().o().o().outputs)
-        
+
         # constants: scaling factor, relative distance span
         factor = left.o().inputs[1].inputs[0].attrs["value"].values.item()
         span = right.i(1,0).i().i().i().inputs[1].inputs[0].attrs["value"].values.item()
 
-        # insert plugin layer        
-        graph.insert_disentangled_attention(inputs, outputs, factor, span) 
+        # insert plugin layer
+        graph.insert_disentangled_attention(inputs, outputs, factor, span)
 
     return graph
 
@@ -142,7 +142,7 @@ def correctness_check_models(graph):
         end_node.outputs[0].dtype = graph_raw.outputs[0].dtype # need to explicitly specify dtype and shape of graph output tensor
         end_node.outputs[0].shape = ['batch_size*num_heads', seq_len, seq_len]
         original_output_all.append(end_node.outputs[0])
-      
+
     graph_raw.outputs = graph_raw.outputs + original_output_all # add plugin outputs to graph output
 
     ## for modified graph with plugin
@@ -165,13 +165,13 @@ def correctness_check_models(graph):
         factor = left.o().inputs[1].inputs[0].attrs["value"].values.item()
         span = right.i(1,0).i().i().i().inputs[1].inputs[0].attrs["value"].values.item()
 
-        # insert plugin layer        
-        graph.insert_disentangled_attention(inputs, outputs, factor, span) 
+        # insert plugin layer
+        graph.insert_disentangled_attention(inputs, outputs, factor, span)
 
     graph.outputs = graph.outputs + plugin_output_all # add plugin outputs to graph output
 
     return graph_raw, graph
-        
+
 def check_model(model_name):
     # Load the ONNX model
     model = onnx.load(model_name)
@@ -200,7 +200,7 @@ if use_plugin:
 
     # don't check model because 'DisentangledAttention_TRT' is not a registered op
 
-elif correctness_check: 
+elif correctness_check:
     # correctness check, save two models (original and w/ plugin) with intermediate output nodes inserted
     graph_raw, graph = correctness_check_models(graph)
 
@@ -213,7 +213,7 @@ elif correctness_check:
     model_output2 = os.path.splitext(model_input)[0] + "_correctness_check_plugin" + os.path.splitext(model_input)[-1]
     onnx.save_model(gs.export_onnx(graph_raw), model_output1)
     onnx.save_model(gs.export_onnx(graph), model_output2)
-    
+
     print(f"Saving models for correctness check to {model_output1} (original) and {model_output2} (with plugin)")
 
     check_model(model_output1)

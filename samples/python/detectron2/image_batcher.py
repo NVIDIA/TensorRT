@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -144,7 +144,7 @@ class ImageBatcher:
 
             # Get characteristics.
             width, height = image.size
-            
+
             # Replicates behavior of ResizeShortestEdge augmentation.
             size = self.min_size_test * 1.0
             pre_scale = size / min(height, width)
@@ -163,7 +163,7 @@ class ImageBatcher:
             neww = int(neww + 0.5)
             newh = int(newh + 0.5)
 
-            # Scaling factor for normalized box coordinates scaling in post-processing. 
+            # Scaling factor for normalized box coordinates scaling in post-processing.
             scaling = max(newh/height, neww/width)
 
             # Padding.
@@ -177,7 +177,7 @@ class ImageBatcher:
         image = Image.open(image_path)
         image = image.convert(mode='RGB')
         # Pad with mean values of COCO dataset, since padding is applied before actual model's
-        # preprocessor steps (Sub, Div ops), we need to pad with mean values in order to reverse 
+        # preprocessor steps (Sub, Div ops), we need to pad with mean values in order to reverse
         # the effects of Sub and Div, so that padding after model's preprocessor will be with actual 0s.
         image, scale = resize_pad(image, (124, 116, 104))
         image = np.asarray(image, dtype=np.float32)

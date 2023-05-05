@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -96,7 +96,7 @@ def full_inference_greedy(
     stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
     no_repeat_ngram_size = BARTModelTRTConfig.NO_REPEAT_NGRAM_SIZE
     logits_processor = LogitsProcessorList([
-        NoRepeatNGramLogitsProcessor(no_repeat_ngram_size), 
+        NoRepeatNGramLogitsProcessor(no_repeat_ngram_size),
         MinLengthLogitsProcessor(min_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token)),
         ForcedBOSTokenLogitsProcessor(tokenizer.convert_tokens_to_ids(tokenizer.bos_token)),
         ForcedEOSTokenLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
@@ -167,7 +167,7 @@ def full_inference_beam(
     stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length)])
     no_repeat_ngram_size = BARTModelTRTConfig.NO_REPEAT_NGRAM_SIZE
     logits_processor = LogitsProcessorList([
-        NoRepeatNGramLogitsProcessor(no_repeat_ngram_size), 
+        NoRepeatNGramLogitsProcessor(no_repeat_ngram_size),
         MinLengthLogitsProcessor(min_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token)),
         ForcedBOSTokenLogitsProcessor(tokenizer.convert_tokens_to_ids(tokenizer.bos_token)),
         ForcedEOSTokenLogitsProcessor(max_length, tokenizer.convert_tokens_to_ids(tokenizer.eos_token))
@@ -194,7 +194,7 @@ def full_inference_beam(
             )
 
             encoder_last_hidden_state = BART_encoder(input_ids=input_ids)
-            
+
             encoder_last_hidden_state = expand_inputs_for_beam_search(encoder_last_hidden_state, expand_size=num_beams)
 
             decoder_output_beam = BART_decoder.beam_search(
@@ -219,9 +219,9 @@ def full_inference_beam(
             )
 
             encoder_last_hidden_state = BART_encoder(input_ids=input_ids)
-            
+
             encoder_last_hidden_state = expand_inputs_for_beam_search(encoder_last_hidden_state, expand_size=num_beams)
-            
+
             BART_decoder.set_encoder_hidden_states_for_inference_cycle(encoder_last_hidden_state)
             decoder_output_beam = BART_decoder.beam_search(
                 input_ids=decoder_input_ids,

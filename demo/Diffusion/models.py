@@ -383,7 +383,7 @@ class TorchVAEEncoder(torch.nn.Module):
         super().__init__()
         self.path = path
         self.vae_encoder = AutoencoderKL.from_pretrained(self.path, subfolder="vae", use_auth_token=token).to(device)
-
+        
     def forward(self, x):
         return self.vae_encoder.encode(x).latent_dist.sample()
 

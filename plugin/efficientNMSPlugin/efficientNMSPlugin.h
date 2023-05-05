@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "common/plugin.h"
-#include "efficientNMSParameters.h"
+#include "efficientNMSPlugin/efficientNMSParameters.h"
 
 namespace nvinfer1
 {
@@ -37,8 +37,8 @@ public:
     // IPluginV2 methods
     char const* getPluginType() const noexcept override;
     char const* getPluginVersion() const noexcept override;
-    int getNbOutputs() const noexcept override;
-    int initialize() noexcept override;
+    int32_t getNbOutputs() const noexcept override;
+    int32_t initialize() noexcept override;
     void terminate() noexcept override;
     size_t getSerializationSize() const noexcept override;
     void serialize(void* buffer) const noexcept override;
@@ -48,19 +48,19 @@ public:
 
     // IPluginV2Ext methods
     nvinfer1::DataType getOutputDataType(
-        int index, nvinfer1::DataType const* inputType, int nbInputs) const noexcept override;
+        int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;
     DimsExprs getOutputDimensions(
-        int outputIndex, DimsExprs const* inputs, int nbInputs, IExprBuilder& exprBuilder) noexcept override;
+        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
-        int pos, PluginTensorDesc const* inOut, int nbInputs, int nbOutputs) noexcept override;
-    void configurePlugin(DynamicPluginTensorDesc const* in, int nbInputs, DynamicPluginTensorDesc const* out,
-        int nbOutputs) noexcept override;
-    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int nbInputs, PluginTensorDesc const* outputs,
-        int nbOutputs) const noexcept override;
-    int enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
+        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
+        int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 protected:

@@ -30,27 +30,27 @@ struct EfficientNMSParameters
     // Related to NMS Options
     float iouThreshold = 0.5F;
     float scoreThreshold = 0.5F;
-    int numOutputBoxes = 100;
-    int numOutputBoxesPerClass = -1;
+    int32_t numOutputBoxes = 100;
+    int32_t numOutputBoxesPerClass = -1;
     bool padOutputBoxesPerClass = false;
-    int backgroundClass = -1;
+    int32_t backgroundClass = -1;
     bool scoreSigmoid = false;
     bool clipBoxes = false;
-    int boxCoding = 0;
+    int32_t boxCoding = 0;
     bool classAgnostic = false;
 
     // Related to NMS Internals
-    int numSelectedBoxes = 4096;
-    int scoreBits = -1;
+    int32_t numSelectedBoxes = 4096;
+    int32_t scoreBits = -1;
     bool outputONNXIndices = false;
 
     // Related to Tensor Configuration
     // (These are set by the various plugin configuration methods, no need to define them during plugin creation.)
-    int batchSize = -1;
-    int numClasses = 1;
-    int numBoxElements = -1;
-    int numScoreElements = -1;
-    int numAnchors = -1;
+    int32_t batchSize = -1;
+    int32_t numClasses = 1;
+    int32_t numBoxElements = -1;
+    int32_t numScoreElements = -1;
+    int32_t numAnchors = -1;
     bool shareLocation = true;
     bool shareAnchors = true;
     bool boxDecoder = false;

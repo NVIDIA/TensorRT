@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -409,6 +409,7 @@ class OnnxLoadArgs(BaseArgs):
         outputs_opt_prefix: str = None,
         allow_shape_inference: bool = None,
         allow_from_tf: bool = None,
+        allow_setting_upper_bounds: bool = None,
     ):
         """
         Args:
@@ -425,12 +426,16 @@ class OnnxLoadArgs(BaseArgs):
             allow_from_tf (bool):
                     Whether to allow conversion of TensorFlow models to ONNX.
                     Defaults to False.
+            allow_setting_upper_bounds (bool):
+                    Whether to allow setting upper bounds for unbounded DDS.
+                    Defaults to False.
         """
         super().__init__()
         self._allow_saving = util.default(allow_saving, False)
         self._allow_shape_inference = util.default(allow_shape_inference, True)
         self._outputs_opt_prefix = util.default(outputs_opt_prefix, "onnx-")
         self._allow_from_tf = util.default(allow_from_tf, False)
+        self._allow_setting_upper_bounds = util.default(allow_setting_upper_bounds, False)
 
     def add_parser_args_impl(self):
         self.group.add_argument(
@@ -468,6 +473,36 @@ class OnnxLoadArgs(BaseArgs):
                 dest="onnx_exclude_outputs",
             )
 
+        self.group.add_argument(
+            "--fp-to-fp16",
+            help="Convert all floating point tensors in an ONNX model to 16-bit precision. "
+            "This is *not* needed in order to use TensorRT's fp16 precision, but may be useful for other backends. "
+            "Requires onnxmltools. ",
+            action="store_true",
+            default=None,
+        )
+
+        if self._allow_setting_upper_bounds:
+            self.group.add_argument(
+                "--set-unbounded-dds-upper-bound",
+                help="""
+                Set upper bounds for tensors with unbounded DDS(data-dependent shape). 
+                Tensors with unbounded DDS can make it difficult for TensorRT to optimize inference performance 
+                and memory usage. In the worst case, they can cause TensorRT engine build failures. To fix this, 
+                Polygraphy supports setting upper bounds for tensors with unbounded DDS by inserting the ONNX 
+                min operator. To specify per-tensor upper bounds, use the format: 
+                --set-unbounded-dds-upper-bound [<tensor_name>:]<upper_bound>.
+                If no tensor name is provided, the upper bound is used for any tensors with unbounded DDS that 
+                are not explicitly specified. For example: 
+                --set-unbounded-dds-upper-bound 10000 tensor_a:5000 tensor_b:4000.
+
+                Note that setting upper bounds only works for models that have been constant folded and have shapes inferred.
+                """,
+                nargs="+",
+                default=None,
+                dest="upper_bounds"
+            )
+
     def parse_impl(self, args):
         """
         Parses command-line arguments and populates the following attributes:
@@ -477,11 +512,15 @@ class OnnxLoadArgs(BaseArgs):
             exclude_outputs (List[str]): Names of tensors which should be unmarked as outputs.
             external_data_dir (str): Path to a directory from which to load external data.
             ignore_external_data (bool): Whether to ignore loading external data.
+            convert_to_fp16 (bool): Whether to convert the model to FP16.
+            upper_bounds (Union[int, Dict[str, int]]): The upper bounds for tensors with unbounded DDS.
         """
         self.outputs = args_util.get_outputs(args, "onnx_outputs")
         self.exclude_outputs = args_util.get(args, "onnx_exclude_outputs")
         self.external_data_dir = args_util.get(args, "external_data_dir")
         self.ignore_external_data = args_util.get(args, "ignore_external_data")
+        self.convert_to_fp16 = args_util.get(args, "fp_to_fp16")
+        self.upper_bounds = args_util.parse_arglist_to_dict(args_util.get(args, "upper_bounds"))
 
     def _add_modify_onnx_outputs(self, script, loader_name, disable_custom_outputs: bool = None):
         if disable_custom_outputs:
@@ -540,12 +579,20 @@ class OnnxLoadArgs(BaseArgs):
 
         loader_name = self._add_modify_onnx_outputs(script, loader_name, disable_custom_outputs=disable_custom_outputs)
 
+        if self.convert_to_fp16:
+            script.add_import(imports=["ConvertToFp16"], frm="polygraphy.backend.onnx")
+            loader_name = script.add_loader(make_invocable("ConvertToFp16", loader_name), "convert_to_fp16")
+
         if self._allow_saving:
             loader_name = self.arg_groups[OnnxSaveArgs].add_to_script(script, loader_name)
 
         if serialize_model:
             script.add_import(imports=["BytesFromOnnx"], frm="polygraphy.backend.onnx")
             loader_name = script.add_loader(make_invocable("BytesFromOnnx", loader_name), "serialize_onnx")
+
+        if self._allow_setting_upper_bounds and self.upper_bounds is not None:
+            script.add_import(imports=["SetUpperBound"], frm="polygraphy.backend.onnx")
+            loader_name = script.add_loader(make_invocable("SetUpperBound", loader_name, upper_bounds=self.upper_bounds), "set_upper_bound")
 
         return loader_name
 
@@ -566,6 +613,8 @@ class OnnxLoadArgs(BaseArgs):
         needs_modify = self._add_modify_onnx_outputs(tmp_script, inp_loader, disable_custom_outputs) != inp_loader
         needs_shape_inference = self._allow_shape_inference and self.arg_groups[OnnxInferShapesArgs].do_shape_inference
         needs_save = self._allow_saving and self.arg_groups[OnnxSaveArgs].path is not None
+        needs_fp16_conversion = self.convert_to_fp16
+        needs_setting_upper_bounds = self._allow_setting_upper_bounds and self.upper_bounds is not None
         # Currently, other loaders do not support external data, so we must fall back to the ONNX loader if it's present.
         return (
             not self.arg_groups[ModelArgs].model_type.is_onnx()
@@ -573,6 +622,8 @@ class OnnxLoadArgs(BaseArgs):
             or self.external_data_dir
             or needs_shape_inference
             or needs_save
+            or needs_fp16_conversion
+            or needs_setting_upper_bounds
         )
 
     def load_onnx(self):

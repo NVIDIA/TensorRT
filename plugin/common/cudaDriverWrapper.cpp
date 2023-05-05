@@ -74,7 +74,7 @@ CUresult CUDADriverWrapper::cuGetErrorName(CUresult error, char const** pStr) co
     return (*_cuGetErrorName)(error, pStr);
 }
 
-CUresult CUDADriverWrapper::cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int value) const
+CUresult CUDADriverWrapper::cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int32_t value) const
 {
     return (*_cuFuncSetAttribute)(hfunc, attrib, value);
 }

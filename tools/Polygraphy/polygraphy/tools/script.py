@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -226,6 +226,17 @@ class Script:
                 G_LOGGER.internal_error(f"Cannot concatenate unsafe string ({other}) to safe string ({self.s})!")
             self.s += other.s
             return self
+
+        def __eq__(self, other):
+            return (
+                isinstance(other, Script.String)
+                and self.safe == other.safe
+                and self.inline == other.inline
+                and self.s == other.s
+            )
+
+        def __hash__(self):
+            return hash((self.s, self.safe, self.inline))
 
         def unwrap(self):
             """

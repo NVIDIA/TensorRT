@@ -43,7 +43,7 @@ $ git clone https://github.com/NVIDIA/TensorRT.git
 ```
 
 ### 2. Create and activate a Python virtual environment
-The commands listed below create and activate a Python virtual enviornment named ```env_trex``` which is stored in a directory by the same name, and configures the current shell to use it as the default python environment.
+The commands listed below create and activate a Python virtual environment named ```env_trex``` which is stored in a directory by the same name, and configures the current shell to use it as the default python environment.
 
 ```
 $ cd TensorRT/tools/experimental/trt-engine-explorer

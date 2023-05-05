@@ -60,12 +60,12 @@ const char* EfficientNMSImplicitTFTRTPlugin::getPluginVersion() const noexcept
     return EFFICIENT_NMS_IMPLICIT_TFTRT_PLUGIN_VERSION;
 }
 
-int EfficientNMSImplicitTFTRTPlugin::getNbOutputs() const noexcept
+int32_t EfficientNMSImplicitTFTRTPlugin::getNbOutputs() const noexcept
 {
     return 4;
 }
 
-int EfficientNMSImplicitTFTRTPlugin::initialize() noexcept
+int32_t EfficientNMSImplicitTFTRTPlugin::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
@@ -106,7 +106,8 @@ const char* EfficientNMSImplicitTFTRTPlugin::getPluginNamespace() const noexcept
     return mNamespace.c_str();
 }
 
-Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const Dims* inputs, int nbInputs) noexcept
+Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(
+    int32_t outputIndex, const Dims* inputs, int32_t nbInputs) noexcept
 {
     try
     {
@@ -117,7 +118,7 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const
         PLUGIN_ASSERT(inputs[1].nbDims == 2);
         if (mParam.padOutputBoxesPerClass && mParam.numOutputBoxesPerClass > 0)
         {
-            const int numClasses = inputs[1].d[1];
+            const int32_t numClasses = inputs[1].d[1];
             if (mParam.numOutputBoxesPerClass * numClasses < mParam.numOutputBoxes)
             {
                 mParam.numOutputBoxes = mParam.numOutputBoxesPerClass * numClasses;
@@ -157,12 +158,12 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(int outputIndex, const
     return Dims{};
 }
 
-size_t EfficientNMSImplicitTFTRTPlugin::getWorkspaceSize(int maxBatchSize) const noexcept
+size_t EfficientNMSImplicitTFTRTPlugin::getWorkspaceSize(int32_t maxBatchSize) const noexcept
 {
     return EfficientNMSWorkspaceSize(maxBatchSize, mParam.numScoreElements, mParam.numClasses, mParam.datatype);
 }
 
-int EfficientNMSImplicitTFTRTPlugin::enqueue(int batchSize, void const* const* inputs,
+int32_t EfficientNMSImplicitTFTRTPlugin::enqueue(int32_t batchSize, void const* const* inputs,
     EfficientNMSImplicitTFTRTOutputsDataType outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
@@ -188,13 +189,13 @@ int EfficientNMSImplicitTFTRTPlugin::enqueue(int batchSize, void const* const* i
     return -1;
 }
 
-bool EfficientNMSImplicitTFTRTPlugin::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool EfficientNMSImplicitTFTRTPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 DataType EfficientNMSImplicitTFTRTPlugin::getOutputDataType(
-    int index, const DataType* inputTypes, int nbInputs) const noexcept
+    int32_t index, const DataType* inputTypes, int32_t nbInputs) const noexcept
 {
     // num_detections and detection_classes use integer outputs
     if (index == 0 || index == 3)
@@ -221,13 +222,13 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPlugin::clone() const noexcept
 }
 
 bool EfficientNMSImplicitTFTRTPlugin::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 bool EfficientNMSImplicitTFTRTPlugin::supportsFormatCombination(
-    int pos, const PluginTensorDesc* inOut, int nbInputs, int nbOutputs) const noexcept
+    int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) const noexcept
 {
     if (inOut[pos].format != PluginFormat::kLINEAR)
     {
@@ -241,8 +242,8 @@ bool EfficientNMSImplicitTFTRTPlugin::supportsFormatCombination(
         PLUGIN_ASSERT(0 <= pos && pos <= 5);
     }
 
-    // num_detections and detection_classes output: int
-    const int posOut = pos - nbInputs;
+    // num_detections and detection_classes output: int32_t
+    const int32_t posOut = pos - nbInputs;
     if (posOut == 0 || posOut == 3)
     {
         return inOut[pos].type == DataType::kINT32 && inOut[pos].format == PluginFormat::kLINEAR;
@@ -254,7 +255,7 @@ bool EfficientNMSImplicitTFTRTPlugin::supportsFormatCombination(
 }
 
 void EfficientNMSImplicitTFTRTPlugin::configurePlugin(
-    const PluginTensorDesc* in, int nbInputs, const PluginTensorDesc* out, int nbOutputs) noexcept
+    const PluginTensorDesc* in, int32_t nbInputs, const PluginTensorDesc* out, int32_t nbOutputs) noexcept
 {
     try
     {
@@ -335,18 +336,18 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPluginCreator::createPlugin(
     try
     {
         const PluginField* fields = fc->fields;
-        for (int i = 0; i < fc->nbFields; ++i)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             const char* attrName = fields[i].name;
             if (!strcmp(attrName, "max_output_size_per_class"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
+                mParam.numOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
             }
             if (!strcmp(attrName, "max_total_size"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxes = *(static_cast<const int*>(fields[i].data));
+                mParam.numOutputBoxes = *(static_cast<const int32_t*>(fields[i].data));
             }
             if (!strcmp(attrName, "iou_threshold"))
             {
@@ -361,12 +362,12 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPluginCreator::createPlugin(
             if (!strcmp(attrName, "pad_per_class"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.padOutputBoxesPerClass = *(static_cast<const int*>(fields[i].data));
+                mParam.padOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
             }
             if (!strcmp(attrName, "clip_boxes"))
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.clipBoxes = *(static_cast<const int*>(fields[i].data));
+                mParam.clipBoxes = *(static_cast<const int32_t*>(fields[i].data));
             }
         }
 

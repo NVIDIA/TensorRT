@@ -36,15 +36,15 @@ static char const* const kFLATTENCONCAT_PLUGIN_NAME{"FlattenConcat_TRT"};
 PluginFieldCollection FlattenConcatPluginCreator::mFC{};
 std::vector<PluginField> FlattenConcatPluginCreator::mPluginAttributes;
 
-FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch)
+FlattenConcat::FlattenConcat(int32_t concatAxis, bool ignoreBatch)
     : mIgnoreBatch(ignoreBatch)
     , mConcatAxisID(concatAxis)
 {
     PLUGIN_VALIDATE(mConcatAxisID == 1 || mConcatAxisID == 2 || mConcatAxisID == 3);
 }
 
-FlattenConcat::FlattenConcat(int concatAxis, bool ignoreBatch, int numInputs, int outputConcatAxis,
-    int const* inputConcatAxis, size_t const* copySize, nvinfer1::Dims const& chwDims)
+FlattenConcat::FlattenConcat(int32_t concatAxis, bool ignoreBatch, int32_t numInputs, int32_t outputConcatAxis,
+    int32_t const* inputConcatAxis, size_t const* copySize, nvinfer1::Dims const& chwDims)
     : mCopySize(numInputs)
     , mInputConcatAxis(numInputs)
     , mIgnoreBatch(ignoreBatch)
@@ -64,13 +64,13 @@ FlattenConcat::FlattenConcat(void const* data, size_t length)
     char const* d = static_cast<char const*>(data);
     char const* const a = d;
     mIgnoreBatch = read<bool>(d);
-    mConcatAxisID = read<int>(d);
+    mConcatAxisID = read<int32_t>(d);
     PLUGIN_VALIDATE(mConcatAxisID >= 1 && mConcatAxisID <= 3);
-    mOutputConcatAxis = read<int>(d);
-    mNumInputs = read<int>(d);
+    mOutputConcatAxis = read<int32_t>(d);
+    mNumInputs = read<int32_t>(d);
 
     mInputConcatAxis.resize(mNumInputs);
-    std::for_each(mInputConcatAxis.begin(), mInputConcatAxis.end(), [&](int& inp) { inp = read<int>(d); });
+    std::for_each(mInputConcatAxis.begin(), mInputConcatAxis.end(), [&](int32_t& inp) { inp = read<int32_t>(d); });
 
     mCHW = read<nvinfer1::Dims3>(d);
 
@@ -82,12 +82,12 @@ FlattenConcat::FlattenConcat(void const* data, size_t length)
 
 FlattenConcat::~FlattenConcat() {}
 
-int FlattenConcat::getNbOutputs() const noexcept
+int32_t FlattenConcat::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims FlattenConcat::getOutputDimensions(int index, Dims const* inputs, int nbInputDims) noexcept
+Dims FlattenConcat::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
 {
     try
     {
@@ -97,11 +97,11 @@ Dims FlattenConcat::getOutputDimensions(int index, Dims const* inputs, int nbInp
         mNumInputs = nbInputDims;
         mCopySize.resize(mNumInputs);
         mInputConcatAxis.resize(mNumInputs);
-        int outputConcatAxis = 0;
+        int32_t outputConcatAxis = 0;
 
-        for (int i = 0; i < nbInputDims; ++i)
+        for (int32_t i = 0; i < nbInputDims; ++i)
         {
-            int flattenInput = 0;
+            int32_t flattenInput = 0;
             PLUGIN_ASSERT(inputs[i].nbDims == 3);
             if (mConcatAxisID != 1)
             {
@@ -129,20 +129,20 @@ Dims FlattenConcat::getOutputDimensions(int index, Dims const* inputs, int nbInp
     return Dims{};
 }
 
-int FlattenConcat::initialize() noexcept
+int32_t FlattenConcat::initialize() noexcept
 {
     return STATUS_SUCCESS;
 }
 
 void FlattenConcat::terminate() noexcept {}
 
-size_t FlattenConcat::getWorkspaceSize(int) const noexcept
+size_t FlattenConcat::getWorkspaceSize(int32_t) const noexcept
 {
     return 0;
 }
 
-int FlattenConcat::enqueue(
-    int batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
+int32_t FlattenConcat::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
 {
     try
     {
@@ -157,11 +157,11 @@ int FlattenConcat::enqueue(
         }
 
         auto* output = static_cast<float*>(outputs[0]);
-        int offset = 0;
-        for (int i = 0; i < mNumInputs; ++i)
+        int32_t offset = 0;
+        for (int32_t i = 0; i < mNumInputs; ++i)
         {
             auto const* input = static_cast<float const*>(inputs[i]);
-            for (int n = 0; n < numConcats; ++n)
+            for (int32_t n = 0; n < numConcats; ++n)
             {
                 auto status = cublasScopy(mCublas, mInputConcatAxis[i], input + n * mInputConcatAxis[i], 1,
                     output + (n * mOutputConcatAxis + offset), 1);
@@ -185,7 +185,7 @@ int FlattenConcat::enqueue(
 
 size_t FlattenConcat::getSerializationSize() const noexcept
 {
-    return sizeof(bool) + sizeof(int) * (3 + mNumInputs) + sizeof(nvinfer1::Dims)
+    return sizeof(bool) + sizeof(int32_t) * (3 + mNumInputs) + sizeof(nvinfer1::Dims)
         + (sizeof(decltype(mCopySize)::value_type) * mNumInputs);
 }
 
@@ -197,12 +197,12 @@ void FlattenConcat::serialize(void* buffer) const noexcept
     write(d, mConcatAxisID);
     write(d, mOutputConcatAxis);
     write(d, mNumInputs);
-    for (int i = 0; i < mNumInputs; ++i)
+    for (int32_t i = 0; i < mNumInputs; ++i)
     {
         write(d, mInputConcatAxis[i]);
     }
     write(d, mCHW);
-    for (int i = 0; i < mNumInputs; ++i)
+    for (int32_t i = 0; i < mNumInputs; ++i)
     {
         write(d, mCopySize[i]);
     }
@@ -221,13 +221,13 @@ void FlattenConcat::detachFromContext() noexcept {}
 
 // Return true if output tensor is broadcast across a batch.
 bool FlattenConcat::isOutputBroadcastAcrossBatch(
-    int outputIndex, bool const* inputIsBroadcasted, int nbInputs) const noexcept
+    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool FlattenConcat::canBroadcastInputAcrossBatch(int inputIndex) const noexcept
+bool FlattenConcat::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
@@ -251,15 +251,16 @@ char const* FlattenConcat::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType FlattenConcat::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+DataType FlattenConcat::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index < 3);
     return DataType::kFLOAT;
 }
 
-void FlattenConcat::configurePlugin(Dims const* inputDims, int nbInputs, Dims const* outputDims, int nbOutputs,
+void FlattenConcat::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int maxBatchSize) noexcept
+    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
     try
     {
@@ -269,9 +270,9 @@ void FlattenConcat::configurePlugin(Dims const* inputDims, int nbInputs, Dims co
         PLUGIN_ASSERT(inputDims[0].nbDims == 3);
 
         mInputConcatAxis.resize(mNumInputs);
-        for (int i = 0; i < nbInputs; ++i)
+        for (int32_t i = 0; i < nbInputs; ++i)
         {
-            int flattenInput = 0;
+            int32_t flattenInput = 0;
             PLUGIN_ASSERT(inputDims[i].nbDims == 3);
             if (mConcatAxisID != 1)
             {
@@ -291,7 +292,7 @@ void FlattenConcat::configurePlugin(Dims const* inputDims, int nbInputs, Dims co
         }
 
         mCopySize.resize(mNumInputs);
-        for (int i = 0; i < nbInputs; ++i)
+        for (int32_t i = 0; i < nbInputs; ++i)
         {
             mCopySize[i] = inputDims[i].d[0] * inputDims[i].d[1] * inputDims[i].d[2] * sizeof(float);
         }
@@ -374,7 +375,7 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(char const* name, PluginF
             if (!strcmp(attrName, "axis"))
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mConcatAxisID = *(static_cast<int const*>(fields[i].data));
+                mConcatAxisID = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "ignoreBatch"))
             {

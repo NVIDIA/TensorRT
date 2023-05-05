@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -385,11 +385,11 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, max_se
     if config.use_int8 and config.use_qat:
         dr_input = weights_dict['l0_attention_self_query_input_amax']
         set_output_range(emb_layer, dr_input, out_idx=0)
-        
+
         if config.use_megatron:
             dr_skln1_res_in = weights_dict['l0_attention_output_add_residual_input_quantizer_amax']
             set_output_range(emb_layer, dr_skln1_res_in, out_idx=1)
-    
+
     set_output_name(emb_layer, "embeddings_", "output")
     return emb_layer, cu_seqlens, max_seqlen
 
@@ -409,7 +409,7 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
         if verbose:
             builder_config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
 
-        # speed up the engine build for trt major version >= 8 
+        # speed up the engine build for trt major version >= 8
         # 1. disable cudnn tactic
         # 2. load global timing cache
         if trt_version[0] >= 8:
@@ -438,7 +438,7 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
             mask_idx = None
         else:
             mask_idx = emb_layer.get_output(1)
-            
+
         if config.use_megatron:  # megatron currently only supports int8 and interleaved
             shuffler = network.add_shuffle(emb_layer.get_output(1))
             shuffler.second_transpose = (2, 1, 0, 3)
@@ -503,8 +503,8 @@ def main():
     cc = pycuda.autoinit.device.compute_capability()
     if cc[0] * 10 + cc[1] < 72:
         raise RuntimeError("This variable-length BERT demo only support Xavier+ GPU.")
-        
-    if args.megatron: 
+
+    if args.megatron:
         if not (args.interleaved and args.int8):
             raise RuntimeError("Megatron BERT currently only supports int8 and interleaved.")
         if not args.pickle:

@@ -132,11 +132,6 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 samplingRatio = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(samplingRatio >= 0);
-            }            
-            if (!strcmp(attrName, "legacy"))
-            {
-                PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                legacy = *(static_cast<int32_t const*>(fields[i].data));
             }
             if (!strcmp(attrName, "legacy"))
             {
@@ -202,7 +197,7 @@ void PyramidROIAlign::destroy() noexcept
     delete this;
 }
 
-size_t PyramidROIAlign::getWorkspaceSize(int) const noexcept
+size_t PyramidROIAlign::getWorkspaceSize(int32_t) const noexcept
 {
     return 0;
 }
@@ -290,7 +285,6 @@ Dims PyramidROIAlign::getOutputDimensions(int32_t index, Dims const* inputs, int
 
 int32_t PyramidROIAlign::enqueue(
     int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
-
 {
     void* const pooled = outputs[0];
     cudaError_t status;
@@ -331,18 +325,18 @@ int32_t PyramidROIAlign::enqueue(
 
 size_t PyramidROIAlign::getSerializationSize() const noexcept
 {
-    return sizeof(int) * 2 // mPooledSize
-        + sizeof(int) * 2  // mImageSize
-        + sizeof(int)      // mFeatureLength
-        + sizeof(int)      // mROICount
-        + sizeof(int)      // mFPNScale
-        + sizeof(int)      // mTransformCoords
-        + sizeof(bool)     // mAbsCoords
-        + sizeof(bool)     // mSwapCoords
-        + sizeof(bool)     // mPlusOneCoords
-        + sizeof(int)      // mSamplingRatio
-        + sizeof(bool)     // mIsLegacy
-        + sizeof(int) * 8; // mFeatureSpatialSize
+    return sizeof(int32_t) * 2 // mPooledSize
+        + sizeof(int32_t) * 2  // mImageSize
+        + sizeof(int32_t)      // mFeatureLength
+        + sizeof(int32_t)      // mROICount
+        + sizeof(int32_t)      // mFPNScale
+        + sizeof(int32_t)      // mTransformCoords
+        + sizeof(bool)         // mAbsCoords
+        + sizeof(bool)         // mSwapCoords
+        + sizeof(bool)         // mPlusOneCoords
+        + sizeof(int32_t)      // mSamplingRatio
+        + sizeof(bool)         // mIsLegacy
+        + sizeof(int32_t) * 8; // mFeatureSpatialSize
 }
 
 void PyramidROIAlign::serialize(void* buffer) const noexcept

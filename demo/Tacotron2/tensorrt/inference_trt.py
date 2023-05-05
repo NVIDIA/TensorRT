@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -244,7 +244,7 @@ def infer_tacotron2_trt(encoder, decoder_iter, postnet,
 
             mel_outputs = torch.tensor(result[0], device=device)
             mel_lengths = torch.tensor(result[1], device=device)
-        else: 
+        else:
             print("Running Tacotron2 Decoder with loop")
             decoder_tensors = {
                 "inputs" :
@@ -449,10 +449,10 @@ def main():
 
     with encoder_context, postnet_context:
         pass
-        
+
     if decoder_context is not None:
         with decoder_context: pass
-    
+
     if waveglow_context is not None:
         with waveglow_context: pass
 

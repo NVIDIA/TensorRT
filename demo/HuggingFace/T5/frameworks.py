@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -91,8 +91,8 @@ class T5FHuggingFace(FrameworkCommand):
                 pytorch_model_dir,
                 use_cache = metadata.other.kv_cache
             )
-        
-        # These ONNX models can be converted using special encoder and decoder classes.        
+
+        # These ONNX models can be converted using special encoder and decoder classes.
         encoder_onnx_model_fpath = os.path.join(encoder_onnx_root, metadata_serialized + "-encoder.onnx")
         decoder_onnx_model_fpath = os.path.join(decoder_onnx_root, metadata_serialized + "-decoder-with-lm-head.onnx")
 
@@ -162,10 +162,8 @@ class T5FHuggingFace(FrameworkCommand):
         # By default, huggingface model structure is one giant file.
         t5_torch_fpath = network_fpaths.torch[0].fpath
         t5_model = T5ForConditionalGeneration.from_pretrained(t5_torch_fpath, use_cache=metadata.other.kv_cache)
-        # Framework fp16 does not support cpu mode for T5
-        # TODO: Enable true frameworks fp16. CUDA 11.4 so far does not support model.half() for PyTorch 1.13.
-        # if metadata.precision.fp16:
-        #     t5_model = t5_model.cuda().half()
+        if metadata.precision.fp16:
+            t5_model = t5_model.cuda().half()
 
         t5_torch_encoder = T5EncoderTorchFile.TorchModule(t5_model.encoder)
         t5_torch_decoder = T5DecoderTorchFile.TorchModule(
@@ -203,7 +201,7 @@ class T5FHuggingFace(FrameworkCommand):
             t5_torch_encoder, input_ids, timing_profile, use_cuda=(not use_cpu)
         )
 
-        # Need to feed the decoder a new empty input_ids for text generation. 
+        # Need to feed the decoder a new empty input_ids for text generation.
         decoder_output_len = output_seq_len // 2 if (not metadata.other.kv_cache) else 1
 
         decoder_input_ids = torch.full(

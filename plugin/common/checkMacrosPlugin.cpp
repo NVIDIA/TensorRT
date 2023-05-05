@@ -30,7 +30,7 @@ namespace plugin
 ILogger* gLogger{};
 
 template <ILogger::Severity kSeverity>
-int LogStream<kSeverity>::Buf::sync()
+int32_t LogStream<kSeverity>::Buf::sync()
 {
     std::string s = str();
     while (!s.empty() && s.back() == '\n')
@@ -53,7 +53,7 @@ LogStream<ILogger::Severity::kINFO> gLogInfo;
 LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
 // break-pointable
-void throwCudaError(char const* file, char const* function, int line, int status, char const* msg)
+void throwCudaError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
 {
     CudaError error(file, function, line, status, msg);
     error.log(gLogError);
@@ -62,7 +62,7 @@ void throwCudaError(char const* file, char const* function, int line, int status
 }
 
 // break-pointable
-void throwCublasError(char const* file, char const* function, int line, int status, char const* msg)
+void throwCublasError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
 {
     if (msg == nullptr)
     {
@@ -88,7 +88,7 @@ void throwCublasError(char const* file, char const* function, int line, int stat
 }
 
 // break-pointable
-void throwCudnnError(char const* file, char const* function, int line, int status, char const* msg)
+void throwCudnnError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
 {
     CudnnError error(file, function, line, status, msg);
     error.log(gLogError);
@@ -97,7 +97,7 @@ void throwCudnnError(char const* file, char const* function, int line, int statu
 }
 
 // break-pointable
-void throwPluginError(char const* file, char const* function, int line, int status, char const* msg)
+void throwPluginError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
 {
     PluginError error(file, function, line, status, msg);
     reportValidationFailure(msg, file, line);
@@ -105,13 +105,13 @@ void throwPluginError(char const* file, char const* function, int line, int stat
     throw error;
 }
 
-void logError(char const* msg, char const* file, char const* fn, int line)
+void logError(char const* msg, char const* file, char const* fn, int32_t line)
 {
     gLogError << "Parameter check failed at: " << file << "::" << fn << "::" << line;
     gLogError << ", condition: " << msg << std::endl;
 }
 
-void reportValidationFailure(char const* msg, char const* file, int line)
+void reportValidationFailure(char const* msg, char const* file, int32_t line)
 {
     std::ostringstream stream;
     stream << "Validation failed: " << msg << "\n" << file << ':' << line << "\n";
@@ -127,7 +127,7 @@ void reportValidationFailure(char const* msg, char const* file, int line)
 }
 
 // break-pointable
-void reportAssertion(char const* msg, char const* file, int line)
+void reportAssertion(char const* msg, char const* file, int32_t line)
 {
     std::ostringstream stream;
     stream << "Assertion failed: " << msg << "\n"

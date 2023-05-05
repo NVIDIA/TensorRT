@@ -37,7 +37,7 @@ PluginFieldCollection ScatterNDPluginCreator::mFC{};
 
 ScatterND::ScatterND() {}
 
-int ScatterND::getNbOutputs() const noexcept
+int32_t ScatterND::getNbOutputs() const noexcept
 {
     // Plugin layer has 1 output
     return 1;
@@ -51,7 +51,7 @@ DimsExprs ScatterND::getOutputDimensions(
     return ret;
 }
 
-int ScatterND::initialize() noexcept
+int32_t ScatterND::initialize() noexcept
 {
     return 0;
 }
@@ -90,7 +90,7 @@ void ScatterND::configurePlugin(
 int32_t ScatterND::calculateNumSlices(Dims indexTensorDims) const noexcept
 {
     int32_t nSlices = 1;
-    for (int i = 0; i < indexTensorDims.nbDims - 1; i++)
+    for (int32_t i = 0; i < indexTensorDims.nbDims - 1; i++)
     {
         nSlices *= indexTensorDims.d[i];
     }
@@ -106,7 +106,7 @@ size_t ScatterND::getWorkspaceSize(
 }
 
 void ScatterND::calculateTransformCoeff(
-    Dims const& dataTensorDims, int indexRank, int32_t* transformCoeff) const noexcept
+    Dims const& dataTensorDims, int32_t indexRank, int32_t* transformCoeff) const noexcept
 {
     std::vector<int32_t> pitches;
     for (int32_t i = indexRank - 1, nIndx = 1; i >= 0; i--)
@@ -123,7 +123,7 @@ void ScatterND::calculateTransformCoeff(
 int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept
 {
     int32_t copySize = 1;
-    for (int i = 0; i < dataDims.nbDims; i++)
+    for (int32_t i = 0; i < dataDims.nbDims; i++)
     {
         copySize *= dataDims.d[i];
     }
@@ -158,7 +158,7 @@ int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc c
     case DataType::kFP8: PLUGIN_FAIL("FP8 not supported"); break;
     }
 
-    for (int i = indexRank; i < dataDims.nbDims; i++)
+    for (int32_t i = indexRank; i < dataDims.nbDims; i++)
     {
         rowSize *= dataDims.d[i];
     }
@@ -194,7 +194,8 @@ char const* ScatterND::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType ScatterND::getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+DataType ScatterND::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return inputTypes[dataTensorIdx];

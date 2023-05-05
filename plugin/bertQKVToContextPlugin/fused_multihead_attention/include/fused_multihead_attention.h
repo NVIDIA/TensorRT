@@ -108,7 +108,7 @@ struct Fused_multihead_attention_params
     float* max_scratch_ptr{};
     float* sum_scratch_ptr{};
     // Scratch buffer to finalize the output (not needed for FP16).
-    int* o_scratch_ptr{};
+    int32_t* o_scratch_ptr{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -398,7 +398,7 @@ public:
                     }
                 }
                 mFunctions.insert({kernelKey, funcInfo});
-                const int s = static_cast<int>(kernelMeta.mS);
+                const int32_t s = static_cast<int32_t>(kernelMeta.mS);
                 if (mValidSequences.find(s) == mValidSequences.end())
                 {
                     mValidSequences.insert(s);
@@ -425,7 +425,7 @@ public:
         }
     }
 
-    bool isValid(int s) const
+    bool isValid(int32_t s) const
     {
         return (mValidSequences.find(s) != mValidSequences.end());
     }
@@ -487,7 +487,7 @@ protected:
         CUfunction mDeviceFunction;
     };
     std::unordered_map<uint64_t, FusedMultiHeadAttentionKernelInfo> mFunctions;
-    std::set<int> mValidSequences;
+    std::set<int32_t> mValidSequences;
 };
 
 template <typename TFusedMHAKernelList>

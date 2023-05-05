@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,7 @@ constexpr int32_t maxBatchNotProvided{0};
 constexpr int32_t defaultMinTiming{1};
 constexpr int32_t defaultAvgTiming{8};
 constexpr int32_t defaultMaxAuxStreams{-1};
-constexpr int32_t defaultBuilderOptimizationLevel{3};
+constexpr int32_t defaultBuilderOptimizationLevel{-1};
 
 // System default params
 constexpr int32_t defaultDevice{0};
@@ -206,6 +206,8 @@ public:
     LayerOutputTypes layerOutputTypes;
     LayerDeviceTypes layerDeviceTypes;
     bool safe{false};
+    bool buildDLAStandalone{false};
+    bool allowGPUFallback{false};
     bool consistency{false};
     bool restricted{false};
     bool skipInference{false};
@@ -249,7 +251,6 @@ class SystemOptions : public Options
 public:
     int32_t device{defaultDevice};
     int32_t DLACore{-1};
-    bool fallback{false};
     bool ignoreParsedPluginLibs{false};
     std::vector<std::string> plugins;
     std::vector<std::string> setPluginsToSerialize;
