@@ -944,6 +944,13 @@ class Graph(object):
             graph_tensors = self.tensors()
             for name, values in constant_values.items():
                 tensor = graph_tensors[name]
+
+                for node in tensor.outputs:
+                    if node.op == "Identity":
+                        t = node.outputs[0]
+                        t.to_constant(tensor._values)  # Using ._values avoids copying
+                        t.inputs.clear() # Constants do not need inputs
+                
                 if isinstance(tensor, Constant):
                     # No need to fold tensors that are already constant.
                     continue
