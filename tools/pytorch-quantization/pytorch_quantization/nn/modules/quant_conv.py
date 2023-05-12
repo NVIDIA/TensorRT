@@ -299,7 +299,7 @@ class QuantConvTranspose1d(_QuantConvTransposeNd):
         if self.padding_mode != 'zeros':
             raise ValueError('Only `zeros` padding mode is supported for QuantConvTranspose1d')
 
-        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size)
+        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size, 1, self.dilation)
 
         quant_input, quant_weight = self._quant(input)
         output = F.conv_transpose1d(quant_input, quant_weight, self.bias, self.stride, self.padding, output_padding,
@@ -339,7 +339,7 @@ class QuantConvTranspose2d(_QuantConvTransposeNd):
         if self.padding_mode != 'zeros':
             raise ValueError('Only `zeros` padding mode is supported for QuantConvTranspose2d')
 
-        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size)
+        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size, 2, self.dilation)
 
         quant_input, quant_weight = self._quant(input)
         output = F.conv_transpose2d(quant_input, quant_weight, self.bias, self.stride, self.padding, output_padding,
@@ -380,7 +380,7 @@ class QuantConvTranspose3d(_QuantConvTransposeNd):
         if self.padding_mode != 'zeros':
             raise ValueError('Only `zeros` padding mode is supported for QuantConvTranspose3d')
 
-        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size)
+        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size, 3, self.dilation)
 
         quant_input, quant_weight = self._quant(input)
         output = F.conv_transpose3d(quant_input, quant_weight, self.bias, self.stride, self.padding, output_padding,
