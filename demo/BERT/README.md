@@ -583,4 +583,3 @@ Results were obtained by running `scripts/inference_benchmark.sh --gpu Ampere` o
 | 384 | 32 | 40.20 | 40.22 | 40.05 |
 | 384 | 64 | 76.82 | 77.11 | 76.52 |
 | 384 | 128 | 149.54 | 149.80 | 148.78 |
-
