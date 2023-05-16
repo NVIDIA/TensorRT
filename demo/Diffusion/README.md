@@ -65,7 +65,7 @@ transformers        4.26.1
 ```bash
 python3 demo_txt2img.py --help
 python3 demo_img2img.py --help
-python3 demo_inpainting.py --help
+python3 demo_inpaint.py --help
 ```
 
 ### HuggingFace user access token

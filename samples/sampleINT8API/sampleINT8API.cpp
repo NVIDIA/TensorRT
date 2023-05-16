@@ -110,6 +110,8 @@ public:
     SampleINT8APIParams mParams; //!< Stores Sample Parameter
 
 private:
+    SampleUniquePtr<IRuntime> mRuntime{}; //!< The TensorRT Runtime used to deserialize the engine.
+
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
 
     std::map<std::string, std::string> mInOut; //!< Input and output mapping of the network
@@ -433,7 +435,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
     infile.seekg(1, infile.cur);
     infile.read(reinterpret_cast<char*>(fileData.data()), width * height * channels);
 
-    float* hostInputBuffer = static_cast<float*>(buffers.getHostBuffer(mInOut["input"]));
+    uint8_t* hostInputBuffer = static_cast<uint8_t*>(buffers.getHostBuffer(mInOut["input"]));
 
     // Convert HWC to CHW and Normalize
     for (int c = 0; c < channels; ++c)
@@ -444,11 +446,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
             {
                 int dstIdx = c * height * width + h * width + w;
                 int srcIdx = h * width * channels + w * channels + c;
-                // This equation include 3 steps
-                // 1. Scale Image to range [0.f, 1.0f]
-                // 2. Normalize Image using per channel Mean and per channel Standard Deviation
-                // 3. Shuffle HWC to CHW form
-                hostInputBuffer[dstIdx] = (2.0 / 255.0) * static_cast<float>(fileData[srcIdx]) - 1.0;
+                hostInputBuffer[dstIdx] = fileData[srcIdx];
             }
         }
     }
@@ -578,8 +576,12 @@ sample::Logger::TestResult SampleINT8API::build()
         return sample::Logger::TestResult::kFAILED;
     }
 
-    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    if (!runtime)
+    if (!mRuntime)
+    {
+        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+    }
+
+    if (!mRuntime)
     {
         sample::gLogError << "Unable to create runtime." << std::endl;
         return sample::Logger::TestResult::kFAILED;
@@ -587,7 +589,7 @@ sample::Logger::TestResult SampleINT8API::build()
 
     // build TRT engine
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         sample::gLogError << "Unable to build cuda engine." << std::endl;
