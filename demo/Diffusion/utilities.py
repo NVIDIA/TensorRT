@@ -210,7 +210,7 @@ class Engine():
             config_kwargs['tactic_sources'] = []
 
         engine = engine_from_network(
-            network_from_onnx_path(onnx_path),
+            network_from_onnx_path(onnx_path, flags=[trt.OnnxParserFlag.NATIVE_INSTANCENORM]),
             config=CreateConfig(fp16=fp16,
                 refittable=enable_refit,
                 profiles=[p],
