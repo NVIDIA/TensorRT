@@ -48,8 +48,8 @@ diffusers           0.14.0
 onnx                1.13.1
 onnx-graphsurgeon   0.3.26
 onnxruntime         1.14.1
-polygraphy          0.44.2
-tensorrt            8.6.0.10
+polygraphy          0.47.1
+tensorrt            8.6.1.6
 tokenizers          0.13.2
 torch               1.13.0
 transformers        4.26.1
