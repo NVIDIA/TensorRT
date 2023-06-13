@@ -72,7 +72,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 2. #### (Optional - if not using TensorRT container) Specify the TensorRT GA release build path
 
-    If using the TensorRT OSS build container, TensorRT libraries are preinstalled under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
+    If using the TensorRT OSS build container, TensorRT libraries are pre-installed under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
 
     Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com/nvidia-tensorrt-download).
 
@@ -87,7 +87,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 3. #### (Optional - for Jetson builds only) Download the JetPack SDK
     1. Download and launch the JetPack SDK manager. Login with your NVIDIA developer account.
-    2. Select the  platform and target OS  (example: Jetson AGX Xavier, `Linux Jetpack 5.0`), and click Continue.
+    2. Select the platform and target OS  (example: Jetson AGX Xavier, `Linux Jetpack 5.0`), and click Continue.
     3. Under `Download & Install Options` change the download folder and select `Download now, Install later`. Agree to the license terms and click Continue.
     4. Move the extracted files into the `<TensorRT-OSS>/docker/jetpack_files` folder.
 
@@ -193,7 +193,7 @@ For Linux platforms, we recommend that you generate a docker container for build
         - Tesla T4, GeForce RTX 2080: `-DGPU_ARCHS="75"`
         - Titan V, Tesla V100: `-DGPU_ARCHS="70"`
         - Multiple SMs: `-DGPU_ARCHS="80 75"`
-	- `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation) on non Linux/x86 platforms must explicitly specify the target platform. Currently supported options: `x86_64` (default), `aarch64`
+	- `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation) on non-Linux/x86 platforms must explicitly specify the target platform. Currently supported options: `x86_64` (default), `aarch64`
 
 # References
 
