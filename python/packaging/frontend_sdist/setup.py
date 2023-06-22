@@ -15,42 +15,18 @@
 # limitations under the License.
 #
 
-import sys
-
 from setuptools import setup
-from setuptools.command.install import install
-import subprocess as sp
 
 tensorrt_module = "##TENSORRT_MODULE##"
-
-
-class InstallCommand(install):
-    def run(self):
-        def install_dep(package_name):
-            status = sp.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "pip",
-                    "install",
-                    "{:}==##TENSORRT_PYTHON_VERSION##".format(package_name),
-                    "--index-url",
-                    "https://pypi.nvidia.com",
-                ]
-            )
-            status.check_returncode()
-
-        install_dep("{:}_libs".format(tensorrt_module))
-        install_dep("{:}_bindings".format(tensorrt_module))
-
-        install.run(self)
+tensorrt_version = "##TENSORRT_PYTHON_VERSION##"
 
 
 setup(
     name=tensorrt_module,
-    version="##TENSORRT_PYTHON_VERSION##",
+    version=tensorrt_version,
     description="A high performance deep learning inference library",
-    long_description="A high performance deep learning inference library",
+    long_description="A high performance deep learning inference library\n\nInstall using `pip install tensorrt --extra-index-url https://pypi.nvidia.com` or run `export PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com` (comma-separated URLs) and then `pip install tensorrt`.",
+    long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
     license="Proprietary",
     classifiers=[
@@ -59,6 +35,10 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     packages=[tensorrt_module],
+    install_requires=[
+        "{}_libs=={}".format(tensorrt_module, tensorrt_version),
+        "{}_bindings=={}".format(tensorrt_module, tensorrt_version),
+    ],
     extras_require={"numpy": "numpy"},
     package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
     include_package_data=True,
@@ -66,5 +46,4 @@ setup(
     keywords="nvidia tensorrt deeplearning inference",
     url="https://developer.nvidia.com/tensorrt",
     download_url="https://github.com/nvidia/tensorrt/tags",
-    cmdclass={"install": InstallCommand},
 )
