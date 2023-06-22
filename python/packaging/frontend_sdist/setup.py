@@ -25,7 +25,18 @@ setup(
     name=tensorrt_module,
     version=tensorrt_version,
     description="A high performance deep learning inference library",
-    long_description="A high performance deep learning inference library\n\nInstall using `pip install tensorrt --extra-index-url https://pypi.nvidia.com` or run `export PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com` (comma-separated URLs) and then `pip install tensorrt`.",
+    long_description="""A high performance deep learning inference library
+
+To install, please execute the following:
+```
+pip install tensorrt --extra-index-url https://pypi.nvidia.com
+```
+Or put the index URL in the (comma-separated) PIP_EXTRA_INDEX_URL environment variable:
+```
+export PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com
+pip install tensorrt
+```
+""",
     long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
     license="Proprietary",
