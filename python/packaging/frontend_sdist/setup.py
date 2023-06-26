@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import platform
 import sys
 
 from setuptools import setup
@@ -22,6 +23,22 @@ from setuptools.command.install import install
 import subprocess as sp
 
 tensorrt_module = "##TENSORRT_MODULE##"
+
+# cherry-pick information from `packaging.markers.default_environment()` needed to find the right wheel
+# https://github.com/pypa/packaging/blob/23.1/src/packaging/markers.py#L175-L190
+if sys.platform == "linux":
+    platform_marker = "manylinux_2_17"
+else:
+    raise RuntimeError("TensorRT currently only builds wheels for linux")
+
+if sys.implementation.name == "cpython":
+    implementation_marker = "cp{}".format("".join(platform.python_version_tuple()[:2]))
+else:
+    raise RuntimeError("TensorRT currently only builds wheels for CPython")
+
+machine_marker = platform.machine()
+if machine_marker != "x86_64":
+    raise RuntimeError("TensorRT currently only builds wheels for x86_64 processors")
 
 
 class InstallCommand(install):
