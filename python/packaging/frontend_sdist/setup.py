@@ -15,10 +15,44 @@
 # limitations under the License.
 #
 
+import os
+import sys
+from subprocess import check_call
+
 from setuptools import setup
+from setuptools.command.install import install
 
 tensorrt_module = "##TENSORRT_MODULE##"
 tensorrt_version = "##TENSORRT_PYTHON_VERSION##"
+tensorrt_submodules = [
+    "{}_libs=={}".format(tensorrt_module, tensorrt_version),
+    "{}_bindings=={}".format(tensorrt_module, tensorrt_version),
+]
+
+
+class InstallCommand(install):
+    def run(self):
+        # pip-inside-pip hack ref #3080
+        check_call(
+            [
+                "{}/bin/pip".format(sys.exec_prefix),
+                "install",
+                "--extra-index-url",
+                "https://pypi.nvidia.com",
+                *tensorrt_submodules,
+            ]
+        )
+
+        super().run(self)
+
+
+# use pip-inside-pip hack only if the nvidia index is not set in the environment
+if "pypi.nvidia.com" in os.environ.get("PIP_EXTRA_INDEX_URL", ""):
+    install_requires = tensorrt_submodules
+    cmdclass = {}
+else:
+    install_requires = []
+    cmdclass = {"install": InstallCommand}
 
 
 setup(
@@ -29,13 +63,10 @@ setup(
 
 To install, please execute the following:
 ```
-pip install tensorrt --extra-index-url https://pypi.nvidia.com
-```
-Or put the index URL in the (comma-separated) PIP_EXTRA_INDEX_URL environment variable:
-```
 export PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com
 pip install tensorrt
 ```
+When the extra index url is not exported, a nested `pip install` will run with the extra index url hard-coded.
 """,
     long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
@@ -46,10 +77,8 @@ pip install tensorrt
         "Programming Language :: Python :: 3",
     ],
     packages=[tensorrt_module],
-    install_requires=[
-        "{}_libs=={}".format(tensorrt_module, tensorrt_version),
-        "{}_bindings=={}".format(tensorrt_module, tensorrt_version),
-    ],
+    install_requires=install_requires,
+    cmdclass=cmdclass,
     extras_require={"numpy": "numpy"},
     package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
     include_package_data=True,
