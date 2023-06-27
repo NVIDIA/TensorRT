@@ -16,8 +16,8 @@
 #
 
 import os
+import subprocess
 import sys
-from subprocess import check_call
 
 from setuptools import setup
 from setuptools.command.install import install
@@ -33,7 +33,7 @@ tensorrt_submodules = [
 class InstallCommand(install):
     def run(self):
         # pip-inside-pip hack ref #3080
-        check_call(
+        subprocess.check_call(
             [
                 "{}/bin/pip".format(sys.exec_prefix),
                 "install",
@@ -43,11 +43,35 @@ class InstallCommand(install):
             ]
         )
 
-        super().run(self)
+        super().run()
+
+
+def parent_command_line():
+    """Get the command line of the parent PID."""
+    pid = os.getppid()
+    # try retrieval using psutil
+    try:
+        import psutil
+
+        return " ".join(psutil.Process(pid).cmdline())
+    except ModuleNotFoundError:
+        pass
+    # fall back to shell
+    try:
+        return (
+            subprocess.check_output(["ps", "-p", str(pid), "-o", "command"])
+            .decode()
+            .split("\n")[1]
+        )
+    except subprocess.CalledProcessError:
+        return ""
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
-if "pypi.nvidia.com" in os.environ.get("PIP_EXTRA_INDEX_URL", ""):
+if (
+    "pypi.nvidia.com" in os.environ.get("PIP_EXTRA_INDEX_URL", "")
+    or "pypi.nvidia.com" in parent_command_line()
+):
     install_requires = tensorrt_submodules
     cmdclass = {}
 else:
@@ -63,10 +87,14 @@ setup(
 
 To install, please execute the following:
 ```
+pip install tensorrt --extra-index-url https://pypi.nvidia.com
+```
+Or put the index URL in the (comma-separated) PIP_EXTRA_INDEX_URL environment variable:
+```
 export PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com
 pip install tensorrt
 ```
-When the extra index url is not exported, a nested `pip install` will run with the extra index url hard-coded.
+When the extra index url is not found, a nested `pip install` will run with the extra index url hard-coded.
 """,
     long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
