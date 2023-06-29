@@ -46,6 +46,7 @@ class StableDiffusionPipeline:
         verbose=False,
         nvtx_profile=False,
         use_cuda_graph=False,
+        controlnets=None,
     ):
         """
         Initializes the Diffusion pipeline.
@@ -137,6 +138,8 @@ class StableDiffusionPipeline:
         self.models = {}
         self.engine = {}
         self.shared_device_memory = None
+        
+        self.controlnets = controlnets
 
     def loadResources(self, image_height, image_width, batch_size, seed):
         # Initialize noise generator
@@ -249,7 +252,7 @@ class StableDiffusionPipeline:
         if 'clip' in self.stages:
             self.models['clip'] = make_CLIP(inpaint=self.inpaint, **models_args)
         if 'unet' in self.stages:
-            self.models['unet'] = make_UNet(inpaint=self.inpaint, **models_args)
+            self.models['unet'] = make_UNet(inpaint=self.inpaint, **models_args, controlnets=self.controlnets)
         if 'vae' in self.stages:
             self.models['vae'] = make_VAE(inpaint=self.inpaint, **models_args)
 
@@ -284,7 +287,9 @@ class StableDiffusionPipeline:
                     # Optimize onnx
                     if force_optimize or not os.path.exists(onnx_opt_path):
                         print(f"Generating optimizing model: {onnx_opt_path}")
-                        onnx_opt_graph = obj.optimize(onnx.load(onnx_path))
+                        # onnx_opt_graph = obj.optimize(onnx.load(onnx_path))
+                        # TODO: need load_external_data=False or not
+                        onnx_opt_graph = obj.optimize(onnx.load(onnx_path, load_external_data=False))
                         onnx.save(onnx_opt_graph, onnx_opt_path)
                     else:
                         print(f"Found cached optimized model: {onnx_opt_path} ")
@@ -357,6 +362,24 @@ class StableDiffusionPipeline:
         if self.nvtx_profile:
             nvtx.end_range(nvtx_image_preprocess)
         return tuple(init_images)
+    
+    def preprocess_controlnet_images(self, batch_size, images=None):
+        '''
+        images: List of PIL.Image.Image
+        '''
+        if images is None:
+            return None
+        
+        if self.nvtx_profile:
+            nvtx_image_preprocess = nvtx.start_range(message='image_preprocess', color='pink')
+        images = [(np.array(i.convert("RGB")).astype(np.float32) / 255.0)[..., None].transpose(0, 3, 1, 2).repeat_interleave(batch_size, dim=0) for i in images]
+        # do_classifier_free_guidance
+        images = [torch.cat([torch.from_numpy(i).to(self.device).float()] * 2) for i in images]
+        images = torch.cat([image[None, ...] for image in images], dim=0)
+        
+        if self.nvtx_profile:
+            nvtx.end_range(nvtx_image_preprocess)
+        return images
 
     def encode_prompt(self, prompt, negative_prompt):
         if self.nvtx_profile:
@@ -396,7 +419,10 @@ class StableDiffusionPipeline:
 
         return text_embeddings
 
-    def denoise_latent(self, latents, text_embeddings, timesteps=None, step_offset=0, mask=None, masked_image_latents=None):
+    def denoise_latent(self, latents, text_embeddings, timesteps=None, step_offset=0, mask=None, masked_image_latents=None, controlnet_imgs=None, controlnet_scales=None):
+        controlnet_imgs = self.preprocess_controlnet_images(latents.shape[0], controlnet_imgs)
+        controlnet_scales = torch.tensor(controlnet_scales, device=self.device).float()[..., None]
+        
         cudart.cudaEventRecord(self.events['denoise-start'], 0)
         if not isinstance(timesteps, torch.Tensor):
             timesteps = self.scheduler.timesteps
@@ -422,7 +448,11 @@ class StableDiffusionPipeline:
             sample_inp = latent_model_input
             timestep_inp = timestep_float
             embeddings_inp = text_embeddings
-            noise_pred = self.runEngine('unet', {"sample": sample_inp, "timestep": timestep_inp, "encoder_hidden_states": embeddings_inp})['latent']
+            if controlnet_imgs is None:
+                noise_pred = self.runEngine('unet', {"sample": sample_inp, "timestep": timestep_inp, "encoder_hidden_states": embeddings_inp})['latent']
+            else:    
+                noise_pred = self.runEngine('unet', {"sample": sample_inp, "timestep": timestep_inp, "encoder_hidden_states": embeddings_inp, 
+                                                    "controlnet_conds": controlnet_imgs, "controlnet_scales": controlnet_scales})['latent']
             if self.nvtx_profile:
                 nvtx.end_range(nvtx_unet)
 

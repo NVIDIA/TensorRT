@@ -48,6 +48,8 @@ class Txt2ImgPipeline(StableDiffusionPipeline):
         negative_prompt,
         image_height,
         image_width,
+        controlnet_imgs=None,
+        controlnet_scales=None,
         seed=None,
         warmup=False,
         verbose=False
@@ -89,7 +91,7 @@ class Txt2ImgPipeline(StableDiffusionPipeline):
             text_embeddings = self.encode_prompt(prompt, negative_prompt)
 
             # UNet denoiser
-            latents = self.denoise_latent(latents, text_embeddings)
+            latents = self.denoise_latent(latents, text_embeddings, controlnet_imgs=controlnet_imgs, controlnet_scales=controlnet_scales)
 
             # VAE decode latent
             images = self.decode_latent(latents)

@@ -20,6 +20,11 @@ from cuda import cudart
 import tensorrt as trt
 from utilities import TRT_LOGGER, add_arguments
 from txt2img_pipeline import Txt2ImgPipeline
+from diffusers.utils import load_image
+import cv2, controlnet_aux
+from PIL import Image
+import numpy as np
+import os
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion [Controlnet] Txt2Img Demo")
@@ -27,7 +32,9 @@ def parseArgs():
     parser.add_argument('--scheduler', type=str, default="DDIM", choices=["PNDM", "LMSD", "DPM", "DDIM", "EulerA"], help="Scheduler for diffusion process")
     # Controlnet arguments configuration
     parser.add_argument('--controlnet-type', nargs='*', type=str, default=None, help="Controlnet type, can be `None`, `str` or `str` list from ['canny', 'depth', 'hed', 'mlsd', 'normal', 'openpose', 'scribble', 'seg']")
+    # parser.add_argument('--controlnet-type', nargs='*', type=str, default=["canny", "normal"], help="Controlnet type, can be `None`, `str` or `str` list from ['canny', 'depth', 'hed', 'mlsd', 'normal', 'openpose', 'scribble', 'seg']")
     parser.add_argument('--controlnet-scale', nargs='*', type=float, default=[1.0], help="The outputs of the controlnet are multiplied by `controlnet_scale` before they are added to the residual in the original unet, can be `None`, `float` or `float` list")
+    
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -45,6 +52,45 @@ if __name__ == "__main__":
         negative_prompt = args.negative_prompt * len(prompt)
     else:
         negative_prompt = args.negative_prompt
+    
+    # Controlnet configuration
+    if not isinstance(args.controlnet_type, list):
+        if args.controlnet_type is None:
+            print("[I] StableDiffusion without controlnet")
+        else:
+            raise ValueError(f"`--controlnet-type` must be of type `str` or `str` list, but is {type(args.controlnet_type)}")
+    else:
+        print(f"[I] StableDiffusion with controlnet: {args.controlnet_type}")
+    controlnet_imgs = None if args.controlnet_type is None else []
+    if args.controlnet_type is not None:
+        if len(args.controlnet_scale) != len(args.controlnet_type):
+            args.controlnet_scale = args.controlnet_scale * (len(args.controlnet_type) // len(args.controlnet_scale))
+        
+        def resize(x, resolution):
+            x = np.array(x, dtype=np.uint8)
+            Ht, Wt = resolution
+            if x.ndim == 2:
+                Ho, Wo = x.shape
+                Co = 1
+            else:
+                Ho, Wo, Co = x.shape
+            if Co == 3 or Co == 4 or Co == 1:
+                k = float(Ht + Wt) / float(Ho + Wo)
+                x = cv2.resize(x, (int(Wt), int(Ht)), interpolation=cv2.INTER_AREA if k < 1 else cv2.INTER_LANCZOS4)
+                return Image.fromarray(x)
+        for controlnet in args.controlnet_type:
+            if controlnet == "canny":
+                prompt = ["Stormtrooper's lecture"] * args.repeat_prompt
+                control_image = load_image("https://huggingface.co/lllyasviel/sd-controlnet-depth/resolve/main/images/stormtrooper.png")
+                control_image = controlnet_aux.CannyDetector()(control_image)
+                controlnet_imgs.append(resize(control_image, [args.height, args.width]))
+            elif controlnet == "normal":
+                prompt = ["Stormtrooper's lecture"] * args.repeat_prompt
+                control_image = load_image("https://huggingface.co/lllyasviel/sd-controlnet-depth/resolve/main/images/stormtrooper.png")
+                control_image = controlnet_aux.NormalBaeDetector.from_pretrained("lllyasviel/Annotators")(control_image)
+                controlnet_imgs.append(resize(control_image, [args.height, args.width]))
+            else:
+                raise ValueError(f"You should implement the conditonal image of this controlnet: {controlnet}") 
 
     # Validate image dimensions
     image_height = args.height
@@ -77,9 +123,13 @@ if __name__ == "__main__":
         verbose=args.verbose,
         nvtx_profile=args.nvtx_profile,
         max_batch_size=max_batch_size,
-        use_cuda_graph=args.use_cuda_graph)
+        use_cuda_graph=args.use_cuda_graph,
+        controlnets=args.controlnet_type)
 
     # Load TensorRT engines and pytorch modules
+    os.makedirs(args.engine_dir, exist_ok=True)
+    os.makedirs(args.onnx_dir, exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
     demo.loadEngines(args.engine_dir, args.onnx_dir, args.onnx_opset,
         opt_batch_size=len(prompt), opt_image_height=image_height, opt_image_width=image_width, \
         force_export=args.force_onnx_export, force_optimize=args.force_onnx_optimize, \
@@ -91,16 +141,16 @@ if __name__ == "__main__":
 
     if args.use_cuda_graph:
         # inference once to get cuda graph
-        images = demo.infer(prompt, negative_prompt, image_height, image_width, warmup=True, verbose=False)
+        images = demo.infer(prompt, negative_prompt, image_height, image_width, controlnet_imgs=controlnet_imgs, controlnet_scales=args.controlnet_scale, warmup=True, verbose=False)
 
     print("[I] Warming up ..")
     for _ in range(args.num_warmup_runs):
-        images = demo.infer(prompt, negative_prompt, image_height, image_width, warmup=True, verbose=False)
+        images = demo.infer(prompt, negative_prompt, image_height, image_width, controlnet_imgs=controlnet_imgs, controlnet_scales=args.controlnet_scale, warmup=True, verbose=False)
 
-    print("[I] Running StableDiffusion pipeline")
+    print("[I] Running StableDiffusion [Controlnet] pipeline")
     if args.nvtx_profile:
         cudart.cudaProfilerStart()
-    images = demo.infer(prompt, negative_prompt, image_height, image_width, seed=args.seed, verbose=args.verbose)
+    images = demo.infer(prompt, negative_prompt, image_height, image_width, controlnet_imgs=controlnet_imgs, controlnet_scales=args.controlnet_scale, seed=args.seed, verbose=args.verbose)
     if args.nvtx_profile:
         cudart.cudaProfilerStop()
 
