@@ -46,6 +46,17 @@ class InstallCommand(install):
         super().run()
 
 
+def pip_config_list():
+    """Get the current pip config (env vars, config file, etc)."""
+    return subprocess.check_output(
+        [
+            "{}/bin/pip".format(sys.exec_prefix),
+            "config",
+            "list",
+        ]
+    ).decode()
+
+
 def parent_command_line():
     """Get the command line of the parent PID."""
     pid = os.getppid()
@@ -68,10 +79,7 @@ def parent_command_line():
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
-if (
-    "pypi.nvidia.com" in os.environ.get("PIP_EXTRA_INDEX_URL", "")
-    or "pypi.nvidia.com" in parent_command_line()
-):
+if "pypi.nvidia.com" in pip_config_list() or "pypi.nvidia.com" in parent_command_line():
     install_requires = tensorrt_submodules
     cmdclass = {}
 else:
