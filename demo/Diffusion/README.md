@@ -156,7 +156,22 @@ We can just set multiple controlnets for inference:
 python3 demo_txt2img_controlnet.py --hf-token=$HF_TOKEN -v --controlnet-type canny normal --controlnet-scale 1.0 1.0
 ```
 
-# Known Issues
+### Dynamic batchsize and dynamic image shape
+This demo enables dynamic batchsize by default.If you want to build static batchsize, you can add `--build-static-batch` to the cmd.  
+And if you want to enable dynamic shape (e.g. to generate images of 256*256 to 1024*1024), you can add `--build-dynamic-shape` to the cmd. Like below:
+```bash
+python3 demo_txt2img_controlnet.py --hf-token=$HF_TOKEN -v --build-dynamic-shape --controlnet-type=canny --controlnet-scale=1.0
+```
+Then we can use the built engine to generate different resolution images:
+```bash
+python3 demo_txt2img_controlnet.py --hf-token=$HF_TOKEN -v --build-dynamic-shape --controlnet-type=canny --controlnet-scale=1.0 --height=1024 --width=1024
+## --height=512 --width=512 or other resolution in [256, 1024] also works
+```
+
+### Acknowledgements
+The controlnet implementation is inspired by [controlnet_stable_tensorrt](https://github.com/hnsywangxin/controlnet_stable_tensorrt), thanks for his good work.
+
+### Known Issues
 
 * Issue: `onnx_torch.ModelProto exceeded maximum protobuf size of 2GB: ` & `RuntimeError: The model does not have an ir_version set properly.`  
 Solution: We have to replace python List with torch.nn.ModuleList() for mutiple layers representation, e.g. `[ControlNetModel]` ==> `torch.nn.ModuleList([ControlNetModel])`  

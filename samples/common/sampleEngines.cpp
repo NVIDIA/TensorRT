@@ -206,7 +206,7 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
             input->setDynamicRange(-127 * calibScale, 127 * calibScale);
         }
     }
-    bool const broadcastOutputFormats = broadcastIOFormats(outputFormats, network.getNbInputs());
+    bool const broadcastOutputFormats = broadcastIOFormats(outputFormats, network.getNbOutputs());
     for (int32_t i = 0, n = network.getNbOutputs(); i < n; ++i)
     {
         int32_t formatIdx = broadcastOutputFormats ? 0 : i;
