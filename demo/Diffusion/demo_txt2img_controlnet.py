@@ -32,7 +32,6 @@ def parseArgs():
     parser.add_argument('--scheduler', type=str, default="DDIM", choices=["PNDM", "LMSD", "DPM", "DDIM", "EulerA"], help="Scheduler for diffusion process")
     # Controlnet arguments configuration
     parser.add_argument('--controlnet-type', nargs='*', type=str, default=None, help="Controlnet type, can be `None`, `str` or `str` list from ['canny', 'depth', 'hed', 'mlsd', 'normal', 'openpose', 'scribble', 'seg']")
-    # parser.add_argument('--controlnet-type', nargs='*', type=str, default=["canny", "normal"], help="Controlnet type, can be `None`, `str` or `str` list from ['canny', 'depth', 'hed', 'mlsd', 'normal', 'openpose', 'scribble', 'seg']")
     parser.add_argument('--controlnet-scale', nargs='*', type=float, default=[1.0], help="The outputs of the controlnet are multiplied by `controlnet_scale` before they are added to the residual in the original unet, can be `None`, `float` or `float` list")
     
     return parser.parse_args()

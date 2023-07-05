@@ -106,3 +106,58 @@ Use `--input-image=<path to image>` and `--mask-image=<path to mask>` to specify
 - To accelerate engine building time one can use `--timing-cache=<path to cache file>`. This cache file will be created if does not exist. Note, that it may influence the performance if the cache file created on the other hardware is used. It is suggested to use this flag only during development. To achieve the best perfromance during deployment, please, build engines without timing cache.
 - To switch between versions or pipelines one needs either to clear onnx and engine dirs, or to specify `--force-onnx-export --force-onnx-optimize --force-engine-build` or to create new dirs and to specify `--onnx-dir=<new onnx dir> --engine-dir=<new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
+
+# Stable Diffusion with ControlNet
+We may need to clean the onnx and trt files in `onnx` and `engine` path or configure different paths for different experiments. 
+```bash
+rm -rf onnx/* engine/*
+```
+Environment software configuration:
+```
+controlnet-aux           0.0.6
+cuda-python              12.1.0rc1+1.g9e30ea2.dirty
+diffusers                0.17.1
+huggingface-hub          0.15.1
+nvidia-cublas-cu12       12.2.1.16
+nvidia-cuda-runtime-cu12 12.2.53
+nvidia-cudnn-cu12        8.9.2.26
+nvidia-dali-cuda110      1.22.0
+nvidia-pyindex           1.0.9
+nvtx                     0.2.5
+onnx                     1.13.0
+onnx-graphsurgeon        0.3.27
+onnxruntime              1.15.1
+opencv-python            4.7.0.72
+polygraphy               0.43.1
+tensorrt                 8.6.1
+tokenizers               0.13.3
+torch                    1.14.0a0+44dac5
+transformers             4.30.2
+```  
+
+### Without ControlNet
+Just like `demo_txt2img.py` we can run text to image inference:
+```bash
+python3 demo_txt2img_controlnet.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN -v
+```
+
+### Single ControlNet
+We can run SD + single Controlnet inference:
+```bash
+python3 demo_txt2img_controlnet.py --hf-token=$HF_TOKEN -v --controlnet-type=canny --controlnet-scale=1.0
+```
+Note:  
+1. `--controlnet-type` currently can be choosen from `['canny', 'depth', 'hed', 'mlsd', 'normal', 'openpose', 'scribble', 'seg']`, but input image and prompt samples are only implemented for `canny` and `normal`. You need to modify the code if you want to implement other controlnet types, with reference to this demo. 
+2. We can set the weight of controlnet by `--controlnet-scale`.
+
+### Mutiple ControlNets
+We can just set multiple controlnets for inference:
+```bash
+python3 demo_txt2img_controlnet.py --hf-token=$HF_TOKEN -v --controlnet-type canny normal --controlnet-scale 1.0 1.0
+```
+
+# Known Issues
+
+* Issue: `onnx_torch.ModelProto exceeded maximum protobuf size of 2GB: ` & `RuntimeError: The model does not have an ir_version set properly.`  
+Solution: We have to replace python List with torch.nn.ModuleList() for mutiple layers representation, e.g. `[ControlNetModel]` ==> `torch.nn.ModuleList([ControlNetModel])`  
+Ref: [Link1](https://discuss.pytorch.org/t/cannot-insert-a-tensor-that-requires-grad-as-a-constant/46561/7) [Link2](https://discuss.pytorch.org/t/the-difference-in-usage-between-nn-modulelist-and-python-list/7744/6) [Link3](https://discuss.pytorch.org/t/is-it-mandatory-to-add-modules-to-modulelist-to-access-its-parameters/81622)
