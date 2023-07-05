@@ -274,23 +274,25 @@ class UNet2DConditionControlNetModel(torch.nn.Module):
         self.controlnets = controlnets
         
     def forward(self, sample, timestep, encoder_hidden_states, controlnet_conds, controlnet_scales):
-        down_block_res_samples_list, mid_block_res_sample_list = []
-        for controlnet_cond, conditioning_scale, controlnet in zip(controlnet_conds, controlnet_scales, self.controlnets):
-            down_block_res_samples, mid_block_res_sample = controlnet(
+        for i, (controlnet_cond, conditioning_scale, controlnet) in enumerate(zip(controlnet_conds, controlnet_scales, self.controlnets)):
+            down_samples, mid_sample = controlnet(
                 sample,
                 timestep,
                 encoder_hidden_states=encoder_hidden_states,
                 controlnet_cond=controlnet_cond,
+                conditioning_scale=conditioning_scale,
                 return_dict=False,
             )
-            down_block_res_samples_list.append([sample * conditioning_scale for sample in down_block_res_samples])
-            mid_block_res_sample_list.append(mid_block_res_sample * conditioning_scale)
-        
-        down_block_res_samples = down_block_res_samples_list[0]
-        mid_block_res_sample = mid_block_res_sample_list[0]
-        for i in range(1, len(down_block_res_samples)):
-            down_block_res_samples = [a + b for a, b in zip(down_block_res_samples, down_block_res_samples_list[i])]
-            mid_block_res_sample += mid_block_res_sample_list[i]
+            
+            # merge samples
+            if i == 0:
+                down_block_res_samples, mid_block_res_sample = down_samples, mid_sample
+            else:
+                down_block_res_samples = [
+                    samples_prev + samples_curr
+                    for samples_prev, samples_curr in zip(down_block_res_samples, down_samples)
+                ]
+                mid_block_res_sample += mid_sample
         
         noise_pred = self.unet(
             sample,
@@ -329,7 +331,8 @@ class UNet(BaseModel):
         if not self.with_controlnet:
             return unet
         else:
-            controlnets = [ControlNetModel.from_pretrained(path, **model_opts).to(self.device) for path in self.controlnets_path]
+            model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
+            controlnets = torch.nn.ModuleList([ControlNetModel.from_pretrained(path, **model_opts).to(self.device) for path in self.controlnets_path])
             return UNet2DConditionControlNetModel(unet, controlnets)
 
     def get_input_names(self):
@@ -352,7 +355,7 @@ class UNet(BaseModel):
             return {
                 'sample': {0: '2B', 2: 'H', 3: 'W'},
                 'encoder_hidden_states': {0: '2B'},
-                'controlnet_conds': {1: '2B', 3: 'H', 4: 'W'},
+                'controlnet_conds': {1: '2B', 3: '8H', 4: '8W'},
                 'latent': {0: '2B', 2: 'H', 3: 'W'}
             }
 
@@ -403,7 +406,7 @@ class UNet(BaseModel):
                 torch.tensor([1.], dtype=torch.float32, device=self.device),
                 torch.randn(2*batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device),
                 torch.randn(len(self.controlnets_path), 2*batch_size, 3, image_height, image_width, dtype=dtype, device=self.device),
-                torch.randn(len(self.controlnets_path), 1),
+                torch.randn(len(self.controlnets_path), 1, dtype=dtype, device=self.device),
             )
 
 def make_UNet(version, hf_token, device, verbose, max_batch_size, inpaint=False, controlnets=None):

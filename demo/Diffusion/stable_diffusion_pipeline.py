@@ -372,7 +372,7 @@ class StableDiffusionPipeline:
         
         if self.nvtx_profile:
             nvtx_image_preprocess = nvtx.start_range(message='image_preprocess', color='pink')
-        images = [(np.array(i.convert("RGB")).astype(np.float32) / 255.0)[..., None].transpose(0, 3, 1, 2).repeat_interleave(batch_size, dim=0) for i in images]
+        images = [(np.array(i.convert("RGB")).astype(np.float32) / 255.0)[..., None].transpose(3, 2, 0, 1).repeat(batch_size, axis=0) for i in images]
         # do_classifier_free_guidance
         images = [torch.cat([torch.from_numpy(i).to(self.device).float()] * 2) for i in images]
         images = torch.cat([image[None, ...] for image in images], dim=0)

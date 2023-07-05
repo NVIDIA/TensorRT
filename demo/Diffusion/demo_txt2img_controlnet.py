@@ -81,11 +81,13 @@ if __name__ == "__main__":
         for controlnet in args.controlnet_type:
             if controlnet == "canny":
                 prompt = ["Stormtrooper's lecture"] * args.repeat_prompt
+                negative_prompt = [""] * args.repeat_prompt
                 control_image = load_image("https://huggingface.co/lllyasviel/sd-controlnet-depth/resolve/main/images/stormtrooper.png")
                 control_image = controlnet_aux.CannyDetector()(control_image)
                 controlnet_imgs.append(resize(control_image, [args.height, args.width]))
             elif controlnet == "normal":
                 prompt = ["Stormtrooper's lecture"] * args.repeat_prompt
+                negative_prompt = [""] * args.repeat_prompt
                 control_image = load_image("https://huggingface.co/lllyasviel/sd-controlnet-depth/resolve/main/images/stormtrooper.png")
                 control_image = controlnet_aux.NormalBaeDetector.from_pretrained("lllyasviel/Annotators")(control_image)
                 controlnet_imgs.append(resize(control_image, [args.height, args.width]))
