@@ -69,11 +69,9 @@ def parent_command_line():
         pass
     # fall back to shell
     try:
-        return (
-            subprocess.check_output(["ps", "-p", str(pid), "-o", "command"])
-            .decode()
-            .split("\n")[1]
-        )
+        return subprocess.check_output(
+            ["ps", "-p", str(pid), "-o", "command", "--no-headers"]
+        ).decode()
     except subprocess.CalledProcessError:
         return ""
 
