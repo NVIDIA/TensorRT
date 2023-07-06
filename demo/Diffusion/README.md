@@ -156,8 +156,11 @@ We can just set multiple controlnets for inference:
 python3 demo_txt2img_controlnet.py --hf-token=$HF_TOKEN -v --controlnet-type canny normal --controlnet-scale 1.0 1.0
 ```
 
+### Some inference performance data (For reference only)
+![ControlNet Inference](ControlNet_Inference_Performance.png "ControlNet Inference")
+
 ### Dynamic batchsize and dynamic image shape
-This demo enables dynamic batchsize by default.If you want to build static batchsize, you can add `--build-static-batch` to the cmd.  
+This demo enables dynamic batchsize by default. If you want to build static batchsize, you can add `--build-static-batch` to the cmd.  
 And if you want to enable dynamic shape (e.g. to generate images of 256*256 to 1024*1024), you can add `--build-dynamic-shape` to the cmd. Like below:
 ```bash
 python3 demo_txt2img_controlnet.py --hf-token=$HF_TOKEN -v --build-dynamic-shape --controlnet-type=canny --controlnet-scale=1.0
