@@ -102,7 +102,7 @@ Or put the index URL in the (comma-separated) PIP_EXTRA_INDEX_URL environment va
 export PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com
 pip install tensorrt
 ```
-When the extra index url is not found, a nested `pip install` will run with the extra index url hard-coded.
+When the extra index url does not contain `pypi.nvidia.com`, a nested `pip install` will run with the proper extra index url hard-coded.
 """,
     long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
