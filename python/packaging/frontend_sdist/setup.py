@@ -96,9 +96,9 @@ To install, please execute the following:
 ```
 pip install tensorrt --extra-index-url {nvidia_pip_index_url}
 ```
-Or put the index URL in the (comma-separated) PIP_EXTRA_INDEX_URL environment variable:
+Or add the index URL to the (space-separated) PIP_EXTRA_INDEX_URL environment variable:
 ```
-export PIP_EXTRA_INDEX_URL={nvidia_pip_index_url}
+export PIP_EXTRA_INDEX_URL='{nvidia_pip_index_url}'
 pip install tensorrt
 ```
 When the extra index url does not contain `{nvidia_pip_index_url}`, a nested `pip install` will run with the proper extra index url hard-coded.
