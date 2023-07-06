@@ -28,6 +28,7 @@ tensorrt_submodules = [
     "{}_libs=={}".format(tensorrt_module, tensorrt_version),
     "{}_bindings=={}".format(tensorrt_module, tensorrt_version),
 ]
+nvidia_pip_index_url = os.environ.get("NVIDIA_PIP_INDEX_URL", "https://pypi.nvidia.com")
 
 
 class InstallCommand(install):
@@ -38,7 +39,7 @@ class InstallCommand(install):
                 "{}/bin/pip".format(sys.exec_prefix),
                 "install",
                 "--extra-index-url",
-                "https://pypi.nvidia.com",
+                nvidia_pip_index_url,
                 *tensorrt_submodules,
             ]
         )
@@ -77,7 +78,7 @@ def parent_command_line():
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
-if "pypi.nvidia.com" in pip_config_list() or "pypi.nvidia.com" in parent_command_line():
+if nvidia_pip_index_url in pip_config_list() or nvidia_pip_index_url in parent_command_line():
     install_requires = tensorrt_submodules
     cmdclass = {}
 else:
@@ -89,18 +90,18 @@ setup(
     name=tensorrt_module,
     version=tensorrt_version,
     description="A high performance deep learning inference library",
-    long_description="""A high performance deep learning inference library
+    long_description=f"""A high performance deep learning inference library
 
 To install, please execute the following:
 ```
-pip install tensorrt --extra-index-url https://pypi.nvidia.com
+pip install tensorrt --extra-index-url {nvidia_pip_index_url}
 ```
 Or put the index URL in the (comma-separated) PIP_EXTRA_INDEX_URL environment variable:
 ```
-export PIP_EXTRA_INDEX_URL=https://pypi.nvidia.com
+export PIP_EXTRA_INDEX_URL={nvidia_pip_index_url}
 pip install tensorrt
 ```
-When the extra index url does not contain `pypi.nvidia.com`, a nested `pip install` will run with the proper extra index url hard-coded.
+When the extra index url does not contain `{nvidia_pip_index_url}`, a nested `pip install` will run with the proper extra index url hard-coded.
 """,
     long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
