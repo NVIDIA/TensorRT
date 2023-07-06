@@ -93,19 +93,21 @@ setup(
     name=tensorrt_module,
     version=tensorrt_version,
     description="A high performance deep learning inference library",
-    long_description=f"""A high performance deep learning inference library
+    long_description="""A high performance deep learning inference library
 
 To install, please execute the following:
 ```
-pip install tensorrt --extra-index-url {nvidia_pip_index_url}
+pip install tensorrt --extra-index-url {}
 ```
 Or add the index URL to the (space-separated) PIP_EXTRA_INDEX_URL environment variable:
 ```
-export PIP_EXTRA_INDEX_URL='{nvidia_pip_index_url}'
+export PIP_EXTRA_INDEX_URL='{}'
 pip install tensorrt
 ```
-When the extra index url does not contain `{nvidia_pip_index_url}`, a nested `pip install` will run with the proper extra index url hard-coded.
-""",
+When the extra index url does not contain `{}`, a nested `pip install` will run with the proper extra index url hard-coded.
+""".format(
+        nvidia_pip_index_url, nvidia_pip_index_url, nvidia_pip_index_url
+    ),
     long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
     license="Proprietary",
@@ -116,6 +118,7 @@ When the extra index url does not contain `{nvidia_pip_index_url}`, a nested `pi
     ],
     packages=[tensorrt_module],
     install_requires=install_requires,
+    python_requires=">=3.6",  # ref https://pypi.nvidia.com/tensorrt-bindings/
     cmdclass=cmdclass,
     extras_require={"numpy": "numpy"},
     package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
