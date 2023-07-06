@@ -78,7 +78,10 @@ def parent_command_line():
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
-if nvidia_pip_index_url in pip_config_list() or nvidia_pip_index_url in parent_command_line():
+if (
+    nvidia_pip_index_url in pip_config_list()
+    or nvidia_pip_index_url in parent_command_line()
+):
     install_requires = tensorrt_submodules
     cmdclass = {}
 else:
