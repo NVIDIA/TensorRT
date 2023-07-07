@@ -149,6 +149,7 @@ def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto"
             kwargs["opset_imports"] = graph.import_domains
 
     model = onnx.helper.make_model(onnx_graph, **kwargs)
+    model.ir_version = graph.ir_version
     model.producer_name = graph.producer_name
     model.producer_version = graph.producer_version
     return model

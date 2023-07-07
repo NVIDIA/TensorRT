@@ -48,6 +48,7 @@ class Graph(object):
     """
 
     DEFAULT_OPSET = 11
+    DEFAULT_IR_VERSION = 8
     OPSET_FUNC_MAP = defaultdict(dict)  # Ops registered for specific opsets.
     GLOBAL_FUNC_MAP = dict()  # Ops registered for ALL opsets.
 
@@ -100,6 +101,7 @@ class Graph(object):
         name=None,
         doc_string=None,
         opset=None,
+        ir_version=None,
         import_domains=None,
         producer_name: str = None,
         producer_version: str = None,
@@ -126,6 +128,7 @@ class Graph(object):
         self.opset = misc.default_value(opset, Graph.DEFAULT_OPSET)
         self.producer_name = misc.default_value(producer_name, "")
         self.producer_version = misc.default_value(producer_version, "")
+        self.ir_version = misc.default_value(ir_version, Graph.DEFAULT_IR_VERSION)
         self.import_domains = import_domains
         # Printing graphs can be very expensive
         G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
@@ -1144,6 +1147,7 @@ class Graph(object):
             name=copy.copy(self.name),
             doc_string=copy.copy(self.doc_string),
             opset=copy.copy(self.opset),
+            ir_version=self.ir_version,
             import_domains=self.import_domains,
         )
 

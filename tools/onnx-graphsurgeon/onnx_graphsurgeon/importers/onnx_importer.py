@@ -90,6 +90,10 @@ class OnnxImporter(BaseImporter):
         return model.opset_import
 
     @staticmethod
+    def get_ir_version(model: onnx.ModelProto):
+        return model.ir_version
+
+    @staticmethod
     def import_tensor(onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]) -> Tensor:
         if isinstance(onnx_tensor, onnx.TensorProto):
             data_location = int(onnx_tensor.data_location) if onnx_tensor.HasField("data_location") else None
@@ -198,6 +202,7 @@ class OnnxImporter(BaseImporter):
         onnx_graph: onnx.GraphProto,
         tensor_map: "OrderedDict[str, Tensor]" = None,
         opset=None,
+        ir_version=None,
         import_domains: onnx.OperatorSetIdProto = None,
         producer_name: str = None,
         producer_version: str = None,
@@ -284,6 +289,7 @@ class OnnxImporter(BaseImporter):
             producer_name=producer_name,
             producer_version=producer_version,
             opset=opset,
+            ir_version=ir_version,
             import_domains=import_domains,
         )
 
@@ -301,6 +307,7 @@ def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
     return OnnxImporter.import_graph(
         onnx_model.graph,
         opset=OnnxImporter.get_opset(onnx_model),
+        ir_version=OnnxImporter.get_ir_version(onnx_model),
         import_domains=OnnxImporter.get_import_domains(onnx_model),
         producer_name=onnx_model.producer_name,
         producer_version=onnx_model.producer_version,
