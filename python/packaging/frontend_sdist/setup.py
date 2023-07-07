@@ -29,6 +29,7 @@ tensorrt_submodules = [
     "{}_bindings=={}".format(tensorrt_module, tensorrt_version),
 ]
 nvidia_pip_index_url = os.environ.get("NVIDIA_PIP_INDEX_URL", "https://pypi.nvidia.com")
+disable_internal_pip = os.environ.get("NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP", False)
 
 
 class InstallCommand(install):
@@ -79,7 +80,8 @@ def parent_command_line():
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
 if (
-    nvidia_pip_index_url in pip_config_list()
+    disable_internal_pip
+    or nvidia_pip_index_url in pip_config_list()
     or nvidia_pip_index_url in parent_command_line()
 ):
     install_requires = tensorrt_submodules
