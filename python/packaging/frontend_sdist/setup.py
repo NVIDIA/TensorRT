@@ -32,17 +32,24 @@ nvidia_pip_index_url = os.environ.get("NVIDIA_PIP_INDEX_URL", "https://pypi.nvid
 disable_internal_pip = os.environ.get("NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP", False)
 
 
+def run_pip_command(args, call_func):
+    try:
+        return call_func([sys.executable, "-m", "pip"] + args)
+    except subprocess.CalledProcessError:
+        return call_func([os.path.join(sys.exec_prefix, "bin", "pip")] + args)
+
+
 class InstallCommand(install):
     def run(self):
         # pip-inside-pip hack ref #3080
-        subprocess.check_call(
+        run_pip_command(
             [
-                "{}/bin/pip".format(sys.exec_prefix),
                 "install",
                 "--extra-index-url",
                 nvidia_pip_index_url,
                 *tensorrt_submodules,
-            ]
+            ],
+            subprocess.check_call,
         )
 
         super().run()
@@ -50,13 +57,7 @@ class InstallCommand(install):
 
 def pip_config_list():
     """Get the current pip config (env vars, config file, etc)."""
-    return subprocess.check_output(
-        [
-            "{}/bin/pip".format(sys.exec_prefix),
-            "config",
-            "list",
-        ]
-    ).decode()
+    return run_pip_command(["config", "list"], subprocess.check_output).decode()
 
 
 def parent_command_line():
