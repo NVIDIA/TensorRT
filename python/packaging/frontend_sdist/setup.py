@@ -39,20 +39,13 @@ def run_pip_command(args, call_func):
     except subprocess.CalledProcessError:
         return call_func([os.path.join(sys.exec_prefix, "bin", "pip")] + args)
 
-# cherry-pick information from `packaging.markers.default_environment()` needed to find the right wheel
-# https://github.com/pypa/packaging/blob/23.1/src/packaging/markers.py#L175-L190
-if sys.platform == "linux":
-    platform_marker = "manylinux_2_17"
-else:
+
+# check wheel availability using information from https://github.com/pypa/packaging/blob/23.1/src/packaging/markers.py#L175-L190
+if sys.platform != "linux":
     raise RuntimeError("TensorRT currently only builds wheels for linux")
-
-if sys.implementation.name == "cpython":
-    implementation_marker = "cp{}".format("".join(platform.python_version_tuple()[:2]))
-else:
+if sys.implementation.name != "cpython":
     raise RuntimeError("TensorRT currently only builds wheels for CPython")
-
-machine_marker = platform.machine()
-if machine_marker != "x86_64":
+if platform.machine() != "x86_64":
     raise RuntimeError("TensorRT currently only builds wheels for x86_64 processors")
 
 
