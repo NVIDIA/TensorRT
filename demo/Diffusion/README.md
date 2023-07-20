@@ -108,32 +108,24 @@ Use `--input-image=<path to image>` and `--mask-image=<path to mask>` to specify
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
 
 # Stable Diffusion with ControlNet
-We may need to clean the onnx and trt files in `onnx` and `engine` path or configure different paths for different experiments. 
+
+### Enviroment Configuration
+Launch NGC container:
+```bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:23.02-py3 /bin/bash
+```
+And follow the commands below:
+```bash
+pip install --upgrade pip
+pip install --upgrade tensorrt
+pip install "torch<2" diffusers==0.18.2 transformers==4.31.0 onnx-graphsurgeon==0.3.27 onnxruntime==1.15.1 controlnet_aux==0.0.6
+```
+
+### Prerequisites
+We may need to clean the onnx and trt files in `onnx` and `engine` path or configure different paths using `--onnx-dir` `--engine-dir` for different experiments. 
 ```bash
 rm -rf onnx/* engine/*
 ```
-Environment software configuration:
-```
-controlnet-aux           0.0.6
-cuda-python              12.1.0rc1+1.g9e30ea2.dirty
-diffusers                0.17.1
-huggingface-hub          0.15.1
-nvidia-cublas-cu12       12.2.1.16
-nvidia-cuda-runtime-cu12 12.2.53
-nvidia-cudnn-cu12        8.9.2.26
-nvidia-dali-cuda110      1.22.0
-nvidia-pyindex           1.0.9
-nvtx                     0.2.5
-onnx                     1.13.0
-onnx-graphsurgeon        0.3.27
-onnxruntime              1.15.1
-opencv-python            4.7.0.72
-polygraphy               0.43.1
-tensorrt                 8.6.1
-tokenizers               0.13.3
-torch                    1.14.0a0+44dac5
-transformers             4.30.2
-```  
 
 ### Without ControlNet
 Just like `demo_txt2img.py` we can run text to image inference:
@@ -177,5 +169,9 @@ The controlnet implementation is inspired by [controlnet_stable_tensorrt](https:
 ### Known Issues
 
 * Issue: `onnx_torch.ModelProto exceeded maximum protobuf size of 2GB: ` & `RuntimeError: The model does not have an ir_version set properly.`  
-Solution: We have to replace python List with torch.nn.ModuleList() for mutiple layers representation, e.g. `[ControlNetModel]` ==> `torch.nn.ModuleList([ControlNetModel])`  
-Ref: [Link1](https://discuss.pytorch.org/t/cannot-insert-a-tensor-that-requires-grad-as-a-constant/46561/7) [Link2](https://discuss.pytorch.org/t/the-difference-in-usage-between-nn-modulelist-and-python-list/7744/6) [Link3](https://discuss.pytorch.org/t/is-it-mandatory-to-add-modules-to-modulelist-to-access-its-parameters/81622)
+  - Solution: We have to replace python List with torch.nn.ModuleList() for mutiple layers representation, e.g. `[ControlNetModel]` ==> `torch.nn.ModuleList([ControlNetModel])`  
+  - Reference: [Link1](https://discuss.pytorch.org/t/cannot-insert-a-tensor-that-requires-grad-as-a-constant/46561/7) [Link2](https://discuss.pytorch.org/t/the-difference-in-usage-between-nn-modulelist-and-python-list/7744/6) [Link3](https://discuss.pytorch.org/t/is-it-mandatory-to-add-modules-to-modulelist-to-access-its-parameters/81622)
+* Issue: `Exporting the operator 'aten::scaled_dot_product_attention' to ONNX opset version 17 is not supported.`  
+  - Reason: The pytorch-2.0 op `scaled_dot_product_attention` in current release (up to July 20th, 2023) is not supported in onnx. 
+  - Solution: Either downgrade pytorch to version 1.x or register this [pytoch op](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) as a [custom onnx op](https://pytorch.org/docs/master/onnx.html#onnx-script-functions).  
+  - Reference: [Link](https://github.com/pytorch/pytorch/issues/97262)
