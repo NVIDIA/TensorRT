@@ -77,13 +77,18 @@ if __name__ == "__main__":
         use_cuda_graph=args.use_cuda_graph)
 
     # Load TensorRT engines and pytorch modules
-    demo.loadEngines(args.engine_dir, args.onnx_dir, args.onnx_opset,
+    demo.loadEngines(args.engine_dir, args.framework_model_dir, args.onnx_dir, args.onnx_opset,
         opt_batch_size=len(prompt), opt_image_height=image_height, opt_image_width=image_width, \
         force_export=args.force_onnx_export, force_optimize=args.force_onnx_optimize, \
         force_build=args.force_engine_build, \
         static_batch=args.build_static_batch, static_shape=not args.build_dynamic_shape, \
         enable_refit=args.build_enable_refit, enable_preview=args.build_preview_features, enable_all_tactics=args.build_all_tactics, \
         timing_cache=args.timing_cache, onnx_refit_dir=args.onnx_refit_dir)
+
+    max_device_memory = max(demo.calculateMaxDeviceMemory(), demo.calculateMaxDeviceMemory())
+    _, shared_device_memory = cudart.cudaMalloc(max_device_memory)
+    demo.activateEngines(shared_device_memory)
+
     demo.loadResources(image_height, image_width, batch_size, args.seed)
 
     if args.use_cuda_graph:

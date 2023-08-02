@@ -23,25 +23,25 @@ import tensorrt as trt
 from utilities import TRT_LOGGER
 from stable_diffusion_pipeline import StableDiffusionPipeline
 
-class Img2ImgPipeline(StableDiffusionPipeline):
+class ControlNetPipeline(StableDiffusionPipeline):
     """
-    Application showcasing the acceleration of Stable Diffusion Img2Img v1.4, v1.5, v2.0-base, v2.0, v2.1-base, v2.1 pipeline using NVidia TensorRT.
+    Application showcasing the acceleration of ControlNet v1.4, v1.5 pipeline using NVidia TensorRT.
     """
     def __init__(
         self,
-        scheduler="DDIM",
+        scheduler="UniPCMultistepScheduler",
         *args, **kwargs
     ):
         """
-        Initializes the Img2Img Diffusion pipeline.
+        Initializes the ControlNet pipeline.
 
         Args:
             scheduler (str):
-                The scheduler to guide the denoising process. Must be one of the [EulerA, DDIM, DPM, LMSD, PNDM].
+                The scheduler to guide the denoising process. Must be one of the [EulerA, DDIM, DPM, LMSD, PNDM, UniPCMultistepScheduler].
         """
-        super(Img2ImgPipeline, self).__init__(*args, **kwargs, \
-            scheduler=scheduler, stages=['vae_encoder', 'clip', 'unet', 'vae'])
-
+        super(ControlNetPipeline, self).__init__(*args, **kwargs, \
+            scheduler=scheduler, stages=['clip', 'unet', 'vae'])
+    
     def infer(
         self,
         prompt,
@@ -49,8 +49,8 @@ class Img2ImgPipeline(StableDiffusionPipeline):
         init_image,
         image_height,
         image_width,
+        controlnet_scales,
         seed=None,
-        strength=0.75,
         warmup=False,
         verbose=False
     ):
@@ -68,41 +68,35 @@ class Img2ImgPipeline(StableDiffusionPipeline):
                 Height (in pixels) of the image to be generated. Must be a multiple of 8.
             image_width (int):
                 Width (in pixels) of the image to be generated. Must be a multiple of 8.
+            controlnet_scales (torch.Tensor)
+                A tensor which containes ControlNet scales, essential for multi ControlNet. 
+                Must be equal to number of Controlnets. 
             seed (int):
                 Seed for the random generator
-            strength (float):
-                How much to transform the input image. Must be between 0 and 1
             warmup (bool):
                 Indicate if this is a warmup run.
             verbose (bool):
                 Verbose in logging
         """
-        batch_size = len(prompt)
         assert len(prompt) == len(negative_prompt)
-
+        batch_size = len(prompt)
         with torch.inference_mode(), torch.autocast("cuda"), trt.Runtime(TRT_LOGGER):
+            # Pre-initialize latents
+            latents = self.initialize_latents( \
+                batch_size=batch_size, \
+                unet_channels=4, \
+                latent_height=(image_height // 8), \
+                latent_width=(image_width // 8)
+            )
+
             torch.cuda.synchronize()
             e2e_tic = time.perf_counter()
 
-            # Initialize timesteps
-            timesteps, t_start = self.initialize_timesteps(self.denoising_steps, strength)
-            latent_timestep = timesteps[:1].repeat(batch_size)
-
-            # Pre-process input image
-            init_image = self.preprocess_images(batch_size, (init_image,))[0]
-
-            # VAE encode init image
-            init_latents = self.encode_image(init_image)
-
             # CLIP text encoder
-            text_embeddings = self.encode_prompt(prompt, negative_prompt)
+            text_embeddings = self.encode_prompt(prompt, negative_prompt)            
 
-            # Add noise to latents using timesteps
-            noise = torch.randn(init_latents.shape, generator=self.generator, device=self.device, dtype=torch.float32)
-            latents = self.scheduler.add_noise(init_latents, noise, t_start, latent_timestep)
-
-            # UNet denoiser
-            latents = self.denoise_latent(latents, text_embeddings, timesteps=timesteps, step_offset=t_start)
+            # ControlNet + UNet denoiser
+            latents = self.denoise_latent(latents, text_embeddings, controlnet_imgs=init_image, controlnet_scales=controlnet_scales)
 
             # VAE decode latent
             images = self.decode_latent(latents)
@@ -111,5 +105,5 @@ class Img2ImgPipeline(StableDiffusionPipeline):
             e2e_toc = time.perf_counter()
 
             if not warmup:
-                self.print_summary(self.denoising_steps, e2e_tic, e2e_toc, batch_size, vae_enc=True)
-                self.save_image(images, 'img2img', prompt)
+                self.print_summary(self.denoising_steps, e2e_tic, e2e_toc, batch_size, controlnet=True)
+                self.save_image(images, 'controlnet', prompt)
