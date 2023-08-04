@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 """Tests of calibrators"""
+import inspect
 import pytest
 import numpy as np
 
@@ -42,11 +43,46 @@ class TestExampleModels():
         model.cuda()
         quant_nn.TensorQuantizer.use_fb_fake_quant = True
         dummy_input = torch.randn(1, 3, 224, 224, device='cuda')
-        torch.onnx.export(model,
-                          dummy_input,
-                          "/tmp/resnet50.onnx",
-                          verbose=False,
-                          opset_version=13,
-                          enable_onnx_checker=False,
-                          do_constant_folding=True)
+        if "enable_onnx_checker" in inspect.signature(torch.onnx.export).parameters:
+            torch.onnx.export(model,
+                              dummy_input,
+                              "/tmp/resnet50.onnx",
+                              verbose=False,
+                              opset_version=13,
+                              enable_onnx_checker=False,
+                              do_constant_folding=True)
+        else:
+            torch.onnx.export(model,
+                              dummy_input,
+                              "/tmp/resnet50.onnx",
+                              verbose=False,
+                              opset_version=13,
+                              do_constant_folding=True)
+        quant_nn.TensorQuantizer.use_fb_fake_quant = False
+
+    def test_resnet50_cpu(self):
+        model = resnet50(pretrained=True, quantize=True)
+        model.eval()
+
+        for name, module in model.named_modules():
+            if name.endswith('_quantizer'):
+                module.amax = 2.50
+
+        quant_nn.TensorQuantizer.use_fb_fake_quant = True
+        dummy_input = torch.randn(1, 3, 224, 224)
+        if "enable_onnx_checker" in inspect.signature(torch.onnx.export).parameters:
+            torch.onnx.export(model,
+                              dummy_input,
+                              "/tmp/resnet50_cpu.onnx",
+                              verbose=False,
+                              opset_version=13,
+                              enable_onnx_checker=False,
+                              do_constant_folding=True)
+        else:
+            torch.onnx.export(model,
+                              dummy_input,
+                              "/tmp/resnet50.onnx",
+                              verbose=False,
+                              opset_version=13,
+                              do_constant_folding=True)
         quant_nn.TensorQuantizer.use_fb_fake_quant = False

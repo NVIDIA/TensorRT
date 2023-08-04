@@ -11,5 +11,5 @@ onnxruntime==1.14.1
 onnx-graphsurgeon==0.3.26
 polygraphy==0.47.1
 scipy
-torch<2.0.0
+torch
 transformers==4.26.1

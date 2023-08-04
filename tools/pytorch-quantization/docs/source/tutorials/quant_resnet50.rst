@@ -155,7 +155,7 @@ Next we will evaluate the classification accuracy of our post training quantized
     # Save the model
     torch.save(model.state_dict(), "/tmp/quant_resnet50-calibrated.pth")
 
-This should yield 76.1% top-1 accuracy, which is close the the pre-trained model accuracy of 76.2%.
+This should yield 76.1% top-1 accuracy, which is close to the pre-trained model accuracy of 76.2%.
 
 Use different calibration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

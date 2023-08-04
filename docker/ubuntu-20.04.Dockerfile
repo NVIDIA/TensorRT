@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.0.1
+ARG CUDA_VERSION=12.1.1
 
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu20.04
 LABEL maintainer="NVIDIA CORPORATION"
@@ -79,7 +79,11 @@ RUN if [ "${CUDA_VERSION}" = "10.2" ] ; then \
         libnvinfer-lean-dev=${v} libnvinfer-vc-plugin8=${v} libnvinfer-vc-plugin-dev=${v} \
         libnvinfer-headers-dev=${v} libnvinfer-headers-plugin-dev=${v}; \
 else \
-    v="${TRT_VERSION}-1+cuda${CUDA_VERSION%.*}" &&\
+    ver="${CUDA_VERSION%.*}" &&\
+    if [ "${ver%.*}" = "12" ] ; then \
+        ver="12.0"; \
+    fi &&\
+    v="${TRT_VERSION}-1+cuda${ver}" &&\
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub &&\
     apt-get update &&\
     sudo apt-get -y install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \

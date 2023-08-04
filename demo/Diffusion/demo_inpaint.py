@@ -104,7 +104,7 @@ if __name__ == "__main__":
         force_export=args.force_onnx_export, force_optimize=args.force_onnx_optimize, \
         force_build=args.force_engine_build, \
         static_batch=args.build_static_batch, static_shape=not args.build_dynamic_shape, \
-        enable_preview=args.build_preview_features, enable_all_tactics=args.build_all_tactics, \
+        enable_all_tactics=args.build_all_tactics, \
         timing_cache=args.timing_cache)
     demo.loadResources(image_height, image_width, batch_size, args.seed)
 

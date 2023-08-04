@@ -190,7 +190,7 @@ class Engine():
             print("Failed to refit!")
             exit(0)
 
-    def build(self, onnx_path, fp16, input_profile=None, enable_refit=False, enable_preview=False, enable_all_tactics=False, timing_cache=None, workspace_size=0):
+    def build(self, onnx_path, fp16, input_profile=None, enable_refit=False, enable_all_tactics=False, timing_cache=None, workspace_size=0):
         print(f"Building TensorRT engine for {onnx_path}: {self.engine_path}")
         p = Profile()
         if input_profile:
@@ -200,10 +200,6 @@ class Engine():
 
         config_kwargs = {}
 
-        config_kwargs['preview_features'] = [trt.PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]
-        if enable_preview:
-            # Faster dynamic shapes made optional since it increases engine build time.
-            config_kwargs['preview_features'].append(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)
         if workspace_size > 0:
             config_kwargs['memory_pool_limits'] = {trt.MemoryPoolType.WORKSPACE: workspace_size}
         if not enable_all_tactics:
@@ -1201,7 +1197,6 @@ def add_arguments(parser):
     parser.add_argument('--build-static-batch', action='store_true', help="Build TensorRT engines with fixed batch size.")
     parser.add_argument('--build-dynamic-shape', action='store_true', help="Build TensorRT engines with dynamic image shapes.")
     parser.add_argument('--build-enable-refit', action='store_true', help="Enable Refit option in TensorRT engines during build.")
-    parser.add_argument('--build-preview-features', action='store_true', help="Build TensorRT engines with preview features.")
     parser.add_argument('--build-all-tactics', action='store_true', help="Build TensorRT engines using all tactic sources.")
     parser.add_argument('--timing-cache', default=None, type=str, help="Path to the precached timing measurements to accelerate build.")
 

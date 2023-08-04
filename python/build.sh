@@ -62,10 +62,10 @@ pushd ${ROOT_PATH}/python/packaging
 for dir in $(find . -type d); do mkdir -p ${WHEEL_OUTPUT_DIR}/$dir; done
 for file in $(find . -type f); do expand_vars_cp $file ${WHEEL_OUTPUT_DIR}/${file}; done
 popd
+
 cp tensorrt/tensorrt.so bindings_wheel/tensorrt/tensorrt.so
 
 pushd ${WHEEL_OUTPUT_DIR}/bindings_wheel
-
 python3 setup.py -q bdist_wheel --python-tag=cp${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION} --plat-name=linux_${TARGET}
 
 popd

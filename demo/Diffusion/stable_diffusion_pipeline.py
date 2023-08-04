@@ -195,7 +195,6 @@ class StableDiffusionPipeline:
         static_batch=False,
         static_shape=True,
         enable_refit=False,
-        enable_preview=False,
         enable_all_tactics=False,
         timing_cache=None,
         onnx_refit_dir=None,
@@ -229,8 +228,6 @@ class StableDiffusionPipeline:
                 Build engine only for specified opt_image_height & opt_image_width. Default = True.
             enable_refit (bool):
                 Build engines with refit option enabled.
-            enable_preview (bool):
-                Enable TensorRT preview features.
             enable_all_tactics (bool):
                 Enable all tactic sources during TensorRT engine builds.
             timing_cache (str):
@@ -304,7 +301,6 @@ class StableDiffusionPipeline:
                         static_batch=static_batch, static_shape=static_shape
                     ),
                     enable_refit=enable_refit,
-                    enable_preview=enable_preview,
                     enable_all_tactics=enable_all_tactics,
                     timing_cache=timing_cache,
                     workspace_size=self.max_workspace_size)

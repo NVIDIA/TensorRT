@@ -82,7 +82,7 @@ if __name__ == "__main__":
         force_export=args.force_onnx_export, force_optimize=args.force_onnx_optimize, \
         force_build=args.force_engine_build, \
         static_batch=args.build_static_batch, static_shape=not args.build_dynamic_shape, \
-        enable_refit=args.build_enable_refit, enable_preview=args.build_preview_features, enable_all_tactics=args.build_all_tactics, \
+        enable_refit=args.build_enable_refit, enable_all_tactics=args.build_all_tactics, \
         timing_cache=args.timing_cache, onnx_refit_dir=args.onnx_refit_dir)
     demo.loadResources(image_height, image_width, batch_size, args.seed)
 
