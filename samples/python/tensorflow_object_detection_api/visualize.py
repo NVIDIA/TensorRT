@@ -105,7 +105,8 @@ def visualize_detections(image_path, output_path, detections, labels=[]):
         text = "{}: {}%".format(label, int(100 * score))
         if score < 0:
             text = label
-        text_width, text_height = font.getsize(text)
+        left, top, right, bottom = font.getbbox(text)
+        text_width, text_height = right - left, bottom - top
         text_bottom = max(text_height, d['ymin'])
         text_left = d['xmin']
         margin = np.ceil(0.05 * text_height)
@@ -119,7 +120,8 @@ def visualize_detections(image_path, output_path, detections, labels=[]):
 
 def concat_visualizations(images, names, colors, output_path):
     def draw_text(draw, font, text, width, bar_height, offset, color):
-        text_width, text_height = font.getsize(text)
+        left, top, right, bottom = font.getbbox(text)
+        text_width, text_height = right - left, bottom - top
         draw.rectangle([(offset, 0), (offset + width, bar_height)], fill=color)
         draw.text((offset + (width - text_width) / 2, text_height - text_height / 2), text, fill='black', font=font)
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,7 @@ class TestClassificationFlow():
                 '--data-dir', dataset_dir,
                 '--model', 'resnet18', '--pretrained',
                 '-t', '0.5',
-                '--num-finetune-epochs', '1',
+                '--num-finetune-epochs', '2',
                 '--evaluate-onnx',
             ],
             env=test_env,

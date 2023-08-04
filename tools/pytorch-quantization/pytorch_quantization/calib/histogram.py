@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,9 +46,9 @@ class HistogramCalibrator(_Calibrator):
         grow_method: A string. DEPRECATED. default None.
         skip_zeros: A boolean. If True, skips zeros when collecting data for histogram. Default False.
         torch_hist: A boolean. If True, collect histogram by torch.histc instead of np.histogram. If input tensor
-            is on GPU, histc will also be running on GPU. Default False.
+            is on GPU, histc will also be running on GPU. Default True.
     """
-    def __init__(self, num_bits, axis, unsigned, num_bins=2048, grow_method=None, skip_zeros=False, torch_hist=False):
+    def __init__(self, num_bits, axis, unsigned, num_bins=2048, grow_method=None, skip_zeros=False, torch_hist=True):
         super(HistogramCalibrator, self).__init__(num_bits, axis, unsigned)
         self._num_bins = num_bins
         self._skip_zeros = skip_zeros
@@ -262,8 +262,8 @@ def _compute_amax_mse(calib_hist, calib_bin_edges, num_bits, unsigned, stride=1,
     if calib_bin_edges is None and calib_hist is None:
         return None
 
-    counts = torch.from_numpy(calib_hist[:]).float()
-    edges = torch.from_numpy(calib_bin_edges[:]).float()
+    counts = torch.from_numpy(calib_hist[:]).float().cuda()
+    edges = torch.from_numpy(calib_bin_edges[:]).float().cuda()
     centers = (edges[1:] + edges[:-1]) / 2
 
     mses = []
@@ -276,7 +276,7 @@ def _compute_amax_mse(calib_hist, calib_bin_edges, num_bits, unsigned, stride=1,
 
         mse = ((quant_centers - centers)**2 * counts).mean()
 
-        mses.append(mse)
+        mses.append(mse.cpu())
         arguments.append(i)
 
     logging.debug("mses={}".format(mses))
@@ -342,17 +342,17 @@ def calibrate_weights(model, method="percentile", perchannel=True, percentile=99
             # Histogram is always collected even if method is "max". Although "max" is supported here
             # but it is not the primary usage of this function
             if axis is None:
-                calib_hist, calib_bin_edges = np.histogram(module.weight.abs().cpu().detach().numpy(), bins=2048)
+                input_weights = module.weight.abs().cpu().detach().numpy()
+                calib_hist, calib_bin_edges = np.histogram(input_weights, bins=2048, range=(0, input_weights.max()))
                 calib_hist = [calib_hist]
                 calib_bin_edges = [calib_bin_edges]
             else:
                 calib_hist = []
                 calib_bin_edges = []
                 for i in range(axis_size):
-                    hist, bin_edges = np.histogram(
-                        module.weight.index_select(
-                            axis, torch.tensor(i, device=module.weight.device)).abs().cpu().detach().numpy(),
-                        bins=num_bins)
+                    input_weights = module.weight.index_select(axis, torch.tensor(
+                        i, device=module.weight.device)).abs().cpu().detach().numpy()
+                    hist, bin_edges = np.histogram(input_weights, bins=num_bins, range=(0, input_weights.max()))
                     calib_hist.append(hist)
                     calib_bin_edges.append(bin_edges)
 

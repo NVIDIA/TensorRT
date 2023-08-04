@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.0.1
+ARG CUDA_VERSION=12.1.1
 
 FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-centos7
 LABEL maintainer="NVIDIA CORPORATION"
@@ -60,7 +60,11 @@ RUN if [ "${CUDA_VERSION}" = "10.2" ] ; then \
         libnvinfer-lean-devel-=${v} libnvinfer-vc-plugin8-=${v} libnvinfer-vc-plugin-devel-=${v} \
         libnvinfer-headers-devel-=${v} libnvinfer-headers-plugin-devel-=${v}; \
 else \
-    v="${TRT_VERSION}-1.cuda${CUDA_VERSION%.*}" &&\
+    ver="${CUDA_VERSION%.*}" &&\
+    if [ "${ver%.*}" = "12" ] ; then \
+        ver="12.0"; \
+    fi &&\
+    v="${TRT_VERSION}-1.cuda${ver}" &&\
     yum-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel7/x86_64/cuda-rhel7.repo &&\
     yum -y install libnvinfer8-${v} libnvparsers8-${v} libnvonnxparsers8-${v} libnvinfer-plugin8-${v} \
         libnvinfer-devel-${v} libnvparsers-devel-${v} libnvonnxparsers-devel-${v} libnvinfer-plugin-devel-${v} \

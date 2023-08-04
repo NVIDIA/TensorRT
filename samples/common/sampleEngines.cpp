@@ -313,8 +313,8 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         ASSERT(parser.onnxParser != nullptr);
         // For version or hardware compatible engines, we must use TensorRT's native InstanceNorm implementation for
         // compatibility.
-        if (build.versionCompatible
-            || (build.hardwareCompatibilityLevel != nvinfer1::HardwareCompatibilityLevel::kNONE))
+        if (build.versionCompatible || (build.hardwareCompatibilityLevel != nvinfer1::HardwareCompatibilityLevel::kNONE)
+            || build.nativeInstanceNorm)
         {
             auto parserflags = 1U << static_cast<uint32_t>(OnnxParserFlag::kNATIVE_INSTANCENORM);
             parser.onnxParser->setFlags(parserflags);

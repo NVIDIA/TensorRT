@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +16,7 @@
 #
 
 import datetime
+import inspect
 import os
 import sys
 import time
@@ -170,9 +171,26 @@ def prepare_model(
     ## Prepare the data loaders
     traindir = os.path.join(data_dir, 'train')
     valdir = os.path.join(data_dir, 'val')
-    _args = collections.namedtuple("mock_args", ["model", "distributed", "cache_dataset"])
+    _args = collections.namedtuple("mock_args", [
+        "model", "distributed", "cache_dataset", "val_resize_size", "val_crop_size", "train_crop_size", "interpolation",
+        "ra_magnitude", "augmix_severity", "weights", "backend", "use_v2"
+    ])
     dataset, dataset_test, train_sampler, test_sampler = load_data(
-        traindir, valdir, _args(model=model_name, distributed=False, cache_dataset=False))
+        traindir, valdir,
+        _args(model=model_name,
+              distributed=False,
+              cache_dataset=False,
+              val_resize_size=256,
+              val_crop_size=224,
+              train_crop_size=224,
+              interpolation="bilinear",
+              ra_magnitude=9,
+              augmix_severity=3,
+              weights=None,
+              backend="pil",
+              use_v2=False))
+
+
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset, batch_size=batch_size_train,
@@ -245,7 +263,13 @@ def main(cmdline_args):
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.num_finetune_epochs)
     for epoch in range(args.num_finetune_epochs):
         # Training a single epch
-        train_one_epoch(model, criterion, optimizer, data_loader_train, "cuda", 0, 100)
+        if "print_freq" in inspect.signature(train_one_epoch).parameters:
+            train_one_epoch(model, criterion, optimizer, data_loader_train, "cuda", 0, 100)
+        else:
+            _args = collections.namedtuple("mock_args",
+                                           ["print_freq", "clip_grad_norm", "model_ema_steps", "lr_warmup_epochs"])
+            train_one_epoch(model, criterion, optimizer, data_loader_train, "cuda", 0,
+                            _args(print_freq=100, clip_grad_norm=None, model_ema_steps=32, lr_warmup_epochs=0))
         lr_scheduler.step()
 
     if args.num_finetune_epochs > 0:
@@ -333,7 +357,10 @@ def export_onnx(model, onnx_filename, batch_onnx, per_channel_quantization):
     print("Creating ONNX file: " + onnx_filename)
     dummy_input = torch.randn(batch_onnx, 3, 224, 224, device='cuda') #TODO: switch input dims by model
     try:
-        torch.onnx.export(model, dummy_input, onnx_filename, verbose=False, opset_version=opset_version, enable_onnx_checker=False, do_constant_folding=True)
+        if "enable_onnx_checker" in inspect.signature(torch.onnx.export).parameters:
+            torch.onnx.export(model, dummy_input, onnx_filename, verbose=False, opset_version=opset_version, enable_onnx_checker=False, do_constant_folding=True)
+        else:
+            torch.onnx.export(model, dummy_input, onnx_filename, verbose=False, opset_version=opset_version, do_constant_folding=True)
     except ValueError:
         warnings.warn(UserWarning("Per-channel quantization is not yet supported in Pytorch/ONNX RT (requires ONNX opset 13)"))
         print("Failed to export to ONNX")

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.0.1
+ARG CUDA_VERSION=12.2.0
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu20.04
@@ -69,7 +69,11 @@ RUN apt-get install -y --no-install-recommends \
     ln -s /usr/bin/pip3 pip;
 
 # Install TensorRT. This will also pull in CUDNN
-RUN v="${TRT_VERSION}-1+cuda${CUDA_VERSION%.*}" &&\
+RUN ver="${CUDA_VERSION%.*}" &&\
+    if [ "${ver%.*}" = "12" ] ; then \
+        ver="12.0"; \
+    fi &&\
+    v="${TRT_VERSION}-1+cuda${ver}" &&\
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/sbsa/3bf863cc.pub &&\
     apt-get update &&\
     sudo apt-get -y install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \

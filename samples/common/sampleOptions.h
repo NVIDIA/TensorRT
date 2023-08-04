@@ -216,6 +216,7 @@ public:
     bool refittable{false};
     bool heuristic{false};
     bool versionCompatible{false};
+    bool nativeInstanceNorm{false};
     bool excludeLeanRuntime{false};
     int32_t builderOptimizationLevel{defaultBuilderOptimizationLevel};
     SparsityFlag sparsity{SparsityFlag::kDISABLE};

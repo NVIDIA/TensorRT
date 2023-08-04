@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,6 +64,6 @@ class TestClip():
 
         loss.backward()
 
-        assert x.grad.cpu()[x < min_value].sum() == 0
-        assert x.grad.cpu()[x > max_value].sum() == 0
+        assert x.grad.cpu()[x.cpu() < min_value].sum() == 0
+        assert x.grad.cpu()[x.cpu() > max_value].sum() == 0
         assert torch.equal(clip_x.grad[(x > min_value) & (x < max_value)], x.grad[(x > min_value) & (x < max_value)])

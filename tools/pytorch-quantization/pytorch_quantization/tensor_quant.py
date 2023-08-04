@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,8 @@ from absl import logging
 
 import torch
 from torch.autograd import Function
+
+from pytorch_quantization import cuda_ext
 
 class ScaledQuantDescriptor():
     """Supportive descriptor of quantization
@@ -230,6 +232,45 @@ QUANT_DESC_8BIT_CONVTRANSPOSE1D_WEIGHT_PER_CHANNEL = QuantDescriptor(num_bits=8,
 QUANT_DESC_8BIT_CONVTRANSPOSE2D_WEIGHT_PER_CHANNEL = QuantDescriptor(num_bits=8, axis=(0))
 QUANT_DESC_8BIT_CONVTRANSPOSE3D_WEIGHT_PER_CHANNEL = QuantDescriptor(num_bits=8, axis=(0))
 
+@torch.jit.script
+def _fake_tensor_quant_backward(inputs, amax, grad_outputs):
+    zero = grad_outputs.new_zeros(1)
+    grad_inputs = torch.where(inputs.abs() <= amax, grad_outputs, zero)
+    return grad_inputs
+
+class FakeTensorQuantFunction(Function):
+    """Fake version of TensorQuantFunction use CUDA extension"""
+
+    @staticmethod
+    def forward(ctx, inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
+        ctx.save_for_backward(inputs, amax)
+
+        def legacy_quant_func():
+            # The LegacyFakeTensorQuantFunction support cpu and amax with any shape that can be broadcasted to inputs.
+            outputs, scale = _tensor_quant(inputs, amax, num_bits, unsigned, narrow_range)
+            return outputs / scale.to(inputs.dtype)
+
+        if not inputs.is_cuda:
+            outputs = legacy_quant_func()
+        else:
+            try:
+                if amax.numel() == 1:
+                    outputs = cuda_ext.fake_tensor_quant(inputs, amax, num_bits, unsigned, narrow_range)
+                else:
+                    axis = amax.shape.index(amax.numel())
+
+                    outputs = cuda_ext.fake_tensor_quant_with_axis(inputs, amax.squeeze(), axis, num_bits, unsigned,
+                                                                   narrow_range)
+            except (RuntimeError, ValueError) as error:
+                outputs = legacy_quant_func()
+
+        return outputs
+
+    @staticmethod
+    def backward(ctx, grad_outputs):
+        inputs, amax = ctx.saved_tensors
+        return _fake_tensor_quant_backward(inputs, amax, grad_outputs), None, None, None, None
+
 
 class TensorQuantFunction(Function):
     """A universal tensor quantization function
@@ -295,7 +336,7 @@ class TensorQuantFunction(Function):
         return grad_inputs, None, None, None, None
 
 
-class FakeTensorQuantFunction(Function):
+class LegacyFakeTensorQuantFunction(Function):
     """Fake version of TensorQuantFunction
     See comments of TensorQuantFunction, arguments are the same.
     """
@@ -422,5 +463,6 @@ class FakeAffineTensorQuantFunction(Function):
 
 
 tensor_quant = TensorQuantFunction.apply
+legacy_fake_tensor_quant = LegacyFakeTensorQuantFunction.apply
 fake_tensor_quant = FakeTensorQuantFunction.apply
 fake_affine_tensor_quant = FakeAffineTensorQuantFunction.apply

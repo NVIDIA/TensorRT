@@ -51,7 +51,7 @@ class GPT2Metadata(_GPT2Metadata, MetadataArgparseInteropMixin):
         network_group.add_argument(
             "--num-beams", type=int, default=1, help="Enables beam search during decoding."
         )
-        
+
         network_group.add_argument(
             "--fp16", action="store_true", help="Enables fp16 TensorRT tactics."
         )
@@ -84,7 +84,7 @@ GPT2TRTBenchmarkingArgs = namedtuple("GPT2BenchmarkingArgs", ["input_seq_len", "
 
 
 class GPT2ModelTRTConfig(NNConfig):
-    TARGET_MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "EleutherAI/gpt-j-6B"]
+    TARGET_MODELS = ["gpt2", "gpt2-medium", "gpt2-large", "gpt2-xl", "EleutherAI/gpt-j-6b"]
     NETWORK_DECODER_SEGMENT_NAME = "gpt2_decoder"
     NETWORK_SEGMENTS = [NETWORK_DECODER_SEGMENT_NAME]
     NETWORK_FULL_NAME = "full"

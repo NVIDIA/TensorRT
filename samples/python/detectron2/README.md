@@ -4,6 +4,8 @@ Support for Detectron 2 Mask R-CNN R50-FPN 3x model in TensorRT. This script hel
 
 ## Changelog
 
+- July 2023:
+  - Update benchmarks and include hardware used.
 - October 2022:
   - Updated converter to support `tracing` export instead of deprecated `caffe2_tracing`
 
@@ -134,14 +136,6 @@ Where `--calib_input` points to a directory with several thousands of images. Fo
 
 The `--calib_cache` is optional, and it controls where the calibration cache file will be written to. This is useful to keep a cached copy of the calibration results. Next time you need to build an int8 engine for the same network, if this file exists, the builder will skip the calibration step and use the cached values instead.
 
-Some sample results of using all precisions:
-
-| **Precision**   | **Latency** | **bbox COCO mAP** | **segm COCO mAP** |
-| ----------------|-------------|-------------------|-------------------|
-| fp32            | 34.48 ms    | 0.402             | 0.368             |
-| fp16            | 17.26 ms    | 0.402             | 0.368             |
-| int8            | 9.90 ms     | 0.398             | 0.366             |
-
 #### Benchmark Engine
 
 Optionally, you can obtain execution timing information for the built engine by using the `trtexec` utility, as:
@@ -158,6 +152,14 @@ An inference benchmark will run, with GPU Compute latency times printed out to t
 ```
 GPU Compute Time: min = 30.1864 ms, max = 37.0945 ms, mean = 34.481 ms, median = 34.4187 ms, percentile(99%) = 37.0945 ms
 ```
+
+Some sample results comparing different data precisions are shown below. The following results were obtained using an RTX A5000 and TensorRT 8.6.1. mAP was evaluated for the COCO val2017 dataset using the instructions in [Evaluate mAP Metric](#evaluate-map-metric).
+
+| **Precision**   | **Latency** | **bbox COCO mAP** | **segm COCO mAP** |
+| ----------------|-------------|-------------------|-------------------|
+| fp32            | 25.89 ms    | 0.402             | 0.368             |
+| fp16            | 13.00 ms    | 0.402             | 0.368             |
+| int8            | 7.29 ms     | 0.399             | 0.366             |
 
 ## Inference
 

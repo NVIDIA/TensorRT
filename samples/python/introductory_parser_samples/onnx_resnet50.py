@@ -61,10 +61,10 @@ def build_engine_onnx(model_file):
 def load_normalized_test_case(test_image, pagelocked_buffer):
     # Converts the input image to a CHW Numpy array
     def normalize_image(image):
-        # Resize, antialias and transpose the image to CHW.
+        # Resize, antialias (Image.LANCZOS) and transpose the image to CHW.
         c, h, w = ModelData.INPUT_SHAPE
         image_arr = (
-            np.asarray(image.resize((w, h), Image.ANTIALIAS))
+            np.asarray(image.resize((w, h), Image.LANCZOS))
             .transpose([2, 0, 1])
             .astype(trt.nptype(ModelData.DTYPE))
             .ravel()

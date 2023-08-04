@@ -946,6 +946,13 @@ void BuildOptions::parse(Arguments& arguments)
         getAndDelOption(arguments, "--versionCompatible", versionCompatible);
     }
 
+    // --ni and --nativeInstanceNorm are synonyms
+    getAndDelOption(arguments, "--ni", nativeInstanceNorm);
+    if (!nativeInstanceNorm)
+    {
+        getAndDelOption(arguments, "--nativeInstanceNorm", nativeInstanceNorm);
+    }
+
     getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
 
     getAndDelNegOption(arguments, "--noTF32", tf32);
@@ -1802,6 +1809,8 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Calibration: "    << (options.int8 && options.calibration.empty() ? "Dynamic" : options.calibration.c_str()) << std::endl <<
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
           "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
+          "ONNX Native InstanceNorm: " << boolToEnabled(options.nativeInstanceNorm || options.versionCompatible
+                || options.hardwareCompatibilityLevel != HardwareCompatibilityLevel::kNONE)                             << std::endl <<
           "TensorRT runtime: " << options.useRuntime                                                                    << std::endl <<
           "Lean DLL Path: " << options.leanDLLPath                                                                      << std::endl <<
           "Tempfile Controls: "; printTempfileControls(os, options.tempfileControls)                                    << std::endl <<
@@ -2082,6 +2091,8 @@ void BuildOptions::help(std::ostream& os)
           "  --versionCompatible, --vc          Mark the engine as version compatible. This allows the engine to be used with newer versions"       "\n"
           "                                     of TensorRT on the same host OS, as well as TensorRT's dispatch and lean runtimes."                 "\n"
           "                                     Only supported with explicit batch."                                                                "\n"
+          "  --nativeInstanceNorm, --ni         Set `kNATIVE_INSTANCENORM` to true in the ONNX parser. This will cause the ONNX parser to use"      "\n"
+          "                                     TensorRT's native InstanceNorm implementation over the plugin implementation when parsing."         "\n"
           R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"      "\n"
           "                                     not support building an engine."                                                                    "\n"
           R"(                                           runtime::= "full"|"lean"|"dispatch")"                                                       "\n"
