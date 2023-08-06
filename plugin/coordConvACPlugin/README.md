@@ -11,6 +11,8 @@
 
 ## Description
 
+> NOTE: This plugin is deprecated since TensorRT 9.0.
+
 The `coordConvACPlugin` implements the `CoordConv` layer. This layer was first introduced by Uber AI Labs in 2018, and improves on regular convolution by adding additional channels containing relative coordinates to the input tensor. These additional channels allows the subsequent convolution to retain information about where it was applied.
 
 Each node with the op name `CoordConvAC` in `ONNX` graph will be mapped to that plugin. `Conv` node should follow after each `CoordConvAC` node into `ONNX` graph. 
@@ -70,6 +72,9 @@ documentation.
 
 
 ## Changelog
+
+June 2023
+Add deprecation note.
 
 April 2020
 This is the first release of this `README.md` file.

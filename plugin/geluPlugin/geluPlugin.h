@@ -43,7 +43,7 @@ int32_t computeGeluBias(
 int32_t computeGeluBias(
     half* output, half const* input, half const* bias, int32_t const ld, int32_t const cols, cudaStream_t stream);
 
-class GeluPluginDynamic : public nvinfer1::IPluginV2DynamicExt
+class TRT_DEPRECATED GeluPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     GeluPluginDynamic(const std::string name, const nvinfer1::DataType type, nvinfer1::Weights const& bias);
@@ -102,7 +102,7 @@ private:
     using IPluginV2Ext::configurePlugin;
 };
 
-class GeluPluginDynamicCreator : public nvinfer1::IPluginCreator
+class TRT_DEPRECATED GeluPluginDynamicCreator : public nvinfer1::IPluginCreator
 {
 public:
     GeluPluginDynamicCreator();

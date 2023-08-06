@@ -99,13 +99,18 @@ if __name__ == "__main__":
         max_batch_size=max_batch_size)
 
     # Load TensorRT engines and pytorch modules
-    demo.loadEngines(args.engine_dir, args.onnx_dir, args.onnx_opset,
+    demo.loadEngines(args.engine_dir, args.framework_model_dir, args.onnx_dir, args.onnx_opset,
         opt_batch_size=len(prompt), opt_image_height=image_height, opt_image_width=image_width, \
         force_export=args.force_onnx_export, force_optimize=args.force_onnx_optimize, \
         force_build=args.force_engine_build, \
         static_batch=args.build_static_batch, static_shape=not args.build_dynamic_shape, \
         enable_preview=args.build_preview_features, enable_all_tactics=args.build_all_tactics, \
         timing_cache=args.timing_cache)
+
+    max_device_memory = max(demo.calculateMaxDeviceMemory(), demo.calculateMaxDeviceMemory())
+    _, shared_device_memory = cudart.cudaMalloc(max_device_memory)
+    demo.activateEngines(shared_device_memory)
+
     demo.loadResources(image_height, image_width, batch_size, args.seed)
 
 

@@ -24,7 +24,6 @@
 #include <utility>
 #include <vector>
 
-// Remove once if common/utils is created (see TRT-17687)
 #include <set>
 
 using namespace nvinfer1;
@@ -217,6 +216,9 @@ IPluginV2* ClipPluginCreator::createPlugin(char const* name, PluginFieldCollecti
 {
     try
     {
+        gLogWarning << "ClipPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() to add an "
+                       "IActivationLayer with ActivationType::kCLIP."
+                    << std::endl;
         float clipMin = 0.0, clipMax = 0.0;
         PluginField const* fields = fc->fields;
 
@@ -250,6 +252,9 @@ IPluginV2* ClipPluginCreator::deserializePlugin(char const* name, void const* se
 {
     try
     {
+        gLogWarning << "ClipPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() to add an "
+                       "IActivationLayer with ActivationType::kCLIP."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call ClipPlugin::destroy()
         return new ClipPlugin(name, serialData, serialLength);

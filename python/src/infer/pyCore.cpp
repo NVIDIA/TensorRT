@@ -18,6 +18,11 @@
 // This contains the core elements of the API, i.e. builder, logger, engine, runtime, context.
 #include "ForwardDeclarations.h"
 #include "utils.h"
+// remove md
+#if ENABLE_MDTRT
+#include "api/internal.h"
+#include "common/internalEngineAPI.h"
+#endif // ENABLE_MDTRT
 #include <chrono>
 #include <iomanip>
 #include <pybind11/stl.h>
@@ -173,11 +178,43 @@ void set_aux_streams(IExecutionContext& self, std::vector<size_t> streamHandle)
     self.setAuxStreams(reinterpret_cast<cudaStream_t*>(streamHandle.data()), static_cast<int32_t>(streamHandle.size()));
 }
 
+template <typename PyIterable>
+Dims castDimsFromPyIterable(PyIterable& in)
+{
+    int32_t const maxDims{static_cast<int32_t>(Dims::MAX_DIMS)};
+    Dims dims{};
+    dims.nbDims = py::len(in);
+    PY_ASSERT_RUNTIME_ERROR(dims.nbDims <= maxDims, "The number of input dims exceeds the maximum allowed number of dimensions");
+    for (int32_t i = 0; i < dims.nbDims; ++i)
+    {
+        dims.d[i] = in[i].template cast<int32_t>();
+    }
+    return dims;
+}
+
+template <typename PyIterable>
+void setBindingDimensions(IExecutionContext& self, int32_t bindingIndex, PyIterable& in)
+{
+    self.setBindingDimensions(bindingIndex, castDimsFromPyIterable<PyIterable>(in));
+}
+template <typename PyIterable>
+bool setInputShape(IExecutionContext& self, char const* tensorName, PyIterable& in)
+{
+    return self.setInputShape(tensorName, castDimsFromPyIterable<PyIterable>(in));
+}
+
 // For IRuntime
 static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffer& serializedEngine) {
     py::buffer_info info = serializedEngine.request();
     return self.deserializeCudaEngine(info.ptr, info.size * info.itemsize);
 };
+// remove md
+#if ENABLE_MDTRT
+static auto const runtime_deserialize_engine = [](IRuntime& self, py::buffer& serializedEngine, int64_t instance) {
+    py::buffer_info info = serializedEngine.request();
+    return nvinfer1DeserializeEngine(self, info.ptr, info.size * info.itemsize, instance);
+};
+#endif // ENABLE_MDTRT
 
 // For ICudaEngine
 bool engine_binding_is_input(ICudaEngine& self, std::string const& name)
@@ -211,9 +248,10 @@ static const auto engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
 std::vector<Dims> engine_get_profile_shape(ICudaEngine& self, int32_t profileIndex, int32_t bindingIndex)
 {
     std::vector<Dims> shapes{};
-    shapes.emplace_back(self.getProfileDimensions(bindingIndex, profileIndex, OptProfileSelector::kMIN));
-    shapes.emplace_back(self.getProfileDimensions(bindingIndex, profileIndex, OptProfileSelector::kOPT));
-    shapes.emplace_back(self.getProfileDimensions(bindingIndex, profileIndex, OptProfileSelector::kMAX));
+    auto const tensorName = self.getIOTensorName(bindingIndex);
+    shapes.emplace_back(self.getProfileShape(tensorName, profileIndex, OptProfileSelector::kMIN));
+    shapes.emplace_back(self.getProfileShape(tensorName, profileIndex, OptProfileSelector::kOPT));
+    shapes.emplace_back(self.getProfileShape(tensorName, profileIndex, OptProfileSelector::kMAX));
     return shapes;
 };
 // Overload to allow using binding names instead of indices.
@@ -234,7 +272,8 @@ std::vector<Dims> get_tensor_profile_shape(ICudaEngine& self, std::string const&
 std::vector<std::vector<int32_t>> engine_get_profile_shape_input(
     ICudaEngine& self, int32_t profileIndex, int32_t bindingIndex)
 {
-    bool const isShapeInput{self.isShapeBinding(bindingIndex) && self.bindingIsInput(bindingIndex)};
+    auto const tensorName = self.getIOTensorName(bindingIndex);
+    bool const isShapeInput{self.isShapeInferenceIO(tensorName) && self.bindingIsInput(bindingIndex)};
     PY_ASSERT_RUNTIME_ERROR(isShapeInput, "Binding index does not correspond to an input shape tensor.");
 
     std::vector<std::vector<int32_t>> shapes{};
@@ -508,6 +547,7 @@ public:
     {
         try
         {
+            py::gil_scoped_acquire gil{};
             PYBIND11_OVERLOAD_PURE_NAME(void, IOutputAllocator, "notify_shape", notifyShape, tensorName, dims);
         }
         catch (std::exception const& e)
@@ -530,6 +570,7 @@ void bindCore(py::module& m)
         {
             try
             {
+                py::gil_scoped_acquire gil{};
                 PYBIND11_OVERLOAD_PURE_NAME(void, ILogger, "log", log, severity, msg);
             }
             catch (std::exception const& e)
@@ -814,6 +855,70 @@ void bindCore(py::module& m)
         .def("clear", &IErrorRecorder::clear, IErrorRecorderDoc::clear)
         .def("report_error", &IErrorRecorder::reportError, IErrorRecorderDoc::report_error);
 
+    // Provide a base implementation of IProgressMonitor.
+    // Trampoline class is required as this class needs to be implemented by the user.
+    class PyProgressMonitor : public IProgressMonitor
+    {
+    public:
+        void phaseStart(char const* phaseName, char const* parentPhase, int32_t nbSteps) noexcept override
+        {
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(
+                    void, IProgressMonitor, "phase_start", phaseStart, phaseName, parentPhase, nbSteps);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in phase_start(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in phase_start()" << std::endl;
+            }
+        }
+
+        bool stepComplete(char const* phaseName, int32_t step) noexcept override
+        {
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(bool, IProgressMonitor, "step_complete", stepComplete, phaseName, step);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in step_complete(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in step_complete()" << std::endl;
+            }
+            // Use the exception as an indicator that we should cancel the build
+            return false;
+        }
+
+        void phaseFinish(char const* phaseName) noexcept override
+        {
+            try
+            {
+                PYBIND11_OVERLOAD_PURE_NAME(void, IProgressMonitor, "phase_finish", phaseFinish, phaseName);
+            }
+            catch (std::exception const& e)
+            {
+                std::cerr << "[ERROR] Exception caught in phase_finish(): " << e.what() << std::endl;
+            }
+            catch (...)
+            {
+                std::cerr << "[ERROR] Exception caught in phase_finish()" << std::endl;
+            }
+        }
+    };
+
+    py::class_<IProgressMonitor, PyProgressMonitor>(
+        m, "IProgressMonitor", IProgressMonitorDoc::descr, py::module_local())
+        .def(py::init<>())
+        .def("phase_start", &IProgressMonitor::phaseStart, IProgressMonitorDoc::phase_start, "phase_name"_a, "parent_phase"_a, "num_steps"_a)
+        .def("step_complete", &IProgressMonitor::stepComplete, IProgressMonitorDoc::step_complete, "phase_name"_a, "step"_a)
+        .def("phase_finish", &IProgressMonitor::phaseFinish, IProgressMonitorDoc::phase_finish, "phase_name"_a);
+
     py::class_<IExecutionContext>(m, "IExecutionContext", IExecutionContextDoc::descr, py::module_local())
         .def("execute", utils::deprecate(lambdas::execute, "execute_v2"), "batch_size"_a = 1, "bindings"_a,
             IExecutionContextDoc::execute, py::call_guard<py::gil_scoped_release>{})
@@ -837,6 +942,10 @@ void bindCore(py::module& m)
             utils::deprecate(lambdas::context_set_optimization_profile, "set_optimization_profile_async"))
         .def("get_strides", utils::deprecateMember(&IExecutionContext::getStrides, "get_tensor_strides"), "binding"_a,
             IExecutionContextDoc::get_strides)
+        .def("set_binding_shape", utils::deprecate(lambdas::setBindingDimensions<py::tuple>, "set_input_shape"),
+            "binding"_a, "shape"_a, IExecutionContextDoc::set_binding_shape)
+        .def("set_binding_shape", utils::deprecate(lambdas::setBindingDimensions<py::list>, "set_input_shape"),
+            "binding"_a, "shape"_a, IExecutionContextDoc::set_binding_shape)
         .def("set_binding_shape", utils::deprecateMember(&IExecutionContext::setBindingDimensions, "set_input_shape"),
             "binding"_a, "shape"_a, IExecutionContextDoc::set_binding_shape)
         .def("get_binding_shape", utils::deprecateMember(&IExecutionContext::getBindingDimensions, "get_tensor_shape"),
@@ -848,6 +957,10 @@ void bindCore(py::module& m)
         // Start of enqueueV3 related APIs.
         .def("get_tensor_strides", &IExecutionContext::getTensorStrides, "name"_a,
             IExecutionContextDoc::get_tensor_strides)
+        .def("set_input_shape", lambdas::setInputShape<py::tuple>, "name"_a, "shape"_a,
+            IExecutionContextDoc::set_input_shape)
+        .def("set_input_shape", lambdas::setInputShape<py::list>, "name"_a, "shape"_a,
+            IExecutionContextDoc::set_input_shape)
         .def("set_input_shape", &IExecutionContext::setInputShape, "name"_a, "shape"_a,
             IExecutionContextDoc::set_input_shape)
         .def("get_tensor_shape", &IExecutionContext::getTensorShape, "name"_a, IExecutionContextDoc::get_tensor_shape)
@@ -885,7 +998,15 @@ void bindCore(py::module& m)
             &IExecutionContext::setPersistentCacheLimit)
         .def_property("nvtx_verbosity", &IExecutionContext::getNvtxVerbosity, &IExecutionContext::setNvtxVerbosity)
         .def("set_aux_streams", lambdas::set_aux_streams, "aux_streams"_a, IExecutionContextDoc::set_aux_streams)
-        .def("__del__", &utils::doNothingDel<IExecutionContext>);
+        .def("__del__", &utils::doNothingDel<IExecutionContext>)
+// remove md
+#if ENABLE_MDTRT
+        .def("set_communicator", &nvinfer1SetCommunicator, "communicator"_a, "type"_a,
+            IExecutionContextDoc::set_communicator)
+        .def("get_communicator", &nvinfer1GetCommunicator, IExecutionContextDoc::get_communicator)
+        .def("get_communicator_type", &nvinfer1GetCommunicatorType, IExecutionContextDoc::get_communicator_type)
+#endif // ENABLE_MDTRT
+        ;
 
     py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr, py::module_local())
         .def_property_readonly("num_bindings", &ICudaEngine::getNbBindings)
@@ -916,15 +1037,16 @@ void bindCore(py::module& m)
             utils::deprecateMember(&ICudaEngine::getMaxBatchSize,
                 "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"))
         .def_property_readonly("num_layers", &ICudaEngine::getNbLayers)
-        .def("serialize", &ICudaEngine::serialize, ICudaEngineDoc::serialize)
+        .def("serialize", &ICudaEngine::serialize, ICudaEngineDoc::serialize, py::call_guard<py::gil_scoped_release>{})
         .def("create_execution_context", &ICudaEngine::createExecutionContext, ICudaEngineDoc::create_execution_context,
-            py::keep_alive<0, 1>{})
+            py::keep_alive<0, 1>{}, py::call_guard<py::gil_scoped_release>{})
         .def("get_location", utils::deprecateMember(&ICudaEngine::getLocation, "get_tensor_location"), "index"_a,
             ICudaEngineDoc::get_location)
         .def("get_location", utils::deprecate(lambdas::engine_get_location, "get_tensor_location"), "name"_a,
             ICudaEngineDoc::get_location_str)
         .def("create_execution_context_without_device_memory", &ICudaEngine::createExecutionContextWithoutDeviceMemory,
-            ICudaEngineDoc::create_execution_context_without_device_memory, py::keep_alive<0, 1>{})
+            ICudaEngineDoc::create_execution_context_without_device_memory, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
         .def_property_readonly("device_memory_size", &ICudaEngine::getDeviceMemorySize)
         .def_property_readonly("refittable", &ICudaEngine::isRefittable)
         .def_property_readonly("name", &ICudaEngine::getName)
@@ -1044,6 +1166,11 @@ void bindCore(py::module& m)
             py::keep_alive<0, 1>{})
         .def_property_readonly("hardware_compatibility_level", &ICudaEngine::getHardwareCompatibilityLevel)
         .def_property_readonly("num_aux_streams", &ICudaEngine::getNbAuxStreams)
+// remove md
+#if ENABLE_MDTRT
+        .def_property_readonly("instance_id", &nvinfer1GetInstanceID)
+        .def_property_readonly("num_instances", &nvinfer1GetNbInstances)
+#endif // ENABLE_MDTRT
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
@@ -1068,6 +1195,7 @@ void bindCore(py::module& m)
 
     py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr, py::module_local())
         .value("FP16", BuilderFlag::kFP16, BuilderFlagDoc::FP16)
+        .value("BF16", BuilderFlag::kBF16, BuilderFlagDoc::BF16)
         .value("INT8", BuilderFlag::kINT8, BuilderFlagDoc::INT8)
         .value("DEBUG", BuilderFlag::kDEBUG, BuilderFlagDoc::DEBUG)
         .value("GPU_FALLBACK", BuilderFlag::kGPU_FALLBACK, BuilderFlagDoc::GPU_FALLBACK)
@@ -1088,7 +1216,9 @@ void bindCore(py::module& m)
             "ENABLE_TACTIC_HEURISTIC", BuilderFlag::kENABLE_TACTIC_HEURISTIC, BuilderFlagDoc::ENABLE_TACTIC_HEURISTIC)
         .value("VERSION_COMPATIBLE", BuilderFlag::kVERSION_COMPATIBLE, BuilderFlagDoc::VERSION_COMPATIBLE)
         .value("EXCLUDE_LEAN_RUNTIME", BuilderFlag::kEXCLUDE_LEAN_RUNTIME, BuilderFlagDoc::EXCLUDE_LEAN_RUNTIME)
-        .value("FP8", BuilderFlag::kFP8, BuilderFlagDoc::FP8);
+        .value("FP8", BuilderFlag::kFP8, BuilderFlagDoc::FP8)
+        .value("ERROR_ON_TIMING_CACHE_MISS", BuilderFlag::kERROR_ON_TIMING_CACHE_MISS,
+            BuilderFlagDoc::ERROR_ON_TIMING_CACHE_MISS);
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1230,6 +1360,20 @@ void bindCore(py::module& m)
             &IBuilderConfig::setHardwareCompatibilityLevel)
         .def_property("plugins_to_serialize", lambdas::get_plugins_to_serialize, lambdas::set_plugins_to_serialize)
         .def_property("max_aux_streams", &IBuilderConfig::getMaxAuxStreams, &IBuilderConfig::setMaxAuxStreams)
+        .def_property("progress_monitor", &IBuilderConfig::getProgressMonitor,
+            py::cpp_function(&IBuilderConfig::setProgressMonitor, py::keep_alive<1, 2>{}))
+// remove md
+#if ENABLE_MDTRT
+        .def_property("num_instances", &nvinfer1GetNbInstances, &nvinfer1SetNbInstances)
+        .def("insert_instance_group", &nvinfer1InsertInstanceGroup, "instance"_a, "group"_a,
+            IBuilderConfigDoc::insert_instance_group)
+        .def("remove_instance_group", &nvinfer1RemoveInstanceGroup, "instance"_a, "group"_a,
+            IBuilderConfigDoc::remove_instance_group)
+        .def("get_num_instance_groups", &nvinfer1GetNbInstanceGroups, "instance"_a,
+            IBuilderConfigDoc::get_num_instance_groups)
+        .def("get_instance_group", &nvinfer1GetInstanceGroup, "instance"_a, "num"_a,
+            IBuilderConfigDoc::get_instance_group)
+#endif // ENABLE_MDTRT
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
@@ -1237,7 +1381,9 @@ void bindCore(py::module& m)
         .value("EXPLICIT_BATCH", NetworkDefinitionCreationFlag::kEXPLICIT_BATCH,
             NetworkDefinitionCreationFlagDoc::EXPLICIT_BATCH)
         .value("EXPLICIT_PRECISION", NetworkDefinitionCreationFlag::kEXPLICIT_PRECISION,
-            NetworkDefinitionCreationFlagDoc::EXPLICIT_PRECISION);
+            NetworkDefinitionCreationFlagDoc::EXPLICIT_PRECISION)
+        .value("STRONGLY_TYPED", NetworkDefinitionCreationFlag::kSTRONGLY_TYPED,
+            NetworkDefinitionCreationFlagDoc::STRONGLY_TYPED);
 
     // Builder
     py::class_<IBuilder>(m, "Builder", BuilderDoc::descr, py::module_local())
@@ -1281,6 +1427,11 @@ void bindCore(py::module& m)
         .def(py::init(&nvinfer1::createInferRuntime), "logger"_a, RuntimeDoc::init, py::keep_alive<1, 2>{})
         .def("deserialize_cuda_engine", lambdas::runtime_deserialize_cuda_engine, "serialized_engine"_a,
             RuntimeDoc::deserialize_cuda_engine, py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
+// remove md
+#if ENABLE_MDTRT
+        .def("deserialize_engine", lambdas::runtime_deserialize_engine, "serialized_engine"_a, "instance"_a,
+            RuntimeDoc::deserialize_engine, py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
+#endif // ENABLE_MDTRT
         .def_property("DLA_core", &IRuntime::getDLACore, &IRuntime::setDLACore)
         .def_property_readonly("num_DLA_cores", &IRuntime::getNbDLACores)
         .def_property("gpu_allocator", nullptr, py::cpp_function(&IRuntime::setGpuAllocator, py::keep_alive<1, 2>{}))
@@ -1317,7 +1468,8 @@ void bindCore(py::module& m)
             RefitterDoc::set_weights)
         .def("set_named_weights", &IRefitter::setNamedWeights, "name"_a, "weights"_a, py::keep_alive<1, 3>{},
             RefitterDoc::set_named_weights)
-        .def("refit_cuda_engine", &IRefitter::refitCudaEngine, RefitterDoc::refit_cuda_engine)
+        .def("refit_cuda_engine", &IRefitter::refitCudaEngine, RefitterDoc::refit_cuda_engine,
+            py::call_guard<py::gil_scoped_release>{})
         .def("get_missing", lambdas::refitter_get_missing, RefitterDoc::get_missing)
         .def("get_missing_weights", lambdas::refitter_get_missing_weights, RefitterDoc::get_missing_weights)
         .def("get_all", lambdas::refitter_get_all, RefitterDoc::get_all)

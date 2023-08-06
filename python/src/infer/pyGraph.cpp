@@ -24,6 +24,10 @@
 #include "NvInferSerialize.h"
 #endif
 
+// remove md
+#if ENABLE_MDTRT
+#include "api/internal.h"
+#endif
 #include "infer/pyGraphDoc.h"
 
 // clang-format off
@@ -220,6 +224,51 @@ namespace tensorrt
             self.getScales(nbScales, scales.data());
             return scales;
         };
+
+        // For Fill layer
+        static auto set_alpha = [](IFillLayer& self, py::object alpha) {
+            try
+            {
+                double alphaDouble = alpha.cast<double>();
+                self.setAlpha(alphaDouble);
+            }
+            catch (py::cast_error const&) {}
+
+            try
+            {
+                int64_t alphaInt64 = alpha.cast<int64_t>();
+                self.setAlphaInt64(alphaInt64);
+            }
+            catch (py::cast_error const&) {}
+        };
+        static auto get_alpha = [](IFillLayer& self) {
+            if (self.isAlphaBetaInt64())
+                return py::cast(self.getAlphaInt64());
+            else
+                return py::cast(self.getAlpha());
+        };
+        static auto set_beta = [](IFillLayer& self, py::object beta) {
+            try
+            {
+                double betaDouble = beta.cast<double>();
+                self.setBeta(betaDouble);
+            }
+            catch (py::cast_error const&) {}
+
+            try
+            {
+                int64_t betaInt64 = beta.cast<int64_t>();
+                self.setBetaInt64(betaInt64);
+            }
+            catch (py::cast_error const&) {}
+        };
+        static auto get_beta = [](IFillLayer& self) {
+            if (self.isAlphaBetaInt64())
+                return py::cast(self.getBetaInt64());
+            else
+                return py::cast(self.getBeta());
+        };
+
     } /* lambdas */
 
     void bindGraph(py::module& m)
@@ -316,6 +365,12 @@ namespace tensorrt
             .def("reset_dynamic_range", &ITensor::resetDynamicRange, ITensorDoc::reset_dynamic_range)
             .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
+// remove md
+#if ENABLE_MDTRT
+            .def("add_instance_id", &nvinfer1AddInstanceID, "id"_a, ITensorDoc::add_instance_id)
+            .def("has_instance_id", &nvinfer1HasInstanceID, "id"_a, ITensorDoc::has_instance_id)
+            .def("del_instance_id", &nvinfer1DelInstanceID, "id"_a, ITensorDoc::del_instance_id)
+#endif // ENABLE_MDTRT
         ;
 
         py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr, py::module_local())
@@ -438,10 +493,12 @@ namespace tensorrt
 
         py::class_<IQuantizeLayer, ILayer, std::unique_ptr<IQuantizeLayer, py::nodelete>>(m, "IQuantizeLayer", IQuantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IQuantizeLayer::getAxis, &IQuantizeLayer::setAxis)
+            .def_property("to_type", &IQuantizeLayer::getToType, &IQuantizeLayer::setToType)
         ;
 
         py::class_<IDequantizeLayer, ILayer, std::unique_ptr<IDequantizeLayer, py::nodelete>>(m, "IDequantizeLayer", IDequantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IDequantizeLayer::getAxis, &IDequantizeLayer::setAxis)
+            .def_property("to_type", &IDequantizeLayer::getToType, &IDequantizeLayer::setToType)
         ;
 
         py::class_<ISoftMaxLayer, ILayer, std::unique_ptr<ISoftMaxLayer, py::nodelete>>(m, "ISoftMaxLayer", ISoftMaxLayerDoc::descr, py::module_local())
@@ -805,9 +862,11 @@ namespace tensorrt
         py::class_<IFillLayer, ILayer, std::unique_ptr<IFillLayer, py::nodelete>>(m, "IFillLayer", IFillLayerDoc::descr, py::module_local())
             .def_property("shape", &IFillLayer::getDimensions, &IFillLayer::setDimensions)
             .def_property("operation", &IFillLayer::getOperation, &IFillLayer::setOperation)
-            .def_property("alpha", &IFillLayer::getAlpha, &IFillLayer::setAlpha)
-            .def_property("beta", &IFillLayer::getBeta, &IFillLayer::setBeta)
+            .def_property("alpha", lambdas::get_alpha, lambdas::set_alpha)
+            .def_property("beta", lambdas::get_beta, lambdas::set_beta)
+            .def_property("to_type", &IFillLayer::getToType, &IFillLayer::setToType)
             .def("set_input", &IFillLayer::setInput, "index"_a, "tensor"_a, IFillLayerDoc::set_input)
+            .def("is_alpha_beta_int64", &IFillLayer::isAlphaBetaInt64)
         ;
 
         py::class_<IIfConditionalBoundaryLayer, ILayer, std::unique_ptr<IIfConditionalBoundaryLayer, py::nodelete>>(m, "IIfConditionalBoundaryLayer", IIfConditionalBoundaryLayerDoc::descr, py::module_local())
@@ -933,7 +992,8 @@ namespace tensorrt
                 py::keep_alive<1, 3>{}, INetworkDefinitionDoc::add_constant,
                 py::return_value_policy::reference_internal)
             .def("add_rnn_v2", utils::deprecateMember(&INetworkDefinition::addRNNv2, "addLoop"), "input"_a, "layer_count"_a,
-                "hidden_size"_a, "max_seq_length"_a, "op"_a, INetworkDefinitionDoc::add_rnn_v2)
+                "hidden_size"_a, "max_seq_length"_a, "op"_a, py::keep_alive<1, 0>{}, INetworkDefinitionDoc::add_rnn_v2,
+                py::return_value_policy::reference)
             .def("add_identity", &INetworkDefinition::addIdentity, "input"_a,
                 INetworkDefinitionDoc::add_identity, py::return_value_policy::reference_internal)
             .def("add_cast", &INetworkDefinition::addCast, "input"_a, "to_type"_a,
@@ -957,10 +1017,15 @@ namespace tensorrt
                   INetworkDefinitionDoc::add_grid_sample, py::return_value_policy::reference_internal)
             .def("add_nms", &INetworkDefinition::addNMS, "boxes"_a,
                 "scores"_a, "max_output_boxes_per_class"_a, INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
-            .def("add_fill", &INetworkDefinition::addFill, "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
-            .def("add_quantize",  &INetworkDefinition::addQuantize, "input"_a, "scale"_a,
+            .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims, FillOperation)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
+            .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims, FillOperation, DataType)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, "output_type"_a, INetworkDefinitionDoc::add_fill)
+            .def("add_quantize",  static_cast<IQuantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&)>(&INetworkDefinition::addQuantize), "input"_a, "scale"_a,
                 INetworkDefinitionDoc::add_quantize, py::return_value_policy::reference_internal)
-            .def("add_dequantize", &INetworkDefinition::addDequantize, "input"_a, "scale"_a,
+            .def("add_dequantize", static_cast<IDequantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&)>(&INetworkDefinition::addDequantize), "input"_a, "scale"_a,
+                INetworkDefinitionDoc::add_dequantize, py::return_value_policy::reference_internal)
+            .def("add_quantize",  static_cast<IQuantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&, DataType)>(&INetworkDefinition::addQuantize), "input"_a, "scale"_a, "output_type"_a,
+                INetworkDefinitionDoc::add_quantize, py::return_value_policy::reference_internal)
+            .def("add_dequantize", static_cast<IDequantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&, DataType)>(&INetworkDefinition::addDequantize), "input"_a, "scale"_a, "output_type"_a,
                 INetworkDefinitionDoc::add_dequantize, py::return_value_policy::reference_internal)
             .def("add_if_conditional", &INetworkDefinition::addIfConditional, INetworkDefinitionDoc::add_if_conditional,
                 py::return_value_policy::reference_internal)
@@ -990,6 +1055,8 @@ namespace tensorrt
             // keep the INetworkDefinition alive while the builder is referenced) is unnecessary here.
             .def_property_readonly("builder", &INetworkDefinition::getBuilder, INetworkDefinitionDoc::builder,
                 py::return_value_policy::reference)
+            .def_property_readonly("flags", &INetworkDefinition::getFlags)
+            .def("get_flag", &INetworkDefinition::getFlag, "flag"_a, INetworkDefinitionDoc::get_flag)
 
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization

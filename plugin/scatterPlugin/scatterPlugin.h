@@ -31,7 +31,7 @@ namespace plugin
 class ScatterND : public IPluginV2DynamicExt
 {
 public:
-    ScatterND();        
+    ScatterND();
 
     ~ScatterND() override = default;
 

@@ -29,7 +29,7 @@ def no_publish():
 
 REQUIRED_PACKAGES = [
     "numpy",
-    "onnx",
+    "onnx>=1.14.0",
 ]
 
 

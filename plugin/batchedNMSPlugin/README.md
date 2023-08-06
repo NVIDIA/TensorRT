@@ -12,6 +12,8 @@
 
 ## Description
 
+> NOTE: This plugin is deprecated since TensorRT 9.0. Its functionality has been superseded by the `INMSLayer` and `EfficientNMS` plugin.
+
 The `batchedNMSPlugin` implements a non-maximum suppression (NMS) step over boxes for object detection networks.
 
 Non-maximum suppression is typically the universal step in object detection inference. This plugin is used after you’ve processed the bounding box prediction and object classification to get the final bounding boxes for objects.
@@ -105,6 +107,9 @@ documentation.
 
 
 ## Changelog
+
+June 2023
+Add deprecation note.
 
 January 2022
 BatchedNMS plugin now supports IOU calculation that matches Torch/Tensorflow and defaults to the [Caffe semantics](https://github.com/weiliu89/caffe/blob/ssd/src/caffe/util/bbox_util.cpp#L92-L97). This is selected using an optional `caffeSemantics` plugin attribute.

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+
 # We need cmake >= 3.8, since 3.8 introduced CUDA as a first class language
 cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 project(CustomHardMax LANGUAGES CXX CUDA)
@@ -63,11 +64,13 @@ add_definitions(-DTENSORRT_BUILD_LIB)
 
 # Add include directories
 get_filename_component(SAMPLES_COMMON_DIR ${CMAKE_SOURCE_DIR}/../../common/ ABSOLUTE)
-include_directories(${CUDA_INC_DIR} ${TRT_INCLUDE} ${CMAKE_SOURCE_DIR}/plugin/ ${SAMPLES_COMMON_DIR})
+get_filename_component(SAMPLES_DIR ${CMAKE_SOURCE_DIR}/../../ ABSOLUTE)
+include_directories(${CUDA_INC_DIR} ${TRT_INCLUDE} ${CMAKE_SOURCE_DIR}/plugin/ ${SAMPLES_COMMON_DIR} ${SAMPLES_DIR})
 
 # Define Hardmax plugin library target
 add_library(customHardmaxPlugin MODULE
   ${SAMPLES_COMMON_DIR}/logger.cpp
+  ${SAMPLES_DIR}/utils/fileLock.cpp
   ${CMAKE_SOURCE_DIR}/plugin/customHardmaxPlugin.cpp
   ${CMAKE_SOURCE_DIR}/plugin/customHardmaxPlugin.h
 )

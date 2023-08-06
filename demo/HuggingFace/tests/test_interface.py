@@ -44,12 +44,11 @@ def test_network_result(inetwork):
         output_tensor=[],
         semantic_output="hello",
         median_runtime=9001,
-        models=[],
     )
 
 
 def test_network_checkpoint_result(inetwork):
-    inetwork.NetworkCheckpointResult(network_results=[], accuracy=9001.0, perplexity=5.0)
+    inetwork.NetworkCheckpointResult(network_results=[], accuracy=9001.0, perplexity=5.0, models="")
 
 
 def test_precision(inetwork):
@@ -58,5 +57,10 @@ def test_precision(inetwork):
 
 def test_network_metadata(inetwork):
     inetwork.NetworkMetadata(
-        variant="gpt2", precision=inetwork.Precision(fp16=True), other=None
+        variant="gpt2",
+        precision=inetwork.Precision(fp16=True),
+        use_cache=True,
+        num_beams=1,
+        batch_size=1,
+        other=inetwork.DeprecatedCache(kv_cache=True),
     )

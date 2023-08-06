@@ -27,7 +27,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class DetectionOutput : public IPluginV2Ext
+class TRT_DEPRECATED DetectionOutput : public IPluginV2Ext
 {
 public:
     DetectionOutput(DetectionOutputParameters param);
@@ -96,7 +96,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class DetectionOutputDynamic : public IPluginV2DynamicExt
+class TRT_DEPRECATED DetectionOutputDynamic : public IPluginV2DynamicExt
 {
 public:
     DetectionOutputDynamic(DetectionOutputParameters param);
@@ -142,7 +142,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class NMSBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED NMSBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     NMSBasePluginCreator();
@@ -160,7 +160,7 @@ protected:
     int32_t mScoreBits;
 };
 
-class NMSPluginCreator : public NMSBasePluginCreator
+class TRT_DEPRECATED NMSPluginCreator : public NMSBasePluginCreator
 {
 public:
     NMSPluginCreator();
@@ -169,7 +169,7 @@ public:
     IPluginV2Ext* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;
 };
 
-class NMSDynamicPluginCreator : public NMSBasePluginCreator
+class TRT_DEPRECATED NMSDynamicPluginCreator : public NMSBasePluginCreator
 {
 public:
     NMSDynamicPluginCreator();

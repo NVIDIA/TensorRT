@@ -18,6 +18,8 @@
 from collections import OrderedDict
 from typing import List, Sequence
 
+from onnx_graphsurgeon.logger import G_LOGGER
+
 # default_value exists to solve issues that might result from Python's normal default argument behavior.
 # Specifically, consider the following class:
 #

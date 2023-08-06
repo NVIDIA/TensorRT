@@ -15,12 +15,9 @@
 # limitations under the License.
 #
 
+############################# GENERATE C++ PROTO FILES ###################################
 add_custom_target(parsers DEPENDS
-    nvcaffeparserlibs
-    nvonnxparser
-)
-
-add_subdirectory(caffe)
+    nvonnxparser)
 
 add_definitions("-D_PROTOBUF_INSTALL_DIR=${Protobuf_INSTALL_DIR}")
 add_compile_options("-Dgoogle=google_private")

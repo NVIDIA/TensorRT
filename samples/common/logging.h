@@ -292,7 +292,7 @@ public:
     };
 
     //!
-    //! \brief Forward-compatible method for retrieving the nvinfer::ILogger associated with this Logger
+    //! \brief Forward-compatible method for retrieving the nvinfer1::ILogger associated with this Logger
     //! \return The nvinfer1::ILogger associated with this Logger
     //!
     //! TODO Once all samples are updated to use this method to register the logger with TensorRT,
@@ -354,7 +354,7 @@ public:
     //!
     //! \brief Define a test for logging
     //!
-    //! \param[in] name The name of the test.  This should be a string starting with
+    //! \param[in] name The name of the test. This should be a string starting with
     //!                  "TensorRT" and containing dot-separated strings containing
     //!                  the characters [A-Za-z0-9_].
     //!                  For example, "TensorRT.sample_googlenet"

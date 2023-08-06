@@ -39,7 +39,7 @@ from builder_utils import SQD_W, SQD_B  # SQuAD Output Keys
 TensorRT Initialization
 """
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
-trt_version = [int(n) for n in trt.__version__.split('.')]
+trt_version = [n for n in trt.__version__.split('.')]
 
 # Import necessary plugins for demoBERT
 plugin_lib_name = "nvinfer_plugin.dll" if sys.platform == "win32" else "libnvinfer_plugin.so"
@@ -412,7 +412,7 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
         # speed up the engine build for trt major version >= 8
         # 1. disable cudnn tactic
         # 2. load global timing cache
-        if trt_version[0] >= 8:
+        if int(trt_version[0]) >= 8:
             tactic_source = builder_config.get_tactic_sources() & ~(1 << int(trt.TacticSource.CUDNN))
             builder_config.set_tactic_sources(tactic_source)
             if config.timing_cache != None:
@@ -459,7 +459,7 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
         TRT_LOGGER.log(TRT_LOGGER.INFO, "build engine in {:.3f} Sec".format(build_time_elapsed))
 
         # save global timing cache
-        if trt_version[0] >= 8 and config.timing_cache != None:
+        if int(trt_version[0]) >= 8 and config.timing_cache != None:
             cache = builder_config.get_timing_cache()
             with cache.serialize() as buffer:
                 with open(config.timing_cache, "wb") as f:

@@ -138,6 +138,14 @@ def quantize_linear(self, inp, out_scale, out_zero_point, axis=1):
     return out
 
 
+@gs.Graph.register()
+def pad(self, data, pads, constant_value=None):
+    constant_value = misc.default_value(constant_value, Variable.empty())
+    out = self.layer(op="Pad", inputs=[data, pads, constant_value], outputs=["pad_out"])[0]
+    out.dtype = data.dtype
+    return out
+
+
 # Generates a graph where an outer node has no outputs except
 # within the subgraph. ONNX-GS should recognize that the node
 # is being used, and should not remove it during cleanup().
@@ -171,12 +179,16 @@ def nested_graph():
 class TestBasic(object):
     def test_generate_name(self):
         graph = Graph()
-        names = set()
+        generated_names = set()
+        existing_names = {"name_{}".format(i) for i in range(50, 150)}  # names_50 to names_149
         num_names = 100
-        # This function should not return the same name more than once
         for idx in range(num_names):
-            names.add(graph._generate_name("name"))
-        assert len(names) == 100
+            generated_names.add(graph._generate_name("name", existing_names))
+        assert len(generated_names) == num_names  # 100 unique generated_names
+        assert len(generated_names.intersection(existing_names)) == 0  # no generated_names in existing_names
+        expected_names = {"name_{}".format(i) for i in range(0, 50)}
+        expected_names.update({"name_{}".format(i) for i in range(150, 200)})
+        assert generated_names == expected_names  # expect 'names_0' to 'names_49', 'names_150' to 'names_199'
 
     def test_equal(self, nested_graph):
         assert nested_graph == nested_graph
@@ -242,6 +254,15 @@ class TestRegister(object):
 
 
 class TestLayer(object):
+    def test_layer_default_naming(self):
+        node1 = Node(name="onnx_graphsurgeon_node_0", op="Identity")  # injecting default name
+        node2 = Node(name="onnx_graphsurgeon_node_1", op="Identity")  # injecting default name again
+        graph = Graph(nodes=[node1, node2])
+        graph.layer(op="Identity")  # new default name should be onnx_graphsurgeon_node_2
+        assert graph.nodes[-1].name == "onnx_graphsurgeon_node_2"
+        graph.layer(op="Identity")  # new default name should be onnx_graphsurgeon_node_3
+        assert graph.nodes[-1].name == "onnx_graphsurgeon_node_3"
+
     def test_layer_with_attrs(self):
         graph = Graph()
         outputs = graph.layer(op="Add", name="node", attrs={"fake_attr": 0})
@@ -1123,7 +1144,7 @@ class TestFoldConstants(object):
         assert np.all(graph.outputs[0].values == inp.shape[1:3:2])
 
     def test_with_variable_conditional(self):
-        cond = gs.Variable("cond", dtype=np.bool, shape=(1,))
+        cond = gs.Variable("cond", dtype=bool, shape=(1,))
 
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
         Y = gs.Constant("Y", values=np.ones((1,), dtype=np.float32))
@@ -1150,7 +1171,7 @@ class TestFoldConstants(object):
     @pytest.mark.parametrize("cond_value", [True, False])
     @pytest.mark.parametrize("flatten", [True, False])
     def test_flatten_static_conditional(self, flatten, cond_value):
-        cond = gs.Constant("cond", values=np.array([cond_value], dtype=np.bool))
+        cond = gs.Constant("cond", values=np.array([cond_value], dtype=bool))
 
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
         Y = gs.Variable("Y", dtype=np.float32, shape=(1,))
@@ -1376,7 +1397,7 @@ class TestFoldConstants(object):
 
         # Make sure size_threshold option is propagated into subgraphs.
         if push_into_subgraph:
-            cond = gs.Variable("cond", dtype=np.bool, shape=tuple())
+            cond = gs.Variable("cond", dtype=bool, shape=tuple())
             outer_graph = Graph(inputs=[cond])
             outer_graph.if_op(cond, then_graph=graph, else_graph=graph)
 
@@ -1453,6 +1474,24 @@ class TestFoldConstants(object):
 
         graph.fold_constants(should_exclude_node=should_exclude_node_func).cleanup()
         assert [node.name for node in graph.nodes] == expected_node_names
+
+    def test_omitted_optional_inputs_ignored(self):
+        # An omitted optional input will show up as a `Variable` with no name.
+        # This should *not* prevent us from folding nodes where all other inputs are constants.
+        data = gs.Constant("data", np.ones(shape=(3, 5, 5), dtype=np.float32))
+        pads = gs.Constant("pads", np.zeros(shape=(6,), dtype=np.int64))
+        graph = Graph()
+
+        pad_0 = graph.pad(data, pads, constant_value=None)
+        graph.outputs = [pad_0]
+
+        assert pad_0.inputs[0].inputs[2] == Variable.empty()
+        assert len(graph.nodes) == 1
+
+        graph.fold_constants().cleanup()
+
+        assert len(graph.nodes) == 0
+        assert isinstance(graph.outputs[0], gs.Constant)
 
 
 class TestIO(object):

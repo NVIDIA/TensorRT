@@ -66,8 +66,10 @@ def fold_pad_inputs(node, graph):
     # Gather the amount of padding in each dimension from pytorch graph.
     if torch.__version__ < "1.5.0":
         pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs["value"].values
-    else:
+    elif torch.__version__ < "2.0.0":
         pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).inputs[0].values
+    else:
+        pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).attrs["value"].values
 
     # Assumption a 4d input tensor
     onnx_pad_values = [0] * 4 * 2  # 4d tensor and 2 sides padding for each dimension

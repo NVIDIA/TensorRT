@@ -30,10 +30,10 @@ from collections import namedtuple, OrderedDict
 
 FILENAME_VALID_CHARS = "-~_.() {}{}".format(string.ascii_letters, string.digits)
 
-"""NetworkResult(input: str, output_tensor: np.array, semantic_output: np.array, median_runtime: NetworkRuntime, models: [str])"""
+"""NetworkResult(input: str, output_tensor: np.array, semantic_output: np.array, median_runtime: NetworkRuntime)"""
 NetworkResult = namedtuple(
     "NetworkResult",
-    ["input", "output_tensor", "semantic_output", "median_runtime", "models"],
+    ["input", "output_tensor", "semantic_output", "median_runtime"],
 )
 
 """BenchmarkingResult(median_runtime: NetworkRuntime, models: [str])"""
@@ -44,15 +44,22 @@ BenchmarkingResult = namedtuple(
 
 """CheckpointResult(network_results: List[NetworkResult], accuracy: float, perplexity: float)"""
 NetworkCheckpointResult = namedtuple(
-    "NetworkCheckpointResult", ["network_results", "accuracy", "perplexity"]
+    "NetworkCheckpointResult", ["network_results", "accuracy", "perplexity", "models"]
+)
+
+InputResult = namedtuple(
+    "InputResult", ["output"]
 )
 
 # Tracks TRT Precision Config
 """Precision(fp16: Bool)"""
 Precision = namedtuple("Precision", ["fp16"])
 
-"""NetworkMetadata(variant: str, precision: Precision, other: Union[namedtuple, None])"""
-NetworkMetadata = namedtuple("NetworkMetadata", ["variant", "precision", "other"])
+"""DeprecatedCache(kv_cache: bool)"""
+DeprecatedCache = namedtuple("DeprecatedCache", "kv_cache")
+
+"""NetworkMetadata(variant: str, precision: Precision, use_cache: bool, num_beams: int, batch_size: int, other: Union[namedtuple, None])"""
+NetworkMetadata = namedtuple("NetworkMetadata", ["variant", "precision", "use_cache", "num_beams", "batch_size", "other"])
 
 """TimingProfile(iterations: int, number: int, warmup: int, duration: int, percentile: int or [int])"""
 TimingProfile = namedtuple("TimingProfile", ["iterations", "number", "warmup", "duration", "percentile"])
@@ -122,7 +129,7 @@ class Dims:
         for k, v in self.encoding.items():
             encodings = []
             for idx, e in enumerate(v):
-                if isinstance(e, str) and (e == self.BATCH or self.SEQUENCE in e):
+                if isinstance(e, str) and (self.BATCH in e or self.SEQUENCE in e):
                     encodings.append((idx, e))
             dynamic_axes[k] = {idx: e for idx, e in encodings}
 
@@ -142,12 +149,11 @@ class NNConfig:
         self.network_name = network_name
         self.variants = variants
 
-        # Due to limitations of namedtuples and pickle function, namedtupled must be tracked as an instance
-        # which refers to a global.
-        if len(self.variants) > 0:
-            self.MetadataClass = type(self.variants[0].other)
-        else:
-            self.MetadataClass = None
+    def from_hf_config(self, hf_config):
+        """
+        Set up config class from a HuggingFace config.
+        """
+        pass
 
     def get_network_segments(self):
         """
@@ -157,8 +163,7 @@ class NNConfig:
         """
         return self.NETWORK_SEGMENTS
 
-    @staticmethod
-    def get_output_dims(metadata) -> Dict:
+    def get_output_dims(self) -> Dict:
         """
         Returns the output dimensions of the current network.
         Since some networks can have multiple parts, should be a dictionary encoding.
@@ -168,8 +173,7 @@ class NNConfig:
         """
         raise NotImplementedError("Output dims not yet defined.")
 
-    @staticmethod
-    def get_input_dims(metadata) -> Dict:
+    def get_input_dims(self) -> Dict:
         """
         Returns the input dimensions of the current network.
         Since some networks can have multiple parts, should be a dictionary encoding.
@@ -201,19 +205,13 @@ class NNConfig:
         precision_str = "-".join(
             [k for k, v in metadata.precision._asdict().items() if v]
         )
+
         result = [self.network_name, metadata.variant]
         if precision_str:
             result.append(precision_str)
 
-        other_result = [
-            "{}~{}".format(k, str(v)) for k, v in metadata.other._asdict().items()
-        ]
-        # Remove all boolean values that are False and remove True if exists
-        true_length = len("~True")
-        other_result_filtered = [v[:-true_length] if v.endswith("~True") else v for v in other_result if "~False" not in v]
-
-        if len(other_result_filtered) != 0:
-            result.append("-".join(other_result_filtered))
+        if metadata.use_cache:
+            result.append("kv_cache")
 
         final_str = "-".join(result)
         assert self._is_valid_filename(

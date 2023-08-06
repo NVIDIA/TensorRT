@@ -82,6 +82,7 @@ private:
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
     int mNumber{0};             //!< The number to classify
 
+    SampleUniquePtr<IRuntime> mRuntime{};           //!< The TensorRT Runtime used to deserialize the engine.
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
     //!
@@ -160,14 +161,18 @@ bool SampleOnnxMnistCoordConvAC::build()
         return false;
     }
 
-    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    if (!runtime)
+    if (!mRuntime)
+    {
+        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+    }
+
+    if (!mRuntime)
     {
         return false;
     }
 
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -233,6 +238,12 @@ bool SampleOnnxMnistCoordConvAC::infer()
     if (!context)
     {
         return false;
+    }
+
+    for (int32_t i = 0; i < mEngine->getNbIOTensors(); i++)
+    {
+        auto const name = mEngine->getIOTensorName(i);
+        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
     }
 
     // Read the input data into the managed buffers

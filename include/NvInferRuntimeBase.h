@@ -121,7 +121,7 @@ enum class DataType : int32_t
     //! 32-bit floating point format.
     kFLOAT = 0,
 
-    //! IEEE 16-bit floating-point format.
+    //! IEEE 16-bit floating-point format -- has a 5 bit exponent and 11 bit significand.
     kHALF = 1,
 
     //! Signed 8-bit integer representing a quantized floating-point value.
@@ -149,9 +149,13 @@ enum class DataType : int32_t
 
     //! Signed 8-bit floating point with
     //! 1 sign bit, 4 exponent bits, 3 mantissa bits, and exponent-bias 7.
-    //! \warning kFP8 is not supported yet and will result in an error or undefined behavior.
-    kFP8 = 6
+    kFP8 = 6,
 
+    //! Brain float -- has an 8 bit exponent and 8 bit significand.
+    kBF16 = 7,
+
+    //! Signed 64-bit integer type.
+    kINT64 = 8,
 };
 
 namespace impl
@@ -161,7 +165,7 @@ template <>
 struct EnumMaxImpl<DataType>
 {
     // Declaration of kVALUE that represents maximum number of elements in DataType enum
-    static constexpr int32_t kVALUE = 7;
+    static constexpr int32_t kVALUE = 9;
 };
 } // namespace impl
 
@@ -612,8 +616,8 @@ enum class ErrorCode : int32_t
     kFAILED_INITIALIZATION = 6,
 
     //!
-    //! An error occurred during execution that caused TensorRT to end prematurely, either an asynchronous error or
-    //! other execution errors reported by CUDA/DLA. In a dynamic system, the
+    //! An error occurred during execution that caused TensorRT to end prematurely, either an asynchronous error,
+    //! user cancellation, or other execution errors reported by CUDA/DLA. In a dynamic system, the
     //! data can be thrown away and the next frame can be processed or execution can be retried.
     //! This is either an execution error or a memory error.
     //!

@@ -33,6 +33,10 @@ namespace lambdas
 // For Weights
 static const auto weights_datatype_constructor = [](DataType const& type) { return new Weights{type, nullptr, 0}; };
 
+static const auto weights_pointer_constructor = [](DataType const& type, size_t const ptr, int64_t count) {
+    return new Weights{type, reinterpret_cast<void*>(ptr), count};
+};
+
 static const auto weights_numpy_constructor = [](py::array& arr) {
     arr = py::array::ensure(arr);
     // In order to construct a weights object, we must have a contiguous C-style array.
@@ -175,8 +179,10 @@ void bindFoundationalTypes(py::module& m)
     py::enum_<DataType>(m, "DataType", DataTypeDoc::descr, py::module_local())
         .value("FLOAT", DataType::kFLOAT, DataTypeDoc::float32)
         .value("HALF", DataType::kHALF, DataTypeDoc::float16)
+        .value("BF16", DataType::kBF16, DataTypeDoc::bfloat16)
         .value("INT8", DataType::kINT8, DataTypeDoc::int8)
         .value("INT32", DataType::kINT32, DataTypeDoc::int32)
+        .value("INT64", DataType::kINT64, DataTypeDoc::int64)
         .value("BOOL", DataType::kBOOL, DataTypeDoc::boolean)
         .value("UINT8", DataType::kUINT8, DataTypeDoc::uint8)
         .value("FP8", DataType::kFP8, DataTypeDoc::fp8); // DataType
@@ -184,8 +190,10 @@ void bindFoundationalTypes(py::module& m)
     // Also create direct mappings (so we can call trt.float32, for example).
     m.attr("float32") = DataType::kFLOAT;
     m.attr("float16") = DataType::kHALF;
+    m.attr("bfloat16") = DataType::kBF16;
     m.attr("int8") = DataType::kINT8;
     m.attr("int32") = DataType::kINT32;
+    m.attr("int64") = DataType::kINT64;
     m.attr("bool") = DataType::kBOOL;
     m.attr("uint8") = DataType::kUINT8;
     m.attr("fp8") = DataType::kFP8;
@@ -202,6 +210,7 @@ void bindFoundationalTypes(py::module& m)
     py::class_<Weights>(m, "Weights", WeightsDoc::descr, py::module_local())
         // Can construct an empty weights object with type. Defaults to float32.
         .def(py::init(lambdas::weights_datatype_constructor), "type"_a = DataType::kFLOAT, WeightsDoc::init_type)
+        .def(py::init(lambdas::weights_pointer_constructor), "type"_a, "ptr"_a, "count"_a, WeightsDoc::init_ptr)
         // Allows for construction through any contiguous numpy array. It then keeps a pointer to that buffer
         // (zero-copy).
         .def(py::init(lambdas::weights_numpy_constructor), "a"_a, py::keep_alive<1, 2>(), WeightsDoc::init_numpy)

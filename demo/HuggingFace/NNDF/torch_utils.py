@@ -80,17 +80,3 @@ def use_cuda(func: Callable):
             return func(**caller_kwargs)
 
     return wrapper
-
-def expand_inputs_for_beam_search(
-    tensor,
-    expand_size: int = 1,
-):
-    """
-    Interleave input tensor with `num_beams`, similar to HuggingFace's _expand_inputs_for_generation() in generation_utils.py
-    """
-    expanded_return_idx = (
-        torch.arange(tensor.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1)
-    )
-    tensor = tensor.index_select(0, expanded_return_idx.to(tensor.device))
-
-    return tensor

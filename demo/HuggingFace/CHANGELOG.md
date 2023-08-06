@@ -20,6 +20,32 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+# [2.0.3] - 2023-06-29
+- Added `attention_mask` support for multi-batch inference with various seq len
+
+# [2.0.2] - 2023-06-23
+- Added support for BLOOM models
+- Added support for OPT models
+
+# [2.0.1] - 2023-05-31
+- Changed PyTorch==2.0.1 to officially support H100
+- Added `chat` command to accept customized inputs
+- Added `--engine-postfix` for differentiating engine name for different platforms
+- Changed `NetworkCheckpointResult` and `NetworkResult` to avoid duplicate long output.
+
+# [2.0.0] - 2023-05-09
+- Added Seq2Seq class to extract common features from Seq2Seq models
+- Changed NNDF.interface to include common workflow for all commands
+- Added flags to take TRT engines without ONNX and PyTorch file.
+- Added playground.ipynb for customized testing with model selection
+- Added `generate` and `__init__` API support for all the model classes in parallel to CLI
+- Changed all notebooks to use direct API
+- Added support for more GPT2 and T5 models
+- Removed old playground.ipynb per model
+- Deprecated `--enable-kv-cache` to `--use-cache`
+- Fixed bs > 1 kv cache accuracy issues
+- Added per step time for `--info` mode
+
 # [1.3.4] - 2023-02-02
 - Changed GPT2 demo kv cache TRT to 1 engine, 2 optimization profiles 
 - Added fp16 support for GPT2

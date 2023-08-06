@@ -26,10 +26,77 @@ label = '''
 TensorRT is a Deep Learning compiler used for deep learning.\n\nThe library is written in C++ and uses Boost.Python.\n\nThe library is available on GitHub.\n\nInstallation\n\nThe library is available on GitHub.\n
 '''
 
-[GPT2.all."EleutherAI/gpt-j-6B".all.generate]
+[GPT2.all."EleutherAI/gpt-j-6b".all.generate]
 
 label = '''
 TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler that enables you to run deep learning models on NVIDIA GPUs.\n\nTensorRT is a deep learning compiler that enables you to run
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-125m".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe following code is a sample of the code used in the previous section.\n\n#include <cmath>\n#include <cstdlib>\n#include <cstring>\n#include <cstdio>\n#include <cstring>\n#include <cstdio>\n#include <cstdlib>\n#include <cstdlib>\n#include <cstdlib>
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-1.3B".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT is a
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-2.7B".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a Deep Learning compiler used for deep learning.\n\n−\n\nTensorRT is a Deep Learning compiler used for deep learning.\n\n+\n
+'''
+
+[GPT2.all."EleutherAI/gpt-neox-20b".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT is a deep learning compiler used for deep learning.\n\nTensorRT
+'''
+
+# This result is bad.
+[GPT2.all."cerebras/Cerebras-GPT-111M".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\n## 3.1.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.3.
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-256M".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe Deep Learning compiler is a deep learning library that is used to learn deep neural networks. It is a deep learning library that is used to learn deep neural networks.\n\nThe Deep Learning compiler is a deep learning library that is used to learn deep neural networks. It is a deep learning library that is used to learn deep neural networks.\n\nThe Deep Learning compiler is a deep learning library that is used to learn deep
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-590M".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe code is written in Python and is available on GitHub.\n\nThe code is available on GitHub.\n\nThe code is available on GitHub.\n\nThe code is available on GitHub.\n\nThe code is available on GitHub.\n\nThe code is available on GitHub.\n\nThe code is available on GitHub.\n\nThe code is available on GitHub.\n\nThe code is available on GitHub.\n
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-1.3B".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe compiler is a C++ library that compiles the code into a machine-readable\nform. It is a very powerful tool for writing machine-readable code.\n\nThe compiler is written in C++ and is available for download from\n[http://www.tensorrt.org](http://www.tensorrt.org).\n\nThe compiler is written in C++ and is available for download from
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-2.7B".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nThe TensorRT compiler is a compiler for TensorRT. It is a compiler for TensorRT that is based on the TensorRT compiler.\n\nThe TensorRT compiler is a compiler for TensorRT that is based on the TensorRT compiler.\n\nThe TensorRT compiler is a compiler for TensorRT that is based on the TensorRT compiler.\n\nThe TensorRT
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-6.7B".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\nTensorRT is a C++ library that provides a high-level API for writing and\nrunning deep learning applications. TensorRT is a C++ library that provides a\nhigh-level API for writing and running deep learning applications.\n\nTensorRT is a C++ library that provides a high-level API for writing and\nrunning deep learning applications. TensorRT is a C++ library that provides a
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-13B".all.generate]
+
+label = '''
+TensorRT is a Deep Learning compiler used for deep learning.\n\n## Installation\n\n```bash\n$ pip install tensorrt\n```\n\n## Usage\n\n```python\nfrom tensorrt.ops.layers import *\nfrom tensorrt.ops.layers import *\nfrom tensorrt.ops.layers import *\nfrom tensorrt.ops.layers import *\nfrom tensorrt.ops.layers import
 '''
 
 [GPT2.all.default.fp16.generate]
@@ -66,10 +133,75 @@ label = '''
 GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the MNIST dataset, which contains over 100,000 handwritten digits. The training data is split into two parts: the training set and
 '''
 
-[GPT2.all."EleutherAI/gpt-j-6B".all.generate_b]
+[GPT2.all."EleutherAI/gpt-j-6b".all.generate_b]
 
 label = '''
 GPT-2 is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-PT**: The same as GPT-2 but with the pretrained model.\n\n-   **
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-125m".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the corpus of the same size as the corpus of the same size as the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-1.3B".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the GPT-2 dataset [@radford2019language] and is pretrained on the English Wikipedia. The model is trained on
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-2.7B".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the following corpora:\n\n-   **GPT-2**: The GPT-2 model is trained on the
+'''
+
+[GPT2.all."EleutherAI/gpt-neox-20b".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\n-   **BERT** [@devlin2018bert] is a deep bidirectional transformer model pretrained on a large corpus.\n\n-   **RoBERTa** [@liu2019roberta] is a deep bidirectional transformer model pretrained on a large corpus.\n\n-   **XLNet** [@yang2019xlnet] is a deep bidirectional transformer model pretrained on
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-111M".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-256M".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-590M".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on a large corpus of training data, and the results are used to train a transformer model. The model is trained on a large corpus of test data, and the results are used to train a transformer model. The model is trained on a large corpus of test data, and the results are used to train a transformer model. The model is trained on a large corpus of test data, and
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-1.3B".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the ImageNet dataset [@imagenet] and tested on the ImageNet-V1 dataset [@imagenet-v1]. The model is trained on the ImageNet-V1 dataset with a batch size of 128. The model is trained on the ImageNet-V1 dataset with a batch size of 128. The model is trained on the ImageNet-V
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-2.7B".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the following datasets:\n\n-   **CUB**: The CUB-200-2011 dataset [@cub2002011] contains 200,000 images of 200 objects.\n\n-   **CUB**: The CUB-200-2011 dataset [@cub2002011] contains 200,000 images of 200 objects.\n\n-  '''
+
+[GPT2.all."cerebras/Cerebras-GPT-6.7B".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-LSTM**: This model is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-LSTM-Att**: This model is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-LSTM-Att-LSTM**:
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-13B".all.generate_b]
+
+label = '''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the full dataset of the CoNLL-2014 Shared Task. The model is trained using the Adam optimizer with a learning rate of 0.001. The model is trained for a total of 100 epochs. The model is trained for a total of 100 epochs. The model is trained for a total of 100 epochs. The model is trained for a total of 100 epoch
 '''
 
 [GPT2.all.default.all.generate_c]
@@ -100,9 +232,240 @@ label = '''
 If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours
 '''
 
-[GPT2.all."EleutherAI/gpt-j-6B".all.generate_c]
+[GPT2.all."EleutherAI/gpt-j-6b".all.generate_c]
 
 label = '''
 If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to be in the same place.\n\nI am going to be in the same place.\n\nI am going to be in the same place
 '''
 
+[GPT2.all."EleutherAI/gpt-neo-125m".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-1.3B".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am not going to fall asleep.\n\nI am going to wake up in 8 hours.\n\nI am not going to fall asleep.\n\nI
+'''
+
+[GPT2.all."EleutherAI/gpt-neo-2.7B".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours
+'''
+
+[GPT2.all."EleutherAI/gpt-neox-20b".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-111M".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-256M".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-590M".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-1.3B".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI have a friend who is a nurse and she has a sleep disorder. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is not
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-2.7B".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-6.7B".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl
+'''
+
+[GPT2.all."cerebras/Cerebras-GPT-13B".all.generate_c]
+
+label = '''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try
+'''
+
+[GPT2.all.default.all.generate_d]
+
+input = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.
+''']
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is based on the following assumptions:\n\nThe model is based on the following assumptions:\n\nThe model is based on the following assumptions:\n''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am not going to sleep for 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8
+''']
+
+[GPT2.all.gpt2-medium.all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on a large corpus of data, and the model is trained on a large number of training examples. The model is trained on a large number
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nIf I fall asleep then I am going to wake up in 8 hours.\n\nIf I fall asleep then I am going to wake up in 8 hours.
+''']
+
+[GPT2.all.gpt2-large.all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the following data:\n\nThe corpus consists of the following text files:\n\nThe corpus is split into two parts:\n\n
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nIf I fall asleep then I am going to wake up in 8 hours.\n\nIf I fall asleep then I am going to wake up in 8 hours.
+''']
+
+[GPT2.all.gpt2-xl.all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the MNIST dataset, which contains over 100,000 handwritten digits. The training data is split into two parts: the training set and
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8
+''']
+
+[GPT2.all."EleutherAI/gpt-j-6b".all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-PT**: The same as GPT-2 but with the pretrained model.\n\n-   **
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to be in the same place.\n\nI am going to be in the same place.\n\nI am going to be in the same
+''']
+
+[GPT2.all."EleutherAI/gpt-neo-125m".all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the corpus of the same size as the corpus of the same size as the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of the corpus of
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.
+''']
+
+[GPT2.all."EleutherAI/gpt-neo-1.3B".all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the GPT-2 dataset [@radford2019language] and is pretrained on the English Wikipedia. The model is trained on
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am not a morning person. I am a night person. I am a night person. I am a night person. I am a night person. I
+''']
+
+[GPT2.all."EleutherAI/gpt-neo-2.7B".all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the following corpora:\n\n-   **GPT-2**: The GPT-2 model is trained on the
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nIf I fall asleep then I am going to wake up in 8 hours.\n\nIf I fall asleep then I am going to wake up in 8 hours.
+''']
+
+[GPT2.all."EleutherAI/gpt-neox-20b".all.generate_d]
+
+label = [
+'''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\n-   **BERT** [@devlin2018bert] is a deep bidirectional transformer model pretrained on a large corpus.\n\n-   **RoBERTa** [@liu2019roberta] is a deep bidirectional transformer model pretrained on a large corpus.\n\n-   **XLNet** [@yang2019xlnet] is a deep bidirectional transformer model pretrained on
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n
+''']
+
+
+[GPT2.all."cerebras/Cerebras-GPT-111M".all.generate_d]
+
+label = ['''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained model pretrained
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.
+''']
+
+[GPT2.all."cerebras/Cerebras-GPT-256M".all.generate_d]
+
+label = ['''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model is trained on a large corpus and the model is trained on a large corpus.\n\nThe model
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep in 8 hours.\n\nI am going to sleep
+''']
+
+[GPT2.all."cerebras/Cerebras-GPT-590M".all.generate_d]
+
+label = ['''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on a large corpus of training data, and the results are used to train a transformer model. The model is trained on a large corpus of test data, and the results are used to train a transformer model. The model is trained on a large corpus of test data, and the results are used to train a transformer model. The model is trained on a large corpus of test data, and
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep in the morning.\n\nI am going to sleep
+''']
+
+[GPT2.all."cerebras/Cerebras-GPT-1.3B".all.generate_d]
+
+label = ['''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the ImageNet dataset [@imagenet] and tested on the ImageNet-V1 dataset [@imagenet-v1]. The model is trained on the ImageNet-V1 dataset with a batch size of 128. The model is trained on the ImageNet-V1 dataset with a batch size of 128. The model is trained on the ImageNet-V
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI have a friend who is a nurse and she has a sleep disorder. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is not good for her. She has a sleep disorder that is
+'''
+]
+
+[GPT2.all."cerebras/Cerebras-GPT-2.7B".all.generate_d]
+
+label = ['''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the following datasets:\n\n-   **CUB**: The CUB-200-2011 dataset [@cub2002011] contains 200,000 images of 200 objects.\n\n-   **CUB**: The CUB-200-2011 dataset [@cub2002011] contains 200,000 images of 200 objects.\n\n-
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.\n\nI am going to wake up in 8 hours.
+'''
+]
+
+[GPT2.all."cerebras/Cerebras-GPT-6.7B".all.generate_d]
+
+label = ['''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-LSTM**: This model is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-LSTM-Att**: This model is a transformer based model pretrained on a large corpus.\n\n-   **GPT-2-LSTM-Att-LSTM**:
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good girl and go to sleep.\n\nI am going to be a good
+'''
+]
+
+
+[GPT2.all."cerebras/Cerebras-GPT-13B".all.generate_d]
+
+label = ['''
+GPT-2 is a transformer based model pretrained on a large corpus.\n\nThe model is trained on the full dataset of the CoNLL-2014 Shared Task. The model is trained using the Adam optimizer with a learning rate of 0.001. The model is trained for a total of 100 epochs. The model is trained for a total of 100 epochs. The model is trained for a total of 100 epochs. The model is trained for a total of 100 epoch
+''',
+'''
+If I fall asleep then I am going to wake up in 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to try to sleep for 8 hours.\n\nI am going to
+'''
+]

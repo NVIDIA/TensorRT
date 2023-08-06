@@ -11,7 +11,9 @@
 
 ## Description
 
-The `proposalPlugin` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT and used in [sampleUffFasterRCNN] to perform inference.
+> NOTE: The `IPluginV2Ext` version of this plugin is deprecated since TensorRT 9.0. `IPluginV2DynamicExt`-based `ProposalDynamic` is recommended instead.
+
+The `proposalPlugin` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT.
 
 `proposalPlugin` decodes predicted bounding boxes, extracts their corresponding objectness score, extracts region of interest from predicted bounding boxes using non maximum suppression, for downstreaming ROIPooling tasks.
 
@@ -75,6 +77,9 @@ documentation.
 
 
 ## Changelog
+
+June 2023
+Add deprecation note for `IPluginV2Ext` version of the plugin.
 
 May 2019
 This is the first release of this `README.md` file.

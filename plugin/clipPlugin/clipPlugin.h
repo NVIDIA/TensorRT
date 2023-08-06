@@ -28,7 +28,7 @@ namespace nvinfer1
 {
 namespace plugin
 {
-class ClipPlugin : public nvinfer1::pluginInternal::BasePlugin
+class TRT_DEPRECATED ClipPlugin : public nvinfer1::pluginInternal::BasePlugin
 {
 public:
     ClipPlugin(std::string name, float clipMin, float clipMax);
@@ -80,7 +80,7 @@ private:
     size_t mInputVolume{0};
 };
 
-class ClipPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED ClipPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     ClipPluginCreator();

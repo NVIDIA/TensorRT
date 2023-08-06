@@ -16,6 +16,7 @@
  */
 
 #include "sampleUtils.h"
+#include "bfloat16.h"
 #include "half.h"
 
 using namespace nvinfer1;
@@ -27,8 +28,10 @@ size_t dataTypeSize(nvinfer1::DataType dataType)
 {
     switch (dataType)
     {
+    case nvinfer1::DataType::kINT64: return 8U;
     case nvinfer1::DataType::kINT32:
     case nvinfer1::DataType::kFLOAT: return 4U;
+    case nvinfer1::DataType::kBF16:
     case nvinfer1::DataType::kHALF: return 2U;
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
@@ -40,11 +43,11 @@ size_t dataTypeSize(nvinfer1::DataType dataType)
 
 int64_t volume(nvinfer1::Dims const& dims, nvinfer1::Dims const& strides, int32_t vecDim, int32_t comps, int32_t batch)
 {
-    int32_t maxNbElems = 1;
+    int64_t maxNbElems = 1;
     for (int32_t i = 0; i < dims.nbDims; ++i)
     {
         // Get effective length of axis.
-        int32_t d = dims.d[i];
+        int64_t d = dims.d[i];
         // Any dimension is 0, it is an empty tensor.
         if (d == 0)
         {
@@ -56,7 +59,7 @@ int64_t volume(nvinfer1::Dims const& dims, nvinfer1::Dims const& strides, int32_
         }
         maxNbElems = std::max(maxNbElems, d * strides.d[i]);
     }
-    return static_cast<int64_t>(maxNbElems) * batch * (vecDim < 0 ? 1 : comps);
+    return maxNbElems * batch * (vecDim < 0 ? 1 : comps);
 }
 
 nvinfer1::Dims toDims(std::vector<int32_t> const& vec)
@@ -98,18 +101,33 @@ void loadFromFile(std::string const& fileName, char* dst, size_t size)
     }
 }
 
-std::vector<std::string> splitToStringVec(std::string const& s, char separator)
+std::vector<std::string> splitToStringVec(std::string const& s, char separator, int64_t maxSplit)
 {
     std::vector<std::string> splitted;
 
     for (size_t start = 0; start < s.length();)
     {
+        // If maxSplit is specified and we have reached maxSplit, emplace back the rest of the string and break the
+        // loop.
+        if (maxSplit >= 0 && static_cast<int64_t>(splitted.size()) == maxSplit)
+        {
+            splitted.emplace_back(s.substr(start, s.length() - start));
+            break;
+        }
+
         size_t separatorIndex = s.find(separator, start);
         if (separatorIndex == std::string::npos)
         {
             separatorIndex = s.length();
         }
         splitted.emplace_back(s.substr(start, separatorIndex - start));
+
+        // If the separator is the last character, then we should push an empty string at the end.
+        if (separatorIndex == s.length() - 1)
+        {
+            splitted.emplace_back("");
+        }
+
         start = separatorIndex + 1;
     }
 
@@ -364,11 +382,15 @@ void sparsify(Weights const& weights, int32_t k, int32_t trs, std::vector<int8_t
     case DataType::kHALF:
         sparsify(static_cast<half_float::half const*>(weights.values), weights.count, k, trs, sparseWeights);
         break;
+    case DataType::kBF16:
+        sparsify(static_cast<BFloat16 const*>(weights.values), weights.count, k, trs, sparseWeights);
+        break;
     case DataType::kINT8:
     case DataType::kINT32:
     case DataType::kUINT8:
     case DataType::kBOOL:
     case DataType::kFP8: break;
+    case DataType::kINT64: ASSERT(false && "Unsupported data type");
     }
 }
 
@@ -430,6 +452,8 @@ template void dumpBuffer<int8_t>(void const* buffer, std::string const& separato
 template void dumpBuffer<float>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
     Dims const& strides, int32_t vectorDim, int32_t spv);
 template void dumpBuffer<__half>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
+    Dims const& strides, int32_t vectorDim, int32_t spv);
+template void dumpBuffer<BFloat16>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
     Dims const& strides, int32_t vectorDim, int32_t spv);
 template void dumpBuffer<uint8_t>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
     Dims const& strides, int32_t vectorDim, int32_t spv);
@@ -526,8 +550,25 @@ void fillBuffer(void* buffer, int64_t volume, T min, T max)
 template void fillBuffer<bool>(void* buffer, int64_t volume, bool min, bool max);
 template void fillBuffer<float>(void* buffer, int64_t volume, float min, float max);
 template void fillBuffer<int32_t>(void* buffer, int64_t volume, int32_t min, int32_t max);
+template void fillBuffer<int64_t>(void* buffer, int64_t volume, int64_t min, int64_t max);
 template void fillBuffer<int8_t>(void* buffer, int64_t volume, int8_t min, int8_t max);
 template void fillBuffer<__half>(void* buffer, int64_t volume, __half min, __half max);
+template void fillBuffer<BFloat16>(void* buffer, int64_t volume, BFloat16 min, BFloat16 max);
 template void fillBuffer<uint8_t>(void* buffer, int64_t volume, uint8_t min, uint8_t max);
+
+bool matchStringWithOneWildcard(std::string const& pattern, std::string const& target)
+{
+    auto const splitPattern = splitToStringVec(pattern, '*', 1);
+
+    // If there is no wildcard, return if the two strings match exactly.
+    if (splitPattern.size() == 1)
+    {
+        return pattern == target;
+    }
+
+    // Otherwise, target must follow prefix+anything+postfix pattern.
+    return target.size() >= (splitPattern[0].size() + splitPattern[1].size()) && target.find(splitPattern[0]) == 0
+        && target.rfind(splitPattern[1]) == (target.size() - splitPattern[1].size());
+}
 
 } // namespace sample

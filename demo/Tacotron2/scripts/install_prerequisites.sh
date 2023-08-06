@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,12 +15,11 @@
 # limitations under the License.
 #
 
-pip3 install numba==0.48 resampy==0.3.1 torch==1.9.1
 pip3 install -r requirements.txt
 echo "nvidia" | sudo -S apt-get install -y libsndfile1
 
 pushd /tmp
 git clone https://github.com/NVIDIA/apex
 cd apex
-pip3 install -v --no-cache-dir ./
+pip3 install -v --disable-pip-version-check --no-build-isolation --no-cache-dir ./
 popd

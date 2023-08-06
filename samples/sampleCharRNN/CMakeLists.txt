@@ -17,9 +17,11 @@
 SET(SAMPLE_SOURCES
     sampleCharRNN.cpp
     ../common/sampleEngines.cpp
+    ../common/sampleOptions.cpp
     ../common/sampleUtils.cpp
+    ../common/bfloat16.cpp
 )
 # Required due to inclusion of sampleEnines.h
-SET(SAMPLE_PARSERS "uff" "caffe" "onnx")
+SET(SAMPLE_PARSERS "onnx")
 
 include(../CMakeSamplesTemplate.txt)

@@ -27,10 +27,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "NvCaffeParser.h"
 #include "NvInfer.h"
 #include "NvOnnxParser.h"
-#include "NvUffParser.h"
 
 #include "ErrorRecorder.h"
 #include "common.h"
@@ -48,22 +46,6 @@ namespace sample
 
 namespace
 {
-
-struct CaffeBufferShutter
-{
-    ~CaffeBufferShutter()
-    {
-        shutdownCaffeParser();
-    }
-};
-
-struct UffBufferShutter
-{
-    ~UffBufferShutter()
-    {
-        shutdownUffParser();
-    }
-};
 
 std::map<std::string, float> readScalesFromCalibrationCache(std::string const& calibrationFile)
 {
@@ -98,8 +80,9 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
 
     if (mEngine == nullptr)
     {
+        auto const& engineBlob = getBlob();
         SMP_RETVAL_IF_FALSE(
-            !mEngineBlob.empty(), "Engine blob is empty. Nothing to deserialize!", nullptr, sample::gLogError);
+            !engineBlob.empty(), "Engine blob is empty. Nothing to deserialize!", nullptr, sample::gLogError);
 
         using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
         using duration = std::chrono::duration<float>;
@@ -141,12 +124,12 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         {
             mRuntime->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
-        mEngine.reset(mRuntime->deserializeCudaEngine(mEngineBlob.data(), mEngineBlob.size()));
+        mEngine.reset(mRuntime->deserializeCudaEngine(engineBlob.data, engineBlob.size));
         SMP_RETVAL_IF_FALSE(mEngine != nullptr, "Engine deserialization failed", nullptr, sample::gLogError);
 
         time_point const deserializeEndTime{std::chrono::high_resolution_clock::now()};
-        sample::gLogInfo << "Engine deserialized in "
-                            << duration(deserializeEndTime - deserializeStartTime).count() << " sec." << std::endl;
+        sample::gLogInfo << "Engine deserialized in " << duration(deserializeEndTime - deserializeStartTime).count()
+                         << " sec." << std::endl;
     }
 
     return mEngine.get();
@@ -163,13 +146,14 @@ nvinfer1::safe::ICudaEngine* LazilyDeserializedEngine::getSafe()
         mIsSafe, "Safe mode is not enabled, but trying to get safe engine!", nullptr, sample::gLogError);
 
     ASSERT(sample::hasSafeRuntime());
+    auto engineBlob = getBlob();
     if (mSafeEngine == nullptr)
     {
         SMP_RETVAL_IF_FALSE(
-            !mEngineBlob.empty(), "Engine blob is empty. Nothing to deserialize!", nullptr, sample::gLogError);
+            !engineBlob.empty(), "Engine blob is empty. Nothing to deserialize!", nullptr, sample::gLogError);
 
-        SMP_RETVAL_IF_FALSE(
-            mDLACore == -1, "Safe DLA engine built with kDLA_STANDALONE should not be deserialized in TRT!", nullptr,
+        SMP_RETVAL_IF_FALSE(mDLACore == -1,
+            "Safe DLA engine built with kDLA_STANDALONE should not be deserialized in TRT!", nullptr,
             sample::gLogError);
 
         using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
@@ -179,13 +163,12 @@ nvinfer1::safe::ICudaEngine* LazilyDeserializedEngine::getSafe()
         std::unique_ptr<safe::IRuntime> safeRuntime{sample::createSafeInferRuntime(sample::gLogger.getTRTLogger())};
         SMP_RETVAL_IF_FALSE(safeRuntime != nullptr, "SafeRuntime creation failed", nullptr, sample::gLogError);
         safeRuntime->setErrorRecorder(&gRecorder);
-        mSafeEngine.reset(
-            safeRuntime->deserializeCudaEngine(mEngineBlob.data(), mEngineBlob.size()));
+        mSafeEngine.reset(safeRuntime->deserializeCudaEngine(engineBlob.data, engineBlob.size));
         SMP_RETVAL_IF_FALSE(mSafeEngine != nullptr, "SafeEngine deserialization failed", nullptr, sample::gLogError);
 
         time_point const deserializeEndTime{std::chrono::high_resolution_clock::now()};
-        sample::gLogInfo << "SafeEngine deserialized in "
-                            << duration(deserializeEndTime - deserializeStartTime).count() << " sec." << std::endl;
+        sample::gLogInfo << "SafeEngine deserialized in " << duration(deserializeEndTime - deserializeStartTime).count()
+                         << " sec." << std::endl;
     }
 
     return mSafeEngine.get();
@@ -243,69 +226,8 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
     auto const tBegin = std::chrono::high_resolution_clock::now();
 
     Parser parser;
-    std::string const& modelName = model.baseModel.model;
     switch (model.baseModel.format)
     {
-    case ModelFormat::kCAFFE:
-    {
-        using namespace nvcaffeparser1;
-        parser.caffeParser.reset(sampleCreateCaffeParser());
-        CaffeBufferShutter bufferShutter;
-        auto const* const blobNameToTensor = parser.caffeParser->parse(
-            model.prototxt.c_str(), modelName.empty() ? nullptr : modelName.c_str(), network, DataType::kFLOAT);
-        if (!blobNameToTensor)
-        {
-            err << "Failed to parse caffe model or prototxt, tensors blob not found" << std::endl;
-            parser.caffeParser.reset();
-            break;
-        }
-
-        for (auto const& s : model.outputs)
-        {
-            if (blobNameToTensor->find(s.c_str()) == nullptr)
-            {
-                err << "Could not find output blob " << s << std::endl;
-                parser.caffeParser.reset();
-                break;
-            }
-            network.markOutput(*blobNameToTensor->find(s.c_str()));
-        }
-        break;
-    }
-    case ModelFormat::kUFF:
-    {
-        using namespace nvuffparser;
-        parser.uffParser.reset(sampleCreateUffParser());
-        UffBufferShutter bufferShutter;
-        for (auto const& s : model.uffInputs.inputs)
-        {
-            if (!parser.uffParser->registerInput(
-                    s.first.c_str(), s.second, model.uffInputs.NHWC ? UffInputOrder::kNHWC : UffInputOrder::kNCHW))
-            {
-                err << "Failed to register input " << s.first << std::endl;
-                parser.uffParser.reset();
-                break;
-            }
-        }
-
-        for (auto const& s : model.outputs)
-        {
-            if (!parser.uffParser->registerOutput(s.c_str()))
-            {
-                err << "Failed to register output " << s << std::endl;
-                parser.uffParser.reset();
-                break;
-            }
-        }
-
-        if (!parser.uffParser->parse(model.baseModel.model.c_str(), network))
-        {
-            err << "Failed to parse uff file" << std::endl;
-            parser.uffParser.reset();
-            break;
-        }
-        break;
-    }
     case ModelFormat::kONNX:
     {
         using namespace nvonnxparser;
@@ -506,18 +428,19 @@ bool setTensorDynamicRange(INetworkDefinition const& network, float inRange = 2.
 
 void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& layerPrecisions)
 {
-    bool const hasGlobalPrecision{layerPrecisions.find("*") != layerPrecisions.end()};
-    auto const globalPrecision = hasGlobalPrecision ? layerPrecisions.at("*") : nvinfer1::DataType::kFLOAT;
     bool hasLayerPrecisionSkipped{false};
     for (int32_t layerIdx = 0; layerIdx < network.getNbLayers(); ++layerIdx)
     {
         auto* layer = network.getLayer(layerIdx);
         auto const layerName = layer->getName();
-        if (layerPrecisions.find(layer->getName()) != layerPrecisions.end())
+        auto exactMatch = layerPrecisions.find(layerName);
+        auto plausibleMatch = findPlausible(layerPrecisions, layerName);
+        if (exactMatch != layerPrecisions.end())
         {
-            layer->setPrecision(layerPrecisions.at(layer->getName()));
+            sample::gLogInfo << "Set layer " << layerName << " to precision " << exactMatch->second << std::endl;
+            layer->setPrecision(exactMatch->second);
         }
-        else if (hasGlobalPrecision)
+        else if (plausibleMatch != layerPrecisions.end())
         {
             // We should not set the layer precision if its default precision is INT32 or Bool.
             if (layer->getPrecision() == nvinfer1::DataType::kINT32
@@ -554,7 +477,8 @@ void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& laye
                 continue;
             }
             // All heuristics passed. Set the layer precision.
-            layer->setPrecision(globalPrecision);
+            sample::gLogInfo << "Set layer " << layerName << " to precision " << plausibleMatch->second << std::endl;
+            layer->setPrecision(plausibleMatch->second);
         }
     }
 
@@ -575,9 +499,11 @@ void setLayerOutputTypes(INetworkDefinition& network, LayerOutputTypes const& la
         auto* layer = network.getLayer(layerIdx);
         auto const layerName = layer->getName();
         auto const nbOutputs = layer->getNbOutputs();
-        if (layerOutputTypes.find(layer->getName()) != layerOutputTypes.end())
+        auto exactMatch = layerOutputTypes.find(layerName);
+        auto plausibleMatch = findPlausible(layerOutputTypes, layerName);
+        if (exactMatch != layerOutputTypes.end())
         {
-            auto const& outputTypes = layerOutputTypes.at(layer->getName());
+            auto const& outputTypes = exactMatch->second;
             bool const isBroadcast = (outputTypes.size() == 1);
             if (!isBroadcast && static_cast<int32_t>(outputTypes.size()) != nbOutputs)
             {
@@ -588,11 +514,17 @@ void setLayerOutputTypes(INetworkDefinition& network, LayerOutputTypes const& la
             }
             for (int32_t outputIdx = 0; outputIdx < nbOutputs; ++outputIdx)
             {
-                layer->setOutputType(outputIdx, outputTypes.at(isBroadcast ? 0 : outputIdx));
+                auto const outputType = outputTypes.at(isBroadcast ? 0 : outputIdx);
+                sample::gLogInfo << "Set output " << outputIdx << " of layer " << layerName << " to type " << outputType
+                                 << std::endl;
+                layer->setOutputType(outputIdx, outputType);
             }
         }
-        else if (hasGlobalOutputType)
+        else if (plausibleMatch != layerOutputTypes.end())
         {
+            auto const& outputTypes = plausibleMatch->second;
+            bool const isBroadcast = (outputTypes.size() == 1);
+
             // We should not set the layer output types if its default precision is INT32 or Bool.
             if (layer->getPrecision() == nvinfer1::DataType::kINT32
                 || layer->getPrecision() == nvinfer1::DataType::kBOOL)
@@ -621,6 +553,10 @@ void setLayerOutputTypes(INetworkDefinition& network, LayerOutputTypes const& la
                                         << layerName << " because it is a shape tensor." << std::endl;
                     continue;
                 }
+
+                auto const outputType = outputTypes.at(isBroadcast ? 0 : outputIdx);
+                sample::gLogInfo << "Set output " << outputIdx << " of layer " << layerName << " to type " << outputType
+                                 << std::endl;
                 layer->setOutputType(outputIdx, globalOutputType);
             }
         }
@@ -640,9 +576,11 @@ void setLayerDeviceTypes(
     {
         auto* layer = network.getLayer(layerIdx);
         auto const layerName = layer->getName();
-        if (layerDeviceTypes.find(layerName) != layerDeviceTypes.end())
+        auto match = findPlausible(layerDeviceTypes, layerName);
+        if (match != layerDeviceTypes.end())
         {
-            DeviceType const deviceType = layerDeviceTypes.at(layerName);
+            DeviceType const deviceType = match->second;
+            sample::gLogInfo << "Set layer " << layerName << " to device type " << deviceType << std::endl;
             config.setDeviceType(layer, deviceType);
         }
     }
@@ -667,7 +605,8 @@ void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
         --sizeInPowerOf2;
         if (sizeInPowerOf2 == 30)
         {
-            sample::gLogWarning << "User-specified DLA managed SRAM size is too large and has been clipped to 2^30 bytes. "
+            sample::gLogWarning
+                << "User-specified DLA managed SRAM size is too large and has been clipped to 2^30 bytes. "
                 << "Please make sure that this is the intended managed SRAM size." << std::endl;
         }
         config.setMemoryPoolLimit(MemoryPoolType::kDLA_MANAGED_SRAM, static_cast<size_t>(1) << sizeInPowerOf2);
@@ -702,40 +641,49 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     INetworkDefinition& network, IBuilderConfig& config, std::unique_ptr<nvinfer1::IInt8Calibrator>& calibrator,
     std::ostream& err, std::vector<std::vector<int8_t>>& sparseWeights)
 {
-    IOptimizationProfile* profile{nullptr};
+    bool shouldCreateOptimizationProfile{false};
+    std::vector<IOptimizationProfile*> profiles{};
     if (build.maxBatch)
     {
         builder.setMaxBatchSize(build.maxBatch);
     }
     else
     {
-        profile = builder.createOptimizationProfile();
+        shouldCreateOptimizationProfile = true;
+        profiles.resize(build.optProfiles.size());
+        for (auto& profile : profiles)
+        {
+            profile = builder.createOptimizationProfile();
+        }
     }
 
     bool hasDynamicShapes{false};
 
     bool broadcastInputFormats = broadcastIOFormats(build.inputFormats, network.getNbInputs());
 
-    if (profile)
+    if (shouldCreateOptimizationProfile)
     {
         // Check if the provided input tensor names match the input tensors of the engine.
         // Throw an error if the provided input tensor names cannot be found because it implies a potential typo.
-        for (auto const& shape : build.shapes)
+        for (auto const& shapes : build.optProfiles)
         {
-            bool tensorNameFound{false};
-            for (int32_t i = 0; i < network.getNbInputs(); ++i)
+            for (auto const& shape : shapes)
             {
-                if (network.getInput(i)->getName() == shape.first)
+                bool tensorNameFound{false};
+                for (int32_t i = 0; i < network.getNbInputs(); ++i)
                 {
-                    tensorNameFound = true;
-                    break;
+                    if (matchStringWithOneWildcard(shape.first, network.getInput(i)->getName()))
+                    {
+                        tensorNameFound = true;
+                        break;
+                    }
                 }
-            }
-            if (!tensorNameFound)
-            {
-                sample::gLogError << "Cannot find input tensor with name \"" << shape.first << "\" in the network "
-                                  << "inputs! Please make sure the input tensor names are correct." << std::endl;
-                return false;
+                if (!tensorNameFound)
+                {
+                    sample::gLogError << "Cannot find input tensor with name \"" << shape.first << "\" in the network "
+                                      << "inputs! Please make sure the input tensor names are correct." << std::endl;
+                    return false;
+                }
             }
         }
     }
@@ -755,9 +703,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             switch (input->getType())
             {
             case DataType::kINT32:
+            case DataType::kINT64:
             case DataType::kBOOL:
             case DataType::kHALF:
             case DataType::kUINT8:
+            case DataType::kBF16:
                 // Leave these as is.
                 break;
             case DataType::kFLOAT:
@@ -770,7 +720,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             input->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
         }
 
-        if (profile)
+        if (shouldCreateOptimizationProfile)
         {
             auto const dims = input->getDimensions();
             auto const isScalar = dims.nbDims == 0;
@@ -779,72 +729,91 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             if (isDynamicInput)
             {
                 hasDynamicShapes = true;
-                auto shape = build.shapes.find(input->getName());
-                ShapeRange shapes{};
-
-                // If no shape is provided, set dynamic dimensions to 1.
-                if (shape == build.shapes.end())
+                for (size_t i = 0; i < build.optProfiles.size(); i++)
                 {
-                    constexpr int DEFAULT_DIMENSION = 1;
-                    std::vector<int> staticDims;
-                    if (input->isShapeTensor())
+                    auto const& optShapes = build.optProfiles[i];
+                    auto profile = profiles[i];
+                    auto const tensorName = input->getName();
+                    auto shape = findPlausible(optShapes, tensorName);
+                    ShapeRange shapes{};
+
+                    // If no shape is provided, set dynamic dimensions to 1.
+                    if (shape == optShapes.end())
                     {
-                        if (isScalar)
+                        constexpr int kDEFAULT_DIMENSION = 1;
+                        std::vector<int> staticDims;
+                        if (input->isShapeTensor())
                         {
-                            staticDims.push_back(1);
+                            if (isScalar)
+                            {
+                                staticDims.push_back(1);
+                            }
+                            else
+                            {
+                                staticDims.resize(dims.d[0]);
+                                std::fill(staticDims.begin(), staticDims.end(), kDEFAULT_DIMENSION);
+                            }
                         }
                         else
                         {
-                            staticDims.resize(dims.d[0]);
-                            std::fill(staticDims.begin(), staticDims.end(), DEFAULT_DIMENSION);
+                            staticDims.resize(dims.nbDims);
+                            std::transform(dims.d, dims.d + dims.nbDims, staticDims.begin(),
+                                [&](int dimension) { return dimension > 0 ? dimension : kDEFAULT_DIMENSION; });
                         }
+                        sample::gLogWarning
+                            << "Dynamic dimensions required for input: " << tensorName
+                            << ", but no shapes were provided. Automatically overriding shape to: " << staticDims
+                            << std::endl;
+                        std::fill(shapes.begin(), shapes.end(), staticDims);
                     }
                     else
                     {
-                        staticDims.resize(dims.nbDims);
-                        std::transform(dims.d, dims.d + dims.nbDims, staticDims.begin(),
-                            [&](int dimension) { return dimension > 0 ? dimension : DEFAULT_DIMENSION; });
+                        shapes = shape->second;
                     }
-                    sample::gLogWarning << "Dynamic dimensions required for input: " << input->getName()
-                                        << ", but no shapes were provided. Automatically overriding shape to: "
-                                        << staticDims << std::endl;
-                    std::fill(shapes.begin(), shapes.end(), staticDims);
-                }
-                else
-                {
-                    shapes = shape->second;
-                }
 
-                std::vector<int> profileDims{};
-                if (input->isShapeTensor())
-                {
-                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
-                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(input->getName(), OptProfileSelector::kMIN,
-                                            profileDims.data(), static_cast<int>(profileDims.size())),
-                        "Error in set shape values MIN", false, err);
-                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
-                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(input->getName(), OptProfileSelector::kOPT,
-                                            profileDims.data(), static_cast<int>(profileDims.size())),
-                        "Error in set shape values OPT", false, err);
-                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
-                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(input->getName(), OptProfileSelector::kMAX,
-                                            profileDims.data(), static_cast<int>(profileDims.size())),
-                        "Error in set shape values MAX", false, err);
-                }
-                else
-                {
-                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
-                    SMP_RETVAL_IF_FALSE(
-                        profile->setDimensions(input->getName(), OptProfileSelector::kMIN, toDims(profileDims)),
-                        "Error in set dimensions to profile MIN", false, err);
-                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
-                    SMP_RETVAL_IF_FALSE(
-                        profile->setDimensions(input->getName(), OptProfileSelector::kOPT, toDims(profileDims)),
-                        "Error in set dimensions to profile OPT", false, err);
-                    profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
-                    SMP_RETVAL_IF_FALSE(
-                        profile->setDimensions(input->getName(), OptProfileSelector::kMAX, toDims(profileDims)),
-                        "Error in set dimensions to profile MAX", false, err);
+                    std::vector<int> profileDims{};
+                    if (input->isShapeTensor())
+                    {
+                        profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
+                        SMP_RETVAL_IF_FALSE(profile->setShapeValues(tensorName, OptProfileSelector::kMIN,
+                                                profileDims.data(), static_cast<int>(profileDims.size())),
+                            "Error in set shape values MIN", false, err);
+                        profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
+                        SMP_RETVAL_IF_FALSE(profile->setShapeValues(tensorName, OptProfileSelector::kOPT,
+                                                profileDims.data(), static_cast<int>(profileDims.size())),
+                            "Error in set shape values OPT", false, err);
+                        profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
+                        SMP_RETVAL_IF_FALSE(profile->setShapeValues(tensorName, OptProfileSelector::kMAX,
+                                                profileDims.data(), static_cast<int>(profileDims.size())),
+                            "Error in set shape values MAX", false, err);
+                        sample::gLogInfo << "Set input shape tensor " << tensorName << " for optimization profile " << i
+                                         << " to:"
+                                         << " MIN=" << shapes[static_cast<size_t>(OptProfileSelector::kMIN)]
+                                         << " OPT=" << shapes[static_cast<size_t>(OptProfileSelector::kOPT)]
+                                         << " MAX=" << shapes[static_cast<size_t>(OptProfileSelector::kMAX)]
+                                         << std::endl;
+                    }
+                    else
+                    {
+                        profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
+                        SMP_RETVAL_IF_FALSE(
+                            profile->setDimensions(tensorName, OptProfileSelector::kMIN, toDims(profileDims)),
+                            "Error in set dimensions to profile MIN", false, err);
+                        profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
+                        SMP_RETVAL_IF_FALSE(
+                            profile->setDimensions(tensorName, OptProfileSelector::kOPT, toDims(profileDims)),
+                            "Error in set dimensions to profile OPT", false, err);
+                        profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
+                        SMP_RETVAL_IF_FALSE(
+                            profile->setDimensions(tensorName, OptProfileSelector::kMAX, toDims(profileDims)),
+                            "Error in set dimensions to profile MAX", false, err);
+                        sample::gLogInfo << "Set shape of input tensor " << tensorName << " for optimization profile "
+                                         << i << " to:"
+                                         << " MIN=" << shapes[static_cast<size_t>(OptProfileSelector::kMIN)]
+                                         << " OPT=" << shapes[static_cast<size_t>(OptProfileSelector::kOPT)]
+                                         << " MAX=" << shapes[static_cast<size_t>(OptProfileSelector::kMAX)]
+                                         << std::endl;
+                    }
                 }
             }
         }
@@ -853,11 +822,12 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     for (uint32_t i = 0, n = network.getNbOutputs(); i < n; i++)
     {
         auto* output = network.getOutput(i);
-        if (profile)
+        if (shouldCreateOptimizationProfile)
         {
             auto const dims = output->getDimensions();
             // A shape tensor output with known static dimensions may have dynamic shape values inside it.
-            auto const isDynamicOutput = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; })
+            auto const isDynamicOutput
+                = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; })
                 || output->isShapeTensor();
             if (isDynamicOutput)
             {
@@ -866,7 +836,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         }
     }
 
-    if (!hasDynamicShapes && !build.shapes.empty())
+    if (!hasDynamicShapes && !build.optProfiles[0].empty())
     {
         sample::gLogError << "Static model does not take explicit shapes since the shape of inference tensors will be "
                              "determined by the model itself"
@@ -874,11 +844,14 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         return false;
     }
 
-    if (profile && hasDynamicShapes)
+    if (shouldCreateOptimizationProfile && hasDynamicShapes)
     {
-        SMP_RETVAL_IF_FALSE(profile->isValid(), "Required optimization profile is invalid", false, err);
-        SMP_RETVAL_IF_FALSE(
-            config.addOptimizationProfile(profile) != -1, "Error in add optimization profile", false, err);
+        for (auto profile : profiles)
+        {
+            SMP_RETVAL_IF_FALSE(profile->isValid(), "Required optimization profile is invalid", false, err);
+            SMP_RETVAL_IF_FALSE(
+                config.addOptimizationProfile(profile) != -1, "Error in add optimization profile", false, err);
+        }
     }
 
     bool broadcastOutputFormats = broadcastIOFormats(build.outputFormats, network.getNbOutputs(), false);
@@ -916,6 +889,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     if (build.timingCacheMode == TimingCacheMode::kDISABLE)
     {
         config.setFlag(BuilderFlag::kDISABLE_TIMING_CACHE);
+    }
+
+    if (build.errorOnTimingCacheMiss)
+    {
+        config.setFlag(BuilderFlag::kERROR_ON_TIMING_CACHE_MISS);
     }
 
     if (!build.tf32)
@@ -966,14 +944,16 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     {
         config.setFlag(BuilderFlag::kFP16);
     }
-
     if (build.int8)
     {
         config.setFlag(BuilderFlag::kINT8);
     }
+    if (build.bf16)
+    {
+        config.setFlag(BuilderFlag::kBF16);
+    }
 
-    SMP_RETVAL_IF_FALSE(!(build.int8 && build.fp8),
-        "FP8 and INT8 precisions have been specified", false, err);
+    SMP_RETVAL_IF_FALSE(!(build.int8 && build.fp8), "FP8 and INT8 precisions have been specified", false, err);
 
     if (build.fp8)
     {
@@ -1019,7 +999,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             try
             {
                 // Set dynamic ranges of int8 inputs / outputs to match scales loaded from calibration cache
-                // TODO http://nvbugs/3262234 Change the network validation so that this workaround can be removed
                 setTensorScalesFromCalibration(network, build.inputFormats, build.outputFormats, build.calibration);
             }
             catch (std::exception&)
@@ -1038,17 +1017,25 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             {
                 auto* input = network.getInput(i);
                 Dims profileDims{};
-                auto shape = build.shapesCalib.find(input->getName());
-                ShapeRange shapesCalib{};
-                shapesCalib = shape->second;
+                auto const tensorName = input->getName();
+                auto shape = findPlausible(build.shapesCalib, tensorName);
 
+                if (shape == build.shapesCalib.end())
+                {
+                    std::ostringstream msg;
+                    msg << "Calibration profile for tensor " << tensorName << " cannot be found!";
+                    throw std::invalid_argument(msg.str());
+                }
+
+                auto shapesCalib = shape->second;
                 profileDims = toDims(shapesCalib[static_cast<size_t>(OptProfileSelector::kOPT)]);
                 // Here we check only kMIN as all profileDims are the same.
-                SMP_RETVAL_IF_FALSE(
-                    profileCalib->setDimensions(input->getName(), OptProfileSelector::kMIN, profileDims),
+                SMP_RETVAL_IF_FALSE(profileCalib->setDimensions(tensorName, OptProfileSelector::kMIN, profileDims),
                     "Error in set dimensions to calibration profile OPT", false, err);
-                profileCalib->setDimensions(input->getName(), OptProfileSelector::kOPT, profileDims);
-                profileCalib->setDimensions(input->getName(), OptProfileSelector::kMAX, profileDims);
+                profileCalib->setDimensions(tensorName, OptProfileSelector::kOPT, profileDims);
+                profileCalib->setDimensions(tensorName, OptProfileSelector::kMAX, profileDims);
+                sample::gLogInfo << "Set calibration profile for input tensor " << tensorName << " to " << profileDims
+                                 << std::endl;
             }
             SMP_RETVAL_IF_FALSE(profileCalib->isValid(), "Calibration profile is invalid", false, err);
             SMP_RETVAL_IF_FALSE(
@@ -1067,9 +1054,10 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             {
                 elemCount.push_back(volume(profileCalib->getDimensions(input->getName(), OptProfileSelector::kOPT)));
             }
-            else if (profile && isDynamicInput)
+            else if (!profiles.empty() && isDynamicInput)
             {
-                elemCount.push_back(volume(profile->getDimensions(input->getName(), OptProfileSelector::kOPT)));
+                elemCount.push_back(
+                    volume(profiles[build.calibProfile]->getDimensions(input->getName(), OptProfileSelector::kOPT)));
             }
             else
             {
@@ -1091,9 +1079,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     case PrecisionConstraints::kNONE:
         // It's the default for TensorRT.
         break;
-    case PrecisionConstraints::kOBEY:
-        config.setFlag(BuilderFlag::kOBEY_PRECISION_CONSTRAINTS);
-        break;
+    case PrecisionConstraints::kOBEY: config.setFlag(BuilderFlag::kOBEY_PRECISION_CONSTRAINTS); break;
     case PrecisionConstraints::kPREFER: config.setFlag(BuilderFlag::kPREFER_PRECISION_CONSTRAINTS); break;
     }
 
@@ -1192,7 +1178,7 @@ bool networkToSerializedEngine(
     // Try to load cache from file. Create a fresh cache if the file doesn't exist
     if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
     {
-        std::vector<char> loadedCache = samplesCommon::loadTimingCacheFile(build.timingCacheFile);
+        std::vector<char> loadedCache = samplesCommon::loadTimingCacheFile(gLogger, build.timingCacheFile);
         timingCache.reset(config->createTimingCache(static_cast<const void*>(loadedCache.data()), loadedCache.size()));
         SMP_RETVAL_IF_FALSE(timingCache != nullptr, "TimingCache creation failed", false, err);
         config->setTimingCache(*timingCache, false);
@@ -1206,17 +1192,17 @@ bool networkToSerializedEngine(
     std::unique_ptr<IHostMemory> serializedEngine{builder.buildSerializedNetwork(*env.network, *config)};
     SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
 
-    env.engine.setBlob(serializedEngine->data(), serializedEngine->size());
-
     if (build.safe && build.consistency)
     {
         checkSafeEngine(serializedEngine->data(), serializedEngine->size());
     }
 
+    env.engine.setBlob(serializedEngine);
+
     if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
     {
         auto timingCache = config->getTimingCache();
-        samplesCommon::updateTimingCacheFile(build.timingCacheFile, timingCache);
+        samplesCommon::updateTimingCacheFile(gLogger, build.timingCacheFile, timingCache, builder);
     }
 
     return true;
@@ -1233,7 +1219,9 @@ bool modelToBuildEnv(
     env.builder->setErrorRecorder(&gRecorder);
     auto networkFlags
         = (build.maxBatch) ? 0U : 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-
+    networkFlags |= (build.stronglyTyped)
+        ? 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)
+        : 0U;
     for (auto const& pluginPath : sys.dynamicPlugins)
     {
         env.builder->getPluginRegistry().loadLibrary(pluginPath.c_str());
@@ -1338,9 +1326,33 @@ bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, Bui
         checkSafeEngine(engineBlob.data(), fsize);
     }
 
-    env.engine.setBlob(engineBlob.data(), engineBlob.size());
+    env.engine.setBlob(std::move(engineBlob));
 
     return true;
+}
+
+bool printPlanVersion(BuildEnvironment& env, std::ostream& err)
+{
+    SMP_RETVAL_IF_FALSE(env.engine.getBlob().data != nullptr, "Plan file is empty", false, err);
+    SMP_RETVAL_IF_FALSE(env.engine.getBlob().size >= 28, "Plan file is incorrect", false, err);
+    auto const blob = static_cast<uint8_t*>(env.engine.getBlob().data);
+    auto const blob32 = static_cast<uint32_t*>(env.engine.getBlob().data);
+    //! Correct TensorRT plan file starts with this tag
+    constexpr uint32_t kPLAN_FILE_TAG{0x74727466U};
+    SMP_RETVAL_IF_FALSE(blob32[0] == kPLAN_FILE_TAG, "Failed to verify a plan tag.", false, err);
+    switch (blob32[1])
+    {
+    case 0U:
+    {
+        // Blob index to store the plan version may depend on the serialization version.
+        sample::gLogInfo << "Plan was created with TensorRT version " << static_cast<int32_t>(blob[24])
+        << "." << static_cast<int32_t>(blob[25]) << "." << static_cast<int32_t>(blob[26])
+        << "." << static_cast<int32_t>(blob[27]) << std::endl;
+        return true;
+    }
+    }
+    sample::gLogError << "Serialization version is not supported." << std::endl;
+    return false;
 }
 
 void dumpRefittable(nvinfer1::ICudaEngine& engine)
@@ -1404,10 +1416,17 @@ bool getEngineBuildEnv(
 
     SMP_RETVAL_IF_FALSE(createEngineSuccess, "Failed to create engine from model or file.", false, err);
 
+    if (build.getPlanVersionOnly && build.load)
+    {
+        SMP_RETVAL_IF_FALSE(printPlanVersion(env, err), "Failed to get plan file version.", false, err);
+        return true;
+    }
+
     if (build.save)
     {
         std::ofstream engineFile(build.engine, std::ios::binary);
-        engineFile.write(reinterpret_cast<char const*>(env.engine.getBlob().data()), env.engine.getBlob().size());
+        auto& engineBlob = env.engine.getBlob();
+        engineFile.write(static_cast<char const*>(engineBlob.data), engineBlob.size);
         SMP_RETVAL_IF_FALSE(!engineFile.fail(), "Saving engine to file failed.", false, err);
     }
 
@@ -1427,8 +1446,10 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
         {
         case DataType::kFLOAT:
         case DataType::kHALF:
+        case DataType::kBF16:
         case DataType::kINT8:
-        case DataType::kINT32: return {std::make_pair(WeightsRole::kCONSTANT, weights)};
+        case DataType::kINT32:
+        case DataType::kINT64: return {std::make_pair(WeightsRole::kCONSTANT, weights)};
         case DataType::kBOOL:
         case DataType::kUINT8:
         case DataType::kFP8:
@@ -1590,7 +1611,7 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
     time_point const refitEndTime{std::chrono::steady_clock::now()};
 
     sample::gLogInfo << "Engine refitted"
-        << " in " << durationMs(refitEndTime - refitStartTime).count() / loop << " ms." << std::endl;
+                     << " in " << durationMs(refitEndTime - refitStartTime).count() / loop << " ms." << std::endl;
     return true;
 }
 
@@ -1600,7 +1621,8 @@ void* initSafeRuntime()
 {
     void* handle{nullptr};
 #if !defined(_WIN32)
-    std::string const dllName{samplesCommon::isDebug() ? "libnvinfer_safe_debug.so.8" : "libnvinfer_safe.so.8"};
+    std::string const dllName{samplesCommon::isDebug() ? "libnvinfer_safe_debug.so." + std::to_string(NV_TENSORRT_MAJOR)
+                                                       : "libnvinfer_safe.so." + std::to_string(NV_TENSORRT_MAJOR)};
 #if SANITIZER_BUILD
     handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
 #else
@@ -1614,7 +1636,9 @@ void* initConsistencyCheckerLibrary()
 {
     void* handle{nullptr};
 #if !defined(_WIN32)
-    std::string const dllName{samplesCommon::isDebug() ? "libnvinfer_checker_debug.so.8" : "libnvinfer_checker.so.8"};
+    std::string const dllName{samplesCommon::isDebug()
+            ? "libnvinfer_checker_debug.so." + std::to_string(NV_TENSORRT_MAJOR)
+            : "libnvinfer_checker.so." + std::to_string(NV_TENSORRT_MAJOR)};
 #if SANITIZER_BUILD
     handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
 #else

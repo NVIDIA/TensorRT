@@ -432,7 +432,7 @@ public:
     //! \brief Whether the tensor is a shape tensor.
     //!
     //! A shape tensor is a tensor that is related to shape calculations.
-    //! It must have type Int32, Bool, or Float, and its shape must be determinable at build time.
+    //! It must have type Int32, Int64, Bool, or Float, and its shape must be determinable at build time.
     //! Furthermore, it must be needed as a shape tensor, either marked as a network shape
     //! output via markOutputForShapes(), or as a layer input that is required to be a shape
     //! tensor, such as the second input to IShuffleLayer. Some layers are "polymorphic" in
@@ -450,7 +450,7 @@ public:
     //!
     //! If a tensor is a shape tensor and becomes an engine input or output,
     //! then ICudaEngine::isShapeBinding will be true for that tensor.
-    //! Such a shape tensor must have type Int32.
+    //! Such a shape tensor must have type Int32 or Int64.
     //!
     //! It is possible for a tensor to be both a shape tensor and an execution tensor.
     //!
@@ -1076,7 +1076,7 @@ public:
     //!
     //! \see getKernelSize()
     //!
-    //! \deprecated Superseded by setKernelSizeNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setKernelSizeNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setKernelSize(DimsHW kernelSize) noexcept
     {
@@ -1088,7 +1088,7 @@ public:
     //!
     //! \see setKernelSize()
     //!
-    //! \deprecated Superseded by getKernelSizeNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getKernelSizeNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getKernelSize() const noexcept
     {
@@ -1126,7 +1126,7 @@ public:
     //!
     //! \see getStride()
     //!
-    //! \deprecated Superseded by setStrideNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setStrideNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setStride(DimsHW stride) noexcept
     {
@@ -1136,7 +1136,7 @@ public:
     //!
     //! \brief Get the stride of the convolution.
     //!
-    //! \deprecated Superseded by getStrideNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getStrideNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getStride() const noexcept
     {
@@ -1156,7 +1156,7 @@ public:
     //!
     //! \see getPadding()
     //!
-    //! \deprecated Superseded by setPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setPadding(DimsHW padding) noexcept
     {
@@ -1168,7 +1168,7 @@ public:
     //!
     //! \see setPadding()
     //!
-    //! \deprecated Superseded by getPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getPadding() const noexcept
     {
@@ -1263,7 +1263,7 @@ public:
     //!
     //! \see getDilation()
     //!
-    //! \deprecated Superseded by setDilationNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setDilationNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setDilation(DimsHW dilation) noexcept
     {
@@ -1275,7 +1275,7 @@ public:
     //!
     //! \see setDilation()
     //!
-    //! \deprecated Superseded by getDilationNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getDilationNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getDilation() const noexcept
     {
@@ -1769,7 +1769,7 @@ public:
     //!
     //! \see getWindowSize()
     //!
-    //! \deprecated Superseded by setWindowSizeNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setWindowSizeNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setWindowSize(DimsHW windowSize) noexcept
     {
@@ -1781,7 +1781,7 @@ public:
     //!
     //! \see setWindowSize()
     //!
-    //! \deprecated Superseded by getWindowSizeNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getWindowSizeNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getWindowSize() const noexcept
     {
@@ -1797,7 +1797,7 @@ public:
     //!
     //! \see getStride()
     //!
-    //! \deprecated Superseded by setStrideNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setStrideNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setStride(DimsHW stride) noexcept
     {
@@ -1809,7 +1809,7 @@ public:
     //!
     //! \see setStride()
     //!
-    //! \deprecated Superseded by getStrideNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getStrideNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getStride() const noexcept
     {
@@ -1825,7 +1825,7 @@ public:
     //!
     //! \see getPadding()
     //!
-    //! \deprecated Superseded by setPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setPadding(DimsHW padding) noexcept
     {
@@ -1839,7 +1839,7 @@ public:
     //!
     //! \see setPadding()
     //!
-    //! \deprecated Superseded by getPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getPadding() const noexcept
     {
@@ -2483,7 +2483,7 @@ public:
     //!
     //! \see getKernelSize()
     //!
-    //! \deprecated Superseded by setKernelSizeNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setKernelSizeNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setKernelSize(DimsHW kernelSize) noexcept
     {
@@ -2495,7 +2495,7 @@ public:
     //!
     //! \see setKernelSize()
     //!
-    //! \deprecated Superseded by getKernelSizeNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getKernelSizeNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getKernelSize() const noexcept
     {
@@ -2533,7 +2533,7 @@ public:
     //!
     //! \see getStride()
     //!
-    //! \deprecated Superseded by setStrideNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setStrideNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setStride(DimsHW stride) noexcept
     {
@@ -2545,7 +2545,7 @@ public:
     //!
     //! Default: (1,1)
     //!
-    //! \deprecated Superseded by getStrideNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getStrideNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getStride() const noexcept
     {
@@ -2565,7 +2565,7 @@ public:
     //!
     //! \see getPadding()
     //!
-    //! \deprecated Superseded by setPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setPadding(DimsHW padding) noexcept
     {
@@ -2579,7 +2579,7 @@ public:
     //!
     //! \see setPadding()
     //!
-    //! \deprecated Superseded by getPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getPadding() const noexcept
     {
@@ -2875,9 +2875,10 @@ protected:
 //!
 //! Operations kAND, kOR, and kXOR must have inputs of DataType::kBOOL.
 //!
-//! Operation kPOW must have inputs of DataType::kFLOAT, DataType::kHALF, or DataType::kINT8.
+//! Operation kPOW must have inputs of floating-point type or DataType::kINT8.
 //!
-//! All other operations must have inputs of DataType::kFLOAT, DataType::kHALF, DataType::kINT8, or DataType::kINT32.
+//! All other operations must have inputs of floating-point type, DataType::kINT8, DataType::kINT32, or
+//! DataType::kINT64.
 //!
 //! \see IElementWiseLayer
 //!
@@ -3030,7 +3031,7 @@ constexpr inline int32_t EnumMax<GatherMode>() noexcept
 //!     GatherMode::kELEMENT:
 //!         The output dimensions match the dimensions of the indices tensor.
 //!
-//! The types of Data and Output must be the same, and Indices shall be DataType::kINT32.
+//! The types of Data and Output must be the same, and Indices shall be DataType::kINT32 or DataType::kINT64.
 //!
 //! How the elements of Data are gathered depends on the mode:
 //!
@@ -3341,8 +3342,7 @@ constexpr inline int32_t EnumMax<RNNGateType>() noexcept
 //!
 //! This layer supersedes IRNNLayer.
 //!
-//! \deprecated Deprecated prior to TensorRT 8.0 and will be removed in 9.0. Superseded by
-//! INetworkDefinition::addLoop().
+//! \deprecated Deprecated prior to TensorRT 8.0. Superseded by INetworkDefinition::addLoop().
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -3661,11 +3661,12 @@ protected:
 //!
 //! Operations kNOT must have inputs of DataType::kBOOL.
 //!
-//! Operation kSIGN must have inputs of DataType::kFLOAT, DataType::kHALF, DataType::kINT8, or DataType::kINT32.
+//! Operation kSIGN and kABS must have inputs of floating-point type, DataType::kINT8, DataType::kINT32 or
+//! DataType::kINT64.
 //!
-//! Operation kISINF must have inputs of DataType::kFLOAT or DataType::kHALF.
+//! Operation kISINF must have inputs of floating-point type.
 //!
-//! All other operations must have inputs of DataType::kFLOAT, DataType::kHALF, or DataType::kINT8.
+//! All other operations must have inputs of floating-point type.
 //!
 //! Operations kSIGN and kROUND are not supported in implicit batch mode.
 //!
@@ -3880,7 +3881,7 @@ public:
     //!
     //! \see getPrePadding
     //!
-    //! \deprecated Superseded by setPrePaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setPrePaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setPrePadding(DimsHW padding) noexcept
     {
@@ -3892,7 +3893,7 @@ public:
     //!
     //! \see setPrePadding
     //!
-    //! \deprecated Superseded by getPrePaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getPrePaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getPrePadding() const noexcept
     {
@@ -3906,7 +3907,7 @@ public:
     //!
     //! \see getPostPadding
     //!
-    //! \deprecated Superseded by setPostPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by setPostPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED void setPostPadding(DimsHW padding) noexcept
     {
@@ -3918,7 +3919,7 @@ public:
     //!
     //! \see setPostPadding
     //!
-    //! \deprecated Superseded by getPostPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by getPostPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED DimsHW getPostPadding() const noexcept
     {
@@ -4713,6 +4714,10 @@ public:
     //!
     //! \brief Set cast layer output type.
     //!
+    //! \param toType The DataType of the output tensor.
+    //!
+    //! Set the output type of the cast layer.
+    //!
     void setToType(DataType toType) noexcept
     {
         mImpl->setToType(toType);
@@ -4720,6 +4725,9 @@ public:
 
     //!
     //! \brief Return cast layer output type.
+    //!
+    //! \return toType parameter set during layer creation or by setToType().
+    //! The return value is the output type of the cast layer.
     //!
     DataType getToType() const noexcept
     {
@@ -4745,9 +4753,8 @@ public:
     //!
     //! \brief Set the weights for the layer.
     //!
-    //! If weights.type is DataType::kINT32, the output is a tensor of 32-bit indices.
-    //! Otherwise the output is a tensor of real values and the output type will be
-    //! follow TensorRT's normal precision rules.
+    //! The output type is weights.type. If the network is weakly typed and the weights have a real type,
+    //! the output type might be different per TensorRT's type conversion rules.
     //!
     //! \see getWeights()
     //!
@@ -5586,7 +5593,7 @@ public:
     //! The indices in the kCONCATENATE or kREVERSE cases are as follows:
     //!
     //! - 0: Contribution to the output tensor.  The contribution must come from inside the loop.
-    //! - 1: The concatenation length scalar value, must come from outside the loop, as a 0D Int32 shape tensor.
+    //! - 1: The concatenation length scalar value, must come from outside the loop, as a 0D Int32 or Int64 shape tensor.
     //!
     //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
@@ -6002,6 +6009,110 @@ public:
     //!
     using ILayer::setInput;
 
+    //!
+    //! \brief Set the alpha parameter with int64 datatype.
+    //!
+    //! \param alpha has different meanings for each operator:
+    //!
+    //! Operation          | Usage
+    //! kLINSPACE          | the start value, defaults to 0;
+    //! kRANDOM_UNIFORM    | the minimum value, defaults to 0;
+    //! kRANDOM_NORMAL     | the mean of the normal distribution, default is 0;
+    //!
+    //! If a third input had been used to create this layer, that input is reset to null by this method.
+    //!
+    //! \see getAlphaInt64
+    //
+    void setAlphaInt64(int64_t alpha) noexcept
+    {
+        mImpl->setAlphaInt64(alpha);
+    }
+
+    //!
+    //! \brief Get the value of alpha parameter with int64 datatype.
+    //!
+    //! \return A int64 value of alpha.
+    //!
+    //! If the second input is present and non-null,
+    //! this function returns -1.
+    //!
+    //! \see setAlphaInt64
+    //!
+    int64_t getAlphaInt64() const noexcept
+    {
+        return mImpl->getAlphaInt64();
+    }
+
+    //!
+    //! \brief Set the beta parameter with int64 datatype.
+    //!
+    //! \param beta has different meanings for each operator:
+    //!
+    //! Operation          | Usage
+    //! kLINSPACE          | the delta value, defaults to 1;
+    //! kRANDOM_UNIFORM    | the maximal value, defaults to 1;
+    //! kRANDOM_NORMAL     | the standard deviation of the normal distribution, default is 1;
+    //!
+    //! If a third input had been used to create this layer, that input is reset to null by this method.
+    //!
+    //! \see getBetaInt64
+    //!
+    void setBetaInt64(int64_t beta) noexcept
+    {
+        mImpl->setBetaInt64(beta);
+    }
+
+    //!
+    //! \brief Get the value of beta parameter with int64 datatype.
+    //!
+    //! \return A int64 value of beta.
+    //!
+    //! If the third input is present and non-null,
+    //! this function returns -1.0.
+    //!
+    //! \see setBetaInt64
+    //!
+    int64_t getBetaInt64() const noexcept
+    {
+        return mImpl->getBetaInt64();
+    }
+
+    //!
+    //! \brief Return true if alpha/beta have type int64, false if they have type double.
+    //!
+    bool isAlphaBetaInt64() const noexcept
+    {
+        return mImpl->isAlphaBetaInt64();
+    }
+
+    //!
+    //! \brief Set the fill layer output type.
+    //!
+    //! \param toType The DataType of the output tensor.
+    //!
+    //! Set the output type of the fill layer. Valid values are DataType::kFLOAT, DataType::kINT32,
+    //! and DataType::kINT64.
+    //! This is equivalent to using setOutputType on the layer outside of strongly typed mode.
+    //! In strongly typed mode, setOutputType cannot be used and setToType must be used instead.
+    //! The value toType must be consistent with the value set by any prior and subsequent setOutputType calls.
+    //!
+    void setToType(DataType toType) noexcept
+    {
+        mImpl->setToType(toType);
+    }
+
+    //!
+    //! \brief Get the fill layer output type.
+    //!
+    //! \return toType parameter set during layer creation or by setToType().
+    //! The return value is the output type of the fill layer.
+    //! The default value is DataType::kFLOAT.
+    //!
+    DataType getToType() const noexcept
+    {
+        return mImpl->getToType();
+    }
+
 protected:
     virtual ~IFillLayer() noexcept = default;
     apiv::VFillLayer* mImpl;
@@ -6091,6 +6202,33 @@ public:
         mImpl->setAxis(axis);
     }
 
+    //!
+    //! \brief Set the Quantize layer output type.
+    //!
+    //! \param toType The DataType of the output tensor.
+    //!
+    //! Set the output type of the quantize layer. Valid values are DataType::kINT8 and DataType::kFP8.
+    //! This is equivalent to using setOutputType on the layer outside of strongly typed mode.
+    //! In strongly typed mode, setOutputType cannot be used and users must use setToType instead.
+    //! The value toType must be consistent with the value set by any prior setOutputType calls.
+    //!
+    void setToType(DataType toType) noexcept
+    {
+        mImpl->setToType(toType);
+    }
+
+    //!
+    //! \brief Get the Quantize layer output type.
+    //!
+    //! \return toType parameter set during layer creation or by setToType().
+    //! The return value is the output type of the quantize layer.
+    //! The default value is DataType::kINT8.
+    //!
+    DataType getToType() const noexcept
+    {
+        return mImpl->getToType();
+    }
+
 protected:
     virtual ~IQuantizeLayer() noexcept = default;
     apiv::VQuantizeLayer* mImpl;
@@ -6177,6 +6315,33 @@ public:
         mImpl->setAxis(axis);
     }
 
+    //!
+    //! \brief Set the Dequantize layer output type.
+    //!
+    //! \param toType The DataType of the output tensor.
+    //!
+    //! Set the output type of the dequantize layer. Valid values are DataType::kFLOAT and DataType::kHALF.
+    //! This is equivalent to using setOutputType on the layer outside of strongly typed mode.
+    //! In strongly typed mode, setOutputType cannot be used and users must use setToType instead.
+    //! The value toType must be consistent with the value set by any prior setOutputType calls.
+    //!
+    void setToType(DataType toType) noexcept
+    {
+        mImpl->setToType(toType);
+    }
+
+    //!
+    //! \brief Return Dequantize layer output type.
+    //!
+    //! \return toType parameter set during layer creation or by setToType().
+    //! The return value is the output type of the quantize layer.
+    //! The default value is DataType::kFLOAT.
+    //!
+    DataType getToType() const noexcept
+    {
+        return mImpl->getToType();
+    }
+
 protected:
     virtual ~IDequantizeLayer() noexcept = default;
     apiv::VDequantizeLayer* mImpl;
@@ -6198,9 +6363,9 @@ protected:
 //! means that those axes will be multiplied. Omitting a label from the output means values along those axes will be
 //! summed. In implicit mode, the indices which appear once in the expression will be part of the output in increasing
 //! alphabetical order. In explicit mode, the output can be controlled by specifying output subscript labels by adding
-//! an arrow (‘->’) followed by subscripts for the output.
-//! For example, “ij,jk->ik” is equivalent to “ij,jk”.
-//! Ellipsis (‘...’) can be used in place of subscripts to broadcast the dimensions.
+//! an arrow ('->') followed by subscripts for the output.
+//! For example, "ij,jk->ik" is equivalent to "ij,jk".
+//! Ellipsis ('...') can be used in place of subscripts to broadcast the dimensions.
 //! See the TensorRT Developer Guide for more details on equation syntax.
 //!
 //! Many common operations can be expressed using the Einsum equation.
@@ -6290,7 +6455,7 @@ constexpr inline int32_t EnumMax<ScatterMode>() noexcept
 //!       Scattermode::kELEMENT: s = q = r
 //! * Output is a tensor with the same dimensions as Data that stores the resulting values of the
 //!   transformation. It must not be a shape tensor.
-//! The types of Data, Update, and Output shall be the same, and Indices shall be DataType::kINT32.
+//! The types of Data, Update, and Output shall be the same, and Indices shall be DataType::kINT32 or DataType::kINT64.
 //!
 //! The output is computed by copying the data, and then updating elements of it based on indices.
 //! How Indices are interpreted depends upon the ScatterMode.
@@ -6386,8 +6551,7 @@ protected:
 //!   The depth tensor must be a build-time constant, and its value should be positive.
 //! * Output is a tensor with rank = rank(indices)+1, where the added dimension contains the one-hot encoding.
 //!   The data types of Output is equal to the Values data type.
-//! * Axis is a scaler specifying to which dimension of the output one-hot encoding is added.
-//!   Axis defaults to -1, that is the new dimension in the output is its final dimension.
+//! * Axis is a scalar specifying to which dimension of the output one-hot encoding is added.
 //!   Valid range for axis is -rank(indices)-1 <= axis <= rank(indices).
 //!
 //! The output is computed by copying off_values to all output elements, then setting on_value on the indices
@@ -6936,7 +7100,7 @@ public:
     //!
     //! \return The new convolution layer, or nullptr if it could not be created.
     //!
-    //! \deprecated Superseded by addConvolutionNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by addConvolutionNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED IConvolutionLayer* addConvolution(
         ITensor& input, int32_t nbOutputMaps, DimsHW kernelSize, Weights kernelWeights, Weights biasWeights) noexcept
@@ -6977,7 +7141,8 @@ public:
     //! output for activations that require these parameters.
     //!
     //! \see IActivationLayer ActivationType
-    //! \warning Int32 tensors are not valid input tensors.
+    //!
+    //! \warning Int32 and Int64 are valid only for activation type kRELU.
     //!
     //! \return The new activation layer, or nullptr if it could not be created.
     //!
@@ -6998,7 +7163,7 @@ public:
     //!
     //! \return The new pooling layer, or nullptr if it could not be created.
     //!
-    //! \deprecated Superseded by addPoolingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by addPoolingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED IPoolingLayer* addPooling(ITensor& input, PoolingType type, DimsHW windowSize) noexcept
     {
@@ -7097,7 +7262,7 @@ public:
     //!
     //! \return The new deconvolution layer, or nullptr if it could not be created.
     //!
-    //! \deprecated Superseded by addDeconvolutionNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by addDeconvolutionNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED IDeconvolutionLayer* addDeconvolution(
         ITensor& input, int32_t nbOutputMaps, DimsHW kernelSize, Weights kernelWeights, Weights biasWeights) noexcept
@@ -7164,7 +7329,7 @@ public:
     //!
     //! \return The new padding layer, or nullptr if it could not be created.
     //!
-    //! \deprecated Superseded by addPaddingNd. Deprecated prior to TensorRT 8.0 and will be removed in 9.0
+    //! \deprecated Superseded by addPaddingNd. Deprecated prior to TensorRT 8.0.
     //!
     TRT_DEPRECATED IPaddingLayer* addPadding(ITensor& input, DimsHW prePadding, DimsHW postPadding) noexcept
     {
@@ -7190,7 +7355,7 @@ public:
     //!
     //! \param indices - tensor containing indices where on_value should be set.
     //! \param values - a 2-element tensor, consisting of [off_value, on_value].
-    //! \param depth - tensor containing the width of the added one-hot dimension.
+    //! \param depth - a shape tensor containing the width of the added one-hot dimension.
     //! \param axis - the axis to add the one-hot encoding to.
     //!
     //! \see IOneHotLayer
@@ -7316,7 +7481,7 @@ public:
     //!
     //! \see IReduceLayer
     //!
-    //! \warning If output is an Int32 shape tensor, ReduceOperation::kAVG is unsupported.
+    //! \warning If output is an Int32 or Int64 shape tensor, ReduceOperation::kAVG is unsupported.
     //!
     //! \return The new reduce layer, or nullptr if it could not be created.
     //!
@@ -7350,8 +7515,6 @@ public:
     //!        Currently reduceAxes must specify exactly one dimension, and it must be one of the last four dimensions.
     //!
     //! \see ITopKLayer
-    //!
-    //! \warning Int32 tensors are not valid input tensors.
     //!
     //! \return The new TopK layer, or nullptr if it could not be created.
     //!
@@ -7530,7 +7693,7 @@ public:
     //!
     //! \see IRNNv2Layer
     //!
-    //! \deprecated Deprecated prior to TensorRT 8.0 and will be removed in 9.0. Superseded by
+    //! \deprecated Deprecated prior to TensorRT 8.0. Superseded by
     //! INetworkDefinition::addLoop().
     //!
     //! \warning RNN inputs do not support wildcard dimensions or explicit batch size networks.
@@ -7708,6 +7871,28 @@ public:
     bool hasImplicitBatchDimension() const noexcept
     {
         return mImpl->hasImplicitBatchDimension();
+    }
+
+    //!
+    //! \brief Get the network definition creation flags for this network definition object. Defaults to 0.
+    //!
+    //! \return The network definition creation options as a bitmask.
+    //!
+    NetworkDefinitionCreationFlags getFlags() const noexcept
+    {
+        return mImpl->getFlags();
+    }
+
+    //!
+    //! \brief Returns true if the network definition creation flag is set
+    //!
+    //! \see getFlags()
+    //!
+    //! \return True if flag is set, false if unset.
+    //!
+    bool getFlag(NetworkDefinitionCreationFlag networkDefinitionCreationFlag) const noexcept
+    {
+        return mImpl->getFlag(networkDefinitionCreationFlag);
     }
 
     //!
@@ -7964,10 +8149,11 @@ public:
 
     //! \brief Add a fill layer to the network.
     //!
-    //! \param dimensions The output tensor dimensions.
+    //! \param dimensions The output tensor dimensions if input 0 is missing.
     //! \param op The fill operation that the layer applies.
     //!
-    //! \warning For FillOperation::kLINSPACE, dimensions.nbDims must be 1.
+    //! \warning For FillOperation::kLINSPACE, dimensions.nbDims must be 1 for static start/delta. If delta is provided
+    //! as a 1D tensor, the length of delta must match dimensions.nbDims.
     //!
     //! This layer is non-deterministic across subsequent calls as the same inputs will produce different
     //! output tensors if \p op is either FillOperation::kRANDOM_UNIFORM or FillOperation::kRANDOM_NORMAL
@@ -7980,9 +8166,38 @@ public:
     //!
     //! \return The new fill layer, or nullptr if it could not be created.
     //!
-    IFillLayer* addFill(Dims dimensions, FillOperation op) noexcept
+    //! \deprecated Deprecated in TensorRT 9.0. Superseded by three-argument addFill.
+    //!
+    TRT_DEPRECATED IFillLayer* addFill(Dims dimensions, FillOperation op) noexcept
     {
         return mImpl->addFill(dimensions, op);
+    }
+
+    //! \brief Add a fill layer to the network.
+    //!
+    //! \param dimensions The output tensor dimensions if input 0 is missing.
+    //! \param op The fill operation that the layer applies.
+    //! \param outputType Optional output tensor data type, must be DataType::kFLOAT, DataType::kHALF, DataType::kINT32,
+    //! or DataType::kINT64. This parameter is only used for static alpha/beta. Future calls to set output type using
+    //! setToType or setOutputType must be consistent.
+    //!
+    //! \warning For FillOperation::kLINSPACE, dimensions.nbDims must be 1 for static start/delta. If delta is provided
+    //! as a 1D tensor, the length of delta must match dimensions.nbDims.
+    //!
+    //! This layer is non-deterministic across subsequent calls as the same inputs will produce different
+    //! output tensors if \p op is either FillOperation::kRANDOM_UNIFORM or FillOperation::kRANDOM_NORMAL
+    //! due to random state being shared across calls. The output tensors generated are deterministic when
+    //! starting from the same initial state.
+    //!
+    //! The network must not have an implicit batch dimension.
+    //!
+    //! \see IFillLayer
+    //!
+    //! \return The new fill layer, or nullptr if it could not be created.
+    //!
+    IFillLayer* addFill(Dims dimensions, FillOperation op, DataType outputType) noexcept
+    {
+        return mImpl->addFillV2(dimensions, op, outputType);
     }
 
     //! \brief Add a padding layer to the network. Only 2D padding is currently supported.
@@ -7995,9 +8210,7 @@ public:
     //!
     //! \return The new padding layer, or nullptr if it could not be created.
     //!
-    //! \deprecated Deprecated in TensorRT 8.0. Superseded by addSlice().
-    //!
-    TRT_DEPRECATED IPaddingLayer* addPaddingNd(ITensor& input, Dims prePadding, Dims postPadding) noexcept
+    IPaddingLayer* addPaddingNd(ITensor& input, Dims prePadding, Dims postPadding) noexcept
     {
         return mImpl->addPaddingNd(input, prePadding, postPadding);
     }
@@ -8067,15 +8280,38 @@ public:
     //!
     //! \see IDequantizeLayer
     //!
-    //! \p input tensor data type must be DataType::kFLOAT.
+    //! \p input tensor data type must be DataType::kINT8/DataType::kFP8.
     //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
     //! be a build-time constant.
     //!
     //! \return The new quantization layer, or nullptr if it could not be created.
     //!
-    IDequantizeLayer* addDequantize(ITensor& input, ITensor& scale) noexcept
+    //! \deprecated Deprecated in TensorRT 9.0. Superseded by three-argument addDequantize.
+    //!
+    TRT_DEPRECATED IDequantizeLayer* addDequantize(ITensor& input, ITensor& scale) noexcept
     {
         return mImpl->addDequantize(input, scale);
+    }
+
+    //!
+    //! \brief Add a dequantization layer to the network.
+    //!
+    //! \param input The input tensor to be dequantized.
+    //! \param scale A tensor with the scale value.
+    //!
+    //! \see IDequantizeLayer
+    //!
+    //! \p input tensor data type must be DataType::kINT8/DataType::kFP8.
+    //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
+    //! be a build-time constant.
+    //! \p outputType output tensor data type, default value is DataType::kFLOAT. Future calls to set output type using
+    //! setToType or setOutputType must be consistent.
+    //!
+    //! \return The new quantization layer, or nullptr if it could not be created.
+    //!
+    IDequantizeLayer* addDequantize(ITensor& input, ITensor& scale, DataType outputType) noexcept
+    {
+        return mImpl->addDequantizeV2(input, scale, outputType);
     }
 
     //!
@@ -8106,15 +8342,38 @@ public:
     //!
     //! \see IQuantizeLayer
     //!
-    //! \p input tensor data type must be DataType::kFLOAT.
+    //! \p input tensor data type must be DataType::kFLOAT/DataType::kHALF.
     //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
     //! be a build-time constant.
     //!
     //! \return The new quantization layer, or nullptr if it could not be created.
     //!
-    IQuantizeLayer* addQuantize(ITensor& input, ITensor& scale) noexcept
+    //! \deprecated Deprecated in TensorRT 9.0. Superseded by three-argument addQuantize.
+    //!
+    TRT_DEPRECATED IQuantizeLayer* addQuantize(ITensor& input, ITensor& scale) noexcept
     {
         return mImpl->addQuantize(input, scale);
+    }
+
+    //!
+    //! \brief Add a quantization layer to the network.
+    //!
+    //! \param input The input tensor to be quantized.
+    //! \param scale A tensor with the scale value.
+    //!
+    //! \see IQuantizeLayer
+    //!
+    //! \p input tensor data type must be DataType::kFLOAT/DataType::kHALF.
+    //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
+    //! be a build-time constant.
+    //! \p outputType output tensor data type, must be DataType::kINT8 (default) or DataType::kFP8. Future calls to set
+    //! output type using setToType or setOutputType must be consistent.
+    //!
+    //! \return The new quantization layer, or nullptr if it could not be created.
+    //!
+    IQuantizeLayer* addQuantize(ITensor& input, ITensor& scale, DataType outputType) noexcept
+    {
+        return mImpl->addQuantizeV2(input, scale, outputType);
     }
 
     //!
@@ -8848,8 +9107,19 @@ enum class BuilderFlag : int32_t
     kEXCLUDE_LEAN_RUNTIME = 16,
 
     //! Enable FP8 layer selection, with FP32 fallback.
-    //! \warning kFP8 is not supported yet and will result in an error or undefined behavior.
-    kFP8 = 17
+    //!
+    //! This flag is not supported with hardware-compatibility mode.
+    //!
+    //! \see HardwareCompatibilityLevel
+    kFP8 = 17,
+
+    //! Emit error when a tactic being timed is not present in the timing cache.
+    //! This flag has an effect only when IBuilderConfig has an associated ITimingCache.
+    kERROR_ON_TIMING_CACHE_MISS = 18,
+
+    //! Enable DataType::kBF16 layer selection, with FP32 fallback.
+    //! This flag is only supported by NVIDIA Ampere and later GPUs.
+    kBF16 = 19,
 };
 
 //!
@@ -8860,7 +9130,7 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 18;
+    return 20;
 }
 
 //!
@@ -9009,7 +9279,7 @@ enum class PreviewFeature : int32_t
     //!
     //! The default value for this flag is on.
     //!
-    //! \deprecated Turning it off is deprecated in TensorRT 8.6. The flag kFASTER_DYNAMIC_SHAPES_0805 will be removed in 9.0.
+    //! \deprecated Turning it off is deprecated in TensorRT 8.6.
     //!
     kFASTER_DYNAMIC_SHAPES_0805 TRT_DEPRECATED_ENUM = 0,
 
@@ -9079,6 +9349,78 @@ struct EnumMaxImpl<HardwareCompatibilityLevel>
     static constexpr int32_t kVALUE = 2;
 };
 } // namespace impl
+
+//!
+//! \class IProgressMonitor
+//!
+//! \brief Application-implemented progress reporting interface for TensorRT.
+//!
+//! The IProgressMonitor is a user-defined object that TensorRT uses to report back when an internal algorithm has
+//! started or finished a phase to help provide feedback on the progress of the optimizer.
+//!
+//! The IProgressMonitor will trigger its start function when a phase is entered and will trigger its finish function
+//! when that phase is exited. Each phase consists of one or more steps. When each step is completed, the stepComplete
+//! function is triggered. This will allow an application using the builder to communicate progress relative to when the
+//! optimization step is expected to complete.
+//!
+//! The implementation of IProgressMonitor must be thread-safe so that it can be called from multiple internal threads.
+//! The lifetime of the IProgressMonitor must exceed the lifetime of all TensorRT objects that use it.
+//!
+class IProgressMonitor
+{
+public:
+    IProgressMonitor() = default;
+    virtual ~IProgressMonitor() noexcept = default;
+
+    //!
+    //! \brief Signal that a phase of the optimizer has started.
+    //!
+    //! \param phaseName The name of this phase for tracking purposes.
+    //! \param parentPhase The parent phase that this phase belongs to, or nullptr if there is no parent.
+    //! \param nbSteps The number of steps that are involved in this phase.
+    //!
+    //! The phaseStart function signals to the application that the current phase is beginning, and that it has a
+    //! certain number of steps to perform. If \p phaseParent is nullptr, then the phaseStart is beginning an
+    //! independent phase, and if \p phaseParent is specified, then the current phase, specified by \p phaseName, is
+    //! within the scope of the parent phase. \p nbSteps will always be a positive number. The phaseStart function
+    //! implies that the first step is being executed. TensorRT will signal when each step is complete.
+    //!
+    //! Phase names are human readable English strings which are unique within a single phase hierarchy but which can be
+    //! reused once the previous instance has completed. Phase names and their hierarchies may change between versions
+    //! of TensorRT.
+    //!
+    //! \see phaseFinish
+    //!
+    virtual void phaseStart(char const* phaseName, char const* parentPhase, int32_t nbSteps) noexcept = 0;
+
+    //!
+    //! \brief Signal that a step of an optimizer phase has finished.
+    //!
+    //! \param phaseName The name of the innermost phase being executed.
+    //! \param step The step number that was completed.
+    //!
+    //! The stepComplete function signals to the application that TensorRT has finished the current \p step for the
+    //! phase \p phaseName, and will move onto the next step if there is one. The application can return false for
+    //! TensorRT to exit the build early. The step value will increase on subsequent calls in the range [0, nbSteps).
+    //!
+    //! \return true to continue to the next step or false to stop the build.
+    //!
+    virtual bool stepComplete(char const* phaseName, int32_t step) noexcept = 0;
+
+    //!
+    //! \brief Signal that a phase of the optimizer has finished.
+    //!
+    //! \param phaseName The name of the phase that has finished.
+    //!
+    //! The phaseFinish function signals to the application that the phase is complete. This function may be called
+    //! before all steps in the range [0, nbSteps) have been reported to stepComplete. This scenario can be triggered by
+    //! error handling, internal optimizations, or when stepComplete returns false to request cancellation of the build.
+    //!
+    //! \see phaseStart
+    //!
+    virtual void phaseFinish(char const* phaseName) noexcept = 0;
+
+}; // class IProgressMonitor
 
 //!
 //! \class IBuilderConfig
@@ -9295,7 +9637,7 @@ public:
     //! If DeviceType is not set or is reset, TensorRT will use the default DeviceType set in the builder.
     //!
     //! \note The device type for a layer must be compatible with the safety flow (if specified).
-    //! For example a layer cannot be marked for DLA execution while the builder is configured for kSAFE_GPU.
+    //! For example a layer cannot be marked for DLA execution while the builder is configured for kSAFETY.
     //!
     //! \see getDeviceType()
     //!
@@ -9903,6 +10245,32 @@ public:
         return mImpl->getMaxAuxStreams();
     }
 
+    //!
+    //! \brief Sets the progress monitor for building a network.
+    //!
+    //! \param monitor The progress monitor to assign to the IBuilderConfig.
+    //!
+    //! The progress monitor signals to the application when different phases of
+    //! the compiler are being executed. Setting to nullptr unsets the monitor so
+    //! that the application is not signaled.
+    //!
+    //! \see IBuilderConfig::getProgressMonitor
+    //!
+    void setProgressMonitor(IProgressMonitor* monitor) noexcept
+    {
+        return mImpl->setProgressMonitor(monitor);
+    }
+
+    //!
+    //! \return The progress monitor set by the application or nullptr.
+    //!
+    //! \see IBuilderConfig::setProgressMonitor
+    //!
+    IProgressMonitor* getProgressMonitor() const noexcept
+    {
+        return mImpl->getProgressMonitor();
+    }
+
 protected:
     apiv::VBuilderConfig* mImpl;
 };
@@ -9935,6 +10303,12 @@ enum class NetworkDefinitionCreationFlag : int32_t
     //! Deprecated. This flag has no effect now, but is only kept for backward compatability.
     //!
     kEXPLICIT_PRECISION TRT_DEPRECATED_ENUM = 1,
+
+    //! Mark the network to be strongly typed.
+    //! Every tensor in the network has a data type defined in the network following only type inference rules and the
+    //! inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network
+    //! output types will be inferred based on the input types and the type inference rules.
+    kSTRONGLY_TYPED = 2,
 };
 
 //!
@@ -9945,7 +10319,7 @@ enum class NetworkDefinitionCreationFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<NetworkDefinitionCreationFlag>() noexcept
 {
-    return 2;
+    return 3;
 }
 
 //!
@@ -10083,9 +10457,18 @@ public:
     //! \brief Create a network definition object
     //!
     //! Creates a network definition object with immutable properties specified using the flags parameter.
+    //!
+    //! createNetworkV2 supports creating network with properties from NetworkDefinitionCreationFlags.
+    //!
     //! CreateNetworkV2 supports dynamic shapes and explicit batch dimensions when used with
     //! NetworkDefinitionCreationFlag::kEXPLICIT_BATCH flag.
     //! Creating a network without NetworkDefinitionCreationFlag::kEXPLICIT_BATCH flag has been deprecated.
+    //!
+    //! createNetworkV2 without NetworkDefinitionCreationFlag::kEXPLICIT_PRECISION flag has been deprecated.
+    //! Explicit precision property of the network can be detected automatically without requiring an explicit flag.
+    //!
+    //! createNetworkV2 with NetworkDefinitionCreationFlag::kSTRONGLY_TYPED flag supports creating a strongly typed plan
+    //! where tensor data types are inferred from network input types and operator type specification.
     //!
     //! \param flags Bitset of NetworkDefinitionCreationFlags specifying network properties combined with bitwise OR.
     //!             e.g., 1U << NetworkDefinitionCreationFlag::kEXPLICIT_BATCH

@@ -17,6 +17,7 @@
 #
 
 from collections import OrderedDict
+from typing import List
 from copy import copy
 import numpy as np
 import onnx
@@ -25,10 +26,8 @@ import os
 import math
 from PIL import Image
 from polygraphy.backend.common import bytes_from_path
-from polygraphy.backend.trt import CreateConfig, Profile
+from polygraphy.backend.trt import CreateConfig, ModifyNetworkOutputs, Profile
 from polygraphy.backend.trt import engine_from_bytes, engine_from_network, network_from_onnx_path, save_engine
-from polygraphy.backend.trt import util as trt_util
-from polygraphy import cuda
 import random
 from scipy import integrate
 import tensorrt as trt
@@ -36,6 +35,7 @@ import torch
 import requests
 from io import BytesIO
 from cuda import cudart
+from enum import Enum, auto
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
@@ -68,6 +68,31 @@ def CUASSERT(cuda_ret):
         return cuda_ret[1]
     return None
 
+class PIPELINE_TYPE(Enum):
+    TXT2IMG = auto()
+    IMG2IMG = auto()
+    INPAINT = auto()
+    SD_XL_BASE = auto()
+    SD_XL_REFINER = auto()
+
+    def is_txt2img(self):
+        return self == self.TXT2IMG
+
+    def is_img2img(self):
+        return self == self.IMG2IMG
+
+    def is_inpaint(self):
+        return self == self.INPAINT
+
+    def is_sd_xl_base(self):
+        return self == self.SD_XL_BASE
+
+    def is_sd_xl_refiner(self):
+        return self == self.SD_XL_REFINER
+
+    def is_sd_xl(self):
+        return self.is_sd_xl_base() or self.is_sd_xl_refiner()
+
 class Engine():
     def __init__(
         self,
@@ -81,7 +106,6 @@ class Engine():
         self.cuda_graph_instance = None # cuda graph
 
     def __del__(self):
-        [buf.free() for buf in self.buffers.values() if isinstance(buf, cuda.DeviceArray) ]
         del self.engine
         del self.context
         del self.buffers
@@ -190,7 +214,7 @@ class Engine():
             print("Failed to refit!")
             exit(0)
 
-    def build(self, onnx_path, fp16, input_profile=None, enable_refit=False, enable_preview=False, enable_all_tactics=False, timing_cache=None, workspace_size=0):
+    def build(self, onnx_path, fp16, input_profile=None, enable_refit=False, enable_preview=False, enable_all_tactics=False, timing_cache=None, update_output_names=None):
         print(f"Building TensorRT engine for {onnx_path}: {self.engine_path}")
         p = Profile()
         if input_profile:
@@ -199,18 +223,15 @@ class Engine():
                 p.add(name, min=dims[0], opt=dims[1], max=dims[2])
 
         config_kwargs = {}
-
-        config_kwargs['preview_features'] = [trt.PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]
-        if enable_preview:
-            # Faster dynamic shapes made optional since it increases engine build time.
-            config_kwargs['preview_features'].append(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805)
-        if workspace_size > 0:
-            config_kwargs['memory_pool_limits'] = {trt.MemoryPoolType.WORKSPACE: workspace_size}
         if not enable_all_tactics:
             config_kwargs['tactic_sources'] = []
 
+        network = network_from_onnx_path(onnx_path, flags=[trt.OnnxParserFlag.NATIVE_INSTANCENORM])
+        if update_output_names:
+            print(f"Updating network outputs to {update_output_names}")
+            network = ModifyNetworkOutputs(network, update_output_names)
         engine = engine_from_network(
-            network_from_onnx_path(onnx_path, flags=[trt.OnnxParserFlag.NATIVE_INSTANCENORM]),
+            network,
             config=CreateConfig(fp16=fp16,
                 refittable=enable_refit,
                 profiles=[p],
@@ -233,7 +254,7 @@ class Engine():
             self.context = self.engine.create_execution_context()
 
     def allocate_buffers(self, shape_dict=None, device='cuda'):
-        for idx in range(trt_util.get_bindings_per_profile(self.engine)):
+        for idx in range(self.engine.num_io_tensors):
             binding = self.engine[idx]
             if shape_dict and binding in shape_dict:
                 shape = shape_dict[binding]
@@ -246,6 +267,7 @@ class Engine():
             self.tensors[binding] = tensor
 
     def infer(self, feed_dict, stream, use_cuda_graph=False):
+        
         for name, buf in feed_dict.items():
             self.tensors[name].copy_(buf)
 
@@ -254,20 +276,20 @@ class Engine():
 
         if use_cuda_graph:
             if self.cuda_graph_instance is not None:
-                CUASSERT(cudart.cudaGraphLaunch(self.cuda_graph_instance, stream.ptr))
-                CUASSERT(cudart.cudaStreamSynchronize(stream.ptr))
+                CUASSERT(cudart.cudaGraphLaunch(self.cuda_graph_instance, stream))
+                CUASSERT(cudart.cudaStreamSynchronize(stream))
             else:
                 # do inference before CUDA graph capture
-                noerror = self.context.execute_async_v3(stream.ptr)
+                noerror = self.context.execute_async_v3(stream)
                 if not noerror:
                     raise ValueError(f"ERROR: inference failed.")
                 # capture cuda graph
-                CUASSERT(cudart.cudaStreamBeginCapture(stream.ptr, cudart.cudaStreamCaptureMode.cudaStreamCaptureModeGlobal))
-                self.context.execute_async_v3(stream.ptr)
-                self.graph = CUASSERT(cudart.cudaStreamEndCapture(stream.ptr))
+                CUASSERT(cudart.cudaStreamBeginCapture(stream, cudart.cudaStreamCaptureMode.cudaStreamCaptureModeGlobal))
+                self.context.execute_async_v3(stream)
+                self.graph = CUASSERT(cudart.cudaStreamEndCapture(stream))
                 self.cuda_graph_instance = CUASSERT(cudart.cudaGraphInstantiate(self.graph, 0))
         else:
-            noerror = self.context.execute_async_v3(stream.ptr)
+            noerror = self.context.execute_async_v3(stream)
             if not noerror:
                 raise ValueError(f"ERROR: inference failed.")
 
@@ -1130,6 +1152,426 @@ class PNDMScheduler():
         noisy_latents = sqrt_alpha_prod * init_latents + sqrt_one_minus_alpha_prod * noise
 
         return noisy_latents
+    
+class UniPCMultistepScheduler():
+    def __init__(
+        self,
+        device = 'cuda',
+        num_train_timesteps: int = 1000,
+        beta_start: float = 0.00085,
+        beta_end: float = 0.012,
+        solver_order: int = 2,
+        prediction_type: str = "epsilon",
+        thresholding: bool = False,
+        dynamic_thresholding_ratio: float = 0.995,
+        sample_max_value: float = 1.0,
+        predict_x0: bool = True,
+        solver_type: str = "bh2",
+        lower_order_final: bool = True,
+        disable_corrector: List[int] = [],
+    ):  
+        self.device = device
+        self.betas = (
+            torch.linspace(beta_start**0.5, beta_end**0.5, num_train_timesteps, dtype=torch.float32) ** 2
+        )
+        
+        self.alphas = 1.0 - self.betas
+        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
+        # Currently we only support VP-type noise schedule
+        self.alpha_t = torch.sqrt(self.alphas_cumprod)
+        self.sigma_t = torch.sqrt(1 - self.alphas_cumprod)
+        self.lambda_t = torch.log(self.alpha_t) - torch.log(self.sigma_t)
+
+        # standard deviation of the initial noise distribution
+        self.init_noise_sigma = 1.0
+
+        self.predict_x0 = predict_x0
+        # setable values
+        self.num_inference_steps = None
+        timesteps = np.linspace(0, num_train_timesteps - 1, num_train_timesteps, dtype=np.float32)[::-1].copy()
+        self.timesteps = torch.from_numpy(timesteps)
+        self.model_outputs = [None] * solver_order
+        self.timestep_list = [None] * solver_order
+        self.lower_order_nums = 0
+        self.disable_corrector = disable_corrector
+        self.last_sample = None
+        self.num_train_timesteps = num_train_timesteps
+        self.solver_order = solver_order
+        self.prediction_type = prediction_type
+        self.thresholding = thresholding
+        self.dynamic_thresholding_ratio = dynamic_thresholding_ratio
+        self.sample_max_value = sample_max_value
+        self.solver_type = solver_type
+        self.lower_order_final = lower_order_final
+
+    def set_timesteps(self, num_inference_steps: int):
+        timesteps = (
+            np.linspace(0, self.num_train_timesteps - 1, num_inference_steps + 1)
+            .round()[::-1][:-1]
+            .copy()
+            .astype(np.int64)
+        )
+
+        # when num_inference_steps == num_train_timesteps, we can end up with
+        # duplicates in timesteps.
+        _, unique_indices = np.unique(timesteps, return_index=True)
+        timesteps = timesteps[np.sort(unique_indices)]
+
+        self.timesteps = torch.from_numpy(timesteps).to(self.device)
+
+        self.num_inference_steps = len(timesteps)
+
+        self.model_outputs = [
+            None,
+        ] * self.solver_order
+        self.lower_order_nums = 0
+        self.last_sample = None
+
+    # Copied from diffusers.schedulers.scheduling_ddpm.DDPMScheduler._threshold_sample
+    def _threshold_sample(self, sample: torch.FloatTensor) -> torch.FloatTensor:
+        dtype = sample.dtype
+        batch_size, channels, height, width = sample.shape
+
+        if dtype not in (torch.float32, torch.float64):
+            sample = sample.float()  # upcast for quantile calculation, and clamp not implemented for cpu half
+
+        # Flatten sample for doing quantile calculation along each image
+        sample = sample.reshape(batch_size, channels * height * width)
+
+        abs_sample = sample.abs()  # "a certain percentile absolute pixel value"
+
+        s = torch.quantile(abs_sample, self.dynamic_thresholding_ratio, dim=1)
+        s = torch.clamp(
+            s, min=1, max=self.sample_max_value
+        )  # When clamped to min=1, equivalent to standard clipping to [-1, 1]
+
+        s = s.unsqueeze(1)  # (batch_size, 1) because clamp will broadcast along dim=0
+        sample = torch.clamp(sample, -s, s) / s  # "we threshold xt0 to the range [-s, s] and then divide by s"
+
+        sample = sample.reshape(batch_size, channels, height, width)
+        sample = sample.to(dtype)
+
+        return sample
+
+    def convert_model_output(
+        self, model_output: torch.FloatTensor, timestep: int, sample: torch.FloatTensor) -> torch.FloatTensor:
+        if self.predict_x0:
+            if self.prediction_type == "epsilon":
+                alpha_t, sigma_t = self.alpha_t[timestep], self.sigma_t[timestep]
+                x0_pred = (sample - sigma_t * model_output) / alpha_t
+            elif self.prediction_type == "sample":
+                x0_pred = model_output
+            elif self.prediction_type == "v_prediction":
+                alpha_t, sigma_t = self.alpha_t[timestep], self.sigma_t[timestep]
+                x0_pred = alpha_t * sample - sigma_t * model_output
+            else:
+                raise ValueError(
+                    f"prediction_type given as {self.prediction_type} must be one of `epsilon`, `sample`, or"
+                    " `v_prediction` for the UniPCMultistepScheduler."
+                )
+
+            if self.thresholding:
+                x0_pred = self._threshold_sample(x0_pred)
+
+            return x0_pred
+        else:
+            if self.prediction_type == "epsilon":
+                return model_output
+            elif self.prediction_type == "sample":
+                alpha_t, sigma_t = self.alpha_t[timestep], self.sigma_t[timestep]
+                epsilon = (sample - alpha_t * model_output) / sigma_t
+                return epsilon
+            elif self.prediction_type == "v_prediction":
+                alpha_t, sigma_t = self.alpha_t[timestep], self.sigma_t[timestep]
+                epsilon = alpha_t * model_output + sigma_t * sample
+                return epsilon
+            else:
+                raise ValueError(
+                    f"prediction_type given as {self.prediction_type} must be one of `epsilon`, `sample`, or"
+                    " `v_prediction` for the UniPCMultistepScheduler."
+                )
+
+    def multistep_uni_p_bh_update(
+        self,
+        model_output: torch.FloatTensor,
+        prev_timestep: int,
+        sample: torch.FloatTensor,
+        order: int,
+    ) -> torch.FloatTensor:
+        
+        timestep_list = self.timestep_list
+        model_output_list = self.model_outputs
+
+        s0, t = self.timestep_list[-1], prev_timestep
+        m0 = model_output_list[-1]
+        x = sample
+
+
+        lambda_t, lambda_s0 = self.lambda_t[t], self.lambda_t[s0]
+        alpha_t, alpha_s0 = self.alpha_t[t], self.alpha_t[s0]
+        sigma_t, sigma_s0 = self.sigma_t[t], self.sigma_t[s0]
+
+        h = lambda_t - lambda_s0
+
+        rks = []
+        D1s = []
+        for i in range(1, order):
+            si = timestep_list[-(i + 1)]
+            mi = model_output_list[-(i + 1)]
+            lambda_si = self.lambda_t[si]
+            rk = (lambda_si - lambda_s0) / h
+            rks.append(rk)
+            D1s.append((mi - m0) / rk)
+
+        rks.append(1.0)
+        rks = torch.tensor(rks, device=self.device)
+
+        R = []
+        b = []
+
+        hh = -h if self.predict_x0 else h
+        h_phi_1 = torch.expm1(hh)  # h\phi_1(h) = e^h - 1
+        h_phi_k = h_phi_1 / hh - 1
+
+        factorial_i = 1
+
+        if self.solver_type == "bh1":
+            B_h = hh
+        elif self.solver_type == "bh2":
+            B_h = torch.expm1(hh)
+        else:
+            raise NotImplementedError()
+
+        for i in range(1, order + 1):
+            R.append(torch.pow(rks, i - 1))
+            b.append(h_phi_k * factorial_i / B_h)
+            factorial_i *= i + 1
+            h_phi_k = h_phi_k / hh - 1 / factorial_i
+
+        R = torch.stack(R)
+        b = torch.tensor(b, device=self.device)
+
+        if len(D1s) > 0:
+            D1s = torch.stack(D1s, dim=1)  # (B, K)
+            # for order 2, we use a simplified version
+            if order == 2:
+                rhos_p = torch.tensor([0.5], dtype=x.dtype, device=self.device)
+            else:
+                rhos_p = torch.linalg.solve(R[:-1, :-1], b[:-1])
+        else:
+            D1s = None
+
+        if self.predict_x0:
+            x_t_ = sigma_t / sigma_s0 * x - alpha_t * h_phi_1 * m0
+            if D1s is not None:
+                pred_res = torch.einsum("k,bkchw->bchw", rhos_p, D1s)
+            else:
+                pred_res = 0
+            x_t = x_t_ - alpha_t * B_h * pred_res
+        else:
+            x_t_ = alpha_t / alpha_s0 * x - sigma_t * h_phi_1 * m0
+            if D1s is not None:
+                pred_res = torch.einsum("k,bkchw->bchw", rhos_p, D1s)
+            else:
+                pred_res = 0
+            x_t = x_t_ - sigma_t * B_h * pred_res
+
+        x_t = x_t.to(x.dtype)
+        return x_t
+
+    def multistep_uni_c_bh_update(
+        self,
+        this_model_output: torch.FloatTensor,
+        this_timestep: int,
+        last_sample: torch.FloatTensor,
+        this_sample: torch.FloatTensor,
+        order: int,
+    ) -> torch.FloatTensor:
+        
+        timestep_list = self.timestep_list
+        model_output_list = self.model_outputs
+
+        s0, t = timestep_list[-1], this_timestep
+        m0 = model_output_list[-1]
+        x = last_sample
+        x_t = this_sample
+        model_t = this_model_output
+
+        lambda_t, lambda_s0 = self.lambda_t[t], self.lambda_t[s0]
+        alpha_t, alpha_s0 = self.alpha_t[t], self.alpha_t[s0]
+        sigma_t, sigma_s0 = self.sigma_t[t], self.sigma_t[s0]
+
+        h = lambda_t - lambda_s0
+
+        rks = []
+        D1s = []
+        for i in range(1, order):
+            si = timestep_list[-(i + 1)]
+            mi = model_output_list[-(i + 1)]
+            lambda_si = self.lambda_t[si]
+            rk = (lambda_si - lambda_s0) / h
+            rks.append(rk)
+            D1s.append((mi - m0) / rk)
+
+        rks.append(1.0)
+        rks = torch.tensor(rks, device=self.device)
+
+        R = []
+        b = []
+
+        hh = -h if self.predict_x0 else h
+        h_phi_1 = torch.expm1(hh)  # h\phi_1(h) = e^h - 1
+        h_phi_k = h_phi_1 / hh - 1
+
+        factorial_i = 1
+
+        if self.solver_type == "bh1":
+            B_h = hh
+        elif self.solver_type == "bh2":
+            B_h = torch.expm1(hh)
+        else:
+            raise NotImplementedError()
+
+        for i in range(1, order + 1):
+            R.append(torch.pow(rks, i - 1))
+            b.append(h_phi_k * factorial_i / B_h)
+            factorial_i *= i + 1
+            h_phi_k = h_phi_k / hh - 1 / factorial_i
+
+        R = torch.stack(R)
+        b = torch.tensor(b, device=self.device)
+
+        if len(D1s) > 0:
+            D1s = torch.stack(D1s, dim=1)
+        else:
+            D1s = None
+
+        # for order 1, we use a simplified version
+        if order == 1:
+            rhos_c = torch.tensor([0.5], dtype=x.dtype, device=self.device)
+        else:
+            rhos_c = torch.linalg.solve(R, b)
+
+        if self.predict_x0:
+            x_t_ = sigma_t / sigma_s0 * x - alpha_t * h_phi_1 * m0
+            if D1s is not None:
+                corr_res = torch.einsum("k,bkchw->bchw", rhos_c[:-1], D1s)
+            else:
+                corr_res = 0
+            D1_t = model_t - m0
+            x_t = x_t_ - alpha_t * B_h * (corr_res + rhos_c[-1] * D1_t)
+        else:
+            x_t_ = alpha_t / alpha_s0 * x - sigma_t * h_phi_1 * m0
+            if D1s is not None:
+                corr_res = torch.einsum("k,bkchw->bchw", rhos_c[:-1], D1s)
+            else:
+                corr_res = 0
+            D1_t = model_t - m0
+            x_t = x_t_ - sigma_t * B_h * (corr_res + rhos_c[-1] * D1_t)
+        x_t = x_t.to(x.dtype)
+        return x_t
+
+    def step(
+        self,
+        model_output: torch.FloatTensor,
+        timestep: int,
+        sample: torch.FloatTensor,
+        return_dict: bool = True,
+    ):
+
+        if self.num_inference_steps is None:
+            raise ValueError(
+                "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
+            )
+
+        if isinstance(timestep, torch.Tensor):
+            timestep = timestep.to(self.device)
+        step_index = (self.timesteps == timestep).nonzero()
+        if len(step_index) == 0:
+            step_index = len(self.timesteps) - 1
+        else:
+            step_index = step_index.item()
+
+        use_corrector = (
+            step_index > 0 and step_index - 1 not in self.disable_corrector and self.last_sample is not None
+        )
+
+        model_output_convert = self.convert_model_output(model_output, timestep, sample)
+        if use_corrector:
+            sample = self.multistep_uni_c_bh_update(
+                this_model_output=model_output_convert,
+                this_timestep=timestep,
+                last_sample=self.last_sample,
+                this_sample=sample,
+                order=self.this_order,
+            )
+
+        # now prepare to run the predictor
+        prev_timestep = 0 if step_index == len(self.timesteps) - 1 else self.timesteps[step_index + 1]
+
+        for i in range(self.solver_order - 1):
+            self.model_outputs[i] = self.model_outputs[i + 1]
+            self.timestep_list[i] = self.timestep_list[i + 1]
+
+        self.model_outputs[-1] = model_output_convert
+        self.timestep_list[-1] = timestep
+
+        if self.lower_order_final:
+            this_order = min(self.solver_order, len(self.timesteps) - step_index)
+        else:
+            this_order = self.solver_order
+
+        self.this_order = min(this_order, self.lower_order_nums + 1)  # warmup for multistep
+        assert self.this_order > 0
+
+        self.last_sample = sample
+        prev_sample = self.multistep_uni_p_bh_update(
+            model_output=model_output,  # pass the original non-converted model output, in case solver-p is used
+            prev_timestep=prev_timestep,
+            sample=sample,
+            order=self.this_order,
+        )
+
+        if self.lower_order_nums < self.solver_order:
+            self.lower_order_nums += 1
+
+        if not return_dict:
+            return (prev_sample,)
+
+        return prev_sample
+
+    def scale_model_input(self, sample: torch.FloatTensor, *args, **kwargs) -> torch.FloatTensor:
+        return sample
+
+    # Copied from diffusers.schedulers.scheduling_ddpm.DDPMScheduler.add_noise
+    def add_noise(
+        self,
+        original_samples: torch.FloatTensor,
+        noise: torch.FloatTensor,
+        timesteps: torch.IntTensor,
+    ) -> torch.FloatTensor:
+        # Make sure alphas_cumprod and timestep have same device and dtype as original_samples
+        alphas_cumprod = self.alphas_cumprod.to(device=self.device, dtype=original_samples.dtype)
+        timesteps = timesteps.to(self.device)
+
+        sqrt_alpha_prod = alphas_cumprod[timesteps] ** 0.5
+        sqrt_alpha_prod = sqrt_alpha_prod.flatten()
+        while len(sqrt_alpha_prod.shape) < len(original_samples.shape):
+            sqrt_alpha_prod = sqrt_alpha_prod.unsqueeze(-1)
+
+        sqrt_one_minus_alpha_prod = (1 - alphas_cumprod[timesteps]) ** 0.5
+        sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten()
+        while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
+            sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
+
+        noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
+        return noisy_samples
+
+    def configure(self):
+        pass
+
+    def __len__(self):
+        return self.num_train_timesteps
 
 def save_image(images, image_path_dir, image_name_prefix):
     """
@@ -1180,7 +1622,7 @@ def download_image(url):
 
 def add_arguments(parser):
     # Stable Diffusion configuration
-    parser.add_argument('--version', type=str, default="2.1", choices=["1.4", "1.5", "2.0", "2.0-base", "2.1", "2.1-base"], help="Version of Stable Diffusion")
+    parser.add_argument('--version', type=str, default="1.5", choices=["1.4", "1.5", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0"], help="Version of Stable Diffusion")
     parser.add_argument('prompt', nargs = '*', help="Text prompt(s) to guide image generation")
     parser.add_argument('--negative-prompt', nargs = '*', default=[''], help="The negative prompt(s) to guide the image generation.")
     parser.add_argument('--repeat-prompt', type=int, default=1, choices=[1, 2, 4, 8, 16], help="Number of times to repeat the prompt (batch size multiplier)")
@@ -1194,6 +1636,9 @@ def add_arguments(parser):
     parser.add_argument('--onnx-refit-dir', help="ONNX models to load the weights from")
     parser.add_argument('--force-onnx-export', action='store_true', help="Force ONNX export of CLIP, UNET, and VAE models")
     parser.add_argument('--force-onnx-optimize', action='store_true', help="Force ONNX optimizations for CLIP, UNET, and VAE models")
+
+    # Framework model ckpt
+    parser.add_argument('--framework-model-dir', default='pytorch_model', help="Directory for HF saved models")
 
     # TensorRT engine build
     parser.add_argument('--engine-dir', default='engine', help="Output directory for TensorRT engines")

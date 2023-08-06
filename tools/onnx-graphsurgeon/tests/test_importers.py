@@ -40,14 +40,25 @@ G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
 
 class TestOnnxImporter(object):
-    def test_import_variable_tensor(self):
+    @pytest.mark.parametrize(
+        "onnx_type, expected_type",
+        [
+            (onnx.TensorProto.FLOAT, np.float32),
+            (onnx.TensorProto.BFLOAT16, onnx.TensorProto.BFLOAT16),
+            (onnx.TensorProto.FLOAT8E4M3FN, onnx.TensorProto.FLOAT8E4M3FN),
+            (onnx.TensorProto.FLOAT8E4M3FNUZ, onnx.TensorProto.FLOAT8E4M3FNUZ),
+            (onnx.TensorProto.FLOAT8E5M2, onnx.TensorProto.FLOAT8E5M2),
+            (onnx.TensorProto.FLOAT8E5M2FNUZ, onnx.TensorProto.FLOAT8E5M2FNUZ),
+        ],
+    )
+    def test_import_variable_tensor(self, onnx_type, expected_type):
         name = "test0"
         shape = (1, 2, 3, 4)
-        onnx_tensor = onnx.helper.make_tensor_value_info(name, onnx.TensorProto.FLOAT, shape)
+        onnx_tensor = onnx.helper.make_tensor_value_info(name, onnx_type, shape)
         tensor = OnnxImporter.import_tensor(onnx_tensor)
         assert type(tensor) == Variable
         assert tensor.name == name
-        assert tensor.dtype == np.float32
+        assert tensor.dtype == expected_type
         assert tuple(tensor.shape) == shape
 
     def test_import_constant_tensor(self):

@@ -25,7 +25,7 @@ from stable_diffusion_pipeline import StableDiffusionPipeline
 
 class Txt2ImgPipeline(StableDiffusionPipeline):
     """
-    Application showcasing the acceleration of Stable Diffusion Txt2Img v1.4, v1.5, v2.0, v2.0-base, v2.1, v2.1-base pipeline using NVidia TensorRT w/ Plugins.
+    Application showcasing the acceleration of Stable Diffusion Txt2Img v1.4, v1.5, v2.0, v2.0-base, v2.1, v2.1-base pipeline using NVidia TensorRT.
     """
     def __init__(
         self,
@@ -72,11 +72,11 @@ class Txt2ImgPipeline(StableDiffusionPipeline):
                 Verbose in logging
         """
         assert len(prompt) == len(negative_prompt)
-
+        batch_size = len(prompt)
         with torch.inference_mode(), torch.autocast("cuda"), trt.Runtime(TRT_LOGGER):
             # Pre-initialize latents
             latents = self.initialize_latents( \
-                batch_size=len(prompt), \
+                batch_size=batch_size, \
                 unet_channels=4, \
                 latent_height=(image_height // 8), \
                 latent_width=(image_width // 8)
@@ -98,5 +98,5 @@ class Txt2ImgPipeline(StableDiffusionPipeline):
             e2e_toc = time.perf_counter()
 
             if not warmup:
-                self.print_summary(self.denoising_steps, e2e_tic, e2e_toc)
+                self.print_summary(self.denoising_steps, e2e_tic, e2e_toc, batch_size)
                 self.save_image(images, 'txt2img', prompt)

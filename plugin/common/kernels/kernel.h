@@ -267,7 +267,6 @@ int32_t generateFeatures_launch(int32_t batch_size, int32_t dense_pillar_num, fl
     float range_min_x, float range_min_y, float range_min_z, uint32_t voxel_features_size, uint32_t max_points,
     uint32_t max_voxels, uint32_t num_point_values, float* features, cudaStream_t stream);
 
-
 #endif // TRT_RPNLAYER_H
 } // namespace plugin
 } // namespace nvinfer1

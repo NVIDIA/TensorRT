@@ -261,8 +261,8 @@ constexpr char const* FAILED_INITIALIZATION = R"trtdoc(
 )trtdoc";
 
 constexpr char const* FAILED_EXECUTION = R"trtdoc(
-    An error occurred during execution that caused TensorRT to end prematurely, either an asynchronous error or
-    other execution errors reported by CUDA/DLA. In a dynamic system, the
+    An error occurred during execution that caused TensorRT to end prematurely, either an asynchronous error,
+    user cancellation, or other execution errors reported by CUDA/DLA. In a dynamic system, the
     data can be thrown away and the next frame can be processed or execution can be retried.
     This is either an execution error or a memory error.
 )trtdoc";
@@ -404,7 +404,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :func:`IExecutionContext::report_to_profiler()` needs to be called to obtain the profiling data and report to the profiler attached.
     :ivar persistent_cache_limit: The maximum size of persistent L2 cache that this execution context may use for activation caching. Activation caching is not supported on all architectures - see "How TensorRT uses Memory" in the developer guide for details. The default is 0 Bytes.
-    :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with kDETAILED verbosity will generally increase latency in enqueueV2/V3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
+    :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with DETAILED verbosity will generally increase latency in enqueueV2/V3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
     :ivar temporary_allocator: :class:`IGpuAllocator` The GPU allocator used for internal temporary storage.
 )trtdoc";
 
@@ -680,8 +680,90 @@ constexpr char const* set_aux_streams = R"trtdoc(
 
     :arg aux_streams: A list of cuda streams. If the length of the list is greater than engine.num_aux_streams, then only the first "engine.num_aux_streams" streams will be used. If the length is less than engine.num_aux_streams, such as an empty list, then TensorRT will use the provided streams for the first few auxiliary streams, and will create additional streams internally for the rest of the auxiliary streams.
 )trtdoc";
+// remove md
+#if ENABLE_MDTRT
+constexpr char const* set_communicator = R"trtdoc(
+    Set the communicator for the execution context.
 
+    :param communicator: A pointer to the communicator that is used by the execution context.
+    :param type: The type of the communication protocol.
+
+    The communicator must be uniform across all multi-device instances or undefined
+    behavior occurs.
+    Defaults to CommunicatorType.NONE. Setting communicator to NONE reverts
+    the communicator type to CommunicatorType.NONE.
+)trtdoc";
+constexpr char const* get_communicator = R"trtdoc(
+    Get the specified communicator.
+
+    :returns: The value specified by set_communicator or NONE if the internal communicator is utilized.
+)trtdoc";
+constexpr char const* get_communicator_type = R"trtdoc(
+    Get the specified communicator type.
+
+    :returns: The value specified by set_communicator or CommunicatorType.NONE.
+)trtdoc";
+#endif // ENABLE_MDTRT
 } // namespace IExecutionContextDoc
+
+namespace IProgressMonitorDoc
+{
+constexpr char const* descr = R"trtdoc(
+    Application-implemented progress reporting interface for TensorRT.
+
+    The IProgressMonitor is a user-defined object that TensorRT uses to report back when an internal algorithm has
+    started or finished a phase to help provide feedback on the progress of the optimizer.
+
+    The IProgressMonitor will trigger its start function when a phase is entered and will trigger its finish function
+    when that phase is exited. Each phase consists of one or more steps. When each step is completed, the step_complete
+    function is triggered. This will allow an application using the builder to communicate progress relative to when the
+    optimization step is expected to complete.
+
+    The implementation of IProgressMonitor must be thread-safe so that it can be called from multiple internal threads.
+    The lifetime of the IProgressMonitor must exceed the lifetime of all TensorRT objects that use it.
+)trtdoc";
+
+constexpr char const* phase_start = R"trtdoc(
+    Signal that a phase of the optimizer has started.
+
+    :arg phase_name: The name of this phase for tracking purposes.
+    :arg parent_phase: The parent phase that this phase belongs to, None if there is no parent.
+    :arg num_steps: The number of steps that are involved in this phase.
+
+    The phase_start function signals to the application that the current phase is beginning, and that it has a
+    certain number of steps to perform. If phase_parent is None, then the phase_start is beginning an
+    independent phase, and if phase_parent is specified, then the current phase, specified by phase_name, is
+    within the scope of the parent phase. num_steps will always be a positive number. The phase_start function
+    implies that the first step is being executed. TensorRT will signal when each step is complete.
+
+    Phase names are human readable English strings which are unique within a single phase hierarchy but which can be
+    reused once the previous instance has completed. Phase names and their hierarchies may change between versions
+    of TensorRT.
+)trtdoc";
+
+constexpr char const* step_complete = R"trtdoc(
+    Signal that a step of an optimizer phase has finished.
+
+    :arg phase_name: The name of the innermost phase being executed.
+    :arg step: The step number that was completed.
+
+    The step_complete function signals to the application that TensorRT has finished the current step for the phase
+    ``phase_name`` , and will move on to the next step if there is one. The application can return False for TensorRT to exit
+    the build early. The step value will increase on subsequent calls in the range [0, num_steps).
+
+    :returns: True to continue to the next step or False to stop the build.
+)trtdoc";
+
+constexpr char const* phase_finish = R"trtdoc(
+    Signal that a phase of the optimizer has finished.
+
+    :arg phase_name: The name of the phase that has finished.
+
+    The phase_finish function signals to the application that the phase is complete. This function may be called before
+    all steps in the range [0, num_steps) have been reported to step_complete. This scenario can be triggered by error
+    handling, internal optimizations, or when step_complete returns False to request cancellation of the build.
+)trtdoc";
+} // namespace IProgressMonitorDoc
 
 namespace ICudaEngineDoc
 {
@@ -705,8 +787,16 @@ constexpr char const* descr = R"trtdoc(
     :ivar tactic_sources: :class:`int` The tactic sources required by this engine.
     :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
     :ivar hardware_compatibility_level: The hardware compatibility level of the engine.
-    :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.
-)trtdoc";
+    :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.)trtdoc"
+// remove md
+#if ENABLE_MDTRT
+                              R"trtdoc(
+    :ivar instance_id: Read-only. Each engine is assigned an instance ID in the multi-device plan file, and this function returns the value that was assigned at build time. In the case of single-device mode, this value shall be 0.
+    :ivar num_instances: Read-only. The number of instances that this multi-device plan file was generated for.
+    :ivar local_input: Read-only. The inputs to enqueue are expected to be on the local device. If this is false, then all the inputs are broadcasted from the root(rank 0) engine and all non-root engines input pointers will be ignored.
+)trtdoc"
+#endif // ENABLE_MDTRT
+    ;
 
 constexpr char const* get_binding_index = R"trtdoc(
     Retrieve the binding index for a named tensor.
@@ -897,11 +987,11 @@ constexpr char const* get_binding_format_desc = R"trtdoc(
 
     The description includes the order, vectorization, data type, strides, etc. For example:
 
-    |   Example 1: kCHW + FP32
+    |   Example 1: CHW + FP32
     |       "Row major linear FP32 format"
-    |   Example 2: kCHW2 + FP16
+    |   Example 2: CHW2 + FP16
     |       "Two wide channel vectorized row major FP16 format"
-    |   Example 3: kHWC8 + FP16 + Line Stride = 32
+    |   Example 3: HWC8 + FP16 + Line Stride = 32
     |       "Channel major FP16 format where C % 8 == 0 and H Stride % 32 == 0"
 
     :arg index: The binding index.
@@ -985,11 +1075,11 @@ constexpr char const* get_tensor_format_desc = R"trtdoc(
 
     The description includes the order, vectorization, data type, strides, etc. For example:
 
-    |   Example 1: kCHW + FP32
+    |   Example 1: CHW + FP32
     |       "Row major linear FP32 format"
-    |   Example 2: kCHW2 + FP16
+    |   Example 2: CHW2 + FP16
     |       "Two wide channel vectorized row major FP16 format"
-    |   Example 3: kHWC8 + FP16 + Line Stride = 32
+    |   Example 3: HWC8 + FP16 + Line Stride = 32
     |       "Channel major FP16 format where C % 8 == 0 and H Stride % 32 == 0"
 
     :arg name: The tensor name.
@@ -1009,7 +1099,6 @@ constexpr char const* get_tensor_profile_shape = R"trtdoc(
     :arg name: The tensor name.
     :arg profile_index: The index of the profile.
 )trtdoc";
-
 } // namespace ICudaEngineDoc
 
 namespace OutputAllocatorDoc
@@ -1060,6 +1149,7 @@ constexpr char const* descr
     = R"trtdoc(Valid modes that the builder can enable when creating an engine from a network definition.)trtdoc";
 
 constexpr char const* FP16 = R"trtdoc(Enable FP16 layer selection)trtdoc";
+constexpr char const* BF16 = R"trtdoc(Enable BF16 layer selection)trtdoc";
 constexpr char const* INT8 = R"trtdoc(Enable Int8 layer selection)trtdoc";
 constexpr char const* DEBUG = R"trtdoc(Enable debugging of layers via synchronizing after every layer)trtdoc";
 constexpr char const* GPU_FALLBACK
@@ -1088,6 +1178,8 @@ constexpr char const* VERSION_COMPATIBLE
     = R"trtdoc(Restrict to lean runtime operators to provide version forward compatibility for the plan files.)trtdoc";
 constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
 constexpr char const* FP8 = R"trtdoc(Enable FP8 layer selection)trtdoc";
+constexpr char const* ERROR_ON_TIMING_CACHE_MISS
+    = R"trtdoc(Emit error when a tactic being timed is not present in the timing cache.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1116,7 +1208,7 @@ constexpr char const* DLA_GLOBAL_DRAM = R"trtdoc(
     This defaults to 512 MiB.
 )trtdoc";
 constexpr char const* TACTIC_DRAM = R"trtdoc(
-    kTACTIC_DRAM is the host DRAM used by the optimizer to
+    TACTIC_DRAM is the host DRAM used by the optimizer to
     run tactics. On embedded devices, where host and device memory are unified, this includes all device
     memory required by TensorRT to build the network up to the point of each memory allocation.
     This defaults to 75% of totalGlobalMem as reported by cudaGetDeviceProperties when
@@ -1141,10 +1233,10 @@ constexpr char const* descr = R"trtdoc(
     For example, to enable faster dynamic shapes, call :func:`set_preview_feature` with ``PreviewFeature.FASTER_DYNAMIC_SHAPES_0805``
 )trtdoc";
 constexpr char const* FASTER_DYNAMIC_SHAPES_0805 = R"trtdoc(
-    [DEPRECATED - will be removed in TensorRT 9.0] Optimize runtime dimensions with TensorRT's DL Compiler.
+    [DEPRECATED] Optimize runtime dimensions with TensorRT's DL Compiler.
     Potentially reduces run time and decreases device memory usage and engine size.
     Models most likely to benefit from enabling ``FASTER_DYNAMIC_SHAPES_0805`` are transformer-based models, and models containing dynamic control flows.
-    The default value for this flag is on. Turning it off is deprecated. 
+    The default value for this flag is on. Turning it off is deprecated.
 )trtdoc";
 constexpr char const* DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 = R"trtdoc(
     Disable usage of cuDNN/cuBLAS/cuBLASLt tactics in the TensorRT core library.
@@ -1152,8 +1244,8 @@ constexpr char const* DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 = R"trtdoc(
     set_tactic_sources, but cudnnContext and cublasContext handles will still be passed to
     plugins via IPluginV2::attachToContext() if the appropriate tactic sources are set.
     This allows users to experiment with disabling external library tactics without having to modify their
-    application's plugins to support nullptr handles.
-    The default value for this flag is off.
+    application's plugins to support None handles.
+    The default value for this flag is on.
 )trtdoc";
 constexpr char const* PROFILE_SHARING_0806 = R"trtdoc(
     Allows optimization profiles to be shared across execution contexts. This will become the default behavior in TensorRT 9.0 and the flag defaults to false.
@@ -1164,7 +1256,7 @@ namespace HardwareCompatibilityLevelDoc
 {
 constexpr char const* descr = R"trtdoc(
     Describes requirements of compatibility with GPU architectures other than that of the GPU on which the engine was
-    built. Levels except kNONE are only supported for engines built on NVIDIA Ampere and later GPUs.
+    built. Levels except NONE are only supported for engines built on NVIDIA Ampere and later GPUs.
     Note that compatibility with future hardware depends on CUDA forward compatibility support.
 )trtdoc";
 constexpr char const* NONE = R"trtdoc(
@@ -1184,8 +1276,9 @@ constexpr char const* descr
     = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable explicit batch mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.EXPLICIT_BATCH)`` to :func:`create_network` )trtdoc";
 constexpr char const* EXPLICIT_BATCH
     = R"trtdoc(Specify that the network should be created with an explicit batch dimension. Creating a network without this flag has been deprecated.)trtdoc";
-constexpr char const* EXPLICIT_PRECISION
-    = R"trtdoc([DEPRECATED] This flag has no effect now.)trtdoc";
+constexpr char const* EXPLICIT_PRECISION = R"trtdoc([DEPRECATED] This flag has no effect now.)trtdoc";
+constexpr char const* STRONGLY_TYPED
+    = R"trtdoc(Specify that every tensor in the network has a data type defined in the network following only type inference rules and the inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network output types will be inferred based on the input types and the type inference rules)trtdoc";
 } // namespace NetworkDefinitionCreationFlagDoc
 
 namespace DeviceTypeDoc
@@ -1249,13 +1342,19 @@ constexpr char const* descr = R"trtdoc(Tactic sources that can provide tactics f
 
 constexpr char const* CUBLAS = R"trtdoc(
         Enables cuBLAS tactics. Enabled by default.
-        **NOTE:** Disabling this value will cause the cublas handle passed to plugins in attachToContext to be null.
+        **NOTE:** Disabling CUBLAS tactic source will cause the cuBLAS handle passed to plugins in attachToContext to be null.
+        **NOTE:** Setting CUBLAS tactic source takes no effect for core library if PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 is on.
     )trtdoc";
 constexpr char const* CUBLAS_LT = R"trtdoc(
-        Enables cuBLAS LT tactics. Enabled for x86 platforms and only enabled for non-x86 platforms when CUDA >= 11.0 by default
+        Enables CUBLAS_LT tactics. Enabled by default.
+        **NOTE:** Setting CUBLAS_LT tactic source takes no effect for core library if PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 is on.
+        [DEPRECATED] Deprecated in TensorRT 9.0.
+
     )trtdoc";
 constexpr char const* CUDNN = R"trtdoc(
         Enables cuDNN tactics. Enabled by default.
+        **NOTE:** Disabling CUDNN tactic source will cause the cuDNN handle passed to plugins in attachToContext to be null.
+        **NOTE:** Setting CUDNN tactic source takes no effect for core library if PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 is on.
     )trtdoc";
 constexpr char const* EDGE_MASK_CONVOLUTIONS = R"trtdoc(
         Enables convolution tactics implemented with edge mask tables. These tactics tradeoff memory for performance
@@ -1360,6 +1459,7 @@ constexpr char const* descr = R"trtdoc(
         :ivar hardware_compatibility_level: Hardware compatibility allows an engine compatible with GPU architectures other than that of the GPU on which the engine was built.
         :ivar plugins_to_serialize: The plugin libraries to be serialized with forward-compatible engines.
         :ivar max_aux_streams: The maximum number of auxiliary streams that TRT is allowed to use. If the network contains operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one provided to the IExecutionContext::enqueueV3() call. The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on whether enabling multi-stream would improve the performance. This behavior can be overridden by calling this API to set the maximum number of auxiliary streams explicitly. Set this to 0 to enforce single-stream inference. The resulting engine may use fewer auxiliary streams than the maximum if the network does not contain enough parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance. Allowing more auxiliary streams does not always give better performance since there will be synchronizations overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by cross-stream synchronizations. Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not be able to be reused.
+        :ivar progress_monitor: The :class:`IProgressMonitor` to use.
     )trtdoc";
 
 constexpr char const* set_memory_pool_limit = R"trtdoc(
@@ -1454,7 +1554,7 @@ constexpr char const* set_calibration_profile = R"trtdoc(
 
     Calibration optimization profile must be set if int8 calibration is used to set scales for a network with runtime dimensions.
 
-    :arg profile: The new calibration profile, which must satisfy ``bool(profile) == True`` or be nullptr. MIN and MAX values will be overwritten by kOPT.
+    :arg profile: The new calibration profile, which must satisfy ``bool(profile) == True`` or be None. MIN and MAX values will be overwritten by OPT.
 
     :returns: True if the calibration profile was set correctly.
 )trtdoc";
@@ -1462,7 +1562,7 @@ constexpr char const* set_calibration_profile = R"trtdoc(
 constexpr char const* get_calibration_profile = R"trtdoc(
     Get the current calibration profile.
 
-    :returns: The current calibration profile or nullptr if calibrartion profile is unset.
+    :returns: The current calibration profile or None if calibrartion profile is unset.
 )trtdoc";
 
 constexpr char const* set_device_type = R"trtdoc(
@@ -1470,7 +1570,7 @@ constexpr char const* set_device_type = R"trtdoc(
     default DeviceType set in the builder.
 
     The DeviceType for a layer must be compatible with the safety flow (if specified). For example a layer
-    cannot be marked for DLA execution while the builder is configured for kSAFE_GPU.
+    cannot be marked for DLA execution while the builder is configured for SAFE_GPU.
 
 
     :arg layer: The layer to set the DeviceType of
@@ -1576,7 +1676,65 @@ constexpr char const* get_preview_feature = R"trtdoc(
 
     :returns: true if the feature is enabled, false otherwise
 )trtdoc";
+// remove md
+#if ENABLE_MDTRT
+constexpr char const* insert_instance_group = R"trtdoc(
+    Add an instance to a group.
 
+    In some cases, such as multi-node deployment, specific instances are on the same node
+    and thus need to be given priority when optimizing instance assignment. This also will
+    change the cost calculations for communication between two instances when they are
+    in the same group. An instance can be assigned to multiple groups, and the groups are
+    considered hierarchical based on the number of instances in a group. In the cases
+    where there is a tie in comparing instances relative to groups, the lower numbered group
+    is given priority. By default, all devices belong to group 0.
+
+    An example of this would be the case of 4 instances over 3 different groups, and can be
+    analogous to 4 devices across two nodes.
+    Given the set of instances, {D0, D1, D2, D3} and the set of nodes {N0, N1}, with equal distribution
+    across nodes, the groups are as follows:
+    * Group 0 - {N0[D0, D1], N1[D2, D3]}
+    * Group 1 - {N0[D0, D1]}
+    * Group 2 - {N1[D2, D3]}
+
+    This will inform TensorRT to optimize data transfers to be within the node when possible instead of
+    moving across node.
+
+    :arg instance: The instance ID to be assigned to a group.
+    :arg group: The group to assign the instance to.
+
+    :returns: true if insertion succeeded, false otherwise.
+)trtdoc";
+
+constexpr char const* remove_instance_group = R"trtdoc(
+    Remove the instance from the group.
+
+    Remove the instance from the assigned group so that it is no longer considered to be part of the group. It is
+    not possible to remove any instance from the group with id 0, as that is the global group.
+
+    :arg instance: The instance ID to remove from the group.
+    :arg group: The group to remove the instance ID from.
+
+    :returns: true if removal succeeded, false otherwise.
+)trtdoc";
+
+constexpr char const* get_num_instance_groups = R"trtdoc(
+    Get the number of groups the instance belongs to.
+
+    :arg instance: The instance ID to get the group count for.
+
+    :returns: The number of groups the instance belongs to.
+)trtdoc";
+
+constexpr char const* get_instance_group = R"trtdoc(
+    Get the nth group ID the instance ID belongs to.
+
+    :arg instance: The instance ID to get the group ID for.
+    :arg num: The nth group to get the ID for.
+
+    :returns: The group the instance ID belongs to.
+)trtdoc";
+#endif // ENABLE_MDTRT
 } // namespace IBuilderConfigDoc
 
 namespace BuilderDoc
@@ -1706,6 +1864,22 @@ constexpr char const* deserialize_cuda_engine = R"trtdoc(
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";
+// remove md
+#if ENABLE_MDTRT
+constexpr char const* deserialize_engine = R"trtdoc(
+    Deserialize an :class:`ICudaEngine` from a stream.
+
+    :arg serialized_engine: The :class:`buffer` that holds the serialized :class:`ICudaEngine` .
+    :arg instance: The instance engine to deserialize.
+
+    Each serialized engine will contain multiple engine instances in the range [0, IBuilderConfig.num_instances). If
+    the value specified by instance is outside of this range, then the error INVALID_ARGUMENT
+    is emitted and a None is returned.
+    If an error recorder has been set for the runtime, it will also be passed to the engine.
+
+    :returns: The engine, or None if it could not be deserialized.
+)trtdoc";
+#endif
 
 constexpr char const* get_plugin_registry = R"trtdoc(
     Get the local plugin registry that can be used by the runtime.
@@ -1935,9 +2109,9 @@ constexpr char const* reallocate = R"trtdoc(
     Options are one of:
     - resize in place leaving min(old_size, new_size) bytes unchanged and return the original address
     - move min(old_size, new_size) bytes to a new location of sufficient size and return its address
-    - return nullptr, to indicate that the request could not be fulfilled.
+    - return None, to indicate that the request could not be fulfilled.
 
-    If nullptr is returned, TensorRT will assume that resize() is not implemented, and that the
+    If None is returned, TensorRT will assume that resize() is not implemented, and that the
     allocation at address is still valid.
 
     This method is made available for use cases where delegating the resize

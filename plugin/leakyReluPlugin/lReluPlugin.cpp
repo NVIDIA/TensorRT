@@ -165,6 +165,10 @@ IPluginV2* LReluPluginCreator::createPlugin(char const* name, PluginFieldCollect
 {
     try
     {
+        gLogWarning << "LReluPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() to add "
+                       "an IActivationLayer "
+                       "with ActivationType::kLEAKY_RELU."
+                    << std::endl;
         PluginField const* fields = fc->fields;
         PLUGIN_VALIDATE(fc->nbFields == 1);
         PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kFLOAT32);
@@ -184,6 +188,10 @@ IPluginV2* LReluPluginCreator::deserializePlugin(char const* name, void const* s
 {
     try
     {
+        gLogWarning << "LReluPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() to add "
+                       "an IActivationLayer "
+                       "with ActivationType::kLEAKY_RELU."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call LReluPlugin::destroy()
         return new LReLU(serialData, serialLength);

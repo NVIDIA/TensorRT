@@ -28,10 +28,8 @@
 //! Samples that use TRT at link time can define DEFINE_TRT_ENTRYPOINTS before including this header to
 //! pick up the definitions here.
 
-#include "NvCaffeParser.h"
 #include "NvInfer.h"
 #include "NvOnnxParser.h"
-#include "NvUffParser.h"
 #include "logger.h"
 
 extern nvinfer1::IBuilder* createBuilder();
@@ -39,12 +37,6 @@ extern nvinfer1::IRuntime* createRuntime();
 extern nvinfer1::IRefitter* createRefitter(nvinfer1::ICudaEngine& engine);
 
 extern nvonnxparser::IParser* createONNXParser(nvinfer1::INetworkDefinition& network);
-
-extern nvcaffeparser1::ICaffeParser* sampleCreateCaffeParser();
-extern void shutdownCaffeParser();
-
-extern nvuffparser::IUffParser* sampleCreateUffParser();
-extern void shutdownUffParser();
 
 #if !defined(DEFINE_TRT_ENTRYPOINTS)
 #define DEFINE_TRT_ENTRYPOINTS 0
@@ -101,38 +93,6 @@ nvonnxparser::IParser* createONNXParser(nvinfer1::INetworkDefinition& network)
     return nvonnxparser::createParser(network, sample::gLogger.getTRTLogger());
 #else
     return {};
-#endif
-}
-
-nvcaffeparser1::ICaffeParser* sampleCreateCaffeParser()
-{
-#if DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT
-    return nvcaffeparser1::createCaffeParser();
-#else
-    return {};
-#endif
-}
-
-void shutdownCaffeParser()
-{
-#if DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT
-    nvcaffeparser1::shutdownProtobufLibrary();
-#endif
-}
-
-nvuffparser::IUffParser* sampleCreateUffParser()
-{
-#if DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT
-    return nvuffparser::createUffParser();
-#else
-    return {};
-#endif
-}
-
-void shutdownUffParser()
-{
-#if DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT
-    nvuffparser::shutdownProtobufLibrary();
 #endif
 }
 

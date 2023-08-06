@@ -68,6 +68,9 @@ documentation.
 
 ## Changelog
 
+April 2023
+Optimize the GPU memory usage by using the cublas handle from attachToContext.
+
 October 2022
 Add IGMMA/HGMMA sm90 fmha_v2 kernels
 

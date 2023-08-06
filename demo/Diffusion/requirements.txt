@@ -1,15 +1,15 @@
 accelerate
 colored
+controlnet_aux
 cuda-python
-diffusers==0.14.0
+diffusers>=0.19.3
 ftfy
 matplotlib
 nvtx
-onnx==1.13.1
-onnxruntime==1.14.1
---extra-index-url https://pypi.ngc.nvidia.com
-onnx-graphsurgeon==0.3.26
-polygraphy==0.47.1
+onnx==1.14.0
+onnxruntime==1.15.1
 scipy
-torch<2.0.0
-transformers==4.26.1
+transformers==4.31.0
+--extra-index-url https://pypi.ngc.nvidia.com
+onnx-graphsurgeon
+polygraphy

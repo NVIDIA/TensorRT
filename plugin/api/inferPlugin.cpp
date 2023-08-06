@@ -174,7 +174,7 @@ void initializePlugin(void* logger, char const* libNamespace)
 
 extern "C"
 {
-    bool initLibNvInferPlugins(void* logger, const char* libNamespace)
+    bool initLibNvInferPlugins(void* logger, char const* libNamespace)
     {
         initializePlugin<nvinfer1::plugin::BatchedNMSDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::BatchedNMSPluginCreator>(logger, libNamespace);

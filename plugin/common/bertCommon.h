@@ -133,8 +133,10 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 {
     switch (t)
     {
-    case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kINT64: return 8;
+    case nvinfer1::DataType::kINT32:
     case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kBF16:
     case nvinfer1::DataType::kHALF: return 2;
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:

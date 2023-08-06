@@ -50,6 +50,7 @@ class NNTomlCheckpoint:
 
     def __init__(self, fpath: str, framework: str, network_name: str, metadata: NetworkMetadata):
         """Loads the toml file for processing."""
+
         data = {}
         with open(fpath) as f:
             data = toml.load(f)
@@ -101,13 +102,17 @@ class NNTomlCheckpoint:
         """
         returns_dict = len(slice) > 1
         for value in self.data.values():
-            if "skip" in value:
+            if skip_keyword in value:
                 continue
 
-            if returns_dict:
-                yield {s: value[s] for s in slice}
-            else:
-                yield value[slice[0]]
+            try:
+                if returns_dict:
+                    yield {s: value[s] for s in slice}
+                else:
+                    yield value[slice[0]]
+            except KeyError as e:
+                raise KeyError(f"Your checkpoint is missing fields for this model: {slice}") from e
+
 
 
 class NNSemanticCheckpoint(NNTomlCheckpoint):
@@ -127,29 +132,58 @@ class NNSemanticCheckpoint(NNTomlCheckpoint):
     <variant> = "default" indicates rules apply to all networks.
     <precision> = "all" indicates rules apply to all precisions.
     """
+    def __init__(self, *args, skip_multibatch = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.skip_multibatch = skip_multibatch
+        self._labels = None
+        self._inputs = None
 
     def __iter__(self):
         return self._iterate_data(["label", "input"])
 
     def labels(self):
-        return self._iterate_data(["label"])
+        if self._labels:
+            return self._labels
+        self._labels = [n for n in self._iterate_data(["label"])]
+        if self.skip_multibatch:
+            self._labels = [n for n in self._labels if not isinstance(n, list)]
+        return self._labels
 
     def inputs(self):
-        return self._iterate_data(["input"])
+        if self._inputs:
+            return self._inputs
+        self._inputs = [n for n in self._iterate_data(["input"])]
+        if self.skip_multibatch:
+            self._inputs = [n for n in self._inputs if not isinstance(n, list)]
+        return self._inputs
 
     def accuracy(self, results: List[NetworkResult]) -> float:
         # Hash checkpoints by their input
         if self._lookup_cache is None:
             self._lookup_cache = {}
-            for k, v in self.data.items():
-                self._lookup_cache[v["input"]] = k
+            for key, value in self.data.items():
+                if isinstance(value["input"], list):
+                    for idx, v in enumerate(value["input"]):
+                        self._lookup_cache["{}_{}".format(v, str(idx))] = key
+                else:
+                    self._lookup_cache[value["input"]] = key
 
         correct_count = 0
-        for r in results:
-            # Find the data the corresponds to input
-            key = self._lookup_cache[r.input]
-            # remove new line characters
-            r_new = r.semantic_output[0] if isinstance(r.semantic_output, list) else r.semantic_output
-            correct_count += int(self.data[key]["label"].replace('\\n','').replace('\n','') == r_new.replace('\\n','').replace('\n',''))
+        result_count = 0
+        def validate_golden(golden_str, result_str):
+            golden_str = golden_str.replace('\\n','').replace('\n','').replace('\\\\"','\"').replace('\\"','\"')
+            result_str = result_str.replace('\\n','').replace('\n','').replace('\\\\"','\"').replace('\\"','\"')
+            return int(golden_str == result_str)
 
-        return correct_count / len(results)
+        for r in results:
+            if isinstance(r.input, list):
+                result_count += len(r.input)
+                for idx, i in enumerate(r.input):
+                    key = self._lookup_cache["{}_{}".format(i, str(idx))]
+                    correct_count += validate_golden(self.data[key]["label"][idx], r.semantic_output[idx])
+            else:
+                result_count += 1
+                # Find the data the corresponds to input
+                key = self._lookup_cache[r.input]
+                correct_count += validate_golden(self.data[key]["label"], r.semantic_output)
+        return correct_count / result_count

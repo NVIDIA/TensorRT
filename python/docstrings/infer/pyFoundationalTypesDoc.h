@@ -30,8 +30,10 @@ constexpr const char* descr = R"trtdoc(
 
 constexpr char const* float32 = R"trtdoc(32-bit floating point format.)trtdoc";
 constexpr char const* float16 = R"trtdoc(IEEE 16-bit floating-point format.)trtdoc";
+constexpr char const* bfloat16 = R"trtdoc(Brain float -- has an 8 bit exponent and 8 bit significand)trtdoc";
 constexpr char const* int8 = R"trtdoc(Signed 8-bit integer representing a quantized floating-point value.)trtdoc";
 constexpr char const* int32 = R"trtdoc(Signed 32-bit integer format.)trtdoc";
+constexpr char const* int64 = R"trtdoc(Signed 64-bit integer format.)trtdoc";
 constexpr char const* boolean = R"trtdoc(8-bit boolean. 0 = false, 1 = true, other values undefined.)trtdoc";
 constexpr char const* uint8 = R"trtdoc(
     Unsigned 8-bit integer format.
@@ -90,6 +92,14 @@ constexpr const char* init_type = R"trtdoc(
     :type: A type to initialize the weights with. Default: :class:`tensorrt.float32`
 )trtdoc";
 
+constexpr const char* init_ptr = R"trtdoc(
+    Initializes a Weights object with the specified data.
+
+    :type: A type to initialize the weights with. 
+    :ptr: A pointer to the data. 
+    :count: The number of weights.
+)trtdoc";
+
 // FIXME: Weird bug occurring here. Cannot provide :arg:
 constexpr const char* init_numpy = R"trtdoc(
     :a: A numpy array whose values to use. No deep copies are made.
@@ -97,8 +107,11 @@ constexpr const char* init_numpy = R"trtdoc(
 
 constexpr const char* numpy = R"trtdoc(
     Create a numpy array using the underlying buffer of this weights object.
+    The resulting array is just a view over the existing data, i.e. no deep copy is made.
 
-    :returns: A new numpy array that holds a reference to this weight object's buffer - no deep copy is made.
+    If the weights cannot be converted to NumPy (e.g. due to unsupported data type), the original weights are returned. 
+
+    :returns: The NumPy array or the original weights.
 )trtdoc";
 } // namespace WeightsDoc
 

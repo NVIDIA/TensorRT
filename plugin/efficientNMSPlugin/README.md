@@ -16,6 +16,8 @@
 
 ## Description
 
+> NOTE: `EfficientNMSONNXPlugin` is deprecated since TensorRT 9.0. Its functionality has been superseded by the `INMSLayer`.
+
 This TensorRT plugin implements an efficient algorithm to perform Non Maximum Suppression for object detection networks.
 
 This plugin is primarily intended for using with EfficientDet on TensorRT, as this network is particularly sensitive to the latencies introduced by slower NMS implementations. However, the plugin is generic enough that it will work correctly for other detections architectures, such as SSD or FasterRCNN.
@@ -168,3 +170,12 @@ The following resources provide a deeper understanding of the NMS algorithm:
 
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html)
 documentation.
+
+## Changelog
+
+June 2023
+Add deprecation note for the `EfficientNMSONNXPlugin` plugin.
+
+## Known issues
+
+There are no known issues in this plugin.

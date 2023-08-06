@@ -741,7 +741,13 @@ enum class PluginFieldType : int32_t
     //! nvinfer1::Dims field type.
     kDIMS = 7,
     //! Unknown field type.
-    kUNKNOWN = 8
+    kUNKNOWN = 8,
+    //! BF16 field type.
+    kBF16 = 9,
+    //! INT64 field type.
+    kINT64 = 10,
+    //! FP8 field type.
+    kFP8 = 11,
 };
 
 //!

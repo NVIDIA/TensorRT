@@ -111,7 +111,7 @@ Notice that Q/DQ nodes are not added to the path coming from `Conv` layer. Addit
 We provide custom Q/DQ insertion cases for the models available in the model zoo. The library-provided custom Q/DQ insertion case classes can be imported from `tensorflow_quantization.custom_qdq_cases` module and passed to the `quantize_model` function.
 
 ```{note}
-Refer to [tensorflow_quantization.custom_qdq_cases](https://gitlab-master.nvidia.com/TensorRT/Tools/tensorflow-quantization/-/blob/main/tensorflow_quantization/custom_qdq_cases.py) module for more details.
+Refer to [tensorflow_quantization.custom_qdq_cases](/tools/tensorflow-quantization/tensorflow_quantization/custom_qdq_cases.py) module for more details.
 ```
 
 ## **How to add a new custom Q/DQ insertion case?**

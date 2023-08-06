@@ -108,6 +108,8 @@ int clipInference(
         PLUGIN_FAIL("unsupported datatype");
         break;
     }
+    case nvinfer1::DataType::kBF16:
+    case nvinfer1::DataType::kINT64: PLUGIN_FAIL("Unsupported data type");
     }
 
     return 0;

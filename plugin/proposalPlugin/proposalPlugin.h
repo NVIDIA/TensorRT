@@ -32,7 +32,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class ProposalPlugin : public IPluginV2Ext
+class TRT_DEPRECATED ProposalPlugin : public IPluginV2Ext
 {
 public:
     ProposalPlugin(int32_t inputHeight, int32_t inputWidth, int32_t rpnHeight, int32_t rpnWidth, float rpnStdScaling,
@@ -196,7 +196,7 @@ protected:
     std::string mPluginName;
 };
 
-class ProposalPluginCreator : public ProposalBasePluginCreator
+class TRT_DEPRECATED ProposalPluginCreator : public ProposalBasePluginCreator
 {
 public:
     ProposalPluginCreator() noexcept;

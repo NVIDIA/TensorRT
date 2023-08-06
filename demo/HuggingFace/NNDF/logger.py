@@ -24,6 +24,7 @@ G_LOGGER.WARNING = logging.WARNING
 G_LOGGER.ERROR = logging.ERROR
 
 formatter = logging.Formatter("[%(asctime)s][%(name)s][%(levelname)s] %(message)s")
-stream = logging.StreamHandler()
-stream.setFormatter(formatter)
-G_LOGGER.addHandler(stream)
+if not G_LOGGER.handlers:
+    stream = logging.StreamHandler()
+    stream.setFormatter(formatter)
+    G_LOGGER.addHandler(stream)

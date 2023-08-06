@@ -2,13 +2,17 @@ Pillow
 -f https://download.pytorch.org/whl/torch_stable.html
 torch==1.9.0; python_version<"3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
 torch==1.9.0+cpu; python_version<"3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
-torch==1.11.0; python_version>="3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
-torch==1.11.0+cpu; python_version>="3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torch==1.11.0; python_version>="3.8" and python_version<"3.11" and (platform_machine=="aarch64" and sys.platform=="linux")
+torch==1.11.0+cpu; python_version>="3.8" and python_version<"3.11" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torch==2.0.0; python_version>="3.11" and (platform_machine=="aarch64" and sys.platform=="linux")
+torch==2.0.0+cpu; python_version>="3.11" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
 -f https://download.pytorch.org/whl/torch_stable.html
 torchvision==0.10.0; python_version<"3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
 torchvision==0.10.0+cpu; python_version<"3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
-torchvision==0.12.0; python_version>="3.8" and (platform_machine=="aarch64" and sys.platform=="linux")
-torchvision==0.12.0+cpu; python_version>="3.8" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torchvision==0.12.0; python_version>="3.8" and python_version<"3.11" and (platform_machine=="aarch64" and sys.platform=="linux")
+torchvision==0.12.0+cpu; python_version>="3.8" and python_version<"3.11" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torchvision==0.15.1; python_version>="3.11" and (platform_machine=="aarch64" and sys.platform=="linux")
+torchvision==0.15.1+cpu; python_version>="3.11" and ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
 cuda-python
 pywin32; platform_system == "Windows"
 pyyaml

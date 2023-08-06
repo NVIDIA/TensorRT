@@ -679,6 +679,9 @@ IPluginV2Ext* ProposalPluginCreator::createPlugin(char const* name, PluginFieldC
 {
     try
     {
+        gLogWarning << "Proposal plugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
+                       "ProposalDynamic plugin."
+                    << std::endl;
         PluginField const* fields = fc->fields;
         int32_t nbFields = fc->nbFields;
         int32_t inputHeight = 0;
@@ -887,6 +890,9 @@ IPluginV2Ext* ProposalPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "Proposal plugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
+                       "ProposalDynamic plugin."
+                    << std::endl;
         // This object will be deleted when the network is destroyed,
         IPluginV2Ext* plugin = new ProposalPlugin(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());

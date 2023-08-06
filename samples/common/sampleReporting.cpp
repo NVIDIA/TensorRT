@@ -102,8 +102,26 @@ float findCoeffOfVariance(std::vector<InferenceTime> const& timings, T const& to
 
 inline InferenceTime traceToTiming(const InferenceTrace& a)
 {
-    return InferenceTime((a.enqEnd - a.enqStart), (a.h2dEnd - a.h2dStart), (a.computeEnd - a.computeStart),
-        (a.d2hEnd - a.d2hStart));
+    return InferenceTime(
+        (a.enqEnd - a.enqStart), (a.h2dEnd - a.h2dStart), (a.computeEnd - a.computeStart), (a.d2hEnd - a.d2hStart));
+}
+
+inline std::string dimsToString(Dims const& shape)
+{
+    std::stringstream ss;
+
+    if (shape.nbDims == 0)
+    {
+        ss << "scalar";
+    }
+    else
+    {
+        for (int32_t i = 0; i < shape.nbDims; i++)
+        {
+            ss << shape.d[i] << (i != shape.nbDims - 1 ? "x" : "");
+        }
+    }
+    return ss.str();
 }
 
 } // namespace
@@ -502,6 +520,33 @@ bool printLayerInfo(
         os << getLayerInformation(engine, context, nvinfer1::LayerInformationFormat::kJSON) << std::flush;
     }
     return true;
+}
+
+void printOptimizationProfileInfo(ReportingOptions const& reporting, nvinfer1::ICudaEngine const* engine)
+{
+    if (reporting.optProfileInfo)
+    {
+        sample::gLogInfo << "Optimization Profile Information:" << std::endl;
+        for (int32_t i = 0; i < engine->getNbOptimizationProfiles(); i++)
+        {
+            for (int32_t j = 0; j < engine->getNbIOTensors(); j++)
+            {
+                auto const tensorName = engine->getIOTensorName(j);
+
+                if (engine->getTensorIOMode(tensorName) == nvinfer1::TensorIOMode::kINPUT)
+                {
+                    auto tensorMinShape = engine->getProfileShape(tensorName, i, nvinfer1::OptProfileSelector::kMIN);
+                    auto tensorOptShape = engine->getProfileShape(tensorName, i, nvinfer1::OptProfileSelector::kOPT);
+                    auto tensorMaxShape = engine->getProfileShape(tensorName, i, nvinfer1::OptProfileSelector::kMAX);
+
+                    sample::gLogInfo << "Model input " << tensorName << " (profile " << i << "): "
+                                     << "min=" << dimsToString(tensorMinShape)
+                                     << ", opt=" << dimsToString(tensorOptShape)
+                                     << ", max=" << dimsToString(tensorMaxShape) << std::endl;
+                }
+            }
+        }
+    }
 }
 
 void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironment& iEnv)

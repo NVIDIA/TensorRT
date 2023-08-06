@@ -476,12 +476,10 @@ UnfusedMHARunner::UnfusedMHARunner(const nvinfer1::DataType type, const int numH
     , mAlgoBatchedEx2(CUBLAS_GEMM_DEFAULT_TENSOR_OP)
     , mSm(sm)
 {
-    PLUGIN_CUBLASASSERT(cublasCreate(&mCublas));
 }
 
 UnfusedMHARunner::~UnfusedMHARunner()
 {
-    PLUGIN_CUBLASASSERT(cublasDestroy(mCublas));
 }
 
 size_t UnfusedMHARunner::getSerializationSize() const noexcept
@@ -523,17 +521,17 @@ size_t UnfusedMHARunner::getWorkspaceSize() const
 }
 
 void UnfusedMHARunner::run(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
-    this->run(inputDesc[0], outputDesc[0], inputs[0], inputs[1], outputs[0], workspace, stream);
+    this->run(inputDesc[0], outputDesc[0], inputs[0], inputs[1], outputs[0], workspace, stream, cublas);
 }
 
 void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
-    const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
+    const void* maskPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
     const int* maskIdx = static_cast<const int*>(maskPtr);
 
-    PLUGIN_CUBLASASSERT(cublasSetStream(mCublas, stream));
+    PLUGIN_CUBLASASSERT(cublasSetStream(cublas, stream));
 
     // Q, K, V: BxNxSxH (inputs)
     // Q * K': BxNxSxS (-> scratch1)
@@ -542,7 +540,7 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
 
     if (mType == DataType::kHALF)
     {
-        CublasConfigHelper helper(mCublas);
+        CublasConfigHelper helper(cublas);
         const half* qptr = static_cast<const half*>(qkvPtr);
         const half* kptr = qptr + mHeadSize;
         const half* vptr = kptr + mHeadSize;
@@ -550,7 +548,7 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
         half* pptr = qkptr + mOmatSize * mNumMats;
         half alpha = 1.f;
         half beta = 0.f;
-        PLUGIN_CUBLASASSERT(::cublasGemmStridedBatchedEx(mCublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, &alpha,
+        PLUGIN_CUBLASASSERT(::cublasGemmStridedBatchedEx(cublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, &alpha,
             kptr, CUDA_R_16F, mLdQKV, mStrideQKV, qptr, CUDA_R_16F, mLdQKV, mStrideQKV, &beta, qkptr, CUDA_R_16F, mS,
             mOmatSize, mNumMats, CUDA_R_16F, static_cast<cublasGemmAlgo_t>(mAlgoBatchedEx1)));
 
@@ -565,7 +563,7 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
         }
 
         // compute P*V (as V*P)
-        PLUGIN_CUBLASASSERT(cublasGemmStridedBatchedEx(mCublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, &alpha,
+        PLUGIN_CUBLASASSERT(cublasGemmStridedBatchedEx(cublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, &alpha,
             vptr, CUDA_R_16F, mLdQKV, mStrideQKV, pptr, CUDA_R_16F, mS, mOmatSize, &beta, output, CUDA_R_16F, mLdOut,
             mStrideOut, mNumMats, CUDA_R_16F, static_cast<cublasGemmAlgo_t>(mAlgoBatchedEx2)));
     }
@@ -578,7 +576,7 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
         float* qkptr = static_cast<float*>(workspace);
         float* pptr = qkptr + mOmatSize * mNumMats;
         float* outptr = static_cast<float*>(output);
-        PLUGIN_CUBLASASSERT(cublasGemmStridedBatched<float>(mCublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, 1.f,
+        PLUGIN_CUBLASASSERT(cublasGemmStridedBatched<float>(cublas, CUBLAS_OP_T, CUBLAS_OP_N, mS, mS, mHeadSize, 1.f,
             kptr, mLdQKV, mStrideQKV, qptr, mLdQKV, mStrideQKV, 0.f, qkptr, mS, mOmatSize, mNumMats));
 
         // apply softmax
@@ -591,7 +589,7 @@ void UnfusedMHARunner::run(const PluginTensorDesc& inputDesc, const PluginTensor
             computeScaledSoftmax<float>(stream, mS, mB, mNumHeads, mRsqrtHeadSize, qkptr, pptr);
         }
 
-        PLUGIN_CUBLASASSERT(cublasGemmStridedBatched<float>(mCublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, 1.f,
+        PLUGIN_CUBLASASSERT(cublasGemmStridedBatched<float>(cublas, CUBLAS_OP_N, CUBLAS_OP_N, mHeadSize, mS, mS, 1.f,
             vptr, mLdQKV, mStrideQKV, pptr, mS, mOmatSize, 0.f, outptr, mLdOut, mStrideOut, mNumMats));
     }
 }
@@ -695,7 +693,7 @@ public:
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
-        const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
+        const void* maskPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
     {
         params.qkv_ptr = const_cast<void*>(qkvPtr);
 
@@ -748,13 +746,13 @@ void FusedMHARunnerFP16::deserialize(const void* data, size_t length)
 }
 
 void FusedMHARunnerFP16::run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
-    const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
+    const void* maskPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
-    pimpl->run(inputDesc, outputDesc, qkvPtr, maskPtr, output, workspace, stream);
+    pimpl->run(inputDesc, outputDesc, qkvPtr, maskPtr, output, workspace, stream, cublas);
 }
 
 void FusedMHARunnerFP16::run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
     assert(false && "not implemented");
 }
@@ -829,7 +827,7 @@ public:
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
-        const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
+        const void* maskPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
     {
         float scaleQkv = inputDesc.scale;
         float scaleCtx = outputDesc.scale;
@@ -897,13 +895,13 @@ void FusedMHARunnerInt8::deserialize(const void* data, size_t length)
 }
 
 void FusedMHARunnerInt8::run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
-    const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
+    const void* maskPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
-    pimpl->run(inputDesc, outputDesc, qkvPtr, maskPtr, output, workspace, stream);
+    pimpl->run(inputDesc, outputDesc, qkvPtr, maskPtr, output, workspace, stream, cublas);
 }
 
 void FusedMHARunnerInt8::run(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream)
+    const void* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
     assert(false && "not implemented");
 }
@@ -1005,7 +1003,7 @@ public:
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
-        const void* maskPtr, const void* cuSeqlenPtr, void* output, void* workspace, cudaStream_t stream)
+        const void* maskPtr, const void* cuSeqlenPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
     {
 
         params.qkv_ptr = const_cast<void*>(qkvPtr);
@@ -1060,17 +1058,16 @@ void FusedMHARunnerFP16v2::deserialize(const void* data, size_t length)
 }
 
 void FusedMHARunnerFP16v2::run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc,
-    const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
+    const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
     assert(false && "not implemented");
-    // pimpl->run(inputDesc, outputDesc, qkvPtr, maskPtr, output, workspace, stream);
 }
 
 void FusedMHARunnerFP16v2::run(const nvinfer1::PluginTensorDesc* inputDesc,
     const nvinfer1::PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream)
+    cudaStream_t stream, cublasHandle_t cublas)
 {
-    pimpl->run(inputDesc[0], outputDesc[0], inputs[0], inputs[1], inputs[2], outputs[0], workspace, stream);
+    pimpl->run(inputDesc[0], outputDesc[0], inputs[0], inputs[1], inputs[2], outputs[0], workspace, stream, cublas);
 }
 
 bool FusedMHARunnerFP16v2::isValid(int s) const
@@ -1170,7 +1167,7 @@ public:
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
-        const void* maskPtr, const void* cuSeqlenPtr, void* output, void* workspace, cudaStream_t stream)
+        const void* maskPtr, const void* cuSeqlenPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
     {
         float scaleQkv = inputDesc.scale;
         float scaleCtx = outputDesc.scale;
@@ -1244,16 +1241,16 @@ void FusedMHARunnerInt8v2::deserialize(const void* data, size_t length)
 }
 
 void FusedMHARunnerInt8v2::run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc,
-    const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream)
+    const void* qkvPtr, const void* maskPtr, void* output, void* workspace, cudaStream_t stream, cublasHandle_t cublas)
 {
     assert(false && "Not implemented");
 }
 
 void FusedMHARunnerInt8v2::run(const nvinfer1::PluginTensorDesc* inputDesc,
     const nvinfer1::PluginTensorDesc* outputDesc, const void* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream)
+    cudaStream_t stream, cublasHandle_t cublas)
 {
-    pimpl->run(inputDesc[0], outputDesc[0], inputs[0], inputs[1], inputs[2], outputs[0], workspace, stream);
+    pimpl->run(inputDesc[0], outputDesc[0], inputs[0], inputs[1], inputs[2], outputs[0], workspace, stream, cublas);
 }
 
 bool FusedMHARunnerInt8v2::isValid(int s) const

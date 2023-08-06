@@ -16,9 +16,6 @@
 #
 
 import argparse
-import onnx
-import pycuda.autoinit
-import pycuda.driver as cuda
 import sys
 import tensorrt as trt
 from os.path import join
