@@ -31,6 +31,7 @@ see `this page <https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/po
     config/toc
     constants/toc
     cuda/toc
+    datatype/toc
     exception/toc
     func/toc
     json/toc

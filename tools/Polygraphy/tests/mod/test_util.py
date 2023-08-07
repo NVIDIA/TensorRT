@@ -31,6 +31,8 @@ from polygraphy import mod
         ("0.1rc0", "0.1b0", True),
         ("0.post1", "0.post0", True),
         ("0.post1", "0.post2", False),
+        ("1.13.1+cu117", "1.13.0", True),
+        ("1.13.1+cu117", "1.13.2", False),
     ],
 )
 def test_version(ver0, ver1, expected):

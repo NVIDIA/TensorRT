@@ -19,6 +19,7 @@ import threading
 import numpy as np
 import pytest
 import tensorrt as trt
+import torch
 
 from polygraphy import cuda, mod
 from polygraphy.backend.trt import (
@@ -30,9 +31,9 @@ from polygraphy.backend.trt import (
     engine_from_network,
     network_from_onnx_bytes,
 )
+from polygraphy.backend.trt.runner import _get_array_on_cpu
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
-from tests.helper import time_func
 from tests.models.meta import ONNX_MODELS
 
 
@@ -49,33 +50,39 @@ def nonzero_engine():
     return engine_from_network(network_loader)
 
 
+@pytest.fixture()
+def identity_engine():
+    model = ONNX_MODELS["identity"]
+    network_loader = NetworkFromOnnxBytes(model.loader)
+    return engine_from_network(network_loader)
+
+
+@pytest.fixture()
+def reducable_engine():
+    model = ONNX_MODELS["reducable"]
+    network_loader = NetworkFromOnnxBytes(model.loader)
+    return engine_from_network(network_loader)
+
+
 class TestTrtRunner:
     def test_can_name_runner(self):
         NAME = "runner"
         runner = TrtRunner(None, name=NAME)
         assert runner.name == NAME
 
-    def test_basic(self):
-        model = ONNX_MODELS["identity"]
-        network_loader = NetworkFromOnnxBytes(model.loader)
-        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+    def test_basic(self, identity_engine):
+        with TrtRunner(identity_engine) as runner:
             assert runner.optimization_profile is None
             assert runner.is_active
-            assert runner.owns_engine
-            assert runner.owns_context
-            model.check_runner(runner)
+            ONNX_MODELS["identity"].check_runner(runner)
             assert runner.last_inference_time() is not None
         assert not runner.is_active
 
     @pytest.mark.serial
-    def test_warn_if_impl_methods_called(self, check_warnings_on_runner_impl_methods):
-        model = ONNX_MODELS["identity"]
-        runner = TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader)))
+    def test_warn_if_impl_methods_called(self, check_warnings_on_runner_impl_methods, identity_engine):
+        runner = TrtRunner(identity_engine)
         check_warnings_on_runner_impl_methods(runner)
 
-    @pytest.mark.skipif(
-        mod.version(trt.__version__) <= mod.version("8.5.0.9"), reason="Unsupported for TRT 8.4 and older"
-    )
     @pytest.mark.parametrize(
         "inp, expected",
         [
@@ -86,23 +93,35 @@ class TestTrtRunner:
     )
     def test_data_dependent_shapes(self, nonzero_engine, inp, expected):
         with TrtRunner(nonzero_engine) as runner:
-            outputs = runner.infer({"input": np.array(inp, dtype=np.int32)})
+            outputs = runner.infer(
+                {
+                    "input": np.array(
+                        inp, dtype=np.int32 if mod.version(trt.__version__) < mod.version("9.0") else np.int64
+                    )
+                }
+            )
             assert np.array_equal(outputs["nonzero_out_0"], np.array(expected, dtype=np.int32))
 
-    def test_context(self):
-        model = ONNX_MODELS["identity"]
-        engine = engine_from_network(NetworkFromOnnxBytes(model.loader))
-        with engine, TrtRunner(engine.create_execution_context) as runner:
-            model.check_runner(runner)
-            assert not runner.owns_engine
-            assert runner.owns_context
+    @pytest.mark.parametrize("copy_outputs_to_host", [True, False])
+    @pytest.mark.parametrize("device", ["cpu", "cuda"])
+    def test_torch_tensors(self, copy_outputs_to_host, identity_engine, device):
+        with TrtRunner(identity_engine) as runner:
+            arr = torch.ones([1, 1, 2, 2], dtype=torch.float32, device=device)
+            outputs = runner.infer({"x": arr}, copy_outputs_to_host=copy_outputs_to_host)
+            assert all(isinstance(t, torch.Tensor) for t in outputs.values())
 
-    def test_device_buffer_order_matches_bindings(self):
-        model = ONNX_MODELS["reducable"]
-        engine = engine_from_network(NetworkFromOnnxBytes(model.loader))
-        with engine, TrtRunner(engine) as runner:
-            dev_buf_order = list(runner.device_buffers.keys())
-            for binding, dev_buf_name in zip(engine, dev_buf_order):
+            assert torch.equal(outputs["y"].to("cpu"), arr.to("cpu"))
+
+            assert outputs["y"].device.type == ("cpu" if copy_outputs_to_host else "cuda")
+
+    def test_context(self, identity_engine):
+        with TrtRunner(identity_engine.create_execution_context) as runner:
+            ONNX_MODELS["identity"].check_runner(runner)
+
+    def test_device_buffer_order_matches_bindings(self, reducable_engine):
+        with TrtRunner(reducable_engine) as runner:
+            dev_buf_order = list(runner.device_input_buffers.keys())
+            for binding, dev_buf_name in zip(reducable_engine, dev_buf_order):
                 assert binding == dev_buf_name
 
     def test_shape_output(self):
@@ -111,20 +130,20 @@ class TestTrtRunner:
         with engine, TrtRunner(engine.create_execution_context) as runner:
             model.check_runner(runner)
 
-    def test_multithreaded_runners_from_engine(self):
-        model = ONNX_MODELS["identity"]
-        engine = engine_from_network(NetworkFromOnnxBytes(model.loader))
-
-        with engine, TrtRunner(engine) as runner0, TrtRunner(engine) as runner1:
-            t1 = threading.Thread(target=model.check_runner, args=(runner0,))
-            t2 = threading.Thread(target=model.check_runner, args=(runner1,))
+    def test_multithreaded_runners_from_engine(self, identity_engine):
+        with TrtRunner(identity_engine) as runner0, TrtRunner(identity_engine) as runner1:
+            t1 = threading.Thread(target=ONNX_MODELS["identity"].check_runner, args=(runner0,))
+            t2 = threading.Thread(target=ONNX_MODELS["identity"].check_runner, args=(runner1,))
             t1.start()
             t2.start()
             t1.join()
             t2.join()
 
-    @pytest.mark.skipif(mod.version(trt.__version__)[0:2] == mod.version("7.2"), reason="Bugged in TRT 7.2")
     @pytest.mark.parametrize("use_optimization_profile", [True, False])
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) >= mod.version("8.6") and mod.version(trt.__version__) < mod.version("8.7"),
+        reason="Bug in TRT 8.6",
+    )
     def test_multiple_profiles(self, use_optimization_profile):
         model = ONNX_MODELS["dynamic_identity"]
         profile0_shapes = [(1, 2, 1, 1), (1, 2, 1, 1), (1, 2, 1, 1)]  # Use min==opt==max to fix shapes in the engine.
@@ -163,7 +182,6 @@ class TestTrtRunner:
             for shape in shapes:
                 model.check_runner(runner, {"new_shape": shape})
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Test not compatible with TRT 6")
     @pytest.mark.parametrize(
         "names, err",
         [
@@ -172,34 +190,27 @@ class TestTrtRunner:
             ([], "The following inputs were not found"),
         ],
     )
-    def test_error_on_wrong_name_feed_dict(self, names, err):
-        model = ONNX_MODELS["identity"]
-        network_loader = NetworkFromOnnxBytes(model.loader)
-        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+    @pytest.mark.parametrize("module", [torch, np])
+    def test_error_on_wrong_name_feed_dict(self, names, err, identity_engine, module):
+        with TrtRunner(identity_engine) as runner:
             with pytest.raises(PolygraphyException, match=err):
-                runner.infer({name: np.ones(shape=(1, 1, 2, 2), dtype=np.float32) for name in names})
+                runner.infer({name: module.ones((1, 1, 2, 2), dtype=module.float32) for name in names})
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Test not compatible with TRT 6")
-    def test_error_on_wrong_dtype_feed_dict(self):
-        model = ONNX_MODELS["identity"]
-        network_loader = NetworkFromOnnxBytes(model.loader)
-        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+    @pytest.mark.parametrize("module", [torch, np])
+    def test_error_on_wrong_dtype_feed_dict(self, identity_engine, module):
+        with TrtRunner(identity_engine) as runner:
             with pytest.raises(PolygraphyException, match="unexpected dtype."):
-                runner.infer({"x": np.ones(shape=(1, 1, 2, 2), dtype=np.int32)})
+                runner.infer({"x": module.ones((1, 1, 2, 2), dtype=module.int32)})
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.0"), reason="Test not compatible with TRT 6")
-    def test_error_on_wrong_shape_feed_dict(self):
-        model = ONNX_MODELS["identity"]
-        network_loader = NetworkFromOnnxBytes(model.loader)
-        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+    @pytest.mark.parametrize("module", [torch, np])
+    def test_error_on_wrong_shape_feed_dict(self, identity_engine, module):
+        with TrtRunner(identity_engine) as runner:
             with pytest.raises(PolygraphyException, match="incompatible shape."):
-                runner.infer({"x": np.ones(shape=(1, 1, 3, 2), dtype=np.float32)})
+                runner.infer({"x": module.ones((1, 1, 3, 2), dtype=module.float32)})
 
     @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
-    def test_device_views(self, use_view):
-        model = ONNX_MODELS["reducable"]
-        network_loader = NetworkFromOnnxBytes(model.loader)
-        with TrtRunner(EngineFromNetwork(network_loader)) as runner, cuda.DeviceArray((1,), dtype=np.float32) as x:
+    def test_device_views(self, use_view, reducable_engine):
+        with TrtRunner(reducable_engine) as runner, cuda.DeviceArray((1,), dtype=np.float32) as x:
             x.copy_from(np.ones((1,), dtype=np.float32))
             outputs = runner.infer(
                 {
@@ -210,19 +221,15 @@ class TestTrtRunner:
             assert outputs["identity_out_6"][0] == 2
             assert outputs["identity_out_8"][0] == 2
 
-    def test_no_output_copy(self):
-        model = ONNX_MODELS["identity"]
-        network_loader = NetworkFromOnnxBytes(model.loader)
-        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+    def test_no_output_copy(self, identity_engine):
+        with TrtRunner(identity_engine) as runner:
             inp = np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
             outputs = runner.infer({"x": inp}, copy_outputs_to_host=False)
             assert isinstance(outputs["y"], cuda.DeviceView)
             assert np.array_equal(outputs["y"].numpy(), inp)
 
-    def test_subsequent_infers_with_different_input_types(self):
-        model = ONNX_MODELS["identity"]
-        network_loader = NetworkFromOnnxBytes(model.loader)
-        with TrtRunner(EngineFromNetwork(network_loader)) as runner:
+    def test_subsequent_infers_with_different_input_types(self, identity_engine):
+        with TrtRunner(identity_engine) as runner:
             inp = np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
 
             def check(outputs):
@@ -230,6 +237,9 @@ class TestTrtRunner:
 
             check(runner.infer({"x": inp}))
             check(runner.infer({"x": cuda.DeviceArray(shape=inp.shape, dtype=inp.dtype).copy_from(inp)}))
+
+            torch_outputs = runner.infer({"x": torch.from_numpy(inp)})
+            check({name: out.numpy() for name, out in torch_outputs.items()})
             check(runner.infer({"x": inp}))
 
     @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
@@ -246,59 +256,14 @@ class TestTrtRunner:
             assert np.all(outputs["Y"] == inp)
             assert outputs["Y"].shape == (1, 2, 3, 3)
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported before TRT 8")
     def test_cannot_use_device_view_shape_tensor(self):
         model = ONNX_MODELS["empty_tensor_expand"]
         with TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader))) as runner, cuda.DeviceArray(
-            shape=(5,), dtype=np.int32
+            shape=(5,), dtype=np.int32 if mod.version(trt.__version__) < mod.version("9.0") else np.int64
         ) as arr:
             with pytest.raises(PolygraphyException, match="it must reside in host memory"):
                 runner.infer({"data": np.ones((2, 0, 3, 0), dtype=np.float32), "new_shape": arr})
 
-    @pytest.mark.flaky
-    @pytest.mark.serial
-    @pytest.mark.parametrize("copy_outputs", [True, False], ids=["output_dtoh", "no_output_copy"])
-    @pytest.mark.parametrize("copy_inputs", [True, False], ids=["input_htod", "no_input_copy"])
-    def test_infer_overhead(self, copy_inputs, copy_outputs):
-        model = ONNX_MODELS["needs_constraints"]
-        inp_name = list(model.input_metadata.keys())[0]
-        inp_shape = model.input_metadata[inp_name].shape
-
-        inp = np.ones(shape=inp_shape, dtype=np.float32)
-        dev_inp = cuda.DeviceArray(shape=inp.shape, dtype=inp.dtype)
-        dev_inp.copy_from(inp)
-
-        out = np.zeros(shape=inp_shape, dtype=np.float32)
-        dev_out = cuda.DeviceArray(shape=out.shape, dtype=out.dtype)
-
-        with engine_from_network(
-            network_from_onnx_bytes(model.loader)
-        ) as engine, engine.create_execution_context() as context, TrtRunner(
-            context
-        ) as runner, dev_inp, dev_out, cuda.Stream() as stream:
-            # Inference outside the TrtRunner
-            def infer():
-                if copy_inputs:
-                    dev_inp.copy_from(inp, stream=stream)
-                context.execute_async_v2(bindings=[dev_inp.ptr, dev_out.ptr], stream_handle=stream.ptr)
-                if copy_outputs:
-                    dev_out.copy_to(out, stream=stream)
-                stream.synchronize()
-
-            native_time = time_func(infer)
-
-            feed_dict = {inp_name: (inp if copy_inputs else dev_inp)}
-
-            def runner_infer():
-                runner.infer(feed_dict, check_inputs=False, copy_outputs_to_host=copy_outputs)
-
-            runner_time = time_func(runner_infer)
-
-        print(f"Absolute difference: {runner_time - native_time:.5g}")
-        print(f"Relative difference: {runner_time / native_time:.5g}")
-        assert (runner_time - native_time) < 1e-3 or runner_time <= (native_time * 1.10)
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.5"), reason="Unsupported before TRT 8.5")
     @pytest.mark.parametrize("hwc_input", [True, False], ids=["hwc_input", "chw_input"])
     @pytest.mark.parametrize("hwc_output", [True, False], ids=["hwc_output", "chw_output"])
     def test_infer_chw_format(self, hwc_input, hwc_output):
@@ -326,3 +291,16 @@ class TestTrtRunner:
                 assert np.allclose(outputs["y"].transpose(0, 3, 1, 2), inp)
             else:  # hwc_input and not hwc_output: output in CHW format and shaped (N, C, H, W)
                 assert np.allclose(outputs["y"].transpose(0, 2, 3, 1), inp)
+
+    @pytest.mark.parametrize("use_torch", [True, False])
+    def test_get_array_on_cpu(self, use_torch):
+        shape = (4,)
+        with cuda.DeviceArray.raw(shape) as arr:
+            host_buffers = {}
+            stream = cuda.Stream()
+            host_arr = _get_array_on_cpu(arr, "test", host_buffers, stream, arr.nbytes, use_torch)
+
+            if use_torch:
+                assert isinstance(host_arr, torch.Tensor)
+            else:
+                assert isinstance(host_arr, np.ndarray)

@@ -26,6 +26,8 @@ to modify an ONNX model.
 
 - [EXPERIMENTAL] `insert` can insert a node into a model, optionally replacing existing subgraphs.
 
+- [EXPERIMENTAL] `prune` can prune an ONNX model to have [2:4 structured sparsity](https://developer.nvidia.com/blog/accelerating-inference-with-sparsity-using-ampere-and-tensorrt/) by setting the some values of the weights to zero. Note that this will *not* retain the accuracy of the model and should hence be used only for functional testing.
+
 
 ## Usage
 

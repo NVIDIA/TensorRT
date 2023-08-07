@@ -101,3 +101,17 @@ class TestImporter:
     )
     def test_version_ok(self, ver, pref, expected):
         assert _version_ok(ver, pref) == expected
+
+    def test_has_mod(self, poly_venv):
+        assert "colored" not in poly_venv.installed_packages()
+        poly_venv.run([poly_venv.python, "-c", "from polygraphy import mod; assert not mod.has_mod('colored')"])
+
+        poly_venv.run([poly_venv.python, "-m", "pip", "install", "colored==1.4.0"])
+        # Make sure `has_mod` doesn't actually import the package.
+        poly_venv.run(
+            [
+                poly_venv.python,
+                "-c",
+                "from polygraphy import mod; import sys; assert mod.has_mod('colored'); assert 'colored' not in sys.modules; import colored; assert 'colored' in sys.modules",
+            ]
+        )

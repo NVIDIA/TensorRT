@@ -17,16 +17,19 @@
 import numpy as np
 import pytest
 import tensorrt as trt
-from polygraphy import cuda, mod, util
+import torch
+
+from polygraphy import cuda, util
 from polygraphy.backend.trt import (
     Calibrator,
     CreateConfig,
+    Profile,
     engine_from_network,
     get_trt_logger,
-    Profile,
     network_from_onnx_bytes,
 )
 from polygraphy.common import TensorMetadata
+from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
@@ -74,9 +77,6 @@ class TestCalibrator:
         ],
     )
     def test_calibrator_basic(self, identity_builder_network, BaseClass):
-        if mod.version(trt.__version__) < mod.version("7.0") and BaseClass == trt.IInt8LegacyCalibrator:
-            pytest.skip("Bug in TRT 6 causes NaNs with legacy calibrator")
-
         builder, network = identity_builder_network
         NUM_BATCHES = 2
 
@@ -129,16 +129,19 @@ class TestCalibrator:
             assert calibrator.num_batches == NUM_BATCHES
         self.check_calibrator_cleanup(calibrator)
 
-    # We should be able to mix DeviceView with NumPy arrays.
-    @pytest.mark.parametrize(
-        "mode", ["array", "view", "pointer"]
-    )  # We should be able to use DeviceArray in place of DeviceView
+    # We should be able to mix DeviceView with NumPy arrays and PyTorch tensors.
+    @pytest.mark.parametrize("mode", ["array", "view", "pointer", "torch"])
     def test_calibrator_device_buffers_multiinput(self, multi_input_builder_network, mode):
         def generate_dev_data(num_batches):
             with cuda.DeviceArray(shape=(1,), dtype=np.float32) as x:
                 for _ in range(num_batches):
                     x.copy_from(np.ones((1,), dtype=np.float32))
-                    xdata = {"array": x, "view": cuda.DeviceView(x.ptr, x.shape, x.dtype), "pointer": x.ptr}[mode]
+                    xdata = {
+                        "array": x,
+                        "view": cuda.DeviceView(x.ptr, x.shape, x.dtype),
+                        "pointer": x.ptr,
+                        "torch": torch.ones((1,), dtype=torch.float32),
+                    }[mode]
                     yield {"X0": xdata, "Y0": np.zeros((1,), dtype=np.float32)}
 
         builder, network = multi_input_builder_network
@@ -160,15 +163,10 @@ class TestCalibrator:
         config.set_flag(trt.BuilderFlag.INT8)
         calibrator = Calibrator(generate_data(NUM_BATCHES))
         config.int8_calibrator = calibrator
+        runtime = trt.Runtime(get_trt_logger())
+        engine = runtime.deserialize_cuda_engine(builder.build_serialized_network(network, config))
 
-        if mod.version(trt.__version__) < mod.version("8.0"):
-            engine = builder.build_engine(network, config)
-        else:
-            with trt.Runtime(get_trt_logger()) as runtime:
-                engine = runtime.deserialize_cuda_engine(builder.build_serialized_network(network, config))
-
-        with engine:
-            assert engine
+        assert engine
         self.check_calibrator_cleanup(calibrator)
 
     def test_calibrator_with_path_name_cache(self, identity_builder_network):
@@ -277,7 +275,12 @@ class TestCalibrator:
         ],
     )
     def test_calibrator_checks_input_metadata(self, expected_meta, meta, should_pass):
-        data = [{name: np.ones(shape=shape, dtype=dtype) for name, (dtype, shape) in meta.items()}]
+        data = [
+            {
+                name: np.ones(shape=shape, dtype=DataType.to_dtype(dtype, "numpy"))
+                for name, (dtype, shape) in meta.items()
+            }
+        ]
         calibrator = Calibrator(data)
         calibrator.set_input_metadata(expected_meta)
 

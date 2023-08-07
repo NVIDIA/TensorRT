@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -102,6 +102,20 @@ class TestQuantMaxPool2d():
         quant_pooling_object.input_quantizer.disable()
 
         out1 = F.max_pool2d(test_input, 3, 1, 0, 1, False, False)
+        out2 = quant_pooling_object(test_input)
+        np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
+
+    def test_input_multi_axis(self):
+        quant_desc_input = tensor_quant.QuantDescriptor(num_bits=8, axis=(0, 1))
+
+        quant_pooling.QuantMaxPool2d.set_default_quant_desc_input(quant_desc_input)
+        quant_pooling_object = quant_pooling.QuantMaxPool2d(kernel_size=3, stride=1)
+
+        test_input = torch.randn(16, 7, 5, 5, dtype=torch.double)
+        input_amax = torch.amax(torch.abs(test_input), dim=(2, 3), keepdim=True)
+        quant_input = tensor_quant.fake_tensor_quant(test_input, input_amax)
+
+        out1 = F.max_pool2d(quant_input, 3, 1, 0, 1, False, False)
         out2 = quant_pooling_object(test_input)
         np.testing.assert_array_equal(out1.detach().cpu().numpy(), out2.detach().cpu().numpy())
 

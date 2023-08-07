@@ -19,10 +19,9 @@ import os
 
 from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
-from polygraphy.logger import G_LOGGER, LogMode
+from polygraphy.datatype import DataType
+from polygraphy.logger import G_LOGGER
 from polygraphy.tools.script import Script, ensure_safe, inline, safe
-
-np = mod.lazy_import("numpy")
 
 
 @mod.export()
@@ -125,31 +124,25 @@ def get_outputs_for_script(script, outputs):
     return outputs
 
 
-def np_types():
+def datatype_from_str(dt_str):
     """
-    Returns a list of human-readable names of NumPy data types.
-    """
-    return sorted(set(np.dtype(dtype).name for dtype in np.sctypeDict.values()))
-
-
-def np_type_from_str(dt_str):
-    """
-    Converts a string representation of a data type to a NumPy data type.
+    Converts a string representation of a data type to a Polygraphy data type.
 
     Args:
         dt_str (str): The string representation of the data type.
 
     Returns:
-        np.dtype: The NumPy data type.
+        DataType: The Polygraphy data type.
 
     Raises:
         KeyError: If the provided string does not correspond to a NumPy data type.
     """
     try:
-        return {np.dtype(dtype).name: np.dtype(dtype) for dtype in np.sctypeDict.values()}[dt_str]
+        return DataType.__members__[dt_str.upper()]
     except KeyError:
         G_LOGGER.error(
-            f"Could not understand data type: {dt_str}. Did you forget to specify a data type? Please use one of: {np_types()} or `auto`."
+            f"Could not understand data type: {dt_str}. Did you forget to specify a data type? "
+            f"Please use one of: {list(DataType.__members__.keys())} or `auto`."
         )
         raise
 
@@ -330,7 +323,7 @@ def parse_meta(meta_args, includes_shape=True, includes_dtype=True):
             return func(val)
 
         if includes_dtype:
-            dtype = pop_meta(func=np_type_from_str)
+            dtype = pop_meta(func=datatype_from_str)
 
         if includes_shape:
             shape = pop_meta(func=lambda s: tuple(e for e in s if e != ""))

@@ -20,8 +20,7 @@ from collections import OrderedDict
 from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.common import TensorMetadata
-
-np = mod.lazy_import("numpy")
+from polygraphy.datatype import DataType
 
 
 @mod.export()
@@ -45,37 +44,40 @@ class OnnxrtRunner(BaseRunner):
 
     @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
-        ONNX_RT_TYPE_TO_NP = {
-            "tensor(double)": np.float64,
-            "tensor(float)": np.float32,
-            "tensor(float16)": np.float16,
-            "tensor(int16)": np.int16,
-            "tensor(int32)": np.int32,
-            "tensor(int64)": np.int64,
-            "tensor(int8)": np.int8,
-            "tensor(uint16)": np.uint16,
-            "tensor(uint32)": np.uint32,
-            "tensor(uint64)": np.uint64,
-            "tensor(uint8)": np.uint8,
-            "tensor(bool)": bool,
-            "tensor(string)": np.unicode_,
-        }
-
         meta = TensorMetadata()
         for node in self.sess.get_inputs():
-            dtype = ONNX_RT_TYPE_TO_NP[node.type] if node.type in ONNX_RT_TYPE_TO_NP else None
-            meta.add(node.name, dtype=dtype, shape=node.shape)
+            meta.add(node.name, dtype=DataType.from_dtype(node.type, "onnxruntime"), shape=node.shape)
         return meta
 
     @util.check_called_by("infer")
     def infer_impl(self, feed_dict):
+        """
+        Implementation for running inference with ONNX-Runtime.
+        Do not call this method directly - use ``infer()`` instead,
+        which will forward unrecognized arguments to this method.
+
+        Args:
+            feed_dict (OrderedDict[str, Union[numpy.ndarray, torch.Tensor]]):
+                    A mapping of input tensor names to corresponding input NumPy arrays or PyTorch tensors.
+                    If PyTorch tensors are provided in the feed_dict, then this function
+                    will return the outputs also as PyTorch tensors.
+
+        Returns:
+            OrderedDict[str, Union[numpy.ndarray, torch.Tensor]]:
+                    A mapping of output tensor names to corresponding output NumPy arrays
+                    or PyTorch tensors.
+        """
+        use_torch = any(util.array.is_torch(t) for t in feed_dict.values())
+        # `to_numpy()`` and `to_torch()` should be zero-copy whenever possible.
+        feed_dict = {name: util.array.to_numpy(t) for name, t in feed_dict.items()}
+
         start = time.time()
         inference_outputs = self.sess.run(None, feed_dict)
         end = time.time()
 
         out_dict = OrderedDict()
         for node, out in zip(self.sess.get_outputs(), inference_outputs):
-            out_dict[node.name] = out
+            out_dict[node.name] = out if not use_torch else util.array.to_torch(out)
         self.inference_time = end - start
         return out_dict
 

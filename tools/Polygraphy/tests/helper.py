@@ -27,7 +27,8 @@ ALL_TOOLS = {
     "run": [],
     "convert": [],
     "inspect": ["data", "model", "tactics", "capability", "diff-tactics"],
-    "surgeon": ["extract", "insert", "sanitize"],
+    "check": ["lint"],
+    "surgeon": ["extract", "insert", "sanitize", "prune"],
     "template": ["trt-network", "trt-config", "onnx-gs"],
     "debug": ["build", "precision", "reduce", "repeat"],
     "data": ["to-input"],
@@ -46,7 +47,7 @@ def is_file_non_empty(path):
     return not is_file_empty(path)
 
 
-def time_func(func, warm_up=25, iters=100):
+def time_func(func, warm_up=25, iters=50):
     for _ in range(warm_up):
         func()
 

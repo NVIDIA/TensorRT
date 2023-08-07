@@ -19,12 +19,13 @@ import json
 import os
 import signal
 
-from polygraphy import config, mod, util
+from polygraphy import config, mod, util, cuda
 from polygraphy.common import TensorMetadata
+from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER, LogMode
 
-trt = mod.lazy_import("tensorrt")
+trt = mod.lazy_import("tensorrt>=8.5")
 np = mod.lazy_import("numpy")
 
 
@@ -41,40 +42,33 @@ def get_trt_logger():
     """
     global TRT_LOGGER
 
-    LoggerType = trt.Logger
-    if mod.version(trt.__version__) >= mod.version("8.0"):
+    if TRT_LOGGER is not None:
+        return TRT_LOGGER
 
-        class CustomTrtLogger(trt.ILogger):
-            def __init__(self):
-                trt.ILogger.__init__(self)
+    class CustomTrtLogger(trt.ILogger):
+        def __init__(self):
+            trt.ILogger.__init__(self)
 
-            def log(self, severity, msg):
-                try:
-                    log_func = {
-                        # This function cannot throw, so `critical` should not be used here!
-                        trt.Logger.INTERNAL_ERROR: G_LOGGER.error,
-                        trt.Logger.ERROR: G_LOGGER.error,
-                        # Reduce warning spam from TRT.
-                        trt.Logger.WARNING: lambda msg: G_LOGGER.warning(msg, mode=LogMode.ONCE),
-                        trt.Logger.INFO: G_LOGGER.verbose,
-                        trt.Logger.VERBOSE: G_LOGGER.extra_verbose,
-                    }.get(severity, G_LOGGER.super_verbose)
+        def log(self, severity, msg):
+            try:
+                log_func = {
+                    # This function cannot throw, so `critical` should not be used here!
+                    trt.Logger.INTERNAL_ERROR: G_LOGGER.error,
+                    trt.Logger.ERROR: G_LOGGER.error,
+                    # Reduce warning spam from TRT.
+                    trt.Logger.WARNING: lambda msg: G_LOGGER.warning(msg, mode=LogMode.ONCE),
+                    trt.Logger.INFO: G_LOGGER.verbose,
+                    trt.Logger.VERBOSE: G_LOGGER.extra_verbose,
+                }.get(severity, G_LOGGER.super_verbose)
 
-                    log_func(msg)
-                except KeyboardInterrupt:
-                    # `log()` is `noexcept` so we need to convert exceptions to signals so that
-                    # ctrl-C will work as expected.
-                    os.kill(os.getpid(), signal.SIGTERM)
+                log_func(msg)
+            except KeyboardInterrupt:
+                # `log()` is `noexcept` so we need to convert exceptions to signals so that
+                # ctrl-C will work as expected.
+                os.kill(os.getpid(), signal.SIGTERM)
 
-        LoggerType = CustomTrtLogger
-
-    if TRT_LOGGER is None:
-        TRT_LOGGER = LoggerType()
+    TRT_LOGGER = CustomTrtLogger()
     return TRT_LOGGER
-
-
-def _should_use_v3_api():
-    return mod.version(trt.__version__) > mod.version("8.5.0.9")
 
 
 def fail_unavailable(what):
@@ -157,21 +151,6 @@ def get_layer_class_mapping():
 
     return layer_class_mapping
 
-def check_numpy_trt_compatibility():
-    if mod.version(trt.__version__) < mod.version("8.6") and \
-       mod.version(np.__version__) >= mod.version("1.24"):
-        # TensorRT < 8.6 uses a deprecated alias np.bool that was removed in NumPy >= 1.24
-        G_LOGGER.warning(f"TensorRT version {trt.__version__} and NumPy version {np.__version__} "
-                          "are not compatible.  Consider downgrading your NumPy package to a version < 1.24 "
-                          "or upgrading TensorRT to a version >= 8.6.", mode=LogMode.ONCE)
-
-
-def np_dtype_from_trt(trt_dtype):
-    # trt.nptype uses NumPy, so to make autoinstall work, we need to trigger it before that.
-    mod.autoinstall(np)
-    check_numpy_trt_compatibility()
-    return np.dtype(trt.nptype(trt_dtype))
-
 
 def get_network_input_names_meta(network):
     names = []
@@ -179,7 +158,7 @@ def get_network_input_names_meta(network):
     for i in range(network.num_inputs):
         tensor = network.get_input(i)
         names.append(tensor.name)
-        meta.add(name=tensor.name, dtype=np_dtype_from_trt(tensor.dtype), shape=tensor.shape)
+        meta.add(name=tensor.name, dtype=DataType.from_dtype(tensor.dtype, "tensorrt"), shape=tensor.shape)
     return names, meta
 
 
@@ -189,7 +168,7 @@ def get_network_output_names_meta(network):
     for i in range(network.num_outputs):
         tensor = network.get_output(i)
         names.append(tensor.name)
-        meta.add(name=tensor.name, dtype=np_dtype_from_trt(tensor.dtype), shape=tensor.shape)
+        meta.add(name=tensor.name, dtype=DataType.from_dtype(tensor.dtype, "tensorrt"), shape=tensor.shape)
     return names, meta
 
 
@@ -200,7 +179,7 @@ def get_layer_input_names_meta(layer):
         inp = layer.get_input(i)
         if inp:
             names.append(inp.name)
-            meta.add(inp.name, np_dtype_from_trt(inp.dtype), inp.shape)
+            meta.add(inp.name, DataType.from_dtype(inp.dtype, "tensorrt"), inp.shape)
     return names, meta
 
 
@@ -211,7 +190,7 @@ def get_layer_output_names_meta(layer):
         out = layer.get_output(i)
         if out:
             names.append(out.name)
-            meta.add(out.name, np_dtype_from_trt(out.dtype), out.shape)
+            meta.add(out.name, DataType.from_dtype(out.dtype, "tensorrt"), out.shape)
     return names, meta
 
 
@@ -292,7 +271,10 @@ def str_from_network(network, show_layers=None, show_attrs=None, show_weights=No
                     network_str += util.indent_block("---- Attributes ----") + "\n"
                 for attr in attrs:
                     with G_LOGGER.verbosity():
-                        val = getattr(layer, attr)
+                        try:
+                            val = getattr(layer, attr)
+                        except Exception as err:
+                            val = f"<Error: could not retrieve layer attribute: {attr}. Note: Error was: {err}>"
                     if show_weights or not isinstance(val, np.ndarray):
                         attr_str = ""
                         if layer.name:
@@ -447,6 +429,12 @@ def str_from_config(config):
     if config.int8_calibrator:
         add_line("Calibrator", f"{config.int8_calibrator}")
 
+    # Quantization Flags
+    with contextlib.suppress(AttributeError):
+        quantization_flags = get_enabled_enum_vals(trt.QuantizationFlag, lambda val: config.get_quantization_flag(val))
+        if quantization_flags:
+            add_line("Quantization Flags", f"{str_from_list(quantization_flags)}")
+
     return "\n".join(lines)
 
 
@@ -519,7 +507,7 @@ def get_input_metadata_from_network(network, profile, force_opt_shapes=None):
 
         input_metadata.add(
             name=tensor.name,
-            dtype=np_dtype_from_trt(tensor.dtype),
+            dtype=tensor.dtype,
             shape=opt_shape if force_opt_shapes else tensor.shape,
             min_shape=None if force_opt_shapes else min_shape,
             max_shape=None if force_opt_shapes else max_shape,
@@ -562,6 +550,13 @@ def try_setup_polygraphy_calibrator(config, network, calib_profile=None):
         calibrator.set_input_metadata(input_metadata)
 
 
+def get_tensor_format(engine, context, name):
+    try:
+        return engine.get_tensor_format(name, context.active_optimization_profile)
+    except TypeError:
+        return engine.get_tensor_format(name)
+
+
 def get_hwc_shape_from_chw(shape, strides):
     # The relative size (descending sorted order) of the strides should give the permutation to convert the shape
     perm = sorted(range(len(strides)), key=strides.__getitem__, reverse=True)
@@ -583,10 +578,10 @@ def get_metadata_from_engine(engine, context, mode):
 
         shape = engine.get_tensor_shape(name)
         # If the input format is HWC, make sure the input is shaped accordingly
-        if engine.get_tensor_format(name) == trt.TensorFormat.HWC:
+        if get_tensor_format(engine, context, name) == trt.TensorFormat.HWC:
             shape = get_hwc_shape_from_chw(shape, context.get_tensor_strides(name))
 
-        meta.add(name=name, dtype=np_dtype_from_trt(engine.get_tensor_dtype(name)), shape=shape)
+        meta.add(name=name, dtype=DataType.from_dtype(engine.get_tensor_dtype(name), "tensorrt"), shape=shape)
     return meta
 
 
@@ -594,21 +589,14 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
     show_layers = util.default(show_layers, False)
     show_attrs = util.default(show_attrs, False)
 
-    if _should_use_v3_api():
-        num_io_tensors = engine.num_io_tensors
-    else:
-        num_io_tensors = get_bindings_per_profile(engine)
+    num_io_tensors = engine.num_io_tensors
 
     engine_str = f"Name: {engine.name} | {'Refittable ' if engine.refittable else ''}{'Implicit' if hasattr(engine, 'has_implicit_batch_dimension') and engine.has_implicit_batch_dimension else 'Explicit'} Batch Engine\n"
     engine_str += "\n"
 
     # Show metadata for the first profile (i.e. the dynamic shapes)
-    if _should_use_v3_api():
-        input_metadata = get_metadata_from_engine(engine, context, mode=trt.TensorIOMode.INPUT)
-        output_metadata = get_metadata_from_engine(engine, context, mode=trt.TensorIOMode.OUTPUT)
-    else:
-        input_metadata = get_input_metadata_from_engine(engine, 0, num_io_tensors)
-        output_metadata = get_output_metadata_from_engine(engine, 0, num_io_tensors)
+    input_metadata = get_metadata_from_engine(engine, context, mode=trt.TensorIOMode.INPUT)
+    output_metadata = get_metadata_from_engine(engine, context, mode=trt.TensorIOMode.OUTPUT)
 
     engine_str += f"---- {len(input_metadata)} Engine Input(s) ----\n{input_metadata}\n\n"
     engine_str += f"---- {len(output_metadata)} Engine Output(s) ----\n{output_metadata}\n\n"
@@ -619,36 +607,18 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
     for profile_index in range(engine.num_optimization_profiles):
         engine_str += f"- Profile: {profile_index}\n"
 
-        if _should_use_v3_api():
-            max_width = max([len(engine.get_tensor_name(idx)) for idx in range(engine.num_io_tensors)]) + 8
-        else:
-            max_width = max([len(binding) for binding in engine]) + 8
+        max_width = max([len(engine.get_tensor_name(idx)) for idx in range(engine.num_io_tensors)]) + 8
 
         for idx in range(num_io_tensors):
-            if _should_use_v3_api():
-                name = engine.get_tensor_name(idx)
-                binding_type = " (Input)" if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT else "(Output)"
-                engine_str += util.indent_block(f"Tensor: {name:<{max_width}} {binding_type}, Index: {idx}")
+            name = engine.get_tensor_name(idx)
+            binding_type = " (Input)" if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT else "(Output)"
+            engine_str += util.indent_block(f"Tensor: {name:<{max_width}} {binding_type}, Index: {idx}")
 
-                if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
-                    min_shape, opt_shape, max_shape = engine.get_tensor_profile_shape(name, profile_index)
-                    engine_str += f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
-                else:
-                    engine_str += f" | Shape: {engine.get_tensor_shape(name)}\n"
+            if engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
+                min_shape, opt_shape, max_shape = engine.get_tensor_profile_shape(name, profile_index)
+                engine_str += f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
             else:
-                binding = profile_index * num_io_tensors + idx
-                name = f"[Name: {engine.get_binding_name(binding)}]"
-                binding_type = "(Input) " if engine.binding_is_input(binding) else "(Output)"
-                engine_str += util.indent_block(f"Binding Index: {binding} {binding_type} {name:<{max_width}}")
-
-                if engine.binding_is_input(binding):
-                    if engine.is_shape_binding(binding):
-                        min_shape, opt_shape, max_shape = engine.get_profile_shape_input(profile_index, binding)
-                    else:
-                        min_shape, opt_shape, max_shape = engine.get_profile_shape(profile_index, binding)
-                    engine_str += f" | Shapes: min={min_shape}, opt={opt_shape}, max={max_shape}\n"
-                else:
-                    engine_str += f" | Shape: {engine.get_binding_shape(binding)}\n"
+                engine_str += f" | Shape: {engine.get_tensor_shape(name)}\n"
         engine_str += "\n"
 
     layers_per_profile = engine.num_layers // engine.num_optimization_profiles
@@ -663,6 +633,7 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                 f"Cannot show layer information because IEngineInspector is not available in this version of TensorRT ({trt.__version__})"
             )
         else:
+            inspector.execution_context = context
             for profile_idx in range(engine.num_optimization_profiles):
                 indent_level = 0
                 if engine.num_optimization_profiles >= 1:
@@ -685,6 +656,25 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                         op = layer_info.get("LayerType", "Unknown")
 
                         def names_meta_from_inspector(key):
+                            def dtype_from_fmt_dtype(contents):
+                                contents = contents.upper()
+                                mapping = {
+                                    "FLOAT": DataType.FLOAT32,
+                                    "FP32": DataType.FLOAT32,
+                                    "FP16": DataType.FLOAT16,
+                                    "INT8": DataType.INT8,
+                                    "INT32": DataType.INT32,
+                                    "INT64": DataType.INT64,
+                                    "BOOL": DataType.BOOL,
+                                    "N/A": None,
+                                }
+
+                                for key, val in mapping.items():
+                                    if key in contents:
+                                        return val
+                                G_LOGGER.internal_error(f"Could not determine data type from format string: {contents}")
+                                return None
+
                             names = []
                             meta = TensorMetadata()
                             info = layer_info.get(key)
@@ -692,7 +682,14 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                                 return meta
                             for elem in info:
                                 names.append(elem["Name"])
-                                meta.add(name=elem["Name"], dtype=None, shape=elem["Dimensions"])
+                                meta.add(
+                                    name=elem["Name"],
+                                    dtype=dtype_from_fmt_dtype(elem["Format/Datatype"]),
+                                    shape=elem["Dimensions"],
+                                    docstring=f"Format: {elem['Format/Datatype']}"
+                                    if "N/A" not in elem["Format/Datatype"]
+                                    else None,
+                                )
                             return names, meta
 
                         input_names, input_meta = names_meta_from_inspector("Inputs")
@@ -726,76 +723,34 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
     return util.indent_block(engine_str, level=0)
 
 
-# V2 APIs
-def add_binding_to_metadata(engine, binding, metadata, name_binding):
-    if _should_use_v3_api():
-        G_LOGGER.internal_error("This function should not be called when using the V3 API")
-
-    # name_binding always comes from profile 0, since that's where we
-    # get all binding names in the runner
-    metadata.add(
-        name=engine[name_binding],
-        dtype=np_dtype_from_trt(engine.get_binding_dtype(binding)),
-        shape=list(engine.get_binding_shape(binding)),
-    )
-
-
-def get_input_metadata_from_engine(engine, start_binding, end_binding):
-    if _should_use_v3_api():
-        G_LOGGER.internal_error("This function should not be called when using the V3 API")
-
-    inputs = TensorMetadata()
-    for index, binding in enumerate(range(start_binding, end_binding)):
-        if engine.binding_is_input(binding):
-            add_binding_to_metadata(engine, binding, inputs, name_binding=index)
-    return inputs
-
-
-def get_output_metadata_from_engine(engine, start_binding, end_binding):
-    if _should_use_v3_api():
-        G_LOGGER.internal_error("This function should not be called when using the V3 API")
-
-    outputs = TensorMetadata()
-    for index, binding in enumerate(range(start_binding, end_binding)):
-        if not engine.binding_is_input(binding):
-            add_binding_to_metadata(engine, binding, outputs, name_binding=index)
-    return outputs
-
-
-def get_bindings_per_profile(engine):
-    if _should_use_v3_api():
-        G_LOGGER.internal_error("This function should not be called when using the V3 API")
-
-    return engine.num_bindings // engine.num_optimization_profiles
-
-
-def get_active_profile_bindings(context):
+def _get_array_on_gpu(arr, name, device_buffers, stream=None):
     """
-    Gets the start and end binding indices for the active optimization profile.
+    Copies the provided array to GPU memory if needed and returns a pointer
+    to the GPU memory. If sufficient GPU memory has not been allocated for
+    the array in ``device_buffers``, this function will allocate new memory.
 
     Args:
-        engine (trt.ICudaEngine): The engine in question.
-        context (trt.IExecutionContext): The context where the profile is currently set.
+        arr (Union[DeviceView, numpy.ndarray, torch.Tensor]): The array.
+        name (str): The name of the array.
+        device_buffers (Dict[str, DeviceArray]):
+                A mapping of names to DeviceArrays.
+        stream (cuda.Stream): The CUDA stream to use.
 
     Returns:
-        Tuple[int, int]: The start and end bindings indices, in that order
+        int: A pointer to the GPU memory.
     """
-    if _should_use_v3_api():
-        G_LOGGER.internal_error("This function should not be called when using the V3 API")
+    if util.array.is_on_gpu(arr):
+        return util.array.data_ptr(arr)
 
-    active_profile = context.active_optimization_profile
-    if active_profile < 0:
-        G_LOGGER.critical(
-            f"Cannot determine profile bindings since the optimization profile for this context is set to: {active_profile}"
-        )
+    arr = util.array.make_contiguous(arr)
 
-    bindings_per_profile = get_bindings_per_profile(context.engine)
+    shape = (util.array.nbytes(arr),)
+    if name not in device_buffers:
+        # We intentionally don't set the shape here so that it's treated as a scalar and therefore has
+        # some memory allocated. Otherwise, if there's an empty tensor, we won't allocate anything
+        # and the device pointer will be 0 (i.e. nullptr), which TensorRT will complain about.
+        device_buffers[name] = cuda.DeviceArray.raw()
 
-    start_binding = bindings_per_profile * active_profile
-    end_binding = start_binding + bindings_per_profile
-
-    G_LOGGER.ultra_verbose(
-        f"Total # of Profiles: {context.engine.num_optimization_profiles}, Bindings Per Profile: {bindings_per_profile}, "
-        f"Active Profile: {active_profile}, Start Binding: {start_binding}, End Binding: {end_binding}"
-    )
-    return start_binding, end_binding
+    device_buffers[name].resize(shape)
+    device_buffers[name].copy_from(util.array.view(arr, DataType.UINT8, shape), stream)
+    return device_buffers[name].ptr

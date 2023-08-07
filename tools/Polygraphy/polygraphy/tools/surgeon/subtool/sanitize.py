@@ -183,10 +183,17 @@ class Sanitize(BaseSurgeonSubtool):
             default=False,
         )
 
+        parser.add_argument(
+            "--toposort",
+            help="Topologically sort nodes in the graph. ",
+            action="store_true",
+            default=False,
+        )
+
     def show_start_end_logging_impl(self, args):
         return True
 
-    def run_impl(self, args):
+    def run_impl_surgeon(self, args):
         # First do all processing that requires an ONNX-GraphSurgeon graph, then do everything
         # that operates on the ONNX model. This lets us avoid ONNX-GraphSurgeon import if we don't
         # need it.
@@ -214,6 +221,10 @@ class Sanitize(BaseSurgeonSubtool):
             if args.cleanup:
                 graph = get_graph()
                 graph.cleanup()
+
+            if args.toposort:
+                graph = get_graph()
+                graph.toposort()
 
             if graph is not None:
                 model = gs.export_onnx(graph)

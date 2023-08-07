@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import contextlib
 import copy
 import functools
 import glob
@@ -185,6 +184,22 @@ def unique_list(sequence):
         list: A list containing the same elements as sequence, in the same order, but without duplicates.
     """
     return list(OrderedDict.fromkeys(sequence))
+
+
+@mod.export()
+def invert_dict(dct):
+    """
+    Inverts the keys and values of a dictionary.
+
+    Args:
+        dct (Dict[Any, Any]): The dictionary to invert.
+
+    Returns:
+        Dict[Any, Any]:
+                A dictionary with the keys and values inverted.
+                That is, the values of the original dictionary become the keys of this dictionary.
+    """
+    return {val: key for key, val in dct.items()}
 
 
 # default exists to solve issues that might result from Python's normal default arguments.
@@ -679,10 +694,11 @@ def check_called_by(expected_caller_name):
     def check_called_by_impl(func):
         @functools.wraps(func)
         def wrapped(*args, **kwargs):
-
             # Skip checks if we're calling these functions internally
             module = inspect.getmodule(sys._getframe(1))
-            called_from_polygraphy = module.__name__ and module.__name__.split(".")[0] == "polygraphy"
+            called_from_polygraphy = (
+                module is not None and module.__name__ and module.__name__.split(".")[0] == "polygraphy"
+            )
 
             if not called_from_polygraphy:
                 actual_caller_name = sys._getframe(1).f_code.co_name
@@ -750,39 +766,43 @@ def try_match_shape(arr, shape):
     This is a no-op if the array is already the correct shape.
 
     Args:
-        arr (numpy.ndarray): The array to reshape.
+        arr (Union[numpy.ndarray, torch.Tensor]): The array or tensor to reshape.
         shape (Tuple[int]): The shape to use. May contain at most 1 dynamic dimension.
 
     Returns:
-        numpy.ndarray: The reshaped array.
+        Union[numpy.ndarray, torch.Tensor]: The reshaped array or tensor.
     """
+    import polygraphy.util.array as array_util
 
     def is_rank_same(arr, shape):
-        return len(shape) == len(arr.shape)
+        return len(shape) == len(array_util.shape(arr))
 
     def try_reshape(arr, shape):
-        original_shape = arr.shape
+        arr = array_util.make_contiguous(arr)
+        original_shape = array_util.shape(arr)
         try:
-            arr = arr.reshape(shape)
-        except ValueError:
-            G_LOGGER.warning(f"Could not reshape array from shape: {arr.shape} to {shape}. Skipping reshape.")
+            arr = array_util.view(arr, shape=shape, dtype=array_util.dtype(arr))
+        except (ValueError, RuntimeError):
+            G_LOGGER.warning(
+                f"Could not reshape array from shape: {array_util.shape(arr)} to {shape}. Skipping reshape."
+            )
         else:
-            if arr.shape != original_shape:
-                G_LOGGER.info(f"Reshaped array from shape: {original_shape} to: {arr.shape}")
+            if array_util.shape(arr) != original_shape:
+                G_LOGGER.info(f"Reshaped array from shape: {original_shape} to: {array_util.shape(arr)}")
         return arr
 
     def try_permute(arr, shape):
-        original_shape = arr.shape
+        original_shape = array_util.shape(arr)
 
-        if sorted(arr.shape) != sorted(shape):
-            G_LOGGER.extra_verbose(f"Array of shape: {arr.shape} cannot be permuted to: {shape}")
+        if sorted(array_util.shape(arr)) != sorted(shape):
+            G_LOGGER.extra_verbose(f"Array of shape: {array_util.shape(arr)} cannot be permuted to: {shape}")
             return arr
 
         # We need to remove axes from the original shape as we use them to avoid
         # duplication in the permutation.
-        arr_shape_indices = {index: dimlen for index, dimlen in enumerate(arr.shape)}
+        arr_shape_indices = {index: dimlen for index, dimlen in enumerate(array_util.shape(arr))}
 
-        # Find which axis in arr.shape corresponds to the specified size. Never returns duplicates.
+        # Find which axis in array_util.shape(arr) corresponds to the specified size. Never returns duplicates.
         def find_axis(dimlen):
             nonlocal arr_shape_indices
             for index, d in arr_shape_indices.items():
@@ -796,8 +816,10 @@ def try_match_shape(arr, shape):
         except Exception as err:
             G_LOGGER.extra_verbose(f"Skipping permutation due to {err}")
         else:
-            if arr.shape != original_shape:
-                G_LOGGER.info(f"Permuted array of shape: {original_shape} to: {arr.shape} using permutation {perm}")
+            if array_util.shape(arr) != original_shape:
+                G_LOGGER.info(
+                    f"Permuted array of shape: {original_shape} to: {array_util.shape(arr)} using permutation {perm}"
+                )
         return arr
 
     # Override any dynamic dimensions in the shape with concrete shapes from the array.
@@ -805,17 +827,18 @@ def try_match_shape(arr, shape):
         if num_dynamic_dimensions(shape) == 1:
             try:
                 static_dims = [dim for dim in shape if not is_dimension_dynamic(dim)]
-                determined_dim = volume(arr.shape) // volume(static_dims)
+                determined_dim = volume(array_util.shape(arr)) // volume(static_dims)
             except ZeroDivisionError:
                 determined_dim = 0
             shape = [determined_dim if is_dimension_dynamic(elem) else elem for elem in shape]
         elif is_rank_same(arr, shape):
             shape = [
-                arr_shape_elem if is_dimension_dynamic(elem) else elem for elem, arr_shape_elem in zip(shape, arr.shape)
+                arr_shape_elem if is_dimension_dynamic(elem) else elem
+                for elem, arr_shape_elem in zip(shape, array_util.shape(arr))
             ]
         return shape
 
-    if shape == arr.shape:
+    if shape == array_util.shape(arr):
         return arr
 
     if is_shape_dynamic(shape):
@@ -829,61 +852,6 @@ def try_match_shape(arr, shape):
 
     arr = try_reshape(arr, shape)
     return arr
-
-
-@mod.export()
-def is_contiguous(array):
-    """
-    Checks whether the provided NumPy array is contiguous in memory.
-
-    Args:
-        array (np.ndarray): The NumPy array.
-
-    Returns:
-        bool: Whether the array is contiguous in memory.
-    """
-    return array.flags["C_CONTIGUOUS"]
-
-
-@mod.export()
-def make_contiguous(array):
-    """
-    Makes a NumPy array contiguous if it's not already.
-
-    Args:
-        array (np.ndarray): The NumPy array.
-
-    Returns:
-        np.ndarray: The contiguous NumPy array.
-    """
-    if not is_contiguous(array):
-        return np.ascontiguousarray(array)
-    return array
-
-
-@mod.export()
-def resize_buffer(buffer, shape):
-    """
-    Resizes the provided buffer and makes it contiguous in memory,
-    possibly reallocating the buffer.
-
-    Args:
-        buffer (np.ndarray): The buffer to resize.
-        shape (Sequence[int]): The desired shape of the buffer.
-
-    Returns:
-        np.ndarray: The resized buffer, possibly reallocated.
-    """
-    if shape != buffer.shape:
-        try:
-            buffer.resize(shape, refcheck=False)
-        except ValueError as err:
-            G_LOGGER.warning(
-                f"Could not resize host buffer to shape: {shape}. "
-                f"Allocating a new buffer instead.\nNote: Error was: {err}"
-            )
-            buffer = np.empty(shape, dtype=np.dtype(buffer.dtype))
-    return make_contiguous(buffer)
 
 
 ##
@@ -1012,43 +980,6 @@ def make_repr(type_str, *args, **kwargs):
         return all(arg == apply_repr(None) for arg in arg_list)
 
     return repr_str, all_default(processed_args), all_default(processed_kwargs)
-
-
-##
-## Safety
-##
-
-
-@mod.export()
-class FreeOnException:
-    def __init__(self, objs):
-        """
-        Frees the specified objects if an exception occurs in this context.
-        Does nothing otherwise.
-
-        Args:
-            objs (List[object]): List of objects with __enter__/__exit__ methods defined.
-        """
-        assert is_sequence(objs), "FreeOnException requires a sequence of objects!"
-        self.objs = objs
-
-    def __enter__(self):
-        """
-        Returns the objects managed by this context manager.
-        """
-        return self.objs
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """
-        On exception, deletes all tracked objects.
-        Does nothing if there are no exceptions.
-        """
-        if exc_type is not None:
-            # Objects are freed in reverse order
-            with contextlib.ExitStack() as stack:
-                for obj in self.objs:
-                    if obj is not None:
-                        stack.enter_context(obj)
 
 
 ##

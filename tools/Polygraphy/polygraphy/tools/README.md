@@ -6,6 +6,7 @@
 - [Common Use-Cases](#common-use-cases)
     - [Inspecting A Model](#inspecting-a-model)
     - [Converting A Model To TensorRT](#converting-a-model-to-tensorrt)
+    - [Linting An ONNX Model](#linting-an-onnx-model)
     - [Sanitizing An ONNX Model](#sanitizing-an-onnx-model)
     - [Comparing A Model Between Frameworks](#comparing-a-model-between-frameworks)
     - [Modifying Input Shapes In An ONNX Model](#modifying-input-shapes-in-an-onnx-model)
@@ -62,6 +63,16 @@ For more information, refer to the examples, which, among other things, show how
 
 You can find the complete listing of `convert` examples [here](../../examples/cli/convert/).
 
+### Linting An ONNX Model
+
+Validating an ONNX model can be more than checking if it passes ONNX specifications.
+For example, it could be data-dependant, or depend on the underlying runtime.
+Moreover, an ONNX model can be broken in multiple places that may only be uncovered iteratively.
+
+The subtool `check lint` validates the model for specific use-cases (dynamic shape, custom data, custom weights etc.).
+When model is broken, it also attempts to catch all independent exceptions/warnings in one go.
+
+For more details, refer to [`check` example 01](../../examples/cli/check/01_linting_an_onnx_model/).
 
 ### Sanitizing An ONNX Model
 

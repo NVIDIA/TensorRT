@@ -59,7 +59,7 @@ about TensorRT engines, i.e. plan files:
                  -> {Y [shape=(1, 2, -1, -1)]}
 
         - Profile: 1
-            Layer 0    | node_of_Y [profile 1] [Op: Reformat]
+            Layer 0    | node_of_Y [profile 1] [Op: MyelinReformat]
                 {X [profile 1] [shape=(1, 2, -1, -1)]}
                  -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
     ```

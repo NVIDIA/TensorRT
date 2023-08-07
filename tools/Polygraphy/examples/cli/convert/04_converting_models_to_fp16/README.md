@@ -15,12 +15,14 @@ with reduced precision.
    ```bash
    polygraphy convert --fp-to-fp16 -o identity_fp16.onnx identity.onnx
    ```
+
 2. **[Optional]** Inspect the resulting model:
 
    ```bash
    polygraphy inspect model identity_fp16.onnx
    ```
-3. **[Optional]** Run the FP32 and FP16 model under ONNX-Runtime, then compare the results:
+
+3. **[Optional]** Run the FP32 and FP16 models under ONNX-Runtime and then compare the results:
 
    ```bash
    polygraphy run --onnxrt identity.onnx \
@@ -32,10 +34,12 @@ with reduced precision.
       --load-inputs inputs.json --load-outputs outputs_fp32.json \
       --atol 0.001 --rtol 0.001
    ```
+
 4. **[Optional]** Check if any intermediate outputs of the FP16 model
    contain NaN or infinity (see [Checking for Intermediate NaN or Infinities](../../../../examples/cli/run/07_checking_nan_inf)):
+
    ```bash
-   polygraphy run --onnxrt identity_fp16.onnx --validate
+   polygraphy run --onnxrt identity_fp16.onnx --onnx-outputs mark all --validate
    ```
 
 ## See Also

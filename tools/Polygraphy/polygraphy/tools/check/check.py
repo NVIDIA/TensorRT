@@ -14,27 +14,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from polygraphy.logger import G_LOGGER
-
-from polygraphy.util.format import FormatManager, DataFormat
-
-import pytest
+from polygraphy.tools.base import Tool
+from polygraphy.tools.check.subtool import Lint
 
 
-class FormatTestCase:
-    def __init__(self, shape, format):
-        self.shape = shape
-        self.format = format
+class Check(Tool):
+    """
+    Check and validate various aspects of a model
+    """
 
+    def __init__(self):
+        super().__init__("check")
 
-EXPECTED_FORMATS = [
-    FormatTestCase((1, 3, 480, 960), DataFormat.NCHW),
-    FormatTestCase((1, 3, 224, 224), DataFormat.NCHW),
-    FormatTestCase((1, 224, 224, 3), DataFormat.NHWC),
-    FormatTestCase((1, 9, 9, 3), DataFormat.NHWC),
-]
-
-
-@pytest.mark.parametrize("test_case", EXPECTED_FORMATS)
-def test_format_deduction(test_case):
-    assert test_case.format == FormatManager.determine_format(test_case.shape)
+    def get_subtools_impl(self):
+        return "Check Subtools", [
+            Lint(),
+        ]

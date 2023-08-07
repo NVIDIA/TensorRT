@@ -175,7 +175,7 @@ class TrtLoadNetworkArgs(BaseArgs):
         self.group.add_argument(
             "--tensor-dtypes",
             "--tensor-datatypes",
-            help="Data type to use for each tensor. This should be specified on a per-tensor basis, using the format: "
+            help="Data type to use for each network I/O tensor. This should be specified on a per-tensor basis, using the format: "
             "--tensor-datatypes <tensor_name>:<tensor_datatype>. Data type values come from the TensorRT data type aliases, like "
             "float32, float16, int8, bool, etc. For example: --tensor-datatypes example_tensor:float16 other_tensor:int8. ",
             nargs="+",
@@ -185,7 +185,7 @@ class TrtLoadNetworkArgs(BaseArgs):
         if self._allow_tensor_formats:
             self.group.add_argument(
                 "--tensor-formats",
-                help="Formats to allow for each tensor. This should be specified on a per-tensor basis, using the format: "
+                help="Formats to allow for each network I/O tensor. This should be specified on a per-tensor basis, using the format: "
                 "--tensor-formats <tensor_name>:[<tensor_formats>,...]. Format values come from the `trt.TensorFormat` enum "
                 "and are case-insensitve. "
                 "For example: --tensor-formats example_tensor:[linear,chw4] other_tensor:[chw16]. ",
@@ -214,6 +214,13 @@ class TrtLoadNetworkArgs(BaseArgs):
             default=None,
         )
 
+        self.group.add_argument(
+            "--strongly-typed",
+            help="Mark the network as being strongly typed.",
+            action="store_true",
+            default=None,
+        )
+
     def parse_impl(self, args):
         """
         Parses command-line arguments and populates the following attributes:
@@ -227,6 +234,7 @@ class TrtLoadNetworkArgs(BaseArgs):
             tensor_formats (Dict[str, List[str]]): Tensor names mapped to their desired formats, in string form.
             postprocess_scripts (List[Tuple[str, str]]):
                     A list of tuples specifying a path to a network postprocessing script and the name of the postprocessing function.
+            strongly_typed (bool): Whether to mark the network as being strongly typed.
         """
         self.outputs = args_util.get_outputs(args, "trt_outputs")
 
@@ -272,6 +280,8 @@ class TrtLoadNetworkArgs(BaseArgs):
                 G_LOGGER.warning(f"Could not find postprocessing script {script_path}")
             self.postprocess_scripts.append((script_path, func))
 
+        self.strongly_typed = args_util.get(args, "strongly_typed")
+
     def add_to_script_impl(self, script):
         network_func_name = self.arg_groups[ModelArgs].extra_model_info
         if self.trt_network_func_name is not None:
@@ -308,6 +318,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     "NetworkFromOnnxBytes",
                     self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader),
                     flags=parser_flags,
+                    strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
             else:
@@ -316,6 +327,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     "NetworkFromOnnxPath",
                     self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file),
                     flags=parser_flags,
+                    strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:

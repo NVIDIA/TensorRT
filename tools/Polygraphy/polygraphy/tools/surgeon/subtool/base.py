@@ -44,8 +44,9 @@ class BaseSurgeonSubtool(Tool):
         if log_model:
             G_LOGGER.info(f"New Model:\n{onnx_util.str_from_onnx(model)}\n\n")
 
-    def run_impl(self, args):
-        raise NotImplementedError("Subclasses must implement run_impl!")
+    # Subtools of `surgeon` should implement this instead of `run_impl`.
+    def run_impl_surgeon(self, args):
+        raise NotImplementedError("Subclasses must implement run_impl_surgeon")
 
     def run_impl(self, args):
         def set_onnx_gs_logging_level(severity_trie):
@@ -79,4 +80,4 @@ class BaseSurgeonSubtool(Tool):
                     ONNX_GS_LOGGER.line_info = True
 
         G_LOGGER.register_callback(set_onnx_gs_logging_level)
-        return self.run_impl(args)
+        return self.run_impl_surgeon(args)

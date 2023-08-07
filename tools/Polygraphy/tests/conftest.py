@@ -16,11 +16,11 @@
 #
 
 import copy
+import ctypes.util
 import glob
 import os
 import subprocess as sp
 import sys
-import ctypes.util
 
 import pytest
 
@@ -58,9 +58,16 @@ def sandboxed_install_run(virtualenv, script_runner):
             status.stdout = sr_status.stdout
             status.success = sr_status.success
         else:
-            sp_status = sp.run(command, cwd=cwd, env=env, stdout=sp.PIPE, stderr=sp.PIPE, universal_newlines=True)
-            status.stdout = sp_status.stdout
-            status.stderr = sp_status.stderr
+            sp_status = sp.run(command, cwd=cwd, env=env, stdout=sp.PIPE, stderr=sp.PIPE)
+
+            def try_decode(inp):
+                try:
+                    return inp.decode()
+                except UnicodeDecodeError:
+                    return inp
+
+            status.stdout = try_decode(sp_status.stdout)
+            status.stderr = try_decode(sp_status.stderr)
             status.success = sp_status.returncode == 0
 
         return status
@@ -80,11 +87,23 @@ def check_warnings_on_runner_impl_methods():
 
         import numpy as np
 
+        from polygraphy.datatype import DataType
+
         outfile = io.StringIO()
         with contextlib.redirect_stdout(outfile), contextlib.redirect_stderr(outfile):
             runner.activate()
+            # Check that NumPy dtypes are still returned by default
             metadata = runner.get_input_metadata()
-            runner.infer({name: np.ones(shape, dtype=dtype) for name, (dtype, shape) in metadata.items()})
+            for dtype, _ in metadata.values():
+                assert isinstance(dtype, np.dtype)
+
+            metadata = runner.get_input_metadata(use_numpy_dtypes=False)
+            runner.infer(
+                {
+                    name: np.ones(shape, dtype=DataType.to_dtype(dtype, "numpy"))
+                    for name, (dtype, shape) in metadata.items()
+                }
+            )
             runner.deactivate()
 
             outfile.seek(0)
@@ -103,7 +122,12 @@ def check_warnings_on_runner_impl_methods():
 
             runner.activate_impl()
             metadata = runner.get_input_metadata_impl()
-            runner.infer_impl({name: np.ones(shape, dtype=dtype) for name, (dtype, shape) in metadata.items()})
+            runner.infer_impl(
+                {
+                    name: np.ones(shape, dtype=DataType.to_dtype(DataType.from_dtype(dtype), "numpy"))
+                    for name, (dtype, shape) in metadata.items()
+                }
+            )
             runner.deactivate_impl()
 
             outfile.seek(0)
@@ -153,7 +177,7 @@ def check_warnings_on_loader_impl_methods():
 @pytest.mark.skipif(sys.platform.startswith("win"), reason="Fixture has not been updated to work on Windows")
 def nvinfer_lean_path():
     lean_library_name = ctypes.util.find_library("nvinfer_lean")
-    for dirname in os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep):
+    for dirname in os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep) + ["/usr/lib/x86_64-linux-gnu"]:
         path = os.path.join(dirname, lean_library_name)
         if os.path.exists(path):
             return path

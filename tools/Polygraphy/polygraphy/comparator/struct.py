@@ -22,64 +22,63 @@ from polygraphy.common.interface import TypedDict, TypedList
 from polygraphy.json import Decoder, Encoder, add_json_methods, load_json, save_json
 from polygraphy.logger import G_LOGGER
 
-np = mod.lazy_import("numpy")
 
-
-class LazyNumpyArray:
+class LazyArray:
     """
-    Represents a lazily loaded NumPy array.
-    For example, large NumPy arrays may be serialized to temporary files on the disk
+    Represents a lazily loaded NumPy array or PyTorch Tensor.
+    For example, large arrays may be serialized to temporary files on the disk
     to save memory.
     """
 
     def __init__(self, arr):
         """
         Args:
-            arr (np.ndarray): The NumPy array.
+            arr (Union[np.ndarray, torch.Tensor]): The array.
         """
         self.arr = None
         self.tmpfile = None
-        if config.ARRAY_SWAP_THRESHOLD_MB >= 0 and arr.nbytes > (config.ARRAY_SWAP_THRESHOLD_MB << 20):
+        if config.ARRAY_SWAP_THRESHOLD_MB >= 0 and util.array.nbytes(arr) > (config.ARRAY_SWAP_THRESHOLD_MB << 20):
             self.tmpfile = util.NamedTemporaryFile(suffix=".json")
             G_LOGGER.extra_verbose(
-                f"Evicting large array ({arr.nbytes / 1024.0 ** 2:.3f} MiB) from memory and saving to {self.tmpfile.name}"
+                f"Evicting large array ({util.array.nbytes(arr) / 1024.0 ** 2:.3f} MiB) from memory and saving to {self.tmpfile.name}"
             )
             save_json(arr, self.tmpfile.name)
         else:
             self.arr = arr
 
-    def numpy(self):
+    def load(self):
         """
-        Get the NumPy array, deserializing from the disk if it was stored earlier.
+        Load the array, deserializing from the disk if it was stored earlier.
 
         Returns:
-            np.ndarray: The NumPy array
+            Union[np.ndarray, torch.Tensor]: The array
         """
         if self.arr is not None:
             return self.arr
 
-        assert self.tmpfile is not None, "Path and NumPy array cannot both be None!"
+        if self.tmpfile is None:
+            G_LOGGER.internal_error(f"self.arr is None but self.tmpfile is also None; this should be impossible.")
         return load_json(self.tmpfile.name)
 
 
-@Encoder.register(LazyNumpyArray)
+@Encoder.register(LazyArray, alias="LazyNumpyArray")
 def encode(lazy_arr):
     return {
-        "values": lazy_arr.numpy(),
+        "values": lazy_arr.load(),
     }
 
 
-@Decoder.register(LazyNumpyArray)
+@Decoder.register(LazyArray, alias="LazyNumpyArray")
 def decode(dct):
-    return LazyNumpyArray(dct["values"])
+    return LazyArray(dct["values"])
 
 
 @mod.export()
-class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
+class IterationResult(TypedDict(lambda: str, lambda: LazyArray)):
     """
     An ordered dictionary containing the result of a running a single iteration of a runner.
 
-    This maps output names to NumPy arrays, and preserves the output ordering from the runner.
+    This maps output names to arrays, and preserves the output ordering from the runner.
 
     NOTE: The ``POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB`` environment variable can be set to enable
     the arrays to be swapped to the disk.
@@ -90,16 +89,16 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
 
     @staticmethod
     def _to_lazy(nparray):
-        if isinstance(nparray, LazyNumpyArray):
+        if isinstance(nparray, LazyArray):
             return nparray
-        return LazyNumpyArray(nparray)
+        return LazyArray(nparray)
 
     @staticmethod
     def _to_lazy_dict(nparray_dict):
         if nparray_dict is None:
             return None
 
-        # Converts a Dict[str, np.ndarray] to a Dict[str, LazyNumpyArray]
+        # Converts a Dict[str, np.ndarray] to a Dict[str, LazyArray]
         lazy = OrderedDict()
         for name, out in nparray_dict.items():
             lazy[name] = IterationResult._to_lazy(out)
@@ -108,7 +107,7 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
     def __init__(self, outputs=None, runtime=None, runner_name=None):
         """
         Args:
-            outputs (Dict[str, np.array]): The outputs of this iteration, mapped to their names.
+            outputs (Dict[str, Union[np.array, torch.Tensor]]): The outputs of this iteration, mapped to their names.
 
             runtime (float):
                     The time required for this iteration, in seconds.
@@ -118,7 +117,11 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
                     If this is omitted, a default name is generated.
         """
         if outputs and config.ARRAY_SWAP_THRESHOLD_MB < 0:
-            total_size_gb = sum(arr.nbytes for arr in outputs.values() if isinstance(arr, np.ndarray)) / (1024.0**3)
+            total_size_gb = sum(
+                util.array.nbytes(arr)
+                for arr in outputs.values()
+                if util.array.is_torch(arr) or util.array.is_numpy(arr)
+            ) / (1024.0**3)
             if total_size_gb >= 1:
                 G_LOGGER.warning(
                     f"It looks like the outputs of this network are very large ({total_size_gb:.3f} GiB).\n"
@@ -139,14 +142,14 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
 
     def values(self):
         for arr in super().values():
-            yield arr.numpy()
+            yield arr.load()
 
     def items(self):
         for name, arr in super().items():
-            yield name, arr.numpy()
+            yield name, arr.load()
 
     def __getitem__(self, name):
-        return super().__getitem__(name).numpy()
+        return super().__getitem__(name).load()
 
     def __eq__(self, other):
         if self.runtime != other.runtime or self.runner_name != other.runner_name:
@@ -156,7 +159,7 @@ class IterationResult(TypedDict(lambda: str, lambda: LazyNumpyArray)):
             if key not in other:
                 return False
 
-            if not np.array_equal(val, other[key]):
+            if not util.array.equal(val, other[key]):
                 return False
 
         return True

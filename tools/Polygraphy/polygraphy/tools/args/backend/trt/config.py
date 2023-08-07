@@ -160,12 +160,15 @@ class TrtConfigArgs(BaseArgs):
 
         self.group.add_argument("--tf32", help="Enable tf32 precision in TensorRT", action="store_true", default=None)
         self.group.add_argument("--fp16", help="Enable fp16 precision in TensorRT", action="store_true", default=None)
+        self.group.add_argument("--bf16", help="Enable bf16 precision in TensorRT", action="store_true", default=None)
         self.group.add_argument("--fp8", help="Enable fp8 precision in TensorRT", action="store_true", default=None)
         self.group.add_argument(
             "--int8",
             help="Enable int8 precision in TensorRT. "
             "If calibration is required but no calibration cache is provided, this option will cause TensorRT to run "
-            "int8 calibration using the Polygraphy data loader to provide calibration data. ",
+            "int8 calibration using the Polygraphy data loader to provide calibration data. "
+            "If calibration is run and the model has dynamic shapes, the last optimization profile will be "
+            "used as the calibration profile. ",
             action="store_true",
             default=None,
         )
@@ -177,16 +180,6 @@ class TrtConfigArgs(BaseArgs):
             choices=("prefer", "obey", "none"),
             default=self._precision_constraints_default,
         )
-
-        precision_constraints_group.add_argument(
-            "--strict-types",
-            help="[DEPRECATED - use --precision-constraints] Enable preference for precision constraints and avoidance of I/O reformatting in TensorRT, "
-            "and fall back to ignoring the request if such an engine cannot be built.",
-            action="store_true",
-            default=None,
-            dest="strict_types",
-        )
-
         self.group.add_argument(
             "--sparse-weights",
             help="Enable optimizations for sparse weights in TensorRT",
@@ -206,14 +199,6 @@ class TrtConfigArgs(BaseArgs):
             default=None,
         )
 
-        self.group.add_argument(
-            "--workspace",
-            metavar="BYTES",
-            help="[DEPRECATED - use --pool-limit] Amount of memory, in bytes, to allocate for the TensorRT builder's workspace. "
-            "Optionally, use a `K`, `M`, or `G` suffix to indicate KiB, MiB, or GiB respectively. "
-            "For example, `--workspace=16M` is equivalent to `--workspace=16777216`. ",
-            default=None,
-        )
         self.group.add_argument(
             "--calibration-cache",
             help="Path to load/save a calibration cache. "
@@ -248,6 +233,20 @@ class TrtConfigArgs(BaseArgs):
             "Used to cache tactic timing information to speed up the engine building process. "
             "If the file specified by --load-timing-cache does not exist, Polygraphy will emit a warning and fall back to "
             "using an empty timing cache.",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--error-on-timing-cache-miss",
+            help="Emit error when a tactic being timed is not present in the timing cache.",
+            action="store_true",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--disable-compilation-cache",
+            help="Disable caching JIT-compiled code",
+            action="store_true",
             default=None,
         )
 
@@ -384,6 +383,17 @@ class TrtConfigArgs(BaseArgs):
             default=None,
         )
 
+        self.group.add_argument(
+            "--quantization-flags",
+            dest="quantization_flags",
+            help="Int8 quantization flags to enable. Values come from the names of values "
+            "in the trt.QuantizationFlag enum, and are case-insensitive. "
+            "If no arguments are provided, e.g. '--quantization-flags', then all quantization flags are disabled. "
+            "Defaults to TensorRT's default quantization flags.",
+            nargs="*",
+            default=None,
+        )
+
         if self._allow_engine_capability:
             self.group.add_argument(
                 "--engine-capability",
@@ -410,6 +420,7 @@ class TrtConfigArgs(BaseArgs):
                 input names to a tuple of (min, opt, max) shapes.
             tf32 (bool): Whether to enable TF32.
             fp16 (bool): Whether to enable FP16.
+            bf16 (bool): Whether to enable BF16.
             fp8  (bool): Whether to enable FP8.
             int8 (bool): Whether to enable INT8.
             precision_constraints (str): The precision constraints to apply.
@@ -437,6 +448,9 @@ class TrtConfigArgs(BaseArgs):
             max_aux_streams (int): The maximum number of auxiliary streams that TensorRT is allowed to use.
             version_compatible (bool): Whether or not to build a TensorRT forward-compatible.
             exclude_lean_runtime (bool): Whether to exclude the lean runtime from a version compatible plan.
+            quantization_flags (List[str]): Names of quantization flags to enable.
+            error_on_timing_cache_miss (bool): Whether to emit error when a tactic being timed is not present in the timing cache.
+            disable_compilation_cache (bool): Whether to disable caching JIT-compiled code.
         """
 
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
@@ -453,21 +467,13 @@ class TrtConfigArgs(BaseArgs):
 
         self.tf32 = args_util.get(args, "tf32")
         self.fp16 = args_util.get(args, "fp16")
+        self.bf16 = args_util.get(args, "bf16")
         self.int8 = args_util.get(args, "int8")
         self.fp8 = args_util.get(args, "fp8")
         self.precision_constraints = args_util.get(args, "precision_constraints")
 
         if self.precision_constraints == "none":
             self.precision_constraints = None
-
-        self._strict_types = args_util.get(args, "strict_types")
-        if self._strict_types is not None:
-            mod.warn_deprecated(
-                "--strict-types",
-                use_instead=f"--precision-constraints=obey",
-                remove_in="0.48.0",
-                always_show_warning=True,
-            )
 
         self.restricted = args_util.get(args, "restricted")
         self.refittable = args_util.get(args, "refittable")
@@ -513,15 +519,6 @@ class TrtConfigArgs(BaseArgs):
         self.use_dla = args_util.get(args, "use_dla")
         self.allow_gpu_fallback = args_util.get(args, "allow_gpu_fallback")
 
-        self._workspace = args_util.parse_num_bytes(args_util.get(args, "workspace"))
-        if self._workspace is not None:
-            mod.warn_deprecated(
-                "--workspace",
-                use_instead=f"--pool-limit workspace:{args_util.get(args, 'workspace')}",
-                remove_in="0.48.0",
-                always_show_warning=True,
-            )
-
         memory_pool_limits = args_util.parse_arglist_to_dict(
             args_util.get(args, "memory_pool_limit"), cast_to=args_util.parse_num_bytes, allow_empty_key=False
         )
@@ -556,8 +553,17 @@ class TrtConfigArgs(BaseArgs):
         self.version_compatible = args_util.get(args, "version_compatible")
         self.exclude_lean_runtime = args_util.get(args, "exclude_lean_runtime")
 
+        quantization_flags = args_util.get(args, "quantization_flags")
+        self.quantization_flags = None
+        if quantization_flags is not None:
+            self.quantization_flags = [make_trt_enum_val("QuantizationFlag", flag) for flag in quantization_flags]
+
         if self.exclude_lean_runtime and not self.version_compatible:
             G_LOGGER.critical(f"`--exclude-lean-runtime` requires `--version-compatible` to be enabled.")
+
+        self.error_on_timing_cache_miss = args_util.get(args, "error_on_timing_cache_miss")
+
+        self.disable_compilation_cache = args_util.get(args, "disable_compilation_cache")
 
     def add_to_script_impl(self, script):
         profiles = []
@@ -627,6 +633,9 @@ class TrtConfigArgs(BaseArgs):
                 self.preview_features,
                 self.engine_capability,
                 self.hardware_compatibility_level,
+                self.quantization_flags,
+                self.error_on_timing_cache_miss,
+                self.disable_compilation_cache,
             ]
         ):
             script.add_import(imports="tensorrt", imp_as="trt")
@@ -639,13 +648,12 @@ class TrtConfigArgs(BaseArgs):
         else:
             config_loader_str = make_invocable_if_nondefault(
                 "CreateTrtConfig",
-                max_workspace_size=self._workspace,
                 tf32=self.tf32,
                 fp16=self.fp16,
+                bf16=self.bf16,
                 int8=self.int8,
                 fp8=self.fp8,
                 precision_constraints=self.precision_constraints,
-                strict_types=self._strict_types,
                 restricted=self.restricted,
                 profiles=profile_name,
                 calibrator=calibrator,
@@ -665,6 +673,9 @@ class TrtConfigArgs(BaseArgs):
                 max_aux_streams=self.max_aux_streams,
                 version_compatible=self.version_compatible,
                 exclude_lean_runtime=self.exclude_lean_runtime,
+                quantization_flags=self.quantization_flags,
+                error_on_timing_cache_miss=self.error_on_timing_cache_miss,
+                disable_compilation_cache=self.disable_compilation_cache,
             )
             if config_loader_str is not None:
                 script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")

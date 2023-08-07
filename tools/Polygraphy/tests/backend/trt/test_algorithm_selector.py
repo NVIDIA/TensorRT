@@ -58,7 +58,6 @@ def fake_algo(implementation=6, tactic=0, io=None):
     return trt_algo
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestTensorInfo:
     @pytest.mark.parametrize(
         "left, right, expected",
@@ -92,7 +91,6 @@ class TestTensorInfo:
         assert (left == right) == expected
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestAlgorithm:
     @pytest.mark.parametrize(
         "left, right, expected",
@@ -274,7 +272,6 @@ def replay(request):
     yield context, poly_algo, trt_algo, in_replay_data, out_replay_data
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestReplayer:
     def test_basic(self, replay):
         context, _, algo, replay_data, _ = replay
@@ -327,7 +324,6 @@ class TestReplayer:
             replayer.report_algorithms([context], [fake_algo(implementation=9)])
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestRecorder:
     def test_basic(self, replay):
         context, poly_algo, algo, _, replay_data = replay

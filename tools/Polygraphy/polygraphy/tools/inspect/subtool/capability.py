@@ -26,7 +26,7 @@ common_backend = mod.lazy_import("polygraphy.backend.common")
 gs = mod.lazy_import("onnx_graphsurgeon")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
-trt = mod.lazy_import("tensorrt")
+trt = mod.lazy_import("tensorrt>=8.5")
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
 util = mod.lazy_import("polygraphy.util")
@@ -185,7 +185,7 @@ class Capability(Tool):
                         A list of subgraphs supported by TensorRT, each described by a list of node indices.
             """
             supported_subgraphs = []
-            for (node_indices, supported) in nodelists:
+            for node_indices, supported in nodelists:
                 if supported:
                     supported_subgraphs.append([index + offset for index in node_indices])
                     continue

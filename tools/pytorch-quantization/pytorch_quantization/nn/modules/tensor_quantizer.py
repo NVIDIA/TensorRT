@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -158,16 +158,16 @@ class TensorQuantizer(nn.Module):
     def disable_clip(self):
         """Disable clip stage"""
         self._if_clip = False
-        self.clip.clip_value_min.required_grad = False
-        self.clip.clip_value_max.required_grad = False
+        self.clip.clip_value_min.requires_grad = False
+        self.clip.clip_value_max.requires_grad = False
 
     def enable_clip(self):
         """Enable clip stage"""
         logging.warning("Enable `clip` stage for amax learning.")
         if not self._learn_amax:
             raise ValueError("learn_amax is False. Cannot enable clip.")
-        self.clip.clip_value_min.required_grad = True
-        self.clip.clip_value_max.required_grad = True
+        self.clip.clip_value_min.requires_grad = True
+        self.clip.clip_value_max.requires_grad = True
         self._if_clip = True
 
     def disable_calib(self):

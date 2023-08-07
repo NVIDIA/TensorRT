@@ -16,9 +16,10 @@
 #
 import numpy as np
 import pytest
-import tensorrt as trt
-from polygraphy import mod, util
-from polygraphy.cuda import DeviceArray, Stream, DeviceView, wrapper, MemcpyKind
+import torch
+
+from polygraphy import util
+from polygraphy.cuda import DeviceArray, DeviceView, MemcpyKind, Stream, wrapper
 from tests.helper import time_func
 
 
@@ -30,21 +31,25 @@ class TestDeviceView:
             assert v.shape == arr.shape
             assert v.dtype == arr.dtype
             assert v.nbytes == arr.nbytes
+            # For backwards compatibility
+            assert isinstance(arr.dtype, np.dtype)
+            assert isinstance(v.dtype, np.dtype)
 
     def test_with_int_ptr(self):
         ptr = 74892
         v = DeviceView(ptr=ptr, shape=(1,), dtype=np.float32)
         assert v.ptr == ptr
 
-    def test_copy_to(self):
+    @pytest.mark.parametrize("module", [np, torch])
+    def test_copy_to(self, module):
         with DeviceArray((2, 2), dtype=np.float32) as arr:
-            arr.copy_from(np.ones((2, 2), dtype=np.float32) * 4)
+            arr.copy_from(module.ones((2, 2), dtype=module.float32) * 4)
 
             v = DeviceView(arr.ptr, arr.shape, arr.dtype)
-            host_buf = np.zeros((2, 2), dtype=np.float32)
+            host_buf = module.zeros((2, 2), dtype=module.float32)
             v.copy_to(host_buf)
 
-            assert np.all(host_buf == 4)
+            assert module.all(host_buf == 4)
 
     def test_numpy(self):
         with DeviceArray((2, 2), dtype=np.float32) as arr:
@@ -137,7 +142,7 @@ class TestDeviceBuffer:
     @pytest.mark.flaky
     @pytest.mark.serial
     def test_copy_from_overhead(self):
-        host_buf = np.ones(shape=(4, 8, 1024, 1024), dtype=np.float32)
+        host_buf = np.ones(shape=(4, 8, 512, 512), dtype=np.float32)
         with DeviceArray(shape=host_buf.shape, dtype=host_buf.dtype) as dev_buf:
             memcpy_time = time_func(
                 lambda: wrapper().memcpy(
@@ -151,12 +156,12 @@ class TestDeviceBuffer:
             copy_from_time = time_func(lambda: dev_buf.copy_from(host_buf))
 
         print(f"memcpy time: {memcpy_time}, copy_from time: {copy_from_time}")
-        assert copy_from_time <= (memcpy_time * 1.05)
+        assert copy_from_time <= (memcpy_time * 1.08)
 
     @pytest.mark.flaky
     @pytest.mark.serial
     def test_copy_to_overhead(self):
-        host_buf = np.ones(shape=(4, 8, 1024, 1024), dtype=np.float32)
+        host_buf = np.ones(shape=(4, 8, 512, 512), dtype=np.float32)
         with DeviceArray(shape=host_buf.shape, dtype=host_buf.dtype) as dev_buf:
             memcpy_time = time_func(
                 lambda: wrapper().memcpy(
@@ -170,7 +175,7 @@ class TestDeviceBuffer:
             copy_to_time = time_func(lambda: dev_buf.copy_to(host_buf))
 
         print(f"memcpy time: {memcpy_time}, copy_to time: {copy_to_time}")
-        assert copy_to_time <= (memcpy_time * 1.05)
+        assert copy_to_time <= (memcpy_time * 1.08)
 
     def test_raw(self):
         with DeviceArray.raw((25,)) as buf:

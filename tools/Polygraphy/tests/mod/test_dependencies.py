@@ -21,7 +21,6 @@ import subprocess as sp
 
 import sys
 import pytest
-import tensorrt as trt
 from polygraphy import mod, util
 from polygraphy.mod.importer import _version_ok
 
@@ -32,13 +31,6 @@ from tests.models.meta import ONNX_MODELS
 The tests here ensure that no additional dependencies are introduced into
 the various modules under Polygraphy.
 """
-
-
-@pytest.fixture()
-def poly_venv(virtualenv):
-    virtualenv.env["PYTHONPATH"] = ROOT_DIR
-    virtualenv.env["LD_LIBRARY_PATH"] = ""
-    return virtualenv
 
 
 def is_submodule(path):
@@ -110,16 +102,17 @@ class TestAutoinstallDeps:
             ],
         ],
     )
+    @pytest.mark.slow
     def test_can_automatically_install_deps(self, poly_venv, cmd):
-        # WAR an issue with newer versions of protobuf, ONNX, and NumPy
-        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0", "numpy<=1.23.0"])
-
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
         cmd = [poly_venv.python, *POLYGRAPHY_CMD] + cmd
         print(f"Running: {' '.join(cmd)}")
         output = poly_venv.run(cmd, capture=True)
         print(output)
         assert "is required, but not installed. Attempting to install now" in output
+
+        # Make sure that no PyTorch dependency is accidentally introduced
+        assert "torch" not in poly_venv.installed_packages()
 
     @pytest.mark.parametrize(
         "new_ver, expected",
@@ -171,7 +164,7 @@ class TestAutoinstallDeps:
                 poly_venv.python,
                 "-c",
                 f"from polygraphy import mod; "
-                f"requests = mod.lazy_import('requests==1.0.0', requires=['colored{new_ver}']); "
+                f"requests = mod.lazy_import('requests==2.25.1', requires=['colored{new_ver}']); "
                 f"requests.__version__; "
                 f"import colored; print(colored.__version__)",
             ]
@@ -230,9 +223,6 @@ class TestAutoinstallDeps:
 
     # We can import inner modules, and Polygraphy should still autoinstall the outermost one.
     def test_can_install_for_nested_import(self, poly_venv):
-        # WAR an issue with newer versions of protobuf, ONNX, and NumPy
-        poly_venv.run([poly_venv.python, "-m", "pip", "install", "protobuf==3.19.4", "onnx==1.10.0", "numpy<=1.23.0"])
-
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
 
         poly_venv.run(
@@ -258,9 +248,7 @@ class TestAutoinstallDeps:
             "msvcrt",
             "numpy",
             "onnx_graphsurgeon",
-            "onnx.external_data_helper",
             "onnx.numpy_helper",
-            "onnx.shape_inference",
             "onnx",
             "onnxmltools",
             "onnxruntime.tools.symbolic_shape_infer",
@@ -268,7 +256,7 @@ class TestAutoinstallDeps:
             "tensorflow",
             "tensorrt",
             "tf2onnx",
-            "uff",
+            "torch",
         ]
         if sys.version_info < (3, 8):
             expected.append("importlib_metadata")
