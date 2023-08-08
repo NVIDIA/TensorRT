@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -215,8 +215,9 @@ class TestFakeTensorQuant():
             tensor_quant.fake_tensor_quant(x_torch_fp16, torch.max(torch.abs(x_torch_fp16))),
             rtol=0, atol=0)
 
-    def test_cuda_ext_with_axis(self):
-        x_np = np.random.rand(3, 4, 5, 6).astype('float32')
+    @pytest.mark.parametrize("dtype", ["float32", "float16"])
+    def test_cuda_ext_with_axis(self, dtype):
+        x_np = np.random.rand(3, 4, 5, 6).astype(dtype)
         x_torch = torch.Tensor(x_np).cuda()
 
         # amax along axis 1
@@ -242,6 +243,12 @@ class TestFakeTensorQuant():
         cuda_ext.fake_tensor_quant_(x_torch_fp16, torch.max(torch.abs(x_torch_fp16)))
         np.testing.assert_array_almost_equal(x_torch_fp16.cpu().numpy(), quant_x_np_fp16, decimal=2)
 
+    def test_cuda_ext_tiny_amax(self):
+        x_torch = torch.rand(2, 3, 4, device="cuda")
+        amax = torch.tensor([1., 1.e-26, 1.], device="cuda").unsqueeze(-1).unsqueeze(1)
+        quant_x = cuda_ext.fake_tensor_quant_with_axis(x_torch, amax, axis=1)
+        assert quant_x[:, 1, :].sum() == 0
+
     def test_overflow_fp16(self):
         x_torch = torch.randn(1023).cuda().half()
         quant_x_torch = tensor_quant.fake_tensor_quant(x_torch, torch.tensor(1e-4).cuda().half(), 8, False)
@@ -266,6 +273,47 @@ class TestFakeTensorQuant():
         quant_x_np = test_utils.quant_np(x_np, amax, num_bits=9, fake=True, narrow_range=False)
         quant_x_torch = tensor_quant.fake_tensor_quant(x_torch, torch.max(torch.abs(x_torch)), 8, True, False)
         np.testing.assert_array_almost_equal(quant_x_torch.cpu().numpy(), quant_x_np)
+
+    @pytest.mark.parametrize("dtype", ["float32", "float16"])
+    def test_against_legacy(self, dtype):
+        x_np = np.random.rand(3, 4, 5, 6).astype(dtype)
+        x_torch = torch.Tensor(x_np).cuda()
+
+        amax_torch = torch.tensor(0.7, device="cuda")
+
+        for num_bits in [3, 4, 5, 7, 8, 11]:
+            for unsigned in [True, False]:
+                legacy_out = tensor_quant.legacy_fake_tensor_quant(x_torch, amax_torch, num_bits, unsigned)
+                test_out = tensor_quant.fake_tensor_quant(x_torch, amax_torch, num_bits, unsigned)
+                test_utils.compare(legacy_out, test_out, rtol=0, atol=0)
+
+    def test_against_legacy_noncontiguous(self):
+        x_np = np.random.rand(3, 4, 5, 6)
+        x_torch = torch.Tensor(x_np).cuda()
+
+        amax_torch = torch.tensor(0.7, device="cuda")
+
+        x_torch_noncontiguous = x_torch[:, 2, :, 3]
+        assert not x_torch_noncontiguous.is_contiguous()
+
+        legacy_out = tensor_quant.legacy_fake_tensor_quant(x_torch_noncontiguous, amax_torch)
+        test_out = tensor_quant.fake_tensor_quant(x_torch_noncontiguous, amax_torch)
+        test_utils.compare(legacy_out, test_out, rtol=0, atol=0)
+
+
+    @pytest.mark.parametrize("dtype", ["float32", "float16"])
+    def test_against_legacy_with_axis(self, dtype):
+        x_np = np.random.rand(3, 4, 5, 6).astype(dtype)
+        x_torch = torch.Tensor(x_np).cuda()
+
+        # amax along axis 1
+        amax_torch = torch.tensor([0.8, 0.9, 0.7, 0.6], device="cuda").view(1, -1, 1, 1)
+
+        for num_bits in [3, 4, 5, 7, 8, 11]:
+            for unsigned in [True, False]:
+                legacy_out = tensor_quant.legacy_fake_tensor_quant(x_torch, amax_torch, num_bits, unsigned)
+                test_out = tensor_quant.fake_tensor_quant(x_torch, amax_torch, num_bits, unsigned)
+                test_utils.compare(legacy_out, test_out, rtol=0, atol=0)
 
 class TestQuantDescriptor():
 

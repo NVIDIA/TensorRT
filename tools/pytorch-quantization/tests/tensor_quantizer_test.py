@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -94,11 +94,11 @@ class TestTensorQuantizer():
     def test_learn_amax(self):
         """Test the clip implied by learn_amax"""
         x_np = np.random.rand(1023).astype(np.float32)
-        x_torch = torch.Tensor(x_np)
+        x_torch = torch.Tensor(x_np).cuda()
         amax = 0.5
         quant_x_np = test_utils.quant_np(x_np, 0.5, fake=True)
         quantizer = tensor_quantizer.TensorQuantizer(
-            tensor_quant.QuantDescriptor(num_bits=8, amax=amax, learn_amax=True))
+            tensor_quant.QuantDescriptor(num_bits=8, amax=amax, learn_amax=True)).cuda()
         assert hasattr(quantizer, 'clip')
         module_quant_x = quantizer(x_torch)
         np.testing.assert_array_equal(module_quant_x.cpu().detach().numpy(), quant_x_np)
@@ -106,23 +106,23 @@ class TestTensorQuantizer():
     def test_clip_mode(self):
         """Test the clip stage only"""
         x_np = np.random.rand(1023).astype(np.float32)
-        x_torch = torch.Tensor(x_np)
+        x_torch = torch.Tensor(x_np).cuda()
         amax = 0.5
         clip_x_np = np.clip(x_np, -amax, amax)
         quantizer = tensor_quantizer.TensorQuantizer(
-            tensor_quant.QuantDescriptor(amax=amax, learn_amax=True), if_quant=False, if_clip=True)
+            tensor_quant.QuantDescriptor(amax=amax, learn_amax=True), if_quant=False, if_clip=True).cuda()
         assert hasattr(quantizer, 'clip')
         module_clip_x = quantizer(x_torch)
         np.testing.assert_array_equal(module_clip_x.cpu().detach().numpy(), clip_x_np)
 
     def test_scale_amax(self):
         x_np = np.random.rand(1023).astype(np.float32)
-        x_torch = torch.Tensor(x_np)
+        x_torch = torch.Tensor(x_np).cuda()
         amax = 0.5
         scale_amax = 0.9
         quant_x_np = test_utils.quant_np(x_np, amax * scale_amax, fake=True)
         quantizer = tensor_quantizer.TensorQuantizer(
-            tensor_quant.QuantDescriptor(num_bits=8, amax=amax, scale_amax=scale_amax))
+            tensor_quant.QuantDescriptor(num_bits=8, amax=amax, scale_amax=scale_amax)).cuda()
         module_quant_x = quantizer(x_torch)
         np.testing.assert_array_equal(module_quant_x.cpu().detach().numpy(), quant_x_np)
 
@@ -133,7 +133,7 @@ class TestTensorQuantizer():
     def test_disable(self):
         x = torch.randn(3, 7).cuda()
         amax_x = torch.max(torch.abs(x))
-        quantizer = tensor_quantizer.TensorQuantizer(disabled=True)
+        quantizer = tensor_quantizer.TensorQuantizer(disabled=True).cuda()
         module_quant_x = quantizer(x)
         np.testing.assert_array_equal(x.cpu().numpy(), module_quant_x.cpu().numpy())
 
@@ -168,7 +168,7 @@ class TestTensorQuantizer():
 
     def test_init_calib(self):
         quant_desc2 = tensor_quant.QuantDescriptor(axis=(0, 1))
-        quantizer2 = tensor_quantizer.TensorQuantizer(quant_desc2, if_calib=True).cuda()
+        quantizer2 = tensor_quantizer.TensorQuantizer(quant_desc2, if_calib=True, if_quant=False).cuda()
 
         x_2 = torch.rand(127, 63, 7, 7).cuda()
         quantizer2(x_2)

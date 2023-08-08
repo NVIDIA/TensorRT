@@ -31,12 +31,8 @@ class DiffTactics(Tool):
     replay files, such as those saved by `--save-tactics`.
     """
 
-    def __init__(self, _issue_deprecation_warning=None):
+    def __init__(self):
         super().__init__("diff-tactics")
-        self._issue_deprecation_warning = util.default(_issue_deprecation_warning, False)
-
-        if self._issue_deprecation_warning:
-            self.__doc__ = "[DEPRECATED - use `inspect diff-tactics`] " + self.__doc__
 
     def add_parser_args(self, parser):
         parser.add_argument(
@@ -57,11 +53,6 @@ class DiffTactics(Tool):
         )
 
     def run_impl(self, args):
-        if self._issue_deprecation_warning:
-            mod.warn_deprecated(
-                "debug diff-tactics", use_instead="inspect diff-tactics", remove_in="0.48.0", always_show_warning=True
-            )
-
         if args.dir is None and (args.good is None or args.bad is None):
             G_LOGGER.critical("Either `--dir`, or both `--good` and `--bad` must be specified.")
 

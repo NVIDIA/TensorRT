@@ -46,7 +46,7 @@ string containing the command; for example: ``python3 -m pip install``.
 
 ARRAY_SWAP_THRESHOLD_MB = int(os.environ.get("POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB", "-1"))
 """
-int: The threshold, in megabytes, above which Polygraphy will evict a NumPy array from memory and swap it to disk.
+int: The threshold, in megabytes, above which Polygraphy will evict an array from memory and swap it to disk.
 A negative value disables swapping and a value of 0 causes all arrays to be saved to disk.
 Disabled by default.
 This can be configured by setting the 'POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB' environment variable.

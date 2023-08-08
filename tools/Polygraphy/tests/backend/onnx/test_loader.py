@@ -18,9 +18,11 @@ import os
 import tempfile
 
 import numpy as np
+import onnx
 import onnx_graphsurgeon as gs
 import pytest
-from polygraphy import constants, util
+
+from polygraphy import constants, mod, util
 from polygraphy.backend.onnx import (
     ConvertToFp16,
     FoldConstants,
@@ -31,17 +33,15 @@ from polygraphy.backend.onnx import (
     SaveOnnx,
     SetUpperBound,
     extract_subgraph,
+    fold_constants,
     gs_from_onnx,
     infer_shapes,
-    fold_constants,
     onnx_from_path,
 )
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER
 from tests.helper import is_file_non_empty
 from tests.models.meta import ONNX_MODELS, TF_MODELS
-
-import onnx
 
 
 class TestLoggerCallbacks:
@@ -90,13 +90,13 @@ class TestGsFromOnnx:
 
 
 class TestExportOnnxFromTf:
-    pytest.importorskip("tensorflow")
-
     def test_no_optimize(self):
+        pytest.importorskip("tensorflow")
         loader = OnnxFromTfGraph(TF_MODELS["identity"].loader, optimize=False)
         model = loader()
 
     def test_opset(self):
+        pytest.importorskip("tensorflow")
         loader = OnnxFromTfGraph(TF_MODELS["identity"].loader, opset=9)
         model = loader()
         assert model.opset_import[0].version == 9
@@ -223,7 +223,6 @@ class TestFoldConstants:
 
 
 class TestSetUpperBound:
-
     @pytest.mark.parametrize("global_upper_bound", [False, True])
     @pytest.mark.parametrize("specified_upper_bound", [False, True])
     def test_set_upper_bound(
@@ -254,7 +253,7 @@ class TestSetUpperBound:
         # Check if there is a Min operator in the modified model
         find_min = False
         for node in graph.nodes:
-            if node.op == 'Min':
+            if node.op == "Min":
                 find_min = True
                 # Check if the Min operator's second input is a constant tensor
                 assert isinstance(node.inputs[1], gs.Constant)
@@ -262,7 +261,7 @@ class TestSetUpperBound:
                 val = node.inputs[1].values
                 # Check if the constant value equals the target upper bound
                 assert val == upper_bound
-        assert (find_min)
+        assert find_min
 
 
 class TestSaveOnnx:

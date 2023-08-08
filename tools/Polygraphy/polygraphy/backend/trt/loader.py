@@ -14,18 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import contextlib
 import ctypes
 import time
-import os
 
 from polygraphy import constants, mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.backend.trt.config import CreateConfig
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
 
-trt = mod.lazy_import("tensorrt")
+trt = mod.lazy_import("tensorrt>=8.5")
 gs = mod.lazy_import("onnx_graphsurgeon")
 np = mod.lazy_import("numpy")
 
@@ -80,7 +79,7 @@ class CreateNetwork(BaseLoader):
     Functor that creates an empty TensorRT network.
     """
 
-    def __init__(self, explicit_batch=None):
+    def __init__(self, explicit_batch=None, strongly_typed=None):
         """
         Creates an empty TensorRT network.
 
@@ -88,8 +87,12 @@ class CreateNetwork(BaseLoader):
             explicit_batch (bool):
                     Whether to create the network with explicit batch mode.
                     Defaults to True.
+            strongly_typed (bool):
+                    Whether to mark the network as being strongly typed.
+                    Defaults to False.
         """
         self.explicit_batch = util.default(explicit_batch, True)
+        self.strongly_typed = util.default(strongly_typed, False)
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -97,43 +100,51 @@ class CreateNetwork(BaseLoader):
         Returns:
             (trt.Builder, trt.INetworkDefinition): The builder and empty network.
         """
-        with util.FreeOnException([trt.Builder(trt_util.get_trt_logger())]) as (builder,):
-            network_flags = 0
-            if self.explicit_batch:
-                network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-            network = builder.create_network(flags=network_flags)
-            if network is None:
-                G_LOGGER.critical("Invalid network. See logging output above for details.")
-            return builder, network
+        builder = trt.Builder(trt_util.get_trt_logger())
+        network_flags = 0
+
+        if self.explicit_batch:
+            network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+
+        if self.strongly_typed:
+            try:
+                network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)
+            except AttributeError:
+                trt_util.fail_unavailable("strongly_typed")
+
+        network = builder.create_network(flags=network_flags)
+        if network is None:
+            G_LOGGER.critical("Invalid network. See logging output above for details.")
+        return builder, network
 
 
 class BaseNetworkFromOnnx(BaseLoader):
-    def __init__(self, explicit_batch=None, flags=None):
+    def __init__(self, flags=None, strongly_typed=None):
         """
         Args:
-            explicit_batch (bool):
-                    Whether to create the network with explicit batch mode.
-                    Defaults to True.
             flags (List[trt.OnnxParserFlag]):
                     A list of ``OnnxParserFlag`` s to modify the default parsing
                     behavior of the ONNX parser.
                     Defaults to None.
+            strongly_typed (bool):
+                    Whether to mark the network as being strongly typed.
+                    Defaults to False.
         """
-        self.explicit_batch = util.default(explicit_batch, True)
         self.flags = flags
+        self.strongly_typed = util.default(strongly_typed, False)
 
     @util.check_called_by("__call__")
     def call_impl(self):
-        with util.FreeOnException(create_network(explicit_batch=self.explicit_batch)) as (builder, network):
-            parser = trt.OnnxParser(network, trt_util.get_trt_logger())
-            # Set flags if applicable
-            if mod.version(trt.__version__) >= mod.version("8.6"):
-                if self.flags:
-                    masked_flags = 0
-                    for f in self.flags:
-                        masked_flags |= 1 << int(f)
-                    parser.flags = masked_flags
-            return builder, network, parser
+        builder, network = create_network(strongly_typed=self.strongly_typed)
+        parser = trt.OnnxParser(network, trt_util.get_trt_logger())
+        # Set flags if applicable
+        if mod.version(trt.__version__) >= mod.version("8.6"):
+            if self.flags:
+                masked_flags = 0
+                for f in self.flags:
+                    masked_flags |= 1 << int(f)
+                parser.flags = masked_flags
+        return builder, network, parser
 
 
 @mod.export(funcify=True)
@@ -142,7 +153,7 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
     Functor that parses an ONNX model to create a trt.INetworkDefinition.
     """
 
-    def __init__(self, model_bytes, flags=None):
+    def __init__(self, model_bytes, flags=None, strongly_typed=None):
         """
         Parses an ONNX model.
 
@@ -154,8 +165,11 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
                     A list of ``OnnxParserFlag`` s to modify the default parsing
                     behavior of the ONNX parser.
                     Defaults to None.
+            strongly_typed (bool):
+                    Whether to mark the network as being strongly typed.
+                    Defaults to False.
         """
-        super().__init__(flags=flags)
+        super().__init__(flags=flags, strongly_typed=strongly_typed)
         self._model_bytes = model_bytes
 
     @util.check_called_by("__call__")
@@ -166,10 +180,10 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
                     A TensorRT network, as well as the builder used to create it, and the parser
                     used to populate it.
         """
-        with util.FreeOnException(super().call_impl()) as (builder, network, parser):
-            success = parser.parse(util.invoke_if_callable(self._model_bytes)[0])
-            trt_util.check_onnx_parser_errors(parser, success)
-            return builder, network, parser
+        builder, network, parser = super().call_impl()
+        success = parser.parse(util.invoke_if_callable(self._model_bytes)[0])
+        trt_util.check_onnx_parser_errors(parser, success)
+        return builder, network, parser
 
 
 @mod.export(funcify=True)
@@ -179,7 +193,7 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
     This loader supports models with weights stored in an external location.
     """
 
-    def __init__(self, path, flags=None):
+    def __init__(self, path, flags=None, strongly_typed=None):
         """
         Parses an ONNX model from a file.
 
@@ -190,8 +204,11 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
                     A list of ``OnnxParserFlag`` s to modify the default parsing
                     behavior of the ONNX parser.
                     Defaults to None.
+            strongly_typed (bool):
+                    Whether to mark the network as being strongly typed.
+                    Defaults to False.
         """
-        super().__init__(flags=flags)
+        super().__init__(flags=flags, strongly_typed=strongly_typed)
         self.path = path
 
     @util.check_called_by("__call__")
@@ -203,17 +220,12 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
                     used to populate it.
         """
         path = util.invoke_if_callable(self.path)[0]
-        if mod.version(trt.__version__) >= mod.version("7.1"):
-            with util.FreeOnException(super().call_impl()) as (builder, network, parser):
-                # We need to use parse_from_file for the ONNX parser to keep track of the location of the ONNX file for
-                # potentially parsing any external weights.
-                success = parser.parse_from_file(path)
-                trt_util.check_onnx_parser_errors(parser, success)
-                return builder, network, parser
-        else:
-            from polygraphy.backend.common import bytes_from_path
-
-            return network_from_onnx_bytes(bytes_from_path(path))
+        builder, network, parser = super().call_impl()
+        # We need to use parse_from_file for the ONNX parser to keep track of the location of the ONNX file for
+        # potentially parsing any external weights.
+        success = parser.parse_from_file(path)
+        trt_util.check_onnx_parser_errors(parser, success)
+        return builder, network, parser
 
 
 @mod.export(funcify=True)
@@ -257,20 +269,16 @@ class PostprocessNetwork(BaseLoader):
             Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]:
                     The modified network along with the builder and parser if provided.
         """
-        ret, owns_network = util.invoke_if_callable(self._network)
+        ret, _ = util.invoke_if_callable(self._network)
         builder, network, parser = util.unpack_args(ret, num=3)
 
         G_LOGGER.verbose(f"Executing postprocessing step [{self.name}]")
 
-        with contextlib.ExitStack() as stack:
-            if owns_network:
-                stack.enter_context(util.FreeOnException([builder, network, parser]))
+        self._func(network=network)
 
-            self._func(network=network)
-
-            if parser is None:
-                return builder, network
-            return builder, network, parser
+        if parser is None:
+            return builder, network
+        return builder, network, parser
 
 
 @mod.export(funcify=True)
@@ -350,7 +358,7 @@ class SetLayerPrecisions(PostprocessNetwork):
 @mod.export(funcify=True)
 class SetTensorDatatypes(PostprocessNetwork):
     """
-    Functor that sets tensor datatypes in a TensorRT ``INetworkDefinition``.
+    Functor that sets tensor datatypes for network I/O tensors in a TensorRT ``INetworkDefinition``.
     """
 
     @staticmethod
@@ -371,7 +379,7 @@ class SetTensorDatatypes(PostprocessNetwork):
 
     def __init__(self, network, tensor_datatypes):
         """
-        Sets tensor datatypes in a TensorRT ``INetworkDefinition``.
+        Sets network I/O tensor datatypes in a TensorRT ``INetworkDefinition``.
 
         Args:
             network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
@@ -387,7 +395,7 @@ class SetTensorDatatypes(PostprocessNetwork):
 @mod.export(funcify=True)
 class SetTensorFormats(PostprocessNetwork):
     """
-    Functor that sets tensor formats in a TensorRT ``INetworkDefinition``.
+    Functor that sets network I/O tensor formats in a TensorRT ``INetworkDefinition``.
     """
 
     @staticmethod
@@ -411,7 +419,7 @@ class SetTensorFormats(PostprocessNetwork):
 
     def __init__(self, network, tensor_formats):
         """
-        Sets tensor formats in a TensorRT ``INetworkDefinition``.
+        Sets network I/O tensor formats in a TensorRT ``INetworkDefinition``.
 
         Args:
             network (Union[Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]], Callable() -> Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
@@ -448,9 +456,9 @@ class LoadRuntime(BaseLoader):
         Returns:
             trt.Runtime: The runtime that was loaded.
         """
-        with trt.Runtime(trt_util.get_trt_logger()) as bootstrap_runtime:
-            G_LOGGER.info(f"Loading TensorRT runtime from: {self.path}")
-            return bootstrap_runtime.load_runtime(self.path)
+        bootstrap_runtime = trt.Runtime(trt_util.get_trt_logger())
+        G_LOGGER.info(f"Loading TensorRT runtime from: {self.path}")
+        return bootstrap_runtime.load_runtime(self.path)
 
 
 @mod.export(funcify=True)
@@ -489,90 +497,69 @@ class EngineBytesFromNetwork(BaseLoader):
             bytes: The serialized engine that was created.
         """
         # If network is a callable, then we own its return value
-        ret, owns_network = util.invoke_if_callable(self._network)
-        builder, network, parser = util.unpack_args(ret, num=3)
+        ret, _ = util.invoke_if_callable(self._network)
+        builder, network, _ = util.unpack_args(ret, num=3)
 
         if builder is None or network is None:
             G_LOGGER.critical(
                 f"Expected to recevie a (builder, network) tuple for the `network` parameter, but received: ({builder}, {network})"
             )
 
-        with contextlib.ExitStack() as stack:
-            if owns_network:
-                stack.enter_context(builder)
-                stack.enter_context(network)
-                if parser is not None:
-                    stack.enter_context(parser)
-            else:
-                provided = "Builder and Network" if parser is None else "Builder, Network, and Parser"
-                G_LOGGER.verbose(
-                    f"{provided} were provided directly instead of via a Callable. This loader will not assume ownership. Please ensure that they are freed."
-                )
+        config, _ = util.invoke_if_callable(self._config, builder, network)
 
-            config, owns_config = util.invoke_if_callable(self._config, builder, network)
-            if owns_config:
-                stack.enter_context(config)
-            else:
-                G_LOGGER.verbose(
-                    "Builder configuration was provided directly instead of via a Callable. This loader will not assume "
-                    "ownership. Please ensure it is freed."
-                )
+        trt_util.try_setup_polygraphy_calibrator(config, network)
 
-            trt_util.try_setup_polygraphy_calibrator(config, network)
-
-            G_LOGGER.super_verbose(
-                lambda: (
-                    "Displaying TensorRT Network:\n"
-                    + trt_util.str_from_network(
-                        network,
-                        show_layers=True,
-                        show_attrs=True,
-                        show_weights=G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__))
-                        <= G_LOGGER.ULTRA_VERBOSE,
-                    )
+        G_LOGGER.super_verbose(
+            lambda: (
+                "Displaying TensorRT Network:\n"
+                + trt_util.str_from_network(
+                    network,
+                    show_layers=True,
+                    show_attrs=True,
+                    show_weights=G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) <= G_LOGGER.ULTRA_VERBOSE,
                 )
             )
+        )
 
-            G_LOGGER.start(f"Building engine with configuration:\n{trt_util.str_from_config(config)}")
+        G_LOGGER.start(f"Building engine with configuration:\n{trt_util.str_from_config(config)}")
 
-            start_time = time.time()
-            try:
-                engine_bytes = builder.build_serialized_network(network, config)
-            except AttributeError:
-                engine = builder.build_engine(network, config)
-                if not engine:
-                    G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
-                stack.enter_context(engine)
-                engine_bytes = engine.serialize()
-            end_time = time.time()
-
-            if not engine_bytes:
+        start_time = time.time()
+        try:
+            engine_bytes = builder.build_serialized_network(network, config)
+        except AttributeError:
+            engine = builder.build_engine(network, config)
+            if not engine:
                 G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
+            engine_bytes = engine.serialize()
+        end_time = time.time()
 
-            G_LOGGER.finish(f"Finished engine building in {end_time - start_time:.3f} seconds")
+        if not engine_bytes:
+            G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
 
-            if self.timing_cache_path:
+        G_LOGGER.finish(f"Finished engine building in {end_time - start_time:.3f} seconds")
+
+        if self.timing_cache_path:
+            try:
+                timing_cache = config.get_timing_cache()
+            except AttributeError:
+                trt_util.fail_unavailable("save_timing_cache in EngineBytesFromNetwork")
+
+            with util.LockFile(self.timing_cache_path):
                 try:
-                    timing_cache = config.get_timing_cache()
-                except AttributeError:
-                    trt_util.fail_unavailable("save_timing_cache in EngineBytesFromNetwork")
+                    prev_cache = config.create_timing_cache(util.load_file(self.timing_cache_path))
+                except:
+                    prev_cache = None
 
-                with util.LockFile(self.timing_cache_path):
-                    try:
-                        prev_cache = config.create_timing_cache(util.load_file(self.timing_cache_path))
-                    except:
-                        prev_cache = None
+                if timing_cache:
+                    if prev_cache is not None:
+                        combine_success = timing_cache.combine(prev_cache, ignore_mismatch=True)
+                        if not combine_success:
+                            G_LOGGER.warning("Could not combine old timing cache into current timing cache")
 
-                    if timing_cache:
-                        if prev_cache is not None:
-                            combine_success = timing_cache.combine(prev_cache, ignore_mismatch=True)
-                            if not combine_success:
-                                G_LOGGER.warning("Could not combine old timing cache into current timing cache")
+                    with timing_cache.serialize() as buffer:
+                        util.save_file(buffer, self.timing_cache_path, description="tactic timing cache")
 
-                        with timing_cache.serialize() as buffer:
-                            util.save_file(buffer, self.timing_cache_path, description="tactic timing cache")
-
-            return engine_bytes
+        return engine_bytes
 
 
 @mod.export(funcify=True)
@@ -643,32 +630,20 @@ class EngineFromBytes(BaseLoader):
         Returns:
             trt.ICudaEngine: The deserialized engine.
         """
-        buffer, owns_buffer = util.invoke_if_callable(self._serialized_engine)
-        runtime, owns_runtime = util.invoke_if_callable(self._runtime)
+        buffer, _ = util.invoke_if_callable(self._serialized_engine)
+        runtime, _ = util.invoke_if_callable(self._runtime)
 
         trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
-        with contextlib.ExitStack() as stack:
-            if owns_runtime:
-                stack.enter_context(runtime)
+        try:
+            # To deserialize version compatible engines, we must signal the runtime that host code is allowed
+            runtime.engine_host_code_allowed = True
+        except AttributeError:
+            pass
 
-            if owns_buffer:
-                try:
-                    buffer.__enter__  # IHostMemory is freed only in __exit__
-                except AttributeError:
-                    pass
-                else:
-                    stack.enter_context(buffer)
-
-            try:
-                # To deserialize version compatible engines, we must signal the runtime that host code is allowed
-                runtime.engine_host_code_allowed = True
-            except AttributeError:
-                pass
-
-            engine = runtime.deserialize_cuda_engine(buffer)
-            if not engine:
-                G_LOGGER.critical("Could not deserialize engine. See log for details.")
-            return engine
+        engine = runtime.deserialize_cuda_engine(buffer)
+        if not engine:
+            G_LOGGER.critical("Could not deserialize engine. See log for details.")
+        return engine
 
 
 @mod.export(funcify=True)
@@ -693,14 +668,8 @@ class BytesFromEngine(BaseLoader):
         Returns:
             bytes: The serialized engine.
         """
-        engine, owns_engine = util.invoke_if_callable(self._engine)
-
-        with contextlib.ExitStack() as stack:
-            if owns_engine:
-                stack.enter_context(util.FreeOnException([engine]))
-
-            with engine.serialize() as buffer:
-                return bytes(buffer)
+        engine, _ = util.invoke_if_callable(self._engine)
+        return bytes(engine.serialize())
 
 
 @mod.export(funcify=True)
@@ -728,14 +697,10 @@ class SaveEngine(BaseLoader):
         Returns:
             trt.ICudaEngine: The engine that was saved.
         """
-        engine, owns_engine = util.invoke_if_callable(self._engine)
+        engine, _ = util.invoke_if_callable(self._engine)
 
-        with contextlib.ExitStack() as stack:
-            if owns_engine:
-                stack.enter_context(util.FreeOnException([engine]))
-
-            util.save_file(contents=bytes_from_engine(engine), dest=self.path, description="engine")
-            return engine
+        util.save_file(contents=bytes_from_engine(engine), dest=self.path, description="engine")
+        return engine
 
 
 @mod.export(funcify=True)
@@ -766,80 +731,74 @@ class OnnxLikeFromNetwork(BaseLoader):
         Returns:
             onnx.ModelProto: The ONNX-like, but **not** valid ONNX, representation of the TensorRT network.
         """
-        ret, owns_network = util.invoke_if_callable(self._network)
-        builder, network, parser = util.unpack_args(ret, num=3)
+        ret, _ = util.invoke_if_callable(self._network)
+        builder, network, _ = util.unpack_args(ret, num=3)
 
         if builder is None or network is None:
             G_LOGGER.critical(
                 f"Expected to recevie a (builder, network) tuple for the `network` parameter, but received: ({builder}, {network})"
             )
 
-        with contextlib.ExitStack() as stack:
-            if owns_network:
-                stack.enter_context(builder)
-                stack.enter_context(network)
-                if parser is not None:
-                    stack.enter_context(parser)
+        tensor_map = {}
 
-            tensor_map = {}
+        def tensors_from_names_meta(names, meta):
+            nonlocal tensor_map
+            tensors = []
+            for name in names:
+                if name not in tensor_map:
+                    dtype, shape = meta[name]
+                    tensor_map[name] = gs.Variable(name=name, dtype=DataType.to_dtype(dtype, "onnx"), shape=shape)
+                tensors.append(tensor_map[name])
+            return tensors
 
-            def tensors_from_names_meta(names, meta):
-                nonlocal tensor_map
-                tensors = []
-                for name in names:
-                    if name not in tensor_map:
-                        dtype, shape = meta[name]
-                        tensor_map[name] = gs.Variable(name=name, dtype=dtype, shape=shape)
-                    tensors.append(tensor_map[name])
-                return tensors
+        nodes = []
+        graph_inputs = tensors_from_names_meta(*trt_util.get_network_input_names_meta(network))
+        graph_outputs = tensors_from_names_meta(*trt_util.get_network_output_names_meta(network))
 
-            nodes = []
-            graph_inputs = tensors_from_names_meta(*trt_util.get_network_input_names_meta(network))
-            graph_outputs = tensors_from_names_meta(*trt_util.get_network_output_names_meta(network))
+        LAYER_TYPE_CLASS_MAPPING = trt_util.get_layer_class_mapping()
 
-            LAYER_TYPE_CLASS_MAPPING = trt_util.get_layer_class_mapping()
+        for layer in network:
+            op_name = layer.type.name
+            if layer.type in LAYER_TYPE_CLASS_MAPPING:
+                layer.__class__ = LAYER_TYPE_CLASS_MAPPING[layer.type]
 
-            for layer in network:
-                op_name = layer.type.name
-                if layer.type in LAYER_TYPE_CLASS_MAPPING:
-                    layer.__class__ = LAYER_TYPE_CLASS_MAPPING[layer.type]
-
-                node_inputs = tensors_from_names_meta(*trt_util.get_layer_input_names_meta(layer))
-                node_outputs = tensors_from_names_meta(*trt_util.get_layer_output_names_meta(layer))
-                attrs = {}
-                attr_names = trt_util.get_layer_attribute_names(layer)
-                for name in attr_names:
-                    with G_LOGGER.verbosity():
+            node_inputs = tensors_from_names_meta(*trt_util.get_layer_input_names_meta(layer))
+            node_outputs = tensors_from_names_meta(*trt_util.get_layer_output_names_meta(layer))
+            attrs = {}
+            attr_names = trt_util.get_layer_attribute_names(layer)
+            for name in attr_names:
+                with G_LOGGER.verbosity():
+                    try:
                         attr = getattr(layer, name)
+                    except Exception as err:
+                        attr = f"<Error: could not retrieve layer attribute: {name}. Note: Error was: {err}>"
 
-                    if util.is_sequence(attr) or any(isinstance(attr, cls) for cls in [trt.Dims, trt.Permutation]):
-                        try:
-                            attr = list(attr)
-                        except ValueError:  # Invalid dims
-                            attr = []
+                if util.is_sequence(attr) or any(isinstance(attr, cls) for cls in [trt.Dims, trt.Permutation]):
+                    try:
+                        attr = list(attr)
+                    except ValueError:  # Invalid dims
+                        attr = []
 
-                    if hasattr(attr, "__entries"):  # TensorRT Enums
-                        attr = attr.name
+                if hasattr(attr, "__entries"):  # TensorRT Enums
+                    attr = attr.name
 
-                    if isinstance(attr, trt.ILoop):
-                        attr = attr.name
+                if isinstance(attr, trt.ILoop):
+                    attr = attr.name
 
-                    VALID_TYPES = [np.ndarray, list, int, str, bool, float]
-                    if not any(isinstance(attr, cls) for cls in VALID_TYPES):
-                        G_LOGGER.internal_error(
-                            f"Unknown type: {type(attr)} for layer attribute: {attr}.\nNote: Layer was: {layer}"
-                        )
-                        try:
-                            attr = str(attr)
-                        except:
-                            attr = "<error during conversion>"
+                VALID_TYPES = [np.ndarray, list, int, str, bool, float]
+                if not any(isinstance(attr, cls) for cls in VALID_TYPES):
+                    G_LOGGER.internal_error(
+                        f"Unknown type: {type(attr)} for layer attribute: {attr}.\nNote: Layer was: {layer}"
+                    )
+                    try:
+                        attr = str(attr)
+                    except:
+                        attr = "<error during conversion>"
 
-                    attrs[name] = attr
+                attrs[name] = attr
 
-                nodes.append(
-                    gs.Node(name=layer.name, op=op_name, attrs=attrs, inputs=node_inputs, outputs=node_outputs)
-                )
+            nodes.append(gs.Node(name=layer.name, op=op_name, attrs=attrs, inputs=node_inputs, outputs=node_outputs))
 
-            graph = gs.Graph(name=network.name, inputs=graph_inputs, outputs=graph_outputs, nodes=nodes)
+        graph = gs.Graph(name=network.name, inputs=graph_inputs, outputs=graph_outputs, nodes=nodes)
 
-            return gs.export_onnx(graph)
+        return gs.export_onnx(graph)

@@ -309,15 +309,15 @@ class TestSurgeonSanitize:
 
     @pytest.mark.parametrize("global_upper_bound", [None, "2000"])
     @pytest.mark.parametrize("specified_upper_bound", [None, "cast_out_6:4000"])
-    def test_set_upper_bound(
-        self,
-        poly_surgeon,
-        global_upper_bound,
-        specified_upper_bound,
-        onnx_model_sanity_check
-    ):
+    def test_set_upper_bound(self, poly_surgeon, global_upper_bound, specified_upper_bound, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
-            cmd = ["sanitize", ONNX_MODELS["unbounded_dds"].path, "-o", outmodel.name, "--set-unbounded-dds-upper-bound"]
+            cmd = [
+                "sanitize",
+                ONNX_MODELS["unbounded_dds"].path,
+                "-o",
+                outmodel.name,
+                "--set-unbounded-dds-upper-bound",
+            ]
             upper_bound = "1000"
             if global_upper_bound:
                 upper_bound = "2000"
@@ -335,7 +335,7 @@ class TestSurgeonSanitize:
             # Check if there is a Min operator in the modified model
             find_min = False
             for node in graph.nodes:
-                if node.op == 'Min':
+                if node.op == "Min":
                     find_min = True
                     # Check if the Min operator's second input is a constant tensor
                     assert isinstance(node.inputs[1], gs.Constant)
@@ -343,8 +343,7 @@ class TestSurgeonSanitize:
                     val = node.inputs[1].values
                     # Check if the constant value equals the target upper bound
                     assert str(val) == upper_bound
-            assert (find_min)
-
+            assert find_min
 
     def test_fold_constants_single_pass(self, poly_surgeon, onnx_model_sanity_check):
         with util.NamedTemporaryFile() as outmodel:
@@ -459,6 +458,22 @@ class TestSurgeonSanitize:
             assert len(model.graph.node) == 1
             assert model.graph.output[0].name == "identity_out_0"
 
+    def test_toposort(self, poly_surgeon):
+        with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
+            poly_surgeon(
+                [
+                    "sanitize",
+                    ONNX_MODELS["unsorted"].path,
+                    "-o",
+                    outmodel.name,
+                    "--toposort",
+                ]
+            )
+
+            model = onnx.load(outmodel.name)
+            assert model.graph.node[0].name == "onnx_graphsurgeon_node_1"
+            assert model.graph.node[1].name == "onnx_graphsurgeon_node_3"
+
     def test_external_data(self, poly_surgeon, poly_run):
         with tempfile.TemporaryDirectory() as outdir:
             model = ONNX_MODELS["ext_weights"]
@@ -533,3 +548,15 @@ class TestSurgeonSanitize:
             else:
                 assert len(model.graph.node) == 1
                 assert model.graph.node[0].op_type == "Tile"
+
+
+class TestSurgeonPrune:
+    @pytest.mark.parametrize("model_name", ["matmul", "matmul.fp16", "matmul.bf16", "matmul.bf16.i32data", "conv"])
+    def test_prune(self, poly_surgeon, onnx_model_sanity_check, model_name):
+        with tempfile.TemporaryDirectory() as outdir:
+            ipath = ONNX_MODELS[model_name].path
+            opath = os.path.join(outdir, "pruned." + os.path.basename(ipath))
+            status = poly_surgeon(["prune", ipath, "-o", opath])
+            assert status
+            if "bf16" not in ipath:
+                onnx_model_sanity_check(opath)

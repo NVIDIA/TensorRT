@@ -22,7 +22,6 @@ from polygraphy.tools.args import (
     PluginRefRunnerArgs,
     RunnerSelectArgs,
     TfRunnerArgs,
-    TrtLegacyRunnerArgs,
     TrtRunnerArgs,
 )
 from tests.tools.args.helper import ArgGroupTestHelper
@@ -37,7 +36,6 @@ def runner_select_args():
             OnnxrtRunnerArgs(),
             PluginRefRunnerArgs(),
             TrtRunnerArgs(),
-            TrtLegacyRunnerArgs(),
         ],
     )
 

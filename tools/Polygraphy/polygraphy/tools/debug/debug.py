@@ -17,9 +17,6 @@
 from polygraphy.tools.base import Tool
 from polygraphy.tools.debug.subtool import Build, Precision, Reduce, Repeat
 
-# For backwards compatibility
-from polygraphy.tools.inspect.subtool import DiffTactics
-
 
 class Debug(Tool):
     r"""
@@ -70,7 +67,6 @@ class Debug(Tool):
         return "Debug Subtools", [
             Build(),
             Precision(),
-            DiffTactics(_issue_deprecation_warning=True),
             Reduce(),
             Repeat(),
         ]

@@ -40,3 +40,13 @@ class PolygraphyInternalException(Exception):
     """
 
     pass
+
+
+# Do not raise this exception manually. Instead, use G_LOGGER.critical(..., ExceptionType=DataTypeConversionException).
+@mod.export()
+class DataTypeConversionException(PolygraphyException):
+    """
+    An exception during conversion to or from a Polygraphy DataType.
+    """
+
+    pass

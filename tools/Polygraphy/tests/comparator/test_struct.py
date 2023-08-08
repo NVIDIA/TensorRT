@@ -14,12 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import contextlib
+
 import numpy as np
 import pytest
-import contextlib
-from polygraphy import config
+import torch
+
+from polygraphy import config, util
 from polygraphy.comparator import IterationResult, RunResults
-from polygraphy.comparator.struct import LazyNumpyArray
+from polygraphy.comparator.struct import LazyArray
 from polygraphy.exception import PolygraphyException
 
 
@@ -115,9 +118,10 @@ class TestRunResults:
         assert all(isinstance(iter_result, IterationResult) for iter_result in iter_results)
 
 
-class TestLazyNumpyArray:
+@pytest.mark.parametrize("module", [torch, np])
+class TestLazyArray:
     @pytest.mark.parametrize("set_threshold", [True, False])
-    def test_unswapped_array(self, set_threshold):
+    def test_unswapped_array(self, set_threshold, module):
         with contextlib.ExitStack() as stack:
             if set_threshold:
 
@@ -129,14 +133,14 @@ class TestLazyNumpyArray:
                 config.ARRAY_SWAP_THRESHOLD_MB = 8
 
             small_shape = (7 * 1024 * 1024,)
-            small_array = np.ones(shape=small_shape, dtype=np.byte)
-            lazy = LazyNumpyArray(small_array)
-            assert np.array_equal(small_array, lazy.arr)
+            small_array = module.ones(small_shape, dtype=module.uint8)
+            lazy = LazyArray(small_array)
+            assert util.array.equal(small_array, lazy.arr)
             assert lazy.tmpfile is None
 
-            assert np.array_equal(small_array, lazy.numpy())
+            assert util.array.equal(small_array, lazy.load())
 
-    def test_swapped_array(self):
+    def test_swapped_array(self, module):
         with contextlib.ExitStack() as stack:
 
             def reset_array_swap():
@@ -147,9 +151,9 @@ class TestLazyNumpyArray:
             config.ARRAY_SWAP_THRESHOLD_MB = 8
 
             large_shape = (9 * 1024 * 1024,)
-            large_array = np.ones(shape=large_shape, dtype=np.byte)
-            lazy = LazyNumpyArray(large_array)
+            large_array = module.ones(large_shape, dtype=module.uint8)
+            lazy = LazyArray(large_array)
             assert lazy.arr is None
             assert lazy.tmpfile is not None
 
-            assert np.array_equal(large_array, lazy.numpy())
+            assert util.array.equal(large_array, lazy.load())

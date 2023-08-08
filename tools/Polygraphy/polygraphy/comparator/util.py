@@ -20,6 +20,7 @@ import os
 
 from polygraphy import config, mod, util
 from polygraphy.logger import G_LOGGER
+from polygraphy.datatype import DataType
 
 import math
 import os
@@ -30,14 +31,14 @@ matplotlib = mod.lazy_import("matplotlib")
 
 
 def cast_up(buffer):
-    dtype = np.dtype(buffer.dtype)
+    dtype = util.array.dtype(buffer)
 
-    if dtype == np.dtype(np.float16):
-        buffer = buffer.astype(np.float32)
-    elif dtype in list(map(np.dtype, [np.int8, np.uint8, np.int16, np.uint16])):
-        buffer = buffer.astype(np.int32)
-    elif dtype == np.dtype(np.uint32):
-        buffer = buffer.astype(np.int64)
+    if dtype == DataType.FLOAT16:
+        buffer = util.array.cast(buffer, DataType.FLOAT32)
+    elif dtype in [DataType.INT8, DataType.UINT8, DataType.INT16, DataType.UINT16]:
+        buffer = util.array.cast(buffer, DataType.INT32)
+    elif dtype == DataType.UINT32:
+        buffer = util.array.cast(buffer, DataType.INT64)
     return buffer
 
 
@@ -48,7 +49,7 @@ def use_higher_precision(func):
 
     @functools.wraps(func)
     def wrapped(*buffers):
-        if any(util.is_empty_shape(buffer.shape) for buffer in buffers):
+        if any(util.is_empty_shape(util.array.shape(buffer)) for buffer in buffers):
             return 0
 
         new_buffers = [cast_up(buffer) for buffer in buffers]
@@ -59,59 +60,61 @@ def use_higher_precision(func):
 
 @use_higher_precision
 def compute_max(buffer):
-    return np.amax(buffer)
+    return util.array.max(buffer)
 
 
 # Returns index of max value
 @use_higher_precision
 def compute_argmax(buffer):
-    return np.unravel_index(np.argmax(buffer), buffer.shape)
+    return util.array.unravel_index(util.array.argmax(buffer), util.array.shape(buffer))
 
 
 @use_higher_precision
 def compute_min(buffer):
-    return np.amin(buffer)
+    return util.array.min(buffer)
 
 
 # Returns index of min value
 @use_higher_precision
 def compute_argmin(buffer):
-    return np.unravel_index(np.argmin(buffer), buffer.shape)
+    return util.array.unravel_index(util.array.argmin(buffer), util.array.shape(buffer))
 
 
-@use_higher_precision
 def compute_mean(buffer):
-    return np.mean(buffer)
+    return util.array.mean(buffer, dtype=DataType.FLOAT32)
 
 
 @use_higher_precision
-def compute_stddev(buffer):
-    return np.std(buffer)
+def compute_std(buffer):
+    return util.array.std(buffer)
 
 
 @use_higher_precision
 def compute_variance(buffer):
-    return np.var(buffer)
+    return util.array.var(buffer)
 
 
 @use_higher_precision
 def compute_median(buffer):
-    return np.median(buffer)
+    return util.array.median(buffer)
 
 
-@use_higher_precision
+def compute_quantile(buffer, q):
+    return util.array.quantile(buffer, q)
+
+
 def compute_average_magnitude(buffer):
-    return np.mean(np.abs(buffer))
+    return util.array.mean(util.array.abs(buffer), dtype=DataType.FLOAT32)
 
 
 def str_histogram(output, hist_range=None):
-    if np.issubdtype(output.dtype, np.bool_):
+    if util.array.dtype(output) == DataType.BOOL:
         return ""
 
     try:
         try:
-            hist, bin_edges = np.histogram(output, range=hist_range)
-        except ValueError as err:
+            hist, bin_edges = util.array.histogram(output, range=hist_range)
+        except (ValueError, RuntimeError) as err:
             G_LOGGER.verbose(f"Could not generate histogram. Note: Error was: {err}")
             return ""
 
@@ -143,9 +146,7 @@ def str_output_stats(output, runner_name=None):
         ret += f"{runner_name} | Stats: "
 
     try:
-        with np.testing.suppress_warnings() as sup:
-            sup.filter(RuntimeWarning)
-            ret += f"mean={compute_mean(output):.5g}, std-dev={compute_stddev(output):.5g}, var={compute_variance(output):.5g}, median={compute_median(output):.5g}, min={compute_min(output):.5g} at {compute_argmin(output)}, max={compute_max(output):.5g} at {compute_argmax(output)}, avg-magnitude={compute_average_magnitude(output):.5g}\n"
+        ret += f"mean={compute_mean(output):.5g}, std-dev={compute_std(output):.5g}, var={compute_variance(output):.5g}, median={compute_median(output):.5g}, min={compute_min(output):.5g} at {compute_argmin(output)}, max={compute_max(output):.5g} at {compute_argmax(output)}, avg-magnitude={compute_average_magnitude(output):.5g}\n"
     except Exception as err:
         G_LOGGER.verbose(f"Could not generate statistics.\nNote: Error was: {err}")
         ret += "<Error while computing statistics>"
@@ -160,7 +161,7 @@ def log_output_stats(output, info_hist=False, runner_name=None, hist_range=None)
     with G_LOGGER.indent():
         # For small outputs, show the entire output instead of just a histogram.
         SMALL_OUTPUT_THRESHOLD = 100
-        if output.size <= SMALL_OUTPUT_THRESHOLD:
+        if util.array.size(output) <= SMALL_OUTPUT_THRESHOLD:
             G_LOGGER.log(
                 lambda: f"---- Values ----\n{util.indent_block(output)}",
                 severity=G_LOGGER.INFO if info_hist else G_LOGGER.VERBOSE,
@@ -177,7 +178,7 @@ def build_heatmaps(arr, min_val, max_val, prefix, save_dir=None, show=None, use_
     of images to display.
 
     Args:
-        arr (np.ndarray): The input array
+        arr (Union[torch.Tensor, numpy.ndarray]): The input array or tensor.
         min_val (float): The minimum value in the input array
         max_val (float): The maximum value in the input array
         prefix (str): The prefix to use when displaying titles for figures.
@@ -193,25 +194,27 @@ def build_heatmaps(arr, min_val, max_val, prefix, save_dir=None, show=None, use_
         MAX_NUM_COLS = 7
         FONT_SIZE = "xx-small"
 
-        if len(arr.shape) < 3:
-            arr = np.expand_dims(arr, tuple(range(3 - len(arr.shape))))
+        shape = util.array.shape(arr)
+        if len(shape) < 3:
+            arr = util.array.view(arr, dtype=util.array.dtype(arr), shape=([1] * (3 - len(shape))) + list(shape))
 
-        original_shape = arr.shape
-        arr = arr.reshape(-1, arr.shape[-2], arr.shape[-1])
+        original_shape = util.array.shape(arr)
+        arr = util.array.view(arr, dtype=util.array.dtype(arr), shape=(-1, original_shape[-2], original_shape[-1]))
 
-        num_images = arr.shape[0]
+        shape = util.array.shape(arr)
+        num_images = shape[0]
 
         def coord_str_from_img_idx(img_idx):
             coord = []
             for dim in reversed(original_shape[:-2]):
                 coord.insert(0, img_idx % dim)
                 img_idx //= dim
-            return f"({','.join(map(str, coord))},0:{arr.shape[-2]},0:{arr.shape[-1]})"
+            return f"({','.join(map(str, coord))},0:{shape[-2]},0:{shape[-1]})"
 
         # We treat each 2D slice of the array as a separate image.
         # Multiple images may be displayed on a single figure (in a grid) and we may have multiple figures.
-        num_rows = min(MAX_HEIGHT // arr.shape[-2], MAX_NUM_ROWS)
-        num_cols = min(MAX_WIDTH // arr.shape[-1], MAX_NUM_COLS)
+        num_rows = min(MAX_HEIGHT // shape[-2], MAX_NUM_ROWS)
+        num_cols = min(MAX_WIDTH // shape[-1], MAX_NUM_COLS)
 
         # Remove any excess images per figure
         if num_images < num_rows * num_cols:
@@ -247,11 +250,11 @@ def build_heatmaps(arr, min_val, max_val, prefix, save_dir=None, show=None, use_
                         ax = axs[row, col]
                         ax.set_axis_off()
 
-                        if img_idx < arr.shape[0]:
+                        if img_idx < shape[0]:
                             img = arr[img_idx]
                             title = f"{coord_str_from_img_idx(img_idx)}"
                         else:
-                            img = np.zeros(shape=(arr.shape[-2:]))
+                            img = np.zeros(shape=(shape[-2:]))
                             title = "Out Of Bounds"
                         ax.set_title(title, fontsize=FONT_SIZE)
 
@@ -291,9 +294,9 @@ def scatter_plot_error_magnitude(
     Display a plot of absolute/relative difference against the magnitude of the output.
 
     Args:
-        absdiff (np.ndarray): The absolute difference.
-        reldiff (np.ndarray): The relative difference.
-        reference_output (np.ndarray): The output to consider as the reference output.
+        absdiff (Union[torch.Tensor, numpy.ndarray]): The absolute difference.
+        reldiff (Union[torch.Tensor, numpy.ndarray]): The relative difference.
+        reference_output (Union[torch.Tensor, numpy.ndarray]): The output to consider as the reference output.
         min_reldiff (float): The minimum relative difference
         max_reldiff (float): The maximum relative difference
         runner0_name (str): The name of the first runner.
@@ -338,7 +341,7 @@ def scatter_plot_error_magnitude(
             ax.set_yticks(np.power(10, np.arange(yrange[0], yrange[1], 1)))
             set_ax_properties(ax)
 
-        magnitude = np.abs(reference_output)
+        magnitude = util.array.abs(reference_output)
         fig, axs = plt.subplots(2, sharex=True, constrained_layout=True)
 
         try:

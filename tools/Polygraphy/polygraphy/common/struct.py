@@ -17,9 +17,8 @@
 
 from polygraphy import mod, util
 from polygraphy.common.interface import TypedDict
+from polygraphy.datatype import DataType
 from polygraphy.json import Decoder, Encoder, add_json_methods
-
-np = mod.lazy_import("numpy")
 
 
 class BoundedShape(list):
@@ -37,23 +36,34 @@ class BoundedShape(list):
 
 
 class MetadataTuple:
-    def __init__(self, dtype, shape):
+    def __init__(self, dtype, shape, docstring):
         self.dtype = dtype
         self.shape = shape
+        self.docstring = docstring
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @dtype.setter
+    def dtype(self, new):
+        self._dtype = DataType.from_dtype(new) if new is not None else None
 
     def __iter__(self):
         yield from [self.dtype, self.shape]
 
     def __repr__(self):
-        return f"MetadataTuple({self.dtype}, {self.shape})"
+        return f"MetadataTuple({self.dtype}, {self.shape}, {self.docstring})"
 
     def __str__(self):
         ret = ""
         meta_items = []
         if self.dtype is not None:
-            meta_items.append(f"dtype={np.dtype(self.dtype).name}")
+            meta_items.append(f"dtype={self.dtype}")
         if self.shape is not None:
             meta_items.append(f"shape={tuple(self.shape)}")
+        if self.docstring is not None:
+            meta_items.append(self.docstring)
         if meta_items:
             ret += "[" + ", ".join(meta_items) + "]"
         return ret
@@ -93,13 +103,15 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
             meta.add(name, arr.dtype, arr.shape)
         return meta
 
-    def add(self, name, dtype, shape, min_shape=None, max_shape=None):
+    def add(self, name, dtype, shape, min_shape=None, max_shape=None, docstring=None):
         """
         Convenience function for adding entries.
 
         Args:
             name (str): The name of the input.
-            dtype (numpy.dtype): The data type of the input.
+            dtype (Any):
+                    The data type of the input.
+                    This can be any type that can be converted to a Polygraphy DataType.
             shape (Sequence[Union[int, str]]]):
                     The shape of the input. Dynamic dimensions may
                     be indicated by negative values, ``None``, or a string.
@@ -110,19 +122,30 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
             max_shape (Sequence[int]):
                     The maximum valid shape for the input.
                     If provided, this shape should not include any dynamic dimensions.
+            docstring (str):
+                    Any additional information associated with a tensor.
 
         Returns:
             The newly added entry.
         """
         self[name] = MetadataTuple(
-            dtype, BoundedShape(shape, min=min_shape, max=max_shape) if shape is not None else None
+            dtype, BoundedShape(shape, min=min_shape, max=max_shape) if shape is not None else None, docstring
         )
         return self
 
     def __repr__(self):
         ret = "TensorMetadata()"
-        for name, (dtype, shape) in self.items():
-            ret += util.make_repr(".add", name, dtype, list(shape), min_shape=shape.min, max_shape=shape.max)[0]
+        for name, metadata_tuple in self.items():
+            (dtype, shape) = metadata_tuple
+            ret += util.make_repr(
+                ".add",
+                name,
+                dtype,
+                list(shape),
+                min_shape=shape.min,
+                max_shape=shape.max,
+                docstring=metadata_tuple.docstring,
+            )[0]
         return ret
 
     def __str__(self):
@@ -145,23 +168,20 @@ class FormattedArray:
     the channel dimension would be padded to a multiple of 4. However, we still need a way to keep
     track of the semantic shape for things like shape inference.
 
-    This class provides a mechanism to specify the shape and dtype of an array independently of
+    This class provides a mechanism to specify the shape of an array independently of
     the underlying array.
     """
 
-    def __init__(self, array, shape, dtype):
+    def __init__(self, array, shape):
         """
         Args:
             array (Union[np.ndarray, polygraphy.cuda.DeviceView]):
                     The array. In most cases, this will be a raw byte-array.
             shape (Sequence[int]):
                     The semantic shape of the data.
-            dtype (np.dtype):
-                    The data type.
         """
         self.array = array
         self.shape = shape
-        self.dtype = dtype
 
 
 @Encoder.register(FormattedArray)
@@ -169,10 +189,9 @@ def encode(farray):
     return {
         "array": farray.array,
         "shape": farray.shape,
-        "dtype": farray.dtype,
     }
 
 
 @Decoder.register(FormattedArray)
 def decode(dct):
-    return FormattedArray(dct["array"], dct["shape"], dct["dtype"])
+    return FormattedArray(dct["array"], dct["shape"])

@@ -18,6 +18,7 @@
 import numpy as np
 import pytest
 import tensorrt as trt
+import torch
 
 from polygraphy import constants, util
 from polygraphy.backend.trt import Algorithm, TacticReplayData, TensorInfo
@@ -32,21 +33,31 @@ class Dummy:
 
 
 @Encoder.register(Dummy)
-def encode(dummy):
+def encode_dummy(dummy):
     return {"x": dummy.x}
 
 
 @Decoder.register(Dummy)
-def decode(dct):
+def decode_dummy(dct):
     assert len(dct) == 1  # Custom type markers should be removed at this point
     return Dummy(x=dct["x"])
+
+
+class NoDecoder:
+    def __init__(self, x):
+        self.x = x
+
+
+@Encoder.register(NoDecoder)
+def encode_nodecoder(no_decoder):
+    return {"x": no_decoder.x}
 
 
 class TestEncoder:
     def test_registered(self):
         d = Dummy(x=-1)
         d_json = to_json(d)
-        assert encode(d) == {"x": d.x, constants.TYPE_MARKER: "Dummy"}
+        assert encode_dummy(d) == {"x": d.x, constants.TYPE_MARKER: "Dummy"}
         expected = f'{{\n    "x": {d.x},\n    "{constants.TYPE_MARKER}": "Dummy"\n}}'
         assert d_json == expected
 
@@ -58,6 +69,49 @@ class TestDecoder:
 
         new_d = from_json(d_json)
         assert new_d.x == d.x
+
+    def test_error_on_no_decoder(self):
+        d = NoDecoder(x=1)
+        d_json = to_json(d)
+
+        with pytest.raises(
+            PolygraphyException,
+            match="Could not decode serialized type: NoDecoder. This could be because a required module is missing.",
+        ):
+            from_json(d_json)
+
+    def test_names_correct(self):
+        # Trigger `try_register_common_json`
+        d = Dummy(x=-1)
+        to_json(d)
+
+        # If the name of a class changes, then we need to specify an `alias` when registering
+        # to retain backwards compatibility.
+        assert set(Decoder.polygraphy_registered.keys()) == {
+            "__polygraphy_encoded_Algorithm",
+            "__polygraphy_encoded_Dummy",
+            "__polygraphy_encoded_FormattedArray",
+            "__polygraphy_encoded_IterationContext",
+            "__polygraphy_encoded_IterationResult",
+            "__polygraphy_encoded_LazyArray",
+            "__polygraphy_encoded_ndarray",
+            "__polygraphy_encoded_RunResults",
+            "__polygraphy_encoded_TacticReplayData",
+            "__polygraphy_encoded_Tensor",
+            "__polygraphy_encoded_TensorInfo",
+            "Algorithm",
+            "Dummy",
+            "FormattedArray",
+            "IterationContext",
+            "IterationResult",
+            "LazyArray",
+            "LazyNumpyArray",
+            "ndarray",
+            "RunResults",
+            "TacticReplayData",
+            "Tensor",
+            "TensorInfo",
+        }
 
 
 def make_algo():
@@ -114,6 +168,7 @@ class TestImplementations:
             np.ones(5, dtype=np.int64),
             np.zeros((4, 5), dtype=np.float32),
             np.random.random_sample((3, 5)),
+            torch.ones((3, 4, 5), dtype=torch.int64),
             make_iter_result(),
             RunResults([("runner0", [make_iter_result()]), ("runner0", [make_iter_result()])]),
         ],
@@ -124,6 +179,8 @@ class TestImplementations:
         decoded = from_json(encoded)
         if isinstance(obj, np.ndarray):
             assert np.array_equal(decoded, obj)
+        elif isinstance(obj, torch.Tensor):
+            assert torch.equal(decoded, obj)
         else:
             assert decoded == obj
 

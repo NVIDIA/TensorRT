@@ -47,16 +47,12 @@ def main():
     # Create a TensorRT IBuilderConfig so that we can build the engine with FP16 enabled.
     config = create_config(builder, network, fp16=True)
 
-    # We can free everything we constructed above once we're done building the engine.
-    # NOTE: In TensorRT 8.0 and newer, we do *not* need to use a context manager here.
-    with builder, network, parser, config:
-        engine = engine_from_network((builder, network), config)
+    engine = engine_from_network((builder, network), config)
 
     # To reuse the engine elsewhere, we can serialize it and save it to a file.
     save_engine(engine, path="identity.engine")
 
-    # NOTE: In TensorRT 8.0 and newer, we do *not* need to use a context manager to free `engine`.
-    with engine, TrtRunner(engine) as runner:
+    with TrtRunner(engine) as runner:
         inp_data = np.ones((1, 1, 2, 2), dtype=np.float32)
 
         # NOTE: The runner owns the output buffers and is free to reuse them between `infer()` calls.

@@ -22,6 +22,7 @@ from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
+from polygraphy.datatype import DataType
 
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
@@ -78,7 +79,7 @@ class Extract(BaseSurgeonSubtool):
             default=[],
         )
 
-    def run_impl(self, args):
+    def run_impl_surgeon(self, args):
         def missing_meta_tensors(input_metadata, output_metadata):
             missing = TensorMetadata()
             for name, (dtype, shape) in input_metadata.items():
@@ -166,6 +167,7 @@ class Extract(BaseSurgeonSubtool):
                         user_dtype, user_shape = user_meta[name].dtype, user_meta[name].shape
 
                     meta[name].dtype = choose_meta(user_dtype, meta[name].dtype, layerwise_meta[name].dtype)
+
                     if set_shapes:
                         meta[name].shape = choose_meta(user_shape, meta[name].shape, layerwise_meta[name].shape)
                     G_LOGGER.verbose(f"Updated tensor: {name} metadata to: {meta[name]}")

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -89,6 +89,6 @@ class TestClip():
             clip_x.grad[x < min_value].sum().cpu().numpy(), min_value.grad.cpu().numpy(), decimal=6)
         np.testing.assert_array_almost_equal(
             clip_x.grad[x > max_value].sum().cpu().numpy(), max_value.grad.cpu().numpy(), decimal=6)
-        assert x.grad.cpu()[x < min_value].sum() == 0
-        assert x.grad.cpu()[x > max_value].sum() == 0
+        assert x.grad.cpu()[x.cpu() < min_value.cpu()].sum() == 0
+        assert x.grad.cpu()[x.cpu() > max_value.cpu()].sum() == 0
         assert torch.equal(clip_x.grad[(x > min_value) & (x < max_value)], x.grad[(x > min_value) & (x < max_value)])

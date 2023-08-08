@@ -30,7 +30,6 @@ class TfTrtArgs(BaseArgs):
     Depends on:
 
         - TrtConfigArgs
-        - TrtLegacyRunnerArgs
     """
 
     def add_parser_args_impl(self):
@@ -75,7 +74,6 @@ class TfTrtArgs(BaseArgs):
         """
         if self.use_tftrt:
             from polygraphy.tools.args.backend.trt import TrtConfigArgs
-            from polygraphy.tools.args.backend.trt_legacy import TrtLegacyRunnerArgs
 
             script.add_import(imports=["UseTfTrt"], frm="polygraphy.backend.tf")
             loader_str = make_invocable(
@@ -84,7 +82,6 @@ class TfTrtArgs(BaseArgs):
                 max_workspace_size=self.arg_groups[TrtConfigArgs]._workspace,
                 fp16=self.arg_groups[TrtConfigArgs].fp16,
                 int8=self.arg_groups[TrtConfigArgs].int8,
-                max_batch_size=self.arg_groups[TrtLegacyRunnerArgs].batch_size,
                 is_dynamic_op=self.dynamic_op,
                 minimum_segment_size=self.minimum_segment_size,
             )

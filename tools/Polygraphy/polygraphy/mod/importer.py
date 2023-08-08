@@ -17,10 +17,10 @@
 
 import contextlib
 import importlib
+import importlib.util
 import os
 import subprocess as sp
 import sys
-import warnings
 from typing import List
 
 from polygraphy import constants
@@ -224,21 +224,18 @@ def lazy_import(
 
 def has_mod(modname):
     """
-    Checks whether a module is available and usable.
+    Checks whether a module is installed.
 
     Args:
         modname (str): The name of the module to check.
 
     Returns:
-        bool:
-                Whether the module is available and usable.
-                This returns false if importing the module fails for any reason.
+        bool: Whether the module is installed.
     """
     try:
-        importlib.import_module(modname)
-    except:
+        return modname in sys.modules or (importlib.util.find_spec(modname) is not None)
+    except ValueError:
         return False
-    return True
 
 
 def autoinstall(lazy_mod):

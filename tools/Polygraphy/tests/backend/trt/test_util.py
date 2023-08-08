@@ -45,154 +45,152 @@ def test_all_layer_types_mapped(layer_class_mapping, layer_type):
 
 
 # Can't use pytest.skip because we can't construct the test unless trt.MemoryPoolType exists.
-if mod.version(trt.__version__) >= mod.version("8.4"):
 
-    def adjust_memory_pool_limits_after_8_6(limits):
-        # Adjust tactic DRAM so we can match the output text reliably in add_default_preview_features_after_8_6.
-        if mod.version(trt.__version__) >= mod.version("8.6"):
-            limits[trt.MemoryPoolType.TACTIC_DRAM] = 1 << 30
-        return limits
 
-    def add_default_preview_features_after_8_6(expected):
-        if mod.version(trt.__version__) >= mod.version("8.6"):
-            expected = expected.replace("MiB]", "MiB, TACTIC_DRAM: 1024.00 MiB]")
+def adjust_memory_pool_limits_after_8_6(limits):
+    # Adjust tactic DRAM so we can match the output text reliably in update_expected_output.
+    if mod.version(trt.__version__) >= mod.version("8.6"):
+        limits[trt.MemoryPoolType.TACTIC_DRAM] = 1 << 30
+    return limits
 
-            if "Preview Features" not in expected:
-                expected = (
-                    dedent(expected).strip()
-                    + "\nPreview Features       | [FASTER_DYNAMIC_SHAPES_0805, DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]"
-                )
 
-        return expected
+def update_expected_output(expected):
+    if mod.version(trt.__version__) >= mod.version("8.6"):
+        expected = expected.replace("MiB]", "MiB, TACTIC_DRAM: 1024.00 MiB]")
 
-    @pytest.mark.parametrize(
-        "create_config, expected",
-        # NOTE: We set workspace sizes here so we can have predictable output
-        [
-            (
-                CreateConfig(
-                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20})
-                ),
-                add_default_preview_features_after_8_6(
-                    """
-                    Flags                  | []
-                    Engine Capability      | EngineCapability.DEFAULT
-                    Memory Pools           | [WORKSPACE: 16.00 MiB]
-                    Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
-                    Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                    """
-                ),
+        if "Preview Features" not in expected:
+            expected = (
+                dedent(expected).strip()
+                + "\nPreview Features       | [FASTER_DYNAMIC_SHAPES_0805, DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]"
+            )
+
+    if mod.version(trt.__version__) >= mod.version("8.7"):
+        # CUBLAS_LT is not longer enabled by default
+        expected = expected.replace("CUBLAS_LT, ", "")
+
+    return expected
+
+
+@pytest.mark.parametrize(
+    "create_config, expected",
+    # NOTE: We set workspace sizes here so we can have predictable output
+    [
+        (
+            CreateConfig(
+                memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20})
             ),
-            (
-                CreateConfig(
-                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
-                    tactic_sources=[],
-                ),
-                add_default_preview_features_after_8_6(
-                    """
-                    Flags                  | []
-                    Engine Capability      | EngineCapability.DEFAULT
-                    Memory Pools           | [WORKSPACE: 16.00 MiB]
-                    Tactic Sources         | []
-                    Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                    """
-                ),
+            update_expected_output(
+                """
+                Flags                  | []
+                Engine Capability      | EngineCapability.DEFAULT
+                Memory Pools           | [WORKSPACE: 16.00 MiB]
+                Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
+                Profiling Verbosity    | ProfilingVerbosity.DETAILED
+                """
             ),
-            (
-                CreateConfig(
-                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 4 << 20})
-                ),
-                add_default_preview_features_after_8_6(
-                    """
-                    Flags                  | []
-                    Engine Capability      | EngineCapability.DEFAULT
-                    Memory Pools           | [WORKSPACE: 4.00 MiB]
-                    Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
-                    Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                    """
-                ),
+        ),
+        (
+            CreateConfig(
+                memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                tactic_sources=[],
             ),
-            (
-                CreateConfig(
-                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
-                    fp16=True,
-                    int8=True,
-                    fp8=True,
-                    tf32=True,
-                    refittable=True,
-                    precision_constraints="obey",
-                ),
-                add_default_preview_features_after_8_6(
-                    """
-                    Flags                  | [FP16, INT8, REFIT, TF32, OBEY_PRECISION_CONSTRAINTS, FP8]
-                    Engine Capability      | EngineCapability.DEFAULT
-                    Memory Pools           | [WORKSPACE: 16.00 MiB]
-                    Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
-                    Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                    """
-                ),
+            update_expected_output(
+                """
+                Flags                  | []
+                Engine Capability      | EngineCapability.DEFAULT
+                Memory Pools           | [WORKSPACE: 16.00 MiB]
+                Tactic Sources         | []
+                Profiling Verbosity    | ProfilingVerbosity.DETAILED
+                """
             ),
-            (
-                CreateConfig(
-                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
-                    profiles=[Profile().add("X", [1], [1], [1]), Profile().add("X", [2], [2], [2])],
-                ),
-                add_default_preview_features_after_8_6(
-                    """
-                    Flags                  | []
-                    Engine Capability      | EngineCapability.DEFAULT
-                    Memory Pools           | [WORKSPACE: 16.00 MiB]
-                    Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
-                    Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                    Optimization Profiles  | 2 profile(s)
-                    """
-                ),
+        ),
+        (
+            CreateConfig(
+                memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 4 << 20})
             ),
-            (
-                CreateConfig(
-                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
-                    use_dla=True,
-                ),
-                add_default_preview_features_after_8_6(
-                    """
-                    Flags                  | []
-                    Engine Capability      | EngineCapability.DEFAULT
-                    Memory Pools           | [WORKSPACE: 16.00 MiB, DLA_MANAGED_SRAM: 0.00 MiB, DLA_LOCAL_DRAM: 1024.00 MiB, DLA_GLOBAL_DRAM: 512.00 MiB]
-                    Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
-                    DLA                    | Default Device Type: DeviceType.DLA, Core: -1
-                    Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                    """
-                ),
+            update_expected_output(
+                """
+                Flags                  | []
+                Engine Capability      | EngineCapability.DEFAULT
+                Memory Pools           | [WORKSPACE: 4.00 MiB]
+                Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
+                Profiling Verbosity    | ProfilingVerbosity.DETAILED
+                """
             ),
-        ]
-        + [
-            (
-                CreateConfig(
-                    memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
-                    preview_features=[trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
-                ),
-                add_default_preview_features_after_8_6(
-                    """
-                    Flags                  | []
-                    Engine Capability      | EngineCapability.DEFAULT
-                    Memory Pools           | [WORKSPACE: 16.00 MiB]
-                    Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
-                    Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                    Preview Features       | [FASTER_DYNAMIC_SHAPES_0805]
-                    """
-                ),
+        ),
+        (
+            CreateConfig(
+                memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                fp16=True,
+                int8=True,
+                tf32=True,
+                refittable=True,
+                precision_constraints="obey",
             ),
-        ]
-        if mod.version(trt.__version__) >= mod.version("8.5")
-        else [],
-        ids=["default", "tactic-sources", "memory-pool-limits", "builder-flags", "profiles", "dla"]
-        + ["preview-features"]
-        if mod.version(trt.__version__) >= mod.version("8.5")
-        else [],
-    )
-    def test_str_from_config(create_config, expected, dummy_network):
-        config = create_config(*dummy_network)
-        assert trt_util.str_from_config(config) == dedent(expected).strip()
+            update_expected_output(
+                """
+                Flags                  | [FP16, INT8, REFIT, TF32, OBEY_PRECISION_CONSTRAINTS]
+                Engine Capability      | EngineCapability.DEFAULT
+                Memory Pools           | [WORKSPACE: 16.00 MiB]
+                Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
+                Profiling Verbosity    | ProfilingVerbosity.DETAILED
+                """
+            ),
+        ),
+        (
+            CreateConfig(
+                memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                profiles=[Profile().add("X", [1], [1], [1]), Profile().add("X", [2], [2], [2])],
+            ),
+            update_expected_output(
+                """
+                Flags                  | []
+                Engine Capability      | EngineCapability.DEFAULT
+                Memory Pools           | [WORKSPACE: 16.00 MiB]
+                Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
+                Profiling Verbosity    | ProfilingVerbosity.DETAILED
+                Optimization Profiles  | 2 profile(s)
+                """
+            ),
+        ),
+        (
+            CreateConfig(
+                memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                use_dla=True,
+            ),
+            update_expected_output(
+                """
+                Flags                  | []
+                Engine Capability      | EngineCapability.DEFAULT
+                Memory Pools           | [WORKSPACE: 16.00 MiB, DLA_MANAGED_SRAM: 0.00 MiB, DLA_LOCAL_DRAM: 1024.00 MiB, DLA_GLOBAL_DRAM: 512.00 MiB]
+                Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
+                DLA                    | Default Device Type: DeviceType.DLA, Core: -1
+                Profiling Verbosity    | ProfilingVerbosity.DETAILED
+                """
+            ),
+        ),
+        (
+            CreateConfig(
+                memory_pool_limits=adjust_memory_pool_limits_after_8_6({trt.MemoryPoolType.WORKSPACE: 16 << 20}),
+                preview_features=[trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
+            ),
+            update_expected_output(
+                """
+                Flags                  | []
+                Engine Capability      | EngineCapability.DEFAULT
+                Memory Pools           | [WORKSPACE: 16.00 MiB]
+                Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
+                Profiling Verbosity    | ProfilingVerbosity.DETAILED
+                Preview Features       | [FASTER_DYNAMIC_SHAPES_0805]
+                """
+            ),
+        ),
+    ],
+    ids=["default", "tactic-sources", "memory-pool-limits", "builder-flags", "profiles", "dla", "preview-features"],
+)
+def test_str_from_config(create_config, expected, dummy_network):
+    config = create_config(*dummy_network)
+    assert trt_util.str_from_config(config) == dedent(expected).strip()
 
 
 def test_get_all_tensors_layer_with_null_inputs():

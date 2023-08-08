@@ -20,6 +20,7 @@ from textwrap import dedent
 
 import numpy as np
 import pytest
+
 from polygraphy import util
 from polygraphy.common import TensorMetadata
 from polygraphy.exception import PolygraphyException

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.surgeon.subtool import Extract, Insert, Sanitize
+from polygraphy.tools.surgeon.subtool import Extract, Insert, Sanitize, Prune
 
 ################################# MAIN TOOL #################################
 
@@ -33,4 +33,5 @@ class Surgeon(Tool):
             Extract(),
             Sanitize(),
             Insert(),
+            Prune(),
         ]

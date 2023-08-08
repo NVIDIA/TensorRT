@@ -30,7 +30,7 @@
     - Install TensorRT. If you don't already have it installed, there are two options:
         1. Install the Python package:
             ```
-            python3 -m pip install nvidia-tensorrt --index-url https://pypi.ngc.nvidia.com
+            python3 -m pip install tensorrt
             ```
         2. Install it manually following the instructions in the [installation guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html#installing).
 

@@ -47,7 +47,14 @@ from tests.tools.args.helper import ArgGroupTestHelper
 
 
 class TestTrtLoadNetworkArgs:
-    def test_load_network(self):
+    @pytest.mark.parametrize("force_onnx_loader", [True, False])
+    @pytest.mark.parametrize(
+        "opts,expected_flag",
+        [([], None)] + [(["--strongly-typed"], trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)]
+        if mod.version(trt.__version__) >= mod.version("8.7")
+        else [],
+    )
+    def test_load_network(self, force_onnx_loader, opts, expected_flag):
         arg_group = ArgGroupTestHelper(
             TrtLoadNetworkArgs(),
             deps=[
@@ -58,12 +65,22 @@ class TestTrtLoadNetworkArgs:
                 TrtOnnxFlagArgs(),
             ],
         )
-        arg_group.parse_args([ONNX_MODELS["identity_identity"].path, "--trt-outputs=identity_out_0"])
+
+        args = [ONNX_MODELS["identity_identity"].path]
+        if force_onnx_loader:
+            # We can force Polygraphy to use NetworkFromOnnxBytes instead of NetworkFromOnnxPath by requiring
+            # changes to the model.
+            args.append("--trt-outputs=identity_out_0")
+
+        args += opts
+        arg_group.parse_args(args)
 
         builder, network, _ = arg_group.load_network()
         with builder, network:
             assert network.num_outputs == 1
-            assert network.get_output(0).name == "identity_out_0"
+            assert network.get_output(0).name == ("identity_out_0" if force_onnx_loader else "identity_out_2")
+            if expected_flag is not None:
+                assert network.get_flag(expected_flag)
 
     @pytest.mark.parametrize("func_name", ["postprocess", "custom_func"])
     def test_postprocess_network(self, func_name):
@@ -163,17 +180,14 @@ class TestTrtLoadNetworkArgs:
                 ONNX_MODELS["identity_identity"].path,
                 "--tensor-datatypes",
                 "X:float16",
-                "identity_out_0:float32",
                 "identity_out_2:float16",
             ]
         )
 
         builder, network, _ = arg_group.load_network()
         with builder, network:
-            assert network[0].get_input(0).dtype == trt.float16
-            assert network[0].get_output(0).dtype == trt.float32
-            assert network[1].get_input(0).dtype == trt.float32
-            assert network[1].get_output(0).dtype == trt.float16
+            assert network.get_input(0).dtype == trt.float16
+            assert network.get_output(0).dtype == trt.float16
 
     def test_set_tensor_datatypes_default_disallowed(self):
         arg_group = ArgGroupTestHelper(
@@ -218,10 +232,10 @@ class TestTrtLoadNetworkArgs:
 
         builder, network, _ = arg_group.load_network()
         with builder, network:
-            assert network[0].get_input(0).allowed_formats == (
+            assert network.get_input(0).allowed_formats == (
                 1 << int(trt.TensorFormat.LINEAR) | 1 << int(trt.TensorFormat.CHW4)
             )
-            assert network[1].get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
+            assert network.get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
 
     def test_set_tensor_formats_default_disallowed(self):
         arg_group = ArgGroupTestHelper(

@@ -18,8 +18,8 @@ import subprocess as sp
 
 import numpy as np
 import pytest
-import tensorrt as trt
-from polygraphy import mod
+
+from polygraphy import util
 from polygraphy.backend.onnx import GsFromOnnx, OnnxFromBytes
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
 from polygraphy.backend.pluginref import PluginRefRunner
@@ -27,6 +27,8 @@ from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxBytes, TrtR
 from polygraphy.comparator import Comparator, CompareFunc, DataLoader, IterationResult, PostprocessFunc, RunResults
 from polygraphy.exception import PolygraphyException
 from tests.models.meta import ONNX_MODELS
+
+build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
 
 
 class TestComparator:
@@ -80,7 +82,7 @@ class TestComparator:
 
     def test_postprocess(self):
         onnx_loader = ONNX_MODELS["identity"].loader
-        run_results = Comparator.run([OnnxrtRunner(SessionFromOnnx(onnx_loader))], use_subprocess=True)
+        run_results = Comparator.run([OnnxrtRunner(SessionFromOnnx(onnx_loader))])
         # Output shape is (1, 1, 2, 2)
         postprocessed = Comparator.postprocess(run_results, postprocess_func=PostprocessFunc.top_k(k=(1, -1)))
         for _, results in postprocessed.items():
@@ -117,16 +119,18 @@ class TestComparator:
         iteration0 = run_results[runner.name][0]
         iteration1 = run_results[runner.name][1]
         for name in iteration0.keys():
-            assert np.any(iteration0[name] != iteration1[name])
+            assert util.array.any(iteration0[name] != iteration1[name])
 
-    def test_validate_nan(self):
+    @pytest.mark.parametrize("array_type", [np.array, build_torch])
+    def test_validate_nan(self, array_type):
         run_results = RunResults()
-        run_results["fake-runner"] = [IterationResult(outputs={"x": np.array(np.nan)})]
+        run_results["fake-runner"] = [IterationResult(outputs={"x": array_type(np.nan)})]
         assert not Comparator.validate(run_results)
 
-    def test_validate_inf(self):
+    @pytest.mark.parametrize("array_type", [np.array, build_torch])
+    def test_validate_inf(self, array_type):
         run_results = RunResults()
-        run_results["fake-runner"] = [IterationResult(outputs={"x": np.array(np.inf)})]
+        run_results["fake-runner"] = [IterationResult(outputs={"x": array_type(np.inf)})]
         assert not Comparator.validate(run_results, check_inf=True)
 
     def test_dim_param_trt_onnxrt(self):

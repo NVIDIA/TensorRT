@@ -58,9 +58,7 @@ class PostprocessFunc:
                     if util.is_sequence(k_val):
                         k_val, axis = k_val
 
-                    indices = np.argsort(-output, axis=axis, kind="stable")
-                    axis_len = indices.shape[axis]
-                    iter_result[name] = np.take(indices, np.arange(0, min(k_val, axis_len)), axis=axis)
+                    iter_result[name] = util.array.topk(output, k_val, axis)[1]
             return iter_result
 
         return top_k_impl

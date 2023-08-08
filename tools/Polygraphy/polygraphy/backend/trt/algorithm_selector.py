@@ -23,7 +23,7 @@ from polygraphy.logger import G_LOGGER, LogMode
 
 from typing import Sequence
 
-trt = mod.lazy_import("tensorrt")
+trt = mod.lazy_import("tensorrt>=8.5")
 
 
 ##
@@ -251,23 +251,14 @@ def decode(dct):
 ## Algorithm Selectors
 ##
 
+
 # Everything is encapsulated in functions so that we don't create a dependency on TensorRT
 # when objects from this file are imported.
 def get_base_selector_type():
-    ALGO_SELECTOR_ENABLED = False
-    if mod.version(trt.__version__) >= mod.version("8.0"):
-        ALGO_SELECTOR_ENABLED = True
-        IAlgorithmSelector = trt.IAlgorithmSelector
-    else:
-        IAlgorithmSelector = object
-
-    class BaseSelector(IAlgorithmSelector):
+    class BaseSelector(trt.IAlgorithmSelector):
         def __init__(self, data):
-            if not ALGO_SELECTOR_ENABLED:
-                trt_util.fail_unavailable("Algorithm selector")
-
             # Must explicitly initialize parent for any trampoline class! Will mysteriously segfault without this.
-            IAlgorithmSelector.__init__(self)
+            trt.IAlgorithmSelector.__init__(self)
 
             self.path = None
             self.data = TacticReplayData()
@@ -317,7 +308,7 @@ def TacticRecorder(record):
             Returns:
                 None
             """
-            for (context, choice) in zip(contexts, choices):
+            for context, choice in zip(contexts, choices):
                 self.data.add(context.name, Algorithm.from_trt(context, choice))
 
             if self.path is not None:
@@ -412,7 +403,7 @@ def TacticReplayer(replay):
                 PolygraphyException:
                         If a tactic specified in ``self.data`` was not selected for a layer.
             """
-            for (context, choice) in zip(contexts, choices):
+            for context, choice in zip(contexts, choices):
                 if context.name in self.data:
                     to_select = self.data[context.name]
                     selected = Algorithm.from_trt(context, choice)

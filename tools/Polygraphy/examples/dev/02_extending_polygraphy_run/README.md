@@ -84,16 +84,9 @@ It is recommended that you read these files in the following order:
 
     Install the wheel:
 
-    <!-- Polygraphy Test
-        *NOTE: For tests, this is required to work around compatibility*
-            *breakages in more recent versions of these packages*
-        ```bash
-        python3 -m pip install protobuf==3.19.4 onnx==1.10.0 numpy<=1.23.0
-        ```
-     Polygraphy Test -->
-
     ```bash
-    python3 -m pip install extension_module/dist/polygraphy_reshape_destroyer-0.0.1-py3-none-any.whl
+    python3 -m pip install extension_module/dist/polygraphy_reshape_destroyer-0.0.1-py3-none-any.whl \
+        --extra-index-url https://pypi.ngc.nvidia.com
     ```
 
     *TIP: If you make changes to the example extension module, you can update your installed version by*
