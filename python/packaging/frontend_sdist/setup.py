@@ -41,11 +41,11 @@ def run_pip_command(args, call_func):
 
 
 # check wheel availability using information from https://github.com/pypa/packaging/blob/23.1/src/packaging/markers.py#L175-L190
-if sys.platform != "linux":
-    raise RuntimeError("TensorRT currently only builds wheels for linux")
+if sys.platform not in ("linux", "win32"):
+    raise RuntimeError("TensorRT currently only builds wheels for Linux and Windows")
 if sys.implementation.name != "cpython":
     raise RuntimeError("TensorRT currently only builds wheels for CPython")
-if platform.machine() != "x86_64":
+if platform.machine() not in ("x86_64", "AMD64"):
     raise RuntimeError("TensorRT currently only builds wheels for x86_64 processors")
 
 
