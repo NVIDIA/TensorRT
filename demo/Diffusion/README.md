@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/8.6 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/9.0 --single-branch
 cd TensorRT
 ```
 
