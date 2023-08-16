@@ -270,7 +270,7 @@ transformer_engine_install_logic() {
 
 	git checkout 804f120322a13cd5f21ea8268860607dcecd055c
 	git submodule update --recursive --init
-	CMD="MAKEFLAGS=-j${ARG_JOBS} MAX_JOBS=${ARG_JOBS} python3 setup.py bdist_wheel"
+	CMD="MAKEFLAGS=-j${ARG_JOBS} MAX_JOBS=${ARG_JOBS} python3 setup.py bdist_wheel --framework=pytorch"
 	echo " >> ${CMD}"
 	eval "${CMD}"
 	unset CMD
