@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
 from Seq2Seq.onnxrt import Seq2SeqOnnxRT
 from OPT.OPTModelConfig import OPTModelTRTConfig
-from Seq2Seq.export import Seq2SeqModelClass
+from OPT.export import OPTModelClass
 
 
 class OPTOnnxRT(Seq2SeqOnnxRT):
@@ -36,7 +36,7 @@ class OPTOnnxRT(Seq2SeqOnnxRT):
         description="Runs OnnxRT results for OPT model.",
         **kwargs
     ):
-        super().__init__(config_class, description=description, model_classes=Seq2SeqModelClass, **kwargs)
+        super().__init__(config_class, description=description, model_classes=OPTModelClass, **kwargs)
 
 # Entry point
 RUN_CMD = OPTOnnxRT()

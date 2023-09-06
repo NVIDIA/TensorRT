@@ -141,6 +141,7 @@ void doNothingDel(const T& self)
     issueDeprecationWarning("del obj");
 }
 
+// https://nvbugs/3479811 Create a wrapper for C++ to python throw
 void throwPyError(PyObject* type, std::string const& message = "python error");
 
 } // namespace utils

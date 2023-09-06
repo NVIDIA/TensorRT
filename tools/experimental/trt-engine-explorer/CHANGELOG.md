@@ -2,6 +2,10 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.1.7 (2023-August)
+- Updated graph rendering for TensorRT 9.0 `kgen` kernels.
+- Updated TensorRT data formats dictionary.
+
 ## v0.1.6 (2023-April)
 - Graph rendering:
   - Add node highlighting option.

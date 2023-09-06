@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+// Remove once if common/utils is created (see TRT-17687)
 #include <set>
 
 using namespace nvinfer1;

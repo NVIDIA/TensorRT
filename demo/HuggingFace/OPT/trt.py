@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
 from Seq2Seq.trt import Seq2SeqTRT
 from OPT.OPTModelConfig import OPTModelTRTConfig
-from Seq2Seq.export import Seq2SeqModelClass
+from OPT.export import OPTModelClass
 
 
 class OPTTRT(Seq2SeqTRT):
@@ -36,7 +36,7 @@ class OPTTRT(Seq2SeqTRT):
         description="Runs trt results for OPT model.",
         **kwargs
     ):
-        super().__init__(config_class, description=description, model_classes=Seq2SeqModelClass, **kwargs)
+        super().__init__(config_class, description=description, model_classes=OPTModelClass, **kwargs)
 
 # Entry point
 RUN_CMD = OPTTRT()

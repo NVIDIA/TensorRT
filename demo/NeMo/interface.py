@@ -20,7 +20,8 @@ import os
 import random
 import sys
 import time
-from typing import List, Union
+from typing import List, Union, Dict
+from copy import copy
 
 from cuda import cuda
 from tqdm import tqdm
@@ -88,6 +89,53 @@ GPT3CONFIG_MAPPINGS = {
     }, **DEFAULT_CONFIG)),
 }
 
+def _hf_hub_metadata(variant: str, fp8: bool) -> Dict[str, str]:
+    repo_mappings = {
+        "gpt-1.3b": "nvidia/nemo-megatron-gpt-1.3B",
+        "gpt-5b": "nvidia/nemo-megatron-gpt-5B",
+    }
+
+    try:
+        repo_id = repo_mappings[variant]
+    except KeyError:
+        raise RuntimeError(
+            "Variant should be one of {}, got {}".format(
+                list(repo_mappings.keys()), variant
+            )
+        )
+
+    file_key = (variant, "fp8" if fp8 else "fp16")
+    file_mappings = {
+        ("gpt-1.3b", "fp8"): ("nemo_gpt1.3B_fp16.nemo", None),
+        ("gpt-1.3b", "fp16"): ("nemo_gpt1.3B_fp16.nemo", None),
+        ("gpt-5b", "fp8"): ("nemo_gpt5B_fp8_bf16_tp1.nemo", "fp8"),
+        ("gpt-5b", "fp16"): ("nemo_gpt5B_fp16_tp1.nemo", None),
+    }
+
+    try:
+        filename, branch = file_mappings[file_key]
+    except KeyError:
+        raise RuntimeError(
+            "Downloading nemo file for variant : {}, precision : {} from huggingface hub is unsupported. Consider passing a nemo-model or onnx-model from the command line.".format(
+                file_key[0], file_key[1]
+            )
+        )
+
+    return {"repo_id": repo_id, "filename": filename, "revision": branch}
+
+
+def download_model(dst_dir: str, cache_dir: str, *args, **kwargs) -> str:
+    from huggingface_hub import hf_hub_download
+
+    model_metadata = _hf_hub_metadata(*args, **kwargs)
+    return hf_hub_download(
+        local_dir=str(dst_dir),
+        local_dir_use_symlinks="auto",
+        cache_dir=cache_dir,
+        **model_metadata,
+    )
+
+
 def load_dataset(dataset_name, base_dir, tokens_to_generate, padding):
     ds_map = {"Lambada": Lambada(base_dir, tokens_to_generate, padding)}
     return ds_map[dataset_name]
@@ -149,7 +197,7 @@ class NeMoCommand(NetworkCommand):
         self.nemo_cfg.trt_export_options.use_fp16 = fp16
         self.nemo_cfg.trt_export_options.use_bf16 = bf16
         self.nemo_cfg.onnx_export_options.use_fp8_storage = use_fp8_storage
-        
+
         if fp16:
             self.nemo_cfg.trainer.precision = "16"
         elif bf16:
@@ -244,7 +292,26 @@ class NeMoCommand(NetworkCommand):
                 "Both nemo-model and onnx-model cannot be specified together. Please specify either nemo-model or onnx-model."
             )
 
+        assert variant in GPT3CONFIG_MAPPINGS
         model_config = GPT3CONFIG_MAPPINGS[variant]
+
+        if self.nemo_cfg.model.max_seq_len > model_config.max_position_embeddings:
+            G_LOGGER.warn(
+                f"Updating max_position_embeddings to be the same as max_seq_len {self.nemo_cfg.model.max_seq_len}."
+            )
+            G_LOGGER.warn(
+                f"Outputs longer than {model_config.max_position_embeddings} might be unmeaningful."
+            )
+            model_config.max_position_embeddings = self.nemo_cfg.model.max_seq_len
+
+        if self.nemo_cfg.model.max_seq_len < model_config.min_seq_len:
+            G_LOGGER.warn(
+                f"Force updating max_seq_len to minimum required length {model_config.min_seq_len}."
+            )
+            self.nemo_cfg.model.max_seq_len = model_config.min_seq_len
+
+        self.nemo_cfg.batch_size = batch_size
+        self.nemo_cfg.use_cache = use_cache
 
         if nemo_checkpoint != None:
             # Set NeMo checkpoint configs
@@ -254,36 +321,46 @@ class NeMoCommand(NetworkCommand):
             self.nemo_cfg.checkpoint_name = os.path.basename(nemo_checkpoint)
             self.nemo_cfg.hparams_file = nemo_hparams
         else:
-            self.nemo_cfg.gpt_model_file = nemo_model
-
-            # Get NeMo model path
-            assert variant in GPT3CONFIG_MAPPINGS
-            if self.fp8 == True:
-                self.nemo_cfg.trt_export_options.use_fp8 = True
-            elif self.bf16 == True:
-                self.nemo_cfg.trt_export_options.use_bf16 = True
+            if onnx_model != None:
+                G_LOGGER.info(f"Using onnx model {onnx_model} for inference.")
+                if os.path.exists(onnx_model):
+                    self.nemo_cfg.onnx_model_file = onnx_model
+                else:
+                    raise IOError(
+                        f"Could not find the specified onnx file {onnx_model}."
+                    )
             else:
-                # Default is to use FP16 precision
-                self.nemo_cfg.trt_export_options.use_fp16 = True
+                if nemo_model != None:
+                    if os.path.exists(nemo_model):
+                        self.nemo_cfg.gpt_model_file = nemo_model
+                    else:
+                        raise IOError(
+                            f"Could not find the specified nemo file {nemo_model}."
+                        )
+                else:
+                    G_LOGGER.info("Downloading nemo model from HuggingFace Hub")
+                    # Download nemo model if it does not exist.
+                    # Setup temporary metadata, config to create a workspace to put the
+                    # downloaded artefacts in
+                    download_metadata = NetworkMetadata(
+                        variant=variant,
+                        precision=Precision(fp16=self.fp16),
+                        use_cache=use_cache,
+                        num_beams=num_beams,
+                        batch_size=batch_size,
+                        other=DeprecatedCache(kv_cache=use_cache),
+                    )
 
-        if self.nemo_cfg.model.max_seq_len > model_config.max_position_embeddings:
-            G_LOGGER.warn(f"Updating max_position_embeddings to be the same as max_seq_len {self.nemo_cfg.model.max_seq_len}.")
-            G_LOGGER.warn(f"Outputs longer than {model_config.max_position_embeddings} might be unmeaningful.")
-            model_config.max_position_embeddings = self.nemo_cfg.model.max_seq_len
+                    download_config = self.config_class(metadata=download_metadata)
+                    download_config.from_nemo_config(copy(self.nemo_cfg))
+                    download_workspace = NNFolderWorkspace(download_config, working_dir)
 
-        if self.nemo_cfg.model.max_seq_len < model_config.min_seq_len:
-            G_LOGGER.warn(f"Force updating max_seq_len to minimum required length {model_config.min_seq_len}.")
-            self.nemo_cfg.model.max_seq_len = model_config.min_seq_len
-
-        if onnx_model != None:
-            G_LOGGER.info(f"Using onnx model {onnx_model} for inference.")
-            if os.path.exists(onnx_model):
-                self.nemo_cfg.onnx_model_file = onnx_model
-            else:
-                raise IOError(f"Could not find the specified path {onnx_model}.")
-
-        self.nemo_cfg.batch_size = batch_size
-        self.nemo_cfg.use_cache = use_cache
+                    self.nemo_cfg.gpt_model_file = download_model(
+                        dst_dir=download_workspace.dpath + "/artefacts",
+                        cache_dir=download_workspace.dpath + "/cache",
+                        variant=variant,
+                        fp8=fp8,
+                    )
 
         if self.nemo_cfg.gpt_model_file == None and self.nemo_cfg.checkpoint_dir == None and onnx_model == None:
             G_LOGGER.error("No model exists based on specified configs and precisions.")
@@ -442,6 +519,7 @@ class NeMoCommand(NetworkCommand):
                     throughput = float(num_tokens) / avg_time
                     return("[{:10s}] Total Time: {:0.5f} s, Average Time: {:0.5f} s, 95th Percentile Time: {:0.5f} s, 99th Percentile Time: {:0.5f} s, Throughput: {:0.2f} tokens/s".format(self.name, total_time, avg_time, percentile95, percentile99, throughput))
 
+            G_LOGGER.info("Warm up finished. Start benchmarking...")
             e2e_timer = BenchmarkTimer("E2E inference")
             core_timer = BenchmarkTimer("Without tokenizer")
             start_time = datetime.now()

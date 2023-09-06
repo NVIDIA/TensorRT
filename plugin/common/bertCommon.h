@@ -105,7 +105,7 @@ inline int32_t getMHAMaskPackedSize(int32_t smVersion, nvinfer1::DataType dataTy
     // this code must match EmbLayerNormPluginDynamic::getOutputDimensions in embLayerNormPlugin.cpp
     int32_t packedSize = unfusedMaskSize;
     bool isSmOK = (smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86 || smVersion == kSM_87
-        || smVersion == kSM_90);
+        || smVersion == kSM_89 || smVersion == kSM_90);
     bool isPrecisionOK = (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF);
     if (isSmOK && isPrecisionOK)
     {

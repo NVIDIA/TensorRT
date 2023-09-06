@@ -168,6 +168,9 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+            && workSpace != nullptr);
+
         int32_t batch = inputDesc[0].dims.d[0];
         int32_t channels = inputDesc[0].dims.d[1];
         int32_t height = inputDesc[0].dims.d[2];

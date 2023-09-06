@@ -24,7 +24,7 @@ graph = gs.import_onnx(onnx.load("model.onnx"))
 
 # Update input shape
 for input in graph.inputs:
-    input.shape[0] = 'N'
+    input.shape[0] = "N"
 
 # Update 'Reshape' nodes (if they exist)
 reshape_nodes = [node for node in graph.nodes if node.op == "Reshape"]

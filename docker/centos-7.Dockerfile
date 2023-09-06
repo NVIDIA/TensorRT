@@ -15,13 +15,24 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.1.1
+ARG CUDA_VERSION=12.2.0
 
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-centos7
+# TODO: Update - unused in 22.09
+FROM nvidia/cuda:${CUDA_VERSION}-devel-centos7
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 9.0.0.1
+ENV NV_CUDNN_VERSION 8.9.4.25-1
+ENV NV_CUDNN_PACKAGE libcudnn8-${NV_CUDNN_VERSION}.cuda12.2
+ENV NV_CUDNN_PACKAGE_DEV libcudnn8-devel-${NV_CUDNN_VERSION}.cuda12.2
+
+ENV TRT_VERSION 9.0.1.4
 SHELL ["/bin/bash", "-c"]
+
+RUN yum install -y \
+    ${NV_CUDNN_PACKAGE} \
+    ${NV_CUDNN_PACKAGE_DEV} \
+    && yum clean all \
+    && rm -rf /var/cache/yum/*
 
 # Setup user account
 ARG uid=1000
@@ -52,21 +63,15 @@ RUN sed -i "1s/python/python2/" /usr/bin/yum
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
-    wget https://pypi.nvidia.com/tensorrt-libs/tensorrt_libs-9.0.0.post11.dev1-py2.py3-none-manylinux_2_17_x86_64.whl \ 
-        && mkdir tensorrt-wheel-9.0.0.1 \
-        && unzip tensorrt_libs-9.0.0.post11.dev1-py2.py3-none-manylinux_2_17_x86_64.whl -d tensorrt-wheel-9.0.0.1 \
-        && cp tensorrt-wheel-9.0.0.1/tensorrt_libs/*.so* /usr/lib64 \
-        && cd /usr/lib64 \
-        && find . -type f -name "*.so.9.0.0" -exec sh -c 'ln -s "$0" "${0%.9.0.0}"' {} \; \
-        && find . -type f -name "*.so.9" -exec sh -c 'ln -s "$0" "${0%.9}"' {} \; ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-11.8.tar.gz \ 
+        && tar -xf tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && cp -a TensorRT-9.0.1.4/lib/*.so* /usr/lib64 \
+        && pip install TensorRT-9.0.1.4/python/tensorrt-9.0.1.post11.dev4-cp36-none-linux_x86_64.whl ;\
 elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://pypi.nvidia.com/tensorrt-libs/tensorrt_libs-9.0.0.post12.dev1-py2.py3-none-manylinux_2_17_x86_64.whl \ 
-        && mkdir tensorrt-wheel-9.0.0.1 \
-        && unzip tensorrt_libs-9.0.0.post12.dev1-py2.py3-none-manylinux_2_17_x86_64.whl -d tensorrt-wheel-9.0.0.1 \
-        && cp tensorrt-wheel-9.0.0.1/tensorrt_libs/*.so* /usr/lib64 \
-        && cd /usr/lib64 \
-        && find . -type f -name "*.so.9.0.0" -exec sh -c 'ln -s "$0" "${0%.9.0.0}"' {} \; \
-        && find . -type f -name "*.so.9" -exec sh -c 'ln -s "$0" "${0%.9}"' {} \; ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-12.2.tar.gz \ 
+        && tar -xf tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-12.2.tar.gz \
+        && cp -a TensorRT-9.0.1.4/lib/*.so* /usr/lib64 \
+        && pip install TensorRT-9.0.1.4/python/tensorrt-9.0.1.post12.dev4-cp36-none-linux_x86_64.whl ;\
 else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \

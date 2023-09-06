@@ -89,6 +89,7 @@ private:
     BindingsVector& bindings;
     int32_t batch;
     int32_t endBindingIndex;
+    int32_t profileIndex;
 
     void fillOneBinding(TensorInfo const& tensorInfo)
     {
@@ -146,13 +147,14 @@ private:
 
 public:
     FillBindingClosure(EngineType const* _engine, ContextType const* _context, InputsMap const& _inputs,
-        BindingsVector& _bindings, int32_t _batch, int32_t _endBindingIndex)
+        BindingsVector& _bindings, int32_t _batch, int32_t _endBindingIndex, int32_t _profileIndex)
         : engine(_engine)
         , context(_context)
         , inputs(_inputs)
         , bindings(_bindings)
         , batch(_batch)
         , endBindingIndex(_endBindingIndex)
+        , profileIndex(_profileIndex)
     {
     }
 
@@ -183,9 +185,9 @@ void FillBindingClosure<nvinfer1::ICudaEngine, nvinfer1::IExecutionContext>::get
         tensorInfo.dims = context->getTensorShape(name);
         tensorInfo.isDynamic = std::any_of(
             tensorInfo.dims.d, tensorInfo.dims.d + tensorInfo.dims.nbDims, [](int32_t dim) { return dim == -1; });
-        tensorInfo.comps = engine->getTensorComponentsPerElement(name);
+        tensorInfo.comps = engine->getTensorComponentsPerElement(name, profileIndex);
         tensorInfo.strides = context->getTensorStrides(name);
-        tensorInfo.vectorDimIndex = engine->getTensorVectorizedDim(name);
+        tensorInfo.vectorDimIndex = engine->getTensorVectorizedDim(name, profileIndex);
         tensorInfo.isInput = engine->getTensorIOMode(name) == TensorIOMode::kINPUT;
         tensorInfo.dataType = engine->getTensorDataType(name);
     }
@@ -237,13 +239,17 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                 sample::gLogError << "Unable to create execution context for stream " << s << "." << std::endl;
                 return false;
             }
+
+            sample::gLogInfo << "Created safe execution context with device memory size: "
+                             << (safeEngine->getDeviceMemorySize() / 1.0_MiB) << " MiB" << std::endl;
+
             iEnv.safeContexts.emplace_back(ec);
             iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
         }
         int32_t const nbBindings = safeEngine->getNbBindings();
         auto const* safeContext = iEnv.safeContexts.front().get();
         // batch is set to 1 because safety only support explicit batch.
-        return FillSafeBindings(safeEngine, safeContext, inference.inputs, iEnv.bindings, 1, nbBindings)();
+        return FillSafeBindings(safeEngine, safeContext, inference.inputs, iEnv.bindings, 1, nbBindings, 0)();
     }
 
     using FillStdBindings = FillBindingClosure<nvinfer1::ICudaEngine, nvinfer1::IExecutionContext>;
@@ -312,6 +318,9 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
             }
             return false;
         }
+
+        sample::gLogInfo << "Created execution context with device memory size: "
+                         << (engine->getDeviceMemorySize() / 1.0_MiB) << " MiB" << std::endl;
 
         iEnv.contexts.emplace_back(ec);
         iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
@@ -464,7 +473,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
 
     auto const* context = iEnv.contexts.front().get();
     int32_t const batch = engine->hasImplicitBatchDimension() ? inference.batch : 1;
-    return FillStdBindings(engine, context, inference.inputs, iEnv.bindings, batch, endBindingIndex)();
+    return FillStdBindings(engine, context, inference.inputs, iEnv.bindings, batch, endBindingIndex, inference.optProfileIndex)();
 }
 
 TaskInferenceEnvironment::TaskInferenceEnvironment(

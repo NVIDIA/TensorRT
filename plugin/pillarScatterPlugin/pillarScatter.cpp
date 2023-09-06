@@ -111,11 +111,13 @@ size_t PillarScatterPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* i
     return 0;
 }
 int32_t PillarScatterPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
+    void* /* workspace */, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         int32_t batchSize = inputDesc[0].dims.d[0];
         int32_t maxPillarNum = inputDesc[0].dims.d[1];
         int32_t numFeatures = inputDesc[0].dims.d[2];

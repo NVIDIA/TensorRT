@@ -440,7 +440,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
     infile.seekg(1, infile.cur);
     infile.read(reinterpret_cast<char*>(fileData.data()), width * height * channels);
 
-    uint8_t* hostInputBuffer = static_cast<uint8_t*>(buffers.getHostBuffer(mInOut["input"]));
+    float* hostInputBuffer = static_cast<float*>(buffers.getHostBuffer(mInOut["input"]));
 
     // Convert HWC to CHW and Normalize
     for (int c = 0; c < channels; ++c)
@@ -451,7 +451,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
             {
                 int dstIdx = c * height * width + h * width + w;
                 int srcIdx = h * width * channels + w * channels + c;
-                hostInputBuffer[dstIdx] = fileData[srcIdx];
+                hostInputBuffer[dstIdx] = (2.0F / 255.0F) * static_cast<float>(fileData[srcIdx]) - 1.0F;
             }
         }
     }

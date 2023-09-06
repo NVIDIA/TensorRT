@@ -255,13 +255,13 @@ size_t SkipLayerNormPluginDynamic::getWorkspaceSize(
 }
 
 int32_t SkipLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
     int32_t status = -1;
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         int32_t const inputVolume = volume(inputDesc[0].dims);
         DataType iType = inputDesc->type;
 
@@ -782,11 +782,13 @@ size_t SkipLayerNormVarSeqlenPlugin::getWorkspaceSize(
 }
 
 int32_t SkipLayerNormVarSeqlenPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
     int32_t status = -1;
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         int32_t const inputVolume = volume(inputDesc[0].dims);
         PLUGIN_VALIDATE(inputVolume % mLd == 0 && "inconsistent dimensions");
         DataType iType = inputDesc->type;

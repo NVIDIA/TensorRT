@@ -37,4 +37,6 @@ fake_node.outputs.clear()
 
 # Remove the fake node from the graph completely
 graph.cleanup()
-onnx.save(gs.export_onnx(graph), "removed.onnx")
+
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "removed.onnx")

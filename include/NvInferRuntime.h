@@ -1755,7 +1755,7 @@ public:
     //! The execution context created will call setOptimizationProfile(0) implicitly if there are
     //! no other execution contexts assigned to optimization profile 0. This functionality is
     //! deprecated in TensorRT 8.6 and will instead default all optimization profiles to 0 starting
-    //! in TensorRT 9.0.
+    //! in TensorRT 10.0.
     //! If an error recorder has been set for the engine, it will also be passed to the execution context.
     //!
     //! \see IExecutionContext.
@@ -3128,7 +3128,7 @@ public:
     //! be set with its corresponding profileIndex before calling execute or enqueue. If no execution
     //! context is assigned optimization profile 0 and a new context is created for an engine,
     //! setOptimizationProfile(0) is called implicitly. This functionality is deprecated in TensorRT 8.6
-    //! and will instead default all optimization profiles to 0 starting in TensorRT 9.0.
+    //! and will instead default all optimization profiles to 0 starting in TensorRT 10.0.
     //!
     //! If the associated CUDA engine does not have inputs with dynamic shapes,
     //! this method need not be called, in which case the default profile index

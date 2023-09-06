@@ -164,6 +164,14 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
 
         self.context_mode = (not config.is_encoder_decoder) and (config.use_cache)
 
+        if config.consume_image_embeds:
+            self.image_embeds = torch.zeros(
+                config.expand_size*config.num_positions*config.hidden_size,
+                dtype=config.precision,
+                device=self.device
+            )
+            self.trt_context.set_tensor_address("image_embeds", self.image_embeds.data_ptr())
+
         if config.is_encoder_decoder:
             self.encoder_hidden_states = torch.zeros(
                 config.expand_size*config.max_input_length*config.hidden_size,
@@ -177,6 +185,8 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
             if not self.config.is_encoder_decoder:
                 self.set_context_mode_trt_context()
                 self.context_trt_context.set_tensor_address("logits", self.logits.data_ptr())
+            if config.consume_image_embeds:
+                self.context_trt_context.set_tensor_address("image_embeds", self.image_embeds.data_ptr())
 
             self.self_attn_cache = {}
             self.past_cross_attn_cache = {}
@@ -226,6 +236,11 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
 
     def can_generate(self):
         return True
+
+    def set_image_embeds(self, image_embeds: torch.Tensor):
+        """Used to cache encoder hidden state runs across same encoder sessions"""
+        self.image_embeds[:image_embeds.numel()] = image_embeds.flatten().contiguous()
+        self.trt_context.set_input_shape("image_embeds", image_embeds.shape)
 
     def set_encoder_hidden_states(self, encoder_hidden_states: torch.Tensor):
         """Used to cache encoder hidden state runs across same encoder sessions"""
@@ -284,6 +299,7 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
         input_ids,
         encoder_outputs: BaseModelOutput = None,
         attention_mask = None,
+        image_embeds = None,
         **kwargs
     ) -> Seq2SeqLMOutput:
 
@@ -298,9 +314,12 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                 self.past_decoder_length = 0
             mask_length = input_length + self.past_decoder_length
 
+        if self.config.consume_image_embeds and image_embeds is None:
+            raise RuntimeError("You are using a Vision2Seq model but does not provide image_embeds.")
+
         if self.config.is_encoder_decoder:
             if encoder_outputs is None:
-                raise RuntimeError("You are using a encoder_decoder model but does not provice encoder_outputs.")
+                raise RuntimeError("You are using a encoder_decoder model but does not provide encoder_outputs.")
             encoder_hidden_states = encoder_outputs.last_hidden_state
         else:
             # When seq len != 1 for decoder only model, meaning it is context mode.
@@ -348,6 +367,8 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                 if self.config.is_encoder_decoder:
                     self.set_encoder_hidden_states(encoder_hidden_states)
                     self.set_cross_attn_cache(encoder_hidden_states)
+                if self.config.consume_image_embeds:
+                    self.set_image_embeds(image_embeds)
 
             self_attn_keys_cache_shape = self._get_self_attn_keys_cache_shape()
             self_attn_values_cache_shape = self._get_self_attn_vals_cache_shape()
@@ -362,9 +383,12 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                     ctx.set_input_shape(f"past_key_values.{i}.self.key", self_attn_keys_cache_shape)
                     ctx.set_input_shape(f"past_key_values.{i}.self.value", self_attn_values_cache_shape)
 
-        elif input_length == 1 and self.config.is_encoder_decoder:
-            encoder_hidden_states = encoder_outputs.last_hidden_state
-            self.set_encoder_hidden_states(encoder_hidden_states)
+        elif input_length == 1:
+            if self.config.is_encoder_decoder:
+                encoder_hidden_states = encoder_outputs.last_hidden_state
+                self.set_encoder_hidden_states(encoder_hidden_states)
+            if self.config.consume_image_embeds:
+                self.set_image_embeds(image_embeds)
 
         # Launch TRT inference.
         assert ctx.all_shape_inputs_specified
@@ -409,7 +433,11 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
 
         return Seq2SeqLMOutput(logits=logits, past_key_values=present_key_values,)
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, encoder_outputs = None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids,
+                                      past_key_values=None,
+                                      encoder_outputs = None,
+                                      image_embeds = None,
+                                      **kwargs):
 
         # In HuggingFace generation_utils.py, this function will be called at each decoding step, before running the decoder's forward().
         input_args = {}
@@ -421,6 +449,9 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
             input_ids = input_ids[:, -1:]
 
         input_args["input_ids"] = input_ids
+
+        if self.config.consume_image_embeds:
+            input_args["image_embeds"] = image_embeds
 
         if self.config.is_encoder_decoder:
             # In HuggingFace, once a sequence has finished, HuggingFace will only decode unfinished sequence, so decoder attention mask is always 1.
@@ -772,7 +803,7 @@ class Seq2SeqTRT(TRTInferenceCommand):
                 timing_cache=self.timing_cache,
             )
 
-            self.encoder = Seq2SeqTRTEncoder(
+            self.encoder = self.encoder_class(
                 self.encoder_engine, encoder_metadata, self.config, self.nvtx_verbose_inference,
             )
             self.workspace.set_encoder_engine_path(encoder_engine_path)

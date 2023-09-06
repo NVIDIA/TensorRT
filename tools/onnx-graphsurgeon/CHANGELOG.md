@@ -2,6 +2,21 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.3.29 (2023-08-11)
+### Fixed
+- Fixed a bug where doing a copy (e.g. `copy.copy`) of node/tensor inputs/outputs would retain
+    their synchronization behavior. For example, for a graph like:
+    ```
+    inp -> node -> out
+    ```
+    Doing:
+    ```py
+    node_outputs = copy.copy(node.outputs)
+    del node_outputs[0]
+    ```
+    would have previously resulted in `out.inputs` being modified also.
+
+
 ## v0.3.28 (2023-07-11)
 ### Added
 - Added support for various 8-bit floating point types. Like `BFLOAT16`, these will not be converted to NumPy

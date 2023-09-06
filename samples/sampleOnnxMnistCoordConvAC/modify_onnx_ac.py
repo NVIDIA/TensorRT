@@ -57,11 +57,11 @@ def main():
     tmap = graph.tensors()
     # You can figure out the input and output tensors using Netron.
     inputs = [tmap["conv1"]]
-    outputs = [tmap["90"]]
+    outputs = [tmap["/conv1/addcoords/Concat_output_0"]]
     replace_with_coordconvac(graph, inputs, outputs)
 
-    inputs = [tmap["92"]]
-    outputs = [tmap["170"]]
+    inputs = [tmap["/Relu_output_0"]]
+    outputs = [tmap["/conv2/addcoords/Concat_output_0"]]
     replace_with_coordconvac(graph, inputs, outputs)
 
     # Remove the now-dangling subgraph.

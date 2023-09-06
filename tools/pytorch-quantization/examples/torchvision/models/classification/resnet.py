@@ -346,6 +346,9 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
+    def _get_dtype(self):
+        return self.conv1.weight.dtype
+
     def _forward_impl(self, x: Tensor) -> Tensor:
         # See note [TorchScript super()]
         x = self.conv1(x)
@@ -365,7 +368,7 @@ class ResNet(nn.Module):
         return x
 
     def forward(self, x: Tensor) -> Tensor:
-        return self._forward_impl(x)
+        return self._forward_impl(x.to(self._get_dtype()))
 
 
 def _resnet(arch: str, block: Type[Union[BasicBlock, Bottleneck]], layers: List[int], pretrained: bool, progress: bool,

@@ -249,7 +249,7 @@ enum class TensorFormat : int32_t
     //! If running on the DLA, this format can be used for acceleration
     //! with the caveat that C must be equal or lesser than 4.
     //! If used as DLA input and the build option kGPU_FALLBACK is not specified,
-    //! it needs to meet line stride requirement of DLA format. Column stride in bytes should
+    //! it needs to meet line stride requirement of DLA format. Column stride in bytes must
     //! be a multiple of 32 on Xavier and 64 on Orin.
     kCHW4 = 3,
 
@@ -367,22 +367,25 @@ using AllocatorFlags = uint32_t;
 //!
 //! \brief Application-implemented class for controlling allocation on the GPU.
 //!
+//! \warning The lifetime of an IGpuAllocator object must exceed that of all objects that use it.
+//!
 class IGpuAllocator
 {
 public:
     //!
     //! A thread-safe callback implemented by the application to handle acquisition of GPU memory.
     //!
-    //! \param size The size of the memory required.
+    //! \param size The size of the memory block required (in bytes).
     //! \param alignment The required alignment of memory. Alignment will be zero
     //!        or a power of 2 not exceeding the alignment guaranteed by cudaMalloc.
     //!        Thus this allocator can be safely implemented with cudaMalloc/cudaFree.
     //!        An alignment value of zero indicates any alignment is acceptable.
     //! \param flags Reserved for future use. In the current release, 0 will be passed.
     //!
-    //! If an allocation request of size 0 is made, nullptr should be returned.
-    //!
-    //! If an allocation request cannot be satisfied, nullptr should be returned.
+    //! \return If the allocation was successful, the start address of a device memory block of the requested size.
+    //! If an allocation request of size 0 is made, nullptr must be returned.
+    //! If an allocation request cannot be satisfied, nullptr must be returned.
+    //! If a non-null address is returned, it is guaranteed to have the specified alignment.
     //!
     //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
@@ -398,7 +401,8 @@ public:
     //!
     //! TensorRT may pass a nullptr to this function if it was previously returned by allocate().
     //!
-    //! \param memory The acquired memory.
+    //! \param memory A memory address that was previously returned by calling allocate() or reallocate() on the same
+    //!        allocator object, or nullptr.
     //!
     //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
@@ -441,10 +445,13 @@ public:
     //!
     //! TensorRT may call realloc to increase the buffer by relatively small amounts.
     //!
-    //! \param baseAddr the address of the original allocation.
-    //! \param alignment The alignment used by the original allocation.
-    //! \param newSize The new memory size required.
-    //! \return the address of the reallocated memory
+    //! \param baseAddr the address of the original allocation, which will have been returned by previously calling
+    //!        allocate() or reallocate() on the same object.
+    //! \param alignment The alignment used by the original allocation. This will be the same value that was previously
+    //!        passed to the allocate() or reallocate() call that returned baseAddr.
+    //! \param newSize The new memory size required (in bytes).
+    //! \return The address of the reallocated memory, or nullptr. If a non-null address is returned, it is
+    //!         guaranteed to have the specified alignment.
     //!
     //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
@@ -463,13 +470,14 @@ public:
     //!
     //! TensorRT may pass a nullptr to this function if it was previously returned by allocate().
     //!
-    //! \param memory The acquired memory.
+    //! \param memory A memory address that was previously returned by an allocate() or reallocate() call of the same allocator
+    //!        object.
     //! \return True if the acquired memory is released successfully.
     //!
     //! \note The implementation must guarantee thread safety for concurrent allocate/free/reallocate/deallocate
     //! requests.
     //!
-    //! \note If user-implemented free() might hit an error condition, the user should override deallocate() as the
+    //! \note If user-implemented free() might hit an error condition, the user must override deallocate() as the
     //! primary implementation and override free() to call deallocate() for backwards compatibility.
     //!
     //! \see free()
@@ -499,7 +507,7 @@ protected:
 //! \brief Application-implemented logging interface for the builder, refitter and runtime.
 //!
 //! The logger used to create an instance of IBuilder, IRuntime or IRefitter is used for all objects created through
-//! that interface. The logger should be valid until all objects created are released.
+//! that interface. The logger must be valid until all objects created are released.
 //!
 //! The Logger object implementation must be thread safe. All locking and synchronization is pushed to the
 //! interface implementation and TensorRT does not hold any synchronization primitives when calling the interface
@@ -532,6 +540,12 @@ public:
     //!
     //! \param severity The severity of the message.
     //! \param msg A null-terminated log message.
+    //!
+    //! \warning Loggers used in the safety certified runtime must set a maximum message length and truncate
+    //!          messages exceeding this length. It is up to the implementer of the derived class to define
+    //!          a suitable limit that will prevent buffer overruns, resource exhaustion, and other security
+    //!          vulnerabilities in their implementation. The TensorRT safety certified runtime will never
+    //!          emit messages longer than 1024 bytes.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -679,14 +693,18 @@ struct EnumMaxImpl<ErrorCode>
 //! The error reporting mechanism is a user defined object that interacts with the internal state of the object
 //! that it is assigned to in order to determine information about abnormalities in execution. The error recorder
 //! gets both an error enum that is more descriptive than pass/fail and also a string description that gives more
-//! detail on the exact failure modes. In the safety context, the error strings are all limited to 1024 characters
-//! in length.
+//! detail on the exact failure modes. In the safety context, the error strings are all limited to 128 bytes
+//! or less in length, including the NULL terminator.
 //!
 //! The ErrorRecorder gets passed along to any class that is created from another class that has an ErrorRecorder
 //! assigned to it. For example, assigning an ErrorRecorder to an IBuilder allows all INetwork's, ILayer's, and
 //! ITensor's to use the same error recorder. For functions that have their own ErrorRecorder accessor functions.
 //! This allows registering a different error recorder or de-registering of the error recorder for that specific
 //! object.
+//!
+//! ErrorRecorder objects that are used in the safety runtime must define an implementation-dependent upper limit
+//! of errors whose information can be stored, and drop errors above this upper limit. The limit must fit in int32_t.
+//! The IErrorRecorder::hasOverflowed() method is used to signal that one or more errors have been dropped.
 //!
 //! The ErrorRecorder object implementation must be thread safe. All locking and synchronization is pushed to the
 //! interface implementation and TensorRT does not hold any synchronization primitives when calling the interface
@@ -703,7 +721,7 @@ public:
     using ErrorDesc = char const*;
 
     //!
-    //! The length limit for an error description, excluding the '\0' string terminator.
+    //! The length limit for an error description in bytes, excluding the '\0' string terminator.
     //!
     static constexpr size_t kMAX_DESC_LENGTH{127U};
 
@@ -723,12 +741,17 @@ public:
     //! Determines the number of errors that occurred between the current point in execution
     //! and the last time that the clear() was executed. Due to the possibility of asynchronous
     //! errors occuring, a TensorRT API can return correct results, but still register errors
-    //! with the Error Recorder. The value of getNbErrors must monotonically increases until clear()
-    //! is called.
+    //! with the Error Recorder. The value of getNbErrors() must increment by 1 after each reportError()
+    //! call until clear() is called, or the maximum number of errors that can be stored is exceeded.
     //!
     //! \return Returns the number of errors detected, or 0 if there are no errors.
+    //!         If the upper bound of errors that can be stored is exceeded, the upper bound value must
+    //!         be returned.
     //!
-    //! \see clear
+    //! For example, if the error recorder can store up to 16 error descriptions but recordError() has
+    //! been called 20 times, getNbErrors() must return 16.
+    //!
+    //! \see clear(), hasOverflowed()
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -745,9 +768,10 @@ public:
     //! The errorIdx specifies what error code from 0 to getNbErrors()-1 that the application
     //! wants to analyze and return the error code enum.
     //!
-    //! \return Returns the enum corresponding to errorIdx.
+    //! \return Returns the enum corresponding to errorIdx if errorIdx is in range (between 0 and getNbErrors()-1).
+    //!         ErrorCode::kUNSPECIFIED_ERROR must be returned if errorIdx is not in range.
     //!
-    //! \see getErrorDesc, ErrorCode
+    //! \see getErrorDesc(), ErrorCode
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -764,11 +788,13 @@ public:
     //! For the error specified by the idx value, return the string description of the error. The
     //! error string is a null-terminated C-style string. In the safety context there is a
     //! constant length requirement to remove any dynamic memory allocations and the error message
-    //! may be truncated. The format of the string is "<EnumAsStr> - <Description>".
+    //! will be truncated if it exceeds kMAX_DESC_LENGTH bytes.
+    //! The format of the string is "<EnumAsStr> - <Description>".
     //!
-    //! \return Returns a string representation of the error along with a description of the error.
+    //! \return Returns a string representation of the error along with a description of the error if errorIdx is in
+    //!         range (between 0 and getNbErrors()-1). An empty string will be returned if errorIdx is not in range.
     //!
-    //! \see getErrorCode
+    //! \see getErrorCode()
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -796,11 +822,11 @@ public:
     //!
     //! \brief Clear the error stack on the error recorder.
     //!
-    //! Removes all the tracked errors by the error recorder.  This function must guarantee that after
+    //! Removes all the tracked errors by the error recorder.  The implementation must guarantee that after
     //! this function is called, and as long as no error occurs, the next call to getNbErrors will return
-    //! zero.
+    //! zero and hasOverflowed will return false.
     //!
-    //! \see getNbErrors
+    //! \see getNbErrors(), hasOverflowed()
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -815,7 +841,9 @@ public:
     //! \brief Report an error to the error recorder with the corresponding enum and description.
     //!
     //! \param val The error code enum that is being reported.
-    //! \param desc The string description of the error.
+    //! \param desc The string description of the error, which will be a NULL-terminated string of kMAX_DESC_LENGTH
+    //!        bytes or less (excluding the NULL terminator). Descriptions that exceed this limit will be silently
+    //!        truncated.
     //!
     //! Report an error to the user that has a given value and human readable description. The function returns false
     //! if processing can continue, which implies that the reported error is not fatal. This does not guarantee that
@@ -825,6 +853,10 @@ public:
     //! or otherwise access the data from desc after reportError returns.
     //!
     //! \return True if the error is determined to be fatal and processing of the current function must end.
+    //!
+    //! \warning If the error recorder's maximum number of storable errors is exceeded, the error description will be
+    //!          silently dropped and the value returned by getNbErrors() will not be incremented. However, the return
+    //!          value will still signal whether the error must be considered fatal.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -838,9 +870,9 @@ public:
     //!
     //! Increments the reference count for the object by one and returns the current value.  This reference count allows
     //! the application to know that an object inside of TensorRT has taken a reference to the ErrorRecorder.  TensorRT
-    //! guarantees that every call to IErrorRecorder::incRefCount will be paired with a call to
-    //! IErrorRecorder::decRefCount when the reference is released.  It is undefined behavior to destruct the
-    //! ErrorRecorder when incRefCount has been called without a corresponding decRefCount.
+    //! guarantees that every call to IErrorRecorder::incRefCount() will be paired with a call to
+    //! IErrorRecorder::decRefCount() when the reference is released.  It is undefined behavior to destruct the
+    //! ErrorRecorder when incRefCount() has been called without a corresponding decRefCount().
     //!
     //! \return The reference counted value after the increment completes.
     //!
@@ -856,9 +888,9 @@ public:
     //!
     //! Decrements the reference count for the object by one and returns the current value.  This reference count allows
     //! the application to know that an object inside of TensorRT has taken a reference to the ErrorRecorder.  TensorRT
-    //! guarantees that every call to IErrorRecorder::decRefCount will be preceded by a call to
-    //! IErrorRecorder::incRefCount.  It is undefined behavior to destruct the ErrorRecorder when incRefCount has been
-    //! called without a corresponding decRefCount.
+    //! guarantees that every call to IErrorRecorder::decRefCount() will be preceded by a call to
+    //! IErrorRecorder::incRefCount().  It is undefined behavior to destruct the ErrorRecorder when incRefCount() has been
+    //! called without a corresponding decRefCount().
     //!
     //! \return The reference counted value after the decrement completes.
     //!

@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
 from Seq2Seq.frameworks import Seq2SeqHF
 from BLOOM.BLOOMModelConfig import BLOOMModelTRTConfig
-from Seq2Seq.export import Seq2SeqModelClass
+from BLOOM.export import BLOOMModelClass
 
 class BLOOMHF(Seq2SeqHF):
     def __init__(
@@ -35,7 +35,7 @@ class BLOOMHF(Seq2SeqHF):
         description="Runs framework results for BLOOM model.",
         **kwargs
     ):
-        super().__init__(config_class, description, model_classes=Seq2SeqModelClass, **kwargs)
+        super().__init__(config_class, description, model_classes=BLOOMModelClass, **kwargs)
 
 # Entry point
 RUN_CMD = BLOOMHF()

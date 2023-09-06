@@ -134,15 +134,27 @@ void printProlog(int32_t warmups, int32_t timings, float warmupMs, float benchTi
 
 void printTiming(std::vector<InferenceTime> const& timings, int32_t runsPerAvg, std::ostream& os)
 {
-    int32_t count = 0;
+    int64_t count = 0;
     InferenceTime sum;
 
     os << std::endl;
     os << "=== Trace details ===" << std::endl;
     os << "Trace averages of " << runsPerAvg << " runs:" << std::endl;
-    for (auto const& t : timings)
+
+    // Show only the first 300 lines and the last 300 lines.
+    constexpr int64_t kTIMING_PRINT_THRESHOLD{300};
+    int64_t const maxNbTimings{kTIMING_PRINT_THRESHOLD * runsPerAvg};
+
+    for (int64_t idx = 0, size = timings.size(); idx < size; ++idx)
     {
-        sum += t;
+        // Omit some latency printing to avoid very long logs.
+        if (size > 2 * maxNbTimings && idx == maxNbTimings)
+        {
+            os << "... Omitting " << (size - 2 * maxNbTimings) << " lines" << std::endl;
+            idx = size - kTIMING_PRINT_THRESHOLD * runsPerAvg - 1;
+        }
+
+        sum += timings[idx];
 
         if (++count == runsPerAvg)
         {

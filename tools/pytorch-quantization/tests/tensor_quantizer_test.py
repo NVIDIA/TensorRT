@@ -14,17 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-
 """tests of tensor quantizer"""
-import yaml
+import contextlib
+
 import pytest
 import numpy as np
 
 import torch
 
 from pytorch_quantization import tensor_quant
-from pytorch_quantization import calib
 from pytorch_quantization.nn.modules import tensor_quantizer
 from pytorch_quantization import utils as quant_utils
 import tests.utils as test_utils
@@ -33,6 +31,7 @@ from tests.fixtures import verbose
 np.random.seed(12345)
 
 # pylint:disable=missing-docstring, no-self-use
+
 
 class TestTensorQuantizer():
 
@@ -109,8 +108,9 @@ class TestTensorQuantizer():
         x_torch = torch.Tensor(x_np).cuda()
         amax = 0.5
         clip_x_np = np.clip(x_np, -amax, amax)
-        quantizer = tensor_quantizer.TensorQuantizer(
-            tensor_quant.QuantDescriptor(amax=amax, learn_amax=True), if_quant=False, if_clip=True).cuda()
+        quantizer = tensor_quantizer.TensorQuantizer(tensor_quant.QuantDescriptor(amax=amax, learn_amax=True),
+                                                     if_quant=False,
+                                                     if_clip=True).cuda()
         assert hasattr(quantizer, 'clip')
         module_clip_x = quantizer(x_torch)
         np.testing.assert_array_equal(module_clip_x.cpu().detach().numpy(), clip_x_np)
@@ -196,9 +196,8 @@ class TestTensorQuantizer():
         quantizer1(x_2)
         quantizer1.disable_calib()
 
-        global_amax = torch.max(
-            quant_utils.reduce_amax(x_1, axis=reduce_axis, keepdims=True),
-            quant_utils.reduce_amax(x_2, axis=reduce_axis, keepdims=True))
+        global_amax = torch.max(quant_utils.reduce_amax(x_1, axis=reduce_axis, keepdims=True),
+                                quant_utils.reduce_amax(x_2, axis=reduce_axis, keepdims=True))
         test_utils.compare(quantizer1._calibrator.compute_amax(), global_amax, atol=0, rtol=0, ctol=0)
 
         quantizer1.load_calib_amax()
@@ -233,8 +232,11 @@ class TestTensorQuantizer():
         quantizer1(x_2)
 
         quantizer1.load_calib_amax("percentile", percentile=99.99)
-        test_utils.compare(quantizer1._calibrator.compute_amax(
-            "percentile", percentile=99.99), quantizer1.amax, atol=0, rtol=0, ctol=0)
+        test_utils.compare(quantizer1._calibrator.compute_amax("percentile", percentile=99.99),
+                           quantizer1.amax,
+                           atol=0,
+                           rtol=0,
+                           ctol=0)
 
     def test_setters(self):
         quantizer = tensor_quantizer.TensorQuantizer()
@@ -243,3 +245,34 @@ class TestTensorQuantizer():
 
         assert quantizer.num_bits == 7
         assert quantizer.unsigned
+
+    def test_pre_quant_scale(self):
+        quant_desc = tensor_quant.QuantDescriptor(axis=1, num_bits=8, amax=127.0)
+        quantizer = tensor_quantizer.TensorQuantizer(quant_desc).cuda()
+        quantizer2 = tensor_quantizer.TensorQuantizer(quant_desc).cuda()
+
+        inputs = torch.Tensor([[0, 0.4, 1.1, 2.0]]).cuda()
+        outputs_gt = torch.Tensor([[0, 0, 1, 2]]).cuda()
+        assert torch.allclose(quantizer(inputs), outputs_gt)
+
+        quantizer.pre_quant_scale = 2.0
+        outputs_gt = torch.Tensor([[0, 1, 2, 4]]).cuda()
+        assert torch.allclose(quantizer(inputs), outputs_gt)
+
+        quantizer2.pre_quant_scale = torch.Tensor([[1.0, 2.0, 3.0, 4.0]]).cuda()
+        outputs_gt = torch.Tensor([[0, 1, 3, 8]]).cuda()
+        assert torch.allclose(quantizer2(inputs), outputs_gt)
+
+    @pytest.mark.parametrize("E, M, axis", [(5, 2, None), (4, 3, None), (4, 3, 1), (7, 3, None)])
+    def test_e4m3(self, E, M, axis):
+        is_error_expected = (E != 4 or M != 3)
+        with (pytest.raises(TypeError)
+              if is_error_expected else contextlib.nullcontext()):
+            e4m3_desc = tensor_quant.QuantDescriptor(num_bits=(E, M), axis=axis)
+            e4m3_quantizer = tensor_quantizer.TensorQuantizer(e4m3_desc).to("cuda")
+
+            x = torch.rand(3, 63, 7, 7, device="cuda")
+
+            e4m3_x = e4m3_quantizer(x)
+            ref = tensor_quant.scaled_e4m3(x, e4m3_quantizer._get_amax(x), E, M)
+            test_utils.compare(e4m3_x, ref, atol=0, rtol=0)

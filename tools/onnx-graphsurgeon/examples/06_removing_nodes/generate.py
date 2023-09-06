@@ -37,4 +37,6 @@ nodes = [
 ]
 
 graph = gs.Graph(nodes=nodes, inputs=[x], outputs=[y])
-onnx.save(gs.export_onnx(graph), "model.onnx")
+
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "model.onnx")

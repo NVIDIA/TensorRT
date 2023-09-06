@@ -101,7 +101,8 @@ def visualize_detections(image_path, output_path, detections, labels=[], iou_thr
         text = "{}: {}%".format(label, int(100 * score))
         if score < 0:
             text = label
-        text_width, text_height = font.getsize(text)
+        left, top, right, bottom = font.getbbox(text)
+        text_width, text_height = right - left, bottom - top
         text_bottom = max(text_height, d['ymin'])
         text_left = d['xmin']
         margin = np.ceil(0.05 * text_height)

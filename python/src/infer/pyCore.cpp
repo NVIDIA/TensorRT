@@ -193,9 +193,9 @@ Dims castDimsFromPyIterable(PyIterable& in)
 }
 
 template <typename PyIterable>
-void setBindingDimensions(IExecutionContext& self, int32_t bindingIndex, PyIterable& in)
+bool setBindingDimensions(IExecutionContext& self, int32_t bindingIndex, PyIterable& in)
 {
-    self.setBindingDimensions(bindingIndex, castDimsFromPyIterable<PyIterable>(in));
+    return self.setBindingDimensions(bindingIndex, castDimsFromPyIterable<PyIterable>(in));
 }
 template <typename PyIterable>
 bool setInputShape(IExecutionContext& self, char const* tensorName, PyIterable& in)
@@ -1218,7 +1218,9 @@ void bindCore(py::module& m)
         .value("EXCLUDE_LEAN_RUNTIME", BuilderFlag::kEXCLUDE_LEAN_RUNTIME, BuilderFlagDoc::EXCLUDE_LEAN_RUNTIME)
         .value("FP8", BuilderFlag::kFP8, BuilderFlagDoc::FP8)
         .value("ERROR_ON_TIMING_CACHE_MISS", BuilderFlag::kERROR_ON_TIMING_CACHE_MISS,
-            BuilderFlagDoc::ERROR_ON_TIMING_CACHE_MISS);
+            BuilderFlagDoc::ERROR_ON_TIMING_CACHE_MISS)
+        .value("DISABLE_COMPILATION_CACHE", BuilderFlag::kDISABLE_COMPILATION_CACHE,
+            BuilderFlagDoc::DISABLE_COMPILATION_CACHE);
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1364,6 +1366,7 @@ void bindCore(py::module& m)
             py::cpp_function(&IBuilderConfig::setProgressMonitor, py::keep_alive<1, 2>{}))
 // remove md
 #if ENABLE_MDTRT
+        // This gets flipped to the C++ API's with TRT-17558
         .def_property("num_instances", &nvinfer1GetNbInstances, &nvinfer1SetNbInstances)
         .def("insert_instance_group", &nvinfer1InsertInstanceGroup, "instance"_a, "group"_a,
             IBuilderConfigDoc::insert_instance_group)
@@ -1373,8 +1376,8 @@ void bindCore(py::module& m)
             IBuilderConfigDoc::get_num_instance_groups)
         .def("get_instance_group", &nvinfer1GetInstanceGroup, "instance"_a, "num"_a,
             IBuilderConfigDoc::get_instance_group)
-#endif // ENABLE_MDTRT
-        .def("__del__", &utils::doNothingDel<IBuilderConfig>);
+#endif  // ENABLE_MDTRT
+                .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
         NetworkDefinitionCreationFlagDoc::descr, py::module_local())

@@ -41,7 +41,7 @@ setup(
     ],
     packages=[tensorrt_module],
     extras_require={"numpy": "numpy"},
-    package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
+    package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

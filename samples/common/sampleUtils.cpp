@@ -370,6 +370,8 @@ void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int
     }
 
     sparsifyMatMulKernelWeights(network, sparseWeights);
+    sample::gLogVerbose << "--sparsity=force pruned " << sparseWeights.size() << " weights to be sparsity pattern." << std::endl;
+    sample::gLogVerbose << "--sparsity=force has been deprecated. Please use <polygraphy surgeon prune> to rewrite the weights to a sparsity pattern and then run with --sparsity=enable" << std::endl;
 }
 
 void sparsify(Weights const& weights, int32_t k, int32_t trs, std::vector<int8_t>& sparseWeights)

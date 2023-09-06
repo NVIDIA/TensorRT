@@ -139,7 +139,7 @@ def load_normalized_test_case(test_image, pagelocked_buffer):
         # Resize, antialias and transpose the image to CHW.
         c, h, w = ModelData.INPUT_SHAPE
         image_arr = (
-            np.asarray(image.resize((w, h), Image.ANTIALIAS))
+            np.asarray(image.resize((w, h), Image.LANCZOS))
             .transpose([2, 0, 1])
             .astype(trt.nptype(ModelData.DTYPE))
             .ravel()

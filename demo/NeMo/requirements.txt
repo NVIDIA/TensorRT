@@ -6,8 +6,8 @@ transformers==4.27.0
 cuda-python==12.1.0
 setuptools==65.5.1
 tqdm
---extra-index-url https://download.pytorch.org/whl/cu118
-torch==2.0.0
-torchvision==0.15.1
-torchaudio==2.0.1
+--pre --extra-index-url https://download.pytorch.org/whl/nightly/cu121
+torch==2.1.0.dev20230820
+torchaudio==2.1.0.dev20230821
+torchvision==0.16.0.dev20230821
 onnx-graphsurgeon==0.3.27

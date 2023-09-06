@@ -69,6 +69,11 @@ Currently, this repository supports the following models with checkpoints:
     - bigscience/bloomz-3b
     - bigscience/bloomz-7b1
 
+1. [BLIP (image captioning task)](https://huggingface.co/docs/transformers/model_doc/blip). The sample supports following variants of BLIP:
+
+    - Salesforce/blip-image-captioning-base
+    - Salesforce/blip-image-captioning-large
+
 ## Setup
 
 
@@ -101,14 +106,17 @@ python run.py <args> # execute program
 │   ├── frameworks.py      # PyTorch inference script
 │   ├── onnxrt.py          # OnnxRT inference script
 │   ├── trt.py             # TensorRT inference script
+├── BLIP      # BLIP directory
+│   └── ...
 ├── BLOOM     # BLOOM directory
 │   └── ...
 ├── GPT2      # GPT2 directory
 │   └── ...
 ├── NNDF      # common high-level abstraction of classes and utilities
-├── Seq2Seq   # common concrete abstraction of classes and utilities
+├── Seq2Seq   # common concrete abstraction of classes and utilities for Sequence-to-Sequence models
 ├── T5        # T5 directory
 │   └── ...
+├── Vision2Seq  # common concrete abstraction of classes and utilities for Vision-to-Sequence models
 ├── notebooks # Jupyter notebooks
 │   ├── playground.ipynb # A new playground for users to run and benchmark selected HF model and configurations
 │   ├── GPT2.ipynb    # Jupyter notebooks for GPT2
@@ -218,12 +226,18 @@ In addition to greedy search, beam search is another widely-used decoding method
 python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --working-dir temp --num-beams 3 [--use-cache]
 ```
 
-### How to run with attention_mask
+### How to run multi-batch inference with attention_mask
 
-Users may want to run multi-batch inference with various seq len, which requires input [`attention_mask`] (https://huggingface.co/docs/transformers/glossary#attention-mask) for masking out pad tokens. For all models, please pass `--use-mask` to enable attention_mask. For example:
+Across all models, please use `--batch-size <B>` to enable multi-batch inference.
+
+```sh
+python3 run.py run GPT2 trt --variant gpt2 --batch-size 4 --working-dir temp --fp16 --use-cache --use-mask
+```
+
+Users may also want to run multi-batch inference with various seq len, which requires input [`attention_mask`] (https://huggingface.co/docs/transformers/glossary#attention-mask) for masking out pad tokens. For all models, please pass `--use-mask` to enable attention_mask. For example:
 
 ```
-python3 run.py run GPT2 trt --variant gpt2 --working-dir temp --fp16 --use-cache --use-mask
+python3 run.py run GPT2 trt --variant gpt2 --batch-size 4 --working-dir temp --fp16 --use-cache --use-mask
 ```
 
 ## TensorRT-specific Flags
@@ -235,6 +249,17 @@ Frameworks (PyTorch) by default run TF32 on Ampere devices and degrade to FP32 o
 ```python
 python3 run.py run BART trt --variant facebook/bart-base --working-dir temp [--fp16]
 ```
+
+### How to run multi-batch inference with dynamic batch sizes
+
+Users can also pass in `--dynamic-batch` to construct TRT engines with dynamic batch sizes. When this dynamic batch mode is enabled, the additional optional arguments `--min-dynamic-batch <minb>` and `--max-dynamic-batch <maxb>` specify the range of batch sizes supported. An example run with a batch size of 4, min batch size of 1 and max batch size of 8 corresponds to
+
+```sh
+python3 run.py run GPT2 trt --variant gpt2 --batch-size 4 --working-dir temp --fp16 --use-cache --use-mask --dynamic-batch --min-dynamic-batch 1 --max-dynamic-batch 8
+```
+
+Notes:
+* In dynamic batch mode, the constraint `min-dynamic-batch <= batch-size <= max-dynamic-batch` needs to be satisfied, else the program errors out.
 
 
 ### How to customize engine name
@@ -334,3 +359,5 @@ torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate ... MiB (GPU 
 3. CPU OOM: Killed
 
 As a rough but not guaranteed estimate, you should have at least `4*num_parameters` bytes of GPU memory in order to run in `--fp16` mode and at least `8*num_parameters` bytes of GPU memory in order to run in fp32 precision. You should also have at least `12*num_parameters` bytes of CPU memory for model loading and engine building and serialization. For example, for a 6B model, you should have >=24GB GPU memory for `--fp16`, or >=32GB GPU memory for fp32, and >=72GB CPU memory. It is recommended to run `--fp16 --use-cache` to optimize engine build and inference.
+
+Furthermore, we have identified an issue with `torch.onnx.export` that causes it to increase memory usage by `4*num_parameters`, so in the case of CPU OOM, please ensure you are running with a cached ONNX model. This can be achieved by simply rerunning the exact same command after the ONNX model has been saved.

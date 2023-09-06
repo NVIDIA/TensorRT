@@ -1,5 +1,7 @@
 # Known Limitations and Issues
 
+* TensorRT 9.0 uses `kgen` kernels which produce broken representations of JSON engine graphs and no per-layer timing or inference profiling information.
+
 * TREx does not always display the correct region shapes. This is due to missing information in the graph JSON produced by TensorRT. This will be fixed in a future TensorRT release.
 * TREx has partial support for multi-profile engines. You can choose which profile to use for the engine plan, but profiling information will only load when using the first (default) profile (0). For example, to load profile 3:
 

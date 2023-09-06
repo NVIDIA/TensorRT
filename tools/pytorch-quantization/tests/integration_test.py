@@ -19,6 +19,7 @@
 """tests of integrating Quant layers into a network"""
 
 import pytest
+import io
 
 import numpy as np
 
@@ -30,6 +31,7 @@ from pytorch_quantization import tensor_quant
 from pytorch_quantization import quant_modules
 from pytorch_quantization import nn as quant_nn
 from pytorch_quantization.tensor_quant import QuantDescriptor
+from pytorch_quantization.nn.modules import tensor_quantizer
 from tests.fixtures.models import LeNet, QuantLeNet
 from tests.fixtures import verbose
 
@@ -200,3 +202,15 @@ class TestNetwork():
                     module.enable()
         quant_model.cuda()
 
+    def test_state_load(self):
+        quant_desc = tensor_quant.QuantDescriptor(axis=1, num_bits=8, amax=127.0)
+        quantizer = tensor_quantizer.TensorQuantizer(quant_desc).cuda()
+        quantizer2 = tensor_quantizer.TensorQuantizer(quant_desc).cuda()
+        quantizer2.pre_quant_scale = torch.Tensor([[1.0, 2.0, 3.0, 4.0]]).cuda()
+        buffer = io.BytesIO()
+        torch.save(quantizer2.state_dict(), buffer)
+
+        buffer.seek(0)
+        quantizer.load_state_dict(torch.load(buffer))
+
+        assert torch.allclose(quantizer.pre_quant_scale, quantizer2.pre_quant_scale)

@@ -122,14 +122,12 @@ void GroupNormalizationPlugin::detachFromContext() noexcept
 }
 
 int32_t GroupNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
+    void* /* workspace */, cudaStream_t stream) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr);
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
         PLUGIN_VALIDATE(mBnScales != nullptr && mBnScales->mPtr != nullptr);
         PLUGIN_VALIDATE(mBnBias != nullptr && mBnBias->mPtr != nullptr);
         PLUGIN_VALIDATE(mCudnnHandle != nullptr);

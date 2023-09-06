@@ -570,6 +570,9 @@ int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+            && workSpace != nullptr);
+
         size_t const workspaceSize = getWorkspaceSize(inputDesc, 1, outputDesc, 1);
 
         int32_t const S = inputDesc->dims.d[SDIM];

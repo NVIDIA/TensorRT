@@ -70,6 +70,7 @@ layer_colormap = defaultdict(lambda: UNKNOWN_KEY_COLOR, {
     "Deconvolution":  "#7B68EE", # MediumSlateBlue
     "ConvActPool":    "#6495ED", # CornflowerBlue
     "MatrixMultiply": "#1E90FF", # DodgerBlue
+    "gemm":           "#1E90FF", # DodgerBlue
     "Reformat":       "#00FFFF", # Cyan
     "Shuffle":        "#BC8F8F", # RosyBrown
     "Slice":          "#FFA500", # Orange
@@ -82,6 +83,7 @@ layer_colormap = defaultdict(lambda: UNKNOWN_KEY_COLOR, {
     "Reduce":         "#90EE90", # LightGreen
     "SoftMax":        "#DA70D6", # Orchid
     "Myelin":         "#800080", # Purple
+    "kgen":           "#800080", # Purple
 })
 
 

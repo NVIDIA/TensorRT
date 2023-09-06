@@ -284,11 +284,13 @@ int32_t BatchedNMSPlugin::enqueue(
     return -1;
 }
 
-int32_t BatchedNMSDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t BatchedNMSDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
         void const* const locData = inputs[0];
         void const* const confData = inputs[1];
 
