@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-
 from absl import logging
 from .version import __version__
+from .quant_modules import *
+
 logging.use_absl_handler()

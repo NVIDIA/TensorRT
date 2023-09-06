@@ -367,11 +367,13 @@ size_t EfficientNMSPlugin::getWorkspaceSize(
     return EfficientNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
 }
 
-int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
         mParam.batchSize = inputDesc[0].dims.d[0];
 
         if (mParam.outputONNXIndices)

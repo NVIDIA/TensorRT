@@ -41,7 +41,7 @@ def main():
         description="ONNX GraphSurgeon",
         long_description=open("README.md", "r", encoding="utf-8").read(),
         license="Apache 2.0",
-        url="https://github.com/nvidia/tensorrt/tools/onnx-graphsurgeon",
+        url="https://github.com/NVIDIA/TensorRT/tree/main/tools/onnx-graphsurgeon",
         author="NVIDIA",
         author_email="svc_tensorrt@nvidia.com",
         classifiers=[

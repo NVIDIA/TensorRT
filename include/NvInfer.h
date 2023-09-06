@@ -634,9 +634,9 @@ public:
     }
 
     //!
-    //! \brief Set the computational precision of this layer
+    //! \brief Set the preferred or required computational precision of this layer in a weakly-typed network.
     //!
-    //! Setting the precision allows TensorRT to choose an implementation which run at this computational precision.
+    //! Setting the precision directs TensorRT to choose an implementation that runs at this computational precision.
     //! TensorRT could still choose a non-conforming fastest implementation that ignores the requested precision.
     //! To force choosing an implementation with the requested precision, set exactly one of the following flags,
     //! which differ in what happens if no such implementation exists:
@@ -651,6 +651,10 @@ public:
     //!
     //! For a IIdentityLayer: If it casts to/from float/half/int8/uint8, the precision must be one of those types,
     //! otherwise it must be either the input or output type.
+    //!
+    //! Strongly-typed networks reject calls to method setPrecision. In strongly-typed networks, the computation
+    //! precision is typically controlled by casting the input tensors to the desired type. The exception is
+    //! INormalizationLayer, which has a method setComputePrecision().
     //!
     //! \param dataType the computational precision.
     //!
@@ -696,12 +700,13 @@ public:
     }
 
     //!
-    //! \brief Set the output type of this layer
+    //! \brief Set the output type of this layer in a weakly-typed network.
     //!
     //! Setting the output type constrains TensorRT to choose implementations which generate output data with the
     //! given type. If it is not set, TensorRT will select output type based on layer computational precision. TensorRT
     //! could still choose non-conforming output type based on fastest implementation. To force choosing the requested
-    //! output type, set exactly one of the following flags, which differ in what happens if no such implementation exists:
+    //! output type, set exactly one of the following flags, which differ in what happens if no such implementation
+    //! exists:
     //!
     //! * BuilderFlag::kOBEY_PRECISION_CONSTRAINTS - build fails with an error message.
     //!
@@ -722,6 +727,14 @@ public:
     //! layer->getOutput(i)->setType(type) to change the tensor data type. This is particularly relevant if the tensor
     //! is marked as a network output, since only setType() [but not setOutputType()] will affect the data
     //! representation in the corresponding output binding.
+    //!
+    //! Strongly-typed networks reject calls to method setOutputType. Instead, the output type can be set
+    //! only for layers that define method setToType(). Those layers are:
+    //!
+    //! * ICastLayer
+    //! * IDequantizeLayer
+    //! * IFillLayer
+    //! * IQuantizeLayer
     //!
     //! \param index the index of the output to set
     //! \param dataType the type of the output
@@ -5418,13 +5431,13 @@ protected:
 //! Emit output
 //!
 //! Condition is a 0D boolean tensor (representing a scalar).
-//! trueSubgraph represents a network subgraph that is executed when condition is evaluated to True.
-//! falseSubgraph represents a network subgraph that is executed when condition is evaluated to False.
+//! trueSubgraph represents a network subgraph that is executed when condition evaluates to True.
+//! falseSubgraph represents a network subgraph that is executed when condition evaluates to False.
 //!
 //! The following constraints apply to If-conditionals:
 //! - Both the trueSubgraph and falseSubgraph must be defined.
 //! - The number of output tensors in both subgraphs is the same.
-//! - The type and shape of each output tensor from true/false subgraphs are the same.
+//! - Corresponding output tensors from the true/false subgraphs have the same type and shape.
 //!
 class IIfConditional : public INoCopy
 {
@@ -5500,7 +5513,6 @@ protected:
     virtual ~IIfConditional() noexcept = default;
     apiv::VIfConditional* mImpl;
 };
-
 
 class IRecurrenceLayer : public ILoopBoundaryLayer
 {
@@ -6092,9 +6104,10 @@ public:
     //!
     //! Set the output type of the fill layer. Valid values are DataType::kFLOAT, DataType::kINT32,
     //! and DataType::kINT64.
-    //! This is equivalent to using setOutputType on the layer outside of strongly typed mode.
-    //! In strongly typed mode, setOutputType cannot be used and setToType must be used instead.
-    //! The value toType must be consistent with the value set by any prior and subsequent setOutputType calls.
+    //! If the network is strongly typed, setToType must be used to set the output type, and use of setOutputType
+    //! is an error. Otherwise, types passed to setOutputType and setToType must be the same.
+    //!
+    //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
     //!
     void setToType(DataType toType) noexcept
     {
@@ -6143,13 +6156,16 @@ protected:
 //!
 //! The subgraph which terminates with the \p scale tensor must be a build-time constant.  The same restrictions apply
 //! to the \p zeroPt.
-//! The output type, if constrained, must be constrained to DataType::kINT8. The input type, if constrained, must be
-//! constrained to DataType::kFLOAT or DataType::kHALF.
-//! The output size is the same as the input size. The quantization axis is in reference to the input tensor's
-//! dimensions.
+//! The output type, if constrained, must be constrained to DataType::kINT8 or DataType::kFP8. The input type, if
+//! constrained, must be constrained to DataType::kFLOAT, DataType::kHALF, or DataType::kBF16. The output size is the
+//! same as the input size. The quantization axis is in reference to the input tensor's dimensions.
 //!
-//! IQuantizeLayer only supports DataType::kFLOAT precision and will default to this precision during instantiation.
-//! IQuantizeLayer only supports DataType::kINT8 output.
+//! IQuantizeLayer supports DataType::kFLOAT, DataType::kHALF, or DataType::kBF16 precision and will default to
+//! DataType::kFLOAT precision during instantiation. For strongly typed networks, \p input data type must be same as \p
+//! scale data type.
+//!
+//! IQuantizeLayer supports DataType::kINT8 or DataType::kFP8 output. For strongly typed networks, \p output data type
+//! is inferred from \p zeroPt data type.
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
@@ -6172,6 +6188,8 @@ protected:
 //! \note Currently the only allowed build-time constant \p scale and \p zeroPt subgraphs are:
 //! 1. Constant -> Quantize
 //! 2. Constant -> Cast -> Quantize
+//!
+//! \note The input tensor for this layer must not be a scalar.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -6208,9 +6226,10 @@ public:
     //! \param toType The DataType of the output tensor.
     //!
     //! Set the output type of the quantize layer. Valid values are DataType::kINT8 and DataType::kFP8.
-    //! This is equivalent to using setOutputType on the layer outside of strongly typed mode.
-    //! In strongly typed mode, setOutputType cannot be used and users must use setToType instead.
-    //! The value toType must be consistent with the value set by any prior setOutputType calls.
+    //! If the network is strongly typed, setToType must be used to set the output type, and use of setOutputType
+    //! is an error. Otherwise, types passed to setOutputType and setToType must be the same.
+    //!
+    //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
     //!
     void setToType(DataType toType) noexcept
     {
@@ -6218,7 +6237,7 @@ public:
     }
 
     //!
-    //! \brief Get the Quantize layer output type.
+    //! \brief Return the Quantize layer output type.
     //!
     //! \return toType parameter set during layer creation or by setToType().
     //! The return value is the output type of the quantize layer.
@@ -6256,12 +6275,15 @@ protected:
 //!
 //! The subgraph which terminates with the \p scale tensor must be a build-time constant.  The same restrictions apply
 //! to the \p zeroPt.
-//! The output type, if constrained, must be constrained to DataType::kFLOAT or DataType::kHALF. The input type, if
-//! constrained, must be constrained to DataType::kINT8. The output size is the same as the input size. The quantization
-//! axis is in reference to the input tensor's dimensions.
+//! The output type, if constrained, must be constrained to DataType::kFLOAT, DataType::kHALF, or DataType::kBF16. The
+//! input type, if constrained, must be constrained to DataType::kINT8 or DataType::kFP8. The output size is the same as
+//! the input size. The quantization axis is in reference to the input tensor's dimensions.
 //!
-//! IDequantizeLayer only supports DataType::kINT8 precision and will default to this precision during instantiation.
-//! IDequantizeLayer only supports DataType::kFLOAT or DataType::kHALF output.
+//! IDequantizeLayer supports DataType::kINT8 or DataType::kFP8 precision and will default to DataType::kINT8
+//! precision during instantiation. For strongly typed networks, \p input data type must be same as \p zeroPt data type.
+//!
+//! IDequantizeLayer supports DataType::kFLOAT, DataType::kHALF, or DataType::kBF16 output. For strongly typed
+//! networks, \p output data type is inferred from \p scale data type.
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
@@ -6285,6 +6307,8 @@ protected:
 //! \note Currently the only allowed build-time constant \p scale and \p zeroPt subgraphs are:
 //! 1. Constant -> Quantize
 //! 2. Constant -> Cast -> Quantize
+//!
+//! \note The input tensor for this layer must not be a scalar.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -6321,9 +6345,10 @@ public:
     //! \param toType The DataType of the output tensor.
     //!
     //! Set the output type of the dequantize layer. Valid values are DataType::kFLOAT and DataType::kHALF.
-    //! This is equivalent to using setOutputType on the layer outside of strongly typed mode.
-    //! In strongly typed mode, setOutputType cannot be used and users must use setToType instead.
-    //! The value toType must be consistent with the value set by any prior setOutputType calls.
+    //! If the network is strongly typed, setToType must be used to set the output type, and use of setOutputType
+    //! is an error. Otherwise, types passed to setOutputType and setToType must be the same.
+    //!
+    //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
     //!
     void setToType(DataType toType) noexcept
     {
@@ -6331,7 +6356,7 @@ public:
     }
 
     //!
-    //! \brief Return Dequantize layer output type.
+    //! \brief Return the Dequantize layer output type.
     //!
     //! \return toType parameter set during layer creation or by setToType().
     //! The return value is the output type of the quantize layer.
@@ -6486,7 +6511,7 @@ constexpr inline int32_t EnumMax<ScatterMode>() noexcept
 //!             for c in [0,n)
 //!                 for h in [0,n)
 //!                     for w in [0,n)
-//!                         output[n,c,indices[n,c,h,w],w] = updates[n,c,h,w]]
+//!                         output[n,c,indices[n,c,h,w],w] = updates[n,c,h,w]
 //!
 //! Writes to the same output element cause undefined behavior.
 //!
@@ -6831,7 +6856,7 @@ protected:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IReverseSequenceLayer: public ILayer
+class IReverseSequenceLayer : public ILayer
 {
 public:
     //!
@@ -6976,12 +7001,18 @@ public:
     //!
     //! \param type The datatype used for the compute precision of this layer.
     //!
-    //! By default TensorRT will run the normalization computation in DataType::kFLOAT32 even in mixed precision
-    //! mode regardless of any set builder flags to avoid overflow errors. To override this default,
-    //! use this function to set the desired compute precision.
+    //! By default, to avoid overflow errors, TensorRT will run the normalization computation in DataType::kFLOAT32
+    //! even in mixed precision mode regardless of builder flags. To override this default, use this method
+    //! to set the desired compute precision.
     //!
-    //! setPrecision() and setOutputPrecision() functions can still be called to control the input and output data types
-    //! to this layer.
+    //! For a weakly typed network:
+    //!
+    //! * Method setOutputType() can still be called to control the output data type.
+    //!
+    //! * Method setPrecision() can still be called. The input data is cast to that precision before
+    //!   being cast to the compute precision.
+    //!
+    //! Neither of these two methods are allowed for a strongly typed network.
     //!
     //! Only DataType::kFLOAT32 and DataType::kHALF are valid types for \p type.
     //!
@@ -7565,6 +7596,7 @@ public:
     //!
     //! \warning The bounds tensor cannot have the last dimension be the wildcard character.
     //! \warning Int32 tensors are not valid input tensors.
+    //! \warning The input and bounds tensors should be 2D tensors in implicit batch mode, 3D tensors otherwise.
     //!
     //! \return The new RaggedSoftMax layer, or nullptr if it could not be created.
     //!
@@ -8079,15 +8111,29 @@ public:
     //!
     //! An ILoop provides a way to specify a recurrent subgraph.
     //!
-    //! \return Pointer to ILoop that can be used to add loop boundary layers for the loop,
-    //!         or nullptr if network has an implicit batch dimension or this version
-    //!         of TensorRT does not support loops.
+    //! \return Pointer to ILoop that can be used to add loop-boundary layers for the loop,
+    //!         or nullptr if network has an implicit batch dimension.
     //!
-    //! The network must not have an implicit batch dimension.
+    //! \see ILoop
     //!
     ILoop* addLoop() noexcept
     {
         return mImpl->addLoop();
+    }
+
+    //!
+    //! \brief Add an if-then-else to the network.
+    //!
+    //! An IIfConditional provides a way to conditionally execute parts of the network.
+    //!
+    //! \return Pointer to the IIfConditional that can be used to add conditional-boundary layers
+    //!         for the if-then-else, or nullptr if network has an implicit batch dimension.
+    //!
+    //! \see IIfConditional
+    //!
+    IIfConditional* addIfConditional() noexcept
+    {
+        return mImpl->addIfConditional();
     }
 
     //! \brief Add a select layer to the network.
@@ -8376,21 +8422,6 @@ public:
         return mImpl->addQuantizeV2(input, scale, outputType);
     }
 
-    //!
-    //! \brief Add an If-conditional layer to the network.
-    //!
-    //! An IIfConditional provides a way to conditionally execute parts of the network.
-    //!
-    //! \see IIfConditional
-    //!
-    //! \return The new conditional layer, or nullptr if network has an implicit batch dimension
-    //!         or this version of TensorRT does not support conditional execution.
-    //!
-    IIfConditional* addIfConditional() noexcept
-    {
-        return mImpl->addIfConditional();
-    }
-
     //! \brief Add an Einsum layer to the network.
     //!
     //! \param inputs The input tensors to the layer.
@@ -8477,8 +8508,7 @@ public:
     //!
     //! \return The new normalization layer, or nullptr if it could not be created.
     //!
-    INormalizationLayer* addNormalization(
-        ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept
+    INormalizationLayer* addNormalization(ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept
     {
         return mImpl->addNormalization(input, scale, bias, axesMask);
     }
@@ -9120,6 +9150,12 @@ enum class BuilderFlag : int32_t
     //! Enable DataType::kBF16 layer selection, with FP32 fallback.
     //! This flag is only supported by NVIDIA Ampere and later GPUs.
     kBF16 = 19,
+
+    //! Disable caching of JIT-compilation results during engine build.
+    //! By default, JIT-compiled code will be serialized as part of the timing cache, which may significantly increase
+    //! the cache size. Setting this flag prevents the code from being serialized. This flag has an effect only when
+    //! BuilderFlag::DISABLE_TIMING_CACHE is not set.
+    kDISABLE_COMPILATION_CACHE = 20,
 };
 
 //!
@@ -9130,7 +9166,7 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 20;
+    return 21;
 }
 
 //!
@@ -9301,7 +9337,7 @@ enum class PreviewFeature : int32_t
 
     //!
     //! Allows optimization profiles to be shared across execution contexts.
-    //! This flag defaults to false and will become the default behavior in TensorRT 9.0.
+    //! This flag defaults to false and will become the default behavior in TensorRT 10.0.
     //! At that point this flag will do nothing.
     //!
     kPROFILE_SHARING_0806 = 2,
@@ -10119,6 +10155,19 @@ public:
     //! The default optimization level is 3. Valid values include integers from 0 to the maximum optimization level,
     //! which is currently 5. Setting it to greater than the maximum level results in behavior identical to the
     //! maximum level.
+    //!
+    //! Below are the descriptions about each builder optimization level:
+    //!
+    //! - Level 0: This enables the fastest compilation by disabling dynamic kernel generation and selecting the first
+    //!   tactic that succeeds in execution. This will also not respect a timing cache.
+    //! - Level 1: Available tactics are sorted by heuristics, but only the top are tested to select the best. If a
+    //!   dynamic kernel is generated its compile optimization is low.
+    //! - Level 2: Available tactics are sorted by heuristics, but only the fastest tactics are tested to select the
+    //!   best.
+    //! - Level 3: Apply heuristics to see if a static precompiled kernel is applicable or if a new one has to be
+    //!   compiled dynamically.
+    //! - Level 4: Always compiles a dynamic kernel.
+    //! - Level 5: Always compiles a dynamic kernel and compares it to static kernels.
     //!
     //! \param level The optimization level to set to. Must be non-negative.
     //!

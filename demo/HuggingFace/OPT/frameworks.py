@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
 from Seq2Seq.frameworks import Seq2SeqHF
 from OPT.OPTModelConfig import OPTModelTRTConfig
-from Seq2Seq.export import Seq2SeqModelClass
+from OPT.export import OPTModelClass
 
 class OPTHF(Seq2SeqHF):
     def __init__(
@@ -35,7 +35,7 @@ class OPTHF(Seq2SeqHF):
         description="Runs framework results for OPT model.",
         **kwargs
     ):
-        super().__init__(config_class, description, model_classes=Seq2SeqModelClass, **kwargs)
+        super().__init__(config_class, description, model_classes=OPTModelClass, **kwargs)
 
 # Entry point
 RUN_CMD = OPTHF()

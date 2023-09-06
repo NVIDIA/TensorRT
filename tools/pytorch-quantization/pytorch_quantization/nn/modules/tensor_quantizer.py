@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-
 """TensorQuantizer Module"""
 import math
 from absl import logging
@@ -23,7 +21,7 @@ from absl import logging
 import torch
 from torch import nn
 
-from pytorch_quantization.tensor_quant import QuantDescriptor, tensor_quant, fake_tensor_quant
+from pytorch_quantization.tensor_quant import QuantDescriptor, tensor_quant, fake_tensor_quant, scaled_e4m3
 from pytorch_quantization.nn.modules.clip import Clip
 
 from pytorch_quantization import calib
@@ -31,6 +29,7 @@ from pytorch_quantization import calib
 import pytorch_quantization.utils as quant_utils
 
 __all__ = ['TensorQuantizer']
+
 
 class TensorQuantizer(nn.Module):
     """Tensor quantizer module
@@ -64,9 +63,7 @@ class TensorQuantizer(nn.Module):
         - amax:
     """
 
-    # An experimental static switch for using pytorch's native fake quantization
-    # Primary usage is to export to ONNX
-    use_fb_fake_quant = False
+    _enable_onnx_export = False
 
     def __init__(self, quant_desc=QuantDescriptor(), disabled=False, if_quant=True, if_clip=False, if_calib=False):
         """Initialize quantizer and set up required variables"""
@@ -100,8 +97,9 @@ class TensorQuantizer(nn.Module):
 
         if quant_desc.calib_method == "histogram":
             logging.info("Creating histogram calibrator")
-            self._calibrator = calib.HistogramCalibrator(
-                num_bits=self._num_bits, axis=self._axis, unsigned=self._unsigned)
+            self._calibrator = calib.HistogramCalibrator(num_bits=self._num_bits,
+                                                         axis=self._axis,
+                                                         unsigned=self._unsigned)
         elif quant_desc.calib_method == "max":
             logging.info("Creating Max calibrator")
             self._calibrator = calib.MaxCalibrator(num_bits=self._num_bits, axis=self._axis, unsigned=self._unsigned)
@@ -110,6 +108,12 @@ class TensorQuantizer(nn.Module):
     @property
     def num_bits(self):
         return self._num_bits
+
+    @property
+    def maxbound(self):
+        if self._num_bits == (4, 3):
+            return 448.0
+        return (1 << (self._num_bits - 1 + int(self._unsigned))) - 1
 
     @property
     def unsigned(self):
@@ -122,6 +126,12 @@ class TensorQuantizer(nn.Module):
         if self._scale is None:
             logging.critical("Accessing scale before quantizing any tensor!")
         return self._scale
+
+    @property
+    def pre_quant_scale(self):
+        if not hasattr(self, "_pre_quant_scale"):
+            return None
+        return self._pre_quant_scale
 
     @property
     def amax(self):
@@ -200,8 +210,21 @@ class TensorQuantizer(nn.Module):
             else:
                 value = torch.tensor(value, device=self._amax.device)
                 if self._amax.shape != value.shape:
-                    raise TypeError("Changing shape when setting amax is not allowed.")
+                    raise RuntimeError("Changing shape when setting amax is not allowed.")
                 self._amax.data.copy_(value.data)
+
+    @pre_quant_scale.setter
+    def pre_quant_scale(self, value):
+        if value is None:
+            logging.error("Setting pre_quant_scale no None is meaningless.")
+        else:
+            if not hasattr(self, "_pre_quant_scale"):
+                self.register_buffer('_pre_quant_scale', torch.tensor(value))
+            else:
+                value = torch.tensor(value, device=self._pre_quant_scale.device)
+                if self._pre_quant_scale.shape != value.shape:
+                    raise RuntimeError("Changing shape when setting pre_quant_scale is not allowed.")
+                self._pre_quant_scale.data.copy_(value.data)
 
     @num_bits.setter
     def num_bits(self, value):
@@ -236,10 +259,9 @@ class TensorQuantizer(nn.Module):
             else:
                 raise RuntimeError(err_msg + " Passing 'strict=False' to `load_calib_amax()` will ignore the error.")
         logging.warning("Load calibrated amax, shape={}.".format(calib_amax.shape))
-        logging.log_first_n(
-            logging.WARNING, "Call .cuda() if running on GPU after loading calibrated amax.", 1)
+        logging.log_first_n(logging.WARNING, "Call .cuda() if running on GPU after loading calibrated amax.", 1)
         if not hasattr(self, '_amax'):
-            self.register_buffer('_amax', calib_amax.data)
+            self.register_buffer("_amax", calib_amax.data)
         else:
             self._amax.copy_(calib_amax)
 
@@ -274,28 +296,13 @@ class TensorQuantizer(nn.Module):
         if self._scale_amax is not None:
             amax = amax.detach() * self._scale_amax
 
+        amax = amax.data
+
+        # cast amax to float32 if it is in a lower precision dtype
+        if amax.dtype not in (torch.double, torch.float):
+            amax = amax.float()
+
         return amax
-
-    def _fb_fake_quant(self, inputs, amax):
-        """Native pytorch fake quantization."""
-        logging.log_first_n(logging.WARNING, "Use Pytorch's native experimental fake quantization.", 1)
-        bound = (1 << (self._num_bits - 1 + int(self._unsigned))) - 1
-        # To be consistent with ONNX, full range is used. e.g. range is [-128, 127] in int8
-        if amax.numel() == 1:
-            outputs = torch.fake_quantize_per_tensor_affine(
-                inputs, amax.item() / bound, 0,
-                -bound - 1 if not self._unsigned else 0, bound)
-        else:
-            amax_sequeeze = amax.squeeze().detach()
-            if len(amax_sequeeze.shape) != 1:
-                raise TypeError("Pytorch's native quantization doesn't support multiple axes")
-            quant_dim = list(amax.shape).index(list(amax_sequeeze.shape)[0])
-            scale = amax_sequeeze / bound
-            outputs = torch.fake_quantize_per_channel_affine(
-                inputs, scale.data, torch.zeros_like(scale, dtype=torch.int32).data, quant_dim,
-                -bound - 1 if not self._unsigned else 0, bound)
-
-        return outputs
 
     def _quant_forward(self, inputs):
         """Quantized forward pass."""
@@ -306,16 +313,30 @@ class TensorQuantizer(nn.Module):
             amax = self._get_amax(inputs)
 
         if self._fake_quant:
-            if not TensorQuantizer.use_fb_fake_quant:
-                outputs = fake_tensor_quant(inputs, amax, self._num_bits, self._unsigned, self._narrow_range)
-            else:
-                if inputs.dtype == torch.half or amax.dtype == torch.half:
-                    raise Exception("Exporting to ONNX in fp16 is not supported. Please export in fp32, i.e. disable AMP.")
-                outputs = self._fb_fake_quant(inputs, amax)
+            outputs = fake_tensor_quant(inputs, amax, self._num_bits, self._unsigned, self._narrow_range)
         else:
             outputs, self._scale = tensor_quant(inputs, amax, self._num_bits, self._unsigned)
 
         return outputs
+
+    def _check_onnx_readiness(self, inputs):
+        """Check if quantizer is ready for ONNX export."""
+
+        assert hasattr(
+            self, '_amax'), ("Quantizer has not been calibrated. ONNX export requires the quantizer to be calibrated."
+                             "Calibrate and load amax before exporting to ONNX.")
+
+        if self._if_calib:
+            logging.warning("Quantizer is in calibration mode. "
+                            "Please complete calibration before exporting to ONNX for correct results.")
+
+        amax = self._get_amax(inputs)
+
+        # We only support scalar amax for E4M3 ONNX export
+        if isinstance(self.num_bits, tuple):
+            assert amax.numel() == 1, ("E4M3 supports ONNX export only for per-tensor quantization."
+                                       " Per-tensor quantization requires scalar amax. "
+                                       f"Received non-scalar amax of shape: {amax.shape}")
 
     def forward(self, inputs):
         """Apply tensor_quant function to inputs
@@ -326,6 +347,14 @@ class TensorQuantizer(nn.Module):
         Returns:
             outputs: A Tensor of type output_dtype
         """
+
+        if self._enable_onnx_export:
+            self._check_onnx_readiness(inputs)
+
+        # Activation scaling for smoothquant
+        if self.pre_quant_scale is not None:
+            inputs = inputs * self.pre_quant_scale
+
         if self._disabled:
             return inputs
 
@@ -334,7 +363,7 @@ class TensorQuantizer(nn.Module):
         if self._if_calib:
             if self._calibrator is None:
                 raise RuntimeError("Calibrator was not created.")
-            # Shape is only know when it sees the first tensor
+            # Shape is only known when it sees the first tensor
             self._calibrator.collect(inputs)
 
         if self._if_clip:
@@ -343,7 +372,11 @@ class TensorQuantizer(nn.Module):
             outputs = self.clip(inputs)
 
         if self._if_quant:
-            outputs = self._quant_forward(inputs)
+            if not isinstance(self._num_bits, tuple):
+                outputs = self._quant_forward(inputs)
+            else:
+                E, M = self._num_bits
+                outputs = scaled_e4m3(inputs, self._get_amax(inputs), E, M)
 
         return outputs
 
@@ -357,10 +390,14 @@ class TensorQuantizer(nn.Module):
         """
         if not hasattr(self, '_amax'):
             return 'dynamic'
+        if self._amax is None:
+            return "None"
         if self._amax.numel() == 1:
             return '{:{fmt}}'.format(self._amax.item(), fmt=fmt)
-        return '[{:{fmt}}, {:{fmt}}]({})'.format(self._amax.min().item(), self._amax.max().item(),
-                                                 self._amax.numel(), fmt=fmt)
+        return '[{:{fmt}}, {:{fmt}}]({})'.format(self._amax.min().item(),
+                                                 self._amax.max().item(),
+                                                 self._amax.numel(),
+                                                 fmt=fmt)
 
     def extra_repr(self):
         if self._disabled:
@@ -371,6 +408,7 @@ class TensorQuantizer(nn.Module):
         s += " axis={}".format(self._axis) if self._axis is not None else " per-tensor"
         s += " amax={}".format(self._short_amax())
         s += " *{}".format(self._scale_amax) if self._scale_amax else ""
+        s += " pre_quant_scale" if self.pre_quant_scale is not None else ""
         s += " learned" if (self._learn_amax) else ""
         s += " calibrator={}".format(self._calibrator.__class__.__name__) if (self._calibrator is not None) else ""
         s += " scale={}".format(self._scale) if self._scale is not None else ""
@@ -401,5 +439,18 @@ class TensorQuantizer(nn.Module):
             self.register_buffer("_amax", state_dict[prefix + '_amax'].data.cuda())
         elif src_has_amax and dst_has_amax:
             logging.warning("{}: Overwriting amax.".format(prefix[:-1]))
+
+        dst_has_pre_quant_scale = '_pre_quant_scale' in self._buffers
+        src_has_pre_quant_scale = prefix + '_pre_quant_scale' in state_dict
+
+        if not src_has_pre_quant_scale and dst_has_pre_quant_scale:
+            logging.error("{}: No pre_quant_scale in state_dict.".format(prefix[:-1]))
+        elif src_has_pre_quant_scale and not dst_has_pre_quant_scale:
+            logging.debug(("{}: No '_pre_quant_scale' buffer to load pre_quant_scale into."
+                           " '_pre_quant_scale` will be created as WAR for now. "
+                           "This behavior will change in future.").format(prefix[:-1]))
+            self.register_buffer("_pre_quant_scale", state_dict[prefix + '_pre_quant_scale'].data.cuda())
+        elif src_has_pre_quant_scale and dst_has_pre_quant_scale:
+            logging.warning("{}: Overwriting pre_quant_scale.".format(prefix[:-1]))
 
         super(TensorQuantizer, self)._load_from_state_dict(state_dict, prefix, *args, **kwargs)

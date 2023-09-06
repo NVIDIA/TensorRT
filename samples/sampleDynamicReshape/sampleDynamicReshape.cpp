@@ -86,6 +86,8 @@ private:
     nvinfer1::Dims mPredictionInputDims;  //!< The dimensions of the input of the MNIST model.
     nvinfer1::Dims mPredictionOutputDims; //!< The dimensions of the output of the MNIST model.
 
+    SampleUniquePtr<nvinfer1::IRuntime> mRuntime{nullptr};
+
     // Engine plan files used for inference. One for resizing inputs, another for prediction.
     SampleUniquePtr<nvinfer1::ICudaEngine> mPreprocessorEngine{nullptr}, mPredictionEngine{nullptr};
 
@@ -121,8 +123,8 @@ bool SampleDynamicReshape::build()
         return false;
     }
 
-    auto runtime = makeUnique(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
-    if (!runtime)
+    mRuntime = makeUnique(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
+    if (!mRuntime)
     {
         sample::gLogError << "Runtime object creation failed." << std::endl;
         return false;
@@ -139,8 +141,8 @@ bool SampleDynamicReshape::build()
             return false;
         }
 
-        bool result = buildPredictionEngine(builder, runtime, *profileStream)
-            && buildPreprocessorEngine(builder, runtime, *profileStream);
+        bool result = buildPredictionEngine(builder, mRuntime, *profileStream)
+            && buildPreprocessorEngine(builder, mRuntime, *profileStream);
         return result;
     }
     catch (std::runtime_error& e)

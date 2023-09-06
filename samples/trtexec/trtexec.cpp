@@ -302,7 +302,7 @@ int main(int argc, char** argv)
         }
         else if (!options.system.plugins.empty())
         {
-            throw std::runtime_error("Plugins require --useRuntime=full.");
+            throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
         }
 
         if (options.build.safe && !sample::hasSafeRuntime())

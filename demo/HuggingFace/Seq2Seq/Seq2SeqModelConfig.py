@@ -90,6 +90,9 @@ class Seq2SeqModelTRTConfig(NNConfig):
         # Use this flag to load torch model if and only if benchmarking seqlen > model n_positions
         self.ignore_mismatched_sizes = False
 
+        # Use this flag to control whether there are vision encoder outputs (named as image_embeds) consumed as inputs
+        self.consume_image_embeds = False
+
         super().__init__(network_name, variants=variants)
 
     def from_hf_config(self, hf_config, model_max_len = None):

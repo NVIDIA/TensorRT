@@ -133,9 +133,9 @@ extern unsigned char cubin_fmha_v1_int8_64_64_sm80_cu_cubin[];
 extern unsigned char cubin_fmha_v1_int8_96_64_sm80_cu_cubin[];
 #endif // defined(ENABLE_SM80) || defined(SM86) || defined(ENABLE_SM89)
 
-#if defined(ENABLE_SM86)
+#if defined(ENABLE_SM86) || defined(ENABLE_SM89)
 extern unsigned char fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o[];
-#endif // defined(ENABLE_SM86)
+#endif // defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
 #if defined(ENABLE_SM87)
 extern unsigned char cubin_fmha_v1_int8_384_64_sm87_cu_cubin[];
@@ -177,9 +177,9 @@ extern uint32_t cubin_fmha_v1_int8_64_64_sm80_cu_cubin_len;
 extern uint32_t cubin_fmha_v1_int8_96_64_sm80_cu_cubin_len;
 #endif // defined(ENABLE_SM80) || defined(SM86) || defined(ENABLE_SM89)
 
-#if defined(ENABLE_SM86)
+#if defined(ENABLE_SM86) || defined(ENABLE_SM89)
 extern uint32_t fused_multihead_attention_fp16_384_64_kernel_sm86_cu_o_len;
-#endif // defined(ENABLE_SM86)
+#endif // defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
 #if defined(ENABLE_SM87)
 extern uint32_t cubin_fmha_v1_int8_384_64_sm87_cu_cubin_len;
@@ -203,6 +203,8 @@ extern uint32_t cubin_fmha_v1_fp16_64_64_sm90_cu_cubin_len;
 
 #if !(defined(ENABLE_SM72) || defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86)                     \
     || defined(ENABLE_SM87) || defined(ENABLE_SM89) || defined(ENABLE_SM90))
+// TRT-17573: Remove SM72 support from this file by factoring out the common logic required by the
+// V2 headers into a separate header.
 #error This file can only be included one of sm 72, 75, 80, 86, 87, 89, or 90 are defined.
 #endif
 static const struct FusedMultiHeadAttentionKernelMetaInfoV1
@@ -263,7 +265,7 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
         fused_multihead_attention_int8_384_64_kernel_sm80_cu_o_len, "fused_multihead_attention_int8_384_64_kernel_sm80",
         57344, 256},
 #endif // defined(ENABLE_SM80) || defined(SM86) || defined(ENABLE_SM89)
-#if defined(ENABLE_SM86)
+#if defined(ENABLE_SM86) || defined(ENABLE_SM89)
     // GA10x
     // Note: For GA10X keep only kernels whose sharedMemBytes < 100KiB
     {DATA_TYPE_FP16, 64, 64, kSM_86, fused_multihead_attention_fp16_64_64_kernel_sm80_cu_o,
@@ -284,7 +286,7 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     {DATA_TYPE_INT8, 384, 64, kSM_86, fused_multihead_attention_int8_384_64_kernel_sm80_cu_o,
         fused_multihead_attention_int8_384_64_kernel_sm80_cu_o_len, "fused_multihead_attention_int8_384_64_kernel_sm80",
         57344, 256},
-#endif // defined(ENABLE_SM86)
+#endif // defined(ENABLE_SM86) || defined(ENABLE_SM89)
 #if defined(ENABLE_SM87)
     // GA10b (Orin-Auto)
     {DATA_TYPE_INT8, 384, 64, kSM_87, cubin_fmha_v1_int8_384_64_sm87_cu_cubin,
@@ -416,9 +418,15 @@ public:
 
         // sm_86 chips prefer sm_86 sass, but can also use sm_80 sass if sm_86 not exist.
         // sm_87 cannot run sm_80 sass
-        // sm_89 will reuse sm_80 kernels
-        if (mSM == kSM_86 || mSM == kSM_89)
+        if (mSM == kSM_86)
         {
+            loadXMMAKernels(kSM_80);
+        }
+
+        // sm_89 will reuse sm_80 and sm_86 kernels
+        if (mSM == kSM_89)
+        {
+            loadXMMAKernels(kSM_86);
             loadXMMAKernels(kSM_80);
         }
     }
@@ -453,6 +461,9 @@ public:
 #endif
 #if defined(ENABLE_SM87)
                << "87 "
+#endif
+#if defined(ENABLE_SM89)
+               << "89 "
 #endif
 #if defined(ENABLE_SM90)
                << "90 "

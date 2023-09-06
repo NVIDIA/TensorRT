@@ -55,7 +55,7 @@ setup(
     ],
     packages=[module_name],
     install_requires=get_requirements(),
-    package_data={module_name: ["*.so*", "*.pyd", "*.pdb"]},
+    package_data={module_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

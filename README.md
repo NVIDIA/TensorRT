@@ -1,7 +1,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Documentation](https://img.shields.io/badge/TensorRT-documentation-brightgreen.svg)](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html)
 
 # TensorRT Open Source Software
-This repository contains the Open Source Software (OSS) components of NVIDIA TensorRT. It includes the sources for TensorRT plugins and ONNX parser, as well as sample applications demonstrating usage and capabilities of the TensorRT platform. These open source software components are a subset of the TensorRT General Availability (EA) release with some extensions and bug-fixes.
+This repository contains the Open Source Software (OSS) components of NVIDIA TensorRT. It includes the sources for TensorRT plugins and ONNX parser, as well as sample applications demonstrating usage and capabilities of the TensorRT platform. These open source software components are a subset of the TensorRT General Availability (GA) release with some extensions and bug-fixes.
 
 * For code contributions to TensorRT-OSS, please see our [Contribution Guide](CONTRIBUTING.md) and [Coding Guidelines](CODING-GUIDELINES.md).
 * For a summary of new additions and updates shipped with TensorRT-OSS releases, please refer to the [Changelog](CHANGELOG.md).
@@ -25,13 +25,14 @@ You can skip the **Build** section to enjoy TensorRT with Python.
 ## Prerequisites
 To build the TensorRT-OSS components, you will first need the following software packages.
 
-**TensorRT EA build**
-* [TensorRT](https://pypi.org/project/tensorrt-libs/) v9.0.0
+**TensorRT GA build**
+* TensorRT v9.0.1.4
+  * Available from direct download links listed below
 
 **System Packages**
 * [CUDA](https://developer.nvidia.com/cuda-toolkit)
   * Recommended versions:
-  * cuda-12.1.1 + cuDNN-8.9
+  * cuda-12.2.0 + cuDNN-8.9
   * cuda-11.8.0 + cuDNN-8.9
 * [GNU make](https://ftp.gnu.org/gnu/make/) >= v4.1
 * [cmake](https://github.com/Kitware/CMake/releases) >= v3.13
@@ -71,15 +72,17 @@ To build the TensorRT-OSS components, you will first need the following software
 
     If using the TensorRT OSS build container, TensorRT libraries are preinstalled under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
 
-    Else download and extract the TensorRT EA build from [PyPI](https://pypi.org/project/tensorrt-libs/).
+    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
+      - [TensorRT 9.0.1.4 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-11.8.tar.gz)
+      - [TensorRT 9.0.1.4 for CUDA 12.2, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-12.2.tar.gz)
 
-    **Example: Ubuntu 20.04 on x86-64 with cuda-12.1**
+
+    **Example: Ubuntu 20.04 on x86-64 with cuda-12.2**
 
     ```bash
     cd ~/Downloads
-    wget https://pypi.nvidia.com/tensorrt-libs/tensorrt_libs-9.0.0.post12.dev1-py2.py3-none-manylinux_2_17_x86_64.whl
-    unzip tensorrt_libs-9.0.0.post12.dev1-py2.py3-none-manylinux_2_17_x86_64.whl
-    export TRT_LIBPATH=`pwd`/tensorrt_libs
+    tar -xvzf tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-12.2.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-9.0.1.4
     ```
 
 ## Setting Up The Build Environment
@@ -89,9 +92,9 @@ For Linux platforms, we recommend that you generate a docker container for build
 1. #### Generate the TensorRT-OSS build container.
     The TensorRT-OSS build container can be generated using the supplied Dockerfiles and build scripts. The build containers are configured for building TensorRT OSS out-of-the-box.
 
-    **Example: Ubuntu 20.04 on x86-64 with cuda-12.1 (default)**
+    **Example: Ubuntu 20.04 on x86-64 with cuda-12.2 (default)**
     ```bash
-    ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda12.1
+    ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda12.2
     ```
     **Example: CentOS/RedHat 7 on x86-64 with cuda-11.8**
     ```bash
@@ -101,7 +104,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 2. #### Launch the TensorRT-OSS build container.
     **Example: Ubuntu 20.04 build container**
 	```bash
-	./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda12.1 --gpus all
+	./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda12.2 --gpus all
 	```
 	> NOTE:
   <br> 1. Use the `--tag` corresponding to build container generated in Step 1.
@@ -112,7 +115,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 ## Building TensorRT-OSS
 * Generate Makefiles and build.
 
-    **Example: Linux (x86-64) build with default cuda-12.1**
+    **Example: Linux (x86-64) build with default cuda-12.2**
 	```bash
 	cd $TRT_OSSPATH
 	mkdir -p build && cd build
@@ -129,7 +132,7 @@ For Linux platforms, we recommend that you generate a docker container for build
     ```
 
 	> NOTE:
-	<br> 1. The default CUDA version used by CMake is 12.1.1. To override this, for example to 11.8, append `-DCUDA_VERSION=11.8` to the cmake command.
+	<br> 1. The default CUDA version used by CMake is 12.2.0. To override this, for example to 11.8, append `-DCUDA_VERSION=11.8` to the cmake command.
 	<br> 2. If samples fail to link on CentOS7, create this symbolic link: `ln -s $TRT_OUT_DIR/libnvinfer_plugin.so $TRT_OUT_DIR/libnvinfer_plugin.so.8`
 * Required CMake build arguments are:
 	- `TRT_LIB_DIR`: Path to the TensorRT installation directory containing libraries.

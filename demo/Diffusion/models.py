@@ -15,21 +15,26 @@
 # limitations under the License.
 #
 
-from collections import OrderedDict
-from copy import deepcopy
-from cuda import cudart
-from diffusers.models import AutoencoderKL, UNet2DConditionModel, ControlNetModel
-import numpy as np
-import onnx
-from onnx import shape_inference
-import onnx_graphsurgeon as gs
 import os
-from polygraphy.backend.onnx.loader import fold_constants
-import shutil
 import tempfile
+
+import onnx
+import onnx_graphsurgeon as gs
 import torch
 import torch.nn.functional as F
-from transformers import CLIPTextModel, CLIPTextModelWithProjection, CLIPTokenizer
+from diffusers.models import (
+    AutoencoderKL,
+    ControlNetModel,
+    UNet2DConditionModel
+)
+from onnx import shape_inference
+from polygraphy.backend.onnx.loader import fold_constants
+from transformers import (
+    CLIPTextModel,
+    CLIPTextModelWithProjection,
+    CLIPTokenizer
+)
+
 
 class Optimizer():
     def __init__(
@@ -175,6 +180,70 @@ def get_unet_embedding_dim(version, pipeline):
     else:
         raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
 
+def fuse_lora_weights(model, lora_weights, lora_scale):
+    if not lora_weights or lora_weights == "":
+        return
+
+    # add lora
+    saved_attn_processors = model.attn_processors
+    model.load_attn_procs(lora_weights)
+    
+    # grab all lora weights
+    lora_dict = {}
+    sd = model.state_dict()
+    for key in sd.keys():
+        if "lora" in key:
+            assert "transformer_blocks" in key
+            attn_processor_key, sub_key = ".".join(key.split(".")[:-4]), ".".join(key.split(".")[-4:])
+            if attn_processor_key not in lora_dict:
+                lora_dict[attn_processor_key] = []
+            lora_dict[attn_processor_key].append(sub_key)
+    # grab original weights that apply lora.
+    for key in sd.keys():
+        # only replace mha lora
+        if "transformer_blocks" in key and key.endswith("weight"):
+            attn_processor_key, sub_key = ".".join(key.split(".")[:-2]), ".".join(key.split(".")[-2:])
+            if attn_processor_key in lora_dict:
+                lora_dict[attn_processor_key].append(sub_key)
+            else:
+                attn_processor_key, sub_key = ".".join(key.split(".")[:-3]), ".".join(key.split(".")[-3:])
+                if attn_processor_key in lora_dict:
+                    lora_dict[attn_processor_key].append(sub_key)
+    assert len(lora_dict) > 0
+
+    # merge weights
+    for key in lora_dict.keys():
+        # we have 3 weights (original, down and up) x 4 tensors (q, k, v and out) in each mha
+        assert len(lora_dict[key]) == 12
+        for subkey in lora_dict[key]:
+            if not "lora" in subkey:
+                original_name = "{}.{}".format(key, subkey)
+                lora_down_name = "{}.processor.{}_lora.down.weight".format(key, subkey.split(".")[0])
+                lora_up_name = "{}.processor.{}_lora.up.weight".format(key, subkey.split(".")[0])
+
+                original_tensor = sd[original_name]
+                lora_down_tensor = sd[lora_down_name]
+                lora_up_tensor = sd[lora_up_name]
+                new_tensor = original_tensor + lora_scale * torch.matmul(lora_up_tensor, lora_down_tensor)
+                sd[original_name] = new_tensor 
+    model.load_state_dict(sd)
+    print(f"[I] Fused {len(lora_dict)} LoRA weights into model.")
+
+    model.set_attn_processor(saved_attn_processors)
+
+
+# FIXME after serialization support for torch.compile is added
+def get_checkpoint_dir(framework_model_dir, version, pipeline, subfolder, torch_inference):
+    return os.path.join(framework_model_dir, version, pipeline, subfolder)
+
+torch_inference_modes = ['default', 'reduce-overhead', 'max-autotune']
+# FIXME update callsites after serialization support for torch.compile is added
+def optimize_checkpoint(model, torch_inference):
+    if not torch_inference or torch_inference == 'eager':
+        return model
+    assert torch_inference in torch_inference_modes
+    return torch.compile(model, mode=torch_inference, dynamic=False, fullgraph=False)
+
 class BaseModel():
     def __init__(self,
         version='1.5',
@@ -211,7 +280,7 @@ class BaseModel():
         self.embedding_dim = embedding_dim
         self.extra_output_names = []
 
-    def get_model(self, framework_model_dir):
+    def get_model(self, framework_model_dir, torch_inference=''):
         pass
 
     def get_input_names(self):
@@ -288,8 +357,8 @@ class CLIP(BaseModel):
         if output_hidden_states:
             self.extra_output_names = ['hidden_states']
 
-    def get_model(self, framework_model_dir):
-        clip_model_dir = os.path.join(framework_model_dir, self.version, self.pipeline, "text_encoder")
+    def get_model(self, framework_model_dir, torch_inference=''):
+        clip_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(clip_model_dir):
             model = CLIPTextModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
@@ -299,6 +368,7 @@ class CLIP(BaseModel):
         else:
             print(f"[I] Load CLIP pytorch model from: {clip_model_dir}")
             model = CLIPTextModel.from_pretrained(clip_model_dir).to(self.device)
+        model = optimize_checkpoint(model, torch_inference)
         return model
 
     def get_input_names(self):
@@ -371,8 +441,8 @@ class CLIPWithProj(CLIP):
         super(CLIPWithProj, self).__init__(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size, embedding_dim=get_clipwithproj_embedding_dim(version, pipeline), output_hidden_states=output_hidden_states)
         self.subfolder = subfolder
 
-    def get_model(self, framework_model_dir):
-        clip_model_dir = os.path.join(framework_model_dir, self.version, self.pipeline, "text_encoder_2")
+    def get_model(self, framework_model_dir, torch_inference=''):
+        clip_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(clip_model_dir):
             model = CLIPTextModelWithProjection.from_pretrained(self.path,
                 subfolder=self.subfolder,
@@ -382,6 +452,7 @@ class CLIPWithProj(CLIP):
         else:
             print(f"[I] Load CLIP pytorch model from: {clip_model_dir}")
             model = CLIPTextModelWithProjection.from_pretrained(clip_model_dir).to(self.device)
+        model = optimize_checkpoint(model, torch_inference)
         return model
 
     def get_shape_dict(self, batch_size, image_height, image_width):
@@ -450,31 +521,40 @@ class UNet(BaseModel):
         max_batch_size=16,
         text_maxlen=77,
         unet_dim=4,
-        controlnet=None
+        controlnet=None,
+        lora_weights=None,
+        lora_scale=1,
     ):
 
         super(UNet, self).__init__(version, pipeline, hf_token, fp16=fp16, device=device, verbose=verbose, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
+        self.subfolder = 'unet'
         self.unet_dim = unet_dim
         self.controlnet = controlnet
+        self.lora_weights=lora_weights
+        self.lora_scale=lora_scale
 
-    def get_model(self, framework_model_dir):
+    def get_model(self, framework_model_dir, torch_inference=''):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
         if self.controlnet:
             unet_model = UNet2DConditionModel.from_pretrained(self.path,
-                subfolder="unet",
+                subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 use_auth_token=self.hf_token,
                 **model_opts).to(self.device)
+            # Use default attention processor for ONNX export
+            if not torch_inference:
+                unet_model.set_default_attn_processor()
+            fuse_lora_weights(unet_model, self.lora_weights, self.lora_scale)
 
             cnet_model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
             controlnets = torch.nn.ModuleList([ControlNetModel.from_pretrained(path, **cnet_model_opts).to(self.device) for path in self.controlnet])
             # FIXME - cache UNet2DConditionControlNetModel
             model = UNet2DConditionControlNetModel(unet_model, controlnets)
         else:
-            unet_model_dir = os.path.join(framework_model_dir, self.version, self.pipeline, "unet")
+            unet_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
             if not os.path.exists(unet_model_dir):
                 model = UNet2DConditionModel.from_pretrained(self.path,
-                    subfolder="unet",
+                    subfolder=self.subfolder,
                     use_safetensors=self.hf_safetensor,
                     use_auth_token=self.hf_token,
                     **model_opts).to(self.device)
@@ -482,6 +562,10 @@ class UNet(BaseModel):
             else:
                 print(f"[I] Load UNet pytorch model from: {unet_model_dir}")
                 model = UNet2DConditionModel.from_pretrained(unet_model_dir).to(self.device)
+            if torch_inference:
+                model.to(memory_format=torch.channels_last)
+            fuse_lora_weights(model, self.lora_weights, self.lora_scale)
+        model = optimize_checkpoint(model, torch_inference)
         return model
 
     def get_input_names(self):
@@ -565,14 +649,11 @@ class UNet(BaseModel):
                 torch.randn(len(self.controlnet), dtype=dtype, device=self.device)
             )
 
-def make_UNet(version, pipeline, hf_token, device, verbose, max_batch_size, controlnet=None):
-    # Disable torch SDPA
-    if hasattr(F, "scaled_dot_product_attention"):
-        delattr(F, "scaled_dot_product_attention")
-
+def make_UNet(version, pipeline, hf_token, device, verbose, max_batch_size, controlnet=None, lora_weights=None, lora_scale=1):
     return UNet(version, pipeline, hf_token, fp16=True, device=device, verbose=verbose,
             max_batch_size=max_batch_size, unet_dim=(9 if pipeline.is_inpaint() else 4),
-            controlnet=get_controlnets_path(controlnet))
+            controlnet=get_controlnets_path(controlnet), lora_weights=lora_weights,
+            lora_scale=lora_scale)
 
 class UNetXL(BaseModel):
     def __init__(self,
@@ -585,25 +666,35 @@ class UNetXL(BaseModel):
         max_batch_size=16,
         text_maxlen=77,
         unet_dim=4,
-        time_dim=6
+        time_dim=6,
+        lora_weights=None,
+        lora_scale=1,
     ):
         super(UNetXL, self).__init__(version, pipeline, hf_token, fp16=fp16, device=device, verbose=verbose, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
+        self.subfolder = 'unet'
         self.unet_dim = unet_dim
         self.time_dim = time_dim
+        self.lora_weights=lora_weights
+        self.lora_scale=lora_scale
 
-    def get_model(self, framework_model_dir):
+    def get_model(self, framework_model_dir, torch_inference=''):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
-        unet_model_dir = os.path.join(framework_model_dir, self.version, self.pipeline, "unet")
+        unet_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(unet_model_dir):
             model = UNet2DConditionModel.from_pretrained(self.path,
-                subfolder="unet",
+                subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 use_auth_token=self.hf_token,
                 **model_opts).to(self.device)
+            # Use default attention processor for ONNX export
+            if not torch_inference:
+                model.set_default_attn_processor()
             model.save_pretrained(unet_model_dir)
         else:
             print(f"[I] Load UNet pytorch model from: {unet_model_dir}")
             model = UNet2DConditionModel.from_pretrained(unet_model_dir).to(self.device)
+        fuse_lora_weights(model, self.lora_weights, self.lora_scale)
+        model = optimize_checkpoint(model, torch_inference)
         return model
 
     def get_input_names(self):
@@ -657,12 +748,10 @@ class UNetXL(BaseModel):
             }
         )
 
-def make_UNetXL(version, pipeline, hf_token, device, verbose, max_batch_size):
-    # Disable torch SDPA
-    if hasattr(F, "scaled_dot_product_attention"):
-        delattr(F, "scaled_dot_product_attention")
+def make_UNetXL(version, pipeline, hf_token, device, verbose, max_batch_size, lora_weights=None, lora_scale=1):
     return UNetXL(version, pipeline, hf_token, fp16=True,  device=device, verbose=verbose,
-                max_batch_size=max_batch_size, unet_dim=4, time_dim=(5 if pipeline.is_sd_xl_refiner() else 6))
+                max_batch_size=max_batch_size, unet_dim=4, time_dim=(5 if pipeline.is_sd_xl_refiner() else 6),
+                lora_weights=lora_weights, lora_scale=lora_scale)
 
 class VAE(BaseModel):
     def __init__(self,
@@ -674,20 +763,22 @@ class VAE(BaseModel):
         max_batch_size,
     ):
         super(VAE, self).__init__(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
+        self.subfolder = 'vae'
 
-    def get_model(self, framework_model_dir):
-        vae_decoder_model_path = os.path.join(framework_model_dir, self.version, self.pipeline, "vae_decoder")
+    def get_model(self, framework_model_dir, torch_inference=''):
+        vae_decoder_model_path = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(vae_decoder_model_path):
-            vae = AutoencoderKL.from_pretrained(self.path,
-                subfolder="vae",
+            model = AutoencoderKL.from_pretrained(self.path,
+                subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 use_auth_token=self.hf_token).to(self.device)
-            vae.save_pretrained(vae_decoder_model_path)
+            model.save_pretrained(vae_decoder_model_path)
         else:
             print(f"[I] Load VAE decoder pytorch model from: {vae_decoder_model_path}")
-            vae = AutoencoderKL.from_pretrained(vae_decoder_model_path).to(self.device)
-        vae.forward = vae.decode
-        return vae
+            model = AutoencoderKL.from_pretrained(vae_decoder_model_path).to(self.device)
+        model.forward = model.decode
+        model = optimize_checkpoint(model, torch_inference)
+        return model
 
     def get_input_names(self):
         return ['latent']
@@ -727,10 +818,10 @@ def make_VAE(version, pipeline, hf_token, device, verbose, max_batch_size):
 class TorchVAEEncoder(torch.nn.Module):
     def __init__(self, version, pipeline, hf_token, device, path, framework_model_dir, hf_safetensor=False):
         super().__init__()
-        vae_encoder_model_dir = os.path.join(framework_model_dir, version, pipeline, "vae_encoder")
+        vae_encoder_model_dir = get_checkpoint_dir(framework_model_dir, version, pipeline, 'vae_encoder', '')
         if not os.path.exists(vae_encoder_model_dir):
             self.vae_encoder = AutoencoderKL.from_pretrained(path,
-                subfolder="vae",
+                subfolder='vae',
                 use_safetensors=hf_safetensor,
                 use_auth_token=hf_token).to(device)
             self.vae_encoder.save_pretrained(vae_encoder_model_dir)
@@ -753,7 +844,7 @@ class VAEEncoder(BaseModel):
     ):
         super(VAEEncoder, self).__init__(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
 
-    def get_model(self, framework_model_dir):
+    def get_model(self, framework_model_dir, torch_inference=''):
         vae_encoder = TorchVAEEncoder(self.version, self.pipeline, self.hf_token, self.device, self.path, framework_model_dir, hf_safetensor=self.hf_safetensor)
         return vae_encoder
 
@@ -796,7 +887,7 @@ def make_VAEEncoder(version, pipeline, hf_token, device, verbose, max_batch_size
     return VAEEncoder(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
 
 def make_tokenizer(version, pipeline, hf_token, framework_model_dir, subfolder="tokenizer"):
-    tokenizer_model_dir = os.path.join(framework_model_dir, version, pipeline.name, subfolder)
+    tokenizer_model_dir = get_checkpoint_dir(framework_model_dir, version, pipeline.name, subfolder, '')
     if not os.path.exists(tokenizer_model_dir):
         model = CLIPTokenizer.from_pretrained(get_path(version, pipeline),
                 subfolder=subfolder,

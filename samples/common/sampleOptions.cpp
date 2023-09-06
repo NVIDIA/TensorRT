@@ -89,7 +89,8 @@ nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
 {
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
         {"fp16", nvinfer1::DataType::kHALF}, {"bf16", nvinfer1::DataType::kBF16}, {"int8", nvinfer1::DataType::kINT8},
-        {"fp8", nvinfer1::DataType::kFP8}, {"int32", nvinfer1::DataType::kINT32}, {"bool", nvinfer1::DataType::kBOOL}};
+        {"fp8", nvinfer1::DataType::kFP8}, {"int32", nvinfer1::DataType::kINT32}, {"int64", nvinfer1::DataType::kINT64},
+        {"bool", nvinfer1::DataType::kBOOL}, {"uint8", nvinfer1::DataType::kUINT8}};
     const auto& dt = strToDT.find(option);
     if (dt == strToDT.end())
     {
@@ -189,8 +190,10 @@ std::pair<std::string, T> splitNameAndValue(const std::string& s)
     {
         if (quoteNameRange.size() != 3)
         {
-            throw std::invalid_argument(std::string("Found invalid number of \'s when parsing ") + s +
-                std::string(". Expected: 2, received: ") + std::to_string(quoteNameRange.size() -1));
+            std::string errorMsg = std::string("Found invalid number of \'s when parsing ") + s +
+                std::string(". Expected: 2, received: ") + std::to_string(quoteNameRange.size() -1) +
+                ". Please ensure that a singular comma is used within each comma-separated key-value pair for options like --inputIOFormats, --optShapes, --optShapesCalib, --layerPrecisions, etc.";
+            throw std::invalid_argument(errorMsg);
         }
         // Everything before the second "'" is the name.
         tensorName = quoteNameRange[0] + quoteNameRange[1];
@@ -448,6 +451,17 @@ bool getShapesInference(Arguments& arguments, InferenceOptions::ShapeProfile& sh
         auto nameDimsPair = splitNameAndValue<std::vector<int32_t>>(s);
         auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
         auto dims = nameDimsPair.second;
+
+        // TRT-20513 WAR: Currently don't have a way to assign scalar input.
+        // As a result, similar to how the engine parses kBOOL scalars,
+        // we allow for input:0 as a valid input option where 0 denotes a scalar.
+        if (dims.size() == 1 && all_of(dims.begin(), dims.end(), [](int32_t i) { return i == 0; }))
+        {
+            // See how scalars are parsed on engine-side in sampleEngines.cpp.
+            // We force the parsing of inference as 0.
+            dims = {};
+        }
+
         insertShapesInference(shapes, tensorName, dims);
     }
     return retVal;
@@ -700,6 +714,10 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
     if (options.fp8)
     {
         os << "+FP8";
+    }
+    if (options.stronglyTyped)
+    {
+        os << " (Strongly Typed)";
     }
     if (options.precisionConstraints == PrecisionConstraints::kOBEY)
     {
@@ -1041,8 +1059,15 @@ void BuildOptions::parse(Arguments& arguments)
         getAndDelOption(arguments, "--versionCompatible", versionCompatible);
     }
 
-    getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
+    // --ni and --nativeInstanceNorm are synonyms
+    getAndDelOption(arguments, "--ni", nativeInstanceNorm);
+    if (!nativeInstanceNorm)
+    {
+        getAndDelOption(arguments, "--nativeInstanceNorm", nativeInstanceNorm);
+    }
 
+    getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
+    getAndDelOption(arguments, "--noCompilationCache", disableCompilationCache);
     getAndDelNegOption(arguments, "--noTF32", tf32);
     getAndDelOption(arguments, "--fp16", fp16);
     getAndDelOption(arguments, "--bf16", bf16);
@@ -1056,8 +1081,7 @@ void BuildOptions::parse(Arguments& arguments)
             {
                 flag = false;
                 sample::gLogWarning << "Invalid usage, setting " << mode
-                                    << " mode is not allowed when strongly typed mode is "
-                                       "enabled. Disabling BuilderFlag::"
+                                    << " mode is not allowed if graph is strongly typed. Disabling BuilderFlag::"
                                     << type << "." << std::endl;
             }
         };
@@ -1333,6 +1357,25 @@ void BuildOptions::parse(Arguments& arguments)
             throw std::invalid_argument(std::string("Unknown preview feature: ") + featureName);
         }
         previewFeatures[static_cast<int32_t>(feat)] = enable;
+    }
+
+    int32_t fasterDynamicShapesFeat = static_cast<int32_t>(PreviewFeature::kFASTER_DYNAMIC_SHAPES_0805);
+
+    // kFASTER_DYNAMIC_SHAPES_0805 is default to turn on if not set.
+    bool const fasterDynamicShapesEnabled = previewFeatures.find(fasterDynamicShapesFeat) != previewFeatures.end()
+        ? previewFeatures.at(fasterDynamicShapesFeat)
+        : true;
+
+    if (best && !fasterDynamicShapesEnabled)
+    {
+        sample::gLogWarning
+            << "--best specified with fasterDynamicShapes0805 flag disabled; implicitly disabling bf16 support."
+            << std::endl;
+        bf16 = false;
+    }
+    else if (bf16 && !fasterDynamicShapesEnabled)
+    {
+        throw std::invalid_argument("--bf16 flag requires fasterDynamicShapes0805 flag to be enabled.");
     }
 
     getAndDelOption(arguments, "--tempdir", tempdir);
@@ -1752,7 +1795,7 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
         os << "fp8";
         break;
     }
-    case nvinfer1::DataType::kINT64: ASSERT(false && "Unsupported data type");
+    case nvinfer1::DataType::kINT64: os << "int64"; break;
     }
     return os;
 }
@@ -1910,6 +1953,8 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Calibration: "    << (options.int8 && options.calibration.empty() ? "Dynamic" : options.calibration.c_str()) << std::endl <<
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
           "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
+          "ONNX Native InstanceNorm: " << boolToEnabled(options.nativeInstanceNorm || options.versionCompatible
+                || options.hardwareCompatibilityLevel != HardwareCompatibilityLevel::kNONE)                             << std::endl <<
           "TensorRT runtime: " << options.useRuntime                                                                    << std::endl <<
           "Lean DLL Path: " << options.leanDLLPath                                                                      << std::endl <<
           "Tempfile Controls: "; printTempfileControls(os, options.tempfileControls)                                    << std::endl <<
@@ -1927,6 +1972,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Tactic sources: ";   printTacticSources(os, options.enabledTactics, options.disabledTactics)                 << std::endl <<
           "timingCacheMode: ";  printTimingCache(os, options.timingCacheMode)                                           << std::endl <<
           "timingCacheFile: " << options.timingCacheFile                                                                << std::endl <<
+          "Enable Compilation Cache: "<< boolToEnabled(!options.disableCompilationCache) << std::endl <<
           "errorOnTimingCacheMiss: "  << boolToEnabled(options.errorOnTimingCacheMiss)                                  << std::endl <<
           "Heuristic: "       << boolToEnabled(options.heuristic)                                                       << std::endl <<
           "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl <<
@@ -2159,7 +2205,7 @@ void BuildOptions::help(std::ostream& os)
           "                                           needs specifying IO format) or set the type and format once for broadcasting."                "\n"
           R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                            "\n"
           "                                                 IOfmt ::= type:fmt"                                                                     "\n"
-          R"(                                               type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int8"|"bool")"                                  "\n"
+          R"(                                               type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int64"|"int8"|"uint8"|"bool")"                  "\n"
           R"(                                               fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
           R"(                                                          "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                            "\n"
           "  --workspace=N                      Set workspace size in MiB."                                                                         "\n"
@@ -2179,6 +2225,8 @@ void BuildOptions::help(std::ostream& os)
           "  --versionCompatible, --vc          Mark the engine as version compatible. This allows the engine to be used with newer versions"       "\n"
           "                                     of TensorRT on the same host OS, as well as TensorRT's dispatch and lean runtimes."                 "\n"
           "                                     Only supported with explicit batch."                                                                "\n"
+          "  --nativeInstanceNorm, --ni         Set `kNATIVE_INSTANCENORM` to true in the ONNX parser. This will cause the ONNX parser to use"      "\n"
+          "                                     TensorRT's native InstanceNorm implementation over the plugin implementation when parsing."         "\n"
           R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"      "\n"
           "                                     not support building an engine."                                                                    "\n"
           R"(                                           runtime::= "full"|"lean"|"dispatch")"                                                       "\n"
@@ -2203,7 +2251,7 @@ void BuildOptions::help(std::ostream& os)
           "  --int8                             Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --fp8                              Enable fp8 precision, in addition to fp32 (default = disabled)"                                     "\n"
           "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
-          "  --stronglyTyped                    Create network with strongly typed mode (default = disabled)"                                       "\n"
+          "  --stronglyTyped                    Create a strongly typed network. (default = disabled)"                                              "\n"
           "  --directIO                         Avoid reformatting at network boundaries. (default = disabled)"                                     "\n"
           "  --precisionConstraints=spec        Control precision constraint setting. (default = none)"                                             "\n"
           R"(                                       Precision Constraints: spec ::= "none" | "obey" | "prefer")"                                    "\n"
@@ -2256,6 +2304,7 @@ void BuildOptions::help(std::ostream& os)
           R"(                                                               |"JIT_CONVOLUTIONS")"                                                   "\n"
           "                                     For example, to disable cudnn and enable cublas: --tacticSources=-CUDNN,+CUBLAS"                    "\n"
           "  --noBuilderCache                   Disable timing cache in builder (default is to enable timing cache)"                                "\n"
+          "  --noCompilationCache               Disable Compilation cache in builder, and the cache is part of timing cache (default is to enable compilation cache)"                                                "\n"
           "  --errorOnTimingCacheMiss           Emit error when a tactic being timed is not present in the timing cache (default = false)"          "\n"
           "  --heuristic                        Enable tactic selection heuristic in builder (default is to disable the heuristic)"                 "\n"
           "  --timingCacheFile=<file>           Save/load the serialized global timing cache"                                                       "\n"

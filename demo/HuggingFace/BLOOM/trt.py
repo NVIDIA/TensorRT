@@ -31,7 +31,7 @@ from NNDF.models import TRTEngineFile
 from NNDF.networks import NetworkMetadata
 from Seq2Seq.trt import Seq2SeqTRTDecoder, Seq2SeqTRT
 from BLOOM.BLOOMModelConfig import BLOOMModelTRTConfig
-from Seq2Seq.export import Seq2SeqModelClass
+from BLOOM.export import BLOOMModelClass
 
 import tensorrt as trt
 
@@ -64,7 +64,7 @@ class BLOOMTRT(Seq2SeqTRT):
         description="Runs trt results for BLOOM model.",
         **kwargs
     ):
-        super().__init__(config_class, description=description, model_classes=Seq2SeqModelClass, **kwargs)
+        super().__init__(config_class, description=description, model_classes=BLOOMModelClass, **kwargs)
         self.decoder_class = BLOOMTRTDecoder
 
     # BLOOM's kv cache shape is unique.

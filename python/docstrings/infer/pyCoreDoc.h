@@ -1180,6 +1180,8 @@ constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from 
 constexpr char const* FP8 = R"trtdoc(Enable FP8 layer selection)trtdoc";
 constexpr char const* ERROR_ON_TIMING_CACHE_MISS
     = R"trtdoc(Emit error when a tactic being timed is not present in the timing cache.)trtdoc";
+constexpr char const* DISABLE_COMPILATION_CACHE
+    = R"trtdoc(Disable caching JIT compilation results during engine build.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1460,6 +1462,15 @@ constexpr char const* descr = R"trtdoc(
         :ivar plugins_to_serialize: The plugin libraries to be serialized with forward-compatible engines.
         :ivar max_aux_streams: The maximum number of auxiliary streams that TRT is allowed to use. If the network contains operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one provided to the IExecutionContext::enqueueV3() call. The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on whether enabling multi-stream would improve the performance. This behavior can be overridden by calling this API to set the maximum number of auxiliary streams explicitly. Set this to 0 to enforce single-stream inference. The resulting engine may use fewer auxiliary streams than the maximum if the network does not contain enough parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance. Allowing more auxiliary streams does not always give better performance since there will be synchronizations overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by cross-stream synchronizations. Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not be able to be reused.
         :ivar progress_monitor: The :class:`IProgressMonitor` to use.
+
+        Below are the descriptions about each builder optimization level:
+
+        - Level 0: This enables the fastest compilation by disabling dynamic kernel generation and selecting the first tactic that succeeds in execution. This will also not respect a timing cache.
+        - Level 1: Available tactics are sorted by heuristics, but only the top are tested to select the best. If a dynamic kernel is generated its compile optimization is low.
+        - Level 2: Available tactics are sorted by heuristics, but only the fastest tactics are tested to select the best.
+        - Level 3: Apply heuristics to see if a static precompiled kernel is applicable or if a new one has to be compiled dynamically.
+        - Level 4: Always compiles a dynamic kernel.
+        - Level 5: Always compiles a dynamic kernel and compares it to static kernels.
     )trtdoc";
 
 constexpr char const* set_memory_pool_limit = R"trtdoc(

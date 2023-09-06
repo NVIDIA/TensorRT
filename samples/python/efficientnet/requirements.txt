@@ -1,7 +1,6 @@
 Pillow
 onnx==1.9.0; python_version<"3.8"
-onnx==1.12.0; python_version>="3.8" and python_version<"3.11"
-onnx==1.13.0; python_version>="3.11"
+onnx==1.13.0; python_version>="3.8"
 tensorrt>=7.1.0.0
 tf2onnx==1.8.1
 cuda-python

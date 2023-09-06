@@ -1,0 +1,7 @@
+cupy-cuda11x
+numba
+triton; platform_system != "Windows"
+colored
+--extra-index-url https://pypi.ngc.nvidia.com
+polygraphy
+numpy==1.23.5; platform_system != "Windows"

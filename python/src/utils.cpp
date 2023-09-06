@@ -61,7 +61,7 @@ std::unique_ptr<py::dtype> nptype(nvinfer1::DataType type)
     case nvinfer1::DataType::kINT64: return makeDtype("i8");
     case nvinfer1::DataType::kBOOL: return makeDtype("b1");
     case nvinfer1::DataType::kUINT8: return makeDtype("u1");
-    case nvinfer1::DataType::kFP8: return makeDtype("f1");
+    case nvinfer1::DataType::kFP8: return nullptr;
     case nvinfer1::DataType::kBF16: return nullptr;
     }
     return nullptr;

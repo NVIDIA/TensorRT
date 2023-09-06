@@ -48,6 +48,7 @@ from NNDF.tensorrt_utils import TRTNativeRunner, setup_benchmark_arg
 from transformers import (
     AutoModelForCausalLM, # For decoder-only models
     AutoModelForSeq2SeqLM, # For encoder_decoder models
+    AutoModelForVision2Seq, # For Vison2Seq models
     AutoTokenizer,
     AutoConfig,
     GenerationConfig,
@@ -233,6 +234,8 @@ class NetworkCommand(metaclass=ABCMeta):
         self.benchmarking_mode = benchmarking_mode
         # Not able to set it inside config class. Therefore needs to be set up here.
         self.config.precision = torch.float16 if self.config.fp16 else torch.float32
+        if self.config.consume_image_embeds:
+            self.config.text_config.precision = torch.float16 if self.config.text_config.fp16 else torch.float32
 
         # Not able to specify model classes in config and therefore needs to set up here.
         self.config.set_model_classes(self.model_classes)
@@ -250,6 +253,8 @@ class NetworkCommand(metaclass=ABCMeta):
 
         if use_mask:
             self.config.use_mask = True
+            if self.config.consume_image_embeds: # For Vision2Seq
+                self.config.text_config.use_mask = True
 
         skip_checkpoint_load = skip_checkpoint_load or benchmarking_mode or (self._args is None)
         if not skip_checkpoint_load:
@@ -311,7 +316,7 @@ class NetworkCommand(metaclass=ABCMeta):
         output_profile_max_len = None,
     ):
         # This is the largest seq len that the model could ever been used
-        n_positions = self.config.n_positions
+        n_positions = self.config.text_config.n_positions if self.config.consume_image_embeds else self.config.n_positions
         # User must provide either a pair of profile_max_len or a profile of seq_len for input/output
         if input_profile_max_len is None or output_profile_max_len is None:
             if input_seq_len is None or output_seq_len is None:
@@ -491,8 +496,9 @@ class NetworkCommand(metaclass=ABCMeta):
             self.config.variant,
             trust_remote_code=True,
         )
-        # Set pad_token = eos_token because eos token will be discarded by attention_mask
-        tokenizer.pad_token = tokenizer.eos_token
+        if hasattr(tokenizer, "eos_token"):
+            # Set pad_token = eos_token because eos token will be discarded by attention_mask
+            tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = 'left'
 
         return tokenizer
@@ -516,7 +522,10 @@ class NetworkCommand(metaclass=ABCMeta):
 
         torch_model = None
         hf_config = self.config.hf_config
-        assert hf_config.use_cache == self.config.use_cache
+        if not self.config.consume_image_embeds:
+            # In BLIP/BLIPv2/pix2struct hf_config.text_config refers to the config for text decoder, but define use_cache in the config by the model itself. Thus we skip the config use_cache checking for Vison2Seq
+            # Note: vision-encoder-decoder has different names (decoder instead of text_config)
+            assert hf_config.use_cache == self.config.use_cache
 
         # Use this flag to load torch model if and only if benchmarking seqlen > model n_positions
         # There is a known issue in HuggingFace in ignore_mismatched_sizes that is fixed in 4.31.0
@@ -525,7 +534,14 @@ class NetworkCommand(metaclass=ABCMeta):
         ignore_mismatched_sizes = self.config.ignore_mismatched_sizes
 
         def _load_torch_model_from_hf(model_loc):
-            if self.config.is_encoder_decoder:
+            if self.config.consume_image_embeds: # For Vision2Seq
+                _torch_model = AutoModelForVision2Seq.from_pretrained(
+                    model_loc,
+                    config=hf_config,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    trust_remote_code=True,
+                )
+            elif self.config.is_encoder_decoder:
                 _torch_model = AutoModelForSeq2SeqLM.from_pretrained(
                     model_loc,
                     config=hf_config,
@@ -628,6 +644,8 @@ class NetworkCommand(metaclass=ABCMeta):
         is_encoder_valid = encoder_onnx_fpath is not None and os.path.exists(encoder_onnx_fpath)
         is_decoder_valid = decoder_onnx_fpath is not None and  os.path.exists(decoder_onnx_fpath)
         is_generator_valid = cache_generator_onnx_fpath is not None and os.path.exists(cache_generator_onnx_fpath)
+        if self.config.consume_image_embeds:
+            return is_encoder_valid and is_decoder_valid
         if self.config.is_encoder_decoder:
             if self.config.use_cache:
                 return is_encoder_valid and is_decoder_valid and is_generator_valid
@@ -669,20 +687,26 @@ class NetworkCommand(metaclass=ABCMeta):
         input_ids,
         attention_mask = None,
         encoder_outputs = None,
+        image_embeds = None,
         use_cuda = True
     ):
         G_LOGGER.info(f"Running decoder inference...")
 
         if isinstance(self.decoder, TRTNativeRunner) and self.config.is_encoder_decoder:
-            self.decoder.set_encoder_hidden_states(encoder_outputs.last_hidden_state)
+            if self.config.consume_image_embeds:
+                self.decoder.set_image_embeds(image_embeds)
+            else: 
+                self.decoder.set_encoder_hidden_states(encoder_outputs.last_hidden_state)
 
         if self.config.use_mask and attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
+        encoder_outputs_kwargs = {"image_embeds": image_embeds} if self.config.consume_image_embeds else {"encoder_outputs": encoder_outputs}
+
         decoder_stmt = lambda: self.decoder(
             input_ids=input_ids,
-            encoder_outputs=encoder_outputs,
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            **encoder_outputs_kwargs,
         )
 
         decoder_e2e_time = measure_python_inference_code(decoder_stmt, self.timing_profile)
@@ -693,17 +717,26 @@ class NetworkCommand(metaclass=ABCMeta):
     @use_cuda
     def encoder_inference(
         self,
-        input_ids,
+        input_ids = None,
         attention_mask = None,
+        pixel_values: torch.Tensor = None, # For Vision encoder in Vision2Seq models
         use_cuda = True
     ):
         G_LOGGER.info(f"Running encoder inference...")
         if self.config.use_mask and attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-        encoder_stmt = lambda: self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask
-        )
+        if self.config.consume_image_embeds:
+            if pixel_values is None:
+                raise RuntimeError("Please provide pixel_values for vision encoder in Vision2Seq models")
+            else:
+                encoder_stmt = lambda: self.encoder(
+                    pixel_values=pixel_values,
+                )
+        else:
+            encoder_stmt = lambda: self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask
+            )
         encoder_e2e_time = measure_python_inference_code(encoder_stmt, self.timing_profile)
         encoder_output = encoder_stmt()
         return (encoder_output, encoder_e2e_time)
@@ -713,6 +746,7 @@ class NetworkCommand(metaclass=ABCMeta):
         self,
         input_ids,
         attention_mask = None,
+        pixel_values: torch.Tensor = None, # For Vision encoder in Vision2Seq models
         early_stopping = True,
         use_cuda = True
     ):
@@ -720,27 +754,43 @@ class NetworkCommand(metaclass=ABCMeta):
         G_LOGGER.info(f"Running full inference...")
         if self.config.use_mask and attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
+        if self.config.consume_image_embeds and pixel_values is None:
+            raise RuntimeError("Please provide pixel_values for vision encoder in Vision2Seq models")
+        
+        decoder_input_ids=input_ids
+        if self.config.consume_image_embeds: # For Vision2Seq (Specifically for BLIP)
+            input_ids[:, 0] = self.config.text_config.bos_token_id
+            decoder_input_ids=input_ids[:, :-1]
+            if self.config.use_mask and attention_mask is not None:
+                attention_mask=attention_mask[:, :-1]
 
         def _e2e():
             with torch.no_grad():
-                encoder_outputs = self.encoder(
-                    input_ids=input_ids,
-                    attention_mask=attention_mask
-                ) if self.encoder else None
+                if self.config.consume_image_embeds: # For Vision2Seq
+                    encoder_outputs = self.encoder(
+                        pixel_values=pixel_values,
+                    )
+                else:
+                    encoder_outputs = self.encoder(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask
+                    ) if self.encoder else None
 
                 mask_kwargs = {"attention_mask": attention_mask} if self.config.use_mask else {}
+                encoder_outputs_kwargs = {"image_embeds": encoder_outputs[0]} if self.config.consume_image_embeds else {"encoder_outputs": encoder_outputs}
+
                 if self.decoder:
                     decoder_output = self.decoder.generate(
-                        input_ids,
+                        input_ids=decoder_input_ids,
                         num_beams=self.config.num_beams,
                         early_stopping=early_stopping,
                         eos_token_id=self.config.eos_token_id,
                         pad_token_id=self.config.pad_token_id,
                         use_cache=self.config.use_cache,
-                        encoder_outputs=encoder_outputs,
                         min_length=self.config.min_output_length,
                         max_length=self.config.max_output_length,
                         **mask_kwargs,
+                        **encoder_outputs_kwargs,
                     )
 
                     return decoder_output
@@ -758,6 +808,7 @@ class NetworkCommand(metaclass=ABCMeta):
     def generate(
         self,
         input_str: str = None,
+        pixel_values: torch.Tensor = None, # For Vision encoder in Vision2Seq models
         input_ids: torch.Tensor = None,
         attention_mask: torch.Tensor = None,
         use_cuda: bool = True,
@@ -768,13 +819,21 @@ class NetworkCommand(metaclass=ABCMeta):
 
         if input_str is None and input_ids is None:
             raise RuntimeError("Please provide either input_str or input_ids for generate")
+        
+        if self.config.consume_image_embeds and pixel_values is None:
+            raise RuntimeError("Please provide pixel_values for vision encoder in Vision2Seq models")
 
         # If no input_ids, use input_str to tokenize
         if input_ids is None:
             tokenizer_output = self.tokenizer([input_str] * self.config.batch_size, padding=True, return_tensors="pt")
             input_ids = tokenizer_output.input_ids
+            if self.config.consume_image_embeds: # For Vision2Seq (Specifically for BLIP)
+                input_ids = input_ids[:, :-1]
+                input_ids[:, 0] = self.config.text_config.bos_token_id
             if self.config.use_mask:
                 attention_mask = tokenizer_output.attention_mask
+                if self.config.consume_image_embeds: # For Vision2Seq (Specifically for BLIP)
+                    attention_mask = attention_mask[:, :-1]
         elif self.config.use_mask and attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
@@ -782,14 +841,26 @@ class NetworkCommand(metaclass=ABCMeta):
             input_ids = input_ids.to("cuda")
             if self.config.use_mask:
                 attention_mask = attention_mask.to("cuda")
+            if self.config.consume_image_embeds:
+                pixel_values = pixel_values.to("cuda")
 
         encoder_outputs = None
+        image_embeds = None
         if self.config.is_encoder_decoder:
-            encoder_outputs = self.encoder(input_ids, attention_mask=attention_mask)
+            if self.config.consume_image_embeds: # Vision encoder
+                vision_outputs = self.encoder(pixel_values=pixel_values)
+                image_embeds = vision_outputs[0]
+            else:
+                encoder_outputs = self.encoder(input_ids, attention_mask=attention_mask)
 
         mask_kwargs = {"attention_mask": attention_mask} if self.config.use_mask else {}
+        vision2seq_kwargs = {}
+        if self.config.consume_image_embeds:
+            vision2seq_kwargs["image_embeds"] = image_embeds
+            vision2seq_kwargs["early_stopping"] = self.config.text_config.early_stopping
+        
         decoder_outputs = self.decoder.generate(
-            input_ids,
+            input_ids=input_ids,
             num_beams=self.config.num_beams,
             eos_token_id=self.config.eos_token_id,
             pad_token_id=self.config.pad_token_id,
@@ -798,6 +869,7 @@ class NetworkCommand(metaclass=ABCMeta):
             min_length=self.config.min_output_length,
             max_length=self.config.max_output_length,
             **mask_kwargs,
+            **vision2seq_kwargs,
         )
 
         semantic_outputs = self.tokenizer.decode(
@@ -810,6 +882,7 @@ class NetworkCommand(metaclass=ABCMeta):
     def execute_inference(
         self,
         inference_input: Union[str, list],
+        pixel_values = None,
         use_cuda: bool = True
     ) -> Union[NetworkResult, BenchmarkingResult]:
 
@@ -834,9 +907,20 @@ class NetworkCommand(metaclass=ABCMeta):
             if self.config.use_mask:
                 attention_mask = torch.ones_like(input_ids)
 
+        if self.config.consume_image_embeds and pixel_values is None:
+            raise RuntimeError("Please provide pixel_values for vision encoder in Vision2Seq models")
+
+        if use_cuda:
+            input_ids = input_ids.to("cuda")
+            if self.config.use_mask:
+                attention_mask = attention_mask.to("cuda")
+            if self.config.consume_image_embeds:
+                pixel_values = pixel_values.to("cuda")
+
         decoder_output, full_e2e_runtime = self.full_inference(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            pixel_values=pixel_values,
             use_cuda=use_cuda,
         )
 
@@ -844,6 +928,7 @@ class NetworkCommand(metaclass=ABCMeta):
             encoder_outputs, encoder_e2e_time = self.encoder_inference(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                pixel_values=pixel_values,
                 use_cuda=use_cuda,
             )
 
@@ -865,13 +950,14 @@ class NetworkCommand(metaclass=ABCMeta):
             encoder_outputs=encoder_outputs if self.config.is_encoder_decoder else None,
         )
 
-        expanded_encoder_outputs = model_kwargs["encoder_outputs"]
+        expanded_encoder_outputs = model_kwargs["encoder_outputs"] if not self.config.consume_image_embeds else None
         expanded_attention_mask = model_kwargs["attention_mask"]
 
         _, decoder_e2e_time = self.decoder_inference(
             input_ids=decoder_input_ids,
             attention_mask=expanded_attention_mask,
             encoder_outputs=expanded_encoder_outputs,
+            image_embeds=encoder_outputs[0] if self.config.consume_image_embeds else None,
             use_cuda=use_cuda,
         )
 
@@ -986,7 +1072,12 @@ class NetworkCommand(metaclass=ABCMeta):
                             self.calculate_perplexity(ei, di, use_cuda=self.use_cuda)
                         )
             else:
-                inference_results = self.execute_inference(inference_input = None)
+                if self.config.consume_image_embeds:
+                    # Generate random pixel_values for the benchmarking mode
+                    pixel_values = torch.rand(self.config.batch_size, 3, self.config.image_size, self.config.image_size)
+                    inference_results = self.execute_inference(inference_input = None, pixel_values = pixel_values)
+                else:
+                    inference_results = self.execute_inference(inference_input = None)
 
         finally:
             self.cleanup()

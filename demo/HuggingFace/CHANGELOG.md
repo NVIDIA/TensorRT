@@ -20,6 +20,9 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+# [2.0.4] - 2023-08-15
+- Added support for BLIP models
+
 # [2.0.3] - 2023-06-29
 - Added `attention_mask` support for multi-batch inference with various seq len
 

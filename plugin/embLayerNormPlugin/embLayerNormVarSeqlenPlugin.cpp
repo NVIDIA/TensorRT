@@ -325,11 +325,14 @@ size_t EmbLayerNormVarSeqlenPluginBase::getWorkspaceSize(
     return 0;
 }
 
-int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputDesc,
+    PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs, void* /* workspace */,
+    cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input
         int32_t const maxSeqlen = inputDesc[3].dims.d[0];
@@ -394,11 +397,14 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
     return STATUS_FAILURE;
 }
 
-int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputDesc,
+    PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs, void* /* workspace */,
+    cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
         // read out the maximum sequence length from the dummy input
         int32_t const maxSeqlen = inputDesc[3].dims.d[0];

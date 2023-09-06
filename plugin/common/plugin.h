@@ -100,15 +100,9 @@ OutType read(BufferType const*& buffer)
     return val;
 }
 
-inline int32_t getTrtSMVersionDec(int32_t smVersion)
-{
-    // Treat SM89 as SM86 temporarily.
-    return (smVersion == 89) ? 86 : smVersion;
-}
-
 inline int32_t getTrtSMVersionDec(int32_t majorVersion, int32_t minorVersion)
 {
-    return getTrtSMVersionDec(majorVersion * 10 + minorVersion);
+    return majorVersion * 10 + minorVersion;
 }
 
 // Check that all required field names are present in the PluginFieldCollection.

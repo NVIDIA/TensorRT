@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
 from Seq2Seq.onnxrt import Seq2SeqOnnxRT
 from BLOOM.BLOOMModelConfig import BLOOMModelTRTConfig
-from Seq2Seq.export import Seq2SeqModelClass
+from BLOOM.export import BLOOMModelClass
 
 
 class BLOOMOnnxRT(Seq2SeqOnnxRT):
@@ -36,7 +36,7 @@ class BLOOMOnnxRT(Seq2SeqOnnxRT):
         description="Runs OnnxRT results for BLOOM model.",
         **kwargs
     ):
-        super().__init__(config_class, description=description, model_classes=Seq2SeqModelClass, **kwargs)
+        super().__init__(config_class, description=description, model_classes=BLOOMModelClass, **kwargs)
 
 # Entry point
 RUN_CMD = BLOOMOnnxRT()

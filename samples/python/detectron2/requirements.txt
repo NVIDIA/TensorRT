@@ -3,7 +3,7 @@ onnx==1.12.0; python_version>="3.8" and python_version<"3.11"
 onnx==1.13.0; python_version>="3.11"
 onnxruntime==1.8.1; python_version<"3.8"
 onnxruntime==1.12.1; python_version>="3.8"
-Pillow
+Pillow>=9.2.0
 git+https://github.com/facebookresearch/detectron2.git
 git+https://github.com/NVIDIA/TensorRT#subdirectory=tools/onnx-graphsurgeon
 cuda-python

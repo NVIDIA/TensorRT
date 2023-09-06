@@ -4,7 +4,7 @@ This repository demonstrates TensorRT inference with NeMo Megatron models in FP8
 Currently, this repository supports [NeMo GPT](https://huggingface.co/nvidia/nemo-megatron-gpt-5B) models only.
 
 # Environment Setup
-It's recommended to run inside a container to avoid conflicts when installing dependencies. Please prepare an Ubuntu container with TensorRT 9.0 or above installed. A GPU with compute capability 8.9 or above is required to run the demo with FP8 precision.
+It's recommended to run inside a container to avoid conflicts when installing dependencies. Please check out [`NGC TensorRT`](https://catalog.ngc.nvidia.com/orgs/nvidia/containers/tensorrt/tags) and find a container with TensorRT 9.0 or above. A GPU with compute capability 8.9 or above is required to run the demo with FP8 precision.
 
 ```
 # Run inside a TensorRT container
@@ -69,7 +69,7 @@ Batch 1: {'sentences': ['TensorRT is a Deep Learning compiler used for deep lear
   3. FP8-FP16: `--fp8 --fp16`
   4. FP8-BF16: `--fp8 --bf16`
 
-- `--nemo-model=<model.nemo>` or `--nemo-checkpoint=<model.ckpt>` can be used to load a NeMo model or checkpoint from a specified path, respectively.
+- `--nemo-model=<model.nemo>` or `--nemo-checkpoint=<model.ckpt>` can be used to load a NeMo model or checkpoint from a specified path, respectively. If these arguments are not provided, a NeMo model will be downloaded (and cached/re-used for subsequent runs) in the working directory.
 
 - K-V cache can be enabled through `--use-cache`
 
@@ -127,9 +127,9 @@ NeMo to ONNX conversion consists of 3 steps:
 2. NeMo uses TransformerEngine to export FP8 models to ONNX (step 1) and the exported ONNX has custom TensorRT Q/DQ nodes. Script `convert_te_onnx_to_trt_onnx.py` can be used to convert the custom operators into standard opset19 ONNX Q/DQ nodes.
 3. Add KV-cache inputs and outputs to the exported ONNX, so it is faster when performing inference on the model.
 
-`nemo_export.py` has `--opset19` and `--use-cache` option to decide whether to perform step 2. and step 3., respectively:
+`nemo_export.py` has `--opset19` and `--use_cache` option to decide whether to perform step 2. and step 3., respectively:
 ```
-python3 nemo_export.py --nemo-model=model.nemo --onnx=onnx/model.onnx --opset19 --use-cache
+python3 nemo_export.py --nemo-model=model.nemo --onnx=onnx/model.onnx --opset19 --use_cache
 ```
 `--extra-configs` can be used to specified configs that are defined in `config.yml` but not being exposed from existing command-line interface.
 Please specify `--help` to see more options.

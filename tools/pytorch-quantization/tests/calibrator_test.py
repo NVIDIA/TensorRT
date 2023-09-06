@@ -68,6 +68,25 @@ class TestMaxCalibrator():
         max_calibrator.reset()
         assert max_calibrator.compute_amax() is None
 
+    def test_reverse_axis(self):
+        axis = -4
+        reducs_axis = (1, 2, 3)
+        max_calibrator = calib.MaxCalibrator(8, axis, False)
+
+        x_1 = torch.rand(31, 63, 7, 7).cuda()
+        x_2 = torch.rand(31, 63, 7, 7).cuda()
+        max_calibrator.collect(x_1)
+        max_calibrator.collect(x_2)
+
+        assert max_calibrator.compute_amax().shape[0] == 31
+
+        test_utils.compare(max_calibrator.compute_amax(),
+                           quant_utils.reduce_amax(torch.max(x_1, x_2), axis=reducs_axis),
+                           atol=0, rtol=0, ctol=0)
+
+        max_calibrator.reset()
+        assert max_calibrator.compute_amax() is None
+
     def test_raises(self):
         axis = 0
         max_calibrator = calib.MaxCalibrator(8, axis, False)

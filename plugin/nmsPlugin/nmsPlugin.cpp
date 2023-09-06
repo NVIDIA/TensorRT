@@ -244,9 +244,11 @@ int32_t DetectionOutput::enqueue(
     return status;
 }
 
-int32_t DetectionOutputDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t DetectionOutputDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
     // Input order {loc, conf, prior}
     void const* const locData = inputs[param.inputOrder[0]];
     void const* const confData = inputs[param.inputOrder[1]];

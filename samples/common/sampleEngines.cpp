@@ -235,8 +235,8 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         ASSERT(parser.onnxParser != nullptr);
         // For version or hardware compatible engines, we must use TensorRT's native InstanceNorm implementation for
         // compatibility.
-        if (build.versionCompatible
-            || (build.hardwareCompatibilityLevel != nvinfer1::HardwareCompatibilityLevel::kNONE))
+        if (build.versionCompatible || (build.hardwareCompatibilityLevel != nvinfer1::HardwareCompatibilityLevel::kNONE)
+            || build.nativeInstanceNorm)
         {
             auto parserflags = 1U << static_cast<uint32_t>(OnnxParserFlag::kNATIVE_INSTANCENORM);
             parser.onnxParser->setFlags(parserflags);
@@ -426,6 +426,12 @@ bool setTensorDynamicRange(INetworkDefinition const& network, float inRange = 2.
     return true;
 }
 
+bool isNonActivationType(nvinfer1::DataType const type)
+{
+    return type == nvinfer1::DataType::kINT32 || type == nvinfer1::DataType::kINT64 || type == nvinfer1::DataType::kBOOL
+        || type == nvinfer1::DataType::kUINT8;
+}
+
 void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& layerPrecisions)
 {
     bool hasLayerPrecisionSkipped{false};
@@ -442,25 +448,21 @@ void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& laye
         }
         else if (plausibleMatch != layerPrecisions.end())
         {
-            // We should not set the layer precision if its default precision is INT32 or Bool.
-            if (layer->getPrecision() == nvinfer1::DataType::kINT32
-                || layer->getPrecision() == nvinfer1::DataType::kBOOL)
+            if (isNonActivationType(layer->getPrecision()))
             {
                 hasLayerPrecisionSkipped = true;
                 sample::gLogVerbose << "Skipped setting precision for layer " << layerName << " because the "
-                                    << " default layer precision is INT32 or Bool." << std::endl;
+                                    << " default layer precision is of non-activation type." << std::endl;
                 continue;
             }
-            // We should not set the constant layer precision if its weights are in INT32.
             if (layer->getType() == nvinfer1::LayerType::kCONSTANT
-                && static_cast<IConstantLayer*>(layer)->getWeights().type == nvinfer1::DataType::kINT32)
+                && (isNonActivationType(static_cast<IConstantLayer*>(layer)->getWeights().type)))
             {
                 hasLayerPrecisionSkipped = true;
                 sample::gLogVerbose << "Skipped setting precision for layer " << layerName << " because this "
-                                    << "constant layer has INT32 weights." << std::endl;
+                                    << "constant layer has weights of non-activation type." << std::endl;
                 continue;
             }
-            // We should not set the layer precision if the layer operates on a shape tensor.
             if (layer->getNbInputs() >= 1 && layer->getInput(0)->isShapeTensor())
             {
                 hasLayerPrecisionSkipped = true;
@@ -468,12 +470,12 @@ void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& laye
                                     << "operates on a shape tensor." << std::endl;
                 continue;
             }
-            if (layer->getNbInputs() >= 1 && layer->getInput(0)->getType() == nvinfer1::DataType::kINT32
-                && layer->getNbOutputs() >= 1 && layer->getOutput(0)->getType() == nvinfer1::DataType::kINT32)
+            if (layer->getNbInputs() >= 1 && isNonActivationType(layer->getInput(0)->getType())
+                && layer->getNbOutputs() >= 1 && isNonActivationType(layer->getOutput(0)->getType()))
             {
                 hasLayerPrecisionSkipped = true;
                 sample::gLogVerbose << "Skipped setting precision for layer " << layerName << " because this "
-                                    << "layer has INT32 input and output." << std::endl;
+                                    << "layer has input and output of non-activation type." << std::endl;
                 continue;
             }
             // All heuristics passed. Set the layer precision.
@@ -891,6 +893,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kDISABLE_TIMING_CACHE);
     }
 
+    if (build.disableCompilationCache)
+    {
+        config.setFlag(BuilderFlag::kDISABLE_COMPILATION_CACHE);
+    }
+
     if (build.errorOnTimingCacheMiss)
     {
         config.setFlag(BuilderFlag::kERROR_ON_TIMING_CACHE_MISS);
@@ -999,6 +1006,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             try
             {
                 // Set dynamic ranges of int8 inputs / outputs to match scales loaded from calibration cache
+                // TODO http://nvbugs/3262234 Change the network validation so that this workaround can be removed
                 setTensorScalesFromCalibration(network, build.inputFormats, build.outputFormats, build.calibration);
             }
             catch (std::exception&)
@@ -1192,6 +1200,8 @@ bool networkToSerializedEngine(
     std::unique_ptr<IHostMemory> serializedEngine{builder.buildSerializedNetwork(*env.network, *config)};
     SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
 
+    sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
+
     if (build.safe && build.consistency)
     {
         checkSafeEngine(serializedEngine->data(), serializedEngine->size());
@@ -1320,6 +1330,8 @@ bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, Bui
     std::vector<uint8_t> engineBlob(fsize);
     engineFile.read(reinterpret_cast<char*>(engineBlob.data()), fsize);
     SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error loading engine file: " << engine);
+
+    sample::gLogInfo << "Loaded engine with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
 
     if (enableConsistency)
     {

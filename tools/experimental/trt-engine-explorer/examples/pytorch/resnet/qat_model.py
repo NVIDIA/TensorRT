@@ -22,6 +22,7 @@
 # the use-case described in the TREx blog post.
 # (i.e. quantization of Convs only, quantization of residual connections, and
 # quantization of GAP layer are all controlled separately).
+# https://gitlab-master.nvidia.com/TensorRT/Tools/pytorch-quantization/-/blob/master/examples/torchvision/models/classification/resnet.py
 
 
 import torch

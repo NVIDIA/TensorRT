@@ -139,3 +139,9 @@ class SynchronizedList(list):
     def __iadd__(self, other_list: List[object]):
         self.extend(other_list)
         return self
+
+    def __copy__(self):
+        return list(self)
+
+    def __deepcopy__(self, memo):
+        return list(self)

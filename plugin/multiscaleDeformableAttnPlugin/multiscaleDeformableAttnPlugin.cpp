@@ -115,9 +115,11 @@ size_t MultiscaleDeformableAttnPlugin::getWorkspaceSize(nvinfer1::PluginTensorDe
 }
 
 int32_t MultiscaleDeformableAttnPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workSpace,
-    cudaStream_t stream) PLUGIN_NOEXCEPT
+    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
+    void* /* workSpace */, cudaStream_t stream) PLUGIN_NOEXCEPT
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
     int32_t const batch = inputDesc[0].dims.d[0];
     int32_t spatial_size = inputDesc[0].dims.d[1];
     int32_t num_heads = inputDesc[0].dims.d[2];

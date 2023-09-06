@@ -1,5 +1,23 @@
 # TensorRT OSS Release Changelog
 
+## 9.0.1 GA - 2023-09-07
+
+Key Features and Updates:
+
+ - TensorRT plugin autorhing in Python is now supported
+   - See the [trt_python_plugin](samples/python/python_plugin) sample for reference.
+ - Updated default CUDA version to 12.2
+ - Support for BLIP models, Seq2Seq and Vision2Seq abstractions in HuggingFace demo.
+ - demoDiffusion refactoring and SDXL enhancements
+ - Additional validation asserts for NV Plugins
+ - Updated tooling
+   - TensorRT Engine Explorer v0.1.7: graph rendering for TensorRT 9.0 `kgen` kernels
+   - ONNX-GraphSurgeon v0.3.29
+   - PyTorch quantization toolkit v2.2.0
+
+
+## 9.0.0 EA - 2023-08-06
+
 Key Features and Updates:
 
  - Added the NeMo demo to demonstrate the performance benefit of using E4M3 FP8 data type with the GPT models trained with the [NVIDIA NeMo Toolkit](https://github.com/NVIDIA/NeMo) and [TransformerEngine](https://github.com/NVIDIA/TransformerEngine).

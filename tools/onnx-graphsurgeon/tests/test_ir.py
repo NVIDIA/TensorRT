@@ -16,12 +16,16 @@
 #
 
 
+import copy
+
 import numpy as np
 import onnx
 import pytest
+
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.util.misc import SynchronizedList
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
@@ -75,6 +79,15 @@ class TensorBaseTests(object):
         tensor.outputs = self.tensor.outputs
         assert tensor.outputs == self.tensor.outputs
         assert tensor.outputs is not self.tensor.outputs
+
+    # copy.copy/deepcopy should yield a regular list instead of a synchronized list
+    @pytest.mark.parametrize("copy_func", [copy.copy, copy.deepcopy])
+    def test_copy_makes_normal_list(self, copy_func):
+        assert isinstance(self.tensor.inputs, SynchronizedList)
+
+        inputs = copy_func(self.tensor.inputs)
+        assert not isinstance(inputs, SynchronizedList)
+        assert isinstance(inputs, list)
 
     def test_i(self):
         x = Variable(name="x")

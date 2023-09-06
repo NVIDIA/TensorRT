@@ -294,13 +294,10 @@ DimsExprs ROIAlign::getOutputDimensions(
     return result;
 }
 
-int32_t ROIAlign::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t ROIAlign::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
+    void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
-    PLUGIN_ASSERT(inputDesc != nullptr);
-    PLUGIN_ASSERT(inputs != nullptr);
-    PLUGIN_ASSERT(outputs != nullptr);
-    PLUGIN_ASSERT(outputDesc != nullptr);
+    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     // No-op pass-through for empty ROIs
     if (mROICount == 0)

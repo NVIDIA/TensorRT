@@ -16,13 +16,11 @@
 #
 
 import argparse
-import os
+
 from cuda import cudart
-import tensorrt as trt
-import torch
-from utilities import TRT_LOGGER, add_arguments
-from txt2img_xl_pipeline import Txt2ImgXLPipeline
-from img2img_xl_pipeline import Img2ImgXLPipeline
+
+from stable_diffusion_pipeline import StableDiffusionPipeline
+from utilities import PIPELINE_TYPE, TRT_LOGGER, add_arguments, process_pipeline_args
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion XL Txt2Img Demo", conflict_handler='resolve')
@@ -30,111 +28,123 @@ def parseArgs():
     parser.add_argument('--version', type=str, default="xl-1.0", choices=["xl-1.0"], help="Version of Stable Diffusion XL")
     parser.add_argument('--height', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
+    parser.add_argument('--num-warmup-runs', type=int, default=1, help="Number of warmup runs before benchmarking performance")
 
-    parser.add_argument('--scheduler', type=str, default="DDIM", choices=["PNDM", "LMSD", "DPM", "DDIM", "EulerA"], help="Scheduler for diffusion process")
+    parser.add_argument('--guidance-scale', type=float, default=5.0, help="Value of classifier-free guidance scale (must be greater than 1)")
 
-    parser.add_argument('--onnx-base-dir', default='onnx_xl_base', help="Directory for SDXL-Base ONNX models")
+    parser.add_argument('--enable-refiner', action='store_true', help="Enable SDXL-Refiner model")
+    parser.add_argument('--image-strength', type=float, default=0.3, help="Strength of transformation applied to input_image (must be between 0 and 1)")
     parser.add_argument('--onnx-refiner-dir', default='onnx_xl_refiner', help="Directory for SDXL-Refiner ONNX models")
-    parser.add_argument('--engine-base-dir', default='engine_xl_base', help="Directory for SDXL-Base TensorRT engines")
     parser.add_argument('--engine-refiner-dir', default='engine_xl_refiner', help="Directory for SDXL-Refiner TensorRT engines")
 
     return parser.parse_args()
+
+class StableDiffusionXLPipeline(StableDiffusionPipeline):
+    def __init__(self, vae_scaling_factor=0.13025, enable_refiner=False, **kwargs):
+        self.enable_refiner = enable_refiner
+        self.nvtx_profile = kwargs['nvtx_profile']
+        self.base = StableDiffusionPipeline(
+            pipeline_type=PIPELINE_TYPE.XL_BASE,
+            vae_scaling_factor=vae_scaling_factor,
+            return_latents=self.enable_refiner,
+            **kwargs)
+        if self.enable_refiner:
+            self.refiner = StableDiffusionPipeline(
+                pipeline_type=PIPELINE_TYPE.XL_REFINER,
+                vae_scaling_factor=vae_scaling_factor,
+                return_latents=False,
+                **kwargs)
+
+    def loadEngines(self, framework_model_dir, onnx_dir, engine_dir, onnx_refiner_dir='onnx_xl_refiner', engine_refiner_dir='engine_xl_refiner', **kwargs):
+        self.base.loadEngines(engine_dir, framework_model_dir, onnx_dir, **kwargs)
+        if self.enable_refiner:
+            self.refiner.loadEngines(engine_refiner_dir, framework_model_dir, onnx_refiner_dir, **kwargs)
+
+    def activateEngines(self, shared_device_memory=None):
+        self.base.activateEngines(shared_device_memory)
+        if self.enable_refiner:
+            self.refiner.activateEngines(shared_device_memory)
+
+    def loadResources(self, image_height, image_width, batch_size, seed):
+        self.base.loadResources(image_height, image_width, batch_size, seed)
+        if self.enable_refiner:
+            self.refiner.loadResources(image_height, image_width, batch_size, seed)
+
+    def get_max_device_memory(self):
+        max_device_memory = self.base.calculateMaxDeviceMemory()
+        if self.enable_refiner:
+            max_device_memory = max(max_device_memory, self.refiner.calculateMaxDeviceMemory())
+        return max_device_memory
+
+    def run(self, prompt, negative_prompt, height, width, batch_size, batch_count, num_warmup_runs, use_cuda_graph, **kwargs_infer_refiner):
+        # Process prompt
+        if not isinstance(prompt, list):
+            raise ValueError(f"`prompt` must be of type `str` list, but is {type(prompt)}")
+        prompt = prompt * batch_size
+
+        if not isinstance(negative_prompt, list):
+            raise ValueError(f"`--negative-prompt` must be of type `str` list, but is {type(negative_prompt)}")
+        if len(negative_prompt) == 1:
+            negative_prompt = negative_prompt * batch_size
+
+        num_warmup_runs = max(1, num_warmup_runs) if use_cuda_graph else num_warmup_runs
+        if num_warmup_runs > 0:
+            print("[I] Warming up ..")
+            for _ in range(num_warmup_runs):
+                images, _ = self.base.infer(prompt, negative_prompt, height, width, warmup=True)
+                if args.enable_refiner:
+                    images, _ = self.refiner.infer(prompt, negative_prompt, height, width, input_image=images, warmup=True, **kwargs_infer_refiner)
+
+        ret = []
+        for _ in range(batch_count):
+            print("[I] Running StableDiffusionXL pipeline")
+            if self.nvtx_profile:
+                cudart.cudaProfilerStart()
+            latents, time_base = self.base.infer(prompt, negative_prompt, height, width, warmup=False)
+            if self.enable_refiner:
+                images, time_refiner = self.refiner.infer(prompt, negative_prompt, height, width, input_image=latents, warmup=False, **kwargs_infer_refiner)
+                ret.append(images)
+            else:
+                ret.append(latents)
+
+            if self.nvtx_profile:
+                cudart.cudaProfilerStop()
+            if self.enable_refiner:
+                print('|-----------------|--------------|')
+                print('| {:^15} | {:>9.2f} ms |'.format('e2e', time_base + time_refiner))
+                print('|-----------------|--------------|')
+        return ret
+
+    def teardown(self):
+        self.base.teardown()
+        if self.enable_refiner:
+            self.refiner.teardown()
 
 if __name__ == "__main__":
     print("[I] Initializing TensorRT accelerated StableDiffusionXL txt2img pipeline")
     args = parseArgs()
 
-    # Process prompt
-    if not isinstance(args.prompt, list):
-        raise ValueError(f"`prompt` must be of type `str` or `str` list, but is {type(args.prompt)}")
-    prompt = args.prompt * args.repeat_prompt
+    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
 
-    if not isinstance(args.negative_prompt, list):
-        raise ValueError(f"`--negative-prompt` must be of type `str` or `str` list, but is {type(args.negative_prompt)}")
-    if len(args.negative_prompt) == 1:
-        negative_prompt = args.negative_prompt * len(prompt)
-    else:
-        negative_prompt = args.negative_prompt
+    # Initialize demo
+    demo = StableDiffusionXLPipeline(vae_scaling_factor=0.13025, enable_refiner=args.enable_refiner, **kwargs_init_pipeline)
 
-    # Validate image dimensions
-    image_height = args.height
-    image_width = args.width
-    if image_height % 8 != 0 or image_width % 8 != 0:
-        raise ValueError(f"Image height and width have to be divisible by 8 but specified as: {image_height} and {image_width}.")
+    # Load TensorRT engines and pytorch modules
+    kwargs_load_refiner = {'onnx_refiner_dir': args.onnx_refiner_dir, 'engine_refiner_dir': args.engine_refiner_dir} if args.enable_refiner else {}
+    demo.loadEngines(
+        args.framework_model_dir,
+        args.onnx_dir,
+        args.engine_dir,
+        **kwargs_load_refiner,
+        **kwargs_load_engine)
 
-    # Register TensorRT plugins
-    trt.init_libnvinfer_plugins(TRT_LOGGER, '')
+    # Load resources
+    _, shared_device_memory = cudart.cudaMalloc(demo.get_max_device_memory())
+    demo.activateEngines(shared_device_memory)
+    demo.loadResources(args.height, args.width, args.batch_size, args.seed)
 
-    max_batch_size = 16
-    # FIXME VAE build fails due to element limit. Limitting batch size is WAR
-    if args.build_dynamic_shape or image_height > 512 or image_width > 512:
-        max_batch_size = 4
+    # Run inference
+    kwargs_infer_refiner = {'image_strength': args.image_strength} if args.enable_refiner else {}
+    demo.run(*args_run_demo, **kwargs_infer_refiner)
 
-    batch_size = len(prompt)
-    if batch_size > max_batch_size:
-        raise ValueError(f"Batch size {len(prompt)} is larger than allowed {max_batch_size}. If dynamic shape is used, then maximum batch size is 4")
-
-    if args.use_cuda_graph and (not args.build_static_batch or args.build_dynamic_shape):
-        raise ValueError(f"Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
-
-    def init_pipeline(pipeline_class, refinfer, onnx_dir, engine_dir):
-        # Initialize demo
-        demo = pipeline_class(
-            scheduler=args.scheduler,
-            denoising_steps=args.denoising_steps,
-            output_dir=args.output_dir,
-            version=args.version,
-            hf_token=args.hf_token,
-            verbose=args.verbose,
-            nvtx_profile=args.nvtx_profile,
-            max_batch_size=max_batch_size,
-            use_cuda_graph=args.use_cuda_graph,
-            refiner=refinfer,
-            framework_model_dir=args.framework_model_dir)
-
-        # Load TensorRT engines and pytorch modules
-        demo.loadEngines(engine_dir, args.framework_model_dir, onnx_dir, args.onnx_opset,
-            opt_batch_size=len(prompt), opt_image_height=image_height, opt_image_width=image_width, \
-            force_export=args.force_onnx_export, force_optimize=args.force_onnx_optimize, \
-            force_build=args.force_engine_build,
-            static_batch=args.build_static_batch, static_shape=not args.build_dynamic_shape, \
-            enable_refit=args.build_enable_refit, enable_preview=args.build_preview_features, \
-            enable_all_tactics=args.build_all_tactics, \
-            timing_cache=args.timing_cache, onnx_refit_dir=args.onnx_refit_dir)
-        return demo
-
-    demo_base = init_pipeline(Txt2ImgXLPipeline, False, args.onnx_base_dir, args.engine_base_dir)
-    demo_refiner = init_pipeline(Img2ImgXLPipeline, True, args.onnx_refiner_dir, args.engine_refiner_dir)
-    max_device_memory = max(demo_base.calculateMaxDeviceMemory(), demo_refiner.calculateMaxDeviceMemory())
-    _, shared_device_memory = cudart.cudaMalloc(max_device_memory)
-    demo_base.activateEngines(shared_device_memory)
-    demo_refiner.activateEngines(shared_device_memory)
-    demo_base.loadResources(image_height, image_width, batch_size, args.seed)
-    demo_refiner.loadResources(image_height, image_width, batch_size, args.seed)
-
-    def run_sd_xl_inference(warmup=False, verbose=False):
-        images, time_base = demo_base.infer(prompt, negative_prompt, image_height, image_width, warmup=warmup, verbose=verbose, seed=args.seed, return_type="latents")
-        images, time_refiner = demo_refiner.infer(prompt, negative_prompt, images, image_height, image_width, warmup=warmup, verbose=verbose, seed=args.seed)
-        return images, time_base + time_refiner
-
-    if args.use_cuda_graph:
-        # inference once to get cuda graph
-        images, _ = run_sd_xl_inference(warmup=True, verbose=False)
-
-    print("[I] Warming up ..")
-    for _ in range(args.num_warmup_runs):
-        images, _ = run_sd_xl_inference(warmup=True, verbose=False)
-
-    print("[I] Running StableDiffusion pipeline")
-    if args.nvtx_profile:
-        cudart.cudaProfilerStart()
-    images, pipeline_time = run_sd_xl_inference(warmup=False, verbose=args.verbose)
-    if args.nvtx_profile:
-        cudart.cudaProfilerStop()
-
-    print('|------------|--------------|')
-    print('| {:^10} | {:>9.2f} ms |'.format('e2e', pipeline_time))
-    print('|------------|--------------|')
-
-    demo_base.teardown()
-    demo_refiner.teardown()
+    demo.teardown()
