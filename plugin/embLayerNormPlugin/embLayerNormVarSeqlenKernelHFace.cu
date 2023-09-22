@@ -43,7 +43,6 @@ __global__ void embLayerNormKernelHFace(int32_t ld, int32_t const* inputIds, int
     // this code currently assumes the input shape is SxB, row-major => seqPos = s * B + b
     // instead we want BxS, row-major => seqPos = b * S + s
 
-    cub::Sum pairSum;
     // 1. lookup word and token of the block
     // blockIdx.x = position in the sequence
     // blockIdx.y = batch
@@ -95,7 +94,7 @@ __global__ void embLayerNormKernelHFace(int32_t ld, int32_t const* inputIds, int
 
             output[outOffset + it] = val;
             T const rldval = rld * val;
-            threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
+            threadData = threadData + kvp<T>(rldval, rldval * val);
         }
     }
 
