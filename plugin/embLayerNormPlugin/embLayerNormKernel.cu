@@ -186,7 +186,6 @@ __global__ void embLayerNormKernel(int ld, int32_t const* inputIds, int32_t cons
     int32_t const tokSize, T* output)
 {
 
-    cub::Sum pairSum;
     // 1. lookup word and token of the block
     // blockIdx.x = position in the sequence
     // blockIdx.y = batch
@@ -225,7 +224,7 @@ __global__ void embLayerNormKernel(int ld, int32_t const* inputIds, int32_t cons
 
             output[outOffset + it] = val;
             T const rldval = rld * val;
-            threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
+            threadData = threadData + kvp<T>(rldval, rldval * val);
         }
     }
 
