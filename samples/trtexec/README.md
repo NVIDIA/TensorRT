@@ -31,9 +31,12 @@ Included in the `samples` directory is a command line wrapper tool, called `trte
 
 `trtexec` can be used to build engines, using different TensorRT features (see command line arguments), and run inference. `trtexec` also measures and reports execution time and can be used to understand performance and possibly locate bottlenecks.
 
-Compile this sample by running `make` in the `<TensorRT root directory>/samples/trtexec` directory. The binary named `trtexec` will be created in the `<TensorRT root directory>/bin` directory.
+buiding `trtexec` by running `cmake` in the `<TensorRT root directory>/build` directory. The binary named `trtexec` will be created in the `<TensorRT root directory>/build` directory.
 ```
-cd <TensorRT root directory>/samples/trtexec
+cd <TensorRT root directory>/
+git submodule update --init --recursive
+mkdir build && cd build
+cmake .. -DPYTHON_EXECUTABLE=$(which python3)
 make
 ```
 Where `<TensorRT root directory>` is where you installed TensorRT.
