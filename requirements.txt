@@ -4,6 +4,6 @@ tensorflow-gpu==2.5.1; (platform_machine=="x86_64" and sys.platform=="linux")
 onnxruntime==1.8.1
 torch==1.8.1
 Pillow==8.3.2
-numpy
+#numpy
 pycuda<2021.1
 pytest
