@@ -668,7 +668,7 @@ class Graph(object):
                     return False
 
                 def all_tensors_const(tensors):
-                    return all([t.name in graph_constants for t in tensors])
+                    return all([t.name in graph_constants for t in tensors if not t.is_empty()])
 
                 if not all_tensors_const(node.inputs):
                     return False
