@@ -668,10 +668,10 @@ class Graph(object):
                     return False
 
                 def all_tensors_const(tensors):
-                    return all([t.name in graph_constants for t in tensors])
+                    # Ignore omitted optional inputs.
+                    return all([t.name in graph_constants for t in tensors if not t.is_empty()])
 
-                # Ignore omitted optional inputs.
-                if not all_tensors_const([inp for inp in node.inputs if not inp.is_empty()]):
+                if not all_tensors_const(node.inputs):
                     return False
 
                 all_subgraph_foreign_tensors_const = True
