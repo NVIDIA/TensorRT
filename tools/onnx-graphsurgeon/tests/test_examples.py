@@ -17,8 +17,6 @@
 
 import os
 import subprocess as sp
-import sys
-import tempfile
 
 import numpy as np
 import onnx
@@ -49,6 +47,7 @@ EXAMPLES = [
     ("08_replacing_a_subgraph", [Artifact("model.onnx"), Artifact("replaced.onnx")]),
     ("09_shape_operations_with_the_layer_api", [Artifact("model.onnx")]),
     ("10_dynamic_batch_size", [Artifact("model.onnx"), Artifact("dynamic.onnx")]),
+    ("11_creating_a_local_function", [Artifact("model.onnx")]),
 ]
 
 # Extract any ``` blocks from the README

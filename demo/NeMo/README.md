@@ -133,3 +133,23 @@ python3 nemo_export.py --nemo-model=model.nemo --onnx=onnx/model.onnx --opset19 
 ```
 `--extra-configs` can be used to specified configs that are defined in `config.yml` but not being exposed from existing command-line interface.
 Please specify `--help` to see more options.
+
+
+# How to run sparsity for benchmark
+
+*Note: this is for performance analysis. The pruned model should not be used for accuracy purpose unless it was fine-tuned for sparsity. The pruning may take minutes or hours depending on the model size.*
+
+
+1. Enable sparsity knobs in `config.yaml`:
+  * Set `onnx_export_options.prune` to `True` to enable pruning of the ONNX model.
+  * Set `trt_export_options.sparse` to `True` to enable sparse tactics profiling in TensorRT.
+2. Run the scripts. You should be able to see logs like below.
+
+```
+[2023-07-28 00:15:03,015][OSS][INFO] Prune ONNX model with: polygraphy surgeon prune ${OSS_ROOT}/demo/NeMo/temp/gpt-5b/GPT3-gpt-5b-fp8-fp16-ms256/onnx/model-16.opset19.onnx -o ${OSS_ROOT}/demo/NeMo/temp/gpt-5b/GPT3-gpt-5b-fp8-fp16-ms256/onnx/pruned.model-16.opset19.onnx --save-external-data ${OSS_ROOT}/demo/NeMo/temp/gpt-5b/GPT3-gpt-5b-fp8-fp16-ms256/onnx/pruned.model-16.opset19.onnx_data
+[2023-07-28 00:15:03,016][OSS][INFO] This may take a while...
+...
+
+[2023-07-28 03:36:52,307][OSS][DEBUG] trtexec --onnx=${OSS_ROOT}/demo/NeMo/temp/gpt-5b/GPT3-gpt-5b-fp8-fp16-ms256/onnx/pruned.model-16.opset19.onnx --minShapes=input_ids:1x1,position_ids:1x1 --optShapes=input_ids:1x128,position_ids:1x128 --maxShapes=input_ids:1x256,position_ids:1x256 --fp8 --fp16 --sparsity=enable --timingCacheFile=functional.cache --preview=+fasterDynamicShapes0805,+disableExternalTacticSourcesForCore0805
+```
+

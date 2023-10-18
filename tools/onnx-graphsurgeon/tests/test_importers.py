@@ -23,7 +23,9 @@ import onnx.numpy_helper
 import onnx.shape_inference
 import pytest
 from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
-from onnx_graphsurgeon.ir.tensor import Constant, Variable
+from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
+from onnx_graphsurgeon.ir.function import Function
+from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 
 from onnx_models import (
@@ -140,6 +142,69 @@ class TestOnnxImporter(object):
         assert node.attrs["floats_attr"] == floats_attr
         assert node.attrs["ints_attr"] == ints_attr
         assert node.attrs["strings_attr"] == strings_attr
+
+    def test_import_node_ref_attrs(self):
+        op = "Test"
+        inputs = ["x"]
+        outputs = ["y"]
+        attrs = {"attr1": 1, "attr2": 2.0}
+        referencing_attr = "attr3"
+        referenced_attr = "attr4"
+
+        onnx_node = onnx.helper.make_node(
+            op,
+            inputs,
+            outputs,
+            **attrs
+        )
+        onnx_attr_ref = onnx.helper.make_attribute_ref(referencing_attr, onnx.AttributeProto.FLOAT)
+        onnx_attr_ref.ref_attr_name = referenced_attr
+        onnx_node.attribute.append(onnx_attr_ref)
+        node = OnnxImporter.import_node(onnx_node, OrderedDict(), OrderedDict(), opset=11, import_domains=None)
+        assert node.op == op
+        assert node.attrs["attr1"] == 1
+        assert node.attrs["attr2"] == 2.0
+        assert node.attrs["attr3"] == Node.AttributeRef(referenced_attr, float)
+
+    def test_import_function(self):
+        name = "Test"
+        domain = "com.test"
+        inputs = ["X", "Y"]
+        outputs = ["Z"]
+        nodes = [
+            onnx.helper.make_node("Add", ["X", "Y"], ["V"], attr1=1),
+            onnx.helper.make_node("Add", ["X", "V"], ["W"], attr2=2),
+            onnx.helper.make_node("Mul", ["V", "W"], ["Z"], attr3=3),
+        ]
+        opset = 18
+        opset_imports = [onnx.helper.make_operatorsetid("ai.onnx", opset)]
+        attributes = ["attr1", "attr2"]
+        attribute_protos = [onnx.helper.make_attribute("attr3", 3)]
+        doc_string = "docstring"
+        onnx_function = onnx.helper.make_function(
+            domain,
+            name,
+            inputs,
+            outputs,
+            nodes,
+            opset_imports,
+            attributes=attributes,
+            attribute_protos=attribute_protos,
+            doc_string=doc_string
+        )
+        func = OnnxImporter.import_function(onnx_function)
+        assert type(func) == Function
+        assert func.name == name
+        assert func.domain == domain
+        assert func.doc_string == doc_string
+        assert list(func.import_domains) == list(opset_imports)
+        assert set(func.attrs.keys()) == set(attributes) | {a.name for a in attribute_protos}
+        assert func.opset == opset
+        assert all([isinstance(t, Tensor) for t in func.inputs + func.outputs])
+        assert sorted(inputs) == sorted([t.name for t in func.inputs])
+        assert sorted(outputs) == sorted([t.name for t in func.outputs])
+        assert sorted([n.op_type for n in nodes]) == sorted([n.op for n in func.nodes])
+        assert attribute_protos[0].i == func.attrs[attribute_protos[0].name]
 
     @pytest.mark.parametrize(
         "model",

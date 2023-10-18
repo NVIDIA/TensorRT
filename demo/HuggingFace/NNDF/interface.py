@@ -21,23 +21,26 @@ Interface classes required for each registered network script.
 
 import argparse
 
-from abc import ABCMeta, abstractmethod
+from abc import abstractmethod
 from typing import List, Union
 # For time purpose
 import time
 
 # NNDF
 from NNDF.networks import (
+    TopNAccuracy,
+    AccuracyResult,
+    AccuracyMetadata,
     BenchmarkingResult,
     NetworkResult,
     Precision,
     NetworkMetadata,
-    DeprecatedCache,
     NetworkCheckpointResult,
     NNConfig,
     NetworkModels,
     TimingProfile,
     NetworkRuntime,
+    InferenceResult,
 )
 from NNDF.logger import G_LOGGER
 from NNDF.general_utils import NNFolderWorkspace, confirm_folder_delete, measure_python_inference_code
@@ -55,7 +58,7 @@ from transformers import (
     GenerationMixin,
 )
 
-import os
+import os, gc
 import torch
 
 # Program-wide constants for passing in valid frameworks.
@@ -68,7 +71,7 @@ VALID_FRAMEWORKS = [
     FRAMEWORK_TENSORRT
 ]
 
-class NetworkCommand(metaclass=ABCMeta):
+class NetworkCommand:
     """Base class that each network script's command module should inherit."""
 
     description = "NetworkCommand"
@@ -78,6 +81,10 @@ class NetworkCommand(metaclass=ABCMeta):
     DEFAULT_WARMUP = 3
     DEFAULT_DURATION = 0.0
     DEFAULT_PERCENTILE = 50
+
+    DEFAULT_NUM_SAMPLES = 20
+    DEFAULT_TOPN = 5
+    DEFAULT_TOKENS_TO_GENERATE = 2
 
     def __init__(
         self,
@@ -110,36 +117,45 @@ class NetworkCommand(metaclass=ABCMeta):
     def setup_environment(
         self,
         variant: str,
+        action: str = "run",
         working_dir: str = "temp",
+        # Model args
         batch_size: int = 1,
         num_beams: int = 1,
         use_cache: bool = True,
         enable_kv_cache: bool = False,
         fp16: bool = True,
+        use_mask: bool = False,
+        # Log level
         verbose: bool = False,
         info: bool = False,
+        # Timing Profile args
         iterations: int = DEFAULT_ITERATIONS,
         number: int = DEFAULT_NUMBER,
         warmup: int = DEFAULT_WARMUP,
         duration: int = DEFAULT_DURATION,
         percentile: int = DEFAULT_PERCENTILE,
-        benchmarking_mode: bool = False,
+        # Benchmarking args
         input_seq_len: int = None,
         output_seq_len: int = None,
         input_profile_max_len: int = None,
         output_profile_max_len: int = None,
+        # Workspace management args
         cleanup: bool = False,
         torch_dir: str = None,
         encoder_onnx: str = None,
         decoder_onnx: str = None,
         cache_generator_onnx: str = None,
-        skip_checkpoint_load: bool = False,
         engine_postfix: str = "",
-        use_mask: bool = False,
+        # Accuracy args
+        num_samples: int = DEFAULT_NUM_SAMPLES,
+        topN: int = DEFAULT_TOPN,
+        tokens_to_generate: int = DEFAULT_TOKENS_TO_GENERATE,
         **kwargs,
     ) -> None:
         """
-        Uses Arguments from command line or user specified to setup config for the model.
+        The main entrance point for configuring models.
+        Uses arguments from command line or user specified to setup config for the model.
         """
 
         if verbose:
@@ -148,8 +164,7 @@ class NetworkCommand(metaclass=ABCMeta):
             G_LOGGER.setLevel(level=G_LOGGER.INFO)
 
         if variant is None:
-            G_LOGGER.error("You should specify --variant to run HuggingFace demo")
-            return
+            raise RuntimeError("You should specify --variant to run HuggingFace demo")
 
         if enable_kv_cache:
             G_LOGGER.warning("--enable-kv-cache has been deprecated to --use-cache to fit HuggingFace config.")
@@ -157,9 +172,12 @@ class NetworkCommand(metaclass=ABCMeta):
 
         if self._args is not None:
             G_LOGGER.info("Setting up environment with arguments: {}".format(self._args))
+            skip_checkpoint_load = False
         else:
-            G_LOGGER.info("User-customized API is called")
+            # Skip checkpoint load for notebook/API users.
+            skip_checkpoint_load = True
 
+        self.action = action
 
         self.metadata = NetworkMetadata(
             variant=variant,
@@ -167,7 +185,6 @@ class NetworkCommand(metaclass=ABCMeta):
             use_cache=use_cache,
             num_beams=num_beams,
             batch_size=batch_size,
-            other=DeprecatedCache(kv_cache=use_cache)
         )
 
         self.config = self.config_class(
@@ -182,7 +199,7 @@ class NetworkCommand(metaclass=ABCMeta):
                 trust_remote_code=True,
             )
 
-            if benchmarking_mode:
+            if action == "benchmark":
 
                 # Return supremum of a max value and valid user input values
                 N_POSITION_EMBEDDINGS_FALLBACK = 1024
@@ -231,7 +248,6 @@ class NetworkCommand(metaclass=ABCMeta):
 
         hf_config = get_hf_config()
         self.config.from_hf_config(hf_config)
-        self.benchmarking_mode = benchmarking_mode
         # Not able to set it inside config class. Therefore needs to be set up here.
         self.config.precision = torch.float16 if self.config.fp16 else torch.float32
         if self.config.consume_image_embeds:
@@ -240,7 +256,12 @@ class NetworkCommand(metaclass=ABCMeta):
         # Not able to specify model classes in config and therefore needs to set up here.
         self.config.set_model_classes(self.model_classes)
 
-        if benchmarking_mode:
+        if use_mask:
+            self.config.use_mask = True
+            if self.config.consume_image_embeds: # For Vision2Seq
+                self.config.text_config.use_mask = True
+
+        if action == "benchmark":
             self.checkpoint = None
             # Overwrite some fields for generation
             self.seq_tag = input_profile_max_len is None and output_profile_max_len is None
@@ -251,21 +272,17 @@ class NetworkCommand(metaclass=ABCMeta):
                 output_profile_max_len=output_profile_max_len,
             )
 
-        if use_mask:
-            self.config.use_mask = True
-            if self.config.consume_image_embeds: # For Vision2Seq
-                self.config.text_config.use_mask = True
+        elif action == "accuracy":
+            self.accuracy_metadata = AccuracyMetadata(dataset="LAMBADA", num_samples=num_samples, tokens_to_generate=tokens_to_generate)
+            # Default to Top1 +TopN + Top10 accuracy
+            self.topN = {1, topN, 10}
+            self.checkpoint = self.load_lambada_dataset(
+                num_samples=num_samples,
+                tokens_to_generate=tokens_to_generate,
+            )
 
-        skip_checkpoint_load = skip_checkpoint_load or benchmarking_mode or (self._args is None)
-        if not skip_checkpoint_load:
+        elif not skip_checkpoint_load:
             self.checkpoint = self.load_nn_semantic_checkpoint()
-            network_input = list(self.checkpoint.inputs())
-            # If there is input which is list, using maximum input list size to batch size
-
-            self.config.input_case_size = max([len(n) if isinstance(n, list) else 1 for n in network_input ])
-            # update config batch size
-            self.config.batch_size = self.config.input_case_size * self.config.batch_size
-            self.config.expand_size = self.config._compute_expand_size(self.config.batch_size, self.config.num_beams)
 
         # User defined variables for generation
         generation_config = GenerationConfig.from_model_config(hf_config)
@@ -631,6 +648,12 @@ class NetworkCommand(metaclass=ABCMeta):
             self.onnx_cross_attn_cache_generator = torch_cross_attn_cache_generator.as_onnx_model(
                 self.workspace.cross_attn_generator_onnx_path, force_overwrite=False, config=self.config
             )
+
+        # torch_model is no longer used. We need to remove it from CPU otherwise it takes 1xfp32 model size and thus affect TRT memory comsumption
+        torch_model.cpu()
+        del torch_model
+        gc.collect()
+
         G_LOGGER.info("ONNX models successfully exported from PyTorch. ONNX export and post-processing time: {:.4f}s".format(time.time() - t0))
         return True
 
@@ -681,6 +704,34 @@ class NetworkCommand(metaclass=ABCMeta):
         )
         return checkpoint
 
+    def load_lambada_dataset(
+        self,
+        num_samples,
+        tokens_to_generate,
+    ):
+        """
+        Loads LAMBADA dataset from online for accuracy checks.
+
+        Args:
+            num_samples: number of samples for the dataset.
+            tokens_to_generate: number of tokens masked out for accuracy testing.
+
+        Returns:
+            NNLambadaCheckpoint
+        """
+        from NNDF.checkpoints import NNLambadaCheckpoint
+        # LAMBADA dataset will be shared for all models, so put in a shared folder.
+        demo_dir = os.path.dirname(os.getcwd())
+        checkpoint = NNLambadaCheckpoint(
+            base_dir=demo_dir,
+            tokens_to_generate=tokens_to_generate,
+            num_samples=num_samples,
+            batch_size=self.config.batch_size,
+            use_mask=self.config.use_mask,
+        )
+
+        return checkpoint
+
     @use_cuda
     def decoder_inference(
         self,
@@ -695,7 +746,7 @@ class NetworkCommand(metaclass=ABCMeta):
         if isinstance(self.decoder, TRTNativeRunner) and self.config.is_encoder_decoder:
             if self.config.consume_image_embeds:
                 self.decoder.set_image_embeds(image_embeds)
-            else: 
+            else:
                 self.decoder.set_encoder_hidden_states(encoder_outputs.last_hidden_state)
 
         if self.config.use_mask and attention_mask is None:
@@ -749,20 +800,22 @@ class NetworkCommand(metaclass=ABCMeta):
         pixel_values: torch.Tensor = None, # For Vision encoder in Vision2Seq models
         early_stopping = True,
         use_cuda = True
-    ):
+    ) -> InferenceResult:
 
         G_LOGGER.info(f"Running full inference...")
         if self.config.use_mask and attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         if self.config.consume_image_embeds and pixel_values is None:
             raise RuntimeError("Please provide pixel_values for vision encoder in Vision2Seq models")
-        
+
         decoder_input_ids=input_ids
         if self.config.consume_image_embeds: # For Vision2Seq (Specifically for BLIP)
             input_ids[:, 0] = self.config.text_config.bos_token_id
             decoder_input_ids=input_ids[:, :-1]
             if self.config.use_mask and attention_mask is not None:
                 attention_mask=attention_mask[:, :-1]
+            if self.config.fp16 and not isinstance(self.decoder, TRTNativeRunner):
+                pixel_values = pixel_values.half()
 
         def _e2e():
             with torch.no_grad():
@@ -800,42 +853,69 @@ class NetworkCommand(metaclass=ABCMeta):
         measurement_function = _e2e
 
         full_e2e_time = measure_python_inference_code(measurement_function, self.timing_profile)
+
         model_outputs = _e2e()
 
-        return (model_outputs, full_e2e_time)
+        return InferenceResult(
+            output=model_outputs,
+            runtime=full_e2e_time,
+        )
 
     @use_cuda
     def generate(
         self,
-        input_str: str = None,
+        input = None,
         pixel_values: torch.Tensor = None, # For Vision encoder in Vision2Seq models
         input_ids: torch.Tensor = None,
         attention_mask: torch.Tensor = None,
+        min_length: int = None,
+        max_length: int = None,
         use_cuda: bool = True,
     ):
         # If models are not set, need to setup tokenizer and models to run inference
         if self.models is None:
             self.models = self.setup_tokenizer_and_model()
 
-        if input_str is None and input_ids is None:
-            raise RuntimeError("Please provide either input_str or input_ids for generate")
-        
+        if input is None and input_ids is None:
+            raise RuntimeError("Please provide either input(list/str) or input_ids(torch.Tensor) for generate")
+
         if self.config.consume_image_embeds and pixel_values is None:
             raise RuntimeError("Please provide pixel_values for vision encoder in Vision2Seq models")
 
         # If no input_ids, use input_str to tokenize
         if input_ids is None:
-            tokenizer_output = self.tokenizer([input_str] * self.config.batch_size, padding=True, return_tensors="pt")
+            if not isinstance(input, list):
+                input = [input] * self.config.batch_size
+
+            tokenizer_output = self.tokenizer(input, padding=True, return_tensors="pt")
             input_ids = tokenizer_output.input_ids
+
             if self.config.consume_image_embeds: # For Vision2Seq (Specifically for BLIP)
                 input_ids = input_ids[:, :-1]
                 input_ids[:, 0] = self.config.text_config.bos_token_id
+
             if self.config.use_mask:
                 attention_mask = tokenizer_output.attention_mask
                 if self.config.consume_image_embeds: # For Vision2Seq (Specifically for BLIP)
                     attention_mask = attention_mask[:, :-1]
+
         elif self.config.use_mask and attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
+
+        if self.config.use_mask:
+            assert input_ids.shape[0] == attention_mask.shape[0], "batch_size of input_ids and attention_mask does not match."
+
+        bs = input_ids.shape[0]
+        if bs != self.config.batch_size:
+            G_LOGGER.warning(f"Input bs {bs} != desired bs {self.config.batch_size}."
+                " Please make sure you are running with framework or with --dynamic-batch with batch_size=max_dynamic_batch."
+                " This behavior may lead to mismatched size or tensor OOM error."
+                " Attempt to cast batch size."
+            )
+
+            self.decoder.config.batch_size = bs
+            self.decoder.config.expand_size = bs * self.decoder.config.num_beams
+            self.decoder.expand_size = bs * self.decoder.config.num_beams
 
         if use_cuda:
             input_ids = input_ids.to("cuda")
@@ -848,6 +928,8 @@ class NetworkCommand(metaclass=ABCMeta):
         image_embeds = None
         if self.config.is_encoder_decoder:
             if self.config.consume_image_embeds: # Vision encoder
+                if self.config.fp16 and not isinstance(self.decoder, TRTNativeRunner):
+                    pixel_values = pixel_values.half()
                 vision_outputs = self.encoder(pixel_values=pixel_values)
                 image_embeds = vision_outputs[0]
             else:
@@ -858,7 +940,9 @@ class NetworkCommand(metaclass=ABCMeta):
         if self.config.consume_image_embeds:
             vision2seq_kwargs["image_embeds"] = image_embeds
             vision2seq_kwargs["early_stopping"] = self.config.text_config.early_stopping
-        
+
+        min_length = self.config.min_output_length if min_length is None else min_length
+        max_length = self.config.max_output_length if max_length is None else max_length
         decoder_outputs = self.decoder.generate(
             input_ids=input_ids,
             num_beams=self.config.num_beams,
@@ -866,49 +950,58 @@ class NetworkCommand(metaclass=ABCMeta):
             pad_token_id=self.config.pad_token_id,
             use_cache=self.config.use_cache,
             encoder_outputs=encoder_outputs,
-            min_length=self.config.min_output_length,
-            max_length=self.config.max_output_length,
+            min_length=min_length,
+            max_length=max_length,
             **mask_kwargs,
             **vision2seq_kwargs,
         )
 
-        semantic_outputs = self.tokenizer.decode(
-            decoder_outputs[-1, :], skip_special_tokens=True
+        semantic_outputs = self.tokenizer.batch_decode(
+            decoder_outputs, skip_special_tokens=True
         )
 
         return decoder_outputs, semantic_outputs
 
+
     @use_cuda
     def execute_inference(
         self,
-        inference_input: Union[str, list],
-        pixel_values = None,
+        input: List[str] = None,
+        input_ids: torch.Tensor = None,
+        attention_mask: torch.Tensor = None,
+        pixel_values: torch.Tensor = None,
         use_cuda: bool = True
-    ) -> Union[NetworkResult, BenchmarkingResult]:
+    ) -> InferenceResult:
 
-        if self.models is None:
-            self.models = self.setup_tokenizer_and_model()
+        '''
+        Measure encoder/decoder/e2e performance for a single example.
 
-        attention_mask = None
-        # Prepare the input tokens and find out output sequence length.
-        if not self.benchmarking_mode:
-            if isinstance(inference_input, list):
-                tokenizer_output = self.tokenizer(inference_input * (self.config.batch_size // self.config.input_case_size), padding=True, return_tensors="pt")
-            else:
-                # TODO: Ideally should be self.config.batch_size // self.config.input_case_size, but this would violate the shape restriction
-                tokenizer_output = self.tokenizer([inference_input] * self.config.batch_size, padding=True, return_tensors="pt")
+        Args:
+            input: List[str]: example.
+            input_ids: torch.Tensor
+            attention_mask: torch.Tensor
 
+        '''
+
+        if input is None and input_ids is None:
+            raise RuntimeError("Please provide either input(list of str) or input_ids(torch.Tensor) for execute_inference function.")
+
+        if input:
+            tokenizer_output = self.tokenizer(input, padding=True, return_tensors="pt")
             input_ids = tokenizer_output.input_ids
             if self.config.use_mask:
                 attention_mask = tokenizer_output.attention_mask
         else:
-            # opt_input_length = input_seq_len in benchmarking mode
-            input_ids = torch.randint(0, self.config.vocab_size, (self.config.batch_size, self.config.opt_input_length))
-            if self.config.use_mask:
+            if self.config.use_mask and attention_mask is None:
+                G_LOGGER.warn("attention_mask is None, but use_mask = True. Using trivial attention_mask.")
                 attention_mask = torch.ones_like(input_ids)
 
-        if self.config.consume_image_embeds and pixel_values is None:
-            raise RuntimeError("Please provide pixel_values for vision encoder in Vision2Seq models")
+        if self.config.consume_image_embeds:
+            if pixel_values is None:
+                G_LOGGER.warn("pixel_values is None but running Vision2Seq model. Using random image.")
+                pixel_values = torch.rand(self.config.batch_size, 3, self.config.image_size, self.config.image_size)
+            if self.config.fp16 and not isinstance(self.decoder, TRTNativeRunner):
+                pixel_values = pixel_values.half()
 
         if use_cuda:
             input_ids = input_ids.to("cuda")
@@ -981,58 +1074,308 @@ class NetworkCommand(metaclass=ABCMeta):
                 )
             )
 
-        # Skip result checking in benchmarking mode since the input data is random.
-        if self.benchmarking_mode:
-            return BenchmarkingResult(median_runtime=runtime, models=self.models)
-
-        if isinstance(inference_input, list):
-            semantic_outputs = list()
-            for batch_index in range(decoder_output.shape[0]):
-                semantic_outputs.append(self.tokenizer.decode(
-                    decoder_output[batch_index, :], skip_special_tokens=True
-        ))
-        else:
-            # Check that each expanded batch returns the same result
-            for batch_index in range(1, decoder_output.shape[0]):
-                if not torch.equal(decoder_output[0, :], decoder_output[batch_index,:]):
-                    # This usually indicate some accuracy issue with multi-batch inference
-                    G_LOGGER.warning(f"batches do not equal for identical inputs. \
-                                       decoder_output = {decoder_output}. \
-                                       input_ids = {input_ids}.")
-                    break
-
-            # Remove the padding and end tokens.
-            semantic_outputs = self.tokenizer.decode(
-                decoder_output[0, :], skip_special_tokens=True
-            )
-
-        return NetworkResult(
-            input=inference_input,
-            output_tensor=decoder_output,
-            semantic_output=semantic_outputs,
-            median_runtime=runtime,
+        return InferenceResult(
+            output=decoder_output,
+            runtime=runtime,
         )
 
     @use_cuda
-    def calculate_perplexity(
+    def execute_accuracy(
         self,
-        input_str: str,
-        reference_str: str,
-        use_cuda: bool = True,
-    ):
+        labels: List[List[str]],
+        use_cuda = True,
+    ) -> AccuracyResult:
         """
-        Each child class should have a `calculate_perplexity` that takes in the result str and reference str for perplexity calculation.
+        Runs accuracy checks using labels from LAMBADA datasets.
+        It uses the first `label_length - tokens_to_generate` tokens to predict the last
+        `tokens_to_generate` tokens and calculates perplxity and TopN accuracy.
+
+        Args:
+            labels: List[List[str]] of shape (num_samples, batch_size)
+
+        Returns:
+            accuracy: AccuracyResult(topN, token_perplexity, seq_perplexity)
 
         """
-        G_LOGGER.warning(
-            f"Make sure that a `calculate_perplexity` function is correctly implemented in {self.__class__.__module__} to"
-            f" enable accuracy check for {self.__class__}. Default=None"
+
+        if self.config.consume_image_embeds:
+            raise RuntimeError("Vision2Seq models currently do not support LAMBADA accuracy check!")
+
+        results = []
+        max_length = self.config.max_length
+        tokens_to_generate = self.accuracy_metadata.tokens_to_generate
+        num_beams = self.config.num_beams
+
+        if num_beams > 1:
+            G_LOGGER.warn("num_beams > 1. Skip perplexity calculation and default to -1")
+        if self.config.network_name == "T5":
+            G_LOGGER.warn(f"T5 may have very bad perplexity because perplexity tends to be very high when logits and tokens do not match. Please refer to TopN.")
+
+        for label in labels:
+
+            self.tokenizer.truncation_side = "right"
+            tokenizer_output = self.tokenizer(
+                label,
+                truncation=True,
+                padding=True,
+                return_tensors="pt",
+                max_length=max_length,
+            )
+
+            target_ids = tokenizer_output.input_ids
+            if self.config.is_encoder_decoder:
+                # Need to insert decoder_start_token_id and truncate eos token
+                target_ids = torch.cat(
+                    (torch.ones((target_ids.shape[0], 1)).long().to(target_ids.device) * self.config.decoder_start_token_id, target_ids),
+                    dim=1
+                )
+
+            target_ids = target_ids[:,:max_length]
+
+            if use_cuda:
+                target_ids = target_ids.cuda()
+
+            G_LOGGER.info("-------------------------------")
+            G_LOGGER.debug(f"target={self.tokenizer.batch_decode(target_ids,skip_special_tokens=True)};target_ids={target_ids}")
+
+            num_tokens = target_ids.shape[1]
+
+            # Always generate tokens_to_generate number of tokens
+            context_len = target_ids.shape[1] - tokens_to_generate
+            if self.config.is_encoder_decoder:
+                # Because the last word may be eos token, we need to truncate that for encoder/decoder models
+                context_len -= 1
+            input_ids = target_ids[:,:context_len]
+
+            if self.config.use_mask:
+                attention_mask = tokenizer_output.attention_mask[:,:context_len]
+                if use_cuda:
+                    attention_mask = attention_mask.cuda()
+            else:
+                attention_mask = None
+
+            if num_beams > 1:
+                target_ids = target_ids.repeat_interleave(num_beams, dim=0)
+
+            self.decoder.accuracy_mode(target_ids)
+
+            _,_ = self.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                # Force generating num_tokens for accuracy check
+                min_length=num_tokens,
+                max_length=num_tokens,
+                use_cuda=use_cuda,
+            )
+
+            full_logits = self.decoder.full_logits.float()
+
+            if num_beams == 1:
+                shifted_logits = full_logits
+                shifted_ids = target_ids[:,1:]
+                if self.config.is_encoder_decoder:
+                    # Truncate the last prediction
+                    shifted_logits = shifted_logits[:,:-1,:]
+                    shifted_ids = shifted_ids[:,:-1]
+                seq_ppl = torch.nn.CrossEntropyLoss()(shifted_logits.permute((0, 2, 1)), shifted_ids)
+            else:
+                seq_ppl = -1
+
+            if not self.config.is_encoder_decoder:
+                target_ids = target_ids[:,-tokens_to_generate:]
+                full_logits = full_logits[:, -tokens_to_generate:,:]
+            else:
+                # Truncate the last prediction
+                target_ids = target_ids[:,-tokens_to_generate-1:-1]
+                full_logits = full_logits[:, -tokens_to_generate-1:-1,:]
+
+            assert target_ids.shape[1] == full_logits.shape[1], "Reference and full logits should have the same sequence length."
+
+            # Calculate full sequence perplexity
+            if num_beams == 1:
+                token_ppl = torch.nn.CrossEntropyLoss()(full_logits.permute((0, 2, 1)), target_ids).item()
+            else:
+                token_ppl = -1
+
+            # Each batch and each token should have its own TopN Accuracy and perplexity
+            topn_accuracy = []
+            for token_id in range(tokens_to_generate):
+                for bs in range(input_ids.shape[0]):
+                    token = target_ids[bs:bs+1, token_id:token_id+1]
+                    token_logits = full_logits[bs*num_beams:(bs+1)*num_beams,token_id:token_id+1, :]
+                    G_LOGGER.info(f"Token:{token}, logits:{token_logits}, top10:{token_logits.topk(10).indices}")
+                    for _topn in self.topN:
+                        accuracy=1.0 if (token[0][0] in token_logits.topk(_topn, dim=-1).indices) else 0.0
+                        topn_accuracy.append(TopNAccuracy(n=_topn, accuracy=accuracy))
+
+            G_LOGGER.info(f"TopN accuracy={topn_accuracy};ppl(last {tokens_to_generate} tokens)={token_ppl}; ppl(sequence)={seq_ppl}")
+
+            results.append(AccuracyResult(
+                topN=topn_accuracy,
+                token_perplexity=token_ppl,
+                seq_perplexity=seq_ppl,
+            ))
+
+        return self.checkpoint.summary(results)
+
+    @use_cuda
+    def execute_benchmark(
+        self,
+        use_cuda: bool = True
+    ) -> BenchmarkingResult:
+
+        """
+        Runs performance benchmark with random inputs and controled generation length.
+
+        Args:
+            None
+        Returns:
+            BenchmarkingResult: container runtime for each section and full inferecne
+
+        """
+
+        if self.models is None:
+            self.models = self.setup_tokenizer_and_model()
+
+        # opt_input_length = input_seq_len in benchmarking mode
+        input_ids = torch.randint(0, self.config.vocab_size, (self.config.batch_size, self.config.opt_input_length))
+        if self.config.consume_image_embeds:
+            pixel_values = torch.rand(self.config.batch_size, 3, self.config.image_size, self.config.image_size)
+            if self.config.fp16 and not isinstance(self.decoder, TRTNativeRunner):
+                pixel_values = pixel_values.half()
+        else:
+            pixel_values = None
+
+        attention_mask = None
+        if self.config.use_mask:
+            attention_mask = torch.ones_like(input_ids)
+
+        inference_result = self.execute_inference(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            use_cuda=use_cuda,
         )
 
-        return None
+        return BenchmarkingResult(median_runtime=inference_result.runtime, models=self.models)
 
+    @use_cuda
+    def execute_run(
+        self,
+        inputs: List[List[str]],
+        labels: List[List[str]],
+        use_cuda: bool = True
+    ) -> NetworkCheckpointResult:
 
-    def run(self) -> Union[List[NetworkResult], BenchmarkingResult]:
+        """
+        (Deprecated) Runs checkpoint.toml checks with absolute accuracy and perplexity calculation.
+
+        Args:
+            inputs: List[List[str]]: inputs from checkpoint. Shape: (num_samples, batch_size)
+            labels: List[List[str]]: Golden outputs from checkpoint.toml. Shape: (num_samples, batch_size)
+
+        Returns:
+            NetworkCheckpointResult:
+                network_results: input, output, accuracy, log_perplexity, runtime
+                accuracy: average accuracy over all samples
+                perplexity: average perplexity over all samples
+        """
+
+        if self.config.consume_image_embeds:
+            raise RuntimeError("Vision2Seq models currently do not support checkpoint.toml accuracy check!")
+
+        if self.models is None:
+            self.models = self.setup_tokenizer_and_model()
+
+        results = []
+        for (input, label) in zip(inputs, labels):
+
+            tokenizer_output = self.tokenizer(input, padding=True, return_tensors="pt")
+            input_ids = tokenizer_output.input_ids
+            attention_mask = None
+
+            if self.config.use_mask:
+                attention_mask = tokenizer_output.attention_mask
+
+            decoder_output, runtime = self.execute_inference(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_cuda=use_cuda,
+            )
+
+            max_length = self.config.max_length
+            # Calculating perplexity
+            if self.config.num_beams == 1:
+                target_ids = self.tokenizer(
+                    label,
+                    padding=True,
+                    return_tensors="pt",
+                ).input_ids
+
+                if self.config.is_encoder_decoder:
+                    # Need to insert decoder start token and truncate eos token
+                    target_ids = torch.cat(
+                        (torch.ones((target_ids.shape[0], 1)).long().to(target_ids.device) * self.config.decoder_start_token_id, target_ids),
+                        dim=1
+                    )
+
+                target_ids = target_ids[:,:max_length]
+                if use_cuda:
+                    target_ids = target_ids.cuda()
+
+                self.decoder.accuracy_mode(target_ids)
+                num_tokens = target_ids.shape[1]
+                _,_ = self.generate(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    # Force generating num_tokens for accuracy check
+                    min_length=num_tokens,
+                    max_length=num_tokens,
+                    use_cuda=use_cuda,
+                )
+                full_logits = self.decoder.full_logits.float()
+                shifted_logits = full_logits
+                shifted_ids = target_ids[:,1:]
+                if self.config.is_encoder_decoder:
+                    # Truncate the last prediction for BART and T5 as it may be eos token.
+                    shifted_logits = shifted_logits[:,:-1,:]
+                    shifted_ids = shifted_ids[:,:-1]
+
+                G_LOGGER.debug(f"target_ids:{shifted_ids};logits:{shifted_logits};top10:{shifted_logits.topk(10).indices}")
+                ppl = torch.nn.CrossEntropyLoss()(shifted_logits.permute((0, 2, 1)), shifted_ids).item()
+                self.decoder.disable_accuracy_mode()
+
+            else:
+                G_LOGGER.warn("num_beams > 1. Skip perplexity calculation and default to -1.")
+                ppl = -1
+
+            semantic_outputs = self.tokenizer.batch_decode(
+                decoder_output, skip_special_tokens=True
+            )
+
+            # Compare native accuracy for each batch
+            def _process_text(text):
+                return text.replace('\\n','').replace('\n','').replace('\\\\"','\"').replace('\\"','\"')
+
+            accuracy = 0.0
+            for (_result, _label) in zip(semantic_outputs, label):
+                if _process_text(_result) == _process_text(_label):
+                    accuracy += 1.0
+
+            accuracy = accuracy / len(semantic_outputs)
+
+            results.append(NetworkResult(
+                input=input,
+                output_tensor=decoder_output,
+                semantic_output=semantic_outputs,
+                median_runtime=runtime,
+                perplexity=ppl,
+                accuracy=accuracy,
+            ))
+
+        return self.checkpoint.summary(results)
+
+    def run(self) -> Union[NetworkCheckpointResult, BenchmarkingResult, AccuracyResult]:
         """
         Main entry point of our function which compiles and generates our model data for command-line mode.
         The general process for the commands are all the same:
@@ -1040,52 +1383,30 @@ class NetworkCommand(metaclass=ABCMeta):
         (2) Run either checkpoint or benchmark
         (3) Returns the result
         """
+
         t0 = time.time()
         self.models = self.setup_tokenizer_and_model()
         t1 = time.time()
         G_LOGGER.info("setup_tokenizer_and_model() takes {:.4f}s in total.".format(t1 - t0))
 
-        if self.checkpoint is None:
-            perplexity_reference = None
-        else:
-            network_input = list(self.checkpoint.inputs())
-
-            perplexity_reference = list(self.checkpoint.labels())
-
-        inference_results = []
-        ppl_results = []
-
         try:
-            if not self.benchmarking_mode:
-                for ninput in network_input:
-                    inference_results.append(
-                        self.execute_inference(ninput, use_cuda=self.use_cuda)
-                    )
-                if perplexity_reference is not None:
-                    assert len(network_input) == len(perplexity_reference), "Encoder and decoder inputs must pair up"
-                    for ei, di in zip(network_input, perplexity_reference):
-                        if ei == "":
-                            raise ValueError("Perplexity reference encoder input is empty")
-                        if di == "":
-                            raise ValueError("Perplexity reference decoder input is empty")
-                        ppl_results.append(
-                            self.calculate_perplexity(ei, di, use_cuda=self.use_cuda)
-                        )
+            if self.action == "benchmark":
+                return self.execute_benchmark()
+            elif self.action == "accuracy":
+                labels = list(self.checkpoint.labels())
+                return self.execute_accuracy(labels, use_cuda=True)
+            elif self.action == "run" or self.action == "compare":
+                inputs = list(self.checkpoint.inputs())
+                labels = list(self.checkpoint.labels())
+                return self.execute_run(inputs, labels, use_cuda=True)
+            elif self.action == "chat":
+                # Return self for chat mode
+                return self
             else:
-                if self.config.consume_image_embeds:
-                    # Generate random pixel_values for the benchmarking mode
-                    pixel_values = torch.rand(self.config.batch_size, 3, self.config.image_size, self.config.image_size)
-                    inference_results = self.execute_inference(inference_input = None, pixel_values = pixel_values)
-                else:
-                    inference_results = self.execute_inference(inference_input = None)
-
+                raise RuntimeError(f"Invalid action {self.action} unimplemented for `run` function.")
         finally:
-            self.cleanup()
-
-        t2 = time.time()
-        G_LOGGER.info("Inference session is {:.4f}s in total.".format(t2 - t1))
-
-        return inference_results, ppl_results
+            if self.action != "chat":
+                self.cleanup()
 
     def __call__(self):
         t0 = time.time()
@@ -1094,34 +1415,11 @@ class NetworkCommand(metaclass=ABCMeta):
 
         self.setup_environment(
             **vars(self._args),
-            benchmarking_mode=(self._args.action == "benchmark")
         )
         t1 = time.time()
         G_LOGGER.info("Set up environment takes {:.4f}s.".format(t1 - t0))
 
-        if self.benchmarking_mode:
-            network_results = self.run()
-            return network_results
-        else:
-            network_results, ppl_results = self.run()
-            return NetworkCheckpointResult(
-                network_results=network_results,
-                accuracy=self.checkpoint.accuracy(network_results),
-                perplexity=(sum(ppl_results) / len(ppl_results) if not (None in ppl_results) else None),
-                models=self.models
-            )
-
-    def setup_chat(self):
-        self.add_args()
-        t0 = time.time()
-        self._args = self._parser.parse_args()
-        self.setup_environment(
-            **vars(self._args),
-            skip_checkpoint_load=True,
-        )
-        self.models = self.setup_tokenizer_and_model()
-        G_LOGGER.info("Total time to setup is: {:.4f}s".format(time.time() - t0))
-
+        return self.run()
 
 class FrameworkCommand(NetworkCommand):
     """Base class that is associated with Frameworks related scripts."""
@@ -1236,6 +1534,13 @@ class TRTInferenceCommand(NetworkCommand):
             "--nvtx-verbose",
             default=False,
             help="nvtx verbosity in inference stage.",
+            action="store_true",
+        )
+
+        engine_group.add_argument(
+            "--use-cuda-graph",
+            default=False,
+            help="Use CUDA graph to inference. Only available if --use-cache is also added",
             action="store_true",
         )
 

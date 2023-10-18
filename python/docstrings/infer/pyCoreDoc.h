@@ -1962,6 +1962,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar logger: :class:`ILogger` The logger provided when creating the refitter.
     :ivar max_threads: :class:`int` The maximum thread that can be used by the :class:`Refitter`.
+    :ivar weights_validation: :class:`bool` The flag to indicate whether to validate weights in the refitting process.
 )trtdoc";
 
 constexpr char const* init = R"trtdoc(
@@ -1977,7 +1978,8 @@ constexpr char const* set_weights = R"trtdoc(
     * The layer does not have weights with the specified role.
     * The number of weights is inconsistent with the layer’s original specification.
 
-    Modifying the weights before :func:`refit_cuda_engine` completes will result in undefined behavior.
+    Modifying the weights before :func:`refit_cuda_engine` or :func:`refit_cuda_engine_async` returns
+    will result in undefined behavior.
 
     :arg layer_name: The name of the layer.
     :arg role: The role of the weights. See :class:`WeightsRole` for more information.
@@ -1993,7 +1995,8 @@ constexpr char const* set_named_weights = R"trtdoc(
     * The name of weights is empty or does not correspond to any refittable weights.
     * The number of weights is inconsistent with the original specification.
 
-    Modifying the weights before method refit_cuda_engine() completes will result in undefined behavior.
+    Modifying the weights before :func:`refit_cuda_engine` or :func:`refit_cuda_engine_async` returns
+    will result in undefined behavior.
 
     :arg name: The name of the weights to be refitted.
     :arg weights: The new weights to associate with the name.
@@ -2001,10 +2004,84 @@ constexpr char const* set_named_weights = R"trtdoc(
     :returns: ``True`` on success, or ``False`` if new weights are rejected.
 )trtdoc";
 
-constexpr char const* refit_cuda_engine = R"trtdoc(
-    Updates associated engine.  Return ``True`` if successful.
+constexpr char const* set_named_weights_with_location = R"trtdoc(
+    Specify new weights on a specified device of given name.
+    Possible reasons for rejection are:
 
-    Failure occurs if :func:`get_missing` != 0 before the call.
+    * The name of weights is empty or does not correspond to any refittable weights.
+    * The number of weights is inconsistent with the original specification.
+
+    It is allowed to provide some weights on CPU and others on GPU.
+    Modifying the weights before :func:`refit_cuda_engine` or :func:`refit_cuda_engine_async` returns
+    will result in undefined behavior.
+
+    :arg name: The name of the weights to be refitted.
+    :arg weights: The new weights on the specified device.
+    :arg location: The location (host vs. device) of the new weights.
+
+    :returns: ``True`` on success, or ``False`` if new weights are rejected.
+)trtdoc";
+
+constexpr char const* get_named_weights = R"trtdoc(
+    Get weights associated with the given name.
+    
+    If the weights were never set, returns null weights and reports an error to the refitter errorRecorder.
+    
+    :arg weights_name: The name of the weights to be refitted.
+    
+    :returns: Weights associated with the given name.
+)trtdoc";
+
+constexpr char const* get_weights_location = R"trtdoc(
+    Get location for the weights associated with the given name.
+    
+    If the weights were never set, returns TensorLocation.HOST and reports an error to the refitter errorRecorder.
+    
+    :arg weights_name: The name of the weights to be refitted.
+
+    :returns: Location for the weights associated with the given name.
+)trtdoc";
+
+constexpr char const* unset_named_weights = R"trtdoc(
+    Unset weights associated with the given name.
+    
+    Unset weights before releasing them.
+    
+    :arg weights_name: The name of the weights to be refitted.
+    
+    :returns: ``False`` if the weights were never set, returns ``True`` otherwise.
+)trtdoc";
+
+constexpr char const* refit_cuda_engine = R"trtdoc(
+   Refits associated engine.
+   
+   If ``False`` is returned, a subset of weights may have been refitted.
+
+   The behavior is undefined if the engine has pending enqueued work.
+   Provided weights on CPU or GPU can be unset and released, or updated after refit_cuda_engine returns.
+   
+   IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
+   weights repeatedly for multiple refit calls as the weights memory can be updated directly instead.
+    
+   :returns: ``True`` on success, or ``False`` if new weights validation fails or get_missing_weights() != 0 before the call.
+)trtdoc";
+
+constexpr char const* refit_cuda_engine_async = R"trtdoc(
+    Enqueue weights refitting of the associated engine on the given stream.
+
+    If ``False`` is returned, a subset of weights may have been refitted.
+    
+    The behavior is undefined if the engine has pending enqueued work on a different stream from the provided one.
+    Provided weights on CPU can be unset and released, or updated after refit_cuda_engine_async returns.
+    Freeing or updating of the provided weights on GPU can be enqueued on the same stream after refit_cuda_engine_async returns.
+
+    IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
+    weights repeatedly for multiple refit calls as the weights memory can be updated directly instead. The weights
+    updating task should use the the same stream as the one used for the refit call.
+    
+    :arg stream: The stream to enqueue the weights updating task.
+    
+    :returns: ``True`` on success, or ``False`` if new weights validation fails or get_missing_weights() != 0 before the call.
 )trtdoc";
 
 constexpr char const* get_missing = R"trtdoc(
@@ -2086,6 +2163,7 @@ To implement a custom allocator, ensure that you explicitly instantiate the base
 
         ...
 
+Note that all methods below (allocate, reallocate, deallocate, free) must be overridden in the custom allocator, or else pybind11 would not be able to call the method from a custom allocator.
 )trtdoc";
 
 constexpr char const* allocate = R"trtdoc(

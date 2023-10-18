@@ -21,7 +21,7 @@ from typing import Dict
 import sys
 import os
 
-from NNDF.networks import Precision, NetworkMetadata, DeprecatedCache, NNConfig, Dims
+from NNDF.networks import Precision, NetworkMetadata, NNConfig, Dims
 
 # Model config for text model in Vision2Seq
 from Seq2Seq.Seq2SeqModelConfig import Seq2SeqModelTRTConfig
@@ -77,10 +77,9 @@ class Vision2SeqModelTRTConfig(NNConfig):
                     use_cache=use_cache,
                     num_beams=1,
                     batch_size=1,
-                    other=DeprecatedCache(kv_cache=use_cache),
                 )
             )
-        
+
         self.use_mask = False
         # Use this flag to load torch model if and only if benchmarking seqlen > model n_positions
         self.ignore_mismatched_sizes = False
@@ -98,7 +97,7 @@ class Vision2SeqModelTRTConfig(NNConfig):
         """
         Set up config from HuggingFace Config.
         """
-        
+
         self.hf_config = hf_config
         self.text_config.from_hf_config(hf_config.text_config)
 
@@ -171,12 +170,11 @@ class Vision2SeqModelTRTConfig(NNConfig):
             use_cache=self.use_cache,
             num_beams=self.num_beams,
             batch_size=self.batch_size,
-            other=DeprecatedCache(kv_cache=self.use_cache)
         )
 
     def get_python_requirements(self):
         base_requirements = super().get_python_requirements()
-        base_requirements.append("transformers==4.27.0")
+        base_requirements.append("transformers==4.29.2")
         return base_requirements
 
     def get_network_segments(self):

@@ -100,6 +100,13 @@ class GPT2DecoderTorchFile(DecoderTorchFile):
             logits = self.lm_head(sequence_output) if self.lm_head is not None else sequence_output
             past_key_values = decoder_outputs[1] if use_cache else None
 
+            if self._return_full_logits:
+                if not use_cache or (use_cache and input_ids.shape[1] > 1):
+                    self.full_logits = logits
+                else:
+                    # KV Cache mode, concat logits for seq > 1
+                    self.full_logits = torch.cat((self.full_logits, logits), dim=1)
+
             return Seq2SeqLMOutput(
                 logits=logits,
                 past_key_values=past_key_values

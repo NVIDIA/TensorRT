@@ -68,7 +68,8 @@ class StableDiffusionXLPipeline(StableDiffusionPipeline):
     def loadResources(self, image_height, image_width, batch_size, seed):
         self.base.loadResources(image_height, image_width, batch_size, seed)
         if self.enable_refiner:
-            self.refiner.loadResources(image_height, image_width, batch_size, seed)
+            # Use a different seed for refiner - we arbitrarily use base seed+1, if specified.
+            self.refiner.loadResources(image_height, image_width, batch_size, ((seed+1) if seed is not None else None))
 
     def get_max_device_memory(self):
         max_device_memory = self.base.calculateMaxDeviceMemory()

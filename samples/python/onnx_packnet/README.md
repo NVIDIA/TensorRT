@@ -98,6 +98,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+August 2023: 
+  - Update ONNX version support to 1.14.0
+  - Removed support for Python versions < 3.8.
 August 2021: Update sample to work with latest torch version
 June 2020: Initial release of this sample
 

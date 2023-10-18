@@ -49,9 +49,11 @@ from NNDF.logger import G_LOGGER
 
 def _calculate_polygraphy_verbosity():
     if G_LOGGER.level == G_LOGGER.DEBUG:
+        # Polygraphy turns TRT kVERBOSE logs to EXTRA_VERBOSE level in Polygraphy logger.
         return PG_LOGGER.EXTRA_VERBOSE
     elif G_LOGGER.level == G_LOGGER.INFO:
-        return PG_LOGGER.INFO
+        # Polygraphy turns TRT kINFO logs to VERBOSE level in Polygraphy logger.
+        return PG_LOGGER.VERBOSE
     else:
         return PG_LOGGER.WARNING
 

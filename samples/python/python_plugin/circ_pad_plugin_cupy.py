@@ -286,3 +286,5 @@ if __name__ == "__main__":
 
         if np.allclose(Y, Y_ref):
             print("Inference result correct!")
+        else:
+            print("Inference result incorrect!")

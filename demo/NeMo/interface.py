@@ -47,7 +47,6 @@ sys.path.append('../HuggingFace') # Include HuggingFace
 from NNDF.general_utils import NNFolderWorkspace
 from NNDF.logger import G_LOGGER
 from NNDF.networks import (
-    DeprecatedCache,
     Precision,
     NetworkMetadata,
     TimingProfile,
@@ -127,6 +126,9 @@ def _hf_hub_metadata(variant: str, fp8: bool) -> Dict[str, str]:
 def download_model(dst_dir: str, cache_dir: str, *args, **kwargs) -> str:
     from huggingface_hub import hf_hub_download
 
+    os.makedirs(dst_dir, exist_ok=True)
+    os.makedirs(cache_dir, exist_ok=True)
+
     model_metadata = _hf_hub_metadata(*args, **kwargs)
     return hf_hub_download(
         local_dir=str(dst_dir),
@@ -178,7 +180,7 @@ class NeMoCommand(NetworkCommand):
         self.nemo_cfg = nemo_cfg
         super().__init__(config_class, description, **kwargs)
 
-    def validate_and_set_precision(self, fp8, fp16, bf16, use_fp8_storage):
+    def validate_and_set_precision(self, fp8, fp16, bf16, use_fp8_storage, quantize_bmms):
         if fp8:
             if fp16:
                 G_LOGGER.info("Use FP8-FP16 precision.")
@@ -197,6 +199,7 @@ class NeMoCommand(NetworkCommand):
         self.nemo_cfg.trt_export_options.use_fp16 = fp16
         self.nemo_cfg.trt_export_options.use_bf16 = bf16
         self.nemo_cfg.onnx_export_options.use_fp8_storage = use_fp8_storage
+        self.nemo_cfg.onnx_export_options.quantize_bmms = quantize_bmms
 
         if fp16:
             self.nemo_cfg.trainer.precision = "16"
@@ -227,7 +230,6 @@ class NeMoCommand(NetworkCommand):
         number: int = None,
         duration: int = None,
         percentile: int = None,
-        benchmarking_mode: bool = False,
         cleanup: bool = False,
         action: str = None,
         max_seq_len: int = None,
@@ -235,6 +237,7 @@ class NeMoCommand(NetworkCommand):
         fp16: bool = False,
         bf16: bool = False,
         use_fp8_storage: bool = False,
+        quantize_bmms: bool = False,
         input_seq_len: int = None,
         output_seq_len: int = None,
         nemo_model: str = None,
@@ -246,7 +249,7 @@ class NeMoCommand(NetworkCommand):
         """
         Use Arguments from command line or user specified to setup config for the model.
         """
-        self.validate_and_set_precision(fp8, fp16, bf16, use_fp8_storage)
+        self.validate_and_set_precision(fp8, fp16, bf16, use_fp8_storage, quantize_bmms)
 
         if not torch.cuda.is_available():
             raise EnvironmentError("GPU is required for NeMo demo.")
@@ -347,8 +350,7 @@ class NeMoCommand(NetworkCommand):
                         precision=Precision(fp16=self.fp16),
                         use_cache=use_cache,
                         num_beams=num_beams,
-                        batch_size=batch_size,
-                        other=DeprecatedCache(kv_cache=use_cache),
+                        batch_size=batch_size
                     )
 
                     download_config = self.config_class(metadata=download_metadata)
@@ -388,8 +390,7 @@ class NeMoCommand(NetworkCommand):
             precision=Precision(fp16=self.fp16),
             use_cache=use_cache,
             num_beams=num_beams,
-            batch_size=batch_size,
-            other=DeprecatedCache(kv_cache=use_cache)
+            batch_size=batch_size
         )
 
         self.config = self.config_class(
@@ -397,7 +398,6 @@ class NeMoCommand(NetworkCommand):
         )
 
         self.config.from_nemo_config(self.nemo_cfg)
-        self.benchmarking_mode = benchmarking_mode
 
         self.workspace = NNFolderWorkspace(
             self.config, working_dir
@@ -698,6 +698,12 @@ class NeMoCommand(NetworkCommand):
             help="Use FP8 storage precision.",
             default=False
         )
+        model_config_group.add_argument(
+            "--quantize-bmms",
+            help="Quantize attention BMMs",
+            action="store_true",
+            default=False,
+        )
 
     def __call__(self):
         t0 = time.time()
@@ -709,7 +715,6 @@ class NeMoCommand(NetworkCommand):
 
         self.setup_environment(
             **vars(self._args),
-            benchmarking_mode=(self._args.action == "benchmark"),
         )
         t1 = time.time()
         G_LOGGER.info("Set up environment takes {:.4f}s.".format(t1 - t0))
@@ -719,5 +724,4 @@ class NeMoCommand(NetworkCommand):
             network_results=network_results,
             accuracy=0,
             perplexity=0,
-            models=self.models
         )

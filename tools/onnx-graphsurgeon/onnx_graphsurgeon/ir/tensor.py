@@ -162,6 +162,7 @@ class Variable(Tensor):
         name: str,
         dtype: Union[np.dtype, "onnx.TensorProto.DataType"] = None,
         shape: Sequence[Union[int, str]] = None,
+        type: str = "tensor_type",
     ):
         """
         Represents a Tensor whose value is not known until inference-time.
@@ -170,12 +171,14 @@ class Variable(Tensor):
             name (str): The name of the tensor.
             dtype (Union[numpy.dtype, onnx.TensorProto.DataType]): The data type of the tensor.
             shape (Sequence[Union[int, str]]): The shape of the tensor. This may contain strings if the model uses dimension parameters.
+            type (str): The type of the tensor.
         """
         self.name = name
         self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=[])
         self.outputs = misc.SynchronizedList(self, field_name="inputs", initial=[])
         self.dtype = dtype
         self.shape = misc.default_value(shape, None)
+        self.type = type
 
     def to_constant(self, values: np.ndarray):
         del self.dtype

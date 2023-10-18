@@ -140,7 +140,7 @@ struct CudaBind
     do                                                                                                                 \
     {                                                                                                                  \
         if (status != 0)                                                                                               \
-            abort();                                                                                                   \
+            exit(EXIT_FAILURE);                                                                                                   \
     } while (0)
 
 #define ASSERT_PARAM(exp)                                                                                              \
@@ -210,7 +210,7 @@ struct CudaBind
         if (status != 0)                                                                                               \
         {                                                                                                              \
             DEBUG_PRINTF("%s %d CUDA FAIL %s\n", __FILE__, __LINE__, cudaGetErrorString(status));                      \
-            abort();                                                                                                   \
+            exit(EXIT_FAILURE);                                                                                                 \
         }                                                                                                              \
     }
 

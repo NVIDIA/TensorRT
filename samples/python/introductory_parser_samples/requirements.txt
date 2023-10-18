@@ -1,11 +1,7 @@
-Pillow
-pycuda<2021.1; python_version<"3.7"
-pycuda; python_version>="3.7"
-cuda-python
+Pillow>=9.2.0,<=9.5.0
+cuda-python==12.2.0
 pywin32; platform_system == "Windows"
-pyyaml
-requests
-tqdm
-numpy==1.18.1; python_version<"3.8" and platform_system == "Windows"
-numpy==1.19.4; python_version<"3.8" and platform_system != "Windows"
-numpy==1.23.2; python_version>="3.8"
+pyyaml==6.0.1
+requests==2.31.0
+tqdm==4.66.1
+numpy==1.24.4

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 SET(SAMPLE_SOURCES
+    ../common/sampleDevice.cpp
     ../common/sampleEngines.cpp
     ../common/sampleInference.cpp
     ../common/sampleOptions.cpp

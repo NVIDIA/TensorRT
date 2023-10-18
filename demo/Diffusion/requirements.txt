@@ -1,8 +1,8 @@
 accelerate
 colored
-controlnet_aux
+controlnet_aux==0.0.6
 cuda-python
-diffusers>=0.19.3
+diffusers==0.19.3
 ftfy
 matplotlib
 nvtx

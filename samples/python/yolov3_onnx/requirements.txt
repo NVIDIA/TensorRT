@@ -1,13 +1,9 @@
-cuda-python
+cuda-python==12.2.0
 pywin32; platform_system == "Windows"
-numpy==1.18.1; python_version<"3.8" and platform_system == "Windows"
-numpy==1.19.4; python_version<"3.8" and platform_system != "Windows"
-numpy==1.23.2; python_version>="3.8"
-onnx==1.11.0; python_version<"3.10"
-onnx==1.13.0; python_version>="3.10"
-Pillow
-protobuf; python_version<"3.7"
-protobuf==3.20.2; python_version>="3.7"
-pyyaml
-requests
-tqdm
+numpy==1.24.4
+onnx==1.14.0
+Pillow>=9.2.0,<=9.5.0
+protobuf==3.20.3
+pyyaml==6.0.1
+requests==2.31.0
+tqdm==4.66.1

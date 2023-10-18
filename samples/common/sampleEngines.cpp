@@ -1197,9 +1197,12 @@ bool networkToSerializedEngine(
     SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
     config->setProfileStream(*profileStream);
 
+    auto const tBegin = std::chrono::high_resolution_clock::now();
     std::unique_ptr<IHostMemory> serializedEngine{builder.buildSerializedNetwork(*env.network, *config)};
     SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
-
+    auto const tEnd = std::chrono::high_resolution_clock::now();
+    float const buildTime = std::chrono::duration<float>(tEnd - tBegin).count();
+    sample::gLogInfo << "Engine built in " << buildTime << " sec." << std::endl;
     sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
 
     if (build.safe && build.consistency)
@@ -1321,6 +1324,7 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getMissingLayerWei
 
 bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, BuildEnvironment& env, std::ostream& err)
 {
+    auto const tBegin = std::chrono::high_resolution_clock::now();
     std::ifstream engineFile(engine, std::ios::binary);
     SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error opening engine file: " << engine);
     engineFile.seekg(0, std::ifstream::end);
@@ -1330,7 +1334,9 @@ bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, Bui
     std::vector<uint8_t> engineBlob(fsize);
     engineFile.read(reinterpret_cast<char*>(engineBlob.data()), fsize);
     SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error loading engine file: " << engine);
-
+    auto const tEnd = std::chrono::high_resolution_clock::now();
+    float const loadTime = std::chrono::duration<float>(tEnd - tBegin).count();
+    sample::gLogInfo << "Engine loaded in " << loadTime << " sec." << std::endl;
     sample::gLogInfo << "Loaded engine with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
 
     if (enableConsistency)
@@ -1601,29 +1607,35 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
         return layerNames.empty();
     };
 
+    // Skip weights validation since we are confident that the new weights are similar to the weights used to build
+    // engine.
+    refitter->setWeightsValidation(false);
+
     // Warm up and report missing weights
+    // We only need to set weights for the first time and that can be reused in later refitting process.
     bool const success = setWeights() && reportMissingWeights() && refitter->refitCudaEngine();
     if (!success)
     {
         return false;
     }
 
-    constexpr int32_t loop = 5;
+    TrtCudaStream stream;
+    constexpr int32_t kLOOP = 10;
     time_point const refitStartTime{std::chrono::steady_clock::now()};
     {
-        for (int32_t l = 0; l < loop; l++)
+        for (int32_t l = 0; l < kLOOP; l++)
         {
-            bool const success = setWeights() && refitter->refitCudaEngine();
-            if (!success)
+            if (!refitter->refitCudaEngineAsync(stream.get()))
             {
                 return false;
             }
         }
     }
+    stream.synchronize();
     time_point const refitEndTime{std::chrono::steady_clock::now()};
 
     sample::gLogInfo << "Engine refitted"
-                     << " in " << durationMs(refitEndTime - refitStartTime).count() / loop << " ms." << std::endl;
+                     << " in " << durationMs(refitEndTime - refitStartTime).count() / kLOOP << " ms." << std::endl;
     return true;
 }
 

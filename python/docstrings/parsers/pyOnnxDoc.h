@@ -170,6 +170,15 @@ constexpr const char* func = R"trtdoc(
 constexpr const char* node = R"trtdoc(
     :returns: Index of the Onnx model node in which the error occurred
 )trtdoc";
+
+constexpr const char* node_name = R"trtdoc(
+    :returns: Name of the node in the model in which the error occurred
+)trtdoc";
+
+constexpr const char* node_operator = R"trtdoc(
+    :returns: Name of the node operation in the model in which the error occurred
+)trtdoc";
+
 } // namespace ParserErrorDoc
 
 constexpr const char* get_nv_onnx_parser_version = R"trtdoc(

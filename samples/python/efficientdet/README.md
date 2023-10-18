@@ -18,6 +18,11 @@ These scripts help with conversion and execution of [Google EfficientDet](https:
 
 ## Changelog
 
+- August 2023:
+  - Removed support for Python versions < 3.8.
+  - Added support for TensorFlow 2.12.0
+  - Update ONNX version support to 1.14.0
+  - Update ONNX Runtime version support to 1.15.1 for Python>=3.8
 - January 2022:
   - Added support for EfficientDet Lite and AdvProp models.
   - Added dynamic batch support.
@@ -34,7 +39,7 @@ Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/dee
 To simplify TensorRT and TensorFlow installation, use an [NGC TensorFlow Docker Image](https://ngc.nvidia.com/catalog/containers/nvidia:tensorflow), such as:
 
 ```bash
-docker pull nvcr.io/nvidia/tensorflow:22.01-tf1-py3
+docker pull nvcr.io/nvidia/tensorflow:23.07-tf2-py3
 ```
 
 Install all dependencies listed in `requirements.txt`:

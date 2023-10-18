@@ -389,9 +389,14 @@ static const auto refitter_get_tensors_with_dynamic_range = [](IRefitter& self) 
     return tensorNames;
 };
 
+static const auto refitter_refit_cuda_engine_async = [](IRefitter& self, size_t streamHandle) {
+    return self.refitCudaEngineAsync(reinterpret_cast<cudaStream_t>(streamHandle));
+};
+
 static const auto context_set_optimization_profile_async
     = [](IExecutionContext& self, int32_t const profileIndex, size_t streamHandle) {
-          PY_ASSERT_RUNTIME_ERROR(self.setOptimizationProfileAsync(profileIndex, reinterpret_cast<cudaStream_t>(streamHandle)),
+          PY_ASSERT_RUNTIME_ERROR(
+              self.setOptimizationProfileAsync(profileIndex, reinterpret_cast<cudaStream_t>(streamHandle)),
               "Error in set optimization profile async.");
           return true;
       };
@@ -450,7 +455,7 @@ public:
 
     void* reallocate(void* baseAddr, uint64_t alignment, uint64_t newSize) noexcept override
     {
-        return allocHelper("reallocate", false, reinterpret_cast<size_t>(baseAddr), alignment, newSize);
+        return allocHelper("reallocate", true, reinterpret_cast<size_t>(baseAddr), alignment, newSize);
     }
 
     void free(void* memory) noexcept override
@@ -1062,7 +1067,7 @@ void bindCore(py::module& m)
         .def("get_profile_shape_input",
             utils::deprecate(lambdas::engine_get_profile_shape_input_str, "get_tensor_profile_shape"),
             "profile_index"_a, "binding"_a, ICudaEngineDoc::get_profile_shape_input)
-        .def("is_shape_binding", utils::deprecateMember(&ICudaEngine::isShapeBinding, "get_tensor_location"),
+        .def("is_shape_binding", utils::deprecateMember(&ICudaEngine::isShapeBinding, "is_shape_inference_io"),
             "binding"_a, ICudaEngineDoc::is_shape_binding)
         .def("is_execution_binding", utils::deprecateMember(&ICudaEngine::isExecutionBinding, "get_tensor_location"),
             "binding"_a, ICudaEngineDoc::is_execution_binding)
@@ -1469,8 +1474,8 @@ void bindCore(py::module& m)
             py::keep_alive<1, 3>{}, RefitterDoc::init)
         .def("set_weights", &IRefitter::setWeights, "layer_name"_a, "role"_a, "weights"_a, py::keep_alive<1, 4>{},
             RefitterDoc::set_weights)
-        .def("set_named_weights", &IRefitter::setNamedWeights, "name"_a, "weights"_a, py::keep_alive<1, 3>{},
-            RefitterDoc::set_named_weights)
+        .def("set_named_weights", py::overload_cast<char const*, Weights>(&IRefitter::setNamedWeights), "name"_a,
+            "weights"_a, py::keep_alive<1, 3>{}, RefitterDoc::set_named_weights)
         .def("refit_cuda_engine", &IRefitter::refitCudaEngine, RefitterDoc::refit_cuda_engine,
             py::call_guard<py::gil_scoped_release>{})
         .def("get_missing", lambdas::refitter_get_missing, RefitterDoc::get_missing)
@@ -1486,6 +1491,15 @@ void bindCore(py::module& m)
             py::cpp_function(&IRefitter::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("logger", &IRefitter::getLogger)
         .def_property("max_threads", &IRefitter::getMaxThreads, &IRefitter::setMaxThreads)
+        .def("set_named_weights", py::overload_cast<char const*, Weights, TensorLocation>(&IRefitter::setNamedWeights),
+            "name"_a, "weights"_a, "location"_a, py::keep_alive<1, 3>{}, RefitterDoc::set_named_weights_with_location)
+        .def("get_named_weights", &IRefitter::getNamedWeights, "weights_name"_a, RefitterDoc::get_named_weights)
+        .def(
+            "get_weights_location", &IRefitter::getWeightsLocation, "weights_name"_a, RefitterDoc::get_weights_location)
+        .def("unset_named_weights", &IRefitter::unsetNamedWeights, "weights_name"_a, RefitterDoc::unset_named_weights)
+        .def_property("weights_validation", &IRefitter::getWeightsValidation, &IRefitter::setWeightsValidation)
+        .def("refit_cuda_engine_async", lambdas::refitter_refit_cuda_engine_async, "stream_handle"_a,
+            RefitterDoc::refit_cuda_engine_async, py::call_guard<py::gil_scoped_release>{})
         .def("__del__", &utils::doNothingDel<IRefitter>);
 #endif // EXPORT_ALL_BINDINGS
 }

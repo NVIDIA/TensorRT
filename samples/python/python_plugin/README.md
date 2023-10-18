@@ -1,4 +1,4 @@
-# Python-based TRT Plugins [Experimental]
+# Python-based TRT Plugins
 
 This is a sample to showcase Python-based plugin definitions in TRT. No changes to existing TRT APIs have been made
 to deliver this feature, so using the updated bindings should not break any existing code.
@@ -17,8 +17,8 @@ The following design considerations were followed in creating bindings to allow 
      - Numba, OpenAI Triton, CuPy etc.
    - Could even do without explicit kernels (e.g. leverage PyTorch functional op)
 
- - Will only support IPluginV2DynamicExt based plugins
-   - Other plugin interfaces (except IPluginV2IOExt) are anyway deprecated since TRT 8.5
+ - Will only support `IPluginV2DynamicExt`-based plugins
+   - Other plugin interfaces (except `IPluginV2IOExt`) are anyway deprecated since TRT 8.5
 
 With these bindings, plugins can be implemented and integrated to TRT purely with Python.
 
@@ -31,17 +31,11 @@ Then install the requisite packages
 cd $TRT_OSSPATH/samples/python/trt_python_plugin
 pip3 install -r requirements.txt
 ```
-Install `cupy-cuda12x` instead if testing on a CUDA 12.0 environment.
-
-> NOTE: To run the Numba example on CUDA 12.0, either [build and install Numba from source](https://numba.readthedocs.io/en/stable/user/installing.html#installing-from-source) or install Numba through conda `conda install numba/label/dev::numba`.
-
-> NOTE: This sample has been preliminarily tested on Windows/Ubuntu x86 with CUDA 11.8/12.0 (except for the Numba sample which has
-only been tested with CUDA 11.8) 
+Install `cupy-cuda11x` instead if testing on a CUDA 11.x environment.
 
 # TensorRT Plugin API for Python
 
-Implementing a TRT plugin in Python is similar to C++ in that an implementation of `IPluginV2DynamicExt` and `IPluginCreator` is necessary. Refer to the [full API doc](doc)
-for a concise description.
+Implementing a TRT plugin in Python is similar to C++ in that implementation of `IPluginV2DynamicExt` and `IPluginCreator` is necessary. Refer to the TensorRT Python API reference for a concise description.
 
 The interface methods in Python have mostly similar APIs to their C++ counterparts, except for `serialize()` and `enqueue()`.
  - While the C++ API for `serialize()` is `void serialize (void *buffer)` where the plugin writes to the passed-in `buffer`, the Python API is `serialize(self) -> bytes`, where the implementation of the method is expected to return a bytes object containing a serialized representation of the plugin object. 
@@ -70,7 +64,7 @@ The plugin shall have the following characteristics:
 
 ## Baseline: Using a C++ plugin
 
-To establish a baseline, we first demonstrate a C++ plugin implementing circular padding. The relevant files can be found in the `circ_plugin_cpp` folder: the included `CMakeLists.txt` can be used to build the shared library `licirc_pad_plugin.so` / `circ_pad_plugin.dll`.
+To establish a baseline, we first demonstrate a C++ plugin implementing circular padding. The relevant files can be found in the `circ_plugin_cpp` folder: the included `CMakeLists.txt` can be used to build the shared library `libcirc_pad_plugin.so` / `circ_pad_plugin.dll`.
 
 ```bash
 cd $TRT_OSSPATH/samples/python/trt_python_plugin

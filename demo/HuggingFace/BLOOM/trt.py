@@ -42,8 +42,9 @@ class BLOOMTRTDecoder(Seq2SeqTRTDecoder):
         network_metadata: NetworkMetadata,
         config: BLOOMModelTRTConfig,
         nvtx_verbose: bool,
+        use_cuda_graph: bool,
     ):
-        super().__init__(trt_engine_file, network_metadata, config, nvtx_verbose)
+        super().__init__(trt_engine_file, network_metadata, config, nvtx_verbose, use_cuda_graph)
 
     def _get_self_attn_keys_cache_shape(self):
         return (self.expand_size * self.config.num_heads, self.embedding_size_per_head, self.past_decoder_length)
@@ -200,7 +201,6 @@ class BLOOMTRT(Seq2SeqTRT):
                 opt_shape += f",'attention_mask':{self.opt_expand_size}x{self.opt_output_seq_len}"
                 max_shape += f",'attention_mask':{self.max_expand_size}x{self.config.max_output_profile_length}"
 
-
             # build context phase profile
             cmin_shape = "--minShapes="
             cmax_shape = "--maxShapes="
@@ -214,28 +214,27 @@ class BLOOMTRT(Seq2SeqTRT):
                 copt_shape += f",'attention_mask':{self.opt_expand_size}x{self.opt_input_seq_len}"
                 cmax_shape += f",'attention_mask':{self.max_expand_size}x{self.config.max_input_profile_length}"
 
-            for i in range(self.config.num_decoder_layers):
-                k = f",'past_key_values.{i}.self.key'"
-                v = f",'past_key_values.{i}.self.value'"
-                k_min_str = f":{self.min_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
-                k_opt_str = f":{self.opt_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x{self.opt_output_seq_len-1}"
-                k_max_str = f":{self.max_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x{self.config.max_output_profile_length-1}"
-                v_min_str = f":{self.min_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
-                v_opt_str = f":{self.opt_expand_size * self.config.num_heads}x{self.opt_output_seq_len-1}x{self.embedding_size_per_head}"
-                v_max_str = f":{self.max_expand_size * self.config.num_heads}x{self.config.max_output_profile_length-1}x{self.embedding_size_per_head}"
-                min_shape += k + k_min_str + v + v_min_str
-                opt_shape += k + k_opt_str + v + v_opt_str
-                max_shape += k + k_max_str + v + v_max_str
+            k = f",'past_key_values.*.self.key'"
+            v = f",'past_key_values.*.self.value'"
+            k_min_str = f":{self.min_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
+            k_opt_str = f":{self.opt_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x{self.opt_output_seq_len-1}"
+            k_max_str = f":{self.max_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x{self.config.max_output_profile_length-1}"
+            v_min_str = f":{self.min_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
+            v_opt_str = f":{self.opt_expand_size * self.config.num_heads}x{self.opt_output_seq_len-1}x{self.embedding_size_per_head}"
+            v_max_str = f":{self.max_expand_size * self.config.num_heads}x{self.config.max_output_profile_length-1}x{self.embedding_size_per_head}"
+            min_shape += k + k_min_str + v + v_min_str
+            opt_shape += k + k_opt_str + v + v_opt_str
+            max_shape += k + k_max_str + v + v_max_str
 
-                k_zero_min_str = f":{self.min_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
-                k_zero_opt_str = f":{self.opt_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
-                k_zero_max_str = f":{self.max_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
-                v_zero_min_str = f":{self.min_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
-                v_zero_opt_str = f":{self.opt_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
-                v_zero_max_str = f":{self.max_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
-                cmin_shape += k + k_zero_min_str + v + v_zero_min_str
-                copt_shape += k + k_zero_opt_str + v + v_zero_opt_str
-                cmax_shape += k + k_zero_max_str + v + v_zero_max_str
+            k_zero_min_str = f":{self.min_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
+            k_zero_opt_str = f":{self.opt_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
+            k_zero_max_str = f":{self.max_expand_size * self.config.num_heads}x{self.embedding_size_per_head}x0"
+            v_zero_min_str = f":{self.min_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
+            v_zero_opt_str = f":{self.opt_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
+            v_zero_max_str = f":{self.max_expand_size * self.config.num_heads}x0x{self.embedding_size_per_head}"
+            cmin_shape += k + k_zero_min_str + v + v_zero_min_str
+            copt_shape += k + k_zero_opt_str + v + v_zero_opt_str
+            cmax_shape += k + k_zero_max_str + v + v_zero_max_str
 
             command += f"--profile=0 {min_shape} {opt_shape} {max_shape} --profile=1 {cmin_shape} {copt_shape} {cmax_shape} "
 

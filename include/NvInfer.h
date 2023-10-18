@@ -2392,7 +2392,7 @@ public:
     //! Bit 2 corresponds to the W dimension boolean.
     //! By default, softmax is performed on the axis which is the number of axes minus three. It is 0 if
     //! there are fewer than 3 non-batch axes. For example, if the input is NCHW, the default axis is C. If the input
-    //! is NHW, then the default axis is H.
+    //! is NHW, then the default axis is N.
     //!
     //! In explicit mode :
     //! Bit 0 corresponds to the N dimension boolean.

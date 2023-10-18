@@ -19,6 +19,16 @@
 {
   global:
     getInferLibVersion;
+    createRPNROIPlugin;
+    createNormalizePlugin;
+    createPriorBoxPlugin;
+    createAnchorGeneratorPlugin;
+    createNMSPlugin;
+    createReorgPlugin;
+    createRegionPlugin;
+    createBatchedNMSPlugin;
+    createSplitPlugin;
+    createInstanceNormalizationPlugin;
     getPluginRegistry;
     initLibNvInferPlugins;
     extern "C++" {

@@ -610,13 +610,7 @@ class StableDiffusionPipeline:
             timesteps = self.scheduler.timesteps
         for step_index, timestep in enumerate(timesteps):
             # Expand the latents if we are doing classifier free guidance
-            latent_model_input = torch.cat([latents] * 2)
-
-            if type(self.scheduler) == UniPCMultistepScheduler:
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, step_offset + step_index, timestep)
-            else:
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, timestep)
-            
+            latent_model_input = self.scheduler.scale_model_input(torch.cat([latents] * 2), step_offset + step_index, timestep)
             if isinstance(mask, torch.Tensor):
                 latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
 
@@ -780,7 +774,10 @@ class StableDiffusionPipeline:
                 image_latents = input_image if input_image.shape[1] == 4 else self.encode_image(input_image)
                 # Add noise to latents using timesteps
                 noise = torch.randn(image_latents.shape, generator=self.generator, device=self.device, dtype=torch.float32)
-                latents = self.scheduler.add_noise(image_latents, noise, t_start, latent_timestep)
+                if type(self.scheduler) == UniPCMultistepScheduler:
+                    latents = self.scheduler.add_noise(image_latents, noise, latent_timestep)
+                else:
+                    latents = self.scheduler.add_noise(image_latents, noise, t_start, latent_timestep)
             elif self.pipeline_type.is_inpaint():
                 mask, mask_image = self.preprocess_images(batch_size, prepare_mask_and_masked_image(input_image, mask_image))
                 mask = torch.nn.functional.interpolate(mask, size=(latent_height, latent_width))

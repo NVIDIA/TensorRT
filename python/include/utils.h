@@ -76,7 +76,7 @@ py::function getOverride(const T* self, std::string const& overloadName, bool sh
     if (!overload && showWarning)
     {
         std::cerr << "Method: " << overloadName
-                  << " was not overriden. Please provide an implementation for this method.";
+                  << " was not overriden. Please provide an implementation for this method." << std::endl;
     }
     return overload;
 }

@@ -47,7 +47,6 @@ from NNDF.tensorrt_utils import PolygraphyOnnxRunner
 from NNDF.general_utils import confirm_folder_delete
 from NNDF.logger import G_LOGGER
 from Seq2Seq.Seq2SeqModelConfig import Seq2SeqModelTRTConfig
-from Seq2Seq.measurements import calculate_perplexity_helper_decoder, calculate_perplexity_helper_encoder_decoder
 from Seq2Seq.export import Seq2SeqModelClass
 
 class OnnxEncoder(PolygraphyOnnxRunner):
@@ -70,11 +69,28 @@ class OnnxDecoder(PolygraphyOnnxRunner, GenerationMixin):
         self.config = config
         self.generation_config = config.generation_config
         self.device = torch.device("cpu")
+        # Use for accuracy check mode
+        self._return_full_logits = False
+        self.target_ids = None
+
+    def accuracy_mode(self, target_ids):
+            self._return_full_logits = True
+            self.full_logits = None
+            self.target_ids = target_ids
+
+    def disable_accuracy_mode(self):
+        self._return_full_logits = False
+        self.target_ids = None
+        self.full_logits = None
 
     def can_generate(self):
         return True
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
+
+        if self.target_ids is not None:
+            input_ids = self.target_ids[:,:input_ids.shape[1]]
+
         input_dict = {
             "input_ids": input_ids
         }
@@ -102,9 +118,12 @@ class OnnxDecoder(PolygraphyOnnxRunner, GenerationMixin):
             encoder_hidden_states = encoder_outputs.last_hidden_state.cpu().numpy().astype(data_type)
             input_dict["encoder_hidden_states"] = encoder_hidden_states
 
-        logits = self.runner.infer(input_dict)["logits"]
+        logits = torch.from_numpy(self.runner.infer(input_dict)["logits"])
 
-        return Seq2SeqLMOutput(logits=torch.from_numpy(logits))
+        if self._return_full_logits:
+            self.full_logits = logits
+
+        return Seq2SeqLMOutput(logits=logits)
 
 
 class Seq2SeqOnnxRT(OnnxRTCommand):
@@ -166,37 +185,6 @@ class Seq2SeqOnnxRT(OnnxRTCommand):
             )
 
         return NetworkModels(torch=None, onnx=onnx_models, trt=None)
-
-    def calculate_perplexity(self, input_str: str, reference_str: str, use_cuda: bool = True):
-        if self.config.num_beams > 1:
-            G_LOGGER.warning("Perplexity calculation is disabled for num_beams>1 in OnnxRT. Default=None")
-            return None
-
-        if self.config.is_encoder_decoder:
-            perplexity = calculate_perplexity_helper_encoder_decoder(
-                encoder=self.encoder,
-                decoder=self.decoder,
-                tokenizer=self.tokenizer,
-                input_str=input_str,
-                reference_str=reference_str,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                use_cuda=use_cuda,
-                use_mask=self.config.use_mask,
-            )
-        else:
-            perplexity = calculate_perplexity_helper_decoder(
-                decoder=self.decoder,
-                tokenizer=self.tokenizer,
-                input_str=reference_str,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                use_cuda=use_cuda,
-                use_mask=self.config.use_mask,
-            )
-
-        G_LOGGER.info("Perplexity={}".format(perplexity))
-        return perplexity
 
     def cleanup(self,
     ) -> None:

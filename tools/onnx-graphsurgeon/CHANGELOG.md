@@ -2,6 +2,23 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.4.0 (2023-08-16)
+### Added
+- Added `Function` class representing a `Graph` implementing a Custom Op.
+- Added `functions` field to `Graph`
+- Added `Node.AttributeRef` dataclass representing an attribute value in a parent Function.
+- Added `subgraph()` methods to `Node` and `Graph` to iterate over the node's/graph's subgraphs.
+- Added new kwargs to `Graph.cleanup()`, `Graph.fold_constants()`, and `Graph.toposort()` to optionally recurse into the Graph's Functions.
+- Added 'mode' kwarg to `Graph.toposort()` to control whether nodes, functions, or both get sorted.
+- Added example 11 which demonstrates how to use `Function`s
+
+### Removed
+- Removed `do_type_check` kwarg from `OnnxExporter.export_node()`
+
+### Fixed
+- Fixed some warnings caused by using deprecated APIs in `onnx.mapping`.
+
+
 ## v0.3.29 (2023-08-11)
 ### Fixed
 - Fixed a bug where doing a copy (e.g. `copy.copy`) of node/tensor inputs/outputs would retain

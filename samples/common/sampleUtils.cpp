@@ -459,6 +459,8 @@ template void dumpBuffer<BFloat16>(void const* buffer, std::string const& separa
     Dims const& strides, int32_t vectorDim, int32_t spv);
 template void dumpBuffer<uint8_t>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
     Dims const& strides, int32_t vectorDim, int32_t spv);
+template void dumpBuffer<int64_t>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
+    Dims const& strides, int32_t vectorDim, int32_t spv);
 
 template <typename T>
 void sparsify(T const* values, int64_t count, int32_t k, int32_t trs, std::vector<int8_t>& sparseWeights)

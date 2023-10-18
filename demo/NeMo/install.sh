@@ -425,6 +425,11 @@ pip install "pyyaml==5.4.1" --no-build-isolation || {
 	echo "Could not install PyYaml, stopping install"
 	exit 1
 }
+# Install a specific version of opencc to WAR a GLIBC not found error.
+pip install "opencc==1.1.6" || {
+	echo "Could not install OpenCC, stopping install"
+	exit 1
+}
 pip install -r requirements.txt || {
 	echo "Could not install dependencies, stopping install"
 	exit 1

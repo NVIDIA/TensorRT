@@ -1229,10 +1229,6 @@ void bindPlugin(py::module& m)
         .def("deregister_library", &IPluginRegistry::deregisterLibrary, "handle"_a,
             IPluginRegistryDoc::deregister_library);
 
-    py::enum_<PluginCreatorVersion>(m, "PluginCreatorVersion", PluginCreatorVersionDoc::descr, py::module_local())
-        .value("V1", PluginCreatorVersion::kV1)
-        .value("V1_PYTHON", PluginCreatorVersion::kV1_PYTHON);
-
     m.def("get_plugin_registry", &getPluginRegistry, py::return_value_policy::reference,
         FreeFunctionsDoc::get_plugin_registry);
 

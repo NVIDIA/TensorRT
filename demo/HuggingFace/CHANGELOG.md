@@ -20,6 +20,12 @@ Uses [semantic versioning](https://semver.org/).
 - `Fixed` for any bug fixes.
 - `Security` in case of vulnerabilities.
 
+# [2.0.6] - 2023-10-10
+- Added runtime dynamic batch support for `generate` function
+
+# [2.0.5] - 2023-09-06
+- Added `accuracy` command for LAMBADA topN accuracy for HF Demo
+
 # [2.0.4] - 2023-08-15
 - Added support for BLIP models
 
@@ -50,7 +56,7 @@ Uses [semantic versioning](https://semver.org/).
 - Added per step time for `--info` mode
 
 # [1.3.4] - 2023-02-02
-- Changed GPT2 demo kv cache TRT to 1 engine, 2 optimization profiles 
+- Changed GPT2 demo kv cache TRT to 1 engine, 2 optimization profiles
 - Added fp16 support for GPT2
 
 # [1.3.3] - 2023-01-04

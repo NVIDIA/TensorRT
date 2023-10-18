@@ -17,7 +17,7 @@
 
 """
 Demonstrates TensorRT capabilities with networks located in HuggingFace repository.
-Requires Python 3.5+
+Requires Python 3.7+
 """
 
 import os
@@ -42,7 +42,8 @@ WRAPPER_LIST_ACTION = "list"
 WRAPPER_COMPARE_ACTION = "compare"
 WRAPPER_BENCHMARK_ACTION = "benchmark"
 WRAPPER_CHAT_ACTION = "chat"
-WRAPPER_ACTIONS = [WRAPPER_RUN_ACTION, WRAPPER_LIST_ACTION, WRAPPER_COMPARE_ACTION, WRAPPER_BENCHMARK_ACTION, WRAPPER_CHAT_ACTION]
+WRAPPER_ACCURACY_ACTION = "accuracy"
+WRAPPER_ACTIONS = [WRAPPER_RUN_ACTION, WRAPPER_LIST_ACTION, WRAPPER_COMPARE_ACTION, WRAPPER_BENCHMARK_ACTION, WRAPPER_CHAT_ACTION, WRAPPER_ACCURACY_ACTION]
 
 # NNDF
 from NNDF.general_utils import process_per_result_entries, process_results, register_network_folders, RANDOM_SEED
@@ -96,6 +97,9 @@ class NetworkScriptAction(Action):
 
 class RunAction(NetworkScriptAction):
     def execute(self, args: argparse.Namespace):
+        G_LOGGER.warning(
+            "run command will be deprecated in a future release. Please use accuracy or benchmark command instead."
+        )
         module = self.load_script(args.script, args)
         module.RUN_CMD._parser = self.parser
 
@@ -185,7 +189,7 @@ class ChatAction(NetworkScriptAction):
         try:
             module = self.load_script(self.TRT_SCRIPT_NAME, args)
         except ModuleNotFoundError as e:
-            print("Unable to do comparison. TRT script not yet supported.")
+            print("Unable to do chat because TRT script not yet supported.")
             exit(1)
 
         compare_group = args.compare
@@ -197,10 +201,9 @@ class ChatAction(NetworkScriptAction):
                 print("Setting up environment for {}".format(g))
                 os.chdir(args.network)
                 module = self.load_script(g, args)
-                command = module.RUN_CMD
-                command._parser = self.parser
-                command.setup_chat()
-                commands[g] = command
+                module.RUN_CMD._parser = self.parser
+                # In chat command, it returns self
+                commands[g] = module.RUN_CMD()
             except ModuleNotFoundError as e:
                 print("{} is not valid, the demo does not support this script yet. Ignoring.".format(g))
 
@@ -220,6 +223,10 @@ class ChatAction(NetworkScriptAction):
                     _, semantic_outputs = commands[g].generate(input_str=prompt)
                     t1 = time.time()
                     print("{}: {}. Time: {:.4f}s".format(g, semantic_outputs, t1 - t0))
+
+        # Cleanup after finishing the chat
+        for g in commands:
+            g.cleanup()
 
         return 0
 
@@ -248,7 +255,7 @@ class CompareAction(NetworkScriptAction):
 
         if len(compare_group) <= 1:
             G_LOGGER.error(
-                "Comparison command must have atleast two groups to compare to."
+                "Comparison command must have at least two groups to compare to."
             )
             exit()
 
@@ -307,6 +314,54 @@ class CompareAction(NetworkScriptAction):
             help="Specific frameworks to compare. If none is specified, all are compared.",
         )
 
+class AccuracyAction(NetworkScriptAction):
+    def execute(self, args: argparse.Namespace):
+        module = self.load_script(args.script, args)
+        module.RUN_CMD._parser = self.parser
+
+        old_path = os.getcwd()
+        # Execute script in each relevant folder
+        try:
+            os.chdir(args.network)
+            results = module.RUN_CMD()
+        finally:
+            os.chdir(old_path)
+
+        # Output to terminal
+        print(results)
+
+        # Dump results as a pickle file if applicable.
+        # Useful for testing or post-processing.
+        if args.save_output_fpath:
+            with open(args.save_output_fpath, "wb") as f:
+                pickle.dump(results, f)
+
+        return 0
+
+    def add_args(self, parser: argparse.ArgumentParser):
+        super().add_args(parser)
+        accuracy_group = parser.add_argument_group("Accuracy args")
+        accuracy_group.add_argument("script", choices=self.PER_NETWORK_SCRIPTS)
+        accuracy_group.add_argument("--save-output-fpath", "-o", default=None, help="Outputs a pickled AccuracyResult object. See networks.py for definition.")
+        accuracy_group.add_argument(
+            "--topN",
+            type=int,
+            default=5,
+            help="TopN Accuracy choice. Default = 5"
+        )
+        accuracy_group.add_argument(
+            "--num-samples",
+            type=int,
+            default=20,
+            help="Number of samples used for accuracy checks in LAMBADA dataset. Default = 20"
+        )
+        accuracy_group.add_argument(
+            "--tokens-to-generate",
+            type=int,
+            default=2,
+            help="Number of generated tokens for accuracy test. Default = 2"
+        )
+
 
 class ListAction(Action):
     def __init__(self, networks: List[str], parser: argparse.ArgumentParser):
@@ -328,6 +383,7 @@ def get_action(
         WRAPPER_RUN_ACTION: RunAction,
         WRAPPER_BENCHMARK_ACTION: BenchmarkAction,
         WRAPPER_CHAT_ACTION: ChatAction,
+        WRAPPER_ACCURACY_ACTION: AccuracyAction,
     }[action_name](networks, parser)
 
 

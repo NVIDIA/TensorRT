@@ -18,7 +18,7 @@
 import copy
 import numbers
 from collections import OrderedDict, defaultdict
-from typing import Sequence
+from typing import List, Sequence
 
 import numpy as np
 from onnx_graphsurgeon.ir.node import Node
@@ -103,6 +103,7 @@ class Graph(object):
         import_domains=None,
         producer_name: str = None,
         producer_version: str = None,
+        functions: "Sequence[Function]" = None,
     ):
         """
         Args:
@@ -127,21 +128,51 @@ class Graph(object):
         self.producer_name = misc.default_value(producer_name, "")
         self.producer_version = misc.default_value(producer_version, "")
         self.import_domains = import_domains
-        # Printing graphs can be very expensive
-        G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
         # For layer() function
         self.name_idx = 0
+
+        # In ONNX, the same list of Functions is shared between all Graphs & Functions in a model.
+        # Protect the list object with an underscore as self._functions
+        # Users should access/modify/set this list via graph.functions
+        self._functions = list(misc.default_value(functions, []))
+        self._merge_subgraph_functions()
+
+        # Printing graphs can be very expensive
+        G_LOGGER.ultra_verbose(lambda: "Created Graph: {:}".format(self))
 
     def __getattr__(self, name):
         try:
             return super().__getattribute__(name)
         except AttributeError as err:
+
+            # Warn user if the name matches multiple registered functions.
+            methods = []
+            method_descs = []
+
             # Opset specific ops always take priority over global ops.
             if self.opset in Graph.OPSET_FUNC_MAP and name in Graph.OPSET_FUNC_MAP[self.opset]:
-                return lambda *args, **kwargs: Graph.OPSET_FUNC_MAP[self.opset][name](self, *args, **kwargs)
+                methods.append(Graph.OPSET_FUNC_MAP[self.opset][name])
+                method_descs.append(f"GraphSurgeon-registered function \"{name}\" with opset {self.opset}")
 
+            # Registered ops take priority over Local Functions.
             if name in Graph.GLOBAL_FUNC_MAP:
-                return lambda *args, **kwargs: Graph.GLOBAL_FUNC_MAP[name](self, *args, **kwargs)
+                methods.append(Graph.GLOBAL_FUNC_MAP[name])
+                method_descs.append(f"GraphSurgeon-registered function \"{name}\"")
+
+            for func in self.functions:
+                if func.name == name:
+                    methods.append(func.__call__)
+                    method_descs.append(f"Local Function \"{func.name}\" with domain \"{func.domain}\"")
+
+            if methods:
+                if len(methods) > 1:
+                    msg_template = "Method name {} is overloaded with the following candidates: {}. "
+                    msg_template += "Choosing candidate {}"
+                    G_LOGGER.warning(
+                        message=msg_template.format(name, method_descs, method_descs[0]),
+                        mode=LogMode.ONCE
+                    )
+                return lambda *args, **kwargs: methods[0](self, *args, **kwargs)
 
             G_LOGGER.error("No function: {:} registered for opset: {:}".format(name, self.opset))
             raise err
@@ -152,18 +183,33 @@ class Graph(object):
             value = list(value)
         return super().__setattr__(name, value)
 
+    @property
+    def functions(self) -> "List[Function]":
+        return self._functions
+
+    @functions.setter
+    def functions(self, new_fns: "Sequence[Function]"):
+        # The 'self._functions' list object is shared between
+        # this graph, its subgraphs, and its functions.
+        # If the user sets a new value for self.functions,
+        # all subgraphs and functions should also see this new value.
+        self._functions.clear()
+        self._functions += list(new_fns)
+
     def __eq__(self, other: "Graph"):
-        nodes_match = len(self.nodes) == len(other.nodes) and all(
-            [node == other_node for node, other_node in zip(self.nodes, other.nodes)]
+        def sequences_equal(seq1, seq2):
+            return len(seq1) == len(seq2) and all(
+                [elem1 == elem2 for elem1, elem2 in zip(seq1, seq2)]
+            )
+        functions_equal = {f.unique_id for f in self.functions} == {f.unique_id for f in other.functions}
+        return (
+            self.opset == other.opset and
+            self.import_domains == other.import_domains and
+            functions_equal and
+            sequences_equal(self.inputs, other.inputs) and
+            sequences_equal(self.outputs, other.outputs) and
+            sequences_equal(self.nodes, other.nodes)
         )
-        inputs_match = len(self.inputs) == len(other.inputs) and all(
-            [inp == other_inp for inp, other_inp in zip(self.inputs, other.inputs)]
-        )
-        outputs_match = len(self.outputs) == len(other.outputs) and all(
-            [out == other_out for out, other_out in zip(self.outputs, other.outputs)]
-        )
-        opset_matches = self.opset == other.opset and self.import_domains == other.import_domains
-        return nodes_match and inputs_match and outputs_match and opset_matches
 
     def node_ids(self):
         """
@@ -209,14 +255,13 @@ class Graph(object):
         for node in self.nodes:
             foreign_tensors.update({t.name: t for t in node.inputs if is_foreign_tensor(t)})
 
-            for attr in node.attrs.values():
-                if isinstance(attr, Graph):
-                    subgraph_foreign_tensors = attr._foreign_tensors()
-                    # Some of the foreign tensors from a subgraph may come from this graph.
-                    subgraph_foreign_tensors = {
-                        t.name: t for t in subgraph_foreign_tensors.values() if is_foreign_tensor(t)
-                    }
-                    foreign_tensors.update(subgraph_foreign_tensors)
+            for subgraph in node.subgraphs():
+                subgraph_foreign_tensors = subgraph._foreign_tensors()
+                # Some of the foreign tensors from a subgraph may come from this graph.
+                subgraph_foreign_tensors = {
+                    t.name: t for t in subgraph_foreign_tensors.values() if is_foreign_tensor(t)
+                }
+                foreign_tensors.update(subgraph_foreign_tensors)
 
         return foreign_tensors
 
@@ -256,15 +301,55 @@ class Graph(object):
                 node_used_tensors = list(node.inputs)
 
                 # If a node includes a subgraph, get any tensors that it uses from the outer graph.
-                for attr in node.attrs.values():
-                    if isinstance(attr, Graph):
-                        node_used_tensors += list(attr._foreign_tensors().values())
+                for subgraph in node.subgraphs():
+                    node_used_tensors += list(subgraph._foreign_tensors().values())
 
                 used_node_ids.add(self._get_node_id(node))
                 used_tensors.extend(filter(ignore_tensors, node_used_tensors))
         return used_node_ids, used_tensors
 
-    def cleanup(self, remove_unused_node_outputs=False, recurse_subgraphs=True, remove_unused_graph_inputs=False):
+    def _merge_subgraph_functions(self):
+        # When a user adds a Graph as a node attr, that graph will have a different
+        # function list than the parent graph. This function merges those lists.
+        func_ids = {func.unique_id for func in self.functions}
+
+        def absorb_function_list(func_list):
+            for func in func_list:
+                if func.unique_id not in func_ids:
+                    self.functions.append(func)
+                    func_ids.add(func.unique_id)
+            return self.functions
+
+        for graph in self.functions + [self]:
+            for subgraph in graph.subgraphs(recursive=True):
+                new_list = absorb_function_list(subgraph.functions)
+                subgraph._functions = new_list
+
+        for func in self.functions:
+            func._functions = absorb_function_list(func.functions)
+
+    def subgraphs(self, recursive=False):
+        """
+        Convenience function to iterate over all subgraphs which are contained in this graph.
+        Subgraphs are found in the attributes of ONNX control flow nodes such as 'If' and 'Loop'.
+
+        Args:
+            recursive (bool): Whether to recursively search this graph's subgraphs for more subgraphs. Defaults to False.
+
+        Returns:
+            A generator which iterates over the subgraphs contained in this graph.
+        """
+        for node in self.nodes:
+            for subgraph in node.subgraphs(recursive=recursive):
+                yield subgraph
+
+    def cleanup(
+        self,
+        remove_unused_node_outputs=False,
+        recurse_subgraphs=True,
+        remove_unused_graph_inputs=False,
+        recurse_functions=True,
+    ):
         """
         Removes unused nodes and tensors from the graph.
         A node or tensor is considered unused if it does not contribute to any of the graph outputs.
@@ -283,22 +368,33 @@ class Graph(object):
             remove_unused_graph_inputs (bool):
                     Whether to remove unused graph inputs.
                     Defaults to False.
-
+            recurse_functions (bool):
+                    Whether to also clean up this graph's local functions.
+                    Defaults to True.
         Returns:
             self
         """
 
         def cleanup_subgraphs():
-            for node in self.nodes:
-                for attr in node.attrs.values():
-                    if isinstance(attr, Graph):
-                        attr.cleanup(
-                            remove_unused_node_outputs=remove_unused_node_outputs,
-                            remove_unused_graph_inputs=remove_unused_graph_inputs,
-                        )
+            for subgraph in self.subgraphs():
+                subgraph.cleanup(
+                    remove_unused_node_outputs=remove_unused_node_outputs,
+                    recurse_subgraphs=recurse_subgraphs,
+                    remove_unused_graph_inputs=remove_unused_graph_inputs,
+                    recurse_functions=False, # Only cleanup functions once
+                )
 
         if recurse_subgraphs:
             cleanup_subgraphs()
+
+        if recurse_functions:
+            for func in self.functions:
+                func.cleanup(
+                    remove_unused_node_outputs=remove_unused_node_outputs,
+                    recurse_subgraphs=recurse_subgraphs,
+                    remove_unused_graph_inputs=remove_unused_graph_inputs,
+                    recurse_functions=False, # No infinite recursion
+                )
 
         G_LOGGER.verbose("Cleaning up {:}".format(self.name))
 
@@ -344,31 +440,57 @@ class Graph(object):
             self.nodes = nodes
             return self
 
-    def toposort(self, recurse_subgraphs=True):
+    def toposort(
+        self,
+        recurse_subgraphs=True,
+        recurse_functions=True,
+        mode="full",
+    ):
         """
         Topologically sort the graph in place.
 
         Args:
             recurse_subgraphs (bool):
                     Whether to recursively topologically sort subgraphs.
+                    Only applicable when mode="full" or mode="nodes".
                     Defaults to True.
+            recurse_functions (bool):
+                    Whether to topologically sort the nodes of this graph's functions.
+                    Only applicable when mode="full" or mode="nodes".
+                    Defaults to True.
+            mode (str):
+                    Whether to reorder this graph's list of nodes, list of functions, or both.
+                    Possible values:
+                        "full": Topologically sort the list of nodes and the list of functions.
+                        "nodes": Only sort the list of nodes.
+                        "functions": Only sort the list of functions.
+                    Defaults to "full".
 
         Returns:
             self
         """
-        if recurse_subgraphs:
-            for node in self.nodes:
-                for attr in node.attrs.values():
-                    if isinstance(attr, Graph):
-                        attr.toposort()
+        ALLOWED_MODES = ["full", "nodes", "functions"]
+        if mode not in ALLOWED_MODES:
+            G_LOGGER.critical(f"Mode \"{mode}\" not in {ALLOWED_MODES}")
+
+        sort_nodes = mode in ["full", "nodes"]
+        sort_functions = mode in ["full", "functions"]
+
+        if sort_nodes and recurse_functions:
+            for func in self.functions:
+                func.toposort(recurse_subgraphs=recurse_subgraphs, mode="nodes")
+
+        if sort_nodes and recurse_subgraphs:
+            for subgraph in self.subgraphs():
+                subgraph.toposort(recurse_subgraphs=True, recurse_functions=False, mode="nodes")
 
         G_LOGGER.debug("Topologically sorting {:}".format(self.name))
 
-        # Keeps track of a node and it's level in the graph hierarchy.
+        # Keeps track of a node and its level in the graph hierarchy.
         # 0 corresponds to an input node, N corresponds to a node with N layers of inputs.
         class HierarchyDescriptor(object):
-            def __init__(self, node=None, level=None):
-                self.node = node
+            def __init__(self, node_or_func, level=None):
+                self.node_or_func = node_or_func
                 self.level = level
 
             def __lt__(self, other):
@@ -377,45 +499,85 @@ class Graph(object):
         hierarchy_levels = {}  # Dict[int, HierarchyDescriptor]
 
         local_tensors = self._local_tensors()
+        func_id_to_func = dict()
 
-        def get_hierarchy_level(node):
-            # Return all local nodes that contribute to this node.
-            def get_input_nodes(node):
-                inputs = {}
+        def get_id(node_or_func):
+            if isinstance(node_or_func, Node):
+                return self._get_node_id(node_or_func)
+            return node_or_func.unique_id
 
-                def add_local_producers(tensor):
-                    nonlocal inputs
-                    if tensor.name in local_tensors:
-                        for inp_node in tensor.inputs:
-                            inputs[self._get_node_id(inp_node)] = inp_node
+        def get_hierarchy_level(node_or_func, visited=None):
+            from onnx_graphsurgeon.ir.function import Function
 
-                for tensor in node.inputs:
-                    add_local_producers(tensor)
+            visited = misc.default_value(visited, set())
+            if get_id(node_or_func) in visited:
+                if isinstance(node_or_func, Function):
+                    G_LOGGER.critical("Cycle detected in function definitions!")
+                G_LOGGER.critical("Cycle detected in graph! Are there tensors with duplicate names in the graph?")
+            visited.add(get_id(node_or_func))
 
-                # If a node includes a subgraph, get any tensors that it uses from the outer graph.
-                for attr in node.attrs.values():
-                    if isinstance(attr, Graph):
-                        for tensor in attr._foreign_tensors().values():
+            def get_inputs(node_or_func):
+
+                # Find all nodes used by this node.
+                def get_used_nodes(node):
+                    inputs = {}
+
+                    def add_local_producers(tensor):
+                        nonlocal inputs
+                        if tensor.name in local_tensors:
+                            for inp_node in tensor.inputs:
+                                inputs[self._get_node_id(inp_node)] = inp_node
+
+                    for tensor in node.inputs:
+                        add_local_producers(tensor)
+
+                    # If a node includes a subgraph, get any tensors that it uses from the outer graph.
+                    for subgraph in node.subgraphs():
+                        for tensor in subgraph._foreign_tensors().values():
                             add_local_producers(tensor)
 
-                return inputs.values()
+                    return inputs.values()
 
-            if self._get_node_id(node) in hierarchy_levels:
-                return hierarchy_levels[self._get_node_id(node)].level
+                # Find all functions used in this list of nodes.
+                def get_used_funcs(nodes):
+                    inputs = {}
+                    for subgraph in self.subgraphs():
+                        inputs.update(get_used_funcs(subgraph.nodes))
+                    for node in nodes:
+                        func_id = (node.domain, node.op)
+                        if func_id in func_id_to_func:
+                            inputs[func_id] = func_id_to_func[func_id]
+                    return inputs
 
-            # The level of a node is the level of it's highest input + 1.
-            try:
-                max_input_level = max([get_hierarchy_level(input_node) for input_node in get_input_nodes(node)] + [-1])
-            except RecursionError:
-                G_LOGGER.critical("Cycle detected in graph! Are there tensors with duplicate names in the graph?")
+                if isinstance(node_or_func, Node):
+                    inputs = get_used_nodes(node_or_func)
+                else:
+                    inputs = get_used_funcs(node_or_func.nodes).values()
+                return inputs
+
+            if get_id(node_or_func) in hierarchy_levels:
+                return hierarchy_levels[get_id(node_or_func)].level
+
+            # The level of a node is the level of its highest input + 1.
+            max_input_level = max([get_hierarchy_level(inp, visited=visited) for inp in get_inputs(node_or_func)] + [-1])
+            visited.remove(get_id(node_or_func))
 
             return max_input_level + 1
 
-        with self.node_ids():
-            for node in self.nodes:
-                hierarchy_levels[self._get_node_id(node)] = HierarchyDescriptor(node, level=get_hierarchy_level(node))
+        if sort_nodes:
+            with self.node_ids():
+                for node in self.nodes:
+                    hierarchy_levels[get_id(node)] = HierarchyDescriptor(node, level=get_hierarchy_level(node))
+            self.nodes = [hd.node_or_func for hd in sorted(hierarchy_levels.values())]
 
-        self.nodes = [hd.node for hd in sorted(hierarchy_levels.values())]
+        if sort_functions:
+            self._merge_subgraph_functions()
+            func_id_to_func.update({func.unique_id : func for func in self.functions})
+            hierarchy_levels.clear()
+            for func in self.functions:
+                hierarchy_levels[func.unique_id] = HierarchyDescriptor(func, level=get_hierarchy_level(func))
+            self.functions = [hd.node_or_func for hd in sorted(hierarchy_levels.values())]
+
         return self
 
     def tensors(self, check_duplicates=False):
@@ -479,10 +641,11 @@ class Graph(object):
         flatten_subgraphs=True,
         size_threshold=None,
         should_exclude_node=None,
+        recurse_functions=True,
     ):
         """
-        Folds constants in-place in the graph. The graph must be topologically sorted prior to
-        calling this function (see `toposort()`).
+        Folds constants in-place in the graph. The graph's nodes and functions must be topologically
+        sorted prior to calling this function (see `toposort()`).
 
         This function will not remove constants after folding them. In order to get rid of
         these hanging nodes, you can run the `cleanup()` function.
@@ -531,13 +694,23 @@ class Graph(object):
                     be excluded from folding. This is only called for nodes which are otherwise foldable.
                     Note that preventing a node from being folded also prevents its consumers from being folded.
                     Defaults to a callable that always returns False.
+            recurse_functions (bool):
+                    Whether to fold constants in this graph's Functions.
+                    Defaults to True.
 
         Returns:
             self
         """
         from onnx_graphsurgeon.exporters.onnx_exporter import dtype_to_onnx, export_onnx
 
-        should_exclude_node = misc.default_value(should_exclude_node, lambda node: False)
+        custom_should_exclude_node = misc.default_value(should_exclude_node, lambda node: False)
+
+        # Don't fold nodes with attribute values which are variable.
+        def should_exclude_node(node):
+            for attr_val in node.attrs.values():
+                if isinstance(attr_val, Node.AttributeRef):
+                    return True
+            return custom_should_exclude_node(node)
 
         PARTITIONING_MODES = [None, "basic", "recursive"]
         if partitioning not in PARTITIONING_MODES:
@@ -561,7 +734,21 @@ class Graph(object):
             if len(tensor.inputs) == 1:
                 node = tensor.inputs[0]
                 if node.op == "Constant":
-                    tensor.to_constant(node.attrs["value"]._values)  # Using ._values avoids copying
+                    if len(node.attrs) != 1:
+                        G_LOGGER.warning("Constant node must contain exactly one attribute")
+                        continue
+                    attr_name, attr_val = list(node.attrs.items())[0]
+                    allowed_attrs = {"value", "value_float", "value_floats", "value_int", "value_ints"}
+                    if attr_name not in allowed_attrs:
+                        G_LOGGER.warning(f"Unsupported attribute for Constant node: {attr_name}")
+                        continue
+                    if isinstance(attr_val, Node.AttributeRef):
+                        continue
+                    elif isinstance(attr_val, Constant):
+                        arr = attr_val._values  # Using ._values avoids copying
+                    else:
+                        arr = np.array(attr_val)
+                    tensor.to_constant(arr)
                     tensor.inputs.clear()
 
         # Pass 2: Run shape-tensor cast elision
@@ -630,7 +817,7 @@ class Graph(object):
             # `cast_node.inputs[0].outputs[0] == cast_node`.
             for index, inp in enumerate(node.inputs):
                 if isinstance(inp, Constant):
-                    inp.values = inp.values.astype(onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[final_type])
+                    inp.values = inp.values.astype(onnx.helper.tensor_dtype_to_np_dtype(final_type))
 
                 for cast in inp_casts:
                     if cast.outputs[0] == inp:
@@ -661,6 +848,10 @@ class Graph(object):
         graph_clone = self.copy()
         clone_tensors = graph_clone.tensors()
 
+        # If 'self' is a Function, then these fields need to be set so it can be exported as an ONNX Graph.
+        graph_clone.producer_name = ""
+        graph_clone.producer_version = ""
+
         def update_foldable_outputs(graph_constants):
             def is_foldable(node):
                 NO_FOLD_OPS = ["QuantizeLinear", "DequantizeLinear", "DynamicQuantizeLinear"]
@@ -675,10 +866,9 @@ class Graph(object):
                     return False
 
                 all_subgraph_foreign_tensors_const = True
-                for attr in node.attrs.values():
-                    if isinstance(attr, Graph):
-                        foreign_tensors = attr._foreign_tensors().values()
-                        all_subgraph_foreign_tensors_const &= all_tensors_const(foreign_tensors)
+                for subgraph in node.subgraphs():
+                    foreign_tensors = subgraph._foreign_tensors().values()
+                    all_subgraph_foreign_tensors_const &= all_tensors_const(foreign_tensors)
 
                 return all_subgraph_foreign_tensors_const and not should_exclude_node(node)
 
@@ -907,7 +1097,7 @@ class Graph(object):
 
         graph_clone.outputs = [t for t in graph_constants.values() if should_eval_foldable(t)]
         G_LOGGER.debug("Folding tensors: {:}".format(graph_clone.outputs))
-        graph_clone.cleanup(remove_unused_graph_inputs=True)
+        graph_clone.cleanup(remove_unused_graph_inputs=True, recurse_functions=False)
 
         # Using ._values avoids a deep copy of the values.
         constant_values = {
@@ -977,17 +1167,16 @@ class Graph(object):
 
         # Folding subgraphs after the outer graph can lead to better folding.
         def fold_subgraphs():
-            for node in self.nodes:
-                for attr in node.attrs.values():
-                    if isinstance(attr, Graph):
-                        attr.fold_constants(
-                            fold_shapes=fold_shapes,
-                            recurse_subgraphs=recurse_subgraphs,
-                            partitioning=partitioning,
-                            error_ok=error_ok,
-                            flatten_subgraphs=flatten_subgraphs,
-                            size_threshold=size_threshold,
-                        )
+            for subgraph in self.subgraphs():
+                subgraph.fold_constants(
+                    fold_shapes=fold_shapes,
+                    recurse_subgraphs=recurse_subgraphs,
+                    partitioning=partitioning,
+                    error_ok=error_ok,
+                    flatten_subgraphs=flatten_subgraphs,
+                    size_threshold=size_threshold,
+                    recurse_functions=False, # Functions are folded later
+                )
 
         if recurse_subgraphs:
             fold_subgraphs()
@@ -1022,6 +1211,21 @@ class Graph(object):
 
                 index += 1
 
+        if recurse_functions:
+            # Nodes which are constant-folded but not cleaned up can result in errors during inference,
+            # so process functions in reverse topological order.
+            for func in reversed(self.functions):
+                func.fold_constants(
+                    fold_shapes=fold_shapes,
+                    recurse_subgraphs=recurse_subgraphs,
+                    partitioning=partitioning,
+                    error_ok=error_ok,
+                    flatten_subgraphs=flatten_subgraphs,
+                    size_threshold=size_threshold,
+                    should_exclude_node=should_exclude_node,
+                    recurse_functions=False, # No infinite recursion
+                )
+
         return self
 
     def _generate_name(self, prefix: str, existing_names: set):
@@ -1034,7 +1238,7 @@ class Graph(object):
                 break
         return name
 
-    def layer(self, inputs=[], outputs=[], *args, **kwargs):
+    def layer(self, inputs=None, outputs=None, *args, **kwargs):
         """
         Creates a node, adds it to this graph, and optionally creates its input and output tensors.
 
@@ -1066,6 +1270,8 @@ class Graph(object):
         Returns:
             List[Tensor]: The output tensors of the node
         """
+        inputs = misc.default_value(inputs, [])
+        outputs = misc.default_value(outputs, [])
 
         def process_io(io, existing_names):
             # Note: modifies `existing_names` in-place
@@ -1162,13 +1368,20 @@ class Graph(object):
             doc_string=copy.copy(self.doc_string),
             opset=copy.copy(self.opset),
             import_domains=self.import_domains,
+            functions=copy.copy(self.functions),
         )
 
     def __str__(self):
         nodes_str = "\n".join([str(node) for node in self.nodes])
-        return "Graph {:} (Opset: {:})\nInputs: {:}\nNodes:\n{:}\nOutputs: {:}".format(
-            self.name, self.opset, self.inputs, nodes_str, self.outputs
-        )
+        functions_str = ",".join([str(func.name) for func in self.functions])
+        out = f"Graph {self.name} (Opset {self.opset})"
+        out += f"\nLocal Functions: [{functions_str}]"
+        out += f"\nInputs: {self.inputs}"
+        out += f"\nNodes: {nodes_str}"
+        out += f"\nOutputs: {self.outputs}"
+        return out
 
     def __repr__(self):
         return self.__str__()
+
+

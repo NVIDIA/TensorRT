@@ -136,32 +136,32 @@ if __name__ == '__main__':
         selected_profile = -1
         num_binding_per_profile = engine.num_bindings // engine.num_optimization_profiles
         for idx in range(engine.num_optimization_profiles):
-            profile_shape = engine.get_profile_shape(profile_index = idx, binding = idx * num_binding_per_profile)
+            profile_shape = engine.get_tensor_profile_shape(name = "input_ids", profile_index = idx)
             if profile_shape[0][0] <= args.batch_size and profile_shape[2][0] >= args.batch_size and profile_shape[0][1] <= max_seq_length and profile_shape[2][1] >= max_seq_length:
                 selected_profile = idx
                 break
         if selected_profile == -1:
             raise RuntimeError("Could not find any profile that can run batch size {}.".format(args.batch_size))
 
-        context.active_optimization_profile = selected_profile
+        # Create a stream in which to copy inputs/outputs and run inference.
+        stream = cuda.Stream()
+
+        context.set_optimization_profile_async(selected_profile, stream.handle)
         binding_idx_offset = selected_profile * num_binding_per_profile
 
         # Specify input shapes. These must be within the min/max bounds of the active profile
         # Note that input shapes can be specified on a per-inference basis, but in this case, we only have a single shape.
         input_shape = (args.batch_size, max_seq_length)
         input_nbytes = trt.volume(input_shape) * trt.int32.itemsize
-        for binding in range(3):
-            context.set_binding_shape(binding_idx_offset + binding, input_shape)
-        assert context.all_binding_shapes_specified
-
-        # Create a stream in which to copy inputs/outputs and run inference.
-        stream = cuda.Stream()
+        for name in ["input_ids", "segment_ids", "input_mask"]:
+            context.set_input_shape(name, input_shape)
+        assert len(context.infer_shapes()) == 0
 
         # Allocate device memory for inputs.
         d_inputs = [cuda.mem_alloc(input_nbytes) for binding in range(3)]
 
         # Allocate output buffer by querying the size from the context. This may be different for different input shapes.
-        h_output = cuda.pagelocked_empty(tuple(context.get_binding_shape(binding_idx_offset + 3)), dtype=np.float32)
+        h_output = cuda.pagelocked_empty(tuple(context.get_tensor_shape("logits_out")), dtype=np.float32)
         d_output = cuda.mem_alloc(h_output.nbytes)
 
         def inference(features, tokens):

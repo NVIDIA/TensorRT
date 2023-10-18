@@ -45,7 +45,7 @@
         if (ret != 0)                                                                                                  \
         {                                                                                                              \
             std::cerr << "Cuda failure: " << ret << std::endl;                                                         \
-            abort();                                                                                                   \
+            exit(EXIT_FAILURE);                                                                                                  \
         }                                                                                                              \
     } while (0)
 
@@ -56,7 +56,7 @@
         if (!(condition))                                                   \
         {                                                                   \
             std::cerr << "Assertion failure: " << #condition << std::endl;  \
-            abort();                                                        \
+            exit(EXIT_FAILURE);                                                       \
         }                                                                   \
     } while (0)
 

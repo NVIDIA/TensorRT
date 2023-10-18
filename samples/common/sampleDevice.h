@@ -29,14 +29,8 @@
 namespace sample
 {
 
-inline void cudaCheck(cudaError_t ret, std::ostream& err = std::cerr)
-{
-    if (ret != cudaSuccess)
-    {
-        err << "Cuda failure: " << cudaGetErrorString(ret) << std::endl;
-        abort();
-    }
-}
+//! Check if the CUDA return status shows any error. If so, exit the program immediately.
+void cudaCheck(cudaError_t ret, std::ostream& err = std::cerr);
 
 class TrtCudaEvent;
 
@@ -511,43 +505,14 @@ private:
     uint64_t mSize{};
 };
 
-inline void setCudaDevice(int device, std::ostream& os)
-{
-    cudaCheck(cudaSetDevice(device));
+//! Set the GPU to run the inference on.
+void setCudaDevice(int32_t device, std::ostream& os);
 
-    cudaDeviceProp properties;
-    cudaCheck(cudaGetDeviceProperties(&properties, device));
+//! Get the CUDA version of the current CUDA driver.
+int32_t getCudaDriverVersion();
 
-    // clang-format off
-    os << "=== Device Information ===" << std::endl;
-    os << "Selected Device: "      << properties.name                                               << std::endl;
-    os << "Compute Capability: "   << properties.major << "." << properties.minor                   << std::endl;
-    os << "SMs: "                  << properties.multiProcessorCount                                << std::endl;
-    os << "Device Global Memory: " << (properties.totalGlobalMem >> 20) << " MiB"                   << std::endl;
-    os << "Shared Memory per SM: " << (properties.sharedMemPerMultiprocessor >> 10) << " KiB"       << std::endl;
-    os << "Memory Bus Width: "     << properties.memoryBusWidth << " bits"
-                        << " (ECC " << (properties.ECCEnabled != 0 ? "enabled" : "disabled") << ")" << std::endl;
-    os << "Application Compute Clock Rate: "   << properties.clockRate / 1000000.0F << " GHz"       << std::endl;
-    os << "Application Memory Clock Rate: "    << properties.memoryClockRate / 1000000.0F << " GHz" << std::endl;
-    os << std::endl;
-    os << "Note: The application clock rates do not reflect the actual clock rates that the GPU is "
-                                                                         << "currently running at." << std::endl;
-    // clang-format on
-}
-
-inline int32_t getCudaDriverVersion()
-{
-    int32_t version{-1};
-    cudaCheck(cudaDriverGetVersion(&version));
-    return version;
-}
-
-inline int32_t getCudaRuntimeVersion()
-{
-    int32_t version{-1};
-    cudaCheck(cudaRuntimeGetVersion(&version));
-    return version;
-}
+//! Get the CUDA version of the current CUDA runtime.
+int32_t getCudaRuntimeVersion();
 
 } // namespace sample
 

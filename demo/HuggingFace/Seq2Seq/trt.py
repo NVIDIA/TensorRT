@@ -56,7 +56,6 @@ from NNDF.models import TRTEngineFile
 from NNDF.logger import G_LOGGER
 
 from Seq2Seq.Seq2SeqModelConfig import Seq2SeqModelTRTConfig
-from Seq2Seq.measurements import calculate_perplexity_helper_encoder_decoder, calculate_perplexity_helper_decoder
 from Seq2Seq.export import Seq2SeqModelClass
 from cuda import cudart
 
@@ -74,6 +73,9 @@ class Seq2SeqTRTEncoder(TRTNativeRunner):
 
         self.data_type = torch.float16 if network_metadata.precision.fp16 else torch.float32
         self.main_input_name = "input_ids"
+        # Older TRT version does not have int64 support, and therefore requires int32 bindings
+        self.int_type = torch.int32 if self.trt_engine.get_tensor_dtype(self.main_input_name) == trt.int32 else torch.int64
+
         self.device = torch.device("cuda")
 
         self.encoder_hidden_states = torch.zeros(
@@ -90,14 +92,10 @@ class Seq2SeqTRTEncoder(TRTNativeRunner):
         # Check if the input data is on CPU (which usually means the PyTorch does not support current GPU).
         is_cpu_mode = (input_ids.device == torch.device("cpu"))
 
-        # Older TRT version does not have int64 support, and therefore requires int32 bindings
-        if self.trt_engine.get_tensor_dtype(self.main_input_name) == trt.int32:
-            input_ids = input_ids.int().contiguous()
-        else:
-            input_ids = input_ids.long().contiguous()
+        input_ids = input_ids.to(self.int_type).contiguous()
 
         if is_cpu_mode:
-            input_ids = input_ids.flatten().contiguous().cuda()
+            input_ids = input_ids.cuda()
 
         self.trt_context.set_tensor_address(self.main_input_name, input_ids.data_ptr())
         self.trt_context.set_input_shape(self.main_input_name, input_ids.shape)
@@ -137,10 +135,13 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
         network_metadata: NetworkMetadata,
         config: Seq2SeqModelTRTConfig,
         nvtx_verbose: bool,
+        use_cuda_graph: bool = False,
     ):
         super().__init__(trt_engine_file, network_metadata, config, nvtx_verbose)
-
         self.main_input_name = "input_ids"
+
+        # Older TRT version does not have int64 support, and therefore requires int32 bindings
+        self.int_type = torch.int32 if self.trt_engine.get_tensor_dtype(self.main_input_name) == trt.int32 else torch.int64
         self.generation_config = config.generation_config
         self.device = torch.device("cuda")
         self.encoder_hidden_size = config.hidden_size
@@ -149,14 +150,24 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
         self.num_decoder_layers = config.num_decoder_layers
         self.expand_size = config.expand_size
         self.profile_idx = 0
+        # For accuracy mode only
+        self._return_full_logits = False
+        self.target_ids = None
 
         # Setting next input shape when execution
-        # Use dict to record which inputs have changed.
+        # Use dictionary to record which inputs have changed.
         self.input_shape_change_record = dict()
+
+        # CUDA Graph
+        self.stream_for_cuda_graph = CUASSERT(cudart.cudaStreamCreate())[0]
+        self.use_cuda_graph = use_cuda_graph
+        # two cuda graph ping-pong instance
+        self.cuda_graph_instances = [None, None]
+        self.cur_cuda_graph_instance = 0
 
         # Construct buffer for logits outputs
         self.logits = torch.zeros(
-            config.expand_size * config.max_decoder_length * config.vocab_size,
+            config.expand_size*config.max_decoder_length*config.vocab_size,
             dtype=config.precision,
             device=self.device,
         )
@@ -171,6 +182,11 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                 device=self.device
             )
             self.trt_context.set_tensor_address("image_embeds", self.image_embeds.data_ptr())
+
+        if self.use_cuda_graph:
+            self.cuda_graph_input_data = torch.zeros(
+                (config.expand_size,1), dtype=self.int_type, device=self.device
+            )
 
         if config.is_encoder_decoder:
             self.encoder_hidden_states = torch.zeros(
@@ -233,6 +249,16 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                     self.cache_id = 0
 
             self.past_decoder_length = 0
+
+    def accuracy_mode(self, target_ids):
+        self._return_full_logits = True
+        self.full_logits = None
+        self.target_ids = target_ids
+
+    def disable_accuracy_mode(self):
+        self._return_full_logits = False
+        self.target_ids = None
+        self.full_logits = None
 
     def can_generate(self):
         return True
@@ -331,16 +357,26 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
         input_shape = input_ids.shape
         is_cpu_mode = input_ids.device == torch.device("cpu")
 
-        # Older TRT version does not have int64 support, and therefore requires int32 bindings
-        if self.trt_engine.get_tensor_dtype(self.main_input_name) == trt.int32:
-            input_ids = input_ids.int().contiguous()
-        else:
-            input_ids = input_ids.long().contiguous()
+        input_ids = input_ids.to(self.int_type).contiguous()
 
         if is_cpu_mode:
             input_ids = input_ids.cuda()
 
-        ctx.set_tensor_address(self.main_input_name, input_ids.data_ptr())
+        use_cuda_graph = self.use_cuda_graph
+
+        # Only enable CUDA graph in generate phase with kv_cache
+        if not self.config.use_cache or input_length != 1 and self.context_mode:
+            use_cuda_graph = False
+            for self.cur_cuda_graph_instance in range(len(self.cuda_graph_instances)):
+                if self.cuda_graph_instances[self.cur_cuda_graph_instance] is not None:
+                    CUASSERT(cudart.cudaGraphExecDestroy(self.cuda_graph_instances[self.cur_cuda_graph_instance]))
+                self.cuda_graph_instances[self.cur_cuda_graph_instance] = None
+
+        if use_cuda_graph:
+            self.cuda_graph_input_data[:,:] = input_ids[:,:]
+            ctx.set_tensor_address(self.main_input_name, self.cuda_graph_input_data.data_ptr())
+        else:
+            ctx.set_tensor_address(self.main_input_name, input_ids.data_ptr())
         ctx.set_input_shape(self.main_input_name, input_shape)
 
 
@@ -350,10 +386,8 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                 attention_mask = torch.ones((input_ids.shape[0], mask_length), device=input_ids.device)
 
             assert attention_mask.shape[1] == mask_length, f"Mask length should equal to {mask_length}"
-            if self.trt_engine.get_tensor_dtype("attention_mask") == trt.int32:
-                attention_mask = attention_mask.int().contiguous()
-            else:
-                attention_mask = attention_mask.long().contiguous()
+
+            attention_mask = attention_mask.to(self.int_type).contiguous()
 
             if is_cpu_mode:
                 attention_mask = attention_mask.cuda()
@@ -392,7 +426,16 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
 
         # Launch TRT inference.
         assert ctx.all_shape_inputs_specified
-        ctx.execute_async_v3(self.stream)
+
+        if self.use_cuda_graph:
+            if self.cuda_graph_instances[self.cur_cuda_graph_instance] is not None:
+                CUASSERT(cudart.cudaGraphLaunch(self.cuda_graph_instances[self.cur_cuda_graph_instance], self.stream))
+            else:
+                ctx.execute_async_v3(self.stream)
+        else:
+            ctx.execute_async_v3(self.stream)
+
+        early_switch = False
         if self.config.use_cache and self.past_decoder_length != 0:
             for i in range(self.num_decoder_layers):
                 next_self_attn_keys_shape = self._get_next_self_attn_keys_cache_shape()
@@ -403,16 +446,44 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                 ctx.set_input_shape(f"past_key_values.{i}.self.value", next_self_attn_vals_shape)
                 key_record = self.input_shape_change_record["past_key_values.{i}.self.key"] = [ctx, next_self_attn_keys_shape]
                 value_record = self.input_shape_change_record["past_key_values.{i}.self.value"] = [ctx, next_self_attn_vals_shape]
+
+            if self.use_cuda_graph:
+                self._switch_cache()
+                early_switch = True
+
+                ctx.set_tensor_address(self.main_input_name, self.cuda_graph_input_data.data_ptr())
+                ctx.set_input_shape(self.main_input_name, input_shape)
+                # capture cuda graph
+                CUASSERT(cudart.cudaStreamBeginCapture(self.stream_for_cuda_graph, cudart.cudaStreamCaptureMode.cudaStreamCaptureModeThreadLocal))
+                ctx.execute_async_v3(self.stream_for_cuda_graph)
+                graph = CUASSERT(cudart.cudaStreamEndCapture(self.stream_for_cuda_graph))[0]
+                # instantiate cuda graph execution
+                self.cur_cuda_graph_instance = ((self.cur_cuda_graph_instance + 1) % 2)
+                if self.cuda_graph_instances[self.cur_cuda_graph_instance] is not None:
+                    err = cudart.cudaGraphExecUpdate(self.cuda_graph_instances[self.cur_cuda_graph_instance], graph)
+                    if err != cudart.cudaError_t.cudaSuccess:
+                        CUASSERT(cudart.cudaGraphExecDestroy(self.cuda_graph_instances[self.cur_cuda_graph_instance]))
+                        self.cuda_graph_instances[self.cur_cuda_graph_instance] = CUASSERT(cudart.cudaGraphInstantiate(graph, 0))[0]
+                    CUASSERT(cudart.cudaGraphUpload(self.cuda_graph_instances[self.cur_cuda_graph_instance], self.stream))
+                else:
+                    self.cuda_graph_instances[self.cur_cuda_graph_instance] = CUASSERT(cudart.cudaGraphInstantiate(graph, 0))[0]
+
+                CUASSERT(cudart.cudaGraphDestroy(graph))
+
         CUASSERT(cudart.cudaStreamSynchronize(self.stream))
 
-        # For bs > 1, this is required, so cannnot avoid this D2D copy
         logits_length = self.expand_size * input_length * self.config.vocab_size
         logits = self.logits[:logits_length].view(self.expand_size, input_length, self.config.vocab_size)
-
+        if self._return_full_logits:
+            if not self.config.use_cache or (self.config.use_cache and kwargs.get("past_key_values") is None):
+                self.full_logits = logits
+            else:
+                # KV Cache mode, concat logits for seq > 1
+                self.full_logits = torch.cat((self.full_logits, logits), dim=1)
         present_key_values = None
         if self.config.use_cache:
-
-            self._switch_cache()
+            if not early_switch:
+                self._switch_cache()
 
             present_key_values = ()
             self.past_decoder_length += input_length
@@ -433,13 +504,19 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
 
         return Seq2SeqLMOutput(logits=logits, past_key_values=present_key_values,)
 
-    def prepare_inputs_for_generation(self, input_ids,
-                                      past_key_values=None,
-                                      encoder_outputs = None,
-                                      image_embeds = None,
-                                      **kwargs):
-
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        encoder_outputs = None,
+        image_embeds = None,
+        **kwargs
+    ):
         # In HuggingFace generation_utils.py, this function will be called at each decoding step, before running the decoder's forward().
+
+        if self.target_ids is not None:
+            input_ids = self.target_ids[:,:input_ids.shape[1]]
+
         input_args = {}
 
         if self.config.is_encoder_decoder and self.config.use_mask:
@@ -553,6 +630,7 @@ class Seq2SeqTRT(TRTInferenceCommand):
         cache_generator_engine: str = None,
         use_timing_cache: bool = False,
         nvtx_verbose: bool = False,
+        use_cuda_graph: bool = False,
         **kwargs
     ):
         self.encoder_hidden_size = self.config.hidden_size
@@ -596,6 +674,7 @@ class Seq2SeqTRT(TRTInferenceCommand):
 
         self.nvtx_verbose_inference = nvtx_verbose # In inference, nvtx verbose level may affect performance.
 
+        self.use_cuda_graph = use_cuda_graph
         if self.use_generator:
             self.cross_attn_cache_generator_engine = None
             self.onnx_cross_attn_cache_generator = None
@@ -685,7 +764,7 @@ class Seq2SeqTRT(TRTInferenceCommand):
         try:
             self.decoder_engine = self.config.decoder_classes["engine"](decoder_engine_fpath, self.metadata)
             self.decoder = self.decoder_class(
-                self.decoder_engine, self.metadata, self.config, self.nvtx_verbose_inference
+                self.decoder_engine, self.metadata, self.config, self.nvtx_verbose_inference, self.use_cuda_graph
             )
 
             if self.config.is_encoder_decoder:
@@ -720,35 +799,24 @@ class Seq2SeqTRT(TRTInferenceCommand):
         #                    If no additional benchmarking flags are provided, it will just use n_positions for max coverage
 
         # Convert ONNX models to TRT engines.
-        if not self.benchmarking_mode:
-            engine_tag = "bs{}".format(self.config.batch_size)
-        # When user does not input any profile_max_len, use seq as tag, both max are config max
-        elif self.seq_tag:
-            # When user inputs dynamic batch, enable engine reuse in future with different batch size.
-            if self.dynamic_batch:
-                engine_tag = "minbs{}-maxbs{}-inseq{}-outseq{}".format(self.min_dynamic_batch,
-                                                                       self.max_dynamic_batch,
-                                                                       self.opt_input_seq_len,
-                                                                       self.opt_output_seq_len)
-            else:
-                engine_tag = "bs{}-inseq{}-outseq{}".format(self.config.batch_size,
-                                                            self.opt_input_seq_len,
-                                                            self.opt_output_seq_len)
-        # When user input profile_max_len, reuse the engine for future use with different seq_len
+        # bs tag first
+        if self.dynamic_batch:
+            engine_tag = f"minbs{self.min_dynamic_batch}-maxbs{self.max_dynamic_batch}"
         else:
-            # When user inputs dynamic batch, enable engine reuse in future with different batch size.
-            if self.dynamic_batch:
-                engine_tag = "minbs{}-maxbs{}-inmax{}-outmax{}".format(self.min_dynamic_batch,
-                                                                       self.max_dynamic_batch,
-                                                                       self.config.max_input_profile_length,
-                                                                       self.config.max_output_profile_length)
+            engine_tag = f"bs{self.config.batch_size}"
+
+        if self.action == "benchmark":
+            # When user does not input any profile_max_len, use seq as tag, both max are config max
+            if self.seq_tag:
+                engine_tag += f"-inseq{self.opt_input_seq_len}-outseq{self.opt_output_seq_len}"
+
+            # When user input profile_max_len, reuse the engine for future use with different seq_len
             else:
-                engine_tag = "bs{}-inmax{}-outmax{}".format(self.config.batch_size,
-                                                            self.config.max_input_profile_length,
-                                                            self.config.max_output_profile_length)
+                # When user inputs dynamic batch, enable engine reuse in future with different batch size.
+                engine_tag += f"-inmax{self.config.max_input_profile_length}-outmax{self.config.max_output_profile_length}"
 
         if self.config.num_beams > 1:
-            engine_tag += "-beam{}".format(self.config.num_beams)
+            engine_tag += f"-beam{self.config.num_beams}"
 
         preview_features = [PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]
 
@@ -776,7 +844,7 @@ class Seq2SeqTRT(TRTInferenceCommand):
         )
 
         self.decoder = self.decoder_class(
-            self.decoder_engine, self.metadata, self.config, self.nvtx_verbose_inference,
+            self.decoder_engine, self.metadata, self.config, self.nvtx_verbose_inference, self.use_cuda_graph
         )
         self.workspace.set_decoder_engine_path(decoder_engine_path)
 
@@ -991,32 +1059,31 @@ class Seq2SeqTRT(TRTInferenceCommand):
                     copt_shape += f",'attention_mask':{self.opt_expand_size}x{self.opt_input_seq_len}"
                     cmax_shape += f",'attention_mask':{self.max_expand_size}x{self.config.max_input_profile_length}"
 
-            for i in range(self.config.num_decoder_layers):
-                k = f",'past_key_values.{i}.self.key'"
-                v = f",'past_key_values.{i}.self.value'"
-                kv_min_str = f":{self.min_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
-                kv_opt_str = f":{self.opt_expand_size}x{self.config.num_heads}x{self.opt_output_seq_len-1}x{self.embedding_size_per_head}"
-                kv_max_str = f":{self.max_expand_size}x{self.config.num_heads}x{self.config.max_output_profile_length-1}x{self.embedding_size_per_head}"
-                min_shape += k + kv_min_str + v + kv_min_str
-                opt_shape += k + kv_opt_str + v + kv_opt_str
-                max_shape += k + kv_max_str + v + kv_max_str
+            k = f",'past_key_values.*.self.key'"
+            v = f",'past_key_values.*.self.value'"
+            kv_min_str = f":{self.min_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
+            kv_opt_str = f":{self.opt_expand_size}x{self.config.num_heads}x{self.opt_output_seq_len-1}x{self.embedding_size_per_head}"
+            kv_max_str = f":{self.max_expand_size}x{self.config.num_heads}x{self.config.max_output_profile_length-1}x{self.embedding_size_per_head}"
+            min_shape += k + kv_min_str + v + kv_min_str
+            opt_shape += k + kv_opt_str + v + kv_opt_str
+            max_shape += k + kv_max_str + v + kv_max_str
 
-                if self.config.is_encoder_decoder:
-                    ck = f",'past_key_values.{i}.cross.key'"
-                    cv = f",'past_key_values.{i}.cross.value'"
-                    ckv_min_str = f":{self.min_expand_size}x{self.config.num_heads}x1x{self.embedding_size_per_head}"
-                    ckv_opt_str = f":{self.opt_expand_size}x{self.config.num_heads}x{self.opt_input_seq_len}x{self.embedding_size_per_head}"
-                    ckv_max_str = f":{self.max_expand_size}x{self.config.num_heads}x{self.config.max_input_profile_length}x{self.embedding_size_per_head}"
-                    min_shape += ck + ckv_min_str + cv + ckv_min_str
-                    opt_shape += ck + ckv_opt_str + cv + ckv_opt_str
-                    max_shape += ck + ckv_max_str + cv + ckv_max_str
-                else:
-                    zero_min_str = f":{self.min_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
-                    zero_opt_str = f":{self.opt_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
-                    zero_max_str = f":{self.max_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
-                    cmin_shape += k + zero_min_str + v + zero_min_str
-                    copt_shape += k + zero_opt_str + v + zero_opt_str
-                    cmax_shape += k + zero_max_str + v + zero_max_str
+            if self.config.is_encoder_decoder:
+                ck = f",'past_key_values.*.cross.key'"
+                cv = f",'past_key_values.*.cross.value'"
+                ckv_min_str = f":{self.min_expand_size}x{self.config.num_heads}x1x{self.embedding_size_per_head}"
+                ckv_opt_str = f":{self.opt_expand_size}x{self.config.num_heads}x{self.opt_input_seq_len}x{self.embedding_size_per_head}"
+                ckv_max_str = f":{self.max_expand_size}x{self.config.num_heads}x{self.config.max_input_profile_length}x{self.embedding_size_per_head}"
+                min_shape += ck + ckv_min_str + cv + ckv_min_str
+                opt_shape += ck + ckv_opt_str + cv + ckv_opt_str
+                max_shape += ck + ckv_max_str + cv + ckv_max_str
+            else:
+                zero_min_str = f":{self.min_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
+                zero_opt_str = f":{self.opt_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
+                zero_max_str = f":{self.max_expand_size}x{self.config.num_heads}x0x{self.embedding_size_per_head}"
+                cmin_shape += k + zero_min_str + v + zero_min_str
+                copt_shape += k + zero_opt_str + v + zero_opt_str
+                cmax_shape += k + zero_max_str + v + zero_max_str
 
             if self.config.is_encoder_decoder:
                 command += f"{min_shape} {opt_shape} {max_shape} "
@@ -1116,38 +1183,6 @@ class Seq2SeqTRT(TRTInferenceCommand):
             command += f"--timingCacheFile={self.timing_cache} "
 
         return command
-
-    def calculate_perplexity(self, input_str: str, reference_str: str, use_cuda: bool = True):
-
-        if self.config.use_cache or self.config.num_beams > 1:
-            G_LOGGER.warning("Perplexity calculation is disabled for use_cache=True or num_beams>1 in TRT. Default=None")
-            return None
-
-        if self.config.is_encoder_decoder:
-            perplexity = calculate_perplexity_helper_encoder_decoder(
-                encoder=self.encoder,
-                decoder=self.decoder,
-                tokenizer=self.tokenizer,
-                input_str=input_str,
-                reference_str=reference_str,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                use_cuda=use_cuda,
-                use_mask=self.config.use_mask,
-            )
-        else:
-            perplexity = calculate_perplexity_helper_decoder(
-                decoder=self.decoder,
-                tokenizer=self.tokenizer,
-                input_str=reference_str,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                use_cuda=use_cuda,
-                use_mask=self.config.use_mask,
-            )
-
-        G_LOGGER.info("Perplexity={}".format(perplexity))
-        return perplexity
 
     def cleanup(self) -> None:
 

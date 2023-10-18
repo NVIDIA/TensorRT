@@ -164,6 +164,10 @@ class DecoderTorchFile(TorchModelFile):
         def __init__(self, model: Module):
             super().__init__()
             self.is_encoder_decoder = model.config.is_encoder_decoder
+            # Used for accuracy checks
+            self._return_full_logits = False
+            self.target_ids = None
+
             if self.is_encoder_decoder:
                 self.decoder = model.get_decoder()
             else:
@@ -193,6 +197,16 @@ class DecoderTorchFile(TorchModelFile):
 
             self.device = model.device
 
+        def accuracy_mode(self, target_ids):
+            self._return_full_logits = True
+            self.full_logits = None
+            self.target_ids = target_ids
+
+        def disable_accuracy_mode(self):
+            self._return_full_logits = False
+            self.target_ids = None
+            self.full_logits = None
+
         def can_generate(self):
             return True
 
@@ -204,6 +218,8 @@ class DecoderTorchFile(TorchModelFile):
             use_cache = None,
             encoder_outputs = None,
         ):
+            if self.target_ids is not None:
+                input_ids = self.target_ids[:, :input_ids.shape[1]]
 
             if past_key_values is not None:
                 input_ids = input_ids[:, -1:]
@@ -245,6 +261,12 @@ class DecoderTorchFile(TorchModelFile):
             sequence_output = decoder_outputs[0]
             logits = self.lm_head(sequence_output) if self.lm_head is not None else sequence_output
             past_key_values = decoder_outputs[1] if use_cache else None
+            if self._return_full_logits:
+                if self.full_logits is None or not use_cache:
+                    self.full_logits = logits
+                else:
+                    # KV Cache mode, concat logits for seq > 1
+                    self.full_logits = torch.cat((self.full_logits, logits), dim=1)
 
             return Seq2SeqLMOutput(
                 logits=logits,
