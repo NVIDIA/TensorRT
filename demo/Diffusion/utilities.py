@@ -384,7 +384,7 @@ class LMSDiscreteScheduler():
             order = min(step_index + 1, order)
             self.lms_coeffs.append([get_lms_coefficient(order, step_index, curr_order) for curr_order in range(order)])
 
-    def step(self, output, latents, idx, timestep):
+    def step(self, output, latents, idx, timestep, generator=None):
         # compute the previous noisy sample x_t -> x_t-1
         # 1. compute predicted original sample (x_0) from sigma-scaled predicted noise
         sigma = self.sigmas[idx]
@@ -1007,7 +1007,7 @@ class DPMScheduler():
             )
         return x_t
 
-    def step(self, output, latents, step_index, timestep):
+    def step(self, output, latents, step_index, timestep, generator=None):
         if self.num_inference_steps is None:
             raise ValueError(
                 "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
@@ -1124,7 +1124,7 @@ class PNDMScheduler():
         self.sample_coeff = self.sample_coeff[timesteps]
         self.model_output_denom_coeff = self.model_output_denom_coeff[timesteps]
 
-    def step(self, output, sample, idx, timestep):
+    def step(self, output, sample, idx, timestep, generator=None):
         # step_plms: propagate the sample with the linear multi-step method. This has one forward pass with multiple
         # times to approximate the solution.
 
@@ -1649,7 +1649,7 @@ def add_arguments(parser):
     parser.add_argument('--height', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--denoising-steps', type=int, default=50, help="Number of denoising steps")
-    parser.add_argument('--scheduler', type=str, default="DDIM", choices=["DDIM", "DPM", "EulerA", "LMSD", "PNDM"], help="Scheduler for diffusion process")
+    parser.add_argument('--scheduler', type=str, default="DDIM", choices=["DDIM", "DPM", "EulerA", "LMSD", "PNDM", "UniPCMultistepScheduler"], help="Scheduler for diffusion process")
     parser.add_argument('--guidance_scale', type=float, default=7.5, help="Value of classifier-free guidance scale (must be greater than 1)")
     parser.add_argument('--lora-scale', type=float, default=1, help="Scale of LoRA weights, default 1 (must between 0 and 1)")
     parser.add_argument('--lora-weights', type=str, default='', help="LoRA weights to apply in the base model")

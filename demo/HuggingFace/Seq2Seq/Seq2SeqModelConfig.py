@@ -21,7 +21,7 @@ from typing import Dict
 import sys
 import os
 
-from NNDF.networks import Precision, NetworkMetadata, DeprecatedCache, NNConfig, Dims
+from NNDF.networks import Precision, NetworkMetadata, NNConfig, Dims
 
 # Add syspath for custom library
 if __name__ == "__main__":
@@ -82,7 +82,6 @@ class Seq2SeqModelTRTConfig(NNConfig):
                     use_cache=use_cache,
                     num_beams=1,
                     batch_size=1,
-                    other=DeprecatedCache(kv_cache=use_cache),
                 )
             )
 
@@ -203,7 +202,6 @@ class Seq2SeqModelTRTConfig(NNConfig):
             use_cache=self.use_cache,
             num_beams=self.num_beams,
             batch_size=self.batch_size,
-            other=DeprecatedCache(kv_cache=self.use_cache)
         )
 
     def get_python_requirements(self):

@@ -20,10 +20,25 @@ from onnx_graphsurgeon.ir.tensor import Tensor
 from onnx_graphsurgeon.util import misc
 
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import List, Dict
 
 
 class Node(object):
+
+    @dataclass
+    class AttributeRef:
+        """
+        An AttributeRef is an attribute value which references an attribute in the parent function.
+        A node's attribute can only be an AttributeRef if the node lives inside a Function.
+
+        Args:
+            name (str): The name of the referenced attribute in the parent Function.
+            type (type): The attribute's type.
+        """
+        name: str
+        type: type
+
     def __init__(
         self,
         op: str,
@@ -90,6 +105,33 @@ class Node(object):
             Node: The specified consumer (output) node
         """
         return self.outputs[tensor_idx].outputs[consumer_idx]
+
+    def subgraphs(self, recursive=False):
+        """
+        Convenience function to iterate over all subgraphs which are contained in this node.
+        Node subgraphs are found in attributes of ONNX control flow nodes such as 'If' and 'Loop'.
+
+        Args:
+            recursive (bool): Whether to recurse into the subgraph nodes when looking for subgraphs. Defaults to False.
+
+        Returns:
+            A generator which iterates over this node's subgraphs.
+        """
+        from onnx_graphsurgeon.ir.graph import Graph
+
+        visit_queue = [self]
+
+        # This prevents infinite recursion in the (illegal) case of cyclical graphs.
+        visited = set()
+
+        while visit_queue:
+            node = visit_queue.pop()
+            for attr in node.attrs.values():
+                if isinstance(attr, Graph) and id(attr) not in visited:
+                    visited.add(id(attr))
+                    if recursive:
+                        visit_queue.extend(attr.nodes)
+                    yield attr
 
     def __setattr__(self, name, value):
         if name in ["inputs", "outputs"]:

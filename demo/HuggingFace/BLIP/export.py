@@ -104,7 +104,7 @@ class BLIPEncoderConverter(EncoderConverter):
         trt_engine_class=BLIPEncoderTRTEngine
     ):
         super().__init__(torch_class=torch_class, onnx_class=onnx_class, trt_engine_class=trt_engine_class)
-    
+
     def onnx_to_trt(
         self,
         output_fpath,
@@ -118,8 +118,8 @@ class BLIPEncoderConverter(EncoderConverter):
         # Needs to overwrite precision for onnx_to_trt
         network_metadata = network_metadata._replace(precision=Precision(fp16=False))
         return super().onnx_to_trt(
-            output_fpath, 
-            input_fpath, 
+            output_fpath,
+            input_fpath,
             network_metadata,
             profiles,
             preview_features,

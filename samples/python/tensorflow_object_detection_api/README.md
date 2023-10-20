@@ -7,14 +7,14 @@ Support for [TensorFlow Object Detection (TFOD) API](https://github.com/tensorfl
 
 ### TensorFlow and TensorRT Environment
 
-In order for scripts to work we suggest an environment with TensorRT >= 8.0.1 and TensorFlow 2.5.
+In order for scripts to work we suggest an environment with TensorRT >= 8.0.1 and TensorFlow 2.12.0.
 
 Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.
 
 If you would like to use Docker, you can use an NGC image to fulfill these requirements, such as:
 
 ```
-docker pull nvcr.io/nvidia/tensorflow:21.10-tf2-py3
+docker pull nvcr.io/nvidia/tensorflow:23.07-tf2-py3
 ```
 ### TFOD API Environment
 
@@ -28,7 +28,7 @@ wget https://github.com/protocolbuffers/protobuf/releases/download/v3.15.4/proto
 unzip protoc*.zip bin/protoc -d /usr/local
 git clone https://github.com/tensorflow/models.git
 cd /workspace/models/research
-git checkout 08b6803
+git checkout 66e22c4
 protoc object_detection/protos/*.proto --python_out=.
 cp object_detection/packages/tf2/setup.py ./
 pip --use-deprecated=legacy-resolver install .
@@ -314,4 +314,11 @@ If you run this on COCO val2017 images, you may also add the parameter `--annota
 #### Mask R-CNN
 
 ![mrcnn_compare_tf](https://drive.google.com/uc?export=view&id=1kNnfJ2H5OY85Z2e6KNxZgiYk3Lo-sB9r)
+
+# Changelog
+
+August 2023: 
+  - Removed support for Python versions < 3.8.
+  - Update ONNX version support to 1.14.0
+  - Update ONNX Runtime version support to 1.15.1 for Python>=3.8
 

@@ -1,5 +1,23 @@
 # TensorRT OSS Release Changelog
 
+## 9.1.0 GA - 2023-10-18
+
+Key Features and Updates:
+
+ - Update the [trt_python_plugin](samples/python/python_plugin) sample.
+   - Python plugins API reference is part of the offical TRT Python API.
+ - Added samples demonstrating the usage of the progress monitor API.
+   - Check [sampleProgressMonitor](samples/sampleProgressMonitor) for the C++ sample.
+   - Check [simple_progress_monitor](samples/python/simple_progress_monitor) for the Python sample.
+ - Remove dependencies related to python<3.8 in python samples as we no longer support python<3.8 for python samples. 
+ - Demo changes
+   - Added LAMBADA dataset accuracy checks in the [HuggingFace](demo/HuggingFace) demo.
+   - Enabled structured sparsity and FP8 quantized batch matrix multiplication(BMM)s in attention in the [NeMo](demo/NeMo) demo.
+   - Replaced deprecated APIs in the [BERT](demo/BERT) demo.
+ - Updated tooling
+   - Polygraphy v0.49.1
+
+
 ## 9.0.1 GA - 2023-09-07
 
 Key Features and Updates:

@@ -29,3 +29,5 @@ tabulate
 toml
 onnx_graphsurgeon
 cuda-python==12.1.0
+Pillow
+datasets

@@ -212,29 +212,23 @@ constexpr const char* descr = R"trtdoc(
 
 // remove md
 #if ENABLE_MDTRT
-constexpr char const* add_instance_id = R"trtdoc(
-    Set that this tensor's data exists on the instance ID.
+constexpr char const* get_tiling_assignment = R"trtdoc(
+    Get the instance associated with the tile.
 
-    In multi-device TensorRT, tensors can exist on different instances. To specify the instances
-    a tensor exists on, use this method. When an input tensor to a layer exists on different
-    instances than its corresponding output tensor, TensorRT will insert data transfers to move
-    the data from its current instances to the correct locations.
-    By default the instance ID is set to -1. The -1 instance id corresponds to a wildcard that
-    will be inferred by TensorRT based on the graph structure.
-
-    :arg id: The instance ID to add to this Tensor.
-    :returns: true if adding the id to the tensors set succeeds, false otherwise.
+    :arg tile: The tile to get the instance mapping of.
+    :returns: The instance associated with the tile or -1 for unassigned.
 )trtdoc";
-constexpr char const* has_instance_id = R"trtdoc(
-    Check if the tensor contains the instance id.
+constexpr char const* set_tiling_assignment = R"trtdoc(
+    set the instance id associated with the tile.
 
-    :arg id: the instance id to check if the tensor is assigned to it.
-    :returns: true if the tensor contains the instance id, false otherwise.
+    :arg tile: The tile to set the instance mapping of.
+    :arg instance: The instance to assign to the tile.
 )trtdoc";
-constexpr char const* del_instance_id = R"trtdoc(
-    Remove the instance id from the tensor
-    :arg id: the instance id to remove from the tensor.
-    :returns: true if the id was removed from the tensor, false otherwise.
+constexpr char const* set_tiling = R"trtdoc(
+    Set the tiling pattern and assignment.
+
+    :arg pattern: The tiling pattern to assign to the tensor.
+    :arg assignment: The tiling assignment to use for the tensor.
 )trtdoc";
 #endif // ENABLE_MDTRT
 constexpr const char* set_dynamic_range = R"trtdoc(
@@ -1233,6 +1227,8 @@ constexpr const char* descr = R"trtdoc(
     This layer casts the element of a given input tensor to a specified data type and returns an output tensor of the same shape in the converted type.
 
     Conversions between all types except FP8 is supported.
+    
+    :ivar to_type: :class:`DataType` The specified data type of the output tensor.
 )trtdoc";
 } // namespace ICastLayerDoc
 
@@ -1707,6 +1703,18 @@ namespace IFillLayerDoc
 {
 constexpr const char* descr = R"trtdoc(
     A fill layer in an :class:`INetworkDefinition` .
+
+    The data type of the output tensor can be specified by :attr:`to_type`. Supported output types for each fill operation is as follows.
+
+    ================   =====================
+    Operation          to_type
+    ================   =====================
+    kLINSPACE          int32, int64, float32
+    kRANDOM_UNIFORM    float16, float32
+    kRANDOM_NORMAL     float16, float32
+    ================   =====================
+    
+    :ivar to_type: :class:`DataType` The specified data type of the output tensor. Defaults to tensorrt.float32.
 )trtdoc";
 
 constexpr const char* set_dimensions = R"trtdoc(
@@ -1838,14 +1846,16 @@ constexpr const char* descr = R"trtdoc(
 
     The subgraph which terminates with the scale tensor must be a build-time constant.  The same restrictions apply
     to the zeroPt.
-    The output type, if constrained, must be constrained to tensorrt.int8. The input type, if constrained, must be
-    constrained to tensorrt.float32 (FP16 input is not supported).
+    The output type, if constrained, must be constrained to tensorrt.int8 or tensorrt.fp8. The input type, if constrained, must be
+    constrained to tensorrt.float32, tensorrt.float16 or tensorrt.bfloat16.
     The output size is the same as the input size.
 
-    IQuantizeLayer only supports tensorrt.float32 precision and will default to this precision during instantiation.
-    IQuantizeLayer only supports tensorrt.int8 output.
+    IQuantizeLayer supports tensorrt.float32, tensorrt.float16 and tensorrt.bfloat16 precision and will default to tensorrt.float32 precision during instantiation.
+    IQuantizeLayer supports tensorrt.int8 and tensorrt.float8 output.
 
     :ivar axis: :class:`int` The axis along which quantization occurs. The quantization axis is in reference to the input tensor's dimensions.
+
+    :ivar to_type: :class:`DataType` The specified data type of the output tensor. Must be tensorrt.int8 or tensorrt.float8.
 )trtdoc";
 } // namespace IQuantizeLayerDoc
 
@@ -1871,15 +1881,16 @@ constexpr const char* descr = R"trtdoc(
 
     The subgraph which terminates with the scale tensor must be a build-time constant.  The same restrictions apply
     to the zeroPt.
-    The output type, if constrained, must be constrained to tensorrt.int8. The input type, if constrained, must be
-    constrained to tensorrt.float32 (FP16 input is not supported).
+    The output type, if constrained, must be constrained to tensorrt.int8 or tensorrt.fp8. The input type, if constrained, must be
+    constrained to tensorrt.float32, tensorrt.float16 or tensorrt.bfloat16.
     The output size is the same as the input size.
 
-    IDequantizeLayer only supports tensorrt.int8 precision and will default to this precision during instantiation.
-    IDequantizeLayer only supports tensorrt.float32 output.
+    IDequantizeLayer supports tensorrt.int8 and tensorrt.float8 precision and will default to tensorrt.int8 precision during instantiation.
+    IDequantizeLayer supports tensorrt.float32, tensorrt.float16 and tensorrt.bfloat16 output.
 
     :ivar axis: :class:`int` The axis along which dequantization occurs. The dequantization axis is in reference to the input tensor's dimensions.
 
+    :ivar to_type: :class:`DataType` The specified data type of the output tensor. Must be tensorrt.float32 or tensorrt.float16.
 )trtdoc";
 } // namespace IDequantizeLayerDoc
 

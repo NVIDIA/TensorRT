@@ -27,6 +27,8 @@
 // remove md
 #if ENABLE_MDTRT
 #include "api/internal.h"
+#include <algorithm>
+#include <vector>
 #endif
 #include "infer/pyGraphDoc.h"
 
@@ -269,6 +271,23 @@ namespace tensorrt
                 return py::cast(self.getBeta());
         };
 
+#if ENABLE_MDTRT
+        // Used for setting the tiling based on a python list.
+        static auto set_tiling(ITensor& self, std::vector<int64_t> const& pattern,
+                std::vector<int64_t> const& assignment)
+        {
+            Dims d;
+            d.nbDims = pattern.size();
+            std::fill(d.d, d.d + Dims::MAX_DIMS, 1);
+            std::copy_n(pattern.begin(), d.nbDims, d.d);
+            nvinfer1SetTilingPattern(self, d);
+            for (int64_t i = 0, e = assignment.size(); i < e; ++i)
+            {
+                nvinfer1SetTilingAssignment(self, i, assignment[i]);
+            }
+        }
+#endif
+
     } /* lambdas */
 
     void bindGraph(py::module& m)
@@ -367,9 +386,11 @@ namespace tensorrt
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
 // remove md
 #if ENABLE_MDTRT
-            .def("add_instance_id", &nvinfer1AddInstanceID, "id"_a, ITensorDoc::add_instance_id)
-            .def("has_instance_id", &nvinfer1HasInstanceID, "id"_a, ITensorDoc::has_instance_id)
-            .def("del_instance_id", &nvinfer1DelInstanceID, "id"_a, ITensorDoc::del_instance_id)
+            .def_property("tile_pattern", &nvinfer1SetTilingPattern, &nvinfer1GetTilingPattern)
+            .def_property_readonly("num_tiles", &nvinfer1GetNbTiles)
+            .def("set_tile_assignment", &nvinfer1SetTilingAssignment, "tile"_a, "instance"_a, ITensorDoc::set_tiling_assignment)
+            .def("get_tile_assignment", &nvinfer1GetTilingAssignment, "tile"_a, ITensorDoc::get_tiling_assignment)
+            .def("set_tiling", lambdas::set_tiling, "pattern"_a, "assignment"_a, ITensorDoc::set_tiling)
 #endif // ENABLE_MDTRT
         ;
 

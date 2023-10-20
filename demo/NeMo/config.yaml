@@ -47,9 +47,11 @@ onnx_export_options:
   onnx_opset: 17
   do_constant_folding: True
   cache_support: False
+  prune: False # Prune the ONNX model for Sparse Tensor Cores 2:4 pattern
   device: 'cuda'
   check_tolerance: 0.01
   use_fp8_storage: False
+  quantize_bmms: False
 
 # for onnx to trt export
 trt_export_options:
@@ -58,7 +60,8 @@ trt_export_options:
   use_fp16: False
   use_fp8: False
   use_bf16: False
-  use_strongly_typed: False # enable strongly typed mode will invalidate `use_[fp8|fp16|bf16]` flags.
+  use_strongly_typed: True # enable strongly typed mode will invalidate `use_[fp8|fp16|bf16]` flags.
+  sparse: False # enable sparse in TRT engine builder
   timing_cache: 'functional.cache'
 
 trainer:

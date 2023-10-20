@@ -130,14 +130,13 @@ if __name__ == '__main__':
     # for each additional profile needed. Here, we only use batch size 1, thus we only need the first profile.
     with open(args.engine, 'rb') as f, trt.Runtime(TRT_LOGGER) as runtime, \
         runtime.deserialize_cuda_engine(f.read()) as engine, engine.create_execution_context() as context:
-
-        # select engine profile
-        context.active_optimization_profile = 0
-
-        input_nbytes = max_seq_length * trt.int32.itemsize
-
         # Create a stream in which to copy inputs/outputs and run inference.
         stream = cuda.Stream()
+
+        # select engine profile
+        context.set_optimization_profile_async(0, stream.handle)
+
+        input_nbytes = max_seq_length * trt.int32.itemsize
 
         # Allocate device memory for inputs.
         d_inputs = [cuda.mem_alloc(input_nbytes) for binding in range(4)]
@@ -164,14 +163,10 @@ if __name__ == '__main__':
                 segment_ids = feature.segment_ids[0:S]
                 cu_seq_lens = np.array([0, S], dtype=np.int32);
 
-                if context.get_binding_shape(0)[0] != S:
-                    context.set_binding_shape(0, (S,))
-                if context.get_binding_shape(1)[0] != S:
-                    context.set_binding_shape(1, (S,))
-                if context.get_binding_shape(2)[0] != 2:
-                    context.set_binding_shape(2, (2,))
-                if context.get_binding_shape(3)[0] != S:
-                    context.set_binding_shape(3, (S,))
+                input_dim0_shape = {"input_ids": S, "segment_ids": S, "cu_seqlens": 2, "max_seqlen": S}
+                for name, val in input_dim0_shape.items():
+                    if context.get_tensor_shape(name)[0] != val:
+                        context.set_input_shape(name, (val,))
 
                 h_input_ids = cuda.register_host_memory(np.ascontiguousarray(input_ids.ravel()))
                 h_segment_ids = cuda.register_host_memory(np.ascontiguousarray(segment_ids.ravel()))

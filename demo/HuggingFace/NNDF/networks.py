@@ -33,7 +33,7 @@ FILENAME_VALID_CHARS = "-~_.() {}{}".format(string.ascii_letters, string.digits)
 """NetworkResult(input: str, output_tensor: np.array, semantic_output: np.array, median_runtime: NetworkRuntime)"""
 NetworkResult = namedtuple(
     "NetworkResult",
-    ["input", "output_tensor", "semantic_output", "median_runtime"],
+    ["input", "output_tensor", "semantic_output", "accuracy", "perplexity", "median_runtime"],
 )
 
 """BenchmarkingResult(median_runtime: NetworkRuntime, models: [str])"""
@@ -44,7 +44,22 @@ BenchmarkingResult = namedtuple(
 
 """CheckpointResult(network_results: List[NetworkResult], accuracy: float, perplexity: float)"""
 NetworkCheckpointResult = namedtuple(
-    "NetworkCheckpointResult", ["network_results", "accuracy", "perplexity", "models"]
+    "NetworkCheckpointResult", ["network_results", "accuracy", "perplexity"]
+)
+
+"""TopNAccuracy(n: int, accuracy: float)"""
+TopNAccuracy = namedtuple(
+    "TopNAccuracy", ["n", "accuracy"]
+)
+
+"""AccuracyMetadata(dataset: str, num_samples: int, tokens_to_generate: int)"""
+AccuracyMetadata = namedtuple(
+    "AccuracyMetadata", ["dataset", "num_samples", "tokens_to_generate"]
+)
+
+"""AccuracyResult(topN: List[TopNAccuracy], token_perplexity: float, seq_perplexity: float)"""
+AccuracyResult = namedtuple(
+    "AccuracyResult", ["topN", "token_perplexity", "seq_perplexity"]
 )
 
 InputResult = namedtuple(
@@ -55,11 +70,8 @@ InputResult = namedtuple(
 """Precision(fp16: Bool)"""
 Precision = namedtuple("Precision", ["fp16"])
 
-"""DeprecatedCache(kv_cache: bool)"""
-DeprecatedCache = namedtuple("DeprecatedCache", "kv_cache")
-
-"""NetworkMetadata(variant: str, precision: Precision, use_cache: bool, num_beams: int, batch_size: int, other: Union[namedtuple, None])"""
-NetworkMetadata = namedtuple("NetworkMetadata", ["variant", "precision", "use_cache", "num_beams", "batch_size", "other"])
+"""NetworkMetadata(variant: str, precision: Precision, use_cache: bool, num_beams: int, batch_size: int)"""
+NetworkMetadata = namedtuple("NetworkMetadata", ["variant", "precision", "use_cache", "num_beams", "batch_size"])
 
 """TimingProfile(iterations: int, number: int, warmup: int, duration: int, percentile: int or [int])"""
 TimingProfile = namedtuple("TimingProfile", ["iterations", "number", "warmup", "duration", "percentile"])
@@ -82,6 +94,14 @@ Args:
 NetworkRuntime(name: str, runtime: float)
 """
 NetworkRuntime = namedtuple("NetworkRuntime", ["name", "runtime"])
+
+"""
+Args:
+    output: Output tokens for an inference session
+    runtime: Runtime for an inference session
+"""
+
+InferenceResult = namedtuple("InferenceResult", ["output", "runtime"])
 
 class Dims:
     """Helper class for interfacing dimension constructs with Polygraphy and PyTorch."""

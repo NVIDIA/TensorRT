@@ -1,0 +1,59 @@
+[tool.poetry]
+name = "trt-huggingface-demo"
+version = "0.1.0"
+description = ""
+authors = ["TensorRT [tensorrt@nvidia.com]"]
+readme = "README.md"
+
+[[tool.poetry.source]]
+name = "pypi_"
+url = "https://pypi.org/simple/"
+default = true
+
+[[tool.poetry.source]]
+name = "ngc_"
+url = "https://pypi.ngc.nvidia.com"
+secondary = true
+
+[[tool.poetry.source]]
+name = "torch_cuda"
+url = "https://download.pytorch.org/whl/cu118"
+secondary = true
+
+[tool.poetry.dependencies]
+python = ">=3.7,<4"
+numpy = [{version = ">=1.23.5", python = ">=3.8"},
+         {version = "*", python = "<3.8"}]
+transformers = "^4.29.2"
+torch = [{version = "^2.0.1+cu118", python = ">=3.8", source = "torch_cuda"},
+        {version = "^1.13.1", python = "<3.8"}]
+tabulate = "^0.9.0"
+toml = "^0.10.2"
+polygraphy = ">=0.42.2"
+onnx-graphsurgeon = ">=0.3.24"
+sentencepiece = [{version = "0.1.95", python = "<3.10"},
+                {version = "0.1.97", python = ">=3.10"}]
+protobuf = [{version="3.20.1", python = "<=3.7"},
+            {version="*", python = ">3.7"}]
+onnx = [{version = "1.9.0", python = "<3.8"},
+       {version = "1.13.1", python = ">=3.8"}]
+cuda-python = "^12.1.0"
+Pillow = [{version = "9.5.0", python = "<3.8"},
+       {version = "10.0.0", python = ">=3.8"}]
+datasets = [{version = "^2.0.0", python = "<3.8"},
+       {version = "^2.14.4", python = ">=3.8"}]
+
+[tool.poetry.group.test]
+optional = true
+
+[tool.poetry.group.test.dependencies]
+pytest = "6.*"
+psutil = "^5.9.4"
+ipython = [{version = ">=8.10.0", python = ">=3.8"},
+          {version = "*", python = "<3.8"}]
+nbmake = "^1.3.5"
+ipywidgets = "^8.0.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

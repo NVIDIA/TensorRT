@@ -23,6 +23,7 @@ import onnx
 import pytest
 
 from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
 from onnx_graphsurgeon.logger.logger import G_LOGGER
 from onnx_graphsurgeon.util.misc import SynchronizedList
@@ -145,6 +146,15 @@ class TestConstant(TensorBaseTests):
         assert self.tensor.dtype == np.float64
 
 
+@pytest.fixture
+def node_with_nested_subgraphs():
+    inner_subgraph = Graph(name="inner_subgraph")
+    outer_subgraph_1 = Graph(name="subgraph1")
+    outer_subgraph_2 = Graph(name="subgraph2", nodes=[Node("Add", attrs={"x": inner_subgraph})])
+    node = Node(op="Add", attrs={"x": outer_subgraph_1, "y": outer_subgraph_2, "z": 5})
+    return node
+
+
 class TestNode(object):
     def setup_method(self):
         self.input_tensor = Variable(name="x")
@@ -237,6 +247,15 @@ class TestNode(object):
         node = Node(op="Add", domain="test")
         assert node.domain == "test"
 
+    def test_subgraphs_not_recursive(self, node_with_nested_subgraphs):
+        unrelated_graph = Graph(name="unrelated")
+        subgraph_names = {subgraph.name for subgraph in node_with_nested_subgraphs.subgraphs()}
+        assert subgraph_names == {"subgraph1", "subgraph2"}
+
+    def test_subgraphs_recursive(self, node_with_nested_subgraphs):
+        unrelated_graph = Graph(name="unrelated")
+        subgraph_names = {subgraph.name for subgraph in node_with_nested_subgraphs.subgraphs(recursive=True)}
+        assert subgraph_names == {"subgraph1", "subgraph2", "inner_subgraph"}
 
 class TestNodeIO(object):
     def setup_method(self, field_names):

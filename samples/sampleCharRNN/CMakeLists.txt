@@ -16,6 +16,7 @@
 #
 SET(SAMPLE_SOURCES
     sampleCharRNN.cpp
+    ../common/sampleDevice.cpp
     ../common/sampleEngines.cpp
     ../common/sampleOptions.cpp
     ../common/sampleUtils.cpp

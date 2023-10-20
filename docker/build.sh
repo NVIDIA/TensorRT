@@ -42,7 +42,7 @@ then
     echo "--cuda not specified, so not passing in --build-arg CUDA_VERSION to Dockerfile"
     docker_args="-f $arg_dockerfile --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
 else
-    docker_args="-f $arg_dockerfile --build-arg CUDA_VERSION=$arg_cudaversion --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
+    docker_args="-f $arg_dockerfile --build-arg CUDA_VERSION=$arg_cudaversion --build-arg CUDA_VERSION_MAJOR_MINOR=${arg_cudaversion:0:4} --build-arg uid=$(id -u) --build-arg gid=$(id -g) --tag=$arg_imagename ."
 fi
 
 echo "Building container:"

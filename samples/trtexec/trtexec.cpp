@@ -321,9 +321,7 @@ int main(int argc, char** argv)
         std::unique_ptr<BuildEnvironment> bEnv(new BuildEnvironment(options.build.safe, options.build.versionCompatible,
             options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath));
 
-        time_point const buildStartTime{std::chrono::high_resolution_clock::now()};
         bool buildPass = getEngineBuildEnv(options.model, options.build, options.system, *bEnv, sample::gLogError);
-        time_point const buildEndTime{std::chrono::high_resolution_clock::now()};
 
         if (!buildPass)
         {
@@ -339,9 +337,6 @@ int main(int argc, char** argv)
 
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
-
-        sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built") << " in "
-                         << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
 
         if (!options.build.safe && !options.build.buildDLAStandalone && options.build.refittable)
         {

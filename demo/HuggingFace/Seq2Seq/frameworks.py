@@ -34,7 +34,6 @@ from NNDF.networks import (
 )
 from NNDF.logger import G_LOGGER
 from Seq2Seq.Seq2SeqModelConfig import Seq2SeqModelTRTConfig
-from Seq2Seq.measurements import calculate_perplexity_helper_encoder_decoder, calculate_perplexity_helper_decoder
 from Seq2Seq.export import Seq2SeqModelClass
 
 class Seq2SeqHF(FrameworkCommand):
@@ -77,36 +76,6 @@ class Seq2SeqHF(FrameworkCommand):
         self.cpu = cpu
         return kwargs
 
-    def calculate_perplexity(self, input_str: str, reference_str: str, use_cuda: bool = True):
-        if self.config.num_beams > 1:
-            G_LOGGER.warning("Perplexity calculation is disabled for num_beams>1 in frameworks. Default=None")
-            return None
-
-        if self.config.is_encoder_decoder:
-            perplexity = calculate_perplexity_helper_encoder_decoder(
-                encoder=self.encoder,
-                decoder=self.decoder,
-                tokenizer=self.tokenizer,
-                input_str=input_str,
-                reference_str=reference_str,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                use_cuda=use_cuda,
-                use_mask=self.config.use_mask,
-            )
-        else:
-            perplexity = calculate_perplexity_helper_decoder(
-                decoder=self.decoder,
-                tokenizer=self.tokenizer,
-                input_str=reference_str,
-                batch_size=self.config.batch_size,
-                max_length=self.config.max_length,
-                use_cuda=use_cuda,
-                use_mask=self.config.use_mask,
-            )
-
-        G_LOGGER.info("Perplexity={}".format(perplexity))
-        return perplexity
 
 # Entry point
 RUN_CMD = Seq2SeqHF()

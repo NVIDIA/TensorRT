@@ -43,12 +43,18 @@ def test_network_result(inetwork):
         input="example",
         output_tensor=[],
         semantic_output="hello",
+        accuracy=0.0,
+        perplexity=0.0,
         median_runtime=9001,
     )
 
 
 def test_network_checkpoint_result(inetwork):
-    inetwork.NetworkCheckpointResult(network_results=[], accuracy=9001.0, perplexity=5.0, models="")
+    inetwork.NetworkCheckpointResult(
+        network_results=[],
+        accuracy=9001.0,
+        perplexity=5.0
+    )
 
 
 def test_precision(inetwork):
@@ -62,5 +68,32 @@ def test_network_metadata(inetwork):
         use_cache=True,
         num_beams=1,
         batch_size=1,
-        other=inetwork.DeprecatedCache(kv_cache=True),
+    )
+
+
+def test_topN_accuracy(inetwork):
+    inetwork.TopNAccuracy(
+        n=1,
+        accuracy=1.0,
+    )
+
+
+def test_accuracy_metadata(inetwork):
+    inetwork.AccuracyMetadata(
+        dataset="LAMBADA",
+        num_samples=100,
+        tokens_to_generate=1,
+    )
+
+
+def test_accuract_result(inetwork):
+    inetwork.AccuracyResult(
+        topN=[
+            inetwork.TopNAccuracy(
+                n=1,
+                accuracy=1.0,
+            )
+        ],
+        token_perplexity=0.0,
+        seq_perplexity=0.0,
     )

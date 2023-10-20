@@ -144,7 +144,7 @@ void reportAssertion(char const* msg, char const* file, int32_t line)
     getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
 #endif
     PLUGIN_CUASSERT(cudaDeviceReset());
-    abort();
+    exit(EXIT_FAILURE);
 }
 
 void TRTException::log(std::ostream& logStream) const

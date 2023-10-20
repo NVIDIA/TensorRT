@@ -82,7 +82,7 @@
         if (!(condition))                                                   \
         {                                                                   \
             sample::gLogError << "Assertion failure: " << #condition << std::endl;  \
-            abort();                                                        \
+            exit(EXIT_FAILURE);                                                       \
         }                                                                   \
     } while (0)
 
@@ -260,7 +260,7 @@ inline std::string locateFile(
     return filepath;
 }
 
-inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int inH, int inW)
+inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int32_t inH, int32_t inW)
 {
     std::ifstream infile(fileName, std::ifstream::binary);
     assert(infile.is_open() && "Attempting to read from a file that is not open.");
@@ -977,11 +977,23 @@ inline std::unique_ptr<DynamicLibrary> loadLibrary(std::string const& path)
     return std::unique_ptr<DynamicLibrary>(new DynamicLibrary{path});
 }
 
+inline void initSafeCuda()
+{
+    // According to CUDA initialization in NVIDIA CUDA SAFETY API REFERENCE FOR DRIVE OS
+    // We will need to do the following in order
+    // 1. Initialize the calling thread with CUDA specific information (Call any CUDA RT API identified as init)
+    // 2. Query/Configure and choose the desired CUDA device
+    // 3. CUDA context initialization. (Call cudaDeviceGetLimit or cuCtxCreate)
+    size_t stackSizeLimit = 0;
+    int32_t deviceIndex = 0;
+    CHECK(cudaGetDevice(&deviceIndex));
+    CHECK(cudaDeviceGetLimit(&stackSizeLimit, cudaLimitStackSize));
+}
+
 inline int32_t getSMVersion()
 {
     int32_t deviceIndex = 0;
     CHECK(cudaGetDevice(&deviceIndex));
-
     int32_t major, minor;
     CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
     CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));

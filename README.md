@@ -26,7 +26,7 @@ You can skip the **Build** section to enjoy TensorRT with Python.
 To build the TensorRT-OSS components, you will first need the following software packages.
 
 **TensorRT GA build**
-* TensorRT v9.0.1.4
+* TensorRT v9.1.0.4
   * Available from direct download links listed below
 
 **System Packages**
@@ -36,7 +36,7 @@ To build the TensorRT-OSS components, you will first need the following software
   * cuda-11.8.0 + cuDNN-8.9
 * [GNU make](https://ftp.gnu.org/gnu/make/) >= v4.1
 * [cmake](https://github.com/Kitware/CMake/releases) >= v3.13
-* [python](<https://www.python.org/downloads/>) >= v3.6.9, <= v3.10.x
+* [python](<https://www.python.org/downloads/>) >= v3.8, <= v3.10.x
 * [pip](https://pypi.org/project/pip/#history) >= v19.0
 * Essential utilities
   * [git](https://git-scm.com/downloads), [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/), [wget](https://www.gnu.org/software/wget/faq.html#download)
@@ -73,16 +73,16 @@ To build the TensorRT-OSS components, you will first need the following software
     If using the TensorRT OSS build container, TensorRT libraries are preinstalled under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
 
     Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
-      - [TensorRT 9.0.1.4 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-11.8.tar.gz)
-      - [TensorRT 9.0.1.4 for CUDA 12.2, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.0.1/tars/tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-12.2.tar.gz)
+      - [TensorRT 9.1.0.4 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.1.0/tars/tensorrt-9.1.0.4.linux.x86_64-gnu.cuda-11.8.tar.gz)
+      - [TensorRT 9.1.0.4 for CUDA 12.2, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/secure/9.1.0/tars/tensorrt-9.1.0.4.linux.x86_64-gnu.cuda-12.2.tar.gz)
 
 
     **Example: Ubuntu 20.04 on x86-64 with cuda-12.2**
 
     ```bash
     cd ~/Downloads
-    tar -xvzf tensorrt-9.0.1.4.linux.x86_64-gnu.cuda-12.2.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-9.0.1.4
+    tar -xvzf tensorrt-9.1.0.4.linux.x86_64-gnu.cuda-12.2.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-9.1.0.4
     ```
 
 ## Setting Up The Build Environment
@@ -96,9 +96,9 @@ For Linux platforms, we recommend that you generate a docker container for build
     ```bash
     ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda12.2
     ```
-    **Example: CentOS/RedHat 7 on x86-64 with cuda-11.8**
+    **Example: CentOS/RedHat 7 on x86-64 with cuda-12.2**
     ```bash
-    ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda11.8 --cuda 11.8.0
+    ./docker/build.sh --file docker/centos-7.Dockerfile --tag tensorrt-centos7-cuda12.2 --cuda 12.2.0
     ```
 
 2. #### Launch the TensorRT-OSS build container.

@@ -24,6 +24,7 @@ import pytest
 from onnx_graphsurgeon.exporters.onnx_exporter import OnnxExporter
 from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.function import Function
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
 
 from onnx_models import (
@@ -146,7 +147,7 @@ class TestOnnxExporter(object):
         attrs["dtype_attr"] = np.float32
         node = Node(op=op, name=name, inputs=inputs, outputs=outputs, attrs=attrs)
 
-        onnx_node = OnnxExporter.export_node(node, do_type_check=True)
+        onnx_node = OnnxExporter.export_node(node)
         assert onnx_node.name == name
         assert onnx_node.op_type == op
         assert onnx_node.input == ["input"]
@@ -173,9 +174,71 @@ class TestOnnxExporter(object):
                         "Unrecognized list attribute: ({:}: {:}) of type: {:}".format(name, attr, type(attr))
                     )
             elif isinstance(attr, type):
-                assert onnx_attr.i == onnx.mapping.NP_TYPE_TO_TENSOR_TYPE[np.dtype(attr)]
+                assert onnx_attr.i == onnx.helper.np_dtype_to_tensor_dtype(np.dtype(attr))
             else:
                 raise AssertionError("Unrecognized attribute: ({:}: {:}) of type: {:}".format(name, attr, type(attr)))
+
+    def test_export_node_ref_attrs(self):
+        op = "Test"
+        inputs = [Variable(name="input")]
+        outputs = [Variable(name="output")]
+        attrs = OrderedDict({
+            "attr1": 1,
+            "attr2": 2.0,
+            "attr3": Node.AttributeRef("attr4", int),
+        })
+        node = Node(op=op, inputs=inputs, outputs=outputs, attrs=attrs)
+
+        onnx_node = OnnxExporter.export_node(node)
+
+        assert onnx_node.attribute[0].name == "attr1"
+        assert onnx_node.attribute[0].i == attrs["attr1"]
+        assert onnx_node.attribute[1].name == "attr2"
+        assert onnx_node.attribute[1].f == attrs["attr2"]
+        assert onnx_node.attribute[2].name == "attr3"
+        assert onnx_node.attribute[2].ref_attr_name == "attr4"
+        assert onnx_node.attribute[2].type == onnx.AttributeProto.INT
+
+    def test_export_function(self):
+        name = "Test"
+        domain = "org.test"
+        W = Variable("W", dtype=np.float32)
+        X = Variable("X", dtype=np.float32)
+        Y = Variable("Y", dtype=np.float32)
+        Z = Variable("Z", dtype=np.float32)
+        nodes = [
+            Node("Add", inputs=[W, X], outputs=[Y]),
+            Node("Mul", inputs=[X, Y], outputs=[Z])
+        ]
+        inputs = [W, X]
+        outputs = [Z]
+        doc_string = "docstring"
+        opset = 15
+        attributes = {"attr1": None, "attr2": 2.0, "attr3": None}
+        func = Function(
+            name,
+            domain=domain,
+            nodes=nodes,
+            inputs=inputs,
+            outputs=outputs,
+            doc_string=doc_string,
+            opset=opset,
+            attrs=attributes,
+        )
+        func.functions = [func]
+        onnx_func = OnnxExporter.export_function(func)
+
+        assert onnx_func.name == name
+        assert onnx_func.domain == domain
+        assert onnx_func.doc_string == doc_string
+        assert sorted(onnx_func.attribute) == sorted([name for name, val in attributes.items() if val is None])
+        assert len(onnx_func.attribute_proto) == 1
+        assert onnx_func.attribute_proto[0].name == "attr2"
+        assert onnx_func.attribute_proto[0].f == 2.0
+        assert sorted(onnx_func.input) == sorted([t.name for t in inputs])
+        assert sorted(onnx_func.output) == sorted([t.name for t in outputs])
+        assert sorted([n.op_type for n in onnx_func.node]) == sorted([n.op for n in nodes])
+        assert onnx_func.opset_import[0].version == opset
 
     # See test_importers for import correctness checks
     # This function first imports an ONNX graph, and then re-exports it with no changes.

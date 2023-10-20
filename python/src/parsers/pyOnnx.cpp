@@ -44,13 +44,18 @@ static const auto error_code_str = [](ErrorCode self) {
     case ErrorCode::kINVALID_NODE: return "INVALID_NODE";
     case ErrorCode::kUNSUPPORTED_GRAPH: return "UNSUPPORTED_GRAPH";
     case ErrorCode::kUNSUPPORTED_NODE: return "UNSUPPORTED_NODE";
+    case ErrorCode::kUNSUPPORTED_NODE_ATTR: return "UNSUPPORTED_NODE_ATTR";
+    case ErrorCode::kUNSUPPORTED_NODE_INPUT: return "UNSUPPORTED_NODE_INPUT";
+    case ErrorCode::kUNSUPPORTED_NODE_DATATYPE: return "UNSUPPORTED_NODE_DATATYPE";
+    case ErrorCode::kUNSUPPORTED_NODE_DYNAMIC: return "UNSUPPORTED_NODE_DYNAMIC";
+    case ErrorCode::kUNSUPPORTED_NODE_SHAPE: return "UNSUPPORTED_NODE_SHAPE";
     }
     return "UNKNOWN";
 };
 
 static const auto parser_error_str = [](IParserError& self) {
-    return "In node " + std::to_string(self.node()) + " (" + self.func() + "): " + error_code_str(self.code()) + ": "
-        + self.desc();
+    return "In node " + std::to_string(self.node()) + " with name: " + self.nodeName() + " and operator: "
+        + self.nodeOperator() + " (" + self.func() + "): " + error_code_str(self.code()) + ": " + self.desc();
 };
 
 static const auto parse = [](IParser& self, const py::buffer& model, const char* path = nullptr) {
@@ -131,6 +136,11 @@ void bindOnnx(py::module& m)
         .value("INVALID_NODE", ErrorCode::kINVALID_NODE)
         .value("UNSUPPORTED_GRAPH", ErrorCode::kUNSUPPORTED_GRAPH)
         .value("UNSUPPORTED_NODE", ErrorCode::kUNSUPPORTED_NODE)
+        .value("UNSUPPORTED_NODE_ATTR", ErrorCode::kUNSUPPORTED_NODE_ATTR)
+        .value("UNSUPPORTED_NODE_INPUT", ErrorCode::kUNSUPPORTED_NODE_INPUT)
+        .value("UNSUPPORTED_NODE_DATATYPE", ErrorCode::kUNSUPPORTED_NODE_DATATYPE)
+        .value("UNSUPPORTED_NODE_DYNAMIC", ErrorCode::kUNSUPPORTED_NODE_DYNAMIC)
+        .value("UNSUPPORTED_NODE_SHAPE", ErrorCode::kUNSUPPORTED_NODE_SHAPE)
         .def("__str__", lambdas::error_code_str)
         .def("__repr__", lambdas::error_code_str);
 
@@ -141,6 +151,8 @@ void bindOnnx(py::module& m)
         .def("line", &IParserError::line, ParserErrorDoc::line)
         .def("func", &IParserError::func, ParserErrorDoc::func)
         .def("node", &IParserError::node, ParserErrorDoc::node)
+        .def("node_name", &IParserError::nodeName, ParserErrorDoc::node_name)
+        .def("node_operator", &IParserError::nodeOperator, ParserErrorDoc::node_operator)
         .def("__str__", lambdas::parser_error_str)
         .def("__repr__", lambdas::parser_error_str);
 

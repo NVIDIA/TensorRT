@@ -40,7 +40,7 @@
 #include "NvInferPlugin.h"
 #include "NvInferVersion.h"
 
-#include "plugin.h"
+#include "common/plugin.h"
 
 #if NV_TENSORRT_MAJOR > 7
 #define PLUGIN_NOEXCEPT noexcept

@@ -1425,8 +1425,12 @@ void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim,
         dumpBuffer<uint8_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
+    case nvinfer1::DataType::kINT64:
+    {
+        dumpBuffer<int64_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
     case nvinfer1::DataType::kFP8: ASSERT(!"FP8 is not supported");
-    case nvinfer1::DataType::kINT64: ASSERT(false && "Unsupported data type");
     }
 }
 

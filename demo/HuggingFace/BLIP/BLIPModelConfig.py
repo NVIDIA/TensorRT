@@ -39,7 +39,7 @@ class BLIPModelTRTConfig(Vision2SeqModelTRTConfig):
         # Remove redundant name
         metadata = metadata._replace(variant=metadata.variant.replace("Salesforce/",""))
         return super().get_metadata_string(metadata)
-    
+
     def from_hf_config(self, hf_config):
         super().from_hf_config(hf_config)
         # Get num_positions for the shape of vision_model output

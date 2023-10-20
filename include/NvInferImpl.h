@@ -237,6 +237,13 @@ public:
     virtual ILogger* getLogger() const noexcept = 0;
     virtual bool setMaxThreads(int32_t maxThreads) noexcept = 0;
     virtual int32_t getMaxThreads() const noexcept = 0;
+    virtual bool setNamedWeightsWithLocation(char const* name, Weights weights, TensorLocation location) noexcept = 0;
+    virtual Weights getNamedWeights(char const* weightsName) const noexcept = 0;
+    virtual TensorLocation getWeightsLocation(char const* weightsName) const noexcept = 0;
+    virtual bool unsetNamedWeights(char const* weightsName) noexcept = 0;
+    virtual void setWeightsValidation(bool weightsValidation) noexcept = 0;
+    virtual bool getWeightsValidation() const noexcept = 0;
+    virtual bool refitCudaEngineAsync(cudaStream_t stream) noexcept = 0;
 };
 
 class VOptimizationProfile : public VRoot

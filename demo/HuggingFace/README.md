@@ -126,6 +126,65 @@ python run.py <args> # execute program
 
 ## Commands
 
+`run.py` is the main entry point for the demos. We have the following command for different purpose:
+1. `accuracy`: Uses LAMBADA dataset to measure TensorRT's accuracy
+1. `benchmark`: Uses random inputs to benchmark TensorRT's performance
+1. `chat`: Uses user-provided inputs to chat interactively with LLM using TensorRT
+1. `run` (Deprecated): Uses hardcoded checkpoint.toml to measure TensorRT's accuracy and performance for common tasks
+1. `compare` (Deprecated): Uses `run` mode to compare over different frameworks
+
+
+### How to run accuracy checks for TensorRT
+
+The `accuracy` action will use LAMBADA dataset to measure the accuracy for each frameworks. It has the following arguments:
+`--num-samples`: The number of samples in LAMBADA dataset to use. Default = 20
+`--tokens-to-generate`: The number of tokens to generate for TopN accuracy and perplexity calculation. Default = 5. The smaller the number of tokens to generate, the higher the accuracy is (high TopN accuracy and low perplexity).
+`--topN`: TopN means if the target is within the top N choice from the output logits, e.g. Top1 represents the absolute accuracy. We will always run Top1 and Top10, but users can pick any other topN. Default = 2.
+
+For example:
+
+```
+python3 run.py accuracy GPT2 [frameworks | trt] --variant gpt2-xl --working-dir temp --batch-size 1 --info --fp16 --use-cache --num-samples 100 --tokens-to-generate 3
+```
+
+Expected output (The number that you see will be slightly different):
+
+```
+AccuracyResult(topN=[TopNAccuracy(n=1, accuracy=0.326), TopNAccuracy(n=10, accuracy=0.720), TopNAccuracy(n=5, accuracy=0.66)], token_perplexity=27.100, seq_perplexity=59.741)
+```
+
+Notes:
+* Perplexity will be very high for some t5 variants because it tends to have very large perplexity between logits and token if they do not match.
+* The `perplexity` field for each sample is actually log_perplexity, but the final reported results is an exponential over the mean of all log_perplexity for each sample.
+* We will not calculate `perplexity` for beam search, but we will report TopN accuracy for beam search.
+
+### How to run fixed-length performance test
+
+The `benchmark` action will benchmark the specific script under the model directory using random input data with specified input/output sequence lengths. Note that since the input data is random, the accuracy is not guaranteed, but the benchmarking mode is useful for performance measurement since it allows arbitrary and controllable input/output sequence lengths with early stopping being disabled and allows apples-to-apples performance comparisons across different frameworks.
+
+```python
+python3 run.py benchmark GPT2 [frameworks | trt] --variant [gpt2 | gpt2-medium | etc.] --working-dir temp --input-seq-len 128 --output-seq-len 256
+```
+
+
+### How to run the demo interactively using `chat` command
+
+With `chat` command, you can pick a model and feed customized inputs and acts like chatting! Here is an example:
+```
+python3 run.py chat T5 --compare frameworks trt --variant t5-small --working-dir temp
+...
+Welcome to TensorRT HuggingFace Demo Chatbox! Please type your prompts. Type 'exit' to quit the chat.
+Setting up environment for frameworks
+... (Setting up)
+Setting up environment for trt
+... (Setting up)
+Prompt:translate English to German: TensorRT is a great software for machine learning.
+frameworks: TensorRT ist eine großartige Software für das Maschinenlernen.. Time: 0.2299s
+trt: TensorRT ist eine großartige Software für das Maschinenlernen.. Time: 0.0331s
+Prompt:exit
+```
+
+
 ### How to run functional and performance tests with checkpoints
 
 The `run` action will run the specific script under the model directory. `--variant` designates the pre-trained HuggingFace model for testing. `--working-dir` saves the downloaded pre-trained models, onnx model files, and TRT engine files. Accuracy of 1.0 indicates correct results in consistency with the expected outputs in `checkpoint.toml`. By default, all running times reported are median numbers of 10 iterations.
@@ -146,17 +205,10 @@ accuracy=1.0,perplexity=7.4631,
 models=NetworkModels(torch=None, onnx=None,trt=[NetworkModel(name='gpt2_decoder', fpath='temp/GPT2/GPT2-gpt2-fp16.onnx.engine')]))
 ```
 
-### How to run fixed-length performance test
-
-The `benchmark` action will benchmark the specific script under the model directory using random input data with specified input/output sequence lengths. Note that since the input data is random, the accuracy is not guaranteed, but the benchmarking mode is useful for performance measurement since it allows arbitrary and controllable input/output sequence lengths with early stopping being disabled and allows apples-to-apples performance comparisons across different frameworks.
-
-```python
-python3 run.py benchmark GPT2 [frameworks | trt] --variant [gpt2 | gpt2-medium | etc.] --working-dir temp --input-seq-len 128 --output-seq-len 256
-```
+Notes:
+* We will not be maintaining checkpoint.toml files, and will not be responsible for any discrepency between outputs and checkpoint.toml file. Please only report if you get unexpected accuracy from `accuracy` command.
 
 ### How to run comparison script
-
-`run.py` is the main entry point for the demos. `compare` and `run` are two most common actions to use with `run.py`.
 
 The `compare` action will by default compare all implemented frameworks, i.e. PyTorch framework & TRT & OnnxRT. Note that ONNXRT does not support kv cache.
 
@@ -170,24 +222,6 @@ The above script compares the performance of PyTorch framework inference and Ten
 |------------|----------|---------------|---------------|------------|
 | frameworks | 1        | 0.00566595    | 0.00803628    | 0.0244497  |
 | trt        | 1        | 0.000525772   | 0.000945443   | 0.00532533 |
-
-
-### How to run the demo interactively using `chat` command
-
-In TRT 9.0 release, we have added a `chat` command. You can pick a model and feed customized inputs and acts like chatting! Here is an example:
-```
-python3 run.py chat T5 --compare frameworks trt --variant t5-small --working-dir temp
-...
-Welcome to TensorRT HuggingFace Demo Chatbox! Please type your prompts. Type 'exit' to quit the chat.
-Setting up environment for frameworks
-... (Setting up)
-Setting up environment for trt
-... (Setting up)
-Prompt:translate English to German: TensorRT is a great software for machine learning.
-frameworks: TensorRT ist eine großartige Software für das Maschinenlernen.. Time: 0.2299s
-trt: TensorRT ist eine großartige Software für das Maschinenlernen.. Time: 0.0331s
-Prompt:exit
-```
 
 
 ## General Flags
@@ -205,10 +239,11 @@ python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --workin
 Notes:
 * Percentile numbers are representative only if the number of iterations are sufficiently large. Please consider increasing `--iterations` when combined with `--percentile`.
 * To avoid conflict with the overall result printing structure, only one percentile number is allowed from command line. If the users need to measure multiple timing statistics from one run (such as p50, p90, p99), please (1) run the command multiple times by changing `--percentile <N>` -- engines will not be re-built from run to run so this is still efficient OR (2) use the [Jupyter notebook demo](./notebooks) for more flexible measurement that can measurement all percentiles in one run.
+* This measurement does not work on `accuracy` mode.
 
 ### How to run with K-V cache
 
-For all the models, use `--use-cache` option to get the same effect of HuggingFace's `use_cache` option. The old `--enable-kv-cache` flag has been deprecated but not removed. For encoder-decoder models, this option will use key & value cache in decoder for uni-directional self-attention and encoder-decoder cross-attention. KV cache could reduce the size of `input_ids` and improve runtime performance when `input_ids` is long. Current benchmarking result shows that at `input_seq_len = 1024` and `output_seq_len = 1024`, t5-large model with kv cache could achieve 3x faster than without kv cache in single NVIDIA A100 GPU.
+For all the models, use `--use-cache` option to get the same effect of HuggingFace's `use_cache` option. The old `--enable-kv-cache` flag has been deprecated. For encoder-decoder models, this option will use key & value cache in decoder for uni-directional self-attention and encoder-decoder cross-attention. KV cache could reduce the size of `input_ids` and improve runtime performance when `input_ids` is long. Current benchmarking result shows that at `input_seq_len = 1024` and `output_seq_len = 1024`, t5-large model with kv cache could achieve 3x faster than without kv cache in single NVIDIA A100 GPU. Therefore, it is **always** recommended to enable `--use-cache` flag.
 
 ```python
 python3 run.py run BART [frameworks | trt] --variant facebook/bart-base --working-dir temp --use-cache
@@ -360,4 +395,4 @@ torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate ... MiB (GPU 
 
 As a rough but not guaranteed estimate, you should have at least `4*num_parameters` bytes of GPU memory in order to run in `--fp16` mode and at least `8*num_parameters` bytes of GPU memory in order to run in fp32 precision. You should also have at least `12*num_parameters` bytes of CPU memory for model loading and engine building and serialization. For example, for a 6B model, you should have >=24GB GPU memory for `--fp16`, or >=32GB GPU memory for fp32, and >=72GB CPU memory. It is recommended to run `--fp16 --use-cache` to optimize engine build and inference.
 
-Furthermore, we have identified an issue with `torch.onnx.export` that causes it to increase memory usage by `4*num_parameters`, so in the case of CPU OOM, please ensure you are running with a cached ONNX model. This can be achieved by simply rerunning the exact same command after the ONNX model has been saved.
+Furthermore, we have identified an issue with `torch.onnx.export` that causes it to increase memory usage by `4*num_parameters`, so in the case of CPU OOM, please ensure you are running with a cached ONNX model. This can be achieved by simply rerunning the exact same command after the ONNX model has been saved. Alternatively, this memory leak bug has been fixed in the latest PyTorch (2.1.0). You may also update your PyTorch version, but it is untested and TRT team does not guarantee its accuracy nor its performance.

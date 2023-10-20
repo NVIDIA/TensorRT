@@ -619,11 +619,4 @@ constexpr const char* init_libnvinfer_plugins = R"trtdoc(
 )trtdoc";
 } // namespace FreeFunctionsDoc
 
-namespace PluginCreatorVersionDoc
-{
-constexpr char const* descr = R"trtdoc(
-    Enum to identify version of the plugin creator.
-)trtdoc";
-} // namespace PluginCreatorVersionDoc
-
 } // namespace tensorrt

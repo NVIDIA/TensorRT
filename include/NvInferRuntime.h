@@ -336,15 +336,25 @@ struct DynamicPluginTensorDesc
 //!
 //! Clients should override the public methods, including the following inherited methods:
 //!
-//!     virtual int32_t getNbOutputs() const noexcept = 0;
-//!     virtual nvinfer1::DataType getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t
-//!     nbInputs) const noexcept = 0; virtual size_t getSerializationSize() const noexcept = 0; virtual void
-//!     serialize(void* buffer) const noexcept = 0; virtual void destroy() noexcept = 0; virtual void
-//!     setPluginNamespace(char const* pluginNamespace) noexcept = 0; virtual char const* getPluginNamespace() const
-//!     noexcept = 0;
+//! * virtual int32_t getNbOutputs() const noexcept = 0;
 //!
-//! For getOutputDataType, the inputTypes will always be DataType::kFLOAT or DataType::kINT32,
+//! * virtual DataType getOutputDataType(int32_t index, DataType const* inputTypes,
+//!                                      int32_t nbInputs) const noexcept = 0;
+//!
+//! * virtual size_t getSerializationSize() const noexcept = 0;
+//!
+//! * virtual void serialize(void* buffer) const noexcept = 0;
+//!
+//! * virtual void destroy() noexcept = 0;
+//!
+//! * virtual void setPluginNamespace(char const* pluginNamespace) noexcept = 0;
+//!
+//! * virtual char const* getPluginNamespace() const noexcept = 0;
+//!
+//! For weakly typed networks, the inputTypes will always be DataType::kFLOAT or DataType::kINT32,
 //! and the returned type is canonicalized to DataType::kFLOAT if it is DataType::kHALF or DataType:kINT8.
+//! For strongly typed networks, inputTypes are inferred from previous operations, and getOutputDataType
+//! specifies the returned type based on the inputTypes.
 //! Details about the floating-point precision are elicited later by method supportsFormatCombination.
 //!
 class IPluginV2DynamicExt : public nvinfer1::IPluginV2Ext
@@ -970,7 +980,8 @@ public:
     //! * The layer does not have weights with the specified role.
     //! * The number of weights is inconsistent with the layer’s original specification.
     //!
-    //! Modifying the weights before method refit() completes will result in undefined behavior.
+    //! Modifying the weights before method refitCudaEngine or refitCudaEngineAsync returns will result in undefined
+    //! behavior.
     //!
     //! \warning The string layerName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
@@ -980,14 +991,16 @@ public:
     }
 
     //!
-    //! \brief Updates associated engine.  Return true if successful.
+    //! \brief Refits associated engine.
     //!
-    //! Failure occurs if getMissing() != 0 before the call.
+    //! \return True on success, or false if new weights validation fails or getMissingWeights() != 0 before the call.
+    //! If false is returned, a subset of weights may have been refitted.
     //!
     //! The behavior is undefined if the engine has pending enqueued work.
+    //! Provided weights on CPU or GPU can be unset and released, or updated after refitCudaEngine returns.
     //!
-    //! Extant IExecutionContexts associated with the engine should not be used afterwards.
-    //! Instead, create new IExecutionContexts after refitting.
+    //! IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
+    //! weights repeatedly for multiple refit calls as the weights memory can be updated directly instead.
     //!
     bool refitCudaEngine() noexcept
     {
@@ -1152,7 +1165,8 @@ public:
     //! * The name of weights is nullptr or does not correspond to any refittable weights.
     //! * The number of weights is inconsistent with the original specification.
     //!
-    //! Modifying the weights before method refitCudaEngine() completes will result in undefined behavior.
+    //! Modifying the weights before method refitCudaEngine or refitCudaEngineAsync returns will result in undefined
+    //! behavior.
     //!
     //! \warning The string name must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
@@ -1233,6 +1247,125 @@ public:
     int32_t getMaxThreads() const noexcept
     {
         return mImpl->getMaxThreads();
+    }
+
+    //!
+    //! \brief Specify new weights on a specified device of given name.
+    //!
+    //! \param name The name of the weights to be refitted.
+    //! \param weights The new weights on the specified device.
+    //! \param location The location (host vs. device) of the new weights.
+    //!
+    //! \return True on success, or false if new weights are rejected.
+    //! Possible reasons for rejection are:
+    //!
+    //! * The name of the weights is nullptr or does not correspond to any refittable weights.
+    //! * The number of the weights is inconsistent with the original specification.
+    //! * The type of the weights is inconsistent with the original specification.
+    //!
+    //! It is allowed to provide some weights on CPU and others on GPU.
+    //! Modifying the weights before the method refitCudaEngine() or refitCudaEngineAsync() completes will result in
+    //! undefined behavior.
+    //!
+    //! \warning The string name must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    bool setNamedWeights(char const* name, Weights weights, TensorLocation location) noexcept
+    {
+        return mImpl->setNamedWeightsWithLocation(name, weights, location);
+    }
+
+    //!
+    //! \brief Get weights associated with the given name.
+    //!
+    //! \param weightsName The name of the weights to be refitted.
+    //!
+    //! \return Weights associated with the given name.
+    //!
+    //! If the weights were never set, returns null weights and reports an error to the refitter errorRecorder.
+    //!
+    //! \warning The string weightsName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    Weights getNamedWeights(char const* weightsName) const noexcept
+    {
+        return mImpl->getNamedWeights(weightsName);
+    }
+
+    //!
+    //! \brief Get location for the weights associated with the given name.
+    //!
+    //! \param weightsName The name of the weights to be refitted.
+    //!
+    //! \return Location for the weights associated with the given name.
+    //!
+    //! If the weights were never set, returns TensorLocation::kHOST and reports an error to the refitter errorRecorder.
+    //!
+    //! \warning The string weightsName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    TensorLocation getWeightsLocation(char const* weightsName) const noexcept
+    {
+        return mImpl->getWeightsLocation(weightsName);
+    }
+
+    //!
+    //! \brief Unset weights associated with the given name.
+    //!
+    //! \param weightsName The name of the weights to be refitted.
+    //!
+    //! \return False if the weights were never set, returns true otherwise.
+    //!
+    //! Unset weights before releasing them.
+    //!
+    //! \warning The string weightsName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    bool unsetNamedWeights(char const* weightsName) noexcept
+    {
+        return mImpl->unsetNamedWeights(weightsName);
+    }
+
+    //!
+    //! \brief Set whether to validate weights during refitting.
+    //!
+    //! \param weightsValidation Indicate whether to validate weights during refitting.
+    //!
+    //! When set to true, TensorRT will validate weights during FP32 to FP16/BF16 weights conversions or
+    //! sparsifying weights in the refit call. If provided weights are not proper for some weights transformations,
+    //! TensorRT will issue a warning and continue the transformation for minor issues (such as overflow during
+    //! narrowing conversion), or issue an error and stop the refitting process for severe issues (such as sparsifying
+    //! dense weights). By default the flag is true. Set the flag to false for faster refitting performance.
+    //!
+    void setWeightsValidation(bool weightsValidation) noexcept
+    {
+        return mImpl->setWeightsValidation(weightsValidation);
+    }
+
+    //!
+    //! \brief Get whether to validate weights values during refitting.
+    //!
+    bool getWeightsValidation() const noexcept
+    {
+        return mImpl->getWeightsValidation();
+    }
+
+    //!
+    //! \brief Enqueue weights refitting of the associated engine on the given stream.
+    //!
+    //! \param stream The stream to enqueue the weights updating task.
+    //!
+    //! \return True on success, or false if new weights validation fails or getMissingWeights() != 0 before the call.
+    //! If false is returned, a subset of weights may have been refitted.
+    //!
+    //! The behavior is undefined if the engine has pending enqueued work on a different stream from the provided one.
+    //! Provided weights on CPU can be unset and released, or updated after refitCudaEngineAsync returns.
+    //! Freeing or updating of the provided weights on GPU can be enqueued on the same stream after refitCudaEngineAsync
+    //! returns.
+    //!
+    //! IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
+    //! weights repeatedly for multiple refit calls as the weights memory can be updated directly instead. The weights
+    //! updating task should use the same stream as the one used for the refit call.
+    //!
+    bool refitCudaEngineAsync(cudaStream_t stream) noexcept
+    {
+        return mImpl->refitCudaEngineAsync(stream);
     }
 
 protected:

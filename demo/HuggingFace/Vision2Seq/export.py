@@ -163,6 +163,7 @@ class DecoderTorchFile(TorchModelFile):
 
         def __init__(self, model: Module):
             super().__init__()
+            self._return_full_logits = False
             self.decoder = model.text_decoder.bert
             self.lm_head = model.text_decoder.cls
 
@@ -178,6 +179,13 @@ class DecoderTorchFile(TorchModelFile):
 
         def can_generate(self):
             return True
+        
+        def return_full_logits(self):
+            self._return_full_logits = True
+            self.full_logits = None
+
+        def disable_full_logits(self):
+            self._return_full_logits = False
 
         def prepare_inputs_for_generation(
             self,
@@ -231,6 +239,13 @@ class DecoderTorchFile(TorchModelFile):
             sequence_output = decoder_outputs[0]
             logits = self.lm_head(sequence_output) if self.lm_head is not None else sequence_output
             past_key_values = decoder_outputs[1] if use_cache else None
+
+            if self._return_full_logits:
+                if self.full_logits is None or not use_cache:
+                    self.full_logits = logits
+                else:
+                    # KV Cache mode, concat logits for seq > 1
+                    self.full_logits = torch.cat((self.full_logits, logits), dim=1)
 
             return Seq2SeqLMOutput(
                 logits=logits,

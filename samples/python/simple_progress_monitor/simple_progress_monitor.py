@@ -88,7 +88,8 @@ class SimpleProgressMonitor(trt.IProgressMonitor):
                 '=' * completed_bar_chars,
                 '-' * (INNER_WIDTH - completed_bar_chars))
 
-        max_cols = os.get_terminal_size().columns
+        # Set max_cols to a default of 200 if not run in interactive mode.
+        max_cols = os.get_terminal_size().columns if sys.stdout.isatty() else 200
 
         move_to_start_of_line()
         for phase in self._active_phases.values():
@@ -117,8 +118,7 @@ def build_engine_onnx(model_file):
     network = builder.create_network(common.EXPLICIT_BATCH)
     config = builder.create_builder_config()
     if not sys.stdout.isatty():
-        print("ERROR: This sample must be run from an interactive terminal.")
-        sys.exit(1)
+        print("Warning: This sample should be run from an interactive terminal in order to showcase the progress monitor correctly.")
     config.progress_monitor = SimpleProgressMonitor()
     parser = trt.OnnxParser(network, TRT_LOGGER)
 

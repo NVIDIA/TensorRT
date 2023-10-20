@@ -86,7 +86,7 @@ public:
         if (!algorithmFile.good())
         {
             sample::gLogError << "Cannot open algorithm cache file: " << mCacheFileName << " to write." << std::endl;
-            abort();
+            exit(EXIT_FAILURE);
         }
 
         for (int32_t i = 0; i < nbAlgorithms; i++)
@@ -220,7 +220,7 @@ public:
         if (!algorithmFile.good())
         {
             sample::gLogError << "Cannot open algorithm cache file: " << cacheFileName << " to read." << std::endl;
-            abort();
+            exit(EXIT_FAILURE);
         }
 
         std::string line;
