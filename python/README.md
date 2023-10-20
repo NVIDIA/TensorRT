@@ -43,7 +43,7 @@ cp -r Python-3.10.11/Include/* $EXT_PATH/python3.10/include
 
 Example: Python 3.10
 ```bash
-wget http://http.us.debian.org/debian/pool/main/p/python3.10/libpython3.10-dev_3.10.12-1_amd64.deb
+wget http://http.us.debian.org/debian/pool/main/p/python3.10/libpython3.10-dev_3.10.13-1_amd64.deb
 ar x libpython3.10-dev*.deb
 mkdir debian && tar -xf data.tar.xz -C debian
 cp debian/usr/include/x86_64-linux-gnu/python3.10/pyconfig.h python3.10/include/
