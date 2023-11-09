@@ -161,7 +161,8 @@ def __fix_columns_types(df: pd.DataFrame):
 
 
 def __fix_output_precision(df: pd.DataFrame):
-    df['output_precision'] = [Activation(outputs[0]).precision for outputs in df['Outputs']]
+    for outputs in df['Outputs']:
+        df['output_precision'] = Activation(outputs[0]).precision if outputs else None
 
 
 
