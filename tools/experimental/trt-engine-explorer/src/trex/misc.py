@@ -26,6 +26,7 @@ import functools
 
 
 def group_count(df, grouping_attr):
+    df[grouping_attr] = df[grouping_attr].apply(lambda x: tuple(x) if isinstance(x, list) else x)
     grp = df.groupby([grouping_attr]).size().to_frame().reset_index()
     grp.rename(columns = {0: 'count'}, inplace = True)
     return grp
