@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "trt-engine-explorer"
-version = "0.1.3"
+version = "0.1.5"
 description = "NVIDIA's experimental tool to explore TRT engines"
 authors = ["Silky Arora <silky.arora@flyzipline.com>"]
 license = "Apache-2.0"
@@ -34,7 +34,7 @@ kaleido = "0.2.1"
 dtale = "^2.2.0"
 traitlets = "5.9.0"
 werkzeug = "2.0.1"
-qgrid = {git = "https://github.com/silkyar/qgrid", rev = "4774ab3d115c353c73c9643ba097d6f28d399197"}
+qgrid = "^1.3.1"
 
 [build-system]
 requires = ["poetry-core"]
