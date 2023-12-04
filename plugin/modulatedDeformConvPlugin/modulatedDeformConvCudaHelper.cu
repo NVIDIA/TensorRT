@@ -97,6 +97,9 @@ void memcpyPermute(
 template void memcpyPermute<float>(
     float* dst, float const* src, int32_t* srcSize, int32_t* permute, int32_t srcDim, cudaStream_t stream);
 
+template void memcpyPermute<half>(
+    half* dst, half const* src, int32_t* srcSize, int32_t* permute, int32_t srcDim, cudaStream_t stream);
+
 template <typename TScalar>
 cublasStatus_t cublasGemmWrap(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
     int32_t n, int32_t k, TScalar const* alpha, TScalar const* A, int32_t lda, TScalar const* B, int32_t ldb,

@@ -42,8 +42,8 @@ static constexpr int32_t kSM_HOPPER_100 = 90;
 class QKVToContextInterleavedPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
-    QKVToContextInterleavedPlugin(std::string const& name, int32_t const hiddenSize, int32_t const numHeads,
-        float const dqProbs, bool const useInt8ScaleMax);
+    QKVToContextInterleavedPlugin(std::string const& name, int32_t hiddenSize, int32_t numHeads, float dqProbs,
+        bool useInt8ScaleMax, bool useExplicitInt8, float qkvScale, float ctxScale);
 
     QKVToContextInterleavedPlugin(std::string const& name, void const* data, size_t length);
 
@@ -88,17 +88,21 @@ private:
     std::string const& mLayerName;
     std::string mNamespace;
 
-    int32_t mS;
-    int32_t mB;
-    int32_t mSM;
-    int32_t mHeadSize;
-    int32_t mHiddenSize;
-    int32_t mNumHeads;
+    int32_t mS{};
+    int32_t mB{};
+    int32_t mSM{};
+    int32_t mHeadSize{};
+    int32_t mHiddenSize{};
+    int32_t mNumHeads{};
 
     FusedMultiHeadAttentionXMMAKernelV2 const* mXmmaKernel;
 
-    float mDqProbs;
+    float mDqProbs{};
     bool mUseInt8ScaleMax{true};
+
+    bool mUseExplicitInt8{};
+    float mQkvScale{};
+    float mCtxScale{};
 };
 
 class QKVToContextInterleavedPluginCreator : public nvinfer1::IPluginCreator

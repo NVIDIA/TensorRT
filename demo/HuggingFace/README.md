@@ -93,7 +93,7 @@ pip3 install -r requirements.txt # install requirements
 python run.py <args> # execute program
 ```
 
-**Please note that due to end-of-life, Python <= 3.6 is no longer supported.**
+**Please note that due to end-of-life, Python <= 3.7 is no longer supported.**
 
 ## File Structure
 
@@ -160,10 +160,10 @@ Notes:
 
 ### How to run fixed-length performance test
 
-The `benchmark` action will benchmark the specific script under the model directory using random input data with specified input/output sequence lengths. Note that since the input data is random, the accuracy is not guaranteed, but the benchmarking mode is useful for performance measurement since it allows arbitrary and controllable input/output sequence lengths with early stopping being disabled and allows apples-to-apples performance comparisons across different frameworks.
+The `benchmark` action will benchmark the specific script under the model directory using random input data with specified input/output sequence lengths. Note that since the input data is random, the accuracy is not guaranteed, but the benchmarking mode is useful for performance measurement since it allows arbitrary and controllable input/output sequence lengths with early stopping being disabled and allows apples-to-apples performance comparisons across different frameworks. Enabling KV-cache and FP16 mode is recommended for best performance.
 
 ```python
-python3 run.py benchmark GPT2 [frameworks | trt] --variant [gpt2 | gpt2-medium | etc.] --working-dir temp --input-seq-len 128 --output-seq-len 256
+python3 run.py benchmark GPT2 [frameworks | trt] --variant [gpt2 | gpt2-medium | etc.] --working-dir temp --input-seq-len 128 --output-seq-len 256 --fp16 --use-cache
 ```
 
 
@@ -395,4 +395,4 @@ torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate ... MiB (GPU 
 
 As a rough but not guaranteed estimate, you should have at least `4*num_parameters` bytes of GPU memory in order to run in `--fp16` mode and at least `8*num_parameters` bytes of GPU memory in order to run in fp32 precision. You should also have at least `12*num_parameters` bytes of CPU memory for model loading and engine building and serialization. For example, for a 6B model, you should have >=24GB GPU memory for `--fp16`, or >=32GB GPU memory for fp32, and >=72GB CPU memory. It is recommended to run `--fp16 --use-cache` to optimize engine build and inference.
 
-Furthermore, we have identified an issue with `torch.onnx.export` that causes it to increase memory usage by `4*num_parameters`, so in the case of CPU OOM, please ensure you are running with a cached ONNX model. This can be achieved by simply rerunning the exact same command after the ONNX model has been saved. Alternatively, this memory leak bug has been fixed in the latest PyTorch (2.1.0). You may also update your PyTorch version, but it is untested and TRT team does not guarantee its accuracy nor its performance.
+Furthermore, we have identified an issue with `torch.onnx.export` with any PyTorch version < 2.1.0 that causes it to increase memory usage by `4*num_parameters`, so in the case of CPU OOM, please ensure you are running with a cached ONNX model. This can be achieved by simply rerunning the exact same command after the ONNX model has been saved. This memory leak bug has been fixed in the latest PyTorch (2.1.0).

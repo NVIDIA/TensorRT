@@ -41,6 +41,8 @@ from datasets import load_dataset, load_from_disk
 
 RANDOM_SEED = 42
 
+MAX_PPL = 100000.0
+
 def process_text(text):
     '''
     Process text such that all the quotes are the same
@@ -194,7 +196,7 @@ class NNSemanticCheckpoint(NNTomlCheckpoint):
         accuracy = sum([n.accuracy for n in results]) / len(results)
         avg_log_ppl = sum([n.perplexity for n in results]) / len(results)
         # To avoid math.inf not supported by inf
-        perplexity = -1 if avg_log_ppl == -1 else min(math.exp(avg_log_ppl), 100000.0)
+        perplexity = -1 if avg_log_ppl == -1 else min(math.exp(avg_log_ppl), MAX_PPL)
         return NetworkCheckpointResult(
             network_results=results,
             accuracy=accuracy,
@@ -266,9 +268,9 @@ class NNLambadaCheckpoint:
 
         avg_seq_log_ppl = sum([n.seq_perplexity for n in results]) / len(results)
         # To avoid math.inf not supported by pickle.
-        seq_perplexity = -1 if avg_seq_log_ppl == -1 else min(math.exp(avg_seq_log_ppl), 100000.0)
+        seq_perplexity = -1 if avg_seq_log_ppl == -1 else min(math.exp(avg_seq_log_ppl), MAX_PPL)
         avg_token_log_ppl = sum([n.token_perplexity for n in results]) / len(results)
-        token_perplexity = -1 if avg_token_log_ppl == -1 else min(math.exp(avg_token_log_ppl), 100000.0)
+        token_perplexity = -1 if avg_token_log_ppl == -1 else min(math.exp(avg_token_log_ppl), MAX_PPL)
 
         sum_topN_accuracy = {}
         for n in results:

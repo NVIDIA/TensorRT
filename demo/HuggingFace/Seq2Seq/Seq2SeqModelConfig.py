@@ -206,7 +206,7 @@ class Seq2SeqModelTRTConfig(NNConfig):
 
     def get_python_requirements(self):
         base_requirements = super().get_python_requirements()
-        base_requirements.append("transformers==4.29.2")
+        base_requirements.append("transformers==4.31.0")
         return base_requirements
 
     def get_network_segments(self):

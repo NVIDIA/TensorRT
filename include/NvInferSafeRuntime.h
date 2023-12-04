@@ -64,7 +64,7 @@ public:
     //! \param blob The memory that holds the serialized engine. The content must be a copy of
     //! the result of calling IHostMemory::data() on a serialized plan that was created via calling
     //! IBuilder::buildSerializedNetwork() on a network within the supported safety scope.
-    //! Additionally it must have been validated via IConsistencyChecker::validate().
+    //! Additionally, it must have been validated via IConsistencyChecker::validate().
     //!
     //! \param size The size of the memory in bytes. This must be the result of calling IHostMemory::size()
     //! on the same IHostMemory object that is associated with the blob parameter.
@@ -96,13 +96,13 @@ public:
     //! \brief Set the ErrorRecorder for this interface.
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr deregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, an error code of ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has already been
+    //! registered, or ILogger::Severity::kERROR will be logged if the recorder has not yet been registered.
     //!
     //! \param recorder The error recorder to register with this interface, or nullptr to deregister the current
     //! error recorder.
-    //
+    //!
     //! \see getErrorRecorder()
     //!
     //! \usage
@@ -173,8 +173,8 @@ public:
     //! including the NULL terminator.
     //!
     //! \param name The tensor name.
-    //! \return The binding index for the named tensor, or -1 if the name is not found. Return values will lie between -1
-    //! and getNbBindings()-1 inclusive.
+    //! \return The binding index for the named tensor, or -1 if the name is not found. Return values will lie between
+    //! -1 and getNbBindings()-1 inclusive.
     //!
     //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
     //! based methods.
@@ -191,9 +191,9 @@ public:
     //! This is the reverse mapping to that provided by getBindingIndex().
     //!
     //! \param bindingIndex The binding index.
-    //! \return The name corresponding to the index if the index is in range (between 0 and nbBindings()-1).
+    //! \return The name corresponding to the index if the index is in the range (between 0 and nbBindings()-1).
     //! nullptr is returned if the index is out of range.
-    //! If a string is returned, it will have a length 1024 bytes or less including the NULL terminator.
+    //! If a string is returned, it will have a length of 1024 bytes or less including the NULL terminator.
     //!
     //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
     //! based methods.
@@ -210,7 +210,7 @@ public:
     //! \brief Determine whether a binding is an input binding.
     //!
     //! \param bindingIndex The binding index.
-    //! \return True if the index corresponds to an input binding and the index is in range (between 0 and
+    //! \return True if the index corresponds to an input binding and the index is in the range (between 0 and
     //! getNbBindings()-1). False if the index is out of range or does not correspond
     //! to an input binding.
     //!
@@ -228,7 +228,7 @@ public:
     //! \brief Get the dimensions of a binding.
     //!
     //! \param bindingIndex The binding index.
-    //! \return The dimensions of the binding if the index is in range (between 0 and getNbBindings()-1).
+    //! \return The dimensions of the binding if the index is in the range (between 0 and getNbBindings()-1).
     //! The invalid value Dims{} is returned if the index is out of range.
     //!
     //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorShape().
@@ -413,13 +413,12 @@ public:
     //! \brief Set the ErrorRecorder for this interface.
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr deregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, the error code ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has been registered.
     //!
-    //! \param recorder The error recorder to register with this interface, or nullptr to deregister the current
+    //! \param recorder The error recorder to register with this interface, or nullptr to deregister the current.
     //! error recorder.
-    //
+    //!
     //! \see getErrorRecorder()
     //!
     //! \usage
@@ -575,9 +574,9 @@ public:
     virtual TensorFormat getTensorFormat(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
-    //! \brief Return the dimension index along which buffer is vectorized.
+    //! \brief Return the dimension index along which the buffer is vectorized.
     //!
-    //! Specifically -1 is returned if the tensor is scalar.
+    //! Specifically, -1 is returned if the tensor is scalar.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
@@ -618,8 +617,8 @@ public:
     //! \param index The IO tensor index.
     //!
     //! \return The name of an IO tensor, which will be a NULL-terminated string of 1024 bytes or less (including the
-    //! NULL terminator) if the index is in range (between 0 and getNbIOTensors()-1). nullptr will be returned if the
-    //! index is not in range.
+    //! NULL terminator) if the index is in the range (between 0 and getNbIOTensors()-1). nullptr will be returned if
+    //! the index is not in range.
     //!
     //! \see getNbIOTensors()
     //!
@@ -631,17 +630,18 @@ public:
 };
 
 //!
-//! \brief Space to record information about runtime errors
+//! \brief Space to record information about runtime errors.
 //!
 //! kNAN_CONSUMED errors occur when NAN values are stored in an INT8 quantized datatype.
 //! kINF_CONSUMED errors occur when +-INF values are stored in an INT8 quantized datatype.
-//! kGATHER_OOB errors occur when gather index tensor contains value is out side of data tensor
-//! kSCATTER_OOB and kSCATTER_RACE are reserved for future use
+//! kGATHER_OOB errors occur when a gather index tensor contains a value that is outside of the data tensor.
+//! kSCATTER_OOB and kSCATTER_RACE are reserved for future use.
 //!
-//! Mark RuntimeErrorType that occur during asynchronous kernel execution
+//! Mark the RuntimeErrorType that occurs during asynchronous kernel execution.
 struct RuntimeErrorInformation
 {
-    uint64_t bitMask; //!< Each bit represent a RuntimeErrorType has occured during kernel execution
+    //! Each bit represents a RuntimeErrorType that has occurred during kernel execution.
+    uint64_t bitMask;
 };
 
 //!
@@ -649,11 +649,16 @@ struct RuntimeErrorInformation
 //!
 enum class RuntimeErrorType : uint64_t
 {
-    kNAN_CONSUMED = 1ULL << 0, //!< NaN floating-point value was silently consumed
-    kINF_CONSUMED = 1ULL << 1, //!< Inf floating-point value was silently consumed
-    kGATHER_OOB = 1ULL << 2,   //!< Out-of-bounds access in gather operation
-    kSCATTER_OOB = 1ULL << 3,  //!< Out-of-bounds access in scatter operation
-    kSCATTER_RACE = 1ULL << 4, //!< Race condition in scatter operation
+    //! NaN floating-point value was silently consumed
+    kNAN_CONSUMED = 1ULL << 0,
+    //! Inf floating-point value was silently consumed
+    kINF_CONSUMED = 1ULL << 1,
+    //! Out-of-bounds access in gather operation
+    kGATHER_OOB = 1ULL << 2,
+    //! Out-of-bounds access in scatter operation
+    kSCATTER_OOB = 1ULL << 3,
+    //! Race condition in scatter operation
+    kSCATTER_RACE = 1ULL << 4,
 };
 
 //!
@@ -689,7 +694,7 @@ public:
     //! This method copies the name string.
     //!
     //! \warning Strings passed to the runtime must be NULL terminated and have a length of 1024 bytes or less
-    //! including the NULL terminator. Otherwise the operation will not change the execution context name, and
+    //! including the NULL terminator. Otherwise, the operation will not change the execution context name, and
     //! an error message will be recorded via the error recorder.
     //!
     //! \see getName()
@@ -703,8 +708,8 @@ public:
     //!
     //! \brief Return the name of the execution context.
     //!
-    //! \return The name that was passed to setName(), as a NULL terminated string of 1024 bytes or less including
-    //! the NULL terminator. An empty string will be returned as default value.
+    //! \return The name that was passed to setName(), as a NULL-terminated string of 1024 bytes or less including
+    //! the NULL terminator. An empty string will be returned as the default value.
     //!
     //! \see setName()
     //!
@@ -717,8 +722,8 @@ public:
     //!
     //! \brief Set the device memory for use by this execution context.
     //!
-    //! \param memory The start address of a device memory buffer whose size in bytes must be at least the value returned
-    //! by getEngine().getDeviceMemorySize().
+    //! \param memory The start address of a device memory buffer whose size in bytes must be at least the value
+    //! returned by getEngine().getDeviceMemorySize().
     //!
     //! If using enqueueV2() to run the network, The memory is in use
     //! from the invocation of enqueueV2() until network execution is complete.
@@ -740,7 +745,7 @@ public:
     //!
     //! \brief Return the strides of the buffer for the given binding.
     //!
-    //! \param bindingIndex The binding index, which must be in range (between 0 and getEngine().getNbBindings()-1).
+    //! \param bindingIndex The binding index, which must be in the range (between 0 and getEngine().getNbBindings()-1).
     //!
     //! \return The strides of the tensor corresponding to bindingIndex if the index is in range, or an invalid value
     //! of Dims{-1, {}} if it is out of range.
@@ -759,10 +764,9 @@ public:
     //! \brief Set the ErrorRecorder for this interface.
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr deregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered. The lifetime of the error recorder object must exceed the lifetime of
-    //! the execution context.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, the error code ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has been registered. The
+    //! lifetime of the error recorder object must exceed the lifetime of the execution context.
     //!
     //! \param recorder Either a pointer to a valid error recorder object to register with this interface,
     //!                 or nullptr to deregister the current recorder.
@@ -807,7 +811,7 @@ public:
     //!
     //! \param stream A CUDA stream on which the inference kernels will be enqueued. Must be a valid CUDA stream.
     //!
-    //! \param inputConsumed An optional event which will be signaled when the input buffers can be refilled with new
+    //! \param inputConsumed An optional event that will be signaled when the input buffers can be refilled with new
     //! data. Must be either nullptr or a valid CUDA event.
     //!
     //! \return True if the kernels were enqueued successfully, else false.
@@ -838,15 +842,15 @@ public:
     //! \brief Set error buffer output for runtime errors.
     //!
     //! The error buffer output must be allocated in device memory and will be used for subsequent
-    //! calls to enqueueV2() or enqueueV3(). Checking the contents of the error buffer after inference is the responsibility
-    //! of the application. The pointer passed here must have alignment adequate for the RuntimeErrorInformation
-    //! struct.
+    //! calls to enqueueV2() or enqueueV3(). Checking the contents of the error buffer after inference is the
+    //! responsibility of the application. The pointer passed here must have alignment adequate for the
+    //! RuntimeErrorInformation struct.
     //!
     //! \warning The buffer is written if reportable errors are encountered during network execution. Releasing the
     //! buffer before network execution is complete will result in undefined behavior. Accessing the memory before
     //! network execution is complete may not correctly capture the error state.
     //!
-    //! \param buffer The device memory address of the runtime error information buffer
+    //! \param buffer The device memory address of the runtime error information buffer.
     //!
     //! \see getErrorBuffer()
     //!
@@ -1065,7 +1069,7 @@ public:
     //!
     //! \brief Register a plugin creator.
     //!
-    //! \param creator
+    //! \param creator The plugin creator to be registered.
     //!
     //! \param pluginNamespace A NULL-terminated namespace string, which must be 1024 bytes or less including the NULL
     //! terminator. It must be identical with the result of calling
@@ -1089,12 +1093,12 @@ public:
 
     //!
     //! \brief Return all the registered plugin creators and the number of
-    //! registered plugin creators. Returns nullptr if none found.
+    //! registered plugin creators. Returns nullptr if none is found.
     //!
     //! \param[out] numCreators If the call completes successfully, the number of registered plugin creators (which
     //!                         will be an integer between 0 and 100 inclusive)
     //! \return The start address of an IPluginCreator* array of length numCreators if at least one plugin creator
-    //!         has been registered, or nullptr if there are no registered plugin cretors.
+    //!         has been registered, or nullptr if there are no registered plugin creators.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -1125,20 +1129,18 @@ public:
     //!   - Thread-safe: Yes
     //!
     virtual IPluginCreator* getPluginCreator(AsciiChar const* const pluginName, AsciiChar const* const pluginVersion,
-        AsciiChar const* const pluginNamespace = "") noexcept
-        = 0;
+        AsciiChar const* const pluginNamespace = "") noexcept = 0;
 
     //!
     //! \brief Set the ErrorRecorder for this interface
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr deregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, the error code ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has been registered.
     //!
     //! \param recorder The error recorder to register with this interface, or nullptr to deregister the current
     //!                 recorder.
-    //
+    //!
     //! \see getErrorRecorder()
     //!
     //! \usage
@@ -1197,7 +1199,7 @@ protected:
 };
 
 //!
-//! \brief Create an instance of an safe::IRuntime class.
+//! \brief Create an instance of a safe::IRuntime class.
 //!
 //! \param logger A logger object whose lifetime must exceed that of the returned runtime.
 //! Loggers must be thread-safe.

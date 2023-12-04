@@ -28,7 +28,7 @@ from utilities import PIPELINE_TYPE, TRT_LOGGER, add_arguments, download_image, 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion ControlNet Demo", conflict_handler='resolve')
     parser = add_arguments(parser)
-    parser.add_argument('--scheduler', type=str, default="UniPCMultistepScheduler", choices=["DDIM", "DPM", "EulerA", "LMSD", "PNDM", "UniPCMultistepScheduler"], help="Scheduler for diffusion process")
+    parser.add_argument('--scheduler', type=str, default="UniPCMultistepScheduler", choices=["DDIM", "DPM", "EulerA", "Euler", "LMSD", "PNDM", "UniPCMultistepScheduler"], help="Scheduler for diffusion process")
     parser.add_argument('--input-image', nargs = '+', type=str, default=[], help="Path to the input image/images already prepared for ControlNet modality. For example: canny edged image for canny ControlNet, not just regular rgb image")
     parser.add_argument('--controlnet-type', nargs='+', type=str, default=["canny"], help="Controlnet type, can be `None`, `str` or `str` list from ['canny', 'depth', 'hed', 'mlsd', 'normal', 'openpose', 'scribble', 'seg']")
     parser.add_argument('--controlnet-scale', nargs='+', type=float, default=[1.0], help="The outputs of the controlnet are multiplied by `controlnet_scale` before they are added to the residual in the original unet, can be `None`, `float` or `float` list")
@@ -41,15 +41,15 @@ if __name__ == "__main__":
     # Controlnet configuration
     if not isinstance(args.controlnet_type, list):
         raise ValueError(f"`--controlnet-type` must be of type `str` or `str` list, but is {type(args.controlnet_type)}")
-    
+
     # Controlnet configuration
     if not isinstance(args.controlnet_scale, list):
         raise ValueError(f"`--controlnet-scale`` must be of type `float` or `float` list, but is {type(args.controlnet_scale)}")
-    
+
     # Check number of ControlNets to ControlNet scales
     if len(args.controlnet_type) != len(args.controlnet_scale):
         raise ValueError(f"Numbers of ControlNets {len(args.controlnet_type)} should be equal to number of ControlNet scales {len(args.controlnet_scale)}.")
-    
+
     # Convert controlnet scales to tensor
     controlnet_scale = torch.FloatTensor(args.controlnet_scale)
 

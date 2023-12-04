@@ -43,6 +43,7 @@ from utilities import (
     DPMScheduler,
     Engine,
     EulerAncestralDiscreteScheduler,
+    EulerDiscreteScheduler,
     LMSDiscreteScheduler,
     PNDMScheduler,
     UniPCMultistepScheduler,
@@ -91,7 +92,7 @@ class StableDiffusionPipeline:
                 The number of denoising steps.
                 More denoising steps usually lead to a higher quality image at the expense of slower inference.
             scheduler (str):
-                The scheduler to guide the denoising process. Must be one of [DDIM, DPM, EulerA, LMSD, PNDM].
+                The scheduler to guide the denoising process. Must be one of [DDIM, DPM, EulerA, Euler, LMSD, PNDM].
             guidance_scale (float):
                 Guidance scale is enabled by setting as > 1.
                 Higher guidance scale encourages to generate images that are closely linked to the text prompt, usually at the expense of lower image quality.
@@ -112,7 +113,7 @@ class StableDiffusionPipeline:
             framework_model_dir (str):
                 cache directory for framework checkpoints
             controlnet (str):
-                Which ControlNet/ControlNets to use. 
+                Which ControlNet/ControlNets to use.
             return_latents (bool):
                 Skip decoding the image and return latents instead.
             torch_inference (str):
@@ -157,6 +158,8 @@ class StableDiffusionPipeline:
             self.scheduler = DPMScheduler(device=self.device, **sched_opts)
         elif scheduler == "EulerA":
             self.scheduler = EulerAncestralDiscreteScheduler(device=self.device, **sched_opts)
+        elif scheduler == "Euler":
+            self.scheduler = EulerDiscreteScheduler(device=self.device, **sched_opts)
         elif scheduler == "LMSD":
             self.scheduler = LMSDiscreteScheduler(device=self.device, **sched_opts)
         elif scheduler == "PNDM":
@@ -165,7 +168,7 @@ class StableDiffusionPipeline:
         elif scheduler == "UniPCMultistepScheduler":
             self.scheduler = UniPCMultistepScheduler(device=self.device)
         else:
-            raise ValueError(f"Unsupported scheduler {scheduler}. Should be either DDIM, DPM, EulerA, LMSD, PNDM, or UniPCMultistepScheduler.")
+            raise ValueError(f"Unsupported scheduler {scheduler}. Should be either DDIM, DPM, EulerA, Euler, LMSD, PNDM, or UniPCMultistepScheduler.")
 
         self.pipeline_type = pipeline_type
         if self.pipeline_type.is_txt2img() or self.pipeline_type.is_controlnet():
@@ -373,7 +376,7 @@ class StableDiffusionPipeline:
             refit_pattern_list = ['onnx::MatMul']
 
         if force_export:
-            force_export_models = all_models 
+            force_export_models = all_models
         if force_optimize:
             force_optimize_models = all_models
         if enable_refit:
@@ -419,7 +422,7 @@ class StableDiffusionPipeline:
                             onnx.save_model(
                                 onnx_opt_graph,
                                 onnx_opt_path,
-                                save_as_external_data=True, 
+                                save_as_external_data=True,
                                 all_tensors_to_one_file=True,
                                 convert_attribute=False)
                         else:
@@ -429,8 +432,14 @@ class StableDiffusionPipeline:
 
         # Build TensorRT engines
         for model_name, obj in self.models.items():
-            if model_name == 'vae' and self.config.get('vae_torch_fallback', False):
-                continue
+            use_fp16 = True
+            use_tf32 = False
+            if model_name == 'vae':
+                if self.config.get('vae_torch_fallback', False):
+                    continue
+                elif self.pipeline_type.is_sd_xl():
+                    use_fp16 = False
+                    use_tf32 = True
             enable_refit = model_name in enable_refit_models
             engine_path = self.getEnginePath(model_name, engine_dir, enable_refit)
             engine = Engine(engine_path)
@@ -440,7 +449,8 @@ class StableDiffusionPipeline:
             if force_build or not os.path.exists(engine.engine_path):
                 update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
                 engine.build(onnx_opt_path,
-                    fp16=True,
+                    fp16=use_fp16,
+                    tf32=use_tf32,
                     input_profile=obj.get_input_profile(
                         opt_batch_size, opt_image_height, opt_image_width,
                         static_batch=static_batch, static_shape=static_shape
@@ -730,8 +740,8 @@ class StableDiffusionPipeline:
             mask_image (image):
                 Mask image containg the region to be inpainted.
             controlnet_scales (torch.Tensor)
-                A tensor which containes ControlNet scales, essential for multi ControlNet. 
-                Must be equal to number of Controlnets. 
+                A tensor which containes ControlNet scales, essential for multi ControlNet.
+                Must be equal to number of Controlnets.
             warmup (bool):
                 Indicate if this is a warmup run.
             verbose (bool):
@@ -810,7 +820,7 @@ class StableDiffusionPipeline:
                     add_neg_time_ids = torch.tensor([add_neg_time_ids], dtype=dtype)
                     add_time_ids = torch.cat([add_neg_time_ids, add_time_ids], dim=0).to(device=self.device)
                     return add_time_ids
-  
+
                 original_size = (image_height, image_width)
                 crops_coords_top_left = (0, 0)
                 target_size = (image_height, image_width)
@@ -873,5 +883,3 @@ class StableDiffusionPipeline:
             self.infer(prompt, negative_prompt, height, width, warmup=False, **kwargs)
             if self.nvtx_profile:
                 cudart.cudaProfilerStop()
-
-

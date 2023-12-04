@@ -58,7 +58,8 @@ class Seq2SeqHF(FrameworkCommand):
         else:
             self.torch_model = self.torch_model.cuda()
 
-        if self.config.precision == torch.float16:
+        # T5 models will have accuracy issue running in fp16 even for frameworks, so we are not running T5 in fp16
+        if self.config.precision == torch.float16 and self.config.network_name != "T5":
             self.torch_model = self.torch_model.half()
 
         self.encoder = self.config.encoder_classes["torch"].TorchModule(self.torch_model) if self.config.is_encoder_decoder else None

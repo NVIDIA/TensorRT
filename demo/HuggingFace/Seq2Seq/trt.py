@@ -455,8 +455,13 @@ class Seq2SeqTRTDecoder(TRTNativeRunner, GenerationMixin):
                 ctx.set_input_shape(self.main_input_name, input_shape)
                 # capture cuda graph
                 CUASSERT(cudart.cudaStreamBeginCapture(self.stream_for_cuda_graph, cudart.cudaStreamCaptureMode.cudaStreamCaptureModeThreadLocal))
-                ctx.execute_async_v3(self.stream_for_cuda_graph)
+                cuda_graph_success = ctx.execute_async_v3(self.stream_for_cuda_graph)
+                if not cuda_graph_success:
+                    G_LOGGER.warning("The built TensorRT engine contains operations that are not permitted under CUDA graph capture mode."
+                                    "The specified --use-cuda-graph flag has been ignored. The inference will be launched without using CUDA graph launch")
+                    self.use_cuda_graph = False
                 graph = CUASSERT(cudart.cudaStreamEndCapture(self.stream_for_cuda_graph))[0]
+
                 # instantiate cuda graph execution
                 self.cur_cuda_graph_instance = ((self.cur_cuda_graph_instance + 1) % 2)
                 if self.cuda_graph_instances[self.cur_cuda_graph_instance] is not None:

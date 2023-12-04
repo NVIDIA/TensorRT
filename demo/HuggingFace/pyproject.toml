@@ -16,32 +16,25 @@ url = "https://pypi.ngc.nvidia.com"
 secondary = true
 
 [[tool.poetry.source]]
-name = "torch_cuda"
-url = "https://download.pytorch.org/whl/cu118"
+name = "torch_"
+url = "https://download.pytorch.org/whl/cu121"
 secondary = true
 
 [tool.poetry.dependencies]
-python = ">=3.7,<4"
-numpy = [{version = ">=1.23.5", python = ">=3.8"},
-         {version = "*", python = "<3.8"}]
-transformers = "^4.29.2"
-torch = [{version = "^2.0.1+cu118", python = ">=3.8", source = "torch_cuda"},
-        {version = "^1.13.1", python = "<3.8"}]
+python = ">=3.8,<4"
+numpy = "^1.24.4"
+transformers = "4.31.0"
+torch = {version = "2.1.0+cu121", source = "torch_"}
 tabulate = "^0.9.0"
 toml = "^0.10.2"
-polygraphy = ">=0.42.2"
-onnx-graphsurgeon = ">=0.3.24"
-sentencepiece = [{version = "0.1.95", python = "<3.10"},
-                {version = "0.1.97", python = ">=3.10"}]
-protobuf = [{version="3.20.1", python = "<=3.7"},
-            {version="*", python = ">3.7"}]
-onnx = [{version = "1.9.0", python = "<3.8"},
-       {version = "1.13.1", python = ">=3.8"}]
-cuda-python = "^12.1.0"
-Pillow = [{version = "9.5.0", python = "<3.8"},
-       {version = "10.0.0", python = ">=3.8"}]
-datasets = [{version = "^2.0.0", python = "<3.8"},
-       {version = "^2.14.4", python = ">=3.8"}]
+polygraphy = {version = "0.47.1", source = "ngc_"}
+onnx = "1.13.1"
+onnx-graphsurgeon = {version = "0.3.27", source = "ngc_"}
+sentencepiece = "*"
+protobuf = "*"
+cuda-python = "*"
+Pillow = "^10.0.0"
+datasets = "^2.14.4"
 
 [tool.poetry.group.test]
 optional = true
@@ -49,8 +42,7 @@ optional = true
 [tool.poetry.group.test.dependencies]
 pytest = "6.*"
 psutil = "^5.9.4"
-ipython = [{version = ">=8.10.0", python = ">=3.8"},
-          {version = "*", python = "<3.8"}]
+ipython = ">=8.10.0"
 nbmake = "^1.3.5"
 ipywidgets = "^8.0.3"
 

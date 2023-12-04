@@ -24,12 +24,6 @@
 #include "NvInferSerialize.h"
 #endif
 
-// remove md
-#if ENABLE_MDTRT
-#include "api/internal.h"
-#include <algorithm>
-#include <vector>
-#endif
 #include "infer/pyGraphDoc.h"
 
 // clang-format off
@@ -270,24 +264,6 @@ namespace tensorrt
             else
                 return py::cast(self.getBeta());
         };
-
-#if ENABLE_MDTRT
-        // Used for setting the tiling based on a python list.
-        static auto set_tiling(ITensor& self, std::vector<int64_t> const& pattern,
-                std::vector<int64_t> const& assignment)
-        {
-            Dims d;
-            d.nbDims = pattern.size();
-            std::fill(d.d, d.d + Dims::MAX_DIMS, 1);
-            std::copy_n(pattern.begin(), d.nbDims, d.d);
-            nvinfer1SetTilingPattern(self, d);
-            for (int64_t i = 0, e = assignment.size(); i < e; ++i)
-            {
-                nvinfer1SetTilingAssignment(self, i, assignment[i]);
-            }
-        }
-#endif
-
     } /* lambdas */
 
     void bindGraph(py::module& m)
@@ -384,14 +360,6 @@ namespace tensorrt
             .def("reset_dynamic_range", &ITensor::resetDynamicRange, ITensorDoc::reset_dynamic_range)
             .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
-// remove md
-#if ENABLE_MDTRT
-            .def_property("tile_pattern", &nvinfer1SetTilingPattern, &nvinfer1GetTilingPattern)
-            .def_property_readonly("num_tiles", &nvinfer1GetNbTiles)
-            .def("set_tile_assignment", &nvinfer1SetTilingAssignment, "tile"_a, "instance"_a, ITensorDoc::set_tiling_assignment)
-            .def("get_tile_assignment", &nvinfer1GetTilingAssignment, "tile"_a, ITensorDoc::get_tiling_assignment)
-            .def("set_tiling", lambdas::set_tiling, "pattern"_a, "assignment"_a, ITensorDoc::set_tiling)
-#endif // ENABLE_MDTRT
         ;
 
         py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr, py::module_local())
@@ -1078,7 +1046,6 @@ namespace tensorrt
                 py::return_value_policy::reference)
             .def_property_readonly("flags", &INetworkDefinition::getFlags)
             .def("get_flag", &INetworkDefinition::getFlag, "flag"_a, INetworkDefinitionDoc::get_flag)
-
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization
             .def("serialize", lambdas::network_serialize, INetworkDefinitionDoc::serialize)

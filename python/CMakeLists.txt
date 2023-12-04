@@ -133,16 +133,6 @@ else()
     set(CMAKE_CXX_FLAGS "${GLIBCXX_USE_CXX11_ABI_FLAG} -fvisibility=hidden -std=c++${CPP_STANDARD} -Wno-deprecated-declarations")
 endif()
 
-# remove md
-# Add the flags to enable MD-TRT.
-if ("${ENABLE_MDTRT}" STREQUAL "1")
-    include_directories(${TENSORRT_ROOT}/optimizer)
-    include_directories(${TENSORRT_ROOT}/runtime)
-    include_directories(${TENSORRT_ROOT}/common)
-    include_directories(${TENSORRT_ROOT}/safety)
-    add_compile_definitions(ENABLE_MDTRT=1)
-endif()
-
 # Update linker
 if(${NV_TARGET_OS} MATCHES "wddm2")
     if(DEFINED W10_LINKER)
