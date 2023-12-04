@@ -32,9 +32,13 @@
 #include "modulatedDeformConvPluginKernel.h"
 
 template <typename T>
-__device__ T dmcnIm2colBilinear(
-    T const* input, int32_t const dataWidth, int32_t const height, int32_t const width, T h, T w)
+__device__ __forceinline__ T dmcnIm2colBilinear(
+    T const* input, int32_t const dataWidth, int32_t const height, int32_t const width, float h, float w)
 {
+    if (h <= -1 || height <= h || w <= -1 || width <= w)
+    {
+        return 0;
+    }
     int32_t hLow = floorf(h);
     int32_t wLow = floorf(w);
     int32_t hHigh = hLow + 1;
@@ -71,6 +75,56 @@ __device__ T dmcnIm2colBilinear(
 
     return val;
 }
+
+template <>
+__device__ __forceinline__ __half dmcnIm2colBilinear(
+    __half const* input, int32_t const dataWidth, int32_t const height, int32_t const width, float h, float w)
+{
+    if (h <= -1 || height <= h || w <= -1 || width <= w)
+    {
+        return 0;
+    }
+    int32_t hLow = floorf(h);
+    int32_t wLow = floorf(w);
+    int32_t hHigh = hLow + 1;
+    int32_t wHigh = wLow + 1;
+
+    half lh = __float2half(h - hLow);
+    half lw = __float2half(w - wLow);
+    half hh = __float2half(1) - lh;
+    half hw = __float2half(1) - lw;
+
+    half v1 = 0;
+    if (hLow >= 0 && wLow >= 0)
+    {
+        v1 = input[hLow * dataWidth + wLow];
+    }
+    half v2 = 0;
+    if (hLow >= 0 && wHigh <= width - 1)
+    {
+        v2 = input[hLow * dataWidth + wHigh];
+    }
+    half v3 = 0;
+    if (hHigh <= height - 1 && wLow >= 0)
+    {
+        v3 = input[hHigh * dataWidth + wLow];
+    }
+    half v4 = 0;
+    if (hHigh <= height - 1 && wHigh <= width - 1)
+    {
+        v4 = input[hHigh * dataWidth + wHigh];
+    }
+
+    half const w1 = __hmul(hh, hw);
+    half const w2 = __hmul(hh, lw);
+    half const w3 = __hmul(lh, hw);
+    half const w4 = __hmul(lh, lw);
+
+    half const val = __hadd(__hadd(__hmul(w1, v1), __hmul(w2, v2)), __hadd(__hmul(w3, v3), __hmul(w4, v4)));
+
+    return val;
+}
+
 
 template <typename T>
 __global__ void modulatedDeformableIm2colGpuKernel(int32_t const n, T const* dataIm, T const* dataOffset,
@@ -114,12 +168,9 @@ __global__ void modulatedDeformableIm2colGpuKernel(int32_t const n, T const* dat
                 T const offsetW = dataOffsetPtr[dataOffsetWPtr];
                 T const mask = dataMaskPtr[dataMaskHwPtr];
                 T val = static_cast<T>(0);
-                T const hIm = hIn + i * dilationH + offsetH;
-                T const wIm = wIn + j * dilationW + offsetW;
-                if (hIm > -1 && wIm > -1 && hIm < height && wIm < width)
-                {
-                    val = dmcnIm2colBilinear(dataImPtr, width, height, width, hIm, wIm);
-                }
+                T const hIm = hIn + i * dilationH + (float)offsetH;
+                T const wIm = wIn + j * dilationW + (float)offsetW;
+                val = dmcnIm2colBilinear(dataImPtr, width, height, width, hIm, wIm);
                 *dataColPtr = val * mask;
                 dataColPtr += batchSize * heightCol * widthCol;
             }
@@ -235,4 +286,15 @@ void ModulatedDeformConvForwardCUDAKernelLauncherFloat(float const* input, float
     ModulatedDeformConvForwardCUDAKernelLauncher<float>(input, weight, bias, offset, mask, output, workspace, batch,
         channels, height, width, channelsOut, kernelW, kernelH, strideW, strideH, padW, padH, dilationW, dilationH,
         group, deformableGroup, im2colStep, cublasHandle, stream);
+}
+
+void ModulatedDeformConvForwardCUDAKernelLauncherHalf(__half const* input, __half const* weight, __half const* bias,
+    __half const* offset, __half const* mask, __half* output, void* workspace, int32_t batch, int32_t channels,
+    int32_t height, int32_t width, int32_t channelsOut, int32_t kernelW, int32_t kernelH, int32_t strideW,
+    int32_t strideH, int32_t padW, int32_t padH, int32_t dilationW, int32_t dilationH, int32_t group,
+    int32_t deformableGroup, int32_t im2colStep, cublasHandle_t cublasHandle, cudaStream_t stream)
+{
+    ModulatedDeformConvForwardCUDAKernelLauncher<__half>(input, weight, bias, offset, mask, output, workspace, batch,
+	channels, height, width, channelsOut, kernelW, kernelH, strideW, strideH, padW, padH, dilationW, dilationH,
+	group, deformableGroup, im2colStep, cublasHandle, stream);
 }

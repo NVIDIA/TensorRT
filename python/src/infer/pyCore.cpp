@@ -18,11 +18,6 @@
 // This contains the core elements of the API, i.e. builder, logger, engine, runtime, context.
 #include "ForwardDeclarations.h"
 #include "utils.h"
-// remove md
-#if ENABLE_MDTRT
-#include "api/internal.h"
-#include "common/internalEngineAPI.h"
-#endif // ENABLE_MDTRT
 #include <chrono>
 #include <iomanip>
 #include <pybind11/stl.h>
@@ -208,13 +203,6 @@ static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffe
     py::buffer_info info = serializedEngine.request();
     return self.deserializeCudaEngine(info.ptr, info.size * info.itemsize);
 };
-// remove md
-#if ENABLE_MDTRT
-static auto const runtime_deserialize_engine = [](IRuntime& self, py::buffer& serializedEngine, int64_t instance) {
-    py::buffer_info info = serializedEngine.request();
-    return nvinfer1DeserializeEngine(self, info.ptr, info.size * info.itemsize, instance);
-};
-#endif // ENABLE_MDTRT
 
 // For ICudaEngine
 bool engine_binding_is_input(ICudaEngine& self, std::string const& name)
@@ -405,6 +393,15 @@ void context_set_device_memory(IExecutionContext& self, size_t memory)
 {
     self.setDeviceMemory(reinterpret_cast<void*>(memory));
 }
+
+void serialization_config_set_flags(ISerializationConfig& self, uint32_t flags)
+{
+    if (!self.setFlags(flags))
+    {
+        utils::throwPyError(PyExc_RuntimeError, "Provided serialization flags is incorrect");
+    }
+}
+
 } // namespace lambdas
 
 class PyGpuAllocator : public IGpuAllocator
@@ -1004,13 +1001,6 @@ void bindCore(py::module& m)
         .def_property("nvtx_verbosity", &IExecutionContext::getNvtxVerbosity, &IExecutionContext::setNvtxVerbosity)
         .def("set_aux_streams", lambdas::set_aux_streams, "aux_streams"_a, IExecutionContextDoc::set_aux_streams)
         .def("__del__", &utils::doNothingDel<IExecutionContext>)
-// remove md
-#if ENABLE_MDTRT
-        .def("set_communicator", &nvinfer1SetCommunicator, "communicator"_a, "type"_a,
-            IExecutionContextDoc::set_communicator)
-        .def("get_communicator", &nvinfer1GetCommunicator, IExecutionContextDoc::get_communicator)
-        .def("get_communicator_type", &nvinfer1GetCommunicatorType, IExecutionContextDoc::get_communicator_type)
-#endif // ENABLE_MDTRT
         ;
 
     py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr, py::module_local())
@@ -1043,6 +1033,10 @@ void bindCore(py::module& m)
                 "network created with NetworkDefinitionCreationFlag::EXPLICIT_BATCH flag"))
         .def_property_readonly("num_layers", &ICudaEngine::getNbLayers)
         .def("serialize", &ICudaEngine::serialize, ICudaEngineDoc::serialize, py::call_guard<py::gil_scoped_release>{})
+        .def("create_serialization_config", &ICudaEngine::createSerializationConfig,
+            ICudaEngineDoc::create_serialization_config, py::keep_alive<0, 1>{})
+        .def("serialize_with_config", &ICudaEngine::serializeWithConfig, ICudaEngineDoc::serialize_with_config,
+            py::call_guard<py::gil_scoped_release>{})
         .def("create_execution_context", &ICudaEngine::createExecutionContext, ICudaEngineDoc::create_execution_context,
             py::keep_alive<0, 1>{}, py::call_guard<py::gil_scoped_release>{})
         .def("get_location", utils::deprecateMember(&ICudaEngine::getLocation, "get_tensor_location"), "index"_a,
@@ -1171,12 +1165,7 @@ void bindCore(py::module& m)
             py::keep_alive<0, 1>{})
         .def_property_readonly("hardware_compatibility_level", &ICudaEngine::getHardwareCompatibilityLevel)
         .def_property_readonly("num_aux_streams", &ICudaEngine::getNbAuxStreams)
-// remove md
-#if ENABLE_MDTRT
-        .def_property_readonly("instance_id", &nvinfer1GetInstanceID)
-        .def_property_readonly("num_instances", &nvinfer1GetNbInstances)
-#endif // ENABLE_MDTRT
-        .def("__del__", &utils::doNothingDel<ICudaEngine>);
+                .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
         .value("RESIZABLE", AllocatorFlag::kRESIZABLE, AllocatorFlagDoc::RESIZABLE);
@@ -1225,7 +1214,14 @@ void bindCore(py::module& m)
         .value("ERROR_ON_TIMING_CACHE_MISS", BuilderFlag::kERROR_ON_TIMING_CACHE_MISS,
             BuilderFlagDoc::ERROR_ON_TIMING_CACHE_MISS)
         .value("DISABLE_COMPILATION_CACHE", BuilderFlag::kDISABLE_COMPILATION_CACHE,
-            BuilderFlagDoc::DISABLE_COMPILATION_CACHE);
+            BuilderFlagDoc::DISABLE_COMPILATION_CACHE)
+        .value("WEIGHTLESS", BuilderFlag::kWEIGHTLESS, BuilderFlagDoc::WEIGHTLESS);
+
+    py::enum_<SerializationFlag>(
+        m, "SerializationFlag", py::arithmetic{}, SerializationFlagDoc::descr, py::module_local())
+        .value("EXCLUDE_WEIGHTS", SerializationFlag::kEXCLUDE_WEIGHTS, SerializationFlagDoc::EXCLUDE_WEIGHTS)
+        .value("EXCLUDE_LEAN_RUNTIME", SerializationFlag::kEXCLUDE_LEAN_RUNTIME,
+            SerializationFlagDoc::EXCLUDE_LEAN_RUNTIME);
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1369,20 +1365,13 @@ void bindCore(py::module& m)
         .def_property("max_aux_streams", &IBuilderConfig::getMaxAuxStreams, &IBuilderConfig::setMaxAuxStreams)
         .def_property("progress_monitor", &IBuilderConfig::getProgressMonitor,
             py::cpp_function(&IBuilderConfig::setProgressMonitor, py::keep_alive<1, 2>{}))
-// remove md
-#if ENABLE_MDTRT
-        // This gets flipped to the C++ API's with TRT-17558
-        .def_property("num_instances", &nvinfer1GetNbInstances, &nvinfer1SetNbInstances)
-        .def("insert_instance_group", &nvinfer1InsertInstanceGroup, "instance"_a, "group"_a,
-            IBuilderConfigDoc::insert_instance_group)
-        .def("remove_instance_group", &nvinfer1RemoveInstanceGroup, "instance"_a, "group"_a,
-            IBuilderConfigDoc::remove_instance_group)
-        .def("get_num_instance_groups", &nvinfer1GetNbInstanceGroups, "instance"_a,
-            IBuilderConfigDoc::get_num_instance_groups)
-        .def("get_instance_group", &nvinfer1GetInstanceGroup, "instance"_a, "num"_a,
-            IBuilderConfigDoc::get_instance_group)
-#endif  // ENABLE_MDTRT
-                .def("__del__", &utils::doNothingDel<IBuilderConfig>);
+               .def("__del__", &utils::doNothingDel<IBuilderConfig>);
+
+    py::class_<ISerializationConfig>(m, "ISerializationConfig", ISerializationConfigDoc::descr, py::module_local())
+        .def_property("flags", &ISerializationConfig::getFlags, &lambdas::serialization_config_set_flags)
+        .def("clear_flag", &ISerializationConfig::clearFlag, "flag"_a, ISerializationConfigDoc::clear_flag)
+        .def("set_flag", &ISerializationConfig::setFlag, "flag"_a, ISerializationConfigDoc::set_flag)
+        .def("get_flag", &ISerializationConfig::getFlag, "flag"_a, ISerializationConfigDoc::get_flag);
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
         NetworkDefinitionCreationFlagDoc::descr, py::module_local())
@@ -1435,11 +1424,6 @@ void bindCore(py::module& m)
         .def(py::init(&nvinfer1::createInferRuntime), "logger"_a, RuntimeDoc::init, py::keep_alive<1, 2>{})
         .def("deserialize_cuda_engine", lambdas::runtime_deserialize_cuda_engine, "serialized_engine"_a,
             RuntimeDoc::deserialize_cuda_engine, py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
-// remove md
-#if ENABLE_MDTRT
-        .def("deserialize_engine", lambdas::runtime_deserialize_engine, "serialized_engine"_a, "instance"_a,
-            RuntimeDoc::deserialize_engine, py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
-#endif // ENABLE_MDTRT
         .def_property("DLA_core", &IRuntime::getDLACore, &IRuntime::setDLACore)
         .def_property_readonly("num_DLA_cores", &IRuntime::getNbDLACores)
         .def_property("gpu_allocator", nullptr, py::cpp_function(&IRuntime::setGpuAllocator, py::keep_alive<1, 2>{}))

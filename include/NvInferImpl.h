@@ -88,6 +88,7 @@ class IRuntime;
 class IScaleLayer;
 class IScatterLayer;
 class ISelectLayer;
+class ISerializationConfig;
 class IShapeLayer;
 class IShuffleLayer;
 class ISliceLayer;
@@ -133,6 +134,7 @@ enum class RNNOperation : int32_t;
 enum class ScaleMode : int32_t;
 enum class ScatterMode : int32_t;
 enum class SampleMode : int32_t;
+enum class SerializationFlag : int32_t;
 enum class TensorIOMode : int32_t;
 enum class TensorLocation : int32_t;
 enum class TopKOperation : int32_t;
@@ -149,6 +151,7 @@ using NetworkDefinitionCreationFlags = uint32_t;
 using QuantizationFlags = uint32_t;
 using TempfileControlFlags = uint32_t;
 using ResizeMode = InterpolationMode;
+using SerializationFlags = uint32_t;
 using SliceMode = SampleMode;
 
 //!
@@ -320,6 +323,9 @@ public:
     virtual TensorFormat getTensorFormatV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
     virtual char const* getTensorFormatDescV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
     virtual int32_t getTensorVectorizedDimV2(char const* tensorName, int32_t profileIndex) const noexcept = 0;
+
+    virtual ISerializationConfig* createSerializationConfig() noexcept = 0;
+    virtual IHostMemory* serializeWithConfig(ISerializationConfig& config) const noexcept = 0;
 };
 
 class VExecutionContext : public VRoot
@@ -1189,6 +1195,16 @@ public:
     virtual int32_t getMaxAuxStreams() const noexcept = 0;
     virtual void setProgressMonitor(IProgressMonitor* monitor) noexcept = 0;
     virtual IProgressMonitor* getProgressMonitor() const noexcept = 0;
+};
+
+class VSerializationConfig : public VRoot
+{
+public:
+    virtual bool setFlags(SerializationFlags serializationFlags) noexcept = 0;
+    virtual SerializationFlags getFlags() const noexcept = 0;
+    virtual bool clearFlag(SerializationFlag serializationFlag) noexcept = 0;
+    virtual bool setFlag(SerializationFlag serializationFlag) noexcept = 0;
+    virtual bool getFlag(SerializationFlag serializationFlag) const noexcept = 0;
 };
 
 class VBuilder : public VRoot

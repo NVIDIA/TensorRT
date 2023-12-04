@@ -428,7 +428,7 @@ constexpr char const* execute_async = R"trtdoc(
 
     :arg batch_size: The batch size. This is at most the value supplied when the :class:`ICudaEngine` was built. This has no effect if the engine is built from a network with explicit batch dimension mode enabled.
     :arg bindings: A list of integers representing input and output buffer addresses for the network.
-    :arg stream_handle: A handle for a CUDA stream on which the inference kernels will be executed.
+    :arg stream_handle: A handle for a CUDA stream on which the inference kernels will be executed. Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by TensorRT to ensure correct synchronizations. Please use non-default stream instead.
     :arg input_consumed: An optional event which will be signaled when the input buffers can be refilled with new data
 
     :returns: True if the kernels were executed successfully.
@@ -450,7 +450,7 @@ constexpr char const* execute_async_v2 = R"trtdoc(
     This method only works for execution contexts built from networks with no implicit batch dimension.
 
     :arg bindings: A list of integers representing input and output buffer addresses for the network.
-    :arg stream_handle: A handle for a CUDA stream on which the inference kernels will be executed.
+    :arg stream_handle: A handle for a CUDA stream on which the inference kernels will be executed. Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by TensorRT to ensure correct synchronizations. Please use non-default stream instead.
     :arg input_consumed: An optional event which will be signaled when the input buffers can be refilled with new data
 
     :returns: True if the kernels were executed successfully.
@@ -664,7 +664,7 @@ constexpr char const* execute_async_v3 = R"trtdoc(
 
     Input tensors can be released after the :func:`set_input_consumed_event` whereas output tensors require stream synchronization.
 
-    :arg stream_handle: The cuda stream on which the inference kernels will be enqueued.
+    :arg stream_handle: The cuda stream on which the inference kernels will be enqueued. Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by TensorRT to ensure correct synchronizations. Please use non-default stream instead.
 )trtdoc";
 
 constexpr char const* set_aux_streams = R"trtdoc(
@@ -680,30 +680,6 @@ constexpr char const* set_aux_streams = R"trtdoc(
 
     :arg aux_streams: A list of cuda streams. If the length of the list is greater than engine.num_aux_streams, then only the first "engine.num_aux_streams" streams will be used. If the length is less than engine.num_aux_streams, such as an empty list, then TensorRT will use the provided streams for the first few auxiliary streams, and will create additional streams internally for the rest of the auxiliary streams.
 )trtdoc";
-// remove md
-#if ENABLE_MDTRT
-constexpr char const* set_communicator = R"trtdoc(
-    Set the communicator for the execution context.
-
-    :param communicator: A pointer to the communicator that is used by the execution context.
-    :param type: The type of the communication protocol.
-
-    The communicator must be uniform across all multi-device instances or undefined
-    behavior occurs.
-    Defaults to CommunicatorType.NONE. Setting communicator to NONE reverts
-    the communicator type to CommunicatorType.NONE.
-)trtdoc";
-constexpr char const* get_communicator = R"trtdoc(
-    Get the specified communicator.
-
-    :returns: The value specified by set_communicator or NONE if the internal communicator is utilized.
-)trtdoc";
-constexpr char const* get_communicator_type = R"trtdoc(
-    Get the specified communicator type.
-
-    :returns: The value specified by set_communicator or CommunicatorType.NONE.
-)trtdoc";
-#endif // ENABLE_MDTRT
 } // namespace IExecutionContextDoc
 
 namespace IProgressMonitorDoc
@@ -788,14 +764,6 @@ constexpr char const* descr = R"trtdoc(
     :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
     :ivar hardware_compatibility_level: The hardware compatibility level of the engine.
     :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.)trtdoc"
-// remove md
-#if ENABLE_MDTRT
-                              R"trtdoc(
-    :ivar instance_id: Read-only. Each engine is assigned an instance ID in the multi-device plan file, and this function returns the value that was assigned at build time. In the case of single-device mode, this value shall be 0.
-    :ivar num_instances: Read-only. The number of instances that this multi-device plan file was generated for.
-    :ivar local_input: Read-only. The inputs to enqueue are expected to be on the local device. If this is false, then all the inputs are broadcasted from the root(rank 0) engine and all non-root engines input pointers will be ignored.
-)trtdoc"
-#endif // ENABLE_MDTRT
     ;
 
 constexpr char const* get_binding_index = R"trtdoc(
@@ -1099,6 +1067,14 @@ constexpr char const* get_tensor_profile_shape = R"trtdoc(
     :arg name: The tensor name.
     :arg profile_index: The index of the profile.
 )trtdoc";
+
+constexpr char const* create_serialization_config = R"trtdoc(
+    Create a serialization configuration object.
+)trtdoc";
+
+constexpr char const* serialize_with_config = R"trtdoc(
+    Serialize the network to a stream.
+)trtdoc";
 } // namespace ICudaEngineDoc
 
 namespace OutputAllocatorDoc
@@ -1182,6 +1158,8 @@ constexpr char const* ERROR_ON_TIMING_CACHE_MISS
     = R"trtdoc(Emit error when a tactic being timed is not present in the timing cache.)trtdoc";
 constexpr char const* DISABLE_COMPILATION_CACHE
     = R"trtdoc(Disable caching JIT compilation results during engine build.)trtdoc";
+constexpr char const* WEIGHTLESS
+    = R"trtdoc(Enable build without saving weights in the final plan file with no impact to runtime performance.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1282,6 +1260,15 @@ constexpr char const* EXPLICIT_PRECISION = R"trtdoc([DEPRECATED] This flag has n
 constexpr char const* STRONGLY_TYPED
     = R"trtdoc(Specify that every tensor in the network has a data type defined in the network following only type inference rules and the inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network output types will be inferred based on the input types and the type inference rules)trtdoc";
 } // namespace NetworkDefinitionCreationFlagDoc
+
+namespace ISerializationConfigDoc
+{
+constexpr char const* descr
+    = R"trtdoc(Class to hold properties for configuring an engine to serialize the binary.)trtdoc";
+constexpr char const* clear_flag = R"trtdoc(Clears the serialization flag from the config.)trtdoc";
+constexpr char const* get_flag = R"trtdoc(Check if a serialization flag is set.)trtdoc";
+constexpr char const* set_flag = R"trtdoc(Add the input serialization flag to the already enabled flags.)trtdoc";
+} // namespace ISerializationConfigDoc
 
 namespace DeviceTypeDoc
 {
@@ -1687,66 +1674,14 @@ constexpr char const* get_preview_feature = R"trtdoc(
 
     :returns: true if the feature is enabled, false otherwise
 )trtdoc";
-// remove md
-#if ENABLE_MDTRT
-constexpr char const* insert_instance_group = R"trtdoc(
-    Add an instance to a group.
-
-    In some cases, such as multi-node deployment, specific instances are on the same node
-    and thus need to be given priority when optimizing instance assignment. This also will
-    change the cost calculations for communication between two instances when they are
-    in the same group. An instance can be assigned to multiple groups, and the groups are
-    considered hierarchical based on the number of instances in a group. In the cases
-    where there is a tie in comparing instances relative to groups, the lower numbered group
-    is given priority. By default, all devices belong to group 0.
-
-    An example of this would be the case of 4 instances over 3 different groups, and can be
-    analogous to 4 devices across two nodes.
-    Given the set of instances, {D0, D1, D2, D3} and the set of nodes {N0, N1}, with equal distribution
-    across nodes, the groups are as follows:
-    * Group 0 - {N0[D0, D1], N1[D2, D3]}
-    * Group 1 - {N0[D0, D1]}
-    * Group 2 - {N1[D2, D3]}
-
-    This will inform TensorRT to optimize data transfers to be within the node when possible instead of
-    moving across node.
-
-    :arg instance: The instance ID to be assigned to a group.
-    :arg group: The group to assign the instance to.
-
-    :returns: true if insertion succeeded, false otherwise.
-)trtdoc";
-
-constexpr char const* remove_instance_group = R"trtdoc(
-    Remove the instance from the group.
-
-    Remove the instance from the assigned group so that it is no longer considered to be part of the group. It is
-    not possible to remove any instance from the group with id 0, as that is the global group.
-
-    :arg instance: The instance ID to remove from the group.
-    :arg group: The group to remove the instance ID from.
-
-    :returns: true if removal succeeded, false otherwise.
-)trtdoc";
-
-constexpr char const* get_num_instance_groups = R"trtdoc(
-    Get the number of groups the instance belongs to.
-
-    :arg instance: The instance ID to get the group count for.
-
-    :returns: The number of groups the instance belongs to.
-)trtdoc";
-
-constexpr char const* get_instance_group = R"trtdoc(
-    Get the nth group ID the instance ID belongs to.
-
-    :arg instance: The instance ID to get the group ID for.
-    :arg num: The nth group to get the ID for.
-
-    :returns: The group the instance ID belongs to.
-)trtdoc";
-#endif // ENABLE_MDTRT
 } // namespace IBuilderConfigDoc
+
+namespace SerializationFlagDoc
+{
+constexpr char const* descr = R"trtdoc(Valid flags that can be use to creating binary file from engine.)trtdoc";
+constexpr char const* EXCLUDE_WEIGHTS = R"trtdoc(Exclude weights that can be refitted.)trtdoc";
+constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
+} // namespace SerializationFlagDoc
 
 namespace BuilderDoc
 {
@@ -1875,22 +1810,6 @@ constexpr char const* deserialize_cuda_engine = R"trtdoc(
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";
-// remove md
-#if ENABLE_MDTRT
-constexpr char const* deserialize_engine = R"trtdoc(
-    Deserialize an :class:`ICudaEngine` from a stream.
-
-    :arg serialized_engine: The :class:`buffer` that holds the serialized :class:`ICudaEngine` .
-    :arg instance: The instance engine to deserialize.
-
-    Each serialized engine will contain multiple engine instances in the range [0, IBuilderConfig.num_instances). If
-    the value specified by instance is outside of this range, then the error INVALID_ARGUMENT
-    is emitted and a None is returned.
-    If an error recorder has been set for the runtime, it will also be passed to the engine.
-
-    :returns: The engine, or None if it could not be deserialized.
-)trtdoc";
-#endif
 
 constexpr char const* get_plugin_registry = R"trtdoc(
     Get the local plugin registry that can be used by the runtime.
@@ -2024,19 +1943,19 @@ constexpr char const* set_named_weights_with_location = R"trtdoc(
 
 constexpr char const* get_named_weights = R"trtdoc(
     Get weights associated with the given name.
-    
+
     If the weights were never set, returns null weights and reports an error to the refitter errorRecorder.
-    
+
     :arg weights_name: The name of the weights to be refitted.
-    
+
     :returns: Weights associated with the given name.
 )trtdoc";
 
 constexpr char const* get_weights_location = R"trtdoc(
     Get location for the weights associated with the given name.
-    
+
     If the weights were never set, returns TensorLocation.HOST and reports an error to the refitter errorRecorder.
-    
+
     :arg weights_name: The name of the weights to be refitted.
 
     :returns: Location for the weights associated with the given name.
@@ -2044,25 +1963,25 @@ constexpr char const* get_weights_location = R"trtdoc(
 
 constexpr char const* unset_named_weights = R"trtdoc(
     Unset weights associated with the given name.
-    
+
     Unset weights before releasing them.
-    
+
     :arg weights_name: The name of the weights to be refitted.
-    
+
     :returns: ``False`` if the weights were never set, returns ``True`` otherwise.
 )trtdoc";
 
 constexpr char const* refit_cuda_engine = R"trtdoc(
    Refits associated engine.
-   
+
    If ``False`` is returned, a subset of weights may have been refitted.
 
    The behavior is undefined if the engine has pending enqueued work.
    Provided weights on CPU or GPU can be unset and released, or updated after refit_cuda_engine returns.
-   
+
    IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
    weights repeatedly for multiple refit calls as the weights memory can be updated directly instead.
-    
+
    :returns: ``True`` on success, or ``False`` if new weights validation fails or get_missing_weights() != 0 before the call.
 )trtdoc";
 
@@ -2070,7 +1989,7 @@ constexpr char const* refit_cuda_engine_async = R"trtdoc(
     Enqueue weights refitting of the associated engine on the given stream.
 
     If ``False`` is returned, a subset of weights may have been refitted.
-    
+
     The behavior is undefined if the engine has pending enqueued work on a different stream from the provided one.
     Provided weights on CPU can be unset and released, or updated after refit_cuda_engine_async returns.
     Freeing or updating of the provided weights on GPU can be enqueued on the same stream after refit_cuda_engine_async returns.
@@ -2078,9 +1997,9 @@ constexpr char const* refit_cuda_engine_async = R"trtdoc(
     IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
     weights repeatedly for multiple refit calls as the weights memory can be updated directly instead. The weights
     updating task should use the the same stream as the one used for the refit call.
-    
+
     :arg stream: The stream to enqueue the weights updating task.
-    
+
     :returns: ``True`` on success, or ``False`` if new weights validation fails or get_missing_weights() != 0 before the call.
 )trtdoc";
 

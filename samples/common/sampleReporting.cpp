@@ -141,8 +141,8 @@ void printTiming(std::vector<InferenceTime> const& timings, int32_t runsPerAvg, 
     os << "=== Trace details ===" << std::endl;
     os << "Trace averages of " << runsPerAvg << " runs:" << std::endl;
 
-    // Show only the first 300 lines and the last 300 lines.
-    constexpr int64_t kTIMING_PRINT_THRESHOLD{300};
+    // Show only the first N lines and the last N lines, where N = kTIMING_PRINT_THRESHOLD.
+    constexpr int64_t kTIMING_PRINT_THRESHOLD{200};
     int64_t const maxNbTimings{kTIMING_PRINT_THRESHOLD * runsPerAvg};
 
     for (int64_t idx = 0, size = timings.size(); idx < size; ++idx)

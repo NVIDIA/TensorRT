@@ -913,6 +913,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kREFIT);
     }
 
+    if (build.weightless)
+    {
+        config.setFlag(BuilderFlag::kWEIGHTLESS);
+    }
+
     if (build.versionCompatible)
     {
         config.setFlag(BuilderFlag::kVERSION_COMPATIBLE);
@@ -1650,7 +1655,8 @@ void* initSafeRuntime()
 #if SANITIZER_BUILD
     handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
 #else
-    handle = dlopen(dllName.c_str(), RTLD_LAZY);
+    // RTLD_GLOBAL is used for symbol resolution of subsequently loaded plugin libraries
+    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_GLOBAL);
 #endif
 #endif
     return handle;

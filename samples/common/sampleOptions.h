@@ -204,6 +204,7 @@ public:
     bool save{false};
     bool load{false};
     bool refittable{false};
+    bool weightless{false};
     bool heuristic{false};
     bool versionCompatible{false};
     bool nativeInstanceNorm{false};

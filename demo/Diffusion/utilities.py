@@ -233,7 +233,16 @@ class Engine():
             exit(0)
         print(f"[I] Total refit {refit_wts_cnt} weights.")
 
-    def build(self, onnx_path, fp16, input_profile=None, enable_refit=False, enable_all_tactics=False, timing_cache=None, update_output_names=None):
+    def build(self,
+        onnx_path,
+        fp16=True,
+        tf32=False,
+        input_profile=None,
+        enable_refit=False,
+        enable_all_tactics=False,
+        timing_cache=None,
+        update_output_names=None
+    ):
         print(f"Building TensorRT engine for {onnx_path}: {self.engine_path}")
         p = Profile()
         if input_profile:
@@ -252,6 +261,7 @@ class Engine():
         engine = engine_from_network(
             network,
             config=CreateConfig(fp16=fp16,
+                tf32=tf32,
                 refittable=enable_refit,
                 profiles=[p],
                 load_timing_cache=timing_cache,
@@ -286,7 +296,7 @@ class Engine():
             self.tensors[binding] = tensor
 
     def infer(self, feed_dict, stream, use_cuda_graph=False):
-        
+
         for name, buf in feed_dict.items():
             self.tensors[name].copy_(buf)
 
@@ -395,7 +405,7 @@ class LMSDiscreteScheduler():
             pred_original_sample = output * (-sigma / (sigma**2 + 1) ** 0.5) + (latents / (sigma**2 + 1))
         else:
             raise ValueError(
-                f"prediction_type given as {self.config.prediction_type} must be one of `epsilon`, or `v_prediction`"
+                f"prediction_type given as {self.prediction_type} must be one of `epsilon`, or `v_prediction`"
             )
         # 2. Convert to an ODE derivative
         derivative = (latents - pred_original_sample) / sigma
@@ -691,6 +701,157 @@ class EulerAncestralDiscreteScheduler():
         step_index = (self.timesteps == timestep).nonzero().item()
         noisy_samples = original_samples + noise * self.sigmas[step_index]
         return noisy_samples
+
+
+class EulerDiscreteScheduler():
+    def __init__(
+        self,
+        num_train_timesteps: int = 1000,
+        beta_start: float = 0.0001,
+        beta_end: float = 0.02,
+        device = 'cuda',
+        prediction_type: str = "epsilon",
+        steps_offset: int = 0,
+    ):
+        # scaled_linear beta_schedule used following EulerAncestralDiscreteScheduler
+        # this schedule is very specific to the latent diffusion model.
+        self.betas = (
+            torch.linspace(beta_start**0.5, beta_end**0.5, num_train_timesteps, dtype=torch.float32) ** 2
+        )
+        self.alphas = 1.0 - self.betas
+        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
+
+        sigmas = np.array(((1 - self.alphas_cumprod) / self.alphas_cumprod) ** 0.5)
+        sigmas = np.concatenate([sigmas[::-1], [0.0]]).astype(np.float32)
+        self.sigmas = torch.from_numpy(sigmas)
+
+        # standard deviation of the initial noise distribution
+        self.init_noise_sigma = self.sigmas.max()
+
+        # setable values
+        self.num_inference_steps = None
+        timesteps = np.linspace(0, num_train_timesteps - 1, num_train_timesteps, dtype=float)[::-1].copy()
+        self.timesteps = torch.from_numpy(timesteps)
+        self.is_scale_input_called = False
+
+        self.device = device
+        self.num_train_timesteps = num_train_timesteps
+        self.steps_offset = steps_offset
+        self.prediction_type = prediction_type
+
+    # the same as EulerAncestralDiscreteScheduler
+    def scale_model_input(
+        self, sample: torch.FloatTensor, idx, timestep, *args, **kwargs
+    ) -> torch.FloatTensor:
+        if isinstance(timestep, torch.Tensor):
+            timestep = timestep.to(self.timesteps.device)
+        step_index = (self.timesteps == timestep).nonzero().item()
+        sigma = self.sigmas[step_index]
+        sample = sample / ((sigma**2 + 1) ** 0.5)
+
+        self.is_scale_input_called = True
+        return sample
+
+    # the same as EulerAncestralDiscreteScheduler
+    def set_timesteps(self, num_inference_steps: int):
+        self.num_inference_steps = num_inference_steps
+
+        timesteps = np.linspace(0, self.num_train_timesteps - 1, num_inference_steps, dtype=np.float32)[::-1].copy()
+        sigmas = np.array(((1 - self.alphas_cumprod) / self.alphas_cumprod) ** 0.5)
+        sigmas = np.interp(timesteps, np.arange(0, len(sigmas)), sigmas)
+        sigmas = np.concatenate([sigmas, [0.0]]).astype(np.float32)
+        self.sigmas = torch.from_numpy(sigmas).to(device=self.device)
+        self.timesteps = torch.from_numpy(timesteps).to(device=self.device)
+
+    def configure(self):
+        pass
+
+    def step(
+        self, model_output, sample, idx, timestep,
+        s_churn: float = 0.0,
+        s_tmin: float = 0.0,
+        s_tmax: float = float("inf"),
+        s_noise: float = 1.0,
+        generator = None,
+    ):
+        """
+        Predict the sample from the previous timestep by reversing the SDE. This function propagates the diffusion
+        process from the learned model outputs (most often the predicted noise).
+
+        Args:
+            model_output: The direct output from learned diffusion model.
+            sample: A current instance of a sample created by the diffusion process.
+            timestep: The current discrete timestep in the diffusion chain.
+            s_churn (`float`):
+            s_tmin  (`float`):
+            s_tmax  (`float`):
+            s_noise (`float`, defaults to 1.0): Scaling factor for noise added to the sample.
+            generator (`torch.Generator`, *optional*): A random number generator.
+        """
+
+        step_index = (self.timesteps == timestep).nonzero().item()
+        sigma = self.sigmas[step_index]
+
+        gamma = min(s_churn / (len(self.sigmas) - 1), 2**0.5 - 1) if s_tmin <= sigma <= s_tmax else 0.0
+
+        device = model_output.device
+        noise = torch.randn(model_output.shape, dtype=model_output.dtype, device=device, generator=generator).to(
+            device
+        )
+
+        eps = noise * s_noise
+        sigma_hat = sigma * (gamma + 1)
+
+        if gamma > 0:
+            sample = sample + eps * (sigma_hat**2 - sigma**2) ** 0.5
+
+        # 1. compute predicted original sample (x_0) from sigma-scaled predicted noise
+        # NOTE: "original_sample" should not be an expected prediction_type but is left in for
+        # backwards compatibility
+        if self.prediction_type == "original_sample" or self.prediction_type == "sample":
+            pred_original_sample = model_output
+        elif self.prediction_type == "epsilon":
+            pred_original_sample = sample - sigma_hat * model_output
+        elif self.prediction_type == "v_prediction":
+            # * c_out + input * c_skip
+            pred_original_sample = model_output * (-sigma / (sigma**2 + 1) ** 0.5) + (sample / (sigma**2 + 1))
+        else:
+            raise ValueError(
+                f"prediction_type given as {self.prediction_type} must be one of `epsilon`, or `v_prediction`"
+            )
+
+        # 2. Convert to an ODE derivative
+        derivative = (sample - pred_original_sample) / sigma_hat
+
+        dt = self.sigmas[step_index + 1] - sigma_hat
+
+        prev_sample = sample + derivative * dt
+
+        return prev_sample
+
+    def add_noise(
+        self, original_samples, noise, timesteps):
+        # Make sure sigmas and timesteps have the same device and dtype as original_samples
+        sigmas = self.sigmas.to(device=original_samples.device, dtype=original_samples.dtype)
+        if original_samples.device.type == "mps" and torch.is_floating_point(timesteps):
+            # mps does not support float64
+            schedule_timesteps = self.timesteps.to(original_samples.device, dtype=torch.float32)
+            timesteps = timesteps.to(original_samples.device, dtype=torch.float32)
+        else:
+            schedule_timesteps = self.timesteps.to(original_samples.device)
+            timesteps = timesteps.to(original_samples.device)
+
+        step_indices = [(schedule_timesteps == t).nonzero().item() for t in timesteps]
+
+        sigma = sigmas[step_indices].flatten()
+        while len(sigma.shape) < len(original_samples.shape):
+            sigma = sigma.unsqueeze(-1)
+
+        noisy_samples = original_samples + noise * sigma
+        return noisy_samples
+
+    def __len__(self):
+        return self.num_train_timesteps
 
 
 class DPMScheduler():
@@ -1171,7 +1332,7 @@ class PNDMScheduler():
         noisy_latents = sqrt_alpha_prod * init_latents + sqrt_one_minus_alpha_prod * noise
 
         return noisy_latents
-    
+
 class UniPCMultistepScheduler():
     def __init__(
         self,
@@ -1188,12 +1349,12 @@ class UniPCMultistepScheduler():
         solver_type: str = "bh2",
         lower_order_final: bool = True,
         disable_corrector: List[int] = [],
-    ):  
+    ):
         self.device = device
         self.betas = (
             torch.linspace(beta_start**0.5, beta_end**0.5, num_train_timesteps, dtype=torch.float32) ** 2
         )
-        
+
         self.alphas = 1.0 - self.betas
         self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
         # Currently we only support VP-type noise schedule
@@ -1317,7 +1478,7 @@ class UniPCMultistepScheduler():
         sample: torch.FloatTensor,
         order: int,
     ) -> torch.FloatTensor:
-        
+
         timestep_list = self.timestep_list
         model_output_list = self.model_outputs
 
@@ -1406,7 +1567,7 @@ class UniPCMultistepScheduler():
         this_sample: torch.FloatTensor,
         order: int,
     ) -> torch.FloatTensor:
-        
+
         timestep_list = self.timestep_list
         model_output_list = self.model_outputs
 
@@ -1649,7 +1810,7 @@ def add_arguments(parser):
     parser.add_argument('--height', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--denoising-steps', type=int, default=50, help="Number of denoising steps")
-    parser.add_argument('--scheduler', type=str, default="DDIM", choices=["DDIM", "DPM", "EulerA", "LMSD", "PNDM", "UniPCMultistepScheduler"], help="Scheduler for diffusion process")
+    parser.add_argument('--scheduler', type=str, default="DDIM", choices=["DDIM", "DPM", "EulerA", "Euler", "LMSD", "PNDM", "UniPCMultistepScheduler"], help="Scheduler for diffusion process")
     parser.add_argument('--guidance_scale', type=float, default=7.5, help="Value of classifier-free guidance scale (must be greater than 1)")
     parser.add_argument('--lora-scale', type=float, default=1, help="Scale of LoRA weights, default 1 (must between 0 and 1)")
     parser.add_argument('--lora-weights', type=str, default='', help="LoRA weights to apply in the base model")
@@ -1688,7 +1849,7 @@ def add_arguments(parser):
 def process_pipeline_args(args):
     if args.height % 8 != 0 or args.width % 8 != 0:
         raise ValueError(f"Image height and width have to be divisible by 8 but specified as: {args.image_height} and {args.width}.")
-    
+
     max_batch_size = 4
     if args.batch_size > max_batch_size:
         raise ValueError(f"Batch size {args.batch_size} is larger than allowed {max_batch_size}.")
@@ -1716,7 +1877,7 @@ def process_pipeline_args(args):
     kwargs_load_engine = {
         'onnx_opset': args.onnx_opset,
         'opt_batch_size': args.batch_size,
-        'opt_image_height': args.height, 
+        'opt_image_height': args.height,
         'opt_image_width': args.width,
         'force_build': args.force_engine_build,
         'force_export': args.force_onnx_export,

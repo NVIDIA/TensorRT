@@ -1672,6 +1672,114 @@ constexpr inline int32_t EnumMax<ProfilingVerbosity>() noexcept
 }
 
 //!
+//! \brief Represents one or more SerializationFlag values using binary OR
+//! operations, e.g., 1U << SerializationFlag::kEXCLUDE_LEAN_RUNTIME
+//!
+//! \see ISerializationConfig::setFlags(), ISerializationConfig::getFlags()
+//!
+using SerializationFlags = uint32_t;
+
+//!
+//! \enum SerializationFlag
+//!
+//! \brief List of valid flags that the engine can enable when serializing the bytes.
+//!
+//! \see ISerializationConfig::setFlags(), ISerializationConfig::getFlags()
+//!
+enum class SerializationFlag : int32_t
+{
+    kEXCLUDE_WEIGHTS = 0,      //!< Exclude the weights that can be refitted.
+    kEXCLUDE_LEAN_RUNTIME = 1, //!< Exclude the lean runtime.
+};
+
+//! Maximum number of serialization flags in SerializationFlag enum. \see SerializationFlag
+template <>
+constexpr inline int32_t EnumMax<SerializationFlag>() noexcept
+{
+    return 2;
+}
+
+//!
+//! \class ISerializationConfig
+//!
+//! \brief Holds properties for configuring an engine to serialize the binary.
+//!
+//! \see SerializationFlag
+//!
+class ISerializationConfig : public INoCopy
+{
+public:
+    virtual ~ISerializationConfig() noexcept = default;
+
+    //!
+    //! \brief Set the serialization flags to turn on for this config.
+    //!
+    //! The flags are listed in the SerializationFlag enum.
+    //!
+    //! \param serializationFlags The serialization flags for an engine.
+    //!
+    //! \note This function will override the previous set flags, rather than bitwise ORing the new flag.
+    //!
+    //! \see getFlags()
+    //!
+    bool setFlags(SerializationFlags serializationFlags) noexcept
+    {
+        return mImpl->setFlags(serializationFlags);
+    }
+
+    //!
+    //! \brief Get the serialization flags for this config.
+    //!
+    //! \return The serialization flags as a bitmask.
+    //!
+    //! \see setFlags()
+    //!
+    SerializationFlags getFlags() const noexcept
+    {
+        return mImpl->getFlags();
+    }
+
+    //!
+    //! \brief clear a serialization flag.
+    //!
+    //! clears the serialization flag from the config.
+    //!
+    //! \see setFlags()
+    //!
+    bool clearFlag(SerializationFlag serializationFlag) noexcept
+    {
+        return mImpl->clearFlag(serializationFlag);
+    }
+
+    //!
+    //! \brief Set a serialization flag.
+    //!
+    //! Add the input serialization flag to the already enabled flags.
+    //!
+    //! \see setFlags()
+    //!
+    bool setFlag(SerializationFlag serializationFlag) noexcept
+    {
+        return mImpl->setFlag(serializationFlag);
+    }
+
+    //!
+    //! \brief Returns true if the serialization flag is set
+    //!
+    //! \see getFlags()
+    //!
+    //! \return True if flag is set, false if unset.
+    //!
+    bool getFlag(SerializationFlag serializationFlag) const noexcept
+    {
+        return mImpl->getFlag(serializationFlag);
+    }
+
+protected:
+    apiv::VSerializationConfig* mImpl;
+};
+
+//!
 //! \class ICudaEngine
 //!
 //! \brief An engine for executing inference on a built network, with functionally unsafe features.
@@ -2602,6 +2710,30 @@ public:
         return mImpl->getNbAuxStreams();
     }
 
+    //!
+    //! \brief Create a serialization configuration object.
+    //!
+    //! \see ISerializationConfig
+    //!
+    ISerializationConfig* createSerializationConfig() noexcept
+    {
+        return mImpl->createSerializationConfig();
+    }
+
+    //!
+    //! \brief Serialize the network to a stream with the provided SerializationConfig.
+    //!
+    //! \return An IHostMemory object that contains the serialized engine.
+    //!
+    //! The network may be deserialized with IRuntime::deserializeCudaEngine().
+    //!
+    //! \see IRuntime::deserializeCudaEngine()
+    //!
+    IHostMemory* serializeWithConfig(ISerializationConfig& config) const noexcept
+    {
+        return mImpl->serializeWithConfig(config);
+    }
+
 protected:
     apiv::VCudaEngine* mImpl;
 };
@@ -2731,6 +2863,9 @@ public:
     //! \warning This function will trigger layer resource updates if hasImplicitBatchDimension()
     //!          returns true and batchSize changes between subsequent calls, possibly resulting in performance
     //!          bottlenecks.
+    //!
+    //! \warning Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by
+    //!          TensorRT to ensure correct synchronizations. Please use non-default stream instead.
     //!
     TRT_DEPRECATED bool enqueue(
         int32_t batchSize, void* const* bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept
@@ -3236,6 +3371,9 @@ public:
     //!          results in undefined behavior. To perform inference concurrently in multiple streams, use one execution
     //!          context per stream.
     //!
+    //! \warning Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by
+    //!          TensorRT to ensure correct synchronizations. Please use non-default stream instead.
+    //!
     TRT_DEPRECATED bool enqueueV2(void* const* bindings, cudaStream_t stream, cudaEvent_t* inputConsumed) noexcept
     {
         return mImpl->enqueueV2(bindings, stream, inputConsumed);
@@ -3594,6 +3732,9 @@ public:
     //! behavior.
     //! Input tensor can be released after the setInputConsumedEvent whereas output tensors require stream
     //! synchronization.
+    //!
+    //! \warning Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by
+    //!          TensorRT to ensure correct synchronizations. Please use non-default stream instead.
     //!
     bool enqueueV3(cudaStream_t stream) noexcept
     {

@@ -397,8 +397,11 @@ public:
     }
 
     //!
-    //! \brief Set allowed formats for this tensor. By default all formats are allowed.
-    //!        Shape tensors (for which isShapeTensor() returns true) may only have row major linear format.
+    //! \brief Set allowed formats for this tensor.
+    //!
+    //! The tensor must be a network input or output, otherwise the call is ignored.
+    //! By default all formats are allowed. Shape tensors (tensors for which
+    //! isShapeTensor() returns true) must have row-major linear format.
     //!
     //! When running network on DLA and the build option kGPU_FALLBACK is not specified, if DLA format(kCHW4 with Int8,
     //! kCHW4 with FP16, kCHW16 with FP16, kCHW32 with Int8) is set, the input format is treated as native DLA format with
@@ -6013,7 +6016,7 @@ public:
     //!
     //! Using the corresponding setter resets the input to null.
     //!
-    //! If either inputs 1 or 2, is non-null, then both must be non-null and have the same data type.
+    //! If either inputs 1 or 2 is non-null, then both must be non-null and have the same data type.
     //!
     //! If this function is called for an index greater or equal to getNbInputs(),
     //! then afterwards getNbInputs() returns index + 1, and any missing intervening
@@ -9156,6 +9159,9 @@ enum class BuilderFlag : int32_t
     //! the cache size. Setting this flag prevents the code from being serialized. This flag has an effect only when
     //! BuilderFlag::DISABLE_TIMING_CACHE is not set.
     kDISABLE_COMPILATION_CACHE = 20,
+
+    //! Build engine without saving weights in the final plan file with no impact to runtime performance.
+    kWEIGHTLESS = 21,
 };
 
 //!
@@ -9166,7 +9172,7 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 21;
+    return 22;
 }
 
 //!

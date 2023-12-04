@@ -61,6 +61,8 @@ from transformers import (
 import os, gc
 import torch
 
+MAX_LOG_PPL = 12.0
+
 # Program-wide constants for passing in valid frameworks.
 FRAMEWORK_NATIVE = "native"
 FRAMEWORK_TENSORRT = "trt"
@@ -1177,7 +1179,7 @@ class NetworkCommand:
                     # Truncate the last prediction
                     shifted_logits = shifted_logits[:,:-1,:]
                     shifted_ids = shifted_ids[:,:-1]
-                seq_ppl = torch.nn.CrossEntropyLoss()(shifted_logits.permute((0, 2, 1)), shifted_ids)
+                seq_ppl = min(torch.nn.CrossEntropyLoss()(shifted_logits.permute((0, 2, 1)), shifted_ids), MAX_LOG_PPL)
             else:
                 seq_ppl = -1
 
@@ -1193,7 +1195,7 @@ class NetworkCommand:
 
             # Calculate full sequence perplexity
             if num_beams == 1:
-                token_ppl = torch.nn.CrossEntropyLoss()(full_logits.permute((0, 2, 1)), target_ids).item()
+                token_ppl = min(torch.nn.CrossEntropyLoss()(full_logits.permute((0, 2, 1)), target_ids).item(), MAX_LOG_PPL)
             else:
                 token_ppl = -1
 
@@ -1342,7 +1344,7 @@ class NetworkCommand:
                     shifted_ids = shifted_ids[:,:-1]
 
                 G_LOGGER.debug(f"target_ids:{shifted_ids};logits:{shifted_logits};top10:{shifted_logits.topk(10).indices}")
-                ppl = torch.nn.CrossEntropyLoss()(shifted_logits.permute((0, 2, 1)), shifted_ids).item()
+                ppl = min(torch.nn.CrossEntropyLoss()(shifted_logits.permute((0, 2, 1)), shifted_ids).item(), MAX_LOG_PPL)
                 self.decoder.disable_accuracy_mode()
 
             else:

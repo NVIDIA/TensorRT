@@ -208,29 +208,8 @@ constexpr const char* descr = R"trtdoc(
     :ivar dynamic_range: :class:`Tuple[float, float]` A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
-)trtdoc";
-
-// remove md
-#if ENABLE_MDTRT
-constexpr char const* get_tiling_assignment = R"trtdoc(
-    Get the instance associated with the tile.
-
-    :arg tile: The tile to get the instance mapping of.
-    :returns: The instance associated with the tile or -1 for unassigned.
-)trtdoc";
-constexpr char const* set_tiling_assignment = R"trtdoc(
-    set the instance id associated with the tile.
-
-    :arg tile: The tile to set the instance mapping of.
-    :arg instance: The instance to assign to the tile.
-)trtdoc";
-constexpr char const* set_tiling = R"trtdoc(
-    Set the tiling pattern and assignment.
-
-    :arg pattern: The tiling pattern to assign to the tensor.
-    :arg assignment: The tiling assignment to use for the tensor.
-)trtdoc";
-#endif // ENABLE_MDTRT
+)trtdoc"
+;
 constexpr const char* set_dynamic_range = R"trtdoc(
     Set dynamic range for the tensor.
     NOTE: It is suggested to use ``tensor.dynamic_range = (min, max)`` instead.
@@ -2080,7 +2059,7 @@ constexpr const char* get_flag = R"trtdoc(
 
     :arg flag: The ``NetworkDefinitionCreationFlag`` .
 
-    :returns: Whether the flag is set. 
+    :returns: Whether the flag is set.
 )trtdoc";
 
 constexpr const char* add_input = R"trtdoc(

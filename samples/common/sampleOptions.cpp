@@ -1052,6 +1052,8 @@ void BuildOptions::parse(Arguments& arguments)
 
     getAndDelOption(arguments, "--refit", refittable);
 
+    getAndDelOption(arguments, "--weightless", weightless);
+
     // --vc and --versionCompatible are synonyms
     getAndDelOption(arguments, "--vc", versionCompatible);
     if (!versionCompatible)
@@ -1952,6 +1954,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Layer Device Types: " << options.layerDeviceTypes                                                            << std::endl <<
           "Calibration: "    << (options.int8 && options.calibration.empty() ? "Dynamic" : options.calibration.c_str()) << std::endl <<
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
+          "Weightless: "     << boolToEnabled(options.weightless)                                                       << std::endl <<
           "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
           "ONNX Native InstanceNorm: " << boolToEnabled(options.nativeInstanceNorm || options.versionCompatible
                 || options.hardwareCompatibilityLevel != HardwareCompatibilityLevel::kNONE)                             << std::endl <<
@@ -2222,6 +2225,7 @@ void BuildOptions::help(std::ostream& os)
                                                                                                                   << defaultAvgTiming << ")"        "\n"
           "  --refit                            Mark the engine as refittable. This will allow the inspection of refittable layers "                "\n"
           "                                     and weights within the engine."                                                                     "\n"
+          "  --weightless                       Mark the engine as weightless."                                                                     "\n"
           "  --versionCompatible, --vc          Mark the engine as version compatible. This allows the engine to be used with newer versions"       "\n"
           "                                     of TensorRT on the same host OS, as well as TensorRT's dispatch and lean runtimes."                 "\n"
           "                                     Only supported with explicit batch."                                                                "\n"
