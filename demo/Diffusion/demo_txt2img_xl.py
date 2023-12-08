@@ -25,7 +25,7 @@ from utilities import PIPELINE_TYPE, TRT_LOGGER, add_arguments, process_pipeline
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion XL Txt2Img Demo", conflict_handler='resolve')
     parser = add_arguments(parser)
-    parser.add_argument('--version', type=str, default="xl-1.0", choices=["xl-1.0"], help="Version of Stable Diffusion XL")
+    parser.add_argument('--version', type=str, default="xl-1.0", choices=["xl-1.0", "xl-turbo"], help="Version of Stable Diffusion XL")
     parser.add_argument('--height', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--num-warmup-runs', type=int, default=1, help="Number of warmup runs before benchmarking performance")

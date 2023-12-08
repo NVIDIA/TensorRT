@@ -27,7 +27,6 @@ def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion Inpaint Demo", conflict_handler='resolve')
     parser = add_arguments(parser)
     parser.add_argument('--version', type=str, default="1.5", choices=["1.5", "2.0"], help="Stable Diffusion version. Only 1.5 and 2.0 supported for inpainting.")
-    parser.add_argument('--scheduler', type=str, default="PNDM", choices=["PNDM"], help="Scheduler for diffusion process")
     parser.add_argument('--input-image', type=str, default="", help="Path to the input image")
     parser.add_argument('--mask-image', type=str, default="", help="Path to the mask image")
     return parser.parse_args()

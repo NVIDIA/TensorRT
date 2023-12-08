@@ -28,7 +28,6 @@ from utilities import PIPELINE_TYPE, TRT_LOGGER, add_arguments, download_image, 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion ControlNet Demo", conflict_handler='resolve')
     parser = add_arguments(parser)
-    parser.add_argument('--scheduler', type=str, default="UniPCMultistepScheduler", choices=["DDIM", "DPM", "EulerA", "Euler", "LMSD", "PNDM", "UniPCMultistepScheduler"], help="Scheduler for diffusion process")
     parser.add_argument('--input-image', nargs = '+', type=str, default=[], help="Path to the input image/images already prepared for ControlNet modality. For example: canny edged image for canny ControlNet, not just regular rgb image")
     parser.add_argument('--controlnet-type', nargs='+', type=str, default=["canny"], help="Controlnet type, can be `None`, `str` or `str` list from ['canny', 'depth', 'hed', 'mlsd', 'normal', 'openpose', 'scribble', 'seg']")
     parser.add_argument('--controlnet-scale', nargs='+', type=float, default=[1.0], help="The outputs of the controlnet are multiplied by `controlnet_scale` before they are added to the residual in the original unet, can be `None`, `float` or `float` list")
@@ -101,7 +100,7 @@ if __name__ == "__main__":
     # Initialize demo
     demo = StableDiffusionPipeline(
         pipeline_type=PIPELINE_TYPE.CONTROLNET,
-        controlnet=args.controlnet_type,
+        controlnets=args.controlnet_type,
         **kwargs_init_pipeline)
 
     # Load TensorRT engines and pytorch modules
