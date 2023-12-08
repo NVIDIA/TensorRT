@@ -15,26 +15,29 @@
 # limitations under the License.
 #
 
-import os
-import tempfile
-
-import onnx
-import onnx_graphsurgeon as gs
-import torch
-import torch.nn.functional as F
+from diffusers.loaders import LoraLoaderMixin
 from diffusers.models import (
     AutoencoderKL,
     ControlNetModel,
     UNet2DConditionModel
 )
-from onnx import shape_inference
+from diffusers.utils import convert_state_dict_to_diffusers
+import json
+import numpy as np
+import onnx
+from onnx import numpy_helper, shape_inference
+import onnx_graphsurgeon as gs
+import os
 from polygraphy.backend.onnx.loader import fold_constants
+import tempfile
+import torch
+import torch.nn.functional as F
 from transformers import (
     CLIPTextModel,
     CLIPTextModelWithProjection,
     CLIPTokenizer
 )
-
+from utilities import merge_loras
 
 class Optimizer():
     def __init__(
@@ -105,18 +108,9 @@ class Optimizer():
         if return_onnx:
             return onnx_graph
 
-def get_controlnets_path(controlnet_list):
-    '''
-    Currently ControlNet 1.0 is supported.
-    '''
-    if controlnet_list is None:
-        return None
-    return ["lllyasviel/sd-controlnet-" + controlnet for controlnet in controlnet_list]
-
-def get_path(version, pipeline, controlnet=None):
-
-    if controlnet is not None:
-        return ["lllyasviel/sd-controlnet-" + modality for modality in controlnet]
+def get_path(version, pipeline, controlnets=None):
+    if controlnets is not None:
+        return ["lllyasviel/sd-controlnet-" + modality for modality in controlnets]
     
     if version == "1.4":
         if pipeline.is_inpaint():
@@ -128,6 +122,8 @@ def get_path(version, pipeline, controlnet=None):
             return "runwayml/stable-diffusion-inpainting"
         else:
             return "runwayml/stable-diffusion-v1-5"
+    elif version == 'dreamshaper-7':
+        return 'Lykon/dreamshaper-7'
     elif version == "2.0-base":
         if pipeline.is_inpaint():
             return "stabilityai/stable-diffusion-2-inpainting"
@@ -149,88 +145,41 @@ def get_path(version, pipeline, controlnet=None):
             return "stabilityai/stable-diffusion-xl-refiner-1.0"
         else:
             raise ValueError(f"Unsupported SDXL 1.0 pipeline {pipeline.name}")
+    elif version == 'xl-turbo':
+        if pipeline.is_sd_xl_base():
+            return "stabilityai/sdxl-turbo"
+        else:
+            raise ValueError(f"Unsupported SDXL Turbo pipeline {pipeline.name}")
     else:
         raise ValueError(f"Incorrect version {version}")
 
 def get_clip_embedding_dim(version, pipeline):
-    if version in ("1.4", "1.5"):
+    if version in ("1.4", "1.5", "dreamshaper-7"):
         return 768
     elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):
         return 1024
-    elif version in ("xl-1.0") and pipeline.is_sd_xl_base():
+    elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_base():
         return 768
     else:
         raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
 
 def get_clipwithproj_embedding_dim(version, pipeline):
-    if version in ("xl-1.0"):
+    if version in ("xl-1.0", "xl-turbo"):
         return 1280
     else:
         raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
 
 def get_unet_embedding_dim(version, pipeline):
-    if version in ("1.4", "1.5"):
+    if version in ("1.4", "1.5", "dreamshaper-7"):
         return 768
     elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):
         return 1024
-    elif version in ("xl-1.0") and pipeline.is_sd_xl_base():
+    elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_base():
         return 2048
-    elif version in ("xl-1.0") and pipeline.is_sd_xl_refiner():
+    elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_refiner():
         return 1280
     else:
         raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
-
-def fuse_lora_weights(model, lora_weights, lora_scale):
-    if not lora_weights or lora_weights == "":
-        return
-
-    # add lora
-    saved_attn_processors = model.attn_processors
-    model.load_attn_procs(lora_weights)
-    
-    # grab all lora weights
-    lora_dict = {}
-    sd = model.state_dict()
-    for key in sd.keys():
-        if "lora" in key:
-            assert "transformer_blocks" in key
-            attn_processor_key, sub_key = ".".join(key.split(".")[:-4]), ".".join(key.split(".")[-4:])
-            if attn_processor_key not in lora_dict:
-                lora_dict[attn_processor_key] = []
-            lora_dict[attn_processor_key].append(sub_key)
-    # grab original weights that apply lora.
-    for key in sd.keys():
-        # only replace mha lora
-        if "transformer_blocks" in key and key.endswith("weight"):
-            attn_processor_key, sub_key = ".".join(key.split(".")[:-2]), ".".join(key.split(".")[-2:])
-            if attn_processor_key in lora_dict:
-                lora_dict[attn_processor_key].append(sub_key)
-            else:
-                attn_processor_key, sub_key = ".".join(key.split(".")[:-3]), ".".join(key.split(".")[-3:])
-                if attn_processor_key in lora_dict:
-                    lora_dict[attn_processor_key].append(sub_key)
-    assert len(lora_dict) > 0
-
-    # merge weights
-    for key in lora_dict.keys():
-        # we have 3 weights (original, down and up) x 4 tensors (q, k, v and out) in each mha
-        assert len(lora_dict[key]) == 12
-        for subkey in lora_dict[key]:
-            if not "lora" in subkey:
-                original_name = "{}.{}".format(key, subkey)
-                lora_down_name = "{}.processor.{}_lora.down.weight".format(key, subkey.split(".")[0])
-                lora_up_name = "{}.processor.{}_lora.up.weight".format(key, subkey.split(".")[0])
-
-                original_tensor = sd[original_name]
-                lora_down_tensor = sd[lora_down_name]
-                lora_up_tensor = sd[lora_up_name]
-                new_tensor = original_tensor + lora_scale * torch.matmul(lora_up_tensor, lora_down_tensor)
-                sd[original_name] = new_tensor 
-    model.load_state_dict(sd)
-    print(f"[I] Fused {len(lora_dict)} LoRA weights into model.")
-
-    model.set_attn_processor(saved_attn_processors)
-
 
 # FIXME after serialization support for torch.compile is added
 def get_checkpoint_dir(framework_model_dir, version, pipeline, subfolder, torch_inference):
@@ -244,28 +193,75 @@ def optimize_checkpoint(model, torch_inference):
     assert torch_inference in torch_inference_modes
     return torch.compile(model, mode=torch_inference, dynamic=False, fullgraph=False)
 
+class LoraLoader(LoraLoaderMixin):
+    def __init__(self,
+        paths,
+    ):
+        self.paths = paths
+        self.state_dict = dict()
+        self.network_alphas = dict()
+
+        for path in paths:
+            state_dict, network_alphas = self.lora_state_dict(path)
+            is_correct_format = all("lora" in key for key in state_dict.keys())
+            if not is_correct_format:
+                raise ValueError("Invalid LoRA checkpoint.")
+
+            self.state_dict[path] = state_dict
+            self.network_alphas[path] = network_alphas
+
+    def get_dicts(self,
+        prefix='unet',
+        convert_to_diffusers=False,
+    ):
+        state_dict = dict()
+        network_alphas = dict()
+
+        for path in self.paths:
+            keys = list(self.state_dict[path].keys())
+            if all(key.startswith(('unet', 'text_encoder')) for key in keys):
+                keys = [k for k in keys if k.startswith(prefix)]
+                if keys:
+                    print(f"Processing {prefix} LoRA: {path}")
+                state_dict[path] = {k.replace(f"{prefix}.", ""): v for k, v in self.state_dict[path].items() if k in keys}
+
+                if path in self.network_alphas:
+                    alpha_keys = [k for k in self.network_alphas[path].keys() if k.startswith(prefix)]
+                    network_alphas[path] = {
+                        k.replace(f"{prefix}.", ""): v for k, v in self.network_alphas[path].items() if k in alpha_keys
+                    }
+
+            else:
+                # Otherwise, we're dealing with the old format.
+                warn_message = "You have saved the LoRA weights using the old format. To convert LoRA weights to the new format, first load them in a dictionary and then create a new dictionary as follows: `new_state_dict = {f'unet.{module_name}': params for module_name, params in old_state_dict.items()}`."
+                print(warn_message)
+
+        return state_dict, network_alphas
+
+
 class BaseModel():
     def __init__(self,
         version='1.5',
         pipeline=None,
-        hf_token='',
         device='cuda',
+        hf_token='',
         verbose=True,
+        framework_model_dir='pytorch_model',
         fp16=False,
         max_batch_size=16,
         text_maxlen=77,
         embedding_dim=768,
-        controlnet=None
     ):
 
         self.name = self.__class__.__name__
         self.pipeline = pipeline.name
         self.version = version
-        self.hf_token = hf_token
-        self.hf_safetensor = pipeline.is_sd_xl()
+        self.path = get_path(version, pipeline)
         self.device = device
+        self.hf_token = hf_token
+        self.hf_safetensor = not (pipeline.is_inpaint() and version in ("1.4", "1.5"))
         self.verbose = verbose
-        self.path = get_path(version, pipeline, controlnet)
+        self.framework_model_dir = framework_model_dir
 
         self.fp16 = fp16
 
@@ -280,7 +276,9 @@ class BaseModel():
         self.embedding_dim = embedding_dim
         self.extra_output_names = []
 
-    def get_model(self, framework_model_dir, torch_inference=''):
+        self.lora_dict = None
+
+    def get_model(self, torch_inference=''):
         pass
 
     def get_input_names(self):
@@ -300,6 +298,92 @@ class BaseModel():
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         return None
+
+    # Helper utility for ONNX export
+    def export_onnx(self, onnx_path, onnx_opt_path, onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=False):
+        onnx_opt_graph = None
+        # Export optimized ONNX model (if missing)
+        if not os.path.exists(onnx_opt_path):
+            if not os.path.exists(onnx_path):
+                print(f"Exporting ONNX model: {onnx_path}")
+                model = self.get_model()
+                if enable_lora_merge:
+                    model = merge_loras(model, self.lora_dict, self.lora_alphas, self.lora_scales)
+                with torch.inference_mode(), torch.autocast("cuda"):
+                    inputs = self.get_sample_input(1, opt_image_height, opt_image_width)
+                    torch.onnx.export(model,
+                            inputs,
+                            onnx_path,
+                            export_params=True,
+                            opset_version=onnx_opset,
+                            do_constant_folding=True,
+                            input_names=self.get_input_names(),
+                            output_names=self.get_output_names(),
+                            dynamic_axes=self.get_dynamic_axes(),
+                    )
+            else:
+                print(f"[I] Found cached ONNX model: {onnx_path}")
+
+            print(f"Optimizing ONNX model: {onnx_opt_path}")
+            onnx_opt_graph = self.optimize(onnx.load(onnx_path))
+            if onnx_opt_graph.ByteSize() > 2147483648:
+                onnx.save_model(
+                    onnx_opt_graph,
+                    onnx_opt_path,
+                    save_as_external_data=True,
+                    all_tensors_to_one_file=True,
+                    convert_attribute=False)
+            else:
+                onnx.save(onnx_opt_graph, onnx_opt_path)
+        else:
+            print(f"[I] Found cached optimized ONNX model: {onnx_opt_path} ")
+
+    # Helper utility for weights map
+    def export_weights_map(self, onnx_opt_path, weights_map_path):
+        if not os.path.exists(weights_map_path):
+            onnx_opt_dir = os.path.dirname(onnx_opt_path)
+            onnx_opt_model = onnx.load(onnx_opt_path)
+            state_dict = self.get_model().state_dict()
+            # Create initializer data hashes
+            initializer_hash_mapping = {}
+            for initializer in onnx_opt_model.graph.initializer:
+                initializer_data = numpy_helper.to_array(initializer, base_dir=onnx_opt_dir).astype(np.float16)
+                initializer_hash = hash(initializer_data.data.tobytes())
+                initializer_hash_mapping[initializer.name] = (initializer_hash, initializer_data.shape)
+
+            weights_name_mapping = {}
+            weights_shape_mapping = {}
+            # set to keep track of initializers already added to the name_mapping dict
+            initializers_mapped = set()
+            for wt_name, wt in state_dict.items():
+                # get weight hash
+                wt = wt.cpu().detach().numpy().astype(np.float16)
+                wt_hash = hash(wt.data.tobytes())
+                wt_t_hash = hash(np.transpose(wt).data.tobytes())
+
+                for initializer_name, (initializer_hash, initializer_shape) in initializer_hash_mapping.items():
+                    # Due to constant folding, some weights are transposed during export
+                    # To account for the transpose op, we compare the initializer hash to the
+                    # hash for the weight and its transpose
+                    if wt_hash == initializer_hash or wt_t_hash == initializer_hash:
+                        # The assert below ensures there is a 1:1 mapping between
+                        # PyTorch and ONNX weight names. It can be removed in cases where 1:many
+                        # mapping is found and name_mapping[wt_name] = list()
+                        assert initializer_name not in initializers_mapped
+                        weights_name_mapping[wt_name] = initializer_name
+                        initializers_mapped.add(initializer_name)
+                        is_transpose = False if wt_hash == initializer_hash else True
+                        weights_shape_mapping[wt_name] = (initializer_shape, is_transpose)
+
+                # Sanity check: Were any weights not matched
+                if wt_name not in weights_name_mapping:
+                    print(f'[I] PyTorch weight {wt_name} not matched with any ONNX initializer')
+            print(f'[I] {len(weights_name_mapping.keys())} PyTorch weights were matched with ONNX initializers')
+            assert weights_name_mapping.keys() == weights_shape_mapping.keys()
+            with open(weights_map_path, 'w') as fp:
+                json.dump([weights_name_mapping, weights_shape_mapping], fp)
+        else:
+            print(f"[I] Found cached weights map: {weights_map_path} ")
 
     def optimize(self, onnx_graph):
         opt = Optimizer(onnx_graph, verbose=self.verbose)
@@ -338,27 +422,31 @@ class BaseModel():
         max_latent_width = latent_width if static_shape else self.max_latent_shape
         return (min_batch, max_batch, min_image_height, max_image_height, min_image_width, max_image_width, min_latent_height, max_latent_height, min_latent_width, max_latent_width)
 
-class CLIP(BaseModel):
+
+class CLIPModel(BaseModel):
     def __init__(self,
         version,
         pipeline,
-        hf_token,
         device,
+        hf_token,
         verbose,
+        framework_model_dir,
         max_batch_size,
         embedding_dim,
         output_hidden_states=False,
-        subfolder="text_encoder"
+        subfolder="text_encoder",
+        lora_dict=None,
+        lora_alphas=None,
     ):
-        super(CLIP, self).__init__(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
+        super(CLIPModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
         self.subfolder = subfolder
 
         # Output the final hidden state
         if output_hidden_states:
             self.extra_output_names = ['hidden_states']
 
-    def get_model(self, framework_model_dir, torch_inference=''):
-        clip_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+    def get_model(self, torch_inference=''):
+        clip_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(clip_model_dir):
             model = CLIPTextModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
@@ -423,26 +511,27 @@ class CLIP(BaseModel):
         opt.info(self.name + ': finished')
         return opt_onnx_graph
 
-def make_CLIP(version, pipeline, hf_token, device, verbose, max_batch_size, output_hidden_states=False, subfolder="text_encoder"):
-    return CLIP(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size, embedding_dim=get_clip_embedding_dim(version, pipeline), output_hidden_states=output_hidden_states, subfolder=subfolder)
 
-
-class CLIPWithProj(CLIP):
+class CLIPWithProjModel(CLIPModel):
     def __init__(self,
         version,
         pipeline,
+        device,
         hf_token,
-        device='cuda',
-        verbose=True,
+        verbose,
+        framework_model_dir,
         max_batch_size=16,
         output_hidden_states=False,
-        subfolder="text_encoder_2"):
+        subfolder="text_encoder_2",
+        lora_dict=None,
+        lora_alphas=None,
+    ):
 
-        super(CLIPWithProj, self).__init__(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size, embedding_dim=get_clipwithproj_embedding_dim(version, pipeline), output_hidden_states=output_hidden_states)
+        super(CLIPWithProjModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, max_batch_size=max_batch_size, embedding_dim=get_clipwithproj_embedding_dim(version, pipeline), output_hidden_states=output_hidden_states)
         self.subfolder = subfolder
 
-    def get_model(self, framework_model_dir, torch_inference=''):
-        clip_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+    def get_model(self, torch_inference=''):
+        clip_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(clip_model_dir):
             model = CLIPTextModelWithProjection.from_pretrained(self.path,
                 subfolder=self.subfolder,
@@ -466,8 +555,6 @@ class CLIPWithProj(CLIP):
 
         return output
 
-def make_CLIPWithProj(version, pipeline, hf_token, device, verbose, max_batch_size, subfolder="text_encoder_2", output_hidden_states=False):
-    return CLIPWithProj(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size, subfolder=subfolder, output_hidden_states=output_hidden_states)
 
 class UNet2DConditionControlNetModel(torch.nn.Module):
     def __init__(self, unet, controlnets) -> None:
@@ -510,48 +597,48 @@ class UNet2DConditionControlNetModel(torch.nn.Module):
         )
         return noise_pred
 
-class UNet(BaseModel):
+
+class UNetModel(BaseModel):
     def __init__(self,
         version,
         pipeline,
+        device,
         hf_token,
-        device='cuda',
-        verbose=True,
-        fp16=False,
-        max_batch_size=16,
-        text_maxlen=77,
-        unet_dim=4,
-        controlnet=None,
-        lora_weights=None,
-        lora_scale=1,
+        verbose,
+        framework_model_dir,
+        fp16 = False,
+        max_batch_size = 16,
+        text_maxlen = 77,
+        controlnets = None,
+        lora_scales = None,
+        lora_dict = None,
+        lora_alphas = None,
+        do_classifier_free_guidance = False,
     ):
 
-        super(UNet, self).__init__(version, pipeline, hf_token, fp16=fp16, device=device, verbose=verbose, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
+        super(UNetModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
         self.subfolder = 'unet'
-        self.unet_dim = unet_dim
-        self.controlnet = controlnet
-        self.lora_weights=lora_weights
-        self.lora_scale=lora_scale
+        self.controlnets = get_path(version, pipeline, controlnets) if controlnets else None
+        self.unet_dim = (9 if pipeline.is_inpaint() else 4)
+        self.lora_scales = lora_scales
+        self.lora_dict = lora_dict
+        self.lora_alphas = lora_alphas
+        self.xB = 2 if do_classifier_free_guidance else 1 # batch multiplier
 
-    def get_model(self, framework_model_dir, torch_inference=''):
+    def get_model(self, torch_inference=''):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
-        if self.controlnet:
+        if self.controlnets:
             unet_model = UNet2DConditionModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 use_auth_token=self.hf_token,
                 **model_opts).to(self.device)
-            # Use default attention processor for ONNX export
-            if not torch_inference:
-                unet_model.set_default_attn_processor()
-            fuse_lora_weights(unet_model, self.lora_weights, self.lora_scale)
-
             cnet_model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
-            controlnets = torch.nn.ModuleList([ControlNetModel.from_pretrained(path, **cnet_model_opts).to(self.device) for path in self.controlnet])
+            controlnets = torch.nn.ModuleList([ControlNetModel.from_pretrained(path, **cnet_model_opts).to(self.device) for path in self.controlnets])
             # FIXME - cache UNet2DConditionControlNetModel
             model = UNet2DConditionControlNetModel(unet_model, controlnets)
         else:
-            unet_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+            unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
             if not os.path.exists(unet_model_dir):
                 model = UNet2DConditionModel.from_pretrained(self.path,
                     subfolder=self.subfolder,
@@ -564,12 +651,11 @@ class UNet(BaseModel):
                 model = UNet2DConditionModel.from_pretrained(unet_model_dir).to(self.device)
             if torch_inference:
                 model.to(memory_format=torch.channels_last)
-            fuse_lora_weights(model, self.lora_weights, self.lora_scale)
         model = optimize_checkpoint(model, torch_inference)
         return model
 
     def get_input_names(self):
-        if self.controlnet is None:
+        if self.controlnets is None:
             return ['sample', 'timestep', 'encoder_hidden_states']
         else:    
             return ['sample', 'timestep', 'encoder_hidden_states', 'images', 'controlnet_scales']
@@ -578,63 +664,64 @@ class UNet(BaseModel):
        return ['latent']
 
     def get_dynamic_axes(self):
-        if self.controlnet is None:
+        xB = '2B' if self.xB == 2 else 'B'
+        if self.controlnets is None:
             return {
-                'sample': {0: '2B', 2: 'H', 3: 'W'},
-                'encoder_hidden_states': {0: '2B'},
-                'latent': {0: '2B', 2: 'H', 3: 'W'}
+                'sample': {0: xB, 2: 'H', 3: 'W'},
+                'encoder_hidden_states': {0: xB},
+                'latent': {0: xB, 2: 'H', 3: 'W'}
             }
         else:
             return {
-                'sample': {0: '2B', 2: 'H', 3: 'W'},
-                'encoder_hidden_states': {0: '2B'},
-                'images': {1: '2B', 3: '8H', 4: '8W'},
-                'latent': {0: '2B', 2: 'H', 3: 'W'}
+                'sample': {0: xB, 2: 'H', 3: 'W'},
+                'encoder_hidden_states': {0: xB},
+                'images': {1: xB, 3: '8H', 4: '8W'},
+                'latent': {0: xB, 2: 'H', 3: 'W'}
             }
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         min_batch, max_batch, min_image_height, max_image_height, min_image_width, max_image_width, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
             self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
-        if self.controlnet is None:
+        if self.controlnets is None:
             return {
-                'sample': [(2*min_batch, self.unet_dim, min_latent_height, min_latent_width), (2*batch_size, self.unet_dim, latent_height, latent_width), (2*max_batch, self.unet_dim, max_latent_height, max_latent_width)],
-                'encoder_hidden_states': [(2*min_batch, self.text_maxlen, self.embedding_dim), (2*batch_size, self.text_maxlen, self.embedding_dim), (2*max_batch, self.text_maxlen, self.embedding_dim)]
+                'sample': [(self.xB*min_batch, self.unet_dim, min_latent_height, min_latent_width), (self.xB*batch_size, self.unet_dim, latent_height, latent_width), (self.xB*max_batch, self.unet_dim, max_latent_height, max_latent_width)],
+                'encoder_hidden_states': [(self.xB*min_batch, self.text_maxlen, self.embedding_dim), (self.xB*batch_size, self.text_maxlen, self.embedding_dim), (self.xB*max_batch, self.text_maxlen, self.embedding_dim)]
             }
         else:
             return {
-                'sample': [(2*min_batch, self.unet_dim, min_latent_height, min_latent_width), 
-                           (2*batch_size, self.unet_dim, latent_height, latent_width), 
-                           (2*max_batch, self.unet_dim, max_latent_height, max_latent_width)],
-                'encoder_hidden_states': [(2*min_batch, self.text_maxlen, self.embedding_dim), 
-                                          (2*batch_size, self.text_maxlen, self.embedding_dim), 
-                                          (2*max_batch, self.text_maxlen, self.embedding_dim)],
-                'images': [(len(self.controlnet), 2*min_batch, 3, min_image_height, min_image_width), 
-                          (len(self.controlnet), 2*batch_size, 3, image_height, image_width), 
-                          (len(self.controlnet), 2*max_batch, 3, max_image_height, max_image_width)]
+                'sample': [(self.xB*min_batch, self.unet_dim, min_latent_height, min_latent_width),
+                           (self.xB*batch_size, self.unet_dim, latent_height, latent_width),
+                           (self.xB*max_batch, self.unet_dim, max_latent_height, max_latent_width)],
+                'encoder_hidden_states': [(self.xB*min_batch, self.text_maxlen, self.embedding_dim),
+                                          (self.xB*batch_size, self.text_maxlen, self.embedding_dim),
+                                          (self.xB*max_batch, self.text_maxlen, self.embedding_dim)],
+                'images': [(len(self.controlnets), self.xB*min_batch, 3, min_image_height, min_image_width),
+                          (len(self.controlnets), self.xB*batch_size, 3, image_height, image_width),
+                          (len(self.controlnets), self.xB*max_batch, 3, max_image_height, max_image_width)]
             }
 
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
-        if self.controlnet is None:
+        if self.controlnets is None:
             return {
-                'sample': (2*batch_size, self.unet_dim, latent_height, latent_width),
-                'encoder_hidden_states': (2*batch_size, self.text_maxlen, self.embedding_dim),
-                'latent': (2*batch_size, 4, latent_height, latent_width)
+                'sample': (self.xB*batch_size, self.unet_dim, latent_height, latent_width),
+                'encoder_hidden_states': (self.xB*batch_size, self.text_maxlen, self.embedding_dim),
+                'latent': (self.xB*batch_size, 4, latent_height, latent_width)
             }
         else:
             return {
-                'sample': (2*batch_size, self.unet_dim, latent_height, latent_width),
-                'encoder_hidden_states': (2*batch_size, self.text_maxlen, self.embedding_dim),
-                'images': (len(self.controlnet), 2*batch_size, 3, image_height, image_width), 
-                'latent': (2*batch_size, 4, latent_height, latent_width)
+                'sample': (self.xB*batch_size, self.unet_dim, latent_height, latent_width),
+                'encoder_hidden_states': (self.xB*batch_size, self.text_maxlen, self.embedding_dim),
+                'images': (len(self.controlnets), self.xB*batch_size, 3, image_height, image_width),
+                'latent': (self.xB*batch_size, 4, latent_height, latent_width)
                 }
 
     def get_sample_input(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         dtype = torch.float16 if self.fp16 else torch.float32
-        if self.controlnet is None:
+        if self.controlnets is None:
             return (
                 torch.randn(batch_size, self.unet_dim, latent_height, latent_width, dtype=torch.float32, device=self.device),
                 torch.tensor([1.], dtype=torch.float32, device=self.device),
@@ -645,41 +732,39 @@ class UNet(BaseModel):
                 torch.randn(batch_size, self.unet_dim, latent_height, latent_width, dtype=torch.float32, device=self.device),
                 torch.tensor(999, dtype=torch.float32, device=self.device),
                 torch.randn(batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device),
-                torch.randn(len(self.controlnet), batch_size, 3, image_height, image_width, dtype=dtype, device=self.device),
-                torch.randn(len(self.controlnet), dtype=dtype, device=self.device)
+                torch.randn(len(self.controlnets), batch_size, 3, image_height, image_width, dtype=dtype, device=self.device),
+                torch.randn(len(self.controlnets), dtype=dtype, device=self.device)
             )
 
-def make_UNet(version, pipeline, hf_token, device, verbose, max_batch_size, controlnet=None, lora_weights=None, lora_scale=1):
-    return UNet(version, pipeline, hf_token, fp16=True, device=device, verbose=verbose,
-            max_batch_size=max_batch_size, unet_dim=(9 if pipeline.is_inpaint() else 4),
-            controlnet=get_controlnets_path(controlnet), lora_weights=lora_weights,
-            lora_scale=lora_scale)
 
-class UNetXL(BaseModel):
+class UNetXLModel(BaseModel):
     def __init__(self,
         version,
         pipeline,
+        device,
         hf_token,
-        fp16=False,
-        device='cuda',
-        verbose=True,
-        max_batch_size=16,
-        text_maxlen=77,
-        unet_dim=4,
-        time_dim=6,
-        lora_weights=None,
-        lora_scale=1,
+        verbose,
+        framework_model_dir,
+        fp16 = False,
+        max_batch_size = 16,
+        text_maxlen = 77,
+        lora_scales = None,
+        lora_dict = None,
+        lora_alphas = None,
+        do_classifier_free_guidance = False,
     ):
-        super(UNetXL, self).__init__(version, pipeline, hf_token, fp16=fp16, device=device, verbose=verbose, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
+        super(UNetXLModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
         self.subfolder = 'unet'
-        self.unet_dim = unet_dim
-        self.time_dim = time_dim
-        self.lora_weights=lora_weights
-        self.lora_scale=lora_scale
+        self.unet_dim = (9 if pipeline.is_inpaint() else 4)
+        self.time_dim = (5 if pipeline.is_sd_xl_refiner() else 6)
+        self.lora_scales = lora_scales
+        self.lora_dict = lora_dict
+        self.lora_alphas = lora_alphas
+        self.xB = 2 if do_classifier_free_guidance else 1 # batch multiplier
 
-    def get_model(self, framework_model_dir, torch_inference=''):
+    def get_model(self, torch_inference=''):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
-        unet_model_dir = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+        unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(unet_model_dir):
             model = UNet2DConditionModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
@@ -692,8 +777,8 @@ class UNetXL(BaseModel):
             model.save_pretrained(unet_model_dir)
         else:
             print(f"[I] Load UNet pytorch model from: {unet_model_dir}")
-            model = UNet2DConditionModel.from_pretrained(unet_model_dir).to(self.device)
-        fuse_lora_weights(model, self.lora_weights, self.lora_scale)
+            model_load_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
+            model = UNet2DConditionModel.from_pretrained(unet_model_dir, **model_load_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
 
@@ -704,12 +789,13 @@ class UNetXL(BaseModel):
        return ['latent']
 
     def get_dynamic_axes(self):
+        xB = '2B' if self.xB == 2 else 'B'
         return {
-            'sample': {0: '2B', 2: 'H', 3: 'W'},
-            'encoder_hidden_states': {0: '2B'},
-            'latent': {0: '2B', 2: 'H', 3: 'W'},
-            'text_embeds': {0: '2B'},
-            'time_ids': {0: '2B'}
+            'sample': {0: xB, 2: 'H', 3: 'W'},
+            'encoder_hidden_states': {0: xB},
+            'latent': {0: xB, 2: 'H', 3: 'W'},
+            'text_embeds': {0: xB},
+            'time_ids': {0: xB}
         }
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
@@ -717,56 +803,53 @@ class UNetXL(BaseModel):
         min_batch, max_batch, _, _, _, _, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
             self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
         return {
-            'sample': [(2*min_batch, self.unet_dim, min_latent_height, min_latent_width), (2*batch_size, self.unet_dim, latent_height, latent_width), (2*max_batch, self.unet_dim, max_latent_height, max_latent_width)],
-            'encoder_hidden_states': [(2*min_batch, self.text_maxlen, self.embedding_dim), (2*batch_size, self.text_maxlen, self.embedding_dim), (2*max_batch, self.text_maxlen, self.embedding_dim)],
-            'text_embeds': [(2*min_batch, 1280), (2*batch_size, 1280), (2*max_batch, 1280)],
-            'time_ids': [(2*min_batch, self.time_dim), (2*batch_size, self.time_dim), (2*max_batch, self.time_dim)]
+            'sample': [(self.xB*min_batch, self.unet_dim, min_latent_height, min_latent_width), (self.xB*batch_size, self.unet_dim, latent_height, latent_width), (self.xB*max_batch, self.unet_dim, max_latent_height, max_latent_width)],
+            'encoder_hidden_states': [(self.xB*min_batch, self.text_maxlen, self.embedding_dim), (self.xB*batch_size, self.text_maxlen, self.embedding_dim), (self.xB*max_batch, self.text_maxlen, self.embedding_dim)],
+            'text_embeds': [(self.xB*min_batch, 1280), (self.xB*batch_size, 1280), (self.xB*max_batch, 1280)],
+            'time_ids': [(self.xB*min_batch, self.time_dim), (self.xB*batch_size, self.time_dim), (self.xB*max_batch, self.time_dim)]
         }
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return {
-            'sample': (2*batch_size, self.unet_dim, latent_height, latent_width),
-            'encoder_hidden_states': (2*batch_size, self.text_maxlen, self.embedding_dim),
-            'latent': (2*batch_size, 4, latent_height, latent_width),
-            'text_embeds': (2*batch_size, 1280),
-            'time_ids': (2*batch_size, self.time_dim)
+            'sample': (self.xB*batch_size, self.unet_dim, latent_height, latent_width),
+            'encoder_hidden_states': (self.xB*batch_size, self.text_maxlen, self.embedding_dim),
+            'latent': (self.xB*batch_size, 4, latent_height, latent_width),
+            'text_embeds': (self.xB*batch_size, 1280),
+            'time_ids': (self.xB*batch_size, self.time_dim)
         }
 
     def get_sample_input(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         dtype = torch.float16 if self.fp16 else torch.float32
         return (
-            torch.randn(2*batch_size, self.unet_dim, latent_height, latent_width, dtype=torch.float32, device=self.device),
+            torch.randn(self.xB*batch_size, self.unet_dim, latent_height, latent_width, dtype=torch.float32, device=self.device),
             torch.tensor([1.], dtype=torch.float32, device=self.device),
-            torch.randn(2*batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device),
+            torch.randn(self.xB*batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device),
             {
                 'added_cond_kwargs': {
-                    'text_embeds': torch.randn(2*batch_size, 1280, dtype=dtype, device=self.device),
-                    'time_ids' : torch.randn(2*batch_size, self.time_dim, dtype=dtype, device=self.device)
+                    'text_embeds': torch.randn(self.xB*batch_size, 1280, dtype=dtype, device=self.device),
+                    'time_ids' : torch.randn(self.xB*batch_size, self.time_dim, dtype=dtype, device=self.device)
                 }
             }
         )
 
-def make_UNetXL(version, pipeline, hf_token, device, verbose, max_batch_size, lora_weights=None, lora_scale=1):
-    return UNetXL(version, pipeline, hf_token, fp16=True,  device=device, verbose=verbose,
-                max_batch_size=max_batch_size, unet_dim=4, time_dim=(5 if pipeline.is_sd_xl_refiner() else 6),
-                lora_weights=lora_weights, lora_scale=lora_scale)
 
-class VAE(BaseModel):
+class VAEModel(BaseModel):
     def __init__(self,
         version,
         pipeline,
-        hf_token,
         device,
+        hf_token,
         verbose,
-        max_batch_size,
+        framework_model_dir,
+        max_batch_size=16,
     ):
-        super(VAE, self).__init__(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
+        super(VAEModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, max_batch_size=max_batch_size)
         self.subfolder = 'vae'
 
-    def get_model(self, framework_model_dir, torch_inference=''):
-        vae_decoder_model_path = get_checkpoint_dir(framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+    def get_model(self, torch_inference=''):
+        vae_decoder_model_path = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
         if not os.path.exists(vae_decoder_model_path):
             model = AutoencoderKL.from_pretrained(self.path,
                 subfolder=self.subfolder,
@@ -812,9 +895,6 @@ class VAE(BaseModel):
         return torch.randn(batch_size, 4, latent_height, latent_width, dtype=torch.float32, device=self.device)
 
 
-def make_VAE(version, pipeline, hf_token, device, verbose, max_batch_size):
-    return VAE(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
-
 class TorchVAEEncoder(torch.nn.Module):
     def __init__(self, version, pipeline, hf_token, device, path, framework_model_dir, hf_safetensor=False):
         super().__init__()
@@ -833,19 +913,20 @@ class TorchVAEEncoder(torch.nn.Module):
         return self.vae_encoder.encode(x).latent_dist.sample()
 
 
-class VAEEncoder(BaseModel):
+class VAEEncoderModel(BaseModel):
     def __init__(self,
         version,
         pipeline,
-        hf_token,
         device,
+        hf_token,
         verbose,
-        max_batch_size,
+        framework_model_dir,
+        max_batch_size=16,
     ):
-        super(VAEEncoder, self).__init__(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
+        super(VAEEncoderModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, max_batch_size=max_batch_size)
 
-    def get_model(self, framework_model_dir, torch_inference=''):
-        vae_encoder = TorchVAEEncoder(self.version, self.pipeline, self.hf_token, self.device, self.path, framework_model_dir, hf_safetensor=self.hf_safetensor)
+    def get_model(self, torch_inference=''):
+        vae_encoder = TorchVAEEncoder(self.version, self.pipeline, self.hf_token, self.device, self.path, self.framework_model_dir, hf_safetensor=self.hf_safetensor)
         return vae_encoder
 
     def get_input_names(self):
@@ -883,10 +964,8 @@ class VAEEncoder(BaseModel):
         self.check_dims(batch_size, image_height, image_width)
         return torch.randn(batch_size, 3, image_height, image_width, dtype=torch.float32, device=self.device)
 
-def make_VAEEncoder(version, pipeline, hf_token, device, verbose, max_batch_size):
-    return VAEEncoder(version, pipeline, hf_token, device=device, verbose=verbose, max_batch_size=max_batch_size)
 
-def make_tokenizer(version, pipeline, hf_token, framework_model_dir, subfolder="tokenizer"):
+def make_tokenizer(version, pipeline, hf_token, framework_model_dir, subfolder="tokenizer", **kwargs):
     tokenizer_model_dir = get_checkpoint_dir(framework_model_dir, version, pipeline.name, subfolder, '')
     if not os.path.exists(tokenizer_model_dir):
         model = CLIPTokenizer.from_pretrained(get_path(version, pipeline),
