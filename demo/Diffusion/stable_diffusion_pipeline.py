@@ -387,7 +387,7 @@ class StableDiffusionPipeline:
         do_engine_refit = dict(zip(model_names, [not self.pipeline_type.is_sd_xl_refiner() and enable_refit and model_name.startswith('unet') for model_name in model_names]))
         do_lora_merge = dict(zip(model_names, [not enable_refit and self.lora_loader and model_name.startswith('unet') for model_name in model_names]))
         # Torch fallback for VAE if specified
-        torch_fallback = dict(zip(model_names, [(model_name == 'vae' and self.config.get('vae_torch_fallback', False)) for model_name in model_names]))
+        torch_fallback = dict(zip(model_names, [self.torch_inference or (model_name == 'vae' and self.config.get('vae_torch_fallback', False)) for model_name in model_names]))
         model_suffix = dict(zip(model_names, [lora_suffix if do_lora_merge[model_name] else '' for model_name in model_names]))
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False, suffix=model_suffix[model_name]) for model_name in model_names]))
         onnx_opt_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, suffix=model_suffix[model_name]) for model_name in model_names]))
@@ -452,7 +452,7 @@ class StableDiffusionPipeline:
 
         # Load torch models
         for model_name, obj in self.models.items():
-            if self.torch_inference or torch_fallback[model_name]:
+            if torch_fallback[model_name]:
                 self.torch_models[model_name] = obj.get_model(torch_inference=self.torch_inference)
 
     def calculateMaxDeviceMemory(self):
