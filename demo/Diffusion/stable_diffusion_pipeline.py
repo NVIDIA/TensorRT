@@ -537,10 +537,10 @@ class StableDiffusionPipeline:
 
             text_hidden_states = None
             if self.torch_inference:
-                outputs = self.torch_models[encoder](text_input_ids)
+                outputs = self.torch_models[encoder](text_input_ids, output_hidden_states=output_hidden_states)
                 text_embeddings = outputs[0].clone()
                 if output_hidden_states:
-                    text_hidden_states = outputs['last_hidden_state'].clone()
+                    text_hidden_states = outputs['hidden_states'][-2].clone()
             else:
                 # NOTE: output tensor for CLIP must be cloned because it will be overwritten when called again for negative prompt
                 outputs = self.runEngine(encoder, {'input_ids': text_input_ids})
