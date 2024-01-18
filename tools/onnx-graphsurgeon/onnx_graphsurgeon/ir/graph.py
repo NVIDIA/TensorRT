@@ -409,6 +409,7 @@ class Graph(object):
             except RecursionError:
                 G_LOGGER.critical("Cycle detected in graph! Are there tensors with duplicate names in the graph?")
 
+            hierarchy_levels[self._get_node_id(node)] = HierarchyDescriptor(node, level=max_input_level+1)
             return max_input_level + 1
 
         with self.node_ids():
