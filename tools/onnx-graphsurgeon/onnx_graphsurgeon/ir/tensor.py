@@ -183,7 +183,7 @@ class Variable(Tensor):
 
         Note: Generally, you should only ever make a copy of a Graph.
         """
-        return Variable(self.name, self.dtype, self.shape)
+        return Variable(self.name, self.dtype, self.shape, self.type)
 
 
 class LazyValues(object):
