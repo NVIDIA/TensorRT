@@ -296,7 +296,7 @@ class TestLint:
             expect_error=False,
         )
         condition = (
-            lambda entry: Lint.CUSTOM_OP_EXCEPTION_SUBSTR in entry["message"]
+            lambda entry: any([substr in entry["message"] for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS])
             and entry["source"] == Lint.Source.ONNXRUNTIME.value
             and entry["level"] == Lint.Level.WARNING.value
         )

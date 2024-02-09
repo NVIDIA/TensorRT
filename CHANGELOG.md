@@ -1,6 +1,15 @@
 # TensorRT OSS Release Changelog
 
-## 9.2.0 GA - 2023-12-04
+## 9.3.0 GA - 2024-02-09
+
+Key Features and Updates:
+
+ - Demo changes
+   - Faster Text-to-image using SDXL & INT8 quantization using AMMO
+ - Updated tooling
+   - Polygraphy v0.49.7
+
+## 9.2.0 GA - 2023-11-27
 
 Key Features and Updates:
 

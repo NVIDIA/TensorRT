@@ -44,8 +44,9 @@ class TestDataType:
             DataType.FLOAT8E4M3FNUZ,
             DataType.FLOAT8E5M2,
             DataType.FLOAT8E5M2FNUZ,
+            DataType.INT4,
         ]:
-            pytest.xfail("BFLOAT16 and FLOAT8 not supported by NumPy")
+            pytest.xfail("Type not supported by NumPy")
 
         np_type = dtype.numpy()
         assert DataType.to_dtype(dtype, "numpy") == np_type
@@ -58,6 +59,11 @@ class TestDataType:
 
     @pytest.mark.parametrize("dtype", DATATYPES, ids=str)
     def test_onnxrt(self, dtype):
+        if dtype in [
+            DataType.INT4,
+        ]:
+            pytest.skip("Type not supported by ONNX-RT")
+
         onnxrt_type = DataType.to_dtype(dtype, "onnxruntime")
         assert dtype.onnxruntime() == onnxrt_type
 
@@ -76,6 +82,11 @@ class TestDataType:
 
     @pytest.mark.parametrize("dtype", DATATYPES, ids=str)
     def test_onnx(self, dtype):
+        if dtype in [
+            DataType.INT4,
+        ]:
+            pytest.skip("Type not supported by ONNX")
+
         onnx_type = dtype.onnx()
         assert DataType.to_dtype(dtype, "onnx") == onnx_type
 
@@ -93,7 +104,10 @@ class TestDataType:
 
         assert DataType.from_dtype(onnx_type) == dtype
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.7"), reason="Unsupported before TRT 8.7")
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.7"),
+        reason="Unsupported before TRT 8.7",
+    )
     @pytest.mark.parametrize("dtype", DATATYPES, ids=str)
     def test_tensorrt(self, dtype):
         if dtype in [
@@ -147,8 +161,9 @@ class TestDataType:
             DataType.UINT32,
             DataType.UINT64,
             DataType.STRING,
+            DataType.INT4,
         ]:
-            pytest.xfail("FLOAT8 not supported by ONNX-RT")
+            pytest.xfail("Type not supported by Torch")
 
         torch_type = dtype.torch()
         assert DataType.to_dtype(dtype, "torch") == torch_type

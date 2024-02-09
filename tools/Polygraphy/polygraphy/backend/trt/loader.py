@@ -91,7 +91,7 @@ class CreateNetwork(BaseLoader):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
         """
-        self.explicit_batch = util.default(explicit_batch, True)
+        self.explicit_batch = util.default(explicit_batch, True if mod.version(trt.__version__) < mod.version("10.0") else None)
         self.strongly_typed = util.default(strongly_typed, False)
 
     @util.check_called_by("__call__")
@@ -104,7 +104,10 @@ class CreateNetwork(BaseLoader):
         network_flags = 0
 
         if self.explicit_batch:
-            network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+            try:
+                network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+            except AttributeError:
+                trt_util.fail_unavailable("explicit_batch")
 
         if self.strongly_typed:
             try:
@@ -119,31 +122,38 @@ class CreateNetwork(BaseLoader):
 
 
 class BaseNetworkFromOnnx(BaseLoader):
-    def __init__(self, flags=None, strongly_typed=None):
+    def __init__(self, flags=None, plugin_instancenorm=None, strongly_typed=None):
         """
         Args:
             flags (List[trt.OnnxParserFlag]):
                     A list of ``OnnxParserFlag`` s to modify the default parsing
                     behavior of the ONNX parser.
                     Defaults to None.
+            plugin_instancenorm (bool):
+                    Whether to force usage of the plugin implementation of ONNX
+                    InstanceNorm by clearing the NATIVE_INSTANCENORM flag in the parser.
+                    Defaults to False
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
         """
         self.flags = flags
+        self.plugin_instancenorm=util.default(plugin_instancenorm, False)
         self.strongly_typed = util.default(strongly_typed, False)
 
     @util.check_called_by("__call__")
     def call_impl(self):
         builder, network = create_network(strongly_typed=self.strongly_typed)
         parser = trt.OnnxParser(network, trt_util.get_trt_logger())
-        # Set flags if applicable
+        # Set flags if applicable.
         if mod.version(trt.__version__) >= mod.version("8.6"):
             if self.flags:
                 masked_flags = 0
                 for f in self.flags:
                     masked_flags |= 1 << int(f)
                 parser.flags = masked_flags
+            if self.plugin_instancenorm:
+                parser.clear_flag(trt.OnnxParserFlag.NATIVE_INSTANCENORM)
         return builder, network, parser
 
 
@@ -153,7 +163,7 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
     Functor that parses an ONNX model to create a trt.INetworkDefinition.
     """
 
-    def __init__(self, model_bytes, flags=None, strongly_typed=None):
+    def __init__(self, model_bytes, flags=None, plugin_instancenorm=None, strongly_typed=None):
         """
         Parses an ONNX model.
 
@@ -165,11 +175,15 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
                     A list of ``OnnxParserFlag`` s to modify the default parsing
                     behavior of the ONNX parser.
                     Defaults to None.
+            plugin_instancenorm (bool):
+                    Whether to force usage of the plugin implementation of ONNX
+                    InstanceNorm by clearing the NATIVE_INSTANCENORM flag in the parser.
+                    Defaults to False
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
         """
-        super().__init__(flags=flags, strongly_typed=strongly_typed)
+        super().__init__(flags=flags, plugin_instancenorm=plugin_instancenorm, strongly_typed=strongly_typed)
         self._model_bytes = model_bytes
 
     @util.check_called_by("__call__")
@@ -193,7 +207,7 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
     This loader supports models with weights stored in an external location.
     """
 
-    def __init__(self, path, flags=None, strongly_typed=None):
+    def __init__(self, path, flags=None, plugin_instancenorm=None, strongly_typed=None):
         """
         Parses an ONNX model from a file.
 
@@ -204,11 +218,15 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
                     A list of ``OnnxParserFlag`` s to modify the default parsing
                     behavior of the ONNX parser.
                     Defaults to None.
+            plugin_instancenorm (bool):
+                    Whether to force usage of the plugin implementation of ONNX
+                    InstanceNorm by clearing the NATIVE_INSTANCENORM flag in the parser.
+                    Defaults to False
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
         """
-        super().__init__(flags=flags, strongly_typed=strongly_typed)
+        super().__init__(flags=flags, plugin_instancenorm=plugin_instancenorm, strongly_typed=strongly_typed)
         self.path = path
 
     @util.check_called_by("__call__")

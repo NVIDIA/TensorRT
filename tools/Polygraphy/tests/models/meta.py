@@ -91,6 +91,12 @@ def check_reshape(runner):
     assert np.all(outputs["output"] == feed_dict["data"].ravel())
 
 
+def check_residual_block(runner,shapes):
+    feed_dict = {"gpu_0/data_0": np.random.random_sample(size=shapes["gpu_0/data_0"]).astype(np.float32)}
+    # Confirm inference can go through without error
+    outputs = runner.infer(feed_dict)
+
+
 def no_check_implemented(runner):
     raise NotImplementedError("No check_runner implemented for this model")
 
@@ -210,6 +216,9 @@ ONNX_MODELS = {
     "matmul": Model(
         path=model_path("matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
     ),
+    "sparse.matmul": Model(
+        path=model_path("sparse.matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
     "matmul.bf16": Model(
         path=model_path("matmul.bf16.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
     ),
@@ -219,6 +228,9 @@ ONNX_MODELS = {
     "unsorted": Model(path=model_path("unsorted.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
     "conv": Model(
         path=model_path("conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "sparse.conv": Model(
+        path=model_path("sparse.conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
     ),
     "no_op_reshape": Model(
         path=model_path("no_op_reshape.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
@@ -252,5 +264,40 @@ ONNX_MODELS = {
     ),
     "empty": Model(
         path=model_path("empty.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
-    )
+    ),
+    "residual_block": Model(
+        path=model_path("residual_block.onnx"), LoaderType=BytesFromPath, check_runner=check_residual_block
+    ),
+    "graph_with_subgraph_matching_toy_plugin": Model(
+        path=model_path("graph_with_subgraph_matching_toy_plugin.onnx"), 
+        LoaderType=BytesFromPath, 
+        check_runner=no_check_implemented
+    ),
+    "transpose_matmul": Model(
+        path=model_path("transpose_matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "qdq_conv": Model(
+        path=model_path("qdq_conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.matmul.fp16": Model(
+        path=model_path("weightless.matmul.fp16.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.matmul.bf16": Model(
+        path=model_path("weightless.matmul.bf16.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.conv": Model(
+        path=model_path("weightless.conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.sparse.matmul": Model(
+        path=model_path("weightless.sparse.matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.sparse.conv": Model(
+        path=model_path("weightless.sparse.conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.transpose_matmul": Model(
+        path=model_path("weightless.transpose_matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.qdq_conv": Model(
+        path=model_path("weightless.qdq_conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
 }

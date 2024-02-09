@@ -11,6 +11,11 @@ see `the GitHub repository <https://github.com/NVIDIA/TensorRT/tree/main/tools/P
 For a conceptual overview of the Python API,
 see `this page <https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/polygraphy>`_.
 
+.. warning::
+    Any APIs not documented here should be considered internal only and do not adhere to the
+    deprecation policy for public APIs. Thus, they may be modified or removed at any time without warning.
+    Avoid using undocumented APIs!
+
 .. toctree::
     :hidden:
 
@@ -36,7 +41,6 @@ see `this page <https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/po
     func/toc
     json/toc
     logger/toc
-    mod/toc
 
 .. toctree::
     :caption: API Reference: Development

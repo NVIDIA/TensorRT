@@ -90,6 +90,7 @@ class DataType:
         "INT32": DataTypeEntry("int32", 4, _DataTypeKind.INTEGRAL),
         "INT64": DataTypeEntry("int64", 8, _DataTypeKind.INTEGRAL),
         "INT8": DataTypeEntry("int8", 1, _DataTypeKind.INTEGRAL),
+        "INT4": DataTypeEntry("int4", 0.5, _DataTypeKind.INTEGRAL),
         "UINT16": DataTypeEntry("uint16", 2, _DataTypeKind.INTEGRAL),
         "UINT32": DataTypeEntry("uint32", 4, _DataTypeKind.INTEGRAL),
         "UINT64": DataTypeEntry("uint64", 8, _DataTypeKind.INTEGRAL),
@@ -98,9 +99,13 @@ class DataType:
         "STRING": DataTypeEntry("string", 0, _DataTypeKind._OTHER),
         "BFLOAT16": DataTypeEntry("bfloat16", 2, _DataTypeKind.FLOATING_POINT),
         "FLOAT8E4M3FN": DataTypeEntry("float8e4m3fn", 1, _DataTypeKind.FLOATING_POINT),
-        "FLOAT8E4M3FNUZ": DataTypeEntry("float8e4m3fnuz", 1, _DataTypeKind.FLOATING_POINT),
+        "FLOAT8E4M3FNUZ": DataTypeEntry(
+            "float8e4m3fnuz", 1, _DataTypeKind.FLOATING_POINT
+        ),
         "FLOAT8E5M2": DataTypeEntry("float8e5m2", 1, _DataTypeKind.FLOATING_POINT),
-        "FLOAT8E5M2FNUZ": DataTypeEntry("float8e5m2fnuz", 1, _DataTypeKind.FLOATING_POINT),
+        "FLOAT8E5M2FNUZ": DataTypeEntry(
+            "float8e5m2fnuz", 1, _DataTypeKind.FLOATING_POINT
+        ),
     }
 
     @staticmethod
@@ -168,7 +173,9 @@ class DataType:
             PolygraphyException: If the data type could not be converted.
         """
         if not isinstance(dtype, DataTypeEntry):
-            G_LOGGER.internal_error(f"Received input of type other than DataType: {dtype}")
+            G_LOGGER.internal_error(
+                f"Received input of type other than DataType: {dtype}"
+            )
             return dtype
 
         if target_module not in DataType._EXPORTER_FUNCS:
@@ -190,7 +197,8 @@ def register_dtype_importer(source_module):
     Registers an importer function with the DataType class.
 
     IMPORTANT: You *must* ensure that the importer function does not attempt to automatically install
-    or import modules which are not already installed. `mod.has_mod` is an easy way to guard the code against this.
+    or import modules which are not already installed.
+    With a lazily imported module, `module.is_installed()/is_importable()` is an easy way to guard the code against this.
     We do not want to automatically install heavy modules like PyTorch or TensorRT just for the sake of DataType.
 
     For example:

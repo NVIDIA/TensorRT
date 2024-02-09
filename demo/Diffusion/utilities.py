@@ -17,6 +17,7 @@
 
 from collections import OrderedDict
 from cuda import cudart
+from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
 from diffusers.utils.torch_utils import randn_tensor
 from enum import Enum, auto
 import gc
@@ -38,10 +39,12 @@ from polygraphy.backend.trt import (
     save_engine
 )
 import random
+import re
 import requests
 from scipy import integrate
 import tensorrt as trt
 import torch
+import types
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
@@ -71,6 +74,65 @@ def unload_model(model):
         del model
         torch.cuda.empty_cache()
         gc.collect()
+
+def replace_lora_layers(model):
+    def lora_forward(self, x, scale=None):
+        return self._torch_forward(x)
+
+    for name, module in model.named_modules():
+        if isinstance(module, LoRACompatibleConv):
+            in_channels = module.in_channels
+            out_channels = module.out_channels
+            kernel_size = module.kernel_size
+            stride = module.stride
+            padding = module.padding
+            dilation = module.dilation
+            groups = module.groups
+            bias = module.bias
+
+            new_conv = torch.nn.Conv2d(
+                in_channels,
+                out_channels,
+                kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+                bias=bias is not None,
+            )
+
+            new_conv.weight.data = module.weight.data.clone().to(module.weight.data.device)
+            if bias is not None:
+                new_conv.bias.data = module.bias.data.clone().to(module.bias.data.device)
+
+            # Replace the LoRACompatibleConv layer with the Conv2d layer
+            path = name.split(".")
+            sub_module = model
+            for p in path[:-1]:
+                sub_module = getattr(sub_module, p)
+            setattr(sub_module, path[-1], new_conv)
+            new_conv._torch_forward = new_conv.forward
+            new_conv.forward = types.MethodType(lora_forward, new_conv)
+
+        elif isinstance(module, LoRACompatibleLinear):
+            in_features = module.in_features
+            out_features = module.out_features
+            bias = module.bias
+
+            new_linear = torch.nn.Linear(in_features, out_features, bias=bias is not None)
+
+            new_linear.weight.data = module.weight.data.clone().to(module.weight.data.device)
+            if bias is not None:
+                new_linear.bias.data = module.bias.data.clone().to(module.bias.data.device)
+
+            # Replace the LoRACompatibleLinear layer with the Linear layer
+            path = name.split(".")
+            sub_module = model
+            for p in path[:-1]:
+                sub_module = getattr(sub_module, p)
+            setattr(sub_module, path[-1], new_linear)
+            new_linear._torch_forward = new_linear.forward
+            new_linear.forward = types.MethodType(lora_forward, new_linear)
 
 def merge_loras(model, lora_dict, lora_alphas, lora_scales):
     assert len(lora_scales) == len(lora_dict)
@@ -170,11 +232,13 @@ class Engine():
         onnx_path,
         fp16=True,
         tf32=False,
+        int8=False,
         input_profile=None,
         enable_refit=False,
         enable_all_tactics=False,
         timing_cache=None,
-        update_output_names=None
+        update_output_names=None,
+        **extra_build_args
     ):
         print(f"Building TensorRT engine for {onnx_path}: {self.engine_path}")
         p = Profile()
@@ -183,9 +247,8 @@ class Engine():
                 assert len(dims) == 3
                 p.add(name, min=dims[0], opt=dims[1], max=dims[2])
 
-        config_kwargs = {}
         if not enable_all_tactics:
-            config_kwargs['tactic_sources'] = []
+            extra_build_args['tactic_sources'] = []
 
         network = network_from_onnx_path(onnx_path, flags=[trt.OnnxParserFlag.NATIVE_INSTANCENORM])
         if update_output_names:
@@ -195,10 +258,11 @@ class Engine():
             network,
             config=CreateConfig(fp16=fp16,
                 tf32=tf32,
+                int8=int8,
                 refittable=enable_refit,
                 profiles=[p],
                 load_timing_cache=timing_cache,
-                **config_kwargs
+                **extra_build_args
             ),
             save_timing_cache=timing_cache
         )
@@ -333,6 +397,83 @@ def get_refit_weights(state_dict, onnx_opt_path, weight_name_mapping, weight_sha
             refit_weights[initializer_name] = wt.contiguous()
     return refit_weights
 
+def load_calib_prompts(batch_size, calib_data_path):
+    with open(calib_data_path, "r") as file:
+        lst = [line.rstrip("\n") for line in file]
+    return [lst[i : i + batch_size] for i in range(0, len(lst), batch_size)]
+
+def filter_func(name):
+    pattern = re.compile(
+        r".*(time_emb_proj|time_embedding|conv_in|conv_out|conv_shortcut|add_embedding).*"
+    )
+    return pattern.match(name) is not None
+
+def quantize_lvl(unet, quant_level=2.5):
+    """
+    We should disable the unwanted quantizer when exporting the onnx
+    Because in the current ammo setting, it will load the quantizer amax for all the layers even
+    if we didn't add that unwanted layer into the config during the calibration
+    """
+    for name, module in unet.named_modules():
+        if isinstance(module, torch.nn.Conv2d):
+            module.input_quantizer.enable()
+            module.weight_quantizer.enable()
+        elif isinstance(module, torch.nn.Linear):
+            if (
+                (quant_level >= 2 and "ff.net" in name)
+                or (quant_level >= 2.5 and ("to_q" in name or "to_k" in name or "to_v" in name))
+                or quant_level == 3
+            ):
+                module.input_quantizer.enable()
+                module.weight_quantizer.enable()
+            else:
+                module.input_quantizer.disable()
+                module.weight_quantizer.disable()
+
+def get_smoothquant_config(model, quant_level=3):
+    quant_config = {
+        "quant_cfg": {},
+        "algorithm": "smoothquant",
+    }
+    for name, module in model.named_modules():
+        w_name = f"{name}*weight_quantizer"
+        i_name = f"{name}*input_quantizer"
+
+        if (
+            w_name in quant_config["quant_cfg"].keys()  # type: ignore
+            or i_name in quant_config["quant_cfg"].keys()  # type: ignore
+        ):
+            continue
+        if filter_func(name):
+            continue
+        if isinstance(module, torch.nn.Linear):
+            if (
+                (quant_level >= 2 and "ff.net" in name)
+                or (quant_level >= 2.5 and ("to_q" in name or "to_k" in name or "to_v" in name))
+                or quant_level == 3
+            ):
+                quant_config["quant_cfg"][w_name] = {"num_bits": 8, "axis": 0}  # type: ignore
+                quant_config["quant_cfg"][i_name] = {"num_bits": 8, "axis": -1}  # type: ignore
+        elif isinstance(module, torch.nn.Conv2d):
+            quant_config["quant_cfg"][w_name] = {"num_bits": 8, "axis": 0}  # type: ignore
+            quant_config["quant_cfg"][i_name] = {"num_bits": 8, "axis": None}  # type: ignore
+    return quant_config
+
+class PercentileAmaxes:
+    def __init__(self, total_step, percentile) -> None:
+        self.data = {}
+        self.total_step = total_step
+        self.percentile = percentile
+        self.i = 0
+
+    def append(self, item):
+        _cur_step = self.i % self.total_step
+        if _cur_step not in self.data.keys():
+            self.data[_cur_step] = item
+        else:
+            self.data[_cur_step] = np.maximum(self.data[_cur_step], item)
+        self.i += 1
+
 def add_arguments(parser):
     # Stable Diffusion configuration
     parser.add_argument('--version', type=str, default="1.5", choices=["1.4", "1.5", "dreamshaper-7", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0", "xl-turbo"], help="Version of Stable Diffusion")
@@ -357,6 +498,8 @@ def add_arguments(parser):
 
     # TensorRT engine build
     parser.add_argument('--engine-dir', default='engine', help="Output directory for TensorRT engines")
+    parser.add_argument('--int8', action='store_true', help="Apply int8 quantization.")
+    parser.add_argument('--quantization-level', type=float, default=3.0, choices=range(1,4), help="int8/fp8 quantization level, 1: CNN, 2: CNN+FFN, 2.5: CNN+FFN+QKV, 3: CNN+FC")
     parser.add_argument('--build-static-batch', action='store_true', help="Build TensorRT engines with fixed batch size.")
     parser.add_argument('--build-dynamic-shape', action='store_true', help="Build TensorRT engines with dynamic image shapes.")
     parser.add_argument('--build-enable-refit', action='store_true', help="Enable Refit option in TensorRT engines during build.")
@@ -386,6 +529,9 @@ def process_pipeline_args(args):
     if args.use_cuda_graph and (not args.build_static_batch or args.build_dynamic_shape):
         raise ValueError(f"Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
 
+    if args.int8 and not args.version.startswith('xl'):
+        raise ValueError(f"int8 quantization only supported for SDXL pipeline.")
+
     kwargs_init_pipeline = {
         'version': args.version,
         'max_batch_size': max_batch_size,
@@ -413,6 +559,9 @@ def process_pipeline_args(args):
         'enable_all_tactics': args.build_all_tactics,
         'enable_refit': args.build_enable_refit,
         'timing_cache': args.timing_cache,
+        'int8': args.int8,
+        'quantization_level': args.quantization_level,
+        'denoising_steps': args.denoising_steps,
     }
 
     args_run_demo = (args.prompt, args.negative_prompt, args.height, args.width, args.batch_size, args.batch_count, args.num_warmup_runs, args.use_cuda_graph)

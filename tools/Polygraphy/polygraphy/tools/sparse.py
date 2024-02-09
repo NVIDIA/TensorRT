@@ -44,6 +44,8 @@ class SparsityPruner:
                 self.tname2producer[t] = n
 
         self.prune_infos = dict()
+        self.sparse_tensors = set()
+        self.weights_skip = set()
 
     # Look back through Q/DQ/Cast nodes
     def __tensor(self, t, axis):
@@ -150,6 +152,11 @@ class SparsityPruner:
             pinfo = prune_infos[i]
             G_LOGGER.super_verbose(f"Processing tensor {i + 1}/{count}: {pinfo}")
             t = self.w_name2obj[pinfo.name]
+            if t.name in self.weights_skip:
+                G_LOGGER.warning(
+                    f"Skipping tensor: {t.name} since it was marked to skip pruning"
+                )
+                continue
             supported_dtypes = [
                 onnx.TensorProto.FLOAT,
                 onnx.TensorProto.FLOAT16,
@@ -187,7 +194,9 @@ class SparsityPruner:
                 pinfo = prune_infos[i]
                 tensor = self.w_name2obj[pinfo.name]
                 G_LOGGER.extra_verbose(f"Checking tensor {i + 1}/{count}: {pinfo.name}")
-                process_tensor(pinfo, tensor, True)
+                is_sparse = process_tensor(pinfo, tensor, True)
+                if is_sparse:
+                    self.sparse_tensors.add(tensor.name)
             G_LOGGER.finish(f"Finished checking {count} tensors. ")
             return None
         else:
@@ -203,7 +212,8 @@ class SparsityPruner:
 
             return build_new_model(self.model, new_w_name2obj)
 
-    def prune(self):
+    def prune(self, weights_skip=set()):
+        self.weights_skip = weights_skip
         return self.process(False)
 
     def check(self):
@@ -244,7 +254,7 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
                         zeros = bf16_zeros_in_int32(i32_data_0) + bf16_zeros_in_int32(i32_data_0)
                     if zeros < 2:
                         G_LOGGER.warning(f"Found non-sparse tensor: {tensor.name}")
-                        return tensor
+                        return False
                 else:
                     if is_raw_data:
                         # data is 8bit array, bf16 is 16bit
@@ -260,7 +270,7 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
 
     if check:
         G_LOGGER.info(f"Found sparse tensor: {tensor.name}")
-        return tensor
+        return True
     else:
         if is_raw_data:
             tensor.raw_data = bytes(data)
@@ -309,7 +319,7 @@ def process_tensor(pinfo, tensor, check):
                 if check:
                     if min0_vabs != 0 or min1_vabs != 0:
                         G_LOGGER.warning(f"Found non-sparse tensor: {tensor.name}")
-                        return tensor
+                        return False
                 else:
                     min0_idx = short2long(min0_idx)
                     min1_idx = short2long(min1_idx)
@@ -318,7 +328,7 @@ def process_tensor(pinfo, tensor, check):
 
     if check:
         G_LOGGER.info(f"Found sparse tensor: {tensor.name}")
-        return tensor
+        return True
     else:
         # pack raw data pack and then push to the model
         data = data.reshape(dims)

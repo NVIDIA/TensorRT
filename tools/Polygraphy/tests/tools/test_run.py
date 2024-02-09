@@ -21,6 +21,7 @@ import subprocess as sp
 import sys
 import tempfile
 from textwrap import dedent
+import tensorrt as trt
 
 import onnx
 import pytest
@@ -204,6 +205,41 @@ class TestTrt:
         ]
         if optimization_profile is not None:
             cmd += [f"--optimization-profile={optimization_profile}"]
+
+        poly_run(cmd)
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.0"),
+        reason="Feature not present before 10.0",
+    )
+    @pytest.mark.parametrize("allocation_strategy", [None, "static", "profile", "runtime"])
+    def test_allocation_strategies(self, poly_run, allocation_strategy):
+        cmd = [
+            ONNX_MODELS["residual_block"].path,
+            "--trt",
+            "--onnxrt",
+            # Profile 0
+            "--trt-min-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-opt-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-max-shapes",
+            "gpu_0/data_0:[2,3,224,224]",
+            # Profile 1
+            "--trt-min-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-opt-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-max-shapes",
+            "gpu_0/data_0:[4,3,224,224]",
+            # Input shapes
+            "--input-shapes",
+            "gpu_0/data_0:[2,3,224,224]",
+            "--optimization-profile",
+            "1",
+        ]
+        if allocation_strategy is not None:
+            cmd += ["--allocation-strategy", allocation_strategy]
 
         poly_run(cmd)
 

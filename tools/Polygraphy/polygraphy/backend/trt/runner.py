@@ -110,7 +110,7 @@ class TrtRunner(BaseRunner):
     be used only for prototyping, testing, and debugging.
     """
 
-    def __init__(self, engine, name: str = None, optimization_profile: int = None):
+    def __init__(self, engine, name: str = None, optimization_profile: int = None, allocation_strategy: str = None, weight_streaming_budget: int = None):
         """
         Args:
             engine (Union[Union[trt.ICudaEngine, trt.IExecutionContext], Callable() -> Union[trt.ICudaEngine, trt.IExecutionContext]]):
@@ -124,10 +124,23 @@ class TrtRunner(BaseRunner):
                     The index of the optimization profile to set each time this runner is activated.
                     When this is not provided, the profile is not set explicitly and will default to the 0th profile.
                     You can also change the profile after the runner is active using the ``set_profile()`` method.
+            allocation_strategy (str):
+                    The way device memory (internal activation and scratch memory) is allocated for the execution context. The value of this argument can be:
+                        - "static": The default value. The execution context will pre-allocate a block of memory that is sufficient for any possible input size across all profiles.
+                        - "profile": Allocate device memory enough for the current profile based on profile max shapes.
+                        - "runtime": Allocate device meomry enough for the current input shapes.
+            weight_streaming_budget (str):
+                    The amount of GPU memory in bytes that TensorRT can use for weights at runtime. It can take on the following values
+                        - None: TensorRT will decide the streaming budget automatically.
+                        - -1: Disables weight streaming at runtime
+                        -  0: Sets weight streaming budget to minimum budget.
+                        - >0: The amount of memory in bytes TensorRT can use for weights.
         """
         super().__init__(name=name, prefix="trt-runner")
         self._engine_or_context = engine
         self.optimization_profile = optimization_profile
+        self.allocation_strategy = allocation_strategy
+        self.weight_streaming_budget = weight_streaming_budget
 
     @util.check_called_by("activate")
     def activate_impl(self):
@@ -135,12 +148,33 @@ class TrtRunner(BaseRunner):
 
         if isinstance(engine_or_context, trt.ICudaEngine):
             self.engine = engine_or_context
-            self.context = self.engine.create_execution_context()
+            if self.weight_streaming_budget is not None:
+                if self.weight_streaming_budget == 0:
+                    min_budget = self.engine.minimum_weight_streaming_budget
+                    self.engine.weight_streaming_budget = min_budget
+                elif self.weight_streaming_budget == -1:
+                    self.engine.weight_streaming_budget = -1
+                else:
+                    self.engine.weight_streaming_budget = self.weight_streaming_budget
+            
+            allocation_strategy = util.default(self.allocation_strategy, "static")
+            if allocation_strategy == 'static':
+                self.context = self.engine.create_execution_context()
+            elif allocation_strategy in ['profile', 'runtime']:
+                # Device memory will be managed by polygraphy
+                self.context = self.engine.create_execution_context(trt.ExecutionContextAllocationStrategy.USER_MANAGED)
+            else:
+                 G_LOGGER.critical("Invalid allocation strategy specified.")
             if not self.context:
                 G_LOGGER.critical("Invalid Context. See error log for details.")
         elif isinstance(engine_or_context, trt.IExecutionContext):
             self.context = engine_or_context
             self.engine = self.context.engine
+            if self.allocation_strategy is not None:
+                G_LOGGER.warning(
+                    "An allocation strategy was specified. Please ensure the provided execution context uses the same strategy."
+                )
+
         else:
             G_LOGGER.critical(
                 "Invalid Engine or Context. Please ensure the engine was built correctly. See error log for details."
@@ -149,6 +183,7 @@ class TrtRunner(BaseRunner):
         self.device_input_buffers = OrderedDict()
         self.host_output_buffers = OrderedDict()
         self.stream = cuda.Stream()
+        self.context_memory_buffer = None
 
         if self.optimization_profile is not None:
             self.set_profile(self.optimization_profile)
@@ -240,6 +275,20 @@ class TrtRunner(BaseRunner):
             if not self.context.set_output_allocator(name, output_allocator):
                 G_LOGGER.critical(f"For output: {name}, failed to set output allocator")
 
+        if self.allocation_strategy in ["profile", "runtime"]:
+            if self.allocation_strategy == "profile":
+                # Perform per-profile allocation.
+                size_to_allocate = self.engine.get_device_memory_size_for_profile(self.context.active_optimization_profile)
+            elif self.allocation_strategy =="runtime":
+                # Perform runtime allocation.
+                size_to_allocate = self.context.update_device_memory_size_for_shapes()
+
+            if self.context_memory_buffer is None:
+                self.context_memory_buffer = cuda.DeviceArray.raw((size_to_allocate,))
+
+            self.context_memory_buffer.resize((size_to_allocate,))
+            self.context.device_memory = self.context_memory_buffer.ptr
+
         if not self.context.execute_async_v3(self.stream.ptr):
             G_LOGGER.critical("`execute_async_v3()` failed. Please see the logging output above for details.")
 
@@ -315,6 +364,8 @@ class TrtRunner(BaseRunner):
     @util.check_called_by("deactivate")
     def deactivate_impl(self):
         [buf.free() for buf in self.device_input_buffers.values()]
+        if self.context_memory_buffer is not None:
+            self.context_memory_buffer.free()
         self.stream.free()
 
         del (
@@ -323,4 +374,5 @@ class TrtRunner(BaseRunner):
             self.device_input_buffers,
             self.host_output_buffers,
             self.stream,
+            self.context_memory_buffer,
         )

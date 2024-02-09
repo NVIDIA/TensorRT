@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/9.2 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/9.3 --single-branch
 cd TensorRT
 ```
 
@@ -16,7 +16,7 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:23.07-py3 /bin/bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:23.12-py3 /bin/bash
 ```
 
 ### Install latest TensorRT release
@@ -26,7 +26,7 @@ python3 -m pip install --upgrade pip
 python3 -m pip install --pre --upgrade --extra-index-url https://pypi.nvidia.com tensorrt
 ```
 
-> NOTE: TensorRT 9.0 is only available as a pre-release
+> NOTE: TensorRT 9.x is only available as a pre-release
 
 Check your installed version using:
 `python3 -c 'import tensorrt;print(tensorrt.__version__)'`
@@ -48,8 +48,8 @@ diffusers           0.23.1
 onnx                1.14.0
 onnx-graphsurgeon   0.3.26
 onnxruntime         1.15.1
-polygraphy          0.49.1
-tensorrt            9.2.0.5
+polygraphy          0.49.7
+tensorrt            9.3.0.1
 tokenizers          0.13.2
 torch               2.1.0
 transformers        4.31.0
@@ -136,6 +136,14 @@ It is also possible to combine multiple LoRAs.
 ```bash
 python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees and mountains" --version=xl-1.0 --lora-path "ostris/crayon_style_lora_sdxl" "ostris/watercolor_style_lora_sdxl" --lora-scale 0.3 0.7 --onnx-dir onnx-sdxl-lora --engine-dir engine-sdxl-lora --build-enable-refit
 ```
+
+### Faster Text-to-image using SDXL & INT8 quantization using AMMO
+
+```bash
+python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --int8 --quantization-level 3
+```
+
+Note that the calibration process can be quite time-consuming, and will be repeated if `--quantization-level`, `--denoising-steps`, or `--onnx-dir` is changed.
 
 ### Faster Text-to-Image using SDXL + LCM (Latent Consistency Model) LoRA weights
 [LCM-LoRA](https://arxiv.org/abs/2311.05556) produces good quality images in 4 to 8 denoising steps instead of 30+ needed base model. Note that we use LCM scheduler and disable classifier-free-guidance by setting `--guidance-scale` to 0.

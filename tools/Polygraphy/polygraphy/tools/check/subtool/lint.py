@@ -16,30 +16,25 @@
 #
 
 import contextlib
+import enum
 import functools
 import io
-import enum
-import sys
-import os
 import json
-import tempfile
+import os
 import re
+import sys
+import tempfile
 from collections import OrderedDict
 from typing import Optional, Union
 
-from polygraphy.tools import util as tools_util
 from polygraphy import mod
-from polygraphy.logger import G_LOGGER
-from polygraphy.exception import PolygraphyException
-from polygraphy.tools.args import (
-    OnnxLoadArgs,
-    ModelArgs,
-    DataLoaderArgs,
-    OnnxrtSessionArgs,
-)
 from polygraphy.comparator import IterationResult
-from polygraphy.tools.base import Tool
+from polygraphy.exception import PolygraphyException
 from polygraphy.json import save_json
+from polygraphy.logger import G_LOGGER
+from polygraphy.tools import util as tools_util
+from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoadArgs, OnnxrtSessionArgs
+from polygraphy.tools.base import Tool
 
 onnx = mod.lazy_import("onnx")
 gs = mod.lazy_import("onnx_graphsurgeon>=0.3.21")
@@ -88,7 +83,7 @@ class Lint(Tool):
     6. Large models (>2GB) require external data to be in same directory as the model file, custom paths to external data are not supported.
     """
 
-    CUSTOM_OP_EXCEPTION_SUBSTR = "No opset import for domain"
+    CUSTOM_OP_EXCEPTION_SUBSTRS = ["No opset import for domain", "is not a registered function/op"]
     ONNX_CHECKER_IGNORE_SUBSTR = "Bad node spec for node"
     INVALID_ONNX_EXCEPTION_SUBSTR = "Error parsing message with type 'onnx.ModelProto'"
     MAXIMUM_PROTOBUF = 2e9  # 2GB
@@ -809,11 +804,14 @@ class Lint(Tool):
                 # NOTE: This is only done if early-exiting, as otherwise these warnings tend to be repeats
                 # of node level warnings/exceptions.
                 if warn_str:
-                    self.report.add(
-                        Lint.Level.WARNING,
-                        Lint.Source.ONNXRUNTIME,
-                        warn_str,
-                    )
+                    warnings = warn_str.split('\n')
+                    for warning in warnings:
+                        if len(warning) > 0:
+                            self.report.add(
+                                Lint.Level.WARNING,
+                                Lint.Source.ONNXRUNTIME,
+                                warning,
+                            )
 
                 ### report.add(unused nodes and tensors) ###
                 _report_unused_info(graph)
@@ -843,7 +841,7 @@ class Lint(Tool):
                     inference_output, exception, _, _ = _ort_inference_check(model_bytes, lcm.feed_dict())
                     # NOTE: we ignore stdout and stderr as it contains info from polygraphy not relevant to linting.
                     err_str = str(exception) if exception else ""
-                    if Lint.CUSTOM_OP_EXCEPTION_SUBSTR in err_str:
+                    if any([substr in err_str for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS]):
                         self.report.add(
                             level=Lint.Level.WARNING,
                             source=Lint.Source.ONNXRUNTIME,

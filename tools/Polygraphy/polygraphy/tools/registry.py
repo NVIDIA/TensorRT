@@ -56,6 +56,7 @@ try_register_tool("polygraphy.tools.surgeon", "Surgeon")
 try_register_tool("polygraphy.tools.template", "Template")
 try_register_tool("polygraphy.tools.debug", "Debug")
 try_register_tool("polygraphy.tools.data", "Data")
+try_register_tool("polygraphy.tools.plugin", "Plugin")
 
 # Check that tool names are unique
 tool_names = [tool.name for tool in TOOL_REGISTRY]

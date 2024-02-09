@@ -396,8 +396,9 @@ class FoldConstants(BaseLoadOnnxCopy):
                 model = infer_shapes(model, allow_onnxruntime=self.allow_onnxruntime_shape_inference)
             return model
 
+        # Need to manually trigger the autoinstall this since it's used by ONNX-GS, which does not have an autoinstall mechanism.
         mod.autoinstall(onnxrt)
-        if not mod.has_mod("onnxruntime"):
+        if not onnxrt.is_installed() or not onnxrt.is_importable():
             G_LOGGER.error(
                 f"ONNX-Runtime is not installed, so constant folding may be suboptimal or not work at all.\n"
                 f"Consider installing ONNX-Runtime: {sys.executable} -m pip install onnxruntime"

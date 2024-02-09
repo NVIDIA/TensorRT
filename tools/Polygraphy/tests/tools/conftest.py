@@ -30,7 +30,9 @@ from polygraphy.json import save_json
 def make_poly_fixture(subtool: List[str]):
     @pytest.fixture()
     def poly_fixture(script_runner):
-        def poly_fixture_impl(additional_opts: List[str] = [], expect_error: bool = False, *args, **kwargs):
+        def poly_fixture_impl(
+            additional_opts: List[str] = [], expect_error: bool = False, *args, **kwargs
+        ):
             cmd = ["polygraphy"] + subtool + ["-v"] + additional_opts
             # NOTE: script_runner does not work very well in `in-process`` mode if you need to inspect stdout/stderr.
             # Occasionally, the output comes out empty - not clear why. Cave emptor!
@@ -43,7 +45,6 @@ def make_poly_fixture(subtool: List[str]):
 
     return poly_fixture
 
-
 poly = make_poly_fixture([])
 poly_run = make_poly_fixture(["run"])
 poly_convert = make_poly_fixture(["convert"])
@@ -54,9 +55,13 @@ poly_surgeon_extract = make_poly_fixture(["surgeon", "extract"])
 poly_template = make_poly_fixture(["template"])
 poly_debug = make_poly_fixture(["debug"])
 poly_data = make_poly_fixture(["data"])
+poly_plugin_match = make_poly_fixture(["plugin", "match"])
+poly_plugin_list_plugins = make_poly_fixture(["plugin", "list"])
+poly_plugin_replace = make_poly_fixture(["plugin", "replace"])
 
-
-FakeAlgorithmContext = namedtuple("FakeAlgorithmContext", ["name", "num_inputs", "num_outputs"])
+FakeAlgorithmContext = namedtuple(
+    "FakeAlgorithmContext", ["name", "num_inputs", "num_outputs"]
+)
 FakeAlgorithm = namedtuple("FakeAlgorithm", ["algorithm_variant", "io_info"])
 FakeAlgorithm.get_algorithm_io_info = lambda this, index: this.io_info[index]
 
@@ -66,20 +71,30 @@ FakeAlgorithmVariant = namedtuple("FakeAlgorithmVariant", ["implementation", "ta
 @pytest.fixture(scope="session", params=["", "subdir"])
 def replay_dir(request):
     def fake_context(name, num_inputs=1, num_outputs=1):
-        return FakeAlgorithmContext(name=name, num_inputs=num_inputs, num_outputs=num_outputs)
+        return FakeAlgorithmContext(
+            name=name, num_inputs=num_inputs, num_outputs=num_outputs
+        )
 
     def fake_algo(
-        implementation=6, tactic=0, num_io=2, tensor_format=trt.TensorFormat.LINEAR, dtype=trt.float32, strides=(1, 2)
+        implementation=6, tactic=0, num_io=2, dtype=trt.float32, strides=(1, 2)
     ):
         io_info = [
             TensorInfo(
-                tensor_format=tensor_format, dtype=dtype, strides=strides, vectorized_dim=-1, components_per_element=1
+                dtype=dtype,
+                strides=strides,
+                vectorized_dim=-1,
+                components_per_element=1,
             )
         ] * num_io
-        return FakeAlgorithm(algorithm_variant=FakeAlgorithmVariant(implementation, tactic), io_info=io_info)
+        return FakeAlgorithm(
+            algorithm_variant=FakeAlgorithmVariant(implementation, tactic),
+            io_info=io_info,
+        )
 
     def make_replay(tactic):
-        return TacticReplayData().add("layer0", Algorithm.from_trt(fake_context("layer0"), fake_algo(0, tactic)))
+        return TacticReplayData().add(
+            "layer0", Algorithm.from_trt(fake_context("layer0"), fake_algo(0, tactic))
+        )
 
     with tempfile.TemporaryDirectory() as dir:
 
@@ -104,7 +119,7 @@ def replay_dir(request):
             [I] Loaded {num} bad tactic replays.
             [I] Found potentially bad tactics:
             [I] Layer: layer0
-                    Algorithms: ['(Implementation: 0, Tactic: 2) | Inputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1, 2), -1, 1),) | Outputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1, 2), -1, 1),)']
+                    Algorithms: ['(Implementation: 0, Tactic: 2) | Inputs: (TensorInfo(DataType.FLOAT, (1, 2), -1, 1),) | Outputs: (TensorInfo(DataType.FLOAT, (1, 2), -1, 1),)']
             """
         )
         yield dir, EXPECTED_OUTPUT

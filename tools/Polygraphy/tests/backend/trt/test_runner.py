@@ -171,6 +171,36 @@ class TestTrtRunner:
                 for shape in shapes:
                     model.check_runner(runner, {"X": shape})
 
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.0"),
+        reason="Feature not present before 10.0",
+    )
+    @pytest.mark.parametrize("allocation_strategy", [None, "static", "profile", "runtime"])
+    def test_allocation_strategies(self, allocation_strategy):
+        model = ONNX_MODELS["residual_block"]
+        profile0_shapes = [(1, 3, 224, 224), (1, 3, 224, 224), (1, 3, 224, 224)]
+        profile1_shapes = [(1, 3, 224, 224), (1, 3, 224, 224), (2, 3, 224, 224)]
+        profile2_shapes = [(1, 3, 224, 224), (1, 3, 224, 224), (4, 3, 224, 224)]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        profiles = [
+            Profile().add("gpu_0/data_0", *profile0_shapes),
+            Profile().add("gpu_0/data_0", *profile1_shapes),
+            Profile().add("gpu_0/data_0", *profile2_shapes),
+        ]
+        config_loader = CreateConfig(profiles=profiles)
+        engine = engine_from_network(network_loader, config_loader)
+
+        for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
+            with TrtRunner(
+                engine,
+                optimization_profile=index,
+                allocation_strategy=allocation_strategy,
+            ) as runner:
+                for shape in shapes:
+                    model.check_runner(runner, {"gpu_0/data_0": shape})
+
+
     def test_empty_tensor_with_dynamic_input_shape_tensor(self):
         model = ONNX_MODELS["empty_tensor_expand"]
         shapes = [(1, 2, 0, 3, 0), (2, 2, 0, 3, 0), (4, 2, 0, 3, 0)]
@@ -304,3 +334,30 @@ class TestTrtRunner:
                 assert isinstance(host_arr, torch.Tensor)
             else:
                 assert isinstance(host_arr, np.ndarray)
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.0"),
+        reason="Feature not present before 10.0",
+    )
+    @pytest.mark.parametrize("budget", [None, -1])
+    def test_weight_streaming(self, budget):
+        model = ONNX_MODELS["residual_block"]
+        profile0_shapes = [(1, 3, 224, 224), (1, 3, 224, 224), (1, 3, 224, 224)]
+        network_loader = NetworkFromOnnxBytes(model.loader)
+        profiles = [
+            Profile().add("gpu_0/data_0", *profile0_shapes),
+        ]
+        network_loader = NetworkFromOnnxBytes(model.loader, strongly_typed=True)
+        config_loader = CreateConfig(profiles=profiles, weight_streaming=True)
+        engine = engine_from_network(network_loader, config_loader)
+        
+        if budget == np.inf:
+            # set to max size - 1
+            budget = engine.streamable_weights_size - 1
+
+        with TrtRunner(
+            engine,
+            optimization_profile=0,
+            weight_streaming_budget=budget,
+        ) as runner:
+            model.check_runner(runner, {"gpu_0/data_0": profile0_shapes[0]})

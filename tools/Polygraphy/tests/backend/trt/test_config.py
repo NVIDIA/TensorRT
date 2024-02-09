@@ -6,7 +6,13 @@ import pytest
 import tensorrt as trt
 
 from polygraphy import mod, util
-from polygraphy.backend.trt import Calibrator, CreateConfig, Profile, network_from_onnx_bytes, postprocess_config
+from polygraphy.backend.trt import (
+    Calibrator,
+    CreateConfig,
+    Profile,
+    network_from_onnx_bytes,
+    postprocess_config,
+)
 from polygraphy.common.struct import BoundedShape
 from polygraphy.comparator import DataLoader
 from polygraphy.datatype import DataType
@@ -41,11 +47,16 @@ class TestCreateConfig:
                 assert not config.get_flag(trt.BuilderFlag.FP8)
                 assert not config.get_flag(trt.BuilderFlag.VERSION_COMPATIBLE)
                 assert not config.get_flag(trt.BuilderFlag.EXCLUDE_LEAN_RUNTIME)
-                assert config.hardware_compatibility_level == trt.HardwareCompatibilityLevel.NONE
+                assert (
+                    config.hardware_compatibility_level
+                    == trt.HardwareCompatibilityLevel.NONE
+                )
             assert config.num_optimization_profiles == 1
             assert config.int8_calibrator is None
             with contextlib.suppress(AttributeError):
-                if mod.version(trt.__version__) >= mod.version("8.7"):
+                if mod.version(trt.__version__) >= mod.version("10.0"):
+                    assert config.get_tactic_sources() == 24
+                elif mod.version(trt.__version__) >= mod.version("8.7"):
                     assert config.get_tactic_sources() == 29
                 elif mod.version(trt.__version__) >= mod.version("8.5"):
                     assert config.get_tactic_sources() == 31
@@ -62,7 +73,11 @@ class TestCreateConfig:
 
     @pytest.mark.parametrize(
         "engine_capability",
-        [trt.EngineCapability.STANDARD, trt.EngineCapability.SAFETY, trt.EngineCapability.DLA_STANDALONE],
+        [
+            trt.EngineCapability.STANDARD,
+            trt.EngineCapability.SAFETY,
+            trt.EngineCapability.DLA_STANDALONE,
+        ],
     )
     def test_engine_capability(self, identity_builder_network, engine_capability):
         builder, network = identity_builder_network
@@ -84,15 +99,23 @@ class TestCreateConfig:
             else:
                 assert not obey_set and not prefer_set
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported before TRT 8.6")
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="Unsupported before TRT 8.6",
+    )
     @pytest.mark.parametrize(
         "kwargs, expected_flag",
         [
             ({"version_compatible": True}, "VERSION_COMPATIBLE"),
-            ({"version_compatible": True, "exclude_lean_runtime": True}, "EXCLUDE_LEAN_RUNTIME"),
+            (
+                {"version_compatible": True, "exclude_lean_runtime": True},
+                "EXCLUDE_LEAN_RUNTIME",
+            ),
         ],
     )
-    def test_version_compatibility_flags(self, identity_builder_network, kwargs, expected_flag):
+    def test_version_compatibility_flags(
+        self, identity_builder_network, kwargs, expected_flag
+    ):
         builder, network = identity_builder_network
         loader = CreateConfig(**kwargs)
         with loader(builder, network) as config:
@@ -136,11 +159,21 @@ class TestCreateConfig:
         )
         + (
             [
-                ("disable_compilation_cache", trt.BuilderFlag.DISABLE_COMPILATION_CACHE),
+                (
+                    "disable_compilation_cache",
+                    trt.BuilderFlag.DISABLE_COMPILATION_CACHE,
+                ),
             ]
             if mod.version(trt.__version__) >= mod.version("9.0")
             else []
         )
+        + (
+            [
+                ("strip_plan", trt.BuilderFlag.STRIP_PLAN),
+            ]
+            if mod.version(trt.__version__) >= mod.version("10.0")
+            else []
+        ),
     )
     @pytest.mark.parametrize("value", [True, False])
     def test_flags(self, identity_builder_network, arg_name, flag_type, value):
@@ -174,7 +207,14 @@ class TestCreateConfig:
             ([trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 3),
             ([trt.TacticSource.CUBLAS, trt.TacticSource.CUDNN], 5),
             ([trt.TacticSource.CUBLAS_LT, trt.TacticSource.CUDNN], 6),
-            ([trt.TacticSource.CUDNN, trt.TacticSource.CUBLAS, trt.TacticSource.CUBLAS_LT], 7),
+            (
+                [
+                    trt.TacticSource.CUDNN,
+                    trt.TacticSource.CUBLAS,
+                    trt.TacticSource.CUBLAS_LT,
+                ],
+                7,
+            ),
             (
                 [
                     trt.TacticSource.CUDNN,
@@ -196,7 +236,9 @@ class TestCreateConfig:
             ),
         ]
 
-        if mod.version(trt.__version__) >= mod.version("8.7"):
+        if mod.version(trt.__version__) >= mod.version("10.0"):
+            TACTIC_SOURCES_CASES[0] = (None, 24)
+        elif mod.version(trt.__version__) >= mod.version("8.7"):
             TACTIC_SOURCES_CASES[0] = (None, 29)
 
     @pytest.mark.parametrize("sources, expected", TACTIC_SOURCES_CASES)
@@ -206,7 +248,10 @@ class TestCreateConfig:
         with loader(builder, network) as config:
             assert config.get_tactic_sources() == expected
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.7"), reason="API was added in TRT 8.7")
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.7"),
+        reason="API was added in TRT 8.7",
+    )
     @pytest.mark.parametrize("flag", [True, False])
     def test_error_on_timing_cache_miss(self, identity_builder_network, flag):
         builder, network = identity_builder_network
@@ -300,12 +345,9 @@ class TestCreateConfig:
     @pytest.mark.parametrize(
         "preview_features",
         [
-            [],
-            [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
-            [
-                trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805,
-                trt.PreviewFeature.DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805,
-            ],
+            [trt.PreviewFeature.PROFILE_SHARING_0806]
+            if mod.version(trt.__version__) >= mod.version("10.0")
+            else [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
         ],
     )
     def test_preview_features(self, identity_builder_network, preview_features):
@@ -332,7 +374,8 @@ class TestCreateConfig:
                 assert config.get_quantization_flag(qf) == (qf in quantization_flags)
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="Unsupported for TRT versions prior to 8.6",
     )
     @pytest.mark.parametrize("level", range(6))
     def test_builder_optimization_level(self, identity_builder_network, level):
@@ -357,7 +400,8 @@ class TestCreateConfig:
                 assert config.hardware_compatibility_level == level
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="Unsupported for TRT versions prior to 8.6",
     )
     @pytest.mark.parametrize("num_streams", range(3))
     def test_max_aux_streams(self, identity_builder_network, num_streams):
@@ -365,6 +409,30 @@ class TestCreateConfig:
         loader = CreateConfig(max_aux_streams=num_streams)
         with loader(builder, network) as config:
             assert config.max_aux_streams == num_streams
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("9.0"),
+        reason="API was added in TRT 9.0",
+    )
+    def test_progress_monitor(self, identity_builder_network):
+        class DummyProgressMonitor(trt.IProgressMonitor):
+            def __init__(self):
+                trt.IProgressMonitor.__init__(self)
+
+            def phase_start(self, phase_name, parent_phase, num_steps):
+                pass
+
+            def phase_finish(self, phase_name):
+                pass
+
+            def step_complete(self, phase_name, step):
+                return True
+
+        builder, network = identity_builder_network
+        progress_monitor = DummyProgressMonitor()
+        loader = CreateConfig(progress_monitor=progress_monitor)
+        with loader(builder, network) as config:
+            assert config.progress_monitor == progress_monitor
 
 
 class TestPostprocessConfig:

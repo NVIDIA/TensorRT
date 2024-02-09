@@ -1,7 +1,7 @@
 colored
 flaky==3.7.0
 numpy==1.21.6
-onnx_graphsurgeon>=0.3.27
+onnx_graphsurgeon>=0.5.0
 onnx==1.14.0
 onnxconverter_common==1.12.2
 onnxmltools==1.11.1
@@ -18,3 +18,4 @@ tensorflow<2.0; python_version<'3.8'
 tf2onnx
 torch==2.0.1
 wheel
+pyyaml

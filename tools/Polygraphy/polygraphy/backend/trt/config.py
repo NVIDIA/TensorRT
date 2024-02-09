@@ -50,6 +50,7 @@ class CreateConfig(BaseLoader):
         profiling_verbosity=None,
         memory_pool_limits=None,
         refittable=None,
+        strip_plan=None,
         preview_features=None,
         engine_capability=None,
         direct_io=None,
@@ -63,6 +64,8 @@ class CreateConfig(BaseLoader):
         error_on_timing_cache_miss=None,
         bf16=None,
         disable_compilation_cache=None,
+        progress_monitor=None,
+        weight_streaming=None,
     ):
         """
         Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
@@ -135,6 +138,9 @@ class CreateConfig(BaseLoader):
             refittable (bool):
                     Enables the engine to be refitted with new weights after it is built.
                     Defaults to False.
+            strip_plan (bool):
+                    Strips the refittable weights from the engine plan file.
+                    Defaults to False.
             preview_features (List[trt.PreviewFeature]):
                     The preview features to enable.
                     Use an empty list to disable all preview features.
@@ -184,6 +190,10 @@ class CreateConfig(BaseLoader):
             disable_compilation_cache (bool):
                     Whether to disable caching JIT-compiled code.
                     Defaults to False.
+            progress_monitor (trt.IProgressMonitor):
+                    A progress monitor. Allow users to view engine building progress through CLI.
+            weight_streaming (bool):
+                    TWhether to enable weight streaming for the TensorRT Engine.
         """
         self.tf32 = util.default(tf32, False)
         self.fp16 = util.default(fp16, False)
@@ -195,6 +205,7 @@ class CreateConfig(BaseLoader):
         self.precision_constraints = precision_constraints
         self.restricted = util.default(restricted, False)
         self.refittable = util.default(refittable, False)
+        self.strip_plan = util.default(strip_plan, False)
         self.timing_cache_path = load_timing_cache
         self.algorithm_selector = algorithm_selector
         self.sparse_weights = util.default(sparse_weights, False)
@@ -212,8 +223,12 @@ class CreateConfig(BaseLoader):
         self.version_compatible = version_compatible
         self.exclude_lean_runtime = exclude_lean_runtime
         self.quantization_flags = quantization_flags
-        self.error_on_timing_cache_miss = util.default(error_on_timing_cache_miss, False)
+        self.error_on_timing_cache_miss = util.default(
+            error_on_timing_cache_miss, False
+        )
         self.disable_compilation_cache = util.default(disable_compilation_cache, False)
+        self.progress_monitor = progress_monitor
+        self.weight_streaming = weight_streaming
 
         if self.calibrator is not None and not self.int8:
             G_LOGGER.warning(
@@ -243,12 +258,17 @@ class CreateConfig(BaseLoader):
                 trt_util.fail_unavailable(f"{name} in CreateConfig")
 
         def try_set_flag(flag_name):
-            return try_run(lambda: config.set_flag(getattr(trt.BuilderFlag, flag_name)), flag_name.lower())
+            return try_run(
+                lambda: config.set_flag(getattr(trt.BuilderFlag, flag_name)),
+                flag_name.lower(),
+            )
 
         if self.preview_features is not None:
             for preview_feature in trt.PreviewFeature.__members__.values():
                 try_run(
-                    lambda: config.set_preview_feature(preview_feature, preview_feature in self.preview_features),
+                    lambda: config.set_preview_feature(
+                        preview_feature, preview_feature in self.preview_features
+                    ),
                     "preview_features",
                 )
 
@@ -286,6 +306,9 @@ class CreateConfig(BaseLoader):
         if self.refittable:
             try_set_flag("REFIT")
 
+        if self.strip_plan:
+            try_set_flag("STRIP_PLAN")
+
         if self.direct_io:
             try_set_flag("DIRECT_IO")
 
@@ -306,17 +329,27 @@ class CreateConfig(BaseLoader):
 
         if self.int8:
             try_set_flag("INT8")
-            if not network.has_explicit_precision:
+            # No Q/DQ layers means that we will need to calibrate.
+            if not any(
+                layer.type in [trt.LayerType.QUANTIZE, trt.LayerType.DEQUANTIZE]
+                for layer in network
+            ):
                 if self.calibrator is not None:
                     config.int8_calibrator = self.calibrator
                     try:
-                        config.set_calibration_profile(calib_profile.to_trt(builder, network))
+                        config.set_calibration_profile(
+                            calib_profile.to_trt(builder, network)
+                        )
                         G_LOGGER.info(f"Using calibration profile: {calib_profile}")
                     except AttributeError:
-                        G_LOGGER.extra_verbose("Cannot set calibration profile on TensorRT 7.0 and older.")
+                        G_LOGGER.extra_verbose(
+                            "Cannot set calibration profile on TensorRT 7.0 and older."
+                        )
 
                     trt_util.try_setup_polygraphy_calibrator(
-                        config, network, calib_profile=calib_profile.to_trt(builder, network)
+                        config,
+                        network,
+                        calib_profile=calib_profile.to_trt(builder, network),
                     )
                 else:
                     G_LOGGER.warning(
@@ -342,26 +375,34 @@ class CreateConfig(BaseLoader):
             try_run(set_profiling_verbosity, name="profiling_verbosity")
         else:
             try:
-                config.profiling_verbosity = trt.ProfilingVerbosity.VERBOSE
+                config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
             except AttributeError:
                 pass
 
         if self.memory_pool_limits is not None:
             for pool_type, pool_size in self.memory_pool_limits.items():
-                try_run(lambda: config.set_memory_pool_limit(pool_type, pool_size), name="memory_pool_limits")
+                try_run(
+                    lambda: config.set_memory_pool_limit(pool_type, pool_size),
+                    name="memory_pool_limits",
+                )
 
         if self.tactic_sources is not None:
             tactic_sources_flag = 0
             for source in self.tactic_sources:
                 tactic_sources_flag |= 1 << int(source)
-            try_run(lambda: config.set_tactic_sources(tactic_sources_flag), name="tactic_sources")
+            try_run(
+                lambda: config.set_tactic_sources(tactic_sources_flag),
+                name="tactic_sources",
+            )
 
         try:
             cache = None
             if self.timing_cache_path:
                 try:
                     with util.LockFile(self.timing_cache_path):
-                        timing_cache_data = util.load_file(self.timing_cache_path, description="tactic timing cache")
+                        timing_cache_data = util.load_file(
+                            self.timing_cache_path, description="tactic timing cache"
+                        )
                         cache = config.create_timing_cache(timing_cache_data)
                 except FileNotFoundError:
                     G_LOGGER.warning(
@@ -387,7 +428,9 @@ class CreateConfig(BaseLoader):
             try_run(set_algo_selector, name="algorithm_selector")
 
             if not self.timing_cache_path:
-                G_LOGGER.warning("Disabling tactic timing cache because algorithm selector is enabled.")
+                G_LOGGER.warning(
+                    "Disabling tactic timing cache because algorithm selector is enabled."
+                )
                 try_set_flag("DISABLE_TIMING_CACHE")
 
         if self.engine_capability is not None:
@@ -416,7 +459,9 @@ class CreateConfig(BaseLoader):
 
         if self.exclude_lean_runtime:
             if not self.version_compatible:
-                G_LOGGER.critical(f"Cannot set EXCLUDE_LEAN_RUNTIME if version compatibility is not enabled. ")
+                G_LOGGER.critical(
+                    f"Cannot set EXCLUDE_LEAN_RUNTIME if version compatibility is not enabled. "
+                )
             try_set_flag("EXCLUDE_LEAN_RUNTIME")
 
         if self.hardware_compatibility_level is not None or self.version_compatible:
@@ -447,9 +492,19 @@ class CreateConfig(BaseLoader):
 
         if self.error_on_timing_cache_miss:
             try_set_flag("ERROR_ON_TIMING_CACHE_MISS")
-        
+
         if self.disable_compilation_cache:
             try_set_flag("DISABLE_COMPILATION_CACHE")
+
+        if self.progress_monitor is not None:
+
+            def set_progress_monitor():
+                config.progress_monitor = self.progress_monitor
+
+            try_run(set_progress_monitor, name="progress_monitor")
+
+        if self.weight_streaming:
+            try_set_flag("WEIGHT_STREAMING")
 
         return config
 
@@ -475,7 +530,9 @@ class PostprocessConfig(BaseLoader):
 
         # Sanity-check that the function passed in is callable
         if not callable(func):
-            G_LOGGER.critical(f"Object {func} (of type {type(func)}) is not a callable.")
+            G_LOGGER.critical(
+                f"Object {func} (of type {type(func)}) is not a callable."
+            )
 
         self._func = func
 

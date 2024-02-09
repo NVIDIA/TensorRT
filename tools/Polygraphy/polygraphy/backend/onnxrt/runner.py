@@ -46,7 +46,11 @@ class OnnxrtRunner(BaseRunner):
     def get_input_metadata_impl(self):
         meta = TensorMetadata()
         for node in self.sess.get_inputs():
-            meta.add(node.name, dtype=DataType.from_dtype(node.type, "onnxruntime"), shape=node.shape)
+            meta.add(
+                node.name,
+                dtype=DataType.from_dtype(node.type, "onnxruntime"),
+                shape=node.shape,
+            )
         return meta
 
     @util.check_called_by("infer")

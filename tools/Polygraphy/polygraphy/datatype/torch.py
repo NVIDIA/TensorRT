@@ -47,7 +47,7 @@ def from_torch(torch_type):
     Returns:
         DataType: The Polygraphy data type.
     """
-    if not mod.has_mod("torch"):
+    if not torch.is_installed() or not torch.is_importable():
         return None
 
     return _get_mapping().get(torch_type)

@@ -28,7 +28,6 @@ from polygraphy.backend.trt import (
     engine_from_network,
     network_from_onnx_bytes,
     save_engine,
-    util as trt_util,
 )
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
@@ -70,7 +69,9 @@ def check_lines_match(actual, expected, should_check_line=lambda x: True):
     actual = [
         line
         for line in actual.splitlines()
-        if "Loading" not in line and not line.startswith("[V]") and not line.startswith("[W]")
+        if "Loading" not in line
+        and not line.startswith("[V]")
+        and not line.startswith("[W]")
     ]
     expected = expected.splitlines()
     assert len(actual) == len(expected)
@@ -461,7 +462,9 @@ ENGINE_CASES = [
 
 
 class TestInspectModel:
-    @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: f"{case[0]}-{case[1]}")
+    @pytest.mark.parametrize(
+        "case", ONNX_CASES, ids=lambda case: f"{case[0]}-{case[1]}"
+    )
     def test_onnx(self, case, poly_inspect):
         model, show, expected, additional_opts = case
         status = poly_inspect(
@@ -519,7 +522,9 @@ class TestInspectModel:
     @pytest.mark.flaky(max_runs=3)
     def test_trt_engine(self, case, dynamic_identity_engine, poly_inspect):
         show, expected = case
-        status = poly_inspect(["model", dynamic_identity_engine] + (["--show"] + show if show else []))
+        status = poly_inspect(
+            ["model", dynamic_identity_engine] + (["--show"] + show if show else [])
+        )
 
         expected = dedent(expected).strip()
         actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
@@ -592,7 +597,9 @@ class TestInspectData:
             lines = [
                 line.strip()
                 for line in status.stdout.splitlines()
-                if line.strip() and line.startswith(constants.TAB * 2) and line.strip() != "..."
+                if line.strip()
+                and line.startswith(constants.TAB * 2)
+                and line.strip() != "..."
             ]
             for line in lines:
                 items = [e for e in line.strip("[]").split() if "..." not in e]
@@ -608,16 +615,16 @@ TACTIC_REPLAY_CASES = [
         "pow_scalar",
         r"""
         [I] Layer: (Unnamed Layer* 0) [Shuffle]
-                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1),)
+                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
             Layer: node_of_z
-                Algorithm: (Implementation: 2147483651, Tactic: 1) | Inputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1), TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1),)
+                Algorithm: (Implementation: 2147483651, Tactic: 1) | Inputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1), TensorInfo(DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
         """
         if mod.version(trt.__version__) < mod.version("8.7")
         else r"""
         [I] Layer: ONNXTRT_Broadcast
-                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1),)
+                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
             Layer: PWN(node_of_z)
-                Algorithm: (Implementation: 2147483688, Tactic: 1) | Inputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1), TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(TensorFormat.LINEAR, DataType.FLOAT, (1,), -1, 1),)
+                Algorithm: (Implementation: 2147483688, Tactic: 1) | Inputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1), TensorInfo(DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
         """,
     ],
 ]
@@ -667,6 +674,15 @@ TEST_CAPABILITY_CASES = [
             -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
             FAKE!    |       2 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[0, 1], [2, 3]]
             FAKER!   |       1 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[4, 5]]
+        """
+        if mod.version(trt.__version__) < mod.version("10.0")
+        else """
+        [I] ===== Summary =====
+            Operator | Count   | Reason                                                                                                                                                                           | Nodes
+            --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            FAKE!    |       1 | In node 0 with name: Fake1 and operator: FAKE! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"  | [[0, 1]]
+            FAKE!    |       1 | In node 0 with name: Fake2 and operator: FAKE! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"  | [[2, 3]]
+            FAKER!   |       1 | In node 0 with name: Fake3 and operator: FAKER! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[4, 5]]
         """,
     ),
     (
@@ -688,6 +704,7 @@ class TestCapability:
             status = poly_inspect(
                 [
                     "capability",
+                    "--with-partitioning",
                     ONNX_MODELS[model].path,
                     "-o",
                     os.path.join(outdir, "subgraphs"),
@@ -699,7 +716,7 @@ class TestCapability:
                     glob.glob(os.path.join(outdir, "subgraphs", "**")),
                 )
             ) == sorted(expected_files)
-            assert dedent(expected_summary).strip() in status.stdout
+            assert dedent(expected_summary).strip() in dedent(status.stdout).strip()
 
 
 class TestDiffTactics:
@@ -737,7 +754,9 @@ class TestDiffTactics:
 
 
 class TestInspectSparsity:
-    @pytest.mark.parametrize("model_name", ["matmul", "matmul.bf16", "matmul.bf16.i32data", "conv"])
+    @pytest.mark.parametrize(
+        "model_name", ["matmul", "matmul.bf16", "matmul.bf16.i32data", "conv"]
+    )
     def test_prune_check(self, poly_inspect, model_name):
         with tempfile.TemporaryDirectory() as outdir:
             ipath = ONNX_MODELS[model_name].path

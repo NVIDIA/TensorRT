@@ -44,7 +44,9 @@ def is_torch(obj):
     Returns:
         bool: Whether the object is a PyTorch tensor.
     """
-    return mod.has_mod("torch") and isinstance(obj, torch.Tensor)
+    return (
+        torch.is_installed() and torch.is_importable() and isinstance(obj, torch.Tensor)
+    )
 
 
 @mod.export()
@@ -59,7 +61,11 @@ def is_numpy(obj):
     Returns:
         bool: Whether the object is a NumPy array.
     """
-    return mod.has_mod("numpy") and (isinstance(obj, np.ndarray) or isinstance(obj, np.generic))
+    return (
+        np.is_installed()
+        and np.is_importable()
+        and (isinstance(obj, np.ndarray) or isinstance(obj, np.generic))
+    )
 
 
 @mod.export()
@@ -144,21 +150,26 @@ def dispatch(num_arrays=1):
     def dispatch_impl(func):
         def _get_key(obj):
             key = None
-            if is_torch(obj):
-                key = "torch"
+
+            if is_device_view(obj):
+                key = "device_view"
             elif is_numpy(obj):
                 key = "numpy"
-            elif is_device_view(obj):
-                key = "device_view"
+            elif is_torch(obj):
+                key = "torch"
             elif isinstance(obj, numbers.Number):
                 key = "number"
 
             if not key:
-                G_LOGGER.critical(f"Function: {func.__name__} is unsupported for objects of type: {type(obj).__name__}")
+                G_LOGGER.critical(
+                    f"Function: {func.__name__} is unsupported for objects of type: {type(obj).__name__}"
+                )
             return key
 
         if num_arrays < 0:
-            G_LOGGER.critical(f"Function: {func.__name__} is unsupported with {num_arrays} < 0")
+            G_LOGGER.critical(
+                f"Function: {func.__name__} is unsupported with {num_arrays} < 0"
+            )
 
         @functools.wraps(func)
         def wrapped(*args, **kwargs):
@@ -188,7 +199,11 @@ def dispatch(num_arrays=1):
                         f"Function: {func.__name__} is unsupported for objects of type: {type(obj).__name__}"
                     )
 
-            converted_args = [obj0] + list(map(convert_array, args[1:num_arrays])) + list(args[num_arrays:])
+            converted_args = (
+                [obj0]
+                + list(map(convert_array, args[1:num_arrays]))
+                + list(args[num_arrays:])
+            )
 
             return mapping[key](*converted_args, **kwargs)
 
@@ -331,7 +346,11 @@ def is_on_cpu():
     Raises:
         PolygraphyException: if the input is of an unrecognized type.
     """
-    return {"torch": lambda obj: obj.device.type == "cpu", "numpy": lambda _: True, "device_view": lambda _: False}
+    return {
+        "torch": lambda obj: obj.device.type == "cpu",
+        "numpy": lambda _: True,
+        "device_view": lambda _: False,
+    }
 
 
 @mod.export()
@@ -349,7 +368,11 @@ def is_on_gpu():
     Raises:
         PolygraphyException: if the input is of an unrecognized type.
     """
-    return {"torch": lambda obj: obj.device.type == "cuda", "numpy": lambda _: False, "device_view": lambda _: True}
+    return {
+        "torch": lambda obj: obj.device.type == "cuda",
+        "numpy": lambda _: False,
+        "device_view": lambda _: True,
+    }
 
 
 @mod.export()
@@ -413,7 +436,11 @@ def view(obj, dtype, shape):
     if is_device_view(obj):
         return obj.view(shape=shape, dtype=dtype)
 
-    dtype = DataType.to_dtype(dtype, "numpy") if is_numpy(obj) else DataType.to_dtype(dtype, "torch")
+    dtype = (
+        DataType.to_dtype(dtype, "numpy")
+        if is_numpy(obj)
+        else DataType.to_dtype(dtype, "torch")
+    )
     return obj.reshape(-1).view(dtype).reshape(shape)
 
 
@@ -465,7 +492,11 @@ def make_contiguous():
             return obj
         return np.ascontiguousarray(obj)
 
-    return {"torch": lambda obj: obj.contiguous(), "numpy": impl_numpy, "device_view": lambda obj: obj}
+    return {
+        "torch": lambda obj: obj.contiguous(),
+        "numpy": impl_numpy,
+        "device_view": lambda obj: obj,
+    }
 
 
 @mod.export()
@@ -497,7 +528,9 @@ def resize_or_reallocate():
     return {
         "numpy": numpy_impl,
         "torch": lambda obj, shape: obj.resize_(shape) if shape != obj.shape else obj,
-        "device_view": lambda obj, shape: obj.resize(shape) if shape != obj.shape else obj,
+        "device_view": lambda obj, shape: obj.resize(shape)
+        if shape != obj.shape
+        else obj,
     }
 
 
@@ -669,8 +702,12 @@ def allclose():
     DEFAULT_ATOL = 1e-8
 
     return {
-        "torch": lambda lhs, rhs, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL: torch.allclose(lhs, rhs, rtol=rtol, atol=atol),
-        "numpy": lambda lhs, rhs, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL: np.allclose(lhs, rhs, rtol=rtol, atol=atol),
+        "torch": lambda lhs, rhs, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL: torch.allclose(
+            lhs, rhs, rtol=rtol, atol=atol
+        ),
+        "numpy": lambda lhs, rhs, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL: np.allclose(
+            lhs, rhs, rtol=rtol, atol=atol
+        ),
     }
 
 
@@ -1019,10 +1056,16 @@ def topk():
         if obj.dtype == torch.float16:
             if torch.cuda.is_available():
                 original_device = obj.device
-                ret = tuple(torch.topk(obj.to('cuda'), builtins.min(k, axis_len), dim=axis))
+                ret = tuple(
+                    torch.topk(obj.to("cuda"), builtins.min(k, axis_len), dim=axis)
+                )
                 return (ret[0].to(original_device), ret[1].to(original_device))
             else:
-                ret = tuple(torch.topk(obj.type(torch.float32), builtins.min(k, axis_len), dim=axis))
+                ret = tuple(
+                    torch.topk(
+                        obj.type(torch.float32), builtins.min(k, axis_len), dim=axis
+                    )
+                )
                 return (ret[0].type(torch.float16), ret[1].type(torch.float16))
         return tuple(torch.topk(obj, builtins.min(k, axis_len), dim=axis))
 

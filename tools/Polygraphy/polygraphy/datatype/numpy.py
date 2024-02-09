@@ -51,7 +51,7 @@ def from_numpy(numpy_type):
     Returns:
         DataType: The Polygraphy data type.
     """
-    if not mod.has_mod("numpy"):
+    if not np.is_installed() or not np.is_importable():
         return None
 
     try:
