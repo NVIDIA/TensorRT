@@ -90,7 +90,9 @@ def identity_network():
 
 @pytest.fixture(scope="session")
 def identity_identity_network():
-    builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity_identity"].loader)
+    builder, network, parser = network_from_onnx_bytes(
+        ONNX_MODELS["identity_identity"].loader
+    )
     yield builder, network, parser
 
 
@@ -123,7 +125,11 @@ class TestLoadPlugins:
             return [pc.name for pc in trt.get_plugin_registry().plugin_creator_list]
 
         loader = LoadPlugins(
-            plugins=["nvinfer_plugin.dll" if sys.platform.startswith("win") else "libnvinfer_plugin.so"]
+            plugins=[
+                "nvinfer_plugin.dll"
+                if sys.platform.startswith("win")
+                else "libnvinfer_plugin.so"
+            ]
         )
         loader()
         assert get_plugin_names()
@@ -152,7 +158,9 @@ class TestSerializedEngineLoader:
                 assert isinstance(engine, trt.ICudaEngine)
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6")
+@pytest.mark.skipif(
+    mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6"
+)
 class TestLoadRuntime:
     def test_load_lean_runtime(self, nvinfer_lean_path):
         loader = LoadRuntime(nvinfer_lean_path)
@@ -160,7 +168,9 @@ class TestLoadRuntime:
             assert isinstance(runtime, trt.Runtime)
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6")
+@pytest.mark.skipif(
+    mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6"
+)
 class TestSerializedVCEngineLoader:
     def test_serialized_vc_engine_loader_from_lambda(self, identity_vc_engine_bytes):
         with util.NamedTemporaryFile() as outpath:
@@ -179,9 +189,10 @@ class TestSerializedVCEngineLoader:
 
 class TestNetworkFromOnnxBytes:
     def test_loader(self):
-        builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
+        builder, network, parser = network_from_onnx_bytes(
+            ONNX_MODELS["identity"].loader
+        )
         assert not network.has_implicit_batch_dimension
-        assert not network.has_explicit_precision
 
     @pytest.mark.parametrize(
         "kwargs, flag",
@@ -190,7 +201,9 @@ class TestNetworkFromOnnxBytes:
         else [],
     )
     def test_network_flags(self, kwargs, flag):
-        builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader, **kwargs)
+        builder, network, parser = network_from_onnx_bytes(
+            ONNX_MODELS["identity"].loader, **kwargs
+        )
         assert network.get_flag(flag)
 
 
@@ -198,7 +211,6 @@ class TestNetworkFromOnnxPath:
     def test_loader(self):
         builder, network, parser = network_from_onnx_path(ONNX_MODELS["identity"].path)
         assert not network.has_implicit_batch_dimension
-        assert not network.has_explicit_precision
 
     @pytest.mark.parametrize(
         "kwargs, flag",
@@ -207,13 +219,17 @@ class TestNetworkFromOnnxPath:
         else [],
     )
     def test_network_flags(self, kwargs, flag):
-        builder, network, parser = network_from_onnx_path(ONNX_MODELS["identity"].path, **kwargs)
+        builder, network, parser = network_from_onnx_path(
+            ONNX_MODELS["identity"].path, **kwargs
+        )
         assert network.get_flag(flag)
 
 
 class TestModifyNetwork:
     def test_mark_layerwise(self, modifiable_network):
-        load_network = ModifyNetworkOutputs(modifiable_network, outputs=constants.MARK_ALL)
+        load_network = ModifyNetworkOutputs(
+            modifiable_network, outputs=constants.MARK_ALL
+        )
         builder, network, parser = load_network()
 
         for layer in network:
@@ -221,14 +237,18 @@ class TestModifyNetwork:
                 assert layer.get_output(index).is_network_output
 
     def test_mark_custom_outputs(self, modifiable_network):
-        builder, network, parser = modify_network_outputs(modifiable_network, outputs=["identity_out_0"])
+        builder, network, parser = modify_network_outputs(
+            modifiable_network, outputs=["identity_out_0"]
+        )
 
         assert network.num_outputs == 1
         assert network.get_output(0).name == "identity_out_0"
 
     def test_exclude_outputs_with_mark_layerwise(self, modifiable_network):
         builder, network, parser = modify_network_outputs(
-            modifiable_network, outputs=constants.MARK_ALL, exclude_outputs=["identity_out_2"]
+            modifiable_network,
+            outputs=constants.MARK_ALL,
+            exclude_outputs=["identity_out_2"],
         )
 
         assert network.num_outputs == 1
@@ -254,7 +274,9 @@ class TestModifyNetwork:
     def test_mark_outputs_layer_with_optional_inputs(self):
         builder, network = create_network()
         inp = network.add_input("input", shape=(1, 3, 224, 224), dtype=trt.float32)
-        slice_layer = network.add_slice(inp, (0, 0, 0, 0), (1, 3, 224, 224), (1, 1, 1, 1))
+        slice_layer = network.add_slice(
+            inp, (0, 0, 0, 0), (1, 3, 224, 224), (1, 1, 1, 1)
+        )
 
         # Set a tensor for `stride` to increment `num_inputs` so we have some inputs
         # which are `None` in between.
@@ -323,7 +345,10 @@ class TestSetLayerPrecisions:
     def test_basic(self, modifiable_network):
         builder, network, parser = set_layer_precisions(
             modifiable_network,
-            layer_precisions={"onnx_graphsurgeon_node_1": trt.float16, "onnx_graphsurgeon_node_3": trt.int8},
+            layer_precisions={
+                "onnx_graphsurgeon_node_1": trt.float16,
+                "onnx_graphsurgeon_node_3": trt.int8,
+            },
         )
 
         assert network[0].precision == trt.float16
@@ -385,12 +410,19 @@ class TestEngineFromNetwork:
 
     def test_custom_runtime(self, identity_builder_network):
         builder, network = identity_builder_network
-        loader = EngineFromNetwork((builder, network), runtime=trt.Runtime(get_trt_logger()))
+        loader = EngineFromNetwork(
+            (builder, network), runtime=trt.Runtime(get_trt_logger())
+        )
         with loader() as engine:
             assert isinstance(engine, trt.ICudaEngine)
 
-    @pytest.mark.parametrize("use_config_loader, set_calib_profile", [(True, None), (False, False), (False, True)])
-    def test_can_build_with_calibrator(self, identity_builder_network, use_config_loader, set_calib_profile):
+    @pytest.mark.parametrize(
+        "use_config_loader, set_calib_profile",
+        [(True, None), (False, False), (False, True)],
+    )
+    def test_can_build_with_calibrator(
+        self, identity_builder_network, use_config_loader, set_calib_profile
+    ):
         builder, network = identity_builder_network
         calibrator = Calibrator(DataLoader())
 
@@ -412,7 +444,9 @@ class TestEngineFromNetwork:
             config.int8_calibrator = calibrator
             # Since this network has static shapes, we shouldn't need to set a calibration profile.
             if set_calib_profile:
-                calib_profile = Profile().fill_defaults(network).to_trt(builder, network)
+                calib_profile = (
+                    Profile().fill_defaults(network).to_trt(builder, network)
+                )
                 config.add_optimization_profile(calib_profile)
                 config.set_calibration_profile(calib_profile)
 
@@ -422,7 +456,9 @@ class TestEngineFromNetwork:
         check_calibrator()
 
         # Calibrator buffers should be freed after the build
-        assert all([buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()])
+        assert all(
+            [buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()]
+        )
 
     @pytest.mark.parametrize("path_mode", [True, False], ids=["path", "file-like"])
     def test_timing_cache_generate_and_append(self, path_mode):
@@ -459,7 +495,10 @@ class TestEngineFromNetwork:
             total_cache_size = get_file_size(total_cache.name)
 
             # The total cache should be larger than either of the individual caches.
-            assert total_cache_size >= const_foldable_cache_size and total_cache_size >= identity_cache_size
+            assert (
+                total_cache_size >= const_foldable_cache_size
+                and total_cache_size >= identity_cache_size
+            )
             # The total cache should also be smaller than or equal to the sum of the individual caches since
             # header information should not be duplicated.
             assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)
@@ -475,14 +514,27 @@ class TestBytesFromEngine:
 class TestSaveEngine:
     def test_save_engine(self, identity_network):
         with util.NamedTemporaryFile() as outpath:
-            engine_loader = SaveEngine(EngineFromNetwork(identity_network), path=outpath.name)
+            engine_loader = SaveEngine(
+                EngineFromNetwork(identity_network), path=outpath.name
+            )
             with engine_loader():
                 assert is_file_non_empty(outpath.name)
 
 
 class TestOnnxLikeFromNetwork:
     @pytest.mark.parametrize(
-        "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]
+        "model_name",
+        [
+            "identity",
+            "empty_tensor_expand",
+            "const_foldable",
+            "and",
+            "scan",
+            "dim_param",
+            "tensor_attr",
+        ],
     )
     def test_onnx_like_from_network(self, model_name):
-        assert onnx_like_from_network(NetworkFromOnnxBytes(ONNX_MODELS[model_name].loader))
+        assert onnx_like_from_network(
+            NetworkFromOnnxBytes(ONNX_MODELS[model_name].loader)
+        )

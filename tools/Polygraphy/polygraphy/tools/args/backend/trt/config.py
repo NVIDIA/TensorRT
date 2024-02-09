@@ -320,6 +320,12 @@ class TrtConfigArgs(BaseArgs):
             default=None,
         )
         self.group.add_argument(
+            "--strip-plan",
+            help="Builds the engine with the refittable weights stripped.",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
             "--use-dla",
             help="[EXPERIMENTAL] Use DLA as the default device type",
             action="store_true",
@@ -394,6 +400,22 @@ class TrtConfigArgs(BaseArgs):
             default=None,
         )
 
+        self.group.add_argument(
+            "--profiling-verbosity",
+            help="The verbosity of NVTX annotations in the generated engine."
+            "Values come from the names of values in the `trt.ProfilingVerbosity` enum and are case-insensitive. "
+            "For example, `--profiling-verbosity detailed`. "
+            "Defaults to 'verbose'.",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--weight-streaming",
+            help="Build a weight streamable engine. Must be set with --strongly-typed. The weight streaming amount can be set with --weight-streaming-budget.",
+            action="store_true",
+            default=None
+        )
+
         if self._allow_engine_capability:
             self.group.add_argument(
                 "--engine-capability",
@@ -443,14 +465,17 @@ class TrtConfigArgs(BaseArgs):
             direct_io (bool): Whether to disallow reformatting layers at network input/output tensors which have user-specified formats.
             preview_features (List[str]): Names of preview features to enable.
             refittable (bool): Whether the engine should be refittable.
+            strip_plan (bool): Whether the engine should be built with the refittable weights stripped.
             builder_optimization_level (int): The builder optimization level.
             hardware_compatibility_level (str): A string representing a hardware compatibility level enum value.
+            profiling_verbosity (str): A string representing a profiling verbosity level enum value.
             max_aux_streams (int): The maximum number of auxiliary streams that TensorRT is allowed to use.
             version_compatible (bool): Whether or not to build a TensorRT forward-compatible.
             exclude_lean_runtime (bool): Whether to exclude the lean runtime from a version compatible plan.
             quantization_flags (List[str]): Names of quantization flags to enable.
             error_on_timing_cache_miss (bool): Whether to emit error when a tactic being timed is not present in the timing cache.
             disable_compilation_cache (bool): Whether to disable caching JIT-compiled code.
+            weight_streaming (bool): Whether to enable weight streaming for the TensorRT Engine.
         """
 
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
@@ -477,6 +502,7 @@ class TrtConfigArgs(BaseArgs):
 
         self.restricted = args_util.get(args, "restricted")
         self.refittable = args_util.get(args, "refittable")
+        self.strip_plan = args_util.get(args, "strip_plan")
 
         self.calibration_cache = args_util.get(args, "calibration_cache")
         calib_base = args_util.get(args, "calibration_base_class")
@@ -549,6 +575,13 @@ class TrtConfigArgs(BaseArgs):
                 "HardwareCompatibilityLevel", hardware_compatibility_level
             )
 
+        self.profiling_verbosity = None
+        profiling_verbosity = args_util.get(args, "profiling_verbosity")
+        if profiling_verbosity is not None:
+            self.profiling_verbosity = make_trt_enum_val(
+                "ProfilingVerbosity", profiling_verbosity
+            )
+
         self.max_aux_streams = args_util.get(args, "max_aux_streams")
         self.version_compatible = args_util.get(args, "version_compatible")
         self.exclude_lean_runtime = args_util.get(args, "exclude_lean_runtime")
@@ -564,6 +597,8 @@ class TrtConfigArgs(BaseArgs):
         self.error_on_timing_cache_miss = args_util.get(args, "error_on_timing_cache_miss")
 
         self.disable_compilation_cache = args_util.get(args, "disable_compilation_cache")
+
+        self.weight_streaming = args_util.get(args, "weight_streaming")
 
     def add_to_script_impl(self, script):
         profiles = []
@@ -632,10 +667,9 @@ class TrtConfigArgs(BaseArgs):
                 self.memory_pool_limits,
                 self.preview_features,
                 self.engine_capability,
+                self.profiling_verbosity,
                 self.hardware_compatibility_level,
                 self.quantization_flags,
-                self.error_on_timing_cache_miss,
-                self.disable_compilation_cache,
             ]
         ):
             script.add_import(imports="tensorrt", imp_as="trt")
@@ -665,17 +699,20 @@ class TrtConfigArgs(BaseArgs):
                 allow_gpu_fallback=self.allow_gpu_fallback,
                 memory_pool_limits=self.memory_pool_limits,
                 refittable=self.refittable,
+                strip_plan=self.strip_plan,
                 preview_features=self.preview_features,
                 engine_capability=self.engine_capability,
                 direct_io=self.direct_io,
                 builder_optimization_level=self.builder_optimization_level,
                 hardware_compatibility_level=self.hardware_compatibility_level,
+                profiling_verbosity=self.profiling_verbosity,
                 max_aux_streams=self.max_aux_streams,
                 version_compatible=self.version_compatible,
                 exclude_lean_runtime=self.exclude_lean_runtime,
                 quantization_flags=self.quantization_flags,
                 error_on_timing_cache_miss=self.error_on_timing_cache_miss,
                 disable_compilation_cache=self.disable_compilation_cache,
+                weight_streaming=self.weight_streaming,
             )
             if config_loader_str is not None:
                 script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")

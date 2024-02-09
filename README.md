@@ -26,7 +26,7 @@ You can skip the **Build** section to enjoy TensorRT with Python.
 To build the TensorRT-OSS components, you will first need the following software packages.
 
 **TensorRT GA build**
-* TensorRT v9.2.0.5
+* TensorRT v9.3.0.1
   * Available from direct download links listed below
 
 **System Packages**
@@ -73,16 +73,16 @@ To build the TensorRT-OSS components, you will first need the following software
     If using the TensorRT OSS build container, TensorRT libraries are preinstalled under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
 
     Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
-      - [TensorRT 9.2.0.5 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/9.2.0/tensorrt-9.2.0.5.linux.x86_64-gnu.cuda-11.8.tar.gz)
-      - [TensorRT 9.2.0.5 for CUDA 12.2, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/9.2.0/tensorrt-9.2.0.5.linux.x86_64-gnu.cuda-12.2.tar.gz)
+      - [TensorRT 9.3.0.1 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/9.3.0/tensorrt-9.3.0.1.linux.x86_64-gnu.cuda-11.8.tar.gz)
+      - [TensorRT 9.3.0.1 for CUDA 12.2, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/9.3.0/tensorrt-9.3.0.1.linux.x86_64-gnu.cuda-12.2.tar.gz)
 
 
     **Example: Ubuntu 20.04 on x86-64 with cuda-12.2**
 
     ```bash
     cd ~/Downloads
-    tar -xvzf tensorrt-9.2.0.5.linux.x86_64-gnu.cuda-12.2.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-9.2.0.5
+    tar -xvzf tensorrt-9.3.0.1.linux.x86_64-gnu.cuda-12.2.tar.gz
+    export TRT_LIBPATH=`pwd`/TensorRT-9.3.0.1
     ```
 
 ## Setting Up The Build Environment

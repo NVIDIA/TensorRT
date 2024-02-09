@@ -16,7 +16,11 @@
 #
 
 from polygraphy import mod, util
-from polygraphy.datatype.datatype import DataType, register_dtype_importer, register_dtype_exporter
+from polygraphy.datatype.datatype import (
+    DataType,
+    register_dtype_importer,
+    register_dtype_exporter,
+)
 
 trt = mod.lazy_import("tensorrt>=8.5")
 
@@ -32,6 +36,7 @@ def _get_mapping():
         util.try_getattr(trt, "bool"): DataType.BOOL,
         util.try_getattr(trt, "bfloat16"): DataType.BFLOAT16,
         util.try_getattr(trt, "fp8"): DataType.FLOAT8E4M3FN,
+        util.try_getattr(trt, "int4"): DataType.INT4,
     }
     if None in DATATYPE_FROM_TENSORRT:
         del DATATYPE_FROM_TENSORRT[None]
@@ -50,7 +55,7 @@ def from_tensorrt(tensorrt_type):
     Returns:
         DataType: The Polygraphy data type.
     """
-    if not mod.has_mod("tensorrt"):
+    if not trt.is_installed() or not trt.is_importable():
         return None
 
     return _get_mapping().get(tensorrt_type)

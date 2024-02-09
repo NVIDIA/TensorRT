@@ -92,15 +92,15 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
         Constructs a new TensorMetadata using information from the provided feed_dict.
 
         Args:
-            feed_dict (OrderedDict[str, numpy.ndarray]):
-                    A mapping of input tensor names to corresponding input NumPy arrays.
+            feed_dict (OrderedDict[str, Union[numpy.ndarray, torch.tensor]]):
+                    A mapping of input tensor names to corresponding input arrays.
 
         Returns:
             TensorMetadata
         """
         meta = TensorMetadata()
         for name, arr in feed_dict.items():
-            meta.add(name, arr.dtype, arr.shape)
+            meta.add(name, util.array.dtype(arr), util.array.shape(arr))
         return meta
 
     def add(self, name, dtype, shape, min_shape=None, max_shape=None, docstring=None):

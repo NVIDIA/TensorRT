@@ -37,7 +37,9 @@ trt = mod.lazy_import("tensorrt>=8.5")
 
 def check_is_instance(obj, cls, name):
     if not isinstance(obj, cls):
-        G_LOGGER.critical(f"'{name}' must be an instance of {cls.__name__}, but is: {obj}.")
+        G_LOGGER.critical(
+            f"'{name}' must be an instance of {cls.__name__}, but is: {obj}."
+        )
 
 
 @mod.export()
@@ -58,7 +60,6 @@ class TensorInfo:
             TensorInfo
         """
         return TensorInfo(
-            io_info.tensor_format,
             io_info.dtype,
             tuple(io_info.strides),
             # These fields were added in 8.6
@@ -66,16 +67,14 @@ class TensorInfo:
             util.try_getattr(io_info, "components_per_element"),
         )
 
-    def __init__(self, tensor_format, dtype, strides, vectorized_dim, components_per_element):
+    def __init__(self, dtype, strides, vectorized_dim, components_per_element):
         """
         Args:
-            tensor_format (trt.TensorFormat): The tensor format.
             dtype (trt.DataType): The data type.
             strides (Sequence[int]): The strides.
             vectorized_dim (int): The index of the vectorized dimensions.
             components_per_element (int): The number of components per element.
         """
-        check_is_instance(tensor_format, trt.TensorFormat, "tensor_format")
         check_is_instance(dtype, trt.DataType, "dtype")
         check_is_instance(strides, Sequence, "strides")
         if vectorized_dim is not None:
@@ -83,7 +82,6 @@ class TensorInfo:
         if components_per_element is not None:
             check_is_instance(components_per_element, int, "components_per_element")
 
-        self.tensor_format = tensor_format
         self.dtype = dtype
         self.strides = tuple(strides)
         self.vectorized_dim = vectorized_dim
@@ -93,16 +91,17 @@ class TensorInfo:
         return self.__dict__ == other.__dict__
 
     def __repr__(self):
-        return f"TensorInfo({str(self.tensor_format)}, {str(self.dtype)}, {self.strides}, {self.vectorized_dim}, {self.components_per_element})"
+        return f"TensorInfo({str(self.dtype)}, {self.strides}, {self.vectorized_dim}, {self.components_per_element})"
 
     def __hash__(self):
-        return hash((self.tensor_format, self.dtype, self.strides, self.vectorized_dim, self.components_per_element))
+        return hash(
+            (self.dtype, self.strides, self.vectorized_dim, self.components_per_element)
+        )
 
 
 @Encoder.register(TensorInfo)
 def encode(tensor_info):
     return {
-        "tensor_format": str(tensor_info.tensor_format),
         "dtype": str(tensor_info.dtype),
         "strides": tensor_info.strides,
         "vectorized_dim": tensor_info.vectorized_dim,
@@ -113,7 +112,6 @@ def encode(tensor_info):
 @Decoder.register(TensorInfo)
 def decode(dct):
     return TensorInfo(
-        util.getattr_nested(trt, dct["tensor_format"]),
         util.getattr_nested(trt, dct["dtype"]),
         dct["strides"],
         dct["vectorized_dim"],
@@ -146,7 +144,10 @@ class Algorithm:
 
         implementation = algorithm.algorithm_variant.implementation
         tactic = algorithm.algorithm_variant.tactic
-        inputs = tuple(TensorInfo.from_trt(algorithm.get_algorithm_io_info(i)) for i in range(context.num_inputs))
+        inputs = tuple(
+            TensorInfo.from_trt(algorithm.get_algorithm_io_info(i))
+            for i in range(context.num_inputs)
+        )
         outputs = tuple(
             TensorInfo.from_trt(algorithm.get_algorithm_io_info(i))
             for i in range(context.num_inputs, context.num_inputs + context.num_outputs)
@@ -233,7 +234,10 @@ class TacticReplayData(TypedDict(lambda: str, lambda: Algorithm)):
 
     def __str__(self):
         return "\n".join(
-            [f"Layer: {name}\n{constants.TAB}Algorithm: {algorithm}" for (name, algorithm) in self.items()]
+            [
+                f"Layer: {name}\n{constants.TAB}Algorithm: {algorithm}"
+                for (name, algorithm) in self.items()
+            ]
         )
 
 

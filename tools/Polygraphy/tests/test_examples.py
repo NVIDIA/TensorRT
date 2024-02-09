@@ -32,14 +32,18 @@ EXAMPLES_ROOT = os.path.join(ROOT_DIR, "examples")
 
 class Marker:
     def __init__(self, matches_start_func=None, matches_end_func=None):
-        self.matches_start = util.default(matches_start_func, lambda line: line == self.start)
+        self.matches_start = util.default(
+            matches_start_func, lambda line: line == self.start
+        )
         self.matches_end = util.default(matches_end_func, lambda line: line == self.end)
 
     @staticmethod
     def from_name(name):
         return Marker(
-            matches_start_func=lambda line: line == f"<!-- Polygraphy Test: {name} Start -->",
-            matches_end_func=lambda line: line == f"<!-- Polygraphy Test: {name} End -->",
+            matches_start_func=lambda line: line
+            == f"<!-- Polygraphy Test: {name} Start -->",
+            matches_end_func=lambda line: line
+            == f"<!-- Polygraphy Test: {name} End -->",
         )
 
 
@@ -95,7 +99,9 @@ class MarkerTracker:
         Whether we are currently on a line between the specified start and end marker.
         This will always return False for a line containing the marker itself.
         """
-        return marker in self.active_markers and not (self.entering(marker) or self.exiting(marker))
+        return marker in self.active_markers and not (
+            self.entering(marker) or self.exiting(marker)
+        )
 
     def entering(self, marker):
         return marker in self.entering_markers
@@ -125,8 +131,12 @@ def load_command_blocks_from_readme(readme) -> List[CommandBlock]:
     with open(readme, "r") as f:
         contents = f.read()
         # Check that the README has all the expected sections.
-        assert "## Introduction" in contents, "All example READMEs should have an 'Introduction' section!"
-        assert "## Running The Example" in contents, "All example READMEs should have a 'Running The Example' section!"
+        assert (
+            "## Introduction" in contents
+        ), "All example READMEs should have an 'Introduction' section!"
+        assert (
+            "## Running The Example" in contents
+        ), "All example READMEs should have a 'Running The Example' section!"
 
     cmd_blocks = []
     with MarkerTracker(readme) as tracker:
@@ -135,7 +145,9 @@ def load_command_blocks_from_readme(readme) -> List[CommandBlock]:
                 continue
 
             if tracker.entering(VALID_MARKERS["command"]):
-                current_block = CommandBlock(xfail=tracker.is_in(VALID_MARKERS["xfail"]))
+                current_block = CommandBlock(
+                    xfail=tracker.is_in(VALID_MARKERS["xfail"])
+                )
             elif tracker.exiting(VALID_MARKERS["command"]):
                 cmd_blocks.append(copy.copy(current_block))
             elif tracker.is_in(VALID_MARKERS["command"]):
@@ -152,7 +164,11 @@ class Example:
         self.original_files = []
 
     def _get_file_list(self):
-        return [path for path in glob.iglob(os.path.join(self.path, "*")) if "__pycache__" not in path]
+        return [
+            path
+            for path in glob.iglob(os.path.join(self.path, "*"))
+            if "__pycache__" not in path
+        ]
 
     def _remove_artifacts(self, must_exist=True):
         for artifact in self.artifacts:
@@ -176,14 +192,22 @@ class Example:
 
     def run(self, cmd_block, sandboxed_install_run):
         # Remove whitespace args and escaped newlines
-        command = [arg for arg in str(cmd_block).strip().split(" ") if arg.strip() and arg != "\\\n"]
+        command = [
+            arg
+            for arg in str(cmd_block).strip().split(" ")
+            if arg.strip() and arg != "\\\n"
+        ]
         status = sandboxed_install_run(command, cwd=self.path)
 
         details = f"Note: Command was: {' '.join(command)}.\n==== STDOUT ====\n{status.stdout}\n==== STDERR ====\n{status.stderr}"
         if cmd_block.xfail:
-            assert not status.success, f"Command that was expected to fail did not fail. {details}"
+            assert (
+                not status.success
+            ), f"Command that was expected to fail did not fail. {details}"
         else:
-            assert status.success, f"Command that was expected to succeed did not succeed. {details}"
+            assert (
+                status.success
+            ), f"Command that was expected to succeed did not succeed. {details}"
         return status
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -201,13 +225,21 @@ class Example:
 
 API_EXAMPLES = [
     Example(["api", "00_inference_with_tensorrt"], artifact_names=["identity.engine"]),
-    Example(["api", "01_comparing_frameworks"], artifact_names=["inference_results.json"]),
+    Example(
+        ["api", "01_comparing_frameworks"], artifact_names=["inference_results.json"]
+    ),
     Example(["api", "02_validating_on_a_dataset"]),
     Example(["api", "03_interoperating_with_tensorrt"]),
-    Example(["api", "04_int8_calibration_in_tensorrt"], artifact_names=["identity-calib.cache"]),
+    Example(
+        ["api", "04_int8_calibration_in_tensorrt"],
+        artifact_names=["identity-calib.cache"],
+    ),
     Example(["api", "05_using_tensorrt_network_api"]),
     Example(["api", "06_immediate_eval_api"], artifact_names=["identity.engine"]),
-    Example(["api", "07_tensorrt_and_dynamic_shapes"], artifact_names=["dynamic_identity.engine"]),
+    Example(
+        ["api", "07_tensorrt_and_dynamic_shapes"],
+        artifact_names=["dynamic_identity.engine"],
+    ),
     Example(
         ["api", "08_working_with_run_results_and_saved_inputs_manually"],
         artifact_names=["inputs.json", "outputs.json"],
@@ -220,7 +252,8 @@ API_EXAMPLES = [
 @pytest.mark.script_launch_mode("subprocess")
 def test_api_examples(example, sandboxed_install_run):
     if "07_tensorrt_and_dynamic_shapes" in example.path and (
-        mod.version(trt.__version__) >= mod.version("8.6") and mod.version(trt.__version__) < mod.version("8.7")
+        mod.version(trt.__version__) >= mod.version("8.6")
+        and mod.version(trt.__version__) < mod.version("8.7")
     ):
         pytest.skip("Broken on 8.6")
 
@@ -244,7 +277,10 @@ CLI_EXAMPLES = [
         ["cli", "run", "04_defining_a_tensorrt_network_or_config_manually"],
         artifact_names=["my_define_network.py", "my_create_config.py"],
     ),
-    Example(["cli", "run", "05_comparing_with_custom_input_data"], artifact_names=["custom_inputs.json"]),
+    Example(
+        ["cli", "run", "05_comparing_with_custom_input_data"],
+        artifact_names=["custom_inputs.json"],
+    ),
     Example(
         ["cli", "run", "06_comparing_with_custom_output_data"],
         artifact_names=["custom_inputs.json", "custom_outputs.json"],
@@ -265,7 +301,12 @@ CLI_EXAMPLES = [
     pytest.param(
         Example(
             ["cli", "convert", "02_deterministic_engine_builds_in_tensorrt"],
-            artifact_names=["0.engine", "1.engine", "timing.cache", "timing.cache.lock"],
+            artifact_names=[
+                "0.engine",
+                "1.engine",
+                "timing.cache",
+                "timing.cache.lock",
+            ],
         ),
         marks=[pytest.mark.serial, pytest.mark.flaky(max_runs=2)],
     ),
@@ -278,9 +319,14 @@ CLI_EXAMPLES = [
         artifact_names=["identity_fp16.onnx", "inputs.json", "outputs_fp32.json"],
     ),
     # Surgeon
-    Example(["cli", "surgeon", "01_isolating_subgraphs"], artifact_names=["subgraph.onnx"]),
+    Example(
+        ["cli", "surgeon", "01_isolating_subgraphs"], artifact_names=["subgraph.onnx"]
+    ),
     Example(["cli", "surgeon", "02_folding_constants"], artifact_names=["folded.onnx"]),
-    Example(["cli", "surgeon", "03_modifying_input_shapes"], artifact_names=["dynamic_identity.onnx"]),
+    Example(
+        ["cli", "surgeon", "03_modifying_input_shapes"],
+        artifact_names=["dynamic_identity.onnx"],
+    ),
     Example(
         ["cli", "surgeon", "04_setting_upper_bounds"],
         artifact_names=["modified.onnx", "folded.onnx"],
@@ -306,19 +352,24 @@ CLI_EXAMPLES = [
         ),
         marks=[pytest.mark.slow],
     ),
+    # Plugin
+    Example(
+        ["cli", "plugin", "01_match_and_replace_plugin"], artifact_names=["config.yaml", "replaced.onnx"]
+    ),
 ]
 
 
 @pytest.mark.parametrize("example", CLI_EXAMPLES, ids=lambda case: str(case))
 @pytest.mark.script_launch_mode("subprocess")
 def test_cli_examples(example, sandboxed_install_run):
-    if "02_deterministic_engine_builds_in_tensorrt" in example.path and mod.version(trt.__version__) < mod.version(
-        "8.7"
-    ):
+    if "02_deterministic_engine_builds_in_tensorrt" in example.path and mod.version(
+        trt.__version__
+    ) < mod.version("8.7"):
         pytest.skip("Only supported on TensorRT 8.7 and newer")
 
     if "03_dynamic_shapes_in_tensorrt" in example.path and (
-        mod.version(trt.__version__) >= mod.version("8.6") and mod.version(trt.__version__) < mod.version("8.7")
+        mod.version(trt.__version__) >= mod.version("8.6")
+        and mod.version(trt.__version__) < mod.version("8.7")
     ):
         pytest.skip("Broken on TensorRT 8.6")
 
@@ -334,8 +385,13 @@ CLI_INSPECT_CHECK_EXAMPLES = [
         artifact_names=["dynamic_identity.engine"],
     ),
     Example(["cli", "inspect", "03_inspecting_an_onnx_model"]),
-    Example(["cli", "inspect", "05_inspecting_inference_outputs"], artifact_names=["outputs.json"]),
-    Example(["cli", "inspect", "06_inspecting_input_data"], artifact_names=["inputs.json"]),
+    Example(
+        ["cli", "inspect", "05_inspecting_inference_outputs"],
+        artifact_names=["outputs.json"],
+    ),
+    Example(
+        ["cli", "inspect", "06_inspecting_input_data"], artifact_names=["inputs.json"]
+    ),
     Example(
         ["cli", "inspect", "08_inspecting_tensorrt_onnx_support"],
         artifact_names=[
@@ -347,17 +403,39 @@ CLI_INSPECT_CHECK_EXAMPLES = [
             "polygraphy_capability_dumps",
         ],
     ),
-    Example(["cli", "inspect", "07_inspecting_tactic_replays"], artifact_names=["replay.json"]),
-    Example(["cli", "check", "01_linting_an_onnx_model"], artifact_names=["report.json"]),
+    Example(
+        ["cli", "inspect", "07_inspecting_tactic_replays"],
+        artifact_names=["replay.json"],
+    ),
+    Example(
+        ["cli", "check", "01_linting_an_onnx_model"], artifact_names=["report.json"]
+    ),
+    Example(
+        ["cli", "inspect", "09_inspecting_tensorrt_static_onnx_support"],
+        artifact_names=[
+            "polygraphy_capability_dumps/results.txt",
+            # Remove directory when done
+            "polygraphy_capability_dumps",
+        ],
+    ),
 ]
 
 if mod.has_mod("tensorflow"):
-    CLI_INSPECT_CHECK_EXAMPLES.append(Example(["cli", "inspect", "04_inspecting_a_tensorflow_graph"]))
+    CLI_INSPECT_CHECK_EXAMPLES.append(
+        Example(["cli", "inspect", "04_inspecting_a_tensorflow_graph"])
+    )
 
 
-@pytest.mark.parametrize("example", CLI_INSPECT_CHECK_EXAMPLES, ids=lambda case: str(case))
+@pytest.mark.parametrize(
+    "example", CLI_INSPECT_CHECK_EXAMPLES, ids=lambda case: str(case)
+)
 @pytest.mark.script_launch_mode("subprocess")
 def test_cli_inspect_check_examples(example, sandboxed_install_run):
+    if mod.version(trt.__version__) < mod.version("10.0") and (
+        "09_inspecting_tensorrt_static_onnx_support" in example.path
+    ):
+        pytest.skip("Parser features not supported in TRT <10.0.")
+
     # Last block should be the expected output, and last command should generate it.
     with example as blocks:
         command_blocks, expected_output = blocks[:-1], str(blocks[-1])
@@ -365,9 +443,17 @@ def test_cli_inspect_check_examples(example, sandboxed_install_run):
             actual_output = example.run(cmd_block, sandboxed_install_run).stdout
 
     if mod.version(trt.__version__) >= mod.version("9.0") and (
-        "01_inspecting_a_tensorrt_network" in example.path or "02_inspecting_a_tensorrt_engine" in example.path
+        "01_inspecting_a_tensorrt_network" in example.path
+        or "02_inspecting_a_tensorrt_engine" in example.path
     ):
-        pytest.skip("Output is different for TRT >=9, this test needs to be updated to account for that. ")
+        pytest.skip(
+            "Output is different for TRT >=9, this test needs to be updated to account for that. "
+        )
+
+    if mod.version(trt.__version__) < mod.version("10.0") and (
+        "08_inspecting_tensorrt_onnx_support" in example.path
+    ):
+        pytest.skip("Output is different for TRT <10.0.")
 
     print(actual_output)
 
@@ -396,11 +482,15 @@ def test_cli_inspect_check_examples(example, sandboxed_install_run):
         "[I] Loading ",
     ]
 
-    for index, (actual_line, expected_line) in enumerate(zip(actual_lines, expected_lines)):
+    for index, (actual_line, expected_line) in enumerate(
+        zip(actual_lines, expected_lines)
+    ):
         # Skip whitespace, and lines that include runner names (since those have timestamps)
-        if expected_line.strip() and all([marker not in expected_line for marker in NON_EXACT_LINE_MARKERS]):
+        if expected_line.strip() and all(
+            [marker not in expected_line for marker in NON_EXACT_LINE_MARKERS]
+        ):
             print(f"Checking line {index}: {expected_line}")
-            assert actual_line == expected_line
+            assert actual_line.strip() == expected_line.strip()
 
 
 DEV_EXAMPLES = [

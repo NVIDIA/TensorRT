@@ -2,6 +2,67 @@
 
 Dates are in YYYY-MM-DD format.
 
+
+## v0.49.7 (2024-02-02)
+### Added
+- Added `plugin match` subtool that finds opportunities for plugin substitution in an ONNX Model and prepares an intermediate file to be used for actual substitution
+- Added `plugin list` subtool that lists opportunities for plugin substitution, without preparing an intermediate file.
+- Added support for building engines with the refittable weights stripped.
+    Setting the `strip_plan` parameter of `CreateConfig` or passing in the `--strip-plan` flag
+    enables building engines with the refittable weights stripped.
+- Added `plugin replace` subtool that replaces subgraphs with plugins, based on an intermediate file (config.yaml)
+- Added `polygraphy surgeon weight-strip` to strip the initializers of selective nodes in an ONNX model
+- Added `polygraphy surgeon weight-reconstruct` to read a weightless ONNX model and fill the empty initializers with proxy tensors
+- Added '--weight-streaming` and `--weight-streaming-budget` APIs to control TRT weight streaming
+
+
+## v0.49.6 (2024-01-18)
+### Fixed
+- Fixed a bug where `explicit_batch` would be provided by default on TRT 10.0, where it has been removed.
+
+
+## v0.49.5 (2024-01-16)
+### Added
+- Added an `allocation_strategy` to `TrtRunner` and corresponding `--allocation-strategy` argument to CLI tools.
+
+### Fixed
+- Fixed a bug where the reference count of the TensorRT engine would not be decremented correctly in `TrtRunner`.
+
+
+## v0.49.4 (2023-12-20)
+### Fixed
+- Fixed a bug where the comparator would modify the original output tensor in some cases instead of operating on a copy.
+- Fixed a bug where `is_installed()` for lazily imported modules would not work if the package name differed from the module name.
+
+
+## v0.49.3 (2023-11-30)
+### Changed
+- Improved error messages in the default data loader for invalid backend modules.
+
+
+## v0.49.2 (2023-11-27)
+### Added
+- Added `DataType.INT4` for 4-bit signed integers.
+
+### Changed
+- Removed internal usage of several deprecated TensorRT APIs.
+
+### Fixed
+- Fixed a bug in the default data loader where scalars would not be generated correctly.
+
+
+## v0.49.1 (2023-10-03)
+### Added
+- Added `--profiling-verbosity` command-line option.
+- Added a `progress_monitor` parameter to `CreateConfig`.
+- Added a `data_loader_backend_module` parameter to `DataLoader` and corresponding `--data-loader-backend-module` argument to CLI tools to
+    choose between generating `numpy.ndarray` and `torch.tensor` in the default dataloader.
+
+### Fixed
+- Fixed a bug where warnings would be issued for unsupported versions of `torch` even if
+    `torch` was not being used.
+
+
 ## v0.49.0 (2023-07-28)
 ### Added
 - Added `check lint` subtool that validates ONNX Models and generates human-readable console output and

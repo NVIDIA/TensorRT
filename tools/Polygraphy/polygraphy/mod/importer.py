@@ -23,6 +23,12 @@ import subprocess as sp
 import sys
 from typing import List
 
+try:
+    # Available in Python 3.8+
+    import importlib.metadata
+except ModuleNotFoundError:
+    pass
+
 from polygraphy import constants
 from polygraphy.mod import util as mod_util
 
@@ -95,13 +101,27 @@ def lazy_import(
                 A lazily loaded module. When an attribute is first accessed,
                 the module will be imported.
     """
+
+    def issue_wrong_version_error(installed_version, version):
+        from polygraphy.logger import G_LOGGER, LogMode
+
+        G_LOGGER.error(
+            f"Module: '{name}' version '{installed_version}' is installed, but version '{version}' is required.\n"
+            f"Please install the required version or set POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
+            f"to allow Polygraphy to do so automatically.\n"
+            f"Attempting to continue with the currently installed version of this module, but note that this may cause errors!",
+            mode=LogMode.ONCE,
+        )
+
     VERSION_CHARS = ["=", ">", "<"]
 
     log = True if log is None else log
     requires = [] if requires is None else requires
 
     def split_name_version(inp):
-        version_char_indices = [inp.index(char) for char in VERSION_CHARS if char in inp]
+        version_char_indices = [
+            inp.index(char) for char in VERSION_CHARS if char in inp
+        ]
         if not version_char_indices:
             return inp, None
 
@@ -120,17 +140,29 @@ def lazy_import(
 
         def install_mod(install_name, install_version, raise_error=True):
             modname = install_name.split(".")[0]
-            pkg = pkg_name if pkg_name is not None else _PKG_NAME_FROM_MODULE.get(modname, modname)
-            extra_flags = install_flags if install_flags is not None else _EXTRA_FLAGS_FOR_MODULE.get(modname, [])
+            pkg = (
+                pkg_name
+                if pkg_name is not None
+                else _PKG_NAME_FROM_MODULE.get(modname, modname)
+            )
+            extra_flags = (
+                install_flags
+                if install_flags is not None
+                else _EXTRA_FLAGS_FOR_MODULE.get(modname, [])
+            )
 
             def fail():
                 log_func = G_LOGGER.critical if raise_error else G_LOGGER.warning
-                log_func(f"Could not automatically install required module: {pkg}. Please install it manually.")
+                log_func(
+                    f"Could not automatically install required module: {pkg}. Please install it manually."
+                )
 
             if config.ASK_BEFORE_INSTALL:
                 res = None
                 while res not in ["y", "n"]:
-                    res = input(f"Automatically install '{pkg}' (version: {install_version or 'any'}) ([Y]/n)? ")
+                    res = input(
+                        f"Automatically install '{pkg}' (version: {install_version or 'any'}) ([Y]/n)? "
+                    )
                     res = res.strip()[:1].lower() or "y"
 
                 if res == "n":
@@ -145,7 +177,9 @@ def lazy_import(
             G_LOGGER.info(f"Running installation command: {' '.join(cmd)}")
             status = sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
             if status.returncode != 0:
-                G_LOGGER.error(f"Error during installation:\n{constants.TAB}{status.stderr.decode()}")
+                G_LOGGER.error(
+                    f"Error during installation:\n{constants.TAB}{status.stderr.decode()}"
+                )
                 fail()
 
             mod = importlib.import_module(install_name)
@@ -182,17 +216,15 @@ def lazy_import(
                         f"Attempting to upgrade now."
                     )
                     # We can try to use the other version if install fails, so this is non-fatal.
-                    installed_mod = install_mod(install_name, install_version, raise_error=False)
+                    installed_mod = install_mod(
+                        install_name, install_version, raise_error=False
+                    )
                     if install_name == name:
                         mod = installed_mod
 
                 elif install_version != LATEST_VERSION:
-                    G_LOGGER.error(
-                        f"Module: '{install_name}' version '{installed_mod.__version__}' is installed, but version '{install_version}' is required.\n"
-                        f"Please install the required version or set POLYGRAPHY_AUTOINSTALL_DEPS=1 in your environment variables "
-                        f"to allow Polygraphy to do so automatically.\n"
-                        f"Attempting to continue with the currently installed version of this module, but note that this may cause errors!",
-                        mode=LogMode.ONCE,
+                    issue_wrong_version_error(
+                        installed_mod.__version__, install_version
                     )
 
         if log:
@@ -219,12 +251,42 @@ def lazy_import(
             module = self.__polygraphy_import_mod()
             return setattr(module, name, value)
 
+        def is_installed(self):
+            """
+            Checks whether any version of this module is installed.
+            The module will not be imported by this method.
+
+            Returns:
+                bool: Whether the module is installed.
+            """
+            global importlib
+
+            try:
+                return name in sys.modules or (
+                    importlib.util.find_spec(name) is not None
+                )
+            except:
+                return False
+
+        def is_importable(self):
+            """
+            Checks whether this module is importable. Note that a module may be installed but not importable.
+
+            Returns:
+                bool: Whether the module is importable.
+            """
+            try:
+                importlib.import_module(name)
+                return True
+            except:
+                return False
+
     return LazyModule()
 
 
 def has_mod(modname):
     """
-    Checks whether a module is installed.
+    Checks whether a module is installed without importing the module.
 
     Args:
         modname (str): The name of the module to check.
@@ -232,6 +294,22 @@ def has_mod(modname):
     Returns:
         bool: Whether the module is installed.
     """
+    import warnings
+
+    import polygraphy
+    from polygraphy.logger import G_LOGGER
+
+    remove_in = "0.50.0"
+    if mod_util.version(polygraphy.__version__) >= mod_util.version(remove_in):
+        G_LOGGER.internal_error(
+            f"has_mod should have been removed in version: {remove_in}"
+        )
+    warnings.warn(
+        f"has_mod is deprecated and will be removed in Polygraphy {remove_in}",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
     try:
         return modname in sys.modules or (importlib.util.find_spec(modname) is not None)
     except ValueError:
@@ -292,9 +370,7 @@ def import_from_script(path, name):
             ext = os.path.splitext(path)[1]
             err_msg = f"Could not import symbol: {name} from script: {path}"
             if ext != ".py":
-                err_msg += (
-                    f"\nThis could be because the extension of the file is not '.py'. Note: The extension is: {ext}"
-                )
+                err_msg += f"\nThis could be because the extension of the file is not '.py'. Note: The extension is: {ext}"
             err_msg += f"\nNote: Error was: {err}"
             err_msg += f"\nNote: sys.path was: {sys.path}"
             G_LOGGER.critical(err_msg)

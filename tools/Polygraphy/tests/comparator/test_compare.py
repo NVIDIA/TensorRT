@@ -25,7 +25,7 @@ from polygraphy.logger import G_LOGGER
 build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
 
 
-@pytest.mark.parametrize("array_type", [np.array, build_torch])
+@pytest.mark.parametrize("array_type", [np.array, build_torch], ids=["numpy", "torch"])
 class TestSimpleCompareFunc:
     @pytest.mark.parametrize(
         "values0, values1, dtype, expected_max_absdiff, expected_max_reldiff",
@@ -38,18 +38,36 @@ class TestSimpleCompareFunc:
             ([0], [1], DataType.UINT32, 1, 1.0),
             ([1], [0], DataType.UINT32, 1, np.inf),
             ([25], [30], DataType.INT8, 5, 5.0 / 30.0),
-            ([25], [30], DataType.FLOAT16, 5, np.array([5.0], dtype=np.float32) / np.array([30.0], dtype=np.float32)),
+            (
+                [25],
+                [30],
+                DataType.FLOAT16,
+                5,
+                np.array([5.0], dtype=np.float32) / np.array([30.0], dtype=np.float32),
+            ),
             ([1], [0], DataType.FLOAT16, 1, 1 / np.finfo(float).eps),
         ],
     )
-    def test_comparison(self, values0, values1, dtype, expected_max_absdiff, expected_max_reldiff, array_type):
+    def test_comparison(
+        self,
+        values0,
+        values1,
+        dtype,
+        expected_max_absdiff,
+        expected_max_reldiff,
+        array_type,
+    ):
         if array_type != np.array:
             try:
                 DataType.to_dtype(dtype, "torch")
             except:
                 pytest.skip(f"Cannot convert {dtype} to torch")
-        iter_result0 = IterationResult(outputs={"output": array_type(values0, dtype=dtype.numpy())})
-        iter_result1 = IterationResult(outputs={"output": array_type(values1, dtype=dtype.numpy())})
+        iter_result0 = IterationResult(
+            outputs={"output": array_type(values0, dtype=dtype.numpy())}
+        )
+        iter_result1 = IterationResult(
+            outputs={"output": array_type(values1, dtype=dtype.numpy())}
+        )
 
         compare_func = CompareFunc.simple()
         acc = compare_func(iter_result0, iter_result1)
@@ -67,36 +85,77 @@ class TestSimpleCompareFunc:
         "values0, values1, dtype, quantile, expected_abs_quantile, expected_rel_quantile",
         [
             ([0, 0.1, 0.5, 0.75, 1], [2, 2, 2, 2, 2], DataType.FLOAT16, 0.5, 1.5, 0.75),
-            ([0, 0.1, 0.5, 0.75, 1], [2, 2, 2, 2, 2], DataType.FLOAT16, 0.75, 1.9, 0.95),
-            ([0.2, 0.2, 0.125, 0.11], [0.1, 0.1, 0.1, 0.1], DataType.FLOAT16, 0.5, 0.0625, 0.625),
+            (
+                [0, 0.1, 0.5, 0.75, 1],
+                [2, 2, 2, 2, 2],
+                DataType.FLOAT16,
+                0.75,
+                1.9,
+                0.95,
+            ),
+            (
+                [0.2, 0.2, 0.125, 0.11],
+                [0.1, 0.1, 0.1, 0.1],
+                DataType.FLOAT16,
+                0.5,
+                0.0625,
+                0.625,
+            ),
             ([0, 1, 2, 3, 4], [2, 2, 2, 2, 2], DataType.UINT8, 0.5, 1, 0.5),
             ([0, 1, 2, 3, 4], [2, 2, 2, 2, 2], DataType.UINT8, 0.75, 2, 1),
-        ]
+        ],
     )
-    def test_qunatile(self, values0, values1, dtype, quantile, expected_abs_quantile, expected_rel_quantile, array_type):
+    def test_quantile(
+        self,
+        values0,
+        values1,
+        dtype,
+        quantile,
+        expected_abs_quantile,
+        expected_rel_quantile,
+        array_type,
+    ):
         if array_type != np.array:
             try:
                 DataType.to_dtype(dtype, "torch")
             except:
                 pytest.skip(f"Cannot convert {dtype} to torch")
-        iter_result0 = IterationResult(outputs={"output": array_type(values0, dtype=dtype.numpy())})
-        iter_result1 = IterationResult(outputs={"output": array_type(values1, dtype=dtype.numpy())})
+        iter_result0 = IterationResult(
+            outputs={"output": array_type(values0, dtype=dtype.numpy())}
+        )
+        iter_result1 = IterationResult(
+            outputs={"output": array_type(values1, dtype=dtype.numpy())}
+        )
 
-        compare_func = CompareFunc.simple(check_error_stat="quantile", error_quantile=quantile)
+        compare_func = CompareFunc.simple(
+            check_error_stat="quantile", error_quantile=quantile
+        )
         acc = compare_func(iter_result0, iter_result1)
 
         comp_result = acc["output"]
-        assert np.isclose(comp_result.quantile_absdiff, expected_abs_quantile, atol=1e-4, rtol=1e-4)
+        assert np.isclose(
+            comp_result.quantile_absdiff, expected_abs_quantile, atol=1e-4, rtol=1e-4
+        )
         assert comp_result.quantile_absdiff <= comp_result.max_absdiff
-        assert (quantile>=0.5) == (comp_result.quantile_absdiff >= comp_result.median_absdiff)
+        assert (quantile >= 0.5) == (
+            comp_result.quantile_absdiff >= comp_result.median_absdiff
+        )
 
-        assert np.isclose(comp_result.quantile_reldiff, expected_rel_quantile, atol=1e-4, rtol=1e-4)
+        assert np.isclose(
+            comp_result.quantile_reldiff, expected_rel_quantile, atol=1e-4, rtol=1e-4
+        )
         assert comp_result.quantile_reldiff <= comp_result.max_reldiff
-        assert (quantile>=0.5) == (comp_result.quantile_reldiff >= comp_result.median_reldiff)
+        assert (quantile >= 0.5) == (
+            comp_result.quantile_reldiff >= comp_result.median_reldiff
+        )
 
     def test_can_compare_bool(self, array_type):
-        iter_result0 = IterationResult(outputs={"output": array_type(np.zeros((4, 4), dtype=bool))})
-        iter_result1 = IterationResult(outputs={"output": array_type(np.ones((4, 4), dtype=bool))})
+        iter_result0 = IterationResult(
+            outputs={"output": array_type(np.zeros((4, 4), dtype=bool))}
+        )
+        iter_result1 = IterationResult(
+            outputs={"output": array_type(np.ones((4, 4), dtype=bool))}
+        )
 
         compare_func = CompareFunc.simple()
         acc = compare_func(iter_result0, iter_result1)
@@ -109,8 +168,12 @@ class TestSimpleCompareFunc:
         OUT1_NAME = "output1"
         OUT_VALS = array_type(np.ones((4, 4)))
 
-        iter_result0 = IterationResult(outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS})
-        iter_result1 = IterationResult(outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS + 1})
+        iter_result0 = IterationResult(
+            outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS}
+        )
+        iter_result1 = IterationResult(
+            outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS + 1}
+        )
 
         # With default tolerances, out1 is wrong for the second result.
         compare_func = CompareFunc.simple()
@@ -139,8 +202,12 @@ class TestSimpleCompareFunc:
         OUT1_NAME = "output1"
         OUT_VALS = array_type(np.ones((4, 4)))
 
-        iter_result0 = IterationResult(outputs={OUT0_NAME: OUT_VALS + 1, OUT1_NAME: OUT_VALS})
-        iter_result1 = IterationResult(outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS + 1})
+        iter_result0 = IterationResult(
+            outputs={OUT0_NAME: OUT_VALS + 1, OUT1_NAME: OUT_VALS}
+        )
+        iter_result1 = IterationResult(
+            outputs={OUT0_NAME: OUT_VALS, OUT1_NAME: OUT_VALS + 1}
+        )
 
         acc = CompareFunc.simple()(iter_result0, iter_result1)
         assert not bool(acc[OUT0_NAME])
@@ -191,8 +258,12 @@ class TestSimpleCompareFunc:
         ],
     )
     def test_non_matching_outputs(self, shape, array_type):
-        iter_result0 = IterationResult(outputs={"output": array_type(np.zeros(shape, dtype=np.float32))})
-        iter_result1 = IterationResult(outputs={"output": array_type(np.ones(shape, dtype=np.float32))})
+        iter_result0 = IterationResult(
+            outputs={"output": array_type(np.zeros(shape, dtype=np.float32))}
+        )
+        iter_result1 = IterationResult(
+            outputs={"output": array_type(np.ones(shape, dtype=np.float32))}
+        )
 
         compare_func = CompareFunc.simple()
 
@@ -210,8 +281,12 @@ class TestSimpleCompareFunc:
         ],
     )
     def test_check_error_stat(self, func, check_error_stat, array_type):
-        iter_result0 = IterationResult(outputs={"output": array_type(func((100,), dtype=np.float32))})
-        iter_result1 = IterationResult(outputs={"output": array_type(func((100,), dtype=np.float32))})
+        iter_result0 = IterationResult(
+            outputs={"output": array_type(func((100,), dtype=np.float32))}
+        )
+        iter_result1 = IterationResult(
+            outputs={"output": array_type(func((100,), dtype=np.float32))}
+        )
 
         iter_result0["output"][0] += 100
 
@@ -228,18 +303,30 @@ class TestSimpleCompareFunc:
     def test_atol_rtol_either_pass(self, check_error_stat, array_type):
         # If either rtol/atol is sufficient, the compare_func should pass
         res0 = IterationResult(outputs={"output": array_type([1, 2], dtype=np.float32)})
-        res1 = IterationResult(outputs={"output": array_type((1.25, 2.5), dtype=np.float32)})
+        res1 = IterationResult(
+            outputs={"output": array_type((1.25, 2.5), dtype=np.float32)}
+        )
 
-        assert not CompareFunc.simple(check_error_stat=check_error_stat)(res0, res1)["output"]
+        assert not CompareFunc.simple(check_error_stat=check_error_stat)(res0, res1)[
+            "output"
+        ]
 
-        assert CompareFunc.simple(check_error_stat=check_error_stat, rtol=0.25)(res0, res1)["output"]
-        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=0.5)(res0, res1)["output"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, rtol=0.25)(
+            res0, res1
+        )["output"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=0.5)(
+            res0, res1
+        )["output"]
 
     def test_atol_rtol_combined_pass(self, array_type):
         # We should also be able to mix them - i.e. rtol might enough for some, atol for others.
         # If they cover the entire output range, it should pass.
-        res0 = IterationResult(outputs={"output": array_type([0, 1, 2, 3], dtype=np.float32)})
-        res1 = IterationResult(outputs={"output": array_type((0.15, 1.25, 2.5, 3.75), dtype=np.float32)})
+        res0 = IterationResult(
+            outputs={"output": array_type([0, 1, 2, 3], dtype=np.float32)}
+        )
+        res1 = IterationResult(
+            outputs={"output": array_type((0.15, 1.25, 2.5, 3.75), dtype=np.float32)}
+        )
 
         assert not CompareFunc.simple()(res0, res1)["output"]
 
@@ -275,12 +362,20 @@ class TestSimpleCompareFunc:
         atol = 0.4125
         assert not CompareFunc.simple(atol=atol)(res0, res1)["output0"]
 
-        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output0"]
-        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=atol)(res0, res1)["output1"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=atol)(
+            res0, res1
+        )["output0"]
+        assert CompareFunc.simple(check_error_stat=check_error_stat, atol=atol)(
+            res0, res1
+        )["output1"]
 
     def test_invalid_error_stat(self, array_type):
-        res0 = IterationResult(outputs={"output": array_type([0, 1, 2, 3], dtype=np.float32)})
-        res1 = IterationResult(outputs={"output": array_type([0.15, 1.25, 2.5, 3.75], dtype=np.float32)})
+        res0 = IterationResult(
+            outputs={"output": array_type([0, 1, 2, 3], dtype=np.float32)}
+        )
+        res1 = IterationResult(
+            outputs={"output": array_type([0.15, 1.25, 2.5, 3.75], dtype=np.float32)}
+        )
 
         with pytest.raises(PolygraphyException, match="Invalid choice"):
             CompareFunc.simple(check_error_stat="invalid-stat")(res0, res1)
@@ -291,7 +386,9 @@ class TestSimpleCompareFunc:
         res0 = IterationResult(outputs={"output": array_type([val0], dtype=np.float32)})
         res1 = IterationResult(outputs={"output": array_type([val1], dtype=np.float32)})
 
-        assert not CompareFunc.simple(check_error_stat=check_error_stat)(res0, res1)["output"]
+        assert not CompareFunc.simple(check_error_stat=check_error_stat)(res0, res1)[
+            "output"
+        ]
 
     @pytest.mark.parametrize("infinities_compare_equal", (False, True))
     @pytest.mark.parametrize("val", (np.inf, -np.inf))
@@ -329,4 +426,7 @@ class TestIndicesCompareFunc:
         res0 = IterationResult(outputs={"output": array_type(out0, dtype=np.int32)})
         res1 = IterationResult(outputs={"output": array_type(out1, dtype=np.int32)})
 
-        assert CompareFunc.indices(index_tolerance=index_tolerance)(res0, res1)["output"] == expected
+        assert (
+            CompareFunc.indices(index_tolerance=index_tolerance)(res0, res1)["output"]
+            == expected
+        )

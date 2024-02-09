@@ -257,6 +257,7 @@ class TestAutoinstallDeps:
             "tensorrt",
             "tf2onnx",
             "torch",
+            "yaml",
         ]
         if sys.version_info < (3, 8):
             expected.append("importlib_metadata")

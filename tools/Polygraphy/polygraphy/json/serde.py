@@ -186,7 +186,9 @@ class Decoder(BaseCustomImpl):
                     "Tensor": "torch.Tensor",
                     "ndarray": "np.ndarray",
                 }.get(type_name, type_name)
-                G_LOGGER.critical(f"Could not decode serialized type: {user_type_name}. This could be because a required module is missing. ")
+                G_LOGGER.critical(
+                    f"Could not decode serialized type: {user_type_name}. This could be because a required module is missing. "
+                )
             return self.polygraphy_registered[type_name](dct)
 
         return dct
@@ -209,7 +211,7 @@ def try_register_common_json(func):
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         global NUMPY_REGISTRATION_SUCCESS
-        if not NUMPY_REGISTRATION_SUCCESS and mod.has_mod("numpy"):
+        if not NUMPY_REGISTRATION_SUCCESS and np.is_installed() and np.is_importable():
             # We define this alongside load_json/save_json so that it is guaranteed to be
             # imported before we need to encode/decode NumPy arrays.
             @Encoder.register(np.ndarray)
@@ -243,7 +245,7 @@ def try_register_common_json(func):
             NUMPY_REGISTRATION_SUCCESS = True
 
         global TORCH_REGISTRATION_SUCCESS
-        if not TORCH_REGISTRATION_SUCCESS and mod.has_mod("torch"):
+        if not TORCH_REGISTRATION_SUCCESS and torch.is_installed() and torch.is_importable():
 
             @Encoder.register(torch.Tensor)
             def encode(tensor):

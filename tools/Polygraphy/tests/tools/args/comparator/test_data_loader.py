@@ -58,6 +58,8 @@ class TestDataLoaderArgs:
             (["--iterations=12"], ["iterations"], [12]),
             (["--val-range", "[0.0,inf]"], ["val_range"], [{"": (0.0, float("inf"))}]),
             (["--val-range", "[-inf,0.0]"], ["val_range"], [{"": (float("-inf"), 0.0)}]),
+            (["--data-loader-backend-module", "torch"], ["data_loader_backend_module"], ["torch"]),
+            (["--data-loader-backend-module", "numpy"], ["data_loader_backend_module"], ["numpy"]),
         ],
         ids=lambda c: c[1][0],
     )

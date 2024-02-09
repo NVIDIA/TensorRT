@@ -25,6 +25,89 @@ from polygraphy.json import save_json
 from polygraphy.logger import G_LOGGER, LogMode
 
 np = mod.lazy_import("numpy")
+torch = mod.lazy_import("torch")
+
+
+class ArraySampler:
+    def __init__(self, data_loader_backend_module, seed):
+        """
+        Args:
+            data_loader_backend_module (str):
+                    The module specifying the array type to use to generate arrays.
+                    Can be either "numpy" or "torch".
+            seed (int):
+                    The seed to use when generating random inputs.
+        """
+        self.rng = None
+        VALID_ARRAY_MODULES = ["numpy", "torch"]
+        if data_loader_backend_module not in VALID_ARRAY_MODULES:
+            G_LOGGER.critical(
+                f"Invalid `data_loader_backend_module`. Note: got: {data_loader_backend_module} but valid modules are: {VALID_ARRAY_MODULES}"
+            )
+
+        self.data_loader_backend_module = data_loader_backend_module
+
+
+        if self.data_loader_backend_module == "numpy":
+            self.rng = np.random.RandomState(seed)
+        elif self.data_loader_backend_module == "torch":
+            self.rng = torch.Generator()
+            self.rng.manual_seed(seed)
+
+
+    def sample_integer(self, shape, dtype, low, high):
+        """
+        Samples an array containing integral values in the range [low, high], inclusive
+        """
+        dtype = (
+            DataType.to_dtype(DataType.from_dtype(dtype), self.data_loader_backend_module)
+            if dtype is not None
+            else dtype
+        )
+        if self.data_loader_backend_module == "numpy":
+            return np.array(
+                self.rng.randint(low=low, high=high + 1, size=shape, dtype=dtype)
+            )
+        elif self.data_loader_backend_module == "torch":
+            return torch.randint(low, high + 1, shape, generator=self.rng, dtype=dtype)
+
+    def sample_float(self, shape, dtype, fmin, fmax):
+        """
+        Samples an array containing float values in the range [fmin, fmax], inclusive
+        """
+        # Special handling for infinite lower/upper bounds
+        # Without this, two infinities will collapse into a NaN, resulting in no infinities
+        # in the final output.
+        scale = fmax - fmin
+        shift = fmin
+        if util.is_inf(fmin):
+            scale = fmin
+            shift = 0
+        if util.is_inf(fmax):
+            scale = fmax
+
+        dtype = (
+            DataType.to_dtype(DataType.from_dtype(dtype), self.data_loader_backend_module)
+            if dtype is not None
+            else dtype
+        )
+        if self.data_loader_backend_module == "numpy":
+            return np.array(
+                (self.rng.random_sample(size=shape) * scale + shift).astype(dtype)
+            )
+        elif self.data_loader_backend_module == "torch":
+            return torch.rand(shape, generator=self.rng, dtype=dtype)
+
+    def constant_array(self, shape, dtype):
+        dtype = (
+            DataType.to_dtype(DataType.from_dtype(dtype), self.data_loader_backend_module)
+            if dtype is not None
+            else dtype
+        )
+        if self.data_loader_backend_module == "numpy":
+            return np.array(shape, dtype=dtype)
+        elif self.data_loader_backend_module == "torch":
+            return torch.tensor(shape, dtype=dtype)
 
 
 @mod.export()
@@ -34,7 +117,14 @@ class DataLoader:
     """
 
     def __init__(
-        self, seed=None, iterations=None, input_metadata=None, int_range=None, float_range=None, val_range=None
+        self,
+        seed=None,
+        iterations=None,
+        input_metadata=None,
+        int_range=None,
+        float_range=None,
+        val_range=None,
+        data_loader_backend_module=None,
     ):
         """
         Args:
@@ -61,6 +151,10 @@ class DataLoader:
                     This can be specified on a per-input basis using a dictionary. In that case,
                     use an empty string ("") as the key to specify default range for inputs not explicitly listed.
                     Defaults to (0.0, 1.0).
+            data_loader_backend_module (str):
+                    A string denoting what module to use to construct the input data arrays. Currently supports
+                    "numpy" and "torch".
+                    Defaults to "numpy".
 
             int_range (Tuple[int]):
                     [DEPRECATED - Use val_range instead]
@@ -79,7 +173,9 @@ class DataLoader:
         """
 
         def default_tuple(tup, default):
-            if tup is None or (not isinstance(tup, tuple) and not isinstance(tup, list)):
+            if tup is None or (
+                not isinstance(tup, tuple) and not isinstance(tup, list)
+            ):
                 return default
             new_tup = []
             for elem, default_elem in zip(tup, default):
@@ -89,15 +185,24 @@ class DataLoader:
         self.seed = util.default(seed, constants.DEFAULT_SEED)
         self.iterations = util.default(iterations, 1)
         self.user_input_metadata = util.default(input_metadata, {})
+        self.data_loader_backend_module = util.default(
+            data_loader_backend_module, "numpy"
+        )
 
         self._int_range_set = int_range is not None
         if self._int_range_set:
-            mod.warn_deprecated("The int_range parameter in DataLoader", "val_range", remove_in="0.50.0")
+            mod.warn_deprecated(
+                "The int_range parameter in DataLoader", "val_range", remove_in="0.50.0"
+            )
         self._int_range = default_tuple(int_range, (1, 25))
 
         self._float_range_set = float_range is not None
         if self._float_range_set:
-            mod.warn_deprecated("The float_range parameter in DataLoader", "val_range", remove_in="0.50.0")
+            mod.warn_deprecated(
+                "The float_range parameter in DataLoader",
+                "val_range",
+                remove_in="0.50.0",
+            )
         self._float_range = default_tuple(float_range, (-1.0, 1.0))
 
         self.input_metadata = None
@@ -118,6 +223,7 @@ class DataLoader:
             int_range=self._int_range,
             float_range=self._float_range,
             val_range=self.val_range,
+            data_loader_backend_module=self.data_loader_backend_module,
         )[0]
 
     def _get_range(self, name, cast_type):
@@ -141,13 +247,14 @@ class DataLoader:
                     Generated data is guaranteed to be the same for the same index.
 
         Returns:
-            OrderedDict[str, numpy.ndarray]: A mapping of input names to input numpy buffers.
+            OrderedDict[str, Union[numpy.ndarray, torch.Tensor]]: A mapping of input names to input numpy buffers.
         """
         if index >= self.iterations:
             raise IndexError()
 
         G_LOGGER.verbose(f"Generating data using numpy seed: {self.seed + index}")
-        rng = np.random.RandomState(self.seed + index)
+
+        array_sampler = ArraySampler(self.data_loader_backend_module, self.seed + index)
 
         def get_static_shape(name, shape):
             static_shape = shape
@@ -182,7 +289,11 @@ class DataLoader:
                 return False
 
             _, shape = self.input_metadata[name]
-            if not np.issubdtype(dtype, np.integer) or util.is_shape_dynamic(shape) or len(shape) != 1:
+            if (
+                (dtype is not None and not DataType.from_dtype(dtype).is_integral)
+                or util.is_shape_dynamic(shape)
+                or len(shape) != 1
+            ):
                 return False
 
             user_shape = self.user_input_metadata[name].shape
@@ -191,20 +302,26 @@ class DataLoader:
 
         def generate_buffer(name, dtype, shape):
             if is_shape_tensor(name, dtype):
-                buffer = np.array(shape, dtype=dtype)
+                buffer = array_sampler.constant_array(shape, dtype)
                 G_LOGGER.info(
                     f"Assuming {name} is a shape tensor. Setting input values to: {buffer}. "
                     "If these values are not correct, please set it correctly in 'input_metadata' or by providing --input-shapes",
                     mode=LogMode.ONCE,
                 )
-            elif np.issubdtype(dtype, np.integer) or np.issubdtype(dtype, np.bool_):
-                imin, imax = self._get_range(name, cast_type=int if np.issubdtype(dtype, np.integer) else bool)
+            elif dtype is not None and (
+                DataType.from_dtype(dtype).is_integral
+                or DataType.from_dtype(dtype) == DataType.BOOL
+            ):
+                imin, imax = self._get_range(
+                    name,
+                    cast_type=int if DataType.from_dtype(dtype).is_integral else bool,
+                )
                 G_LOGGER.verbose(
                     f"Input tensor: {name} | Generating input data in range: [{imin}, {imax}]",
                     mode=LogMode.ONCE,
                 )
                 # high is 1 greater than the max int drawn.
-                buffer = rng.randint(low=imin, high=imax + 1, size=shape, dtype=dtype)
+                buffer = array_sampler.sample_integer(shape, dtype, imin, imax)
             else:
                 fmin, fmax = self._get_range(name, cast_type=float)
                 G_LOGGER.verbose(
@@ -212,20 +329,8 @@ class DataLoader:
                     mode=LogMode.ONCE,
                 )
 
-                # Special handling for infinite lower/upper bounds
-                # Without this, two inifinities will collapse into a NaN, resulting in no inifinities
-                # in the final output.
-                scale = fmax - fmin
-                shift = fmin
-                if util.is_inf(fmin):
-                    scale = fmin
-                    shift = 0
-                if util.is_inf(fmax):
-                    scale = fmax
+                buffer = array_sampler.sample_float(shape, dtype, fmin, fmax)
 
-                buffer = (rng.random_sample(size=shape) * scale + shift).astype(dtype)
-
-            buffer = np.array(buffer)  # To handle scalars, since the above functions return a float if shape is ().
             return buffer
 
         if self.input_metadata is None and self.user_input_metadata is not None:
@@ -234,18 +339,33 @@ class DataLoader:
         buffers = OrderedDict()
         for name, (dtype, shape) in self.input_metadata.items():
             try:
-                dtype = DataType.to_dtype(DataType.from_dtype(dtype), "numpy") if dtype is not None else None
+                dtype = (
+                    DataType.to_dtype(
+                        DataType.from_dtype(dtype), self.data_loader_backend_module
+                    )
+                    if dtype is not None
+                    else None
+                )
             except DataTypeConversionException:
                 G_LOGGER.critical(
-                    f"Could not convert data type: {dtype} to NumPy, so the default data loader cannot generate a NumPy array for input: {name}. "
+                    f"Could not convert data type: {dtype} to {self.data_loader_backend_module}, so the default data loader cannot generate a {self.data_loader_backend_module} array for input: {name}. "
                     f"Please use a custom data loader to provide inputs. "
                 )
             if name in self.user_input_metadata:
                 user_dtype, user_shape = self.user_input_metadata[name]
 
                 dtype = util.default(user_dtype, dtype)
-                dtype = DataType.to_dtype(DataType.from_dtype(dtype), "numpy") if dtype is not None else None
-                is_valid_shape_override = user_shape is not None and util.is_valid_shape_override(user_shape, shape)
+                dtype = (
+                    DataType.to_dtype(
+                        DataType.from_dtype(dtype), self.data_loader_backend_module
+                    )
+                    if dtype is not None
+                    else None
+                )
+                is_valid_shape_override = (
+                    user_shape is not None
+                    and util.is_valid_shape_override(user_shape, shape)
+                )
 
                 if util.is_shape_dynamic(user_shape):
                     G_LOGGER.warning(
@@ -266,7 +386,9 @@ class DataLoader:
         for name in self.user_input_metadata.keys():
             if name not in self.input_metadata:
                 msg = f"Input tensor: {name} | Metadata was provided, but the input does not exist in one or more runners."
-                close_match = util.find_str_in_iterable(name, self.input_metadata.keys())
+                close_match = util.find_str_in_iterable(
+                    name, self.input_metadata.keys()
+                )
                 if close_match:
                     msg += f"\nMaybe you meant to set: {close_match}?"
                 G_LOGGER.warning(msg)
@@ -305,9 +427,13 @@ class DataLoaderCache:
         # Attempts to match existing input buffers to the requested input_metadata
         def coerce_cached_input(index, name, dtype, shape):
             cached_feed_dict = self.cache[iteration]
-            cached_name = util.find_str_in_iterable(name, cached_feed_dict.keys(), index)
+            cached_name = util.find_str_in_iterable(
+                name, cached_feed_dict.keys(), index
+            )
             if cached_name is None:
-                G_LOGGER.critical(f"Input tensor: {name} | Does not exist in the data loader cache.")
+                G_LOGGER.critical(
+                    f"Input tensor: {name} | Does not exist in the data loader cache."
+                )
 
             if cached_name != name:
                 G_LOGGER.warning(
@@ -332,7 +458,9 @@ class DataLoaderCache:
                     elif dtype.is_floating:
                         type_info = np.finfo(np_type)
 
-                    if type_info is not None and util.array.any((buffer < type_info.min) | (buffer > type_info.max)):
+                    if type_info is not None and util.array.any(
+                        (buffer < type_info.min) | (buffer > type_info.max)
+                    ):
                         G_LOGGER.warning(
                             f"Some values in this input are out of range of {dtype}. Unexpected behavior may ensue!"
                         )
@@ -345,7 +473,9 @@ class DataLoaderCache:
                 )
                 buffer = util.try_match_shape(buffer, shape)
 
-            if util.array.dtype(buffer) != dtype or not util.is_valid_shape_override(util.array.shape(buffer), shape):
+            if util.array.dtype(buffer) != dtype or not util.is_valid_shape_override(
+                util.array.shape(buffer), shape
+            ):
                 G_LOGGER.critical(
                     f"Input tensor: {name} | Cannot reuse input data due to mismatch in shape or data type.\n"
                     f"Note: Cached input: [dtype={util.array.dtype(buffer)}, shape={util.array.shape(buffer)}], "
@@ -360,7 +490,9 @@ class DataLoaderCache:
 
         for index, (name, (dtype, shape)) in enumerate(self.input_metadata.items()):
             try:
-                buffer = coerce_cached_input(index, name, DataType.from_dtype(dtype), shape)
+                buffer = coerce_cached_input(
+                    index, name, DataType.from_dtype(dtype), shape
+                )
             except PolygraphyException:
                 G_LOGGER.warning(
                     f"Could not use buffer previously cached from data loader for input: {name}. Attempting to reload inputs from the data loader.\nNote that this will only work if the data loader supports random access.\nPlease refer to warnings above for details on why the previously generated input buffer didn't work. "

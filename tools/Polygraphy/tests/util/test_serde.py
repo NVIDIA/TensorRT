@@ -120,10 +120,10 @@ def make_algo():
         tactic=5,
         # Should work even if strides are not set
         inputs=[
-            TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2), -1, 1),
-            TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2), -1, 1),
+            TensorInfo(trt.float32, (1, 2), -1, 1),
+            TensorInfo(trt.float32, (1, 2), -1, 1),
         ],
-        outputs=[TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (2, 3), -1, 1)],
+        outputs=[TensorInfo(trt.float32, (2, 3), -1, 1)],
     )
 
 
@@ -148,21 +148,21 @@ class TestImplementations:
     @pytest.mark.parametrize(
         "obj",
         [
-            TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+            TensorInfo(trt.float32, (1, 2, 3), -1, 1),
             Algorithm(
                 implementation=4,
                 tactic=5,
-                inputs=[TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1)],
-                outputs=[TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1)],
+                inputs=[TensorInfo(trt.float32, (1, 2, 3), -1, 1)],
+                outputs=[TensorInfo(trt.float32, (1, 2, 3), -1, 1)],
             ),
             Algorithm(
                 implementation=4,
                 tactic=5,
                 inputs=[
-                    TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
-                    TensorInfo(trt.TensorFormat.CHW32, trt.int8, (1, 2, 3), -1, 1),
+                    TensorInfo(trt.float32, (1, 2, 3), -1, 1),
+                    TensorInfo(trt.int8, (1, 2, 3), -1, 1),
                 ],
-                outputs=[TensorInfo(trt.TensorFormat.CHW32, trt.float16, (1, 2, 3), -1, 1)],
+                outputs=[TensorInfo(trt.float16, (1, 2, 3), -1, 1)],
             ),
             np.ones((3, 4, 5), dtype=np.int64),
             np.ones(5, dtype=np.int64),
@@ -170,7 +170,9 @@ class TestImplementations:
             np.random.random_sample((3, 5)),
             torch.ones((3, 4, 5), dtype=torch.int64),
             make_iter_result(),
-            RunResults([("runner0", [make_iter_result()]), ("runner0", [make_iter_result()])]),
+            RunResults(
+                [("runner0", [make_iter_result()]), ("runner0", [make_iter_result()])]
+            ),
         ],
         ids=lambda x: type(x),
     )

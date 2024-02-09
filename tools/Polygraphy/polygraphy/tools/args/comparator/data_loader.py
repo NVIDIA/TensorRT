@@ -90,6 +90,15 @@ class DataLoaderArgs(BaseArgs):
             dest="iterations",
         )
 
+        self._array_modules = ["numpy", "torch"]
+        self.group.add_argument(
+            "--data-loader-backend-module",
+            type=str,
+            choices=self._array_modules,
+            help=f"The module to use for generating input arrays. Currently supported options: {', '.join(self._array_modules)}",
+            default=None,
+        )
+
         custom_loader_group = self.group.add_mutually_exclusive_group()
         custom_loader_group.add_argument(
             "--load-inputs",
@@ -128,6 +137,7 @@ class DataLoaderArgs(BaseArgs):
             load_inputs_paths (List[str]): Path(s) from which to load inputs.
             data_loader_script (str): Path to a custom script to load inputs.
             data_loader_func_name (str): Name of the function in the custom data loader script that loads data.
+            data_loader_backend_module (str): Module to be used that provides arrays.
         """
 
         def omit_none_tuple(tup):
@@ -167,6 +177,8 @@ class DataLoaderArgs(BaseArgs):
         self.iterations = args_util.get(args, "iterations")
 
         self.load_inputs_paths = args_util.get(args, "load_inputs_paths")
+
+        self.data_loader_backend_module = args_util.get(args, "data_loader_backend_module")
 
         self.data_loader_script, self.data_loader_func_name = args_util.parse_script_and_func_name(
             args_util.get(args, "data_loader_script"), default_func_name="load_data"
@@ -224,6 +236,7 @@ class DataLoaderArgs(BaseArgs):
                 int_range=self._int_range,
                 float_range=self._float_range,
                 val_range=self.val_range,
+                data_loader_backend_module=self.data_loader_backend_module,
             )
             if data_loader:
                 script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")

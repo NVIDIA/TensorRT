@@ -18,12 +18,14 @@ import os
 import tempfile
 
 import onnx
+from onnx import numpy_helper
 import onnx_graphsurgeon as gs
 import pytest
 from polygraphy import util
 from polygraphy.backend.onnx import util as onnx_util
+from polygraphy.tools.sparse import SparsityPruner
 from tests.helper import is_file_non_empty
-from tests.models.meta import ONNX_MODELS
+from tests.models.meta import ONNX_MODELS, model_path
 
 
 @pytest.fixture()
@@ -33,6 +35,67 @@ def onnx_model_sanity_check(poly_run):
 
     return onnx_model_sanity_check_impl
 
+def get_exclude_list(exclude_list):
+    if not exclude_list:
+        return set()
+    with open(exclude_list) as fp:
+        lines = [line.rstrip() for line in fp]
+        return set(lines)
+
+def pruned_initializer_sanity_check(opath, is_sparse=False, exclude_list=None):
+    exclude_list = get_exclude_list(exclude_list)
+    # we only prune the input data of QuantizeLinear and leave the scale and zero_point untouched
+    if 'qdq' in opath:
+        exclude_list.add('y_scale')
+        exclude_list.add('y_zero_point')
+
+    model = onnx.load(opath)
+    for initializer in model.graph.initializer:
+        # If initializer is to be left un-stripped
+        if initializer.name in exclude_list:
+            # ensure initializer is non-empty and doc_string doesn't contain the weightless flag
+            shape_match = list(numpy_helper.to_array(initializer).shape) == initializer.dims
+            if "TRT_WEIGHTLESS" in initializer.doc_string or not shape_match:
+                return False
+            continue
+
+        # ensure initializer is empty and doc_string is in required format
+        init_empty = initializer.raw_data == b""
+        trt_weightless, sparsity = initializer.doc_string.split('/')
+        trt_weightless_correctness = trt_weightless == "TRT_WEIGHTLESS"
+        sparsity_correctness = False
+        if (not is_sparse and sparsity == "") or (is_sparse and sparsity == "SPARSE_2_4"):
+            sparsity_correctness = True
+
+        if not (init_empty and trt_weightless_correctness and sparsity_correctness):
+            return False
+
+    return True
+
+def get_initializers_to_sparsify(ipath):
+    model = onnx.load(ipath)
+    initializers_to_sparsify = set()
+    for initializer in model.graph.initializer:
+        if "SPARSE_2_4" in initializer.doc_string:
+            initializers_to_sparsify.add(initializer.name)
+
+    return initializers_to_sparsify
+
+def reconstructed_initializer_sanity_check(opath, initializers_to_sparsify):
+    model = onnx.load(opath)
+    sparsity_checker = SparsityPruner(model)
+    sparsity_checker.check()
+    sparse_tensors = sparsity_checker.sparse_tensors
+    for initializer in model.graph.initializer:
+        shape_match = list(numpy_helper.to_array(initializer).shape) == initializer.dims
+        if not shape_match:
+            return False
+
+        # ensure sparsity of initializers is retained
+        if initializer.name in initializers_to_sparsify and initializer.name not in sparse_tensors:
+            return False
+
+    return True
 
 def was_shape_inference_run(status, model):
     logging_correct = "Shape inference completed successfully" in (status.stdout + status.stderr)
@@ -560,3 +623,47 @@ class TestSurgeonPrune:
             assert status
             if "bf16" not in ipath:
                 onnx_model_sanity_check(opath)
+
+class TestSurgeonWeightStrip:
+    @pytest.mark.parametrize("model_name", ["matmul", "matmul.fp16", "matmul.bf16", "conv", "sparse.matmul", "sparse.conv",
+        "transpose_matmul", "qdq_conv"])
+    def test_weight_strip(self, poly_surgeon, model_name):
+        with tempfile.TemporaryDirectory() as outdir:
+            ipath = ONNX_MODELS[model_name].path
+            opath = os.path.join(outdir, "weightless." + os.path.basename(ipath))
+            status = poly_surgeon(["weight-strip", ipath, "-o", opath])
+            assert status
+
+            is_sparse = "sparse" in ipath
+            assert pruned_initializer_sanity_check(opath, is_sparse=is_sparse)
+
+    @pytest.mark.parametrize(
+        "model_name,     exclude_list", [
+        ["matmul",       "matmul.exclude_list.txt"],
+        ["sparse.conv",  "sparse.conv.exclude_list.txt"],
+        ["qdq_conv",     "qdq_conv.exclude_list.txt"]])
+    def test_weight_strip_exclude_file(self, poly_surgeon, model_name, exclude_list):
+        with tempfile.TemporaryDirectory() as outdir:
+            ipath = ONNX_MODELS[model_name].path
+            exclude_list = model_path(exclude_list)
+            opath = os.path.join(outdir, "weightless_sparse." + os.path.basename(ipath))
+            status = poly_surgeon(["weight-strip", ipath, "-o", opath, "--exclude-list", exclude_list])
+            assert status
+
+            is_sparse = "sparse" in ipath
+            assert pruned_initializer_sanity_check(opath, is_sparse=is_sparse, exclude_list=exclude_list)
+
+class TestSurgeonWeightReconstruct:
+    @pytest.mark.parametrize("model_name", ["weightless.matmul.fp16", "weightless.matmul.bf16", "weightless.conv", "weightless.sparse.matmul",
+        "weightless.sparse.conv", "weightless.transpose_matmul", "weightless.qdq_conv"])
+    def test_weight_reconstruct(self, poly_surgeon, onnx_model_sanity_check, model_name):
+        with tempfile.TemporaryDirectory() as outdir:
+            ipath = ONNX_MODELS[model_name].path
+            opath = os.path.join(outdir, "reconstruct." + os.path.basename(ipath))
+            status = poly_surgeon(["weight-reconstruct", ipath, "-o", opath])
+            assert status
+            if "bf16" not in ipath:
+                onnx_model_sanity_check(opath)
+
+                initializers_to_sparsify = get_initializers_to_sparsify(ipath)
+                assert reconstructed_initializer_sanity_check(opath, initializers_to_sparsify)

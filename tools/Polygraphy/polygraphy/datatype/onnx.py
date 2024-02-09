@@ -60,7 +60,7 @@ def from_onnx(onnx_type):
     Returns:
         DataType: The Polygraphy data type.
     """
-    if not mod.has_mod("onnx"):
+    if not onnx.is_installed() or not onnx.is_importable():
         return None
 
     return _get_mapping().get(onnx_type)

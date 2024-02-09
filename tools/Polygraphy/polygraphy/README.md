@@ -27,8 +27,8 @@ with the `--gen-script` option to auto-generate template scripts that use the Po
 
 > :warning: Any APIs not documented in the [API reference documentation](#python-api-reference-documentation)
     should be considered internal only and do not adhere to the [deprecation policy](#deprecation-policy)
-    as the public APIs do. Thus, they may be modified or removed at any time without warning.
-    Avoid using these internal APIs outside of Polygraphy!
+    for public APIs. Thus, they may be modified or removed at any time without warning.
+    Avoid using undocumented APIs!
 
 
 ## Backends

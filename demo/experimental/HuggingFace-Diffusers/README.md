@@ -7,7 +7,7 @@ This demo notebook showcases the acceleration of Stable Diffusion pipeline using
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/9.2 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/9.3 --single-branch
 cd TensorRT/demo/experimental/HuggingFace-Diffusers
 ```
 

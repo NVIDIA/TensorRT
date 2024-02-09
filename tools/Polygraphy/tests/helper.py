@@ -28,7 +28,7 @@ ALL_TOOLS = {
     "convert": [],
     "inspect": ["data", "model", "tactics", "capability", "diff-tactics"],
     "check": ["lint"],
-    "surgeon": ["extract", "insert", "sanitize", "prune"],
+    "surgeon": ["extract", "insert", "sanitize", "prune", "weight-strip", "weight-reconstruct"],
     "template": ["trt-network", "trt-config", "onnx-gs"],
     "debug": ["build", "precision", "reduce", "repeat"],
     "data": ["to-input"],

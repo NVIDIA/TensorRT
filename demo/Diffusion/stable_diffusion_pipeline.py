@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import ammo.torch.quantization as atq
+import calibration
 from cuda import cudart
 from diffusers import (
     DDIMScheduler,
@@ -53,9 +55,14 @@ from utilities import (
     PIPELINE_TYPE,
     TRT_LOGGER,
     Engine,
+    filter_func,
+    get_smoothquant_config,
     get_refit_weights,
+    load_calib_prompts,
     merge_loras,
     prepare_mask_and_masked_image,
+    quantize_lvl,
+    replace_lora_layers,
     save_image,
     unload_model
 )
@@ -289,6 +296,11 @@ class StableDiffusionPipeline:
         os.makedirs(onnx_model_dir, exist_ok=True)
         return os.path.join(onnx_model_dir, 'refit'+suffix+'.json')
 
+    def getStateDictPath(self, model_name, onnx_dir, suffix=''):
+        onnx_model_dir = os.path.join(onnx_dir, self.cachedModelName(model_name)+suffix)
+        os.makedirs(onnx_model_dir, exist_ok=True)
+        return os.path.join(onnx_model_dir, 'state_dict.pt')
+
     def loadEngines(
         self,
         engine_dir,
@@ -303,6 +315,12 @@ class StableDiffusionPipeline:
         enable_refit=False,
         enable_all_tactics=False,
         timing_cache=None,
+        int8=False,
+        quantization_level=2.5,
+        quantization_percentile=0.4,
+        quantization_alpha=0.6,
+        calibration_steps=384,
+        denoising_steps=50,
     ):
         """
         Build and load engines for TensorRT accelerated inference.
@@ -389,20 +407,90 @@ class StableDiffusionPipeline:
         # Torch fallback for VAE if specified
         torch_fallback = dict(zip(model_names, [self.torch_inference or (model_name == 'vae' and self.config.get('vae_torch_fallback', False)) for model_name in model_names]))
         model_suffix = dict(zip(model_names, [lora_suffix if do_lora_merge[model_name] else '' for model_name in model_names]))
+        use_int8 = dict.fromkeys(model_names, False)
+        if int8:
+            assert self.pipeline_type.is_sd_xl(), "int8 quantization only supported for SDXL pipeline"
+            use_int8['unetxl'] = True
+            model_suffix['unetxl'] += f"-int8.l{quantization_level}.bs2.s{denoising_steps}.c{calibration_steps}.p{quantization_percentile}.a{quantization_alpha}"
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False, suffix=model_suffix[model_name]) for model_name in model_names]))
         onnx_opt_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, suffix=model_suffix[model_name]) for model_name in model_names]))
         engine_path = dict(zip(model_names, [self.getEnginePath(model_name, engine_dir, do_engine_refit[model_name], suffix=model_suffix[model_name]) for model_name in model_names]))
         weights_map_path = dict(zip(model_names, [(self.getWeightsMapPath(model_name, onnx_dir) if do_engine_refit[model_name] else None) for model_name in model_names]))
 
-        # Export models to ONNX and save weights name mapping
         for model_name, obj in self.models.items():
             if torch_fallback[model_name]:
                 continue
+            # Export models to ONNX and save weights name mapping
             do_export_onnx = not os.path.exists(engine_path[model_name]) and not os.path.exists(onnx_opt_path[model_name])
             do_export_weights_map = weights_map_path[model_name] and not os.path.exists(weights_map_path[model_name])
-            # FIXME do_export_weights_map needs ONNX graph
             if do_export_onnx or do_export_weights_map:
-                obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=do_lora_merge[model_name])
+                # Non-quantized ONNX export
+                if not use_int8[model_name]:
+                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=do_lora_merge[model_name])
+                else:
+                    state_dict_path = self.getStateDictPath(model_name, onnx_dir, suffix=model_suffix[model_name])
+                    if not os.path.exists(state_dict_path):
+                        print(f"[I] Calibrated weights not found, generating {state_dict_path}")
+                        pipeline = obj.get_pipeline()
+                        model = pipeline.unet
+                        replace_lora_layers(model)
+                        calibration_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'calibration-prompts.txt')
+                        # Use batch_size = 2 for UNet calibration
+                        calibration_prompts = load_calib_prompts(2, calibration_file)
+                        # TODO check size > calibration_steps
+                        quant_config = get_smoothquant_config(model, quantization_level)
+                        if quantization_percentile is not None:
+                            quant_config["percentile"] = quantization_percentile
+                            quant_config["base-step"] = int(denoising_steps)
+
+                        atq.replace_quant_module(model)
+                        atq.set_quantizer_by_cfg(model, quant_config["quant_cfg"])
+                        if quantization_percentile is not None:
+                            calibration.precentile_calib_mode(base_unet=model, quant_config=quant_config)
+                        if quantization_alpha is not None:
+                            calibration.reg_alpha_qkv(base_unet=model, alpha=quantization_alpha)
+
+                        def do_calibrate(base, calibration_prompts, **kwargs):
+                            for i_th, prompts in enumerate(calibration_prompts):
+                                if i_th >= kwargs["calib_size"]:
+                                    return
+                                base(
+                                    prompt=prompts,
+                                    num_inference_steps=kwargs["n_steps"],
+                                    negative_prompt=[
+                                        "normal quality, low quality, worst quality, low res, blurry, nsfw, nude"
+                                    ]
+                                    * len(prompts),
+                                ).images
+
+                        def calibration_loop():
+                            do_calibrate(
+                                base=pipeline,
+                                calibration_prompts=calibration_prompts,
+                                calib_size=calibration_steps,
+                                n_steps=denoising_steps,
+                            )
+
+                        print(f"[I] Performing int8 calibration for {calibration_steps} steps. This can take a long time.")
+                        calibration.calibrate(model, quant_config["algorithm"], forward_loop=calibration_loop)
+                        torch.save(model.state_dict(), state_dict_path)
+
+                    print(f"[I] Generaing quantized ONNX model: {onnx_opt_path[model_name]}")
+                    if not os.path.exists(onnx_path[model_name]):
+                        model = obj.get_model()
+                        replace_lora_layers(model)
+                        atq.replace_quant_module(model)
+                        quant_config = atq.INT8_DEFAULT_CFG
+                        atq.set_quantizer_by_cfg(model, quant_config["quant_cfg"])
+                        model.load_state_dict(torch.load(state_dict_path), strict=True)
+                        quantize_lvl(model, quantization_level)
+                        atq.disable_quantizer(model, filter_func)
+                        model.to(torch.float32) # QDQ needs to be in FP32
+                    else:
+                        model = None
+                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, custom_model=model)
+
+            # FIXME do_export_weights_map needs ONNX graph
             if do_export_weights_map:
                 print(f"[I] Saving weights map: {weights_map_path[model_name]}")
                 obj.export_weights_map(onnx_opt_path[model_name], weights_map_path[model_name])
@@ -414,10 +502,13 @@ class StableDiffusionPipeline:
             engine = Engine(engine_path[model_name])
             if not os.path.exists(engine_path[model_name]):
                 update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
-                use_tf32 = model_name == 'vae' and self.pipeline_type.is_sd_xl()
+                extra_build_args = {}
+                if use_int8[model_name]:
+                    extra_build_args['int8'] = True
+                    extra_build_args['precision_constraints'] = 'prefer'
+                    extra_build_args['builder_optimization_level'] = 4
                 engine.build(onnx_opt_path[model_name],
-                    fp16=not use_tf32,
-                    tf32=use_tf32,
+                    fp16=True,
                     input_profile=obj.get_input_profile(
                         opt_batch_size, opt_image_height, opt_image_width,
                         static_batch=static_batch, static_shape=static_shape
@@ -425,7 +516,8 @@ class StableDiffusionPipeline:
                     enable_refit=do_engine_refit[model_name],
                     enable_all_tactics=enable_all_tactics,
                     timing_cache=timing_cache,
-                    update_output_names=update_output_names)
+                    update_output_names=update_output_names,
+                    **extra_build_args)
             self.engine[model_name] = engine
 
         # Load TensorRT engines
@@ -716,9 +808,9 @@ class StableDiffusionPipeline:
         print('|-----------------|--------------|')
         print('Throughput: {:.2f} image/s'.format(batch_size*1000./walltime_ms))
 
-    def save_image(self, images, pipeline, prompt):
+    def save_image(self, images, pipeline, prompt, seed):
         # Save image
-        image_name_prefix = pipeline+'-fp16'+''.join(set(['-'+prompt[i].replace(' ','_')[:10] for i in range(len(prompt))]))+'-'
+        image_name_prefix = pipeline+''.join(set(['-'+prompt[i].replace(' ','_')[:10] for i in range(len(prompt))]))+'-'+str(seed)+'-'
         save_image(images, self.output_dir, image_name_prefix)
 
     def infer(
@@ -777,7 +869,7 @@ class StableDiffusionPipeline:
 
         num_inference_steps = self.denoising_steps
 
-        with torch.inference_mode(), torch.autocast("cuda"), trt.Runtime(TRT_LOGGER):
+        with torch.inference_mode(), trt.Runtime(TRT_LOGGER):
             torch.cuda.synchronize()
             e2e_tic = time.perf_counter()
 
@@ -875,7 +967,6 @@ class StableDiffusionPipeline:
             denoiser = 'unetxl' if self.pipeline_type.is_sd_xl() else 'unet'
             latents = self.denoise_latent(latents, text_embeddings, denoiser=denoiser, **denoise_kwargs)
 
-        with torch.inference_mode(), trt.Runtime(TRT_LOGGER):
             # VAE decode latent (if applicable)
             if self.return_latents:
                 latents = latents * self.vae_scaling_factor
@@ -889,7 +980,7 @@ class StableDiffusionPipeline:
         if not warmup:
             self.print_summary(num_inference_steps, walltime_ms, batch_size)
             if not self.return_latents and save_image:
-                self.save_image(images, self.pipeline_type.name.lower(), prompt)
+                self.save_image(images, self.pipeline_type.name.lower(), prompt, self.seed)
 
         return (latents, walltime_ms) if self.return_latents else (images, walltime_ms)
 

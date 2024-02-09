@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+from diffusers import DiffusionPipeline
 from diffusers.loaders import LoraLoaderMixin
 from diffusers.models import (
     AutoencoderKL,
@@ -29,6 +30,7 @@ from onnx import numpy_helper, shape_inference
 import onnx_graphsurgeon as gs
 import os
 from polygraphy.backend.onnx.loader import fold_constants
+import re
 import tempfile
 import torch
 import torch.nn.functional as F
@@ -54,8 +56,7 @@ class Optimizer():
 
     def cleanup(self, return_onnx=False):
         self.graph.cleanup().toposort()
-        if return_onnx:
-            return gs.export_onnx(self.graph)
+        return gs.export_onnx(self.graph) if return_onnx else self.graph
 
     def select_outputs(self, keep, names=None):
         self.graph.outputs = [self.graph.outputs[o] for o in keep]
@@ -107,6 +108,59 @@ class Optimizer():
                     onnx_graph.graph.node[i].input[j] = "hidden_states"
         if return_onnx:
             return onnx_graph
+
+    def fuse_mha_qkv_int8_sq(self):
+        tensors = self.graph.tensors()
+        keys = tensors.keys()
+
+        # mha  : fuse QKV QDQ nodes
+        # mhca : fuse KV QDQ nodes
+        q_pat = (
+            "/down_blocks.\\d+/attentions.\\d+/transformer_blocks"
+            ".\\d+/attn\\d+/to_q/input_quantizer/DequantizeLinear_output_0"
+        )
+        k_pat = (
+            "/down_blocks.\\d+/attentions.\\d+/transformer_blocks"
+            ".\\d+/attn\\d+/to_k/input_quantizer/DequantizeLinear_output_0"
+        )
+        v_pat = (
+            "/down_blocks.\\d+/attentions.\\d+/transformer_blocks"
+            ".\\d+/attn\\d+/to_v/input_quantizer/DequantizeLinear_output_0"
+        )
+
+        qs = list(sorted(map(
+            lambda x: x.group(0),  # type: ignore
+            filter(lambda x: x is not None, [re.match(q_pat, key) for key in keys]),
+            )))
+        ks = list(sorted(map(
+            lambda x: x.group(0),  # type: ignore
+            filter(lambda x: x is not None, [re.match(k_pat, key) for key in keys]),
+            )))
+        vs = list(sorted(map(
+            lambda x: x.group(0),  # type: ignore
+            filter(lambda x: x is not None, [re.match(v_pat, key) for key in keys]),
+            )))
+
+        removed = 0
+        assert len(qs) == len(ks) == len(vs), "Failed to collect tensors"
+        for q, k, v in zip(qs, ks, vs):
+            is_mha = all(["attn1" in tensor for tensor in [q, k, v]])
+            is_mhca = all(["attn2" in tensor for tensor in [q, k, v]])
+            assert (is_mha or is_mhca) and (not (is_mha and is_mhca))
+
+            if is_mha:
+                tensors[k].outputs[0].inputs[0] = tensors[q]
+                tensors[v].outputs[0].inputs[0] = tensors[q]
+                del tensors[k]
+                del tensors[v]
+                removed += 2
+            else:  # is_mhca
+                tensors[k].outputs[0].inputs[0] = tensors[v]
+                del tensors[k]
+                removed += 1
+        print(f"Removed {removed} QDQ nodes")
+        return removed
+
 
 def get_path(version, pipeline, controlnets=None):
     if controlnets is not None:
@@ -248,6 +302,7 @@ class BaseModel():
         verbose=True,
         framework_model_dir='pytorch_model',
         fp16=False,
+        int8=False,
         max_batch_size=16,
         text_maxlen=77,
         embedding_dim=768,
@@ -264,6 +319,7 @@ class BaseModel():
         self.framework_model_dir = framework_model_dir
 
         self.fp16 = fp16
+        self.int8 = int8
 
         self.min_batch = 1
         self.max_batch = max_batch_size
@@ -277,6 +333,15 @@ class BaseModel():
         self.extra_output_names = []
 
         self.lora_dict = None
+
+    def get_pipeline(self):
+        model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
+        return DiffusionPipeline.from_pretrained(
+            self.path,
+            use_safetensors=self.hf_safetensor,
+            use_auth_token=self.hf_token,
+            **model_opts,
+        ).to(self.device)
 
     def get_model(self, torch_inference=''):
         pass
@@ -300,16 +365,24 @@ class BaseModel():
         return None
 
     # Helper utility for ONNX export
-    def export_onnx(self, onnx_path, onnx_opt_path, onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=False):
+    def export_onnx(
+        self,
+        onnx_path,
+        onnx_opt_path,
+        onnx_opset,
+        opt_image_height,
+        opt_image_width,
+        custom_model=None,
+        enable_lora_merge=False
+    ):
         onnx_opt_graph = None
         # Export optimized ONNX model (if missing)
         if not os.path.exists(onnx_opt_path):
             if not os.path.exists(onnx_path):
-                print(f"Exporting ONNX model: {onnx_path}")
-                model = self.get_model()
-                if enable_lora_merge:
-                    model = merge_loras(model, self.lora_dict, self.lora_alphas, self.lora_scales)
-                with torch.inference_mode(), torch.autocast("cuda"):
+                print(f"[I] Exporting ONNX model: {onnx_path}")
+                def export_onnx(model):
+                    if enable_lora_merge:
+                        model = merge_loras(model, self.lora_dict, self.lora_alphas, self.lora_scales)
                     inputs = self.get_sample_input(1, opt_image_height, opt_image_width)
                     torch.onnx.export(model,
                             inputs,
@@ -321,10 +394,16 @@ class BaseModel():
                             output_names=self.get_output_names(),
                             dynamic_axes=self.get_dynamic_axes(),
                     )
+                if custom_model:
+                    with torch.inference_mode():
+                        export_onnx(custom_model)
+                else:
+                    with torch.inference_mode(), torch.autocast("cuda"):
+                        export_onnx(self.get_model())
             else:
                 print(f"[I] Found cached ONNX model: {onnx_path}")
 
-            print(f"Optimizing ONNX model: {onnx_opt_path}")
+            print(f"[I] Optimizing ONNX model: {onnx_opt_path}")
             onnx_opt_graph = self.optimize(onnx.load(onnx_path))
             if onnx_opt_graph.ByteSize() > 2147483648:
                 onnx.save_model(
@@ -385,7 +464,7 @@ class BaseModel():
         else:
             print(f"[I] Found cached weights map: {weights_map_path} ")
 
-    def optimize(self, onnx_graph):
+    def optimize(self, onnx_graph, return_onnx=True, **kwargs):
         opt = Optimizer(onnx_graph, verbose=self.verbose)
         opt.info(self.name + ': original')
         opt.cleanup()
@@ -394,7 +473,10 @@ class BaseModel():
         opt.info(self.name + ': fold constants')
         opt.infer_shapes()
         opt.info(self.name + ': shape inference')
-        onnx_opt_graph = opt.cleanup(return_onnx=True)
+        if kwargs.get('fuse_mha_qkv_int8', False):
+            opt.fuse_mha_qkv_int8_sq()
+            opt.info(self.name + ': fuse QKV nodes')
+        onnx_opt_graph = opt.cleanup(return_onnx=return_onnx)
         opt.info(self.name + ': finished')
         return onnx_opt_graph
 
@@ -607,6 +689,7 @@ class UNetModel(BaseModel):
         verbose,
         framework_model_dir,
         fp16 = False,
+        int8 = False,
         max_batch_size = 16,
         text_maxlen = 77,
         controlnets = None,
@@ -746,6 +829,7 @@ class UNetXLModel(BaseModel):
         verbose,
         framework_model_dir,
         fp16 = False,
+        int8 = False,
         max_batch_size = 16,
         text_maxlen = 77,
         lora_scales = None,
@@ -834,6 +918,8 @@ class UNetXLModel(BaseModel):
             }
         )
 
+    def optimize(self, onnx_graph):
+        return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
 
 class VAEModel(BaseModel):
     def __init__(self,

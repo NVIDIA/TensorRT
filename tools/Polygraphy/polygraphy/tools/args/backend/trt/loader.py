@@ -80,6 +80,14 @@ class TrtOnnxFlagArgs(BaseArgs):
             nargs="+",
             default=None,
         )
+        self.group.add_argument(
+            "--plugin-instancenorm",
+            help="Switch to clear the `trt.OnnxParserFlag.NATIVE_INSTANCENORM` flag and"
+            "force the usage of the plugin implementation of ONNX InstanceNorm."
+            "Note that `trt.OnnxParserFlag.NATIVE_INSTANCENORM` is ON by default since TensorRT 10.0.",
+            action="store_true",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -89,6 +97,7 @@ class TrtOnnxFlagArgs(BaseArgs):
             flags (List[str]): flags for onnxparser
         """
         self._flags = args_util.get(args, "onnx_flags", default=[])
+        self._plugin_instancenorm = args_util.get(args, "plugin_instancenorm", default=None)
 
     def get_flags(self):
         """
@@ -110,7 +119,7 @@ class TrtOnnxFlagArgs(BaseArgs):
             )
             flags.append("native_instancenorm")
 
-        return [make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None
+        return ([make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None, self._plugin_instancenorm)
 
 
 @mod.export()
@@ -291,10 +300,10 @@ class TrtLoadNetworkArgs(BaseArgs):
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
         outputs = args_util.get_outputs_for_script(script, self.outputs)
-        parser_flags = self.arg_groups[TrtOnnxFlagArgs].get_flags()
+        parser_flags, plugin_instancenorm = self.arg_groups[TrtOnnxFlagArgs].get_flags()
 
         if any(
-            arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats, parser_flags]
+            arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats, parser_flags, plugin_instancenorm]
         ):
             script.add_import(imports="tensorrt", imp_as="trt")
 
@@ -318,6 +327,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     "NetworkFromOnnxBytes",
                     self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader),
                     flags=parser_flags,
+                    plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
@@ -327,6 +337,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     "NetworkFromOnnxPath",
                     self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file),
                     flags=parser_flags,
+                    plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")

@@ -20,10 +20,13 @@ subtool, which reduces failing ONNX models.
 """
 import os
 
+import tempfile
 import numpy as np
 import onnx
+import subprocess
 import onnx_graphsurgeon as gs
-
+from meta import ONNX_MODELS
+from polygraphy.tools.sparse import SparsityPruner
 CURDIR = os.path.dirname(__file__)
 
 
@@ -107,12 +110,41 @@ def split(self, inp, split, axis=0):
         attrs={"axis": axis, "split": split},
     )
 
+@gs.Graph.register()
+def transpose(self, inp, **kwargs):
+    return self.layer(
+        op="Transpose",
+        inputs=[inp],
+        outputs=["transpose_out"],
+        **kwargs
+    )[0]
+
+@gs.Graph.register()
+def quantize_linear(self, inp, y_scale, y_zero_point, **kwargs):
+    return self.layer(
+        op="QuantizeLinear",
+        inputs=[inp, y_scale, y_zero_point],
+        outputs=["quantize_linear_out"],
+        **kwargs
+    )[0]
+
+@gs.Graph.register()
+def dequantize_linear(self, inp, x_scale, x_zero_point, **kwargs):
+    return self.layer(
+        op="DequantizeLinear",
+        inputs=[inp, x_scale, x_zero_point],
+        outputs=["dequantize_linear_out"],
+        **kwargs
+    )[0]
 
 def save(graph, model_name):
     path = os.path.join(CURDIR, model_name)
     print(f"Writing: {path}")
     onnx.save(gs.export_onnx(graph), path)
 
+def make_sparse(graph):
+    sparsity_pruner = SparsityPruner(gs.export_onnx(graph))
+    return gs.import_onnx(sparsity_pruner.prune())
 
 # Generates a model with multiple inputs/outputs:
 #
@@ -396,7 +428,7 @@ def make_unbounded_dds():
 make_unbounded_dds()
 
 
-def make_small_matmul(name, dtype):
+def make_small_matmul(name, dtype, save_sparse=False):
     M = 8
     N = 8
     K = 16
@@ -409,9 +441,10 @@ def make_small_matmul(name, dtype):
     g.outputs = [c]
 
     save(g, name)
+    if save_sparse:
+        save(make_sparse(g), 'sparse.'+name)
 
-
-make_small_matmul("matmul.onnx", np.float32)
+make_small_matmul("matmul.onnx", np.float32, save_sparse=True)
 make_small_matmul("matmul.fp16.onnx", np.float16)
 
 
@@ -431,6 +464,7 @@ def make_small_conv(name):
     g.outputs = [c]
 
     save(g, name)
+    save(make_sparse(g), 'sparse.'+name)
 
 
 make_small_conv("conv.onnx")
@@ -725,3 +759,100 @@ def make_bad_graph_with_duplicate_node_names():
 
     save(graph, "bad_graph_with_duplicate_node_names.onnx")
 make_bad_graph_with_duplicate_node_names()
+
+# Generates a model where the graph has a subgraph matching toyPlugin's graph pattern
+def make_graph_with_subgraph_matching_toy_plugin():
+    i0 = gs.Variable(name="i0", dtype=np.float32)
+    i1 = gs.Variable(name="i1", dtype=np.float32)
+    i2 = gs.Variable(name="i2", dtype=np.float32)
+    i3 = gs.Variable(name="i3", dtype=np.float32)
+    i4 = gs.Variable(name="i4", dtype=np.float32)
+
+    o1 = gs.Variable(name="o1", dtype=np.float32)
+    o2 = gs.Variable(name="o2", dtype=np.float32)
+
+    O_node = gs.Node(op="O", inputs=[i0], outputs=[i1], name="n1")
+    A_node = gs.Node(op="A", inputs=[i1], outputs=[i2], name="n2")
+    B_node = gs.Node(op="B", inputs=[i1], outputs=[i3], name="n3")
+    C_node = gs.Node(op="C", inputs=[i2,i3], outputs=[i4], attrs={"x":1}, name="n4")
+    D_node = gs.Node(op="D", inputs=[i4], outputs=[o1], name="n5")
+    E_node = gs.Node(op="E", inputs=[i4], outputs=[o2], name="n6")
+
+    graph = gs.Graph(nodes=[O_node, A_node, B_node, C_node, D_node, E_node], inputs=[i0], outputs=[o1,o2])
+
+    save(graph, "graph_with_subgraph_matching_toy_plugin.onnx")
+make_graph_with_subgraph_matching_toy_plugin()
+
+# Generates the following Graph
+#
+# The input to the Transpose op is an initializer
+#
+#    Transpose
+#       |
+#      MatMul
+#       |
+#      out
+#
+def make_transpose_matmul():
+    M = 8
+    N = 8
+    K = 16
+    a = gs.Variable("a", shape=(M, K), dtype=np.float32)
+    g = gs.Graph(inputs=[a], opset=13)
+    val = np.random.uniform(-3, 3, size=K * N).astype(np.float32).reshape((N, K))
+    b = gs.Constant("b", values=val)
+    b_transpose = g.transpose(b, name="transpose")
+    c = g.matmul(a, b_transpose, name="matmul")
+    c.dtype = np.float32
+    g.outputs = [c]
+
+    save(g, "transpose_matmul.onnx")
+
+make_transpose_matmul()
+
+# Generates the following Graph
+#
+# The input to the QuantizeLinear op is an initializer
+#
+#    QuantizeLinear
+#       |
+#    DequantizeLinear
+#       |
+#      Conv
+#       |
+#      out
+#
+def make_qdq_conv():
+    x = np.random.uniform(-3, 3, size=3*3*130).astype(np.float32).reshape((1, 3, 3, 130))
+    y_scale = np.array([2, 4, 5], dtype=np.float32)
+    y_zero_point = np.array([84, 24, 196], dtype=np.uint8)
+    x_const = gs.Constant("x", values=x)
+    y_scale_const = gs.Constant("y_scale", values=y_scale)
+    y_zero_point_const = gs.Constant("y_zero_point", values=y_zero_point)
+
+    weight = gs.Constant("Weights_0", values=np.ones((3, 3, 3, 3), dtype=np.float32))
+
+    g = gs.Graph(inputs=[], opset=13)
+    q_layer = g.quantize_linear(x_const, y_scale_const, y_zero_point_const)
+    dq_layer = g.dequantize_linear(q_layer, y_scale_const, y_zero_point_const)
+    out = g.conv(dq_layer, weight, [3, 3], name="Conv_0")
+    out.dtype = np.float32
+    g.outputs = [out]
+
+    save(g, "qdq_conv.onnx")
+
+make_qdq_conv()
+
+def make_weightless_network(model_name):
+    ipath = ONNX_MODELS[model_name].path
+    opath = os.path.join(CURDIR, "weightless." + model_name + ".onnx")
+    cmd = [f"polygraphy surgeon weight-strip {ipath} -o {opath}"]
+    subprocess.run(cmd, shell=True)
+
+make_weightless_network("matmul.fp16")
+make_weightless_network("matmul.bf16")
+make_weightless_network("sparse.matmul")
+make_weightless_network("conv")
+make_weightless_network("sparse.conv")
+make_weightless_network("transpose_matmul")
+make_weightless_network("qdq_conv")
