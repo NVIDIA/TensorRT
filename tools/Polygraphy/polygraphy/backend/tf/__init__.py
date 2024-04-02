@@ -11,7 +11,7 @@ def register_logger_callback():
 
         tf = mod.lazy_import("tensorflow<2.0")
 
-        if not mod.has_mod("tensorflow"):
+        if not tf.is_installed() or not tf.is_importable():
             return
 
         sev = severity_trie.get(G_LOGGER.module_path(os.path.dirname(__file__)))

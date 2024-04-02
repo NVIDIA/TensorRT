@@ -248,13 +248,13 @@ void checkDescs(PluginTensorDesc const& iDesc, PluginTensorDesc const& sDesc, Pl
 }
 
 int32_t SkipLayerNormInterleavedPluginHFace::enqueue(PluginTensorDesc const* inputDesc,
-    PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
+    PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* /* workspace */,
     cudaStream_t stream) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         // Input shape: 1x(hxd)xtotalx1
         auto const iDesc = inputDesc[0];
         auto const sDesc = inputDesc[1];
@@ -288,11 +288,13 @@ int32_t SkipLayerNormInterleavedPluginHFace::enqueue(PluginTensorDesc const* inp
 }
 
 int32_t SkipLayerNormInterleavedPluginMTron::enqueue(PluginTensorDesc const* inputDesc,
-    PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
+    PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* /* workspace */,
     cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         // Input shape: 1x(hxd)xtotalx1
         auto const iDesc = inputDesc[0];
         auto const sDesc = inputDesc[1];

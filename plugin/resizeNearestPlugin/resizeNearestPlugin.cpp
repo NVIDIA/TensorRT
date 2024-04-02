@@ -231,7 +231,7 @@ int32_t ResizeNearest::enqueue(
 
     int32_t nchan = mOutputDims.d[0];
     float scale = mScale;
-    int2 osize = {mOutputDims.d[2], mOutputDims.d[1]};
+    int2 osize = {dimToInt32(mOutputDims.d[2]), dimToInt32(mOutputDims.d[1])};
     int32_t istride = mInputDims.d[2];
     int32_t ostride = mOutputDims.d[2];
     int32_t ibatchstride = mInputDims.d[1] * istride;

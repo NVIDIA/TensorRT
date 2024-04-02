@@ -54,7 +54,7 @@ using namespace pybind11::literals;
 struct FallbackString
 {
     FallbackString() = default;
-    FallbackString(std::string other)
+    FallbackString(std::string const& other)
         : mData{other}
     {
     }
@@ -85,8 +85,6 @@ void bindCore(py::module& m);
 // Parsers
 #if EXPORT_ALL_BINDINGS
 void bindOnnx(py::module& m);
-void bindUff(py::module& m);
-void bindCaffe(py::module& m);
 #endif
 } // namespace tensorrt
 

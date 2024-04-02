@@ -110,8 +110,8 @@ Calibration
 ~~~~~~~~~~~
 
 Calibration is the TensorRT terminology of passing data samples to the
-quantizer and deciding the best amax for activations. We support 3
-calibration method:
+quantizer and deciding the best amax for activations. 
+We support 3 calibration methods:
 
 -  ``max``: Simply use global maximum absolute value
 -  ``entropy``: TensorRT's entropy calibration
@@ -125,7 +125,7 @@ be used as the following example:
 
     # Find the TensorQuantizer and enable calibration
     for name, module in model.named_modules():
-        if name.endswith('_input_quantizer'):
+        if name.endswith('_quantizer'):
             module.enable_calib()
             module.disable_quant()  # Use full precision data to calibrate
             
@@ -135,8 +135,9 @@ be used as the following example:
 
     # Finalize calibration
     for name, module in model.named_modules():
-        if name.endswith('_input_quantizer'):
+        if name.endswith('_quantizer'):
             module.load_calib_amax()
+            module.disable_calib()
             module.enable_quant()
             
     # If running on GPU, it needs to call .cuda() again because new tensors will be created by calibration process
@@ -144,6 +145,10 @@ be used as the following example:
 
     # Keep running the quantized model
     # ...
+
+.. note::
+
+    Calibration needs to be performed before exporting the model to ONNX.
 
 Quantization Aware Training
 ---------------------
@@ -182,34 +187,32 @@ experience, here are some recommendations:
 Export to ONNX
 --------------
 
-The goal of exporting to ONNX is to deploy inference by TensorRT, not
+The goal of exporting to ONNX is to deploy to TensorRT, not to
 ONNX runtime. So we only export fake quantized model into a form TensorRT will take. Fake
 quantization will be broken into a pair of
-QuantizeLinear/DequantizeLinear ONNX ops. In future, TensorRT will take
-the graph, and execute it in int8 in the most optimized way to its
+QuantizeLinear/DequantizeLinear ONNX ops. TensorRT will take
+the generated ONNX graph, and execute it in int8 in the most optimized way to its
 capability.
 
-First set static member of TensorQuantizer to use Pytorch’s own fake
-quantization functions
+.. note::
 
-.. code:: python
+    Currently, we only support exporting int8 and fp8 fake quantized modules. 
+    Additionally, quantized modules need to be calibrated before exporting to ONNX. 
 
-   from pytorch_quantization import nn as quant_nn
-   quant_nn.TensorQuantizer.use_fb_fake_quant = True
-
-Fake quantized model can now be exported to ONNX as other models, follow
-the instructions in
+Fake quantized model can be exported to ONNX as any other Pytorch model. 
+Please learn more about exporting a Pytorch model to ONNX at
 `torch.onnx <https://pytorch.org/docs/stable/onnx.html?highlight=onnx#module-torch.onnx>`__.
 For example:
 
 .. code:: python
 
+   import pytorch_quantization
    from pytorch_quantization import nn as quant_nn
    from pytorch_quantization import quant_modules
-   quant_nn.TensorQuantizer.use_fb_fake_quant = True
 
    quant_modules.initialize()
    model = torchvision.models.resnet50()
+   
    # load the calibrated model
    state_dict = torch.load("quant_resnet50-entropy-1024.pth", map_location="cpu")
    model.load_state_dict(state_dict)
@@ -220,9 +223,11 @@ For example:
    input_names = [ "actual_input_1" ]
    output_names = [ "output1" ]
 
-   # enable_onnx_checker needs to be disabled. See notes below.
-   torch.onnx.export(
-       model, dummy_input, "quant_resnet50.onnx", verbose=True, opset_version=10, enable_onnx_checker=False)
+   with pytorch_quantization.enable_onnx_export():
+        # enable_onnx_checker needs to be disabled. See notes below.
+        torch.onnx.export(
+            model, dummy_input, "quant_resnet50.onnx", verbose=True, opset_version=10, enable_onnx_checker=False
+            )
 
 .. Note::
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +17,6 @@
 #include "scatterPlugin.h"
 #include "common/half.h"
 #include <cstring>
-#include <cublas_v2.h>
-#include <cudnn.h>
 #include <iostream>
 #include <sstream>
 namespace nvinfer1
@@ -134,6 +132,9 @@ int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept
 int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+        && workspace != nullptr);
+
     int32_t transformCoeff[nvinfer1::Dims::MAX_DIMS];
     std::memset(transformCoeff, 0, sizeof(int32_t) * outputDesc[0].dims.MAX_DIMS);
     Dims IndexDims = inputDesc[indexTensorIdx].dims;
@@ -155,7 +156,10 @@ int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc c
     case DataType::kINT8:
     case DataType::kUINT8:
     case DataType::kBOOL: elementSizeInBytes = 1; break;
-    case DataType::kFP8: PLUGIN_FAIL("FP8 not supported"); break;
+    case DataType::kFP8:
+    case DataType::kBF16:
+    case DataType::kINT64:
+    case DataType::kINT4: PLUGIN_FAIL("Unsupported data type");
     }
 
     for (int32_t i = indexRank; i < dataDims.nbDims; i++)

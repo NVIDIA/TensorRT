@@ -28,7 +28,6 @@ from polygraphy.backend.trt import (
     engine_from_network,
     network_from_onnx_bytes,
     save_engine,
-    util as trt_util,
 )
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
@@ -70,7 +69,9 @@ def check_lines_match(actual, expected, should_check_line=lambda x: True):
     actual = [
         line
         for line in actual.splitlines()
-        if "Loading" not in line and not line.startswith("[V]") and not line.startswith("[W]")
+        if "Loading" not in line
+        and not line.startswith("[V]")
+        and not line.startswith("[W]")
     ]
     expected = expected.splitlines()
     assert len(actual) == len(expected)
@@ -428,43 +429,11 @@ ONNX_CASES = [
 ]
 
 
-def process_expected_engine_output(output):
-    # This used to be required due to differences in the output based on TRT version, but is not required currently.
-    # Kept here as it may be required in the future.
-    return output
-
-
 # Format: List[Tuple[show_opts, expected]]
 ENGINE_CASES = [
     (
         [],
-        process_expected_engine_output(
-            r"""
-        [I] ==== TensorRT Engine ====
-            Name: Unnamed Network 0 | Explicit Batch Engine
-
-            ---- 1 Engine Input(s) ----
-            {X [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- 1 Engine Output(s) ----
-            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- Memory ----
-            Device Memory: 0 bytes
-
-            ---- 2 Profile(s) (2 Tensor(s) Each) ----
-            - Profile: 0
-                Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
-                Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
-
-            - Profile: 1
-                Binding Index: 2 (Input)  [Name: X [profile 1]] | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
-                Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
-
-            ---- 1 Layer(s) Per Profile ----
-        """
-            if not trt_util._should_use_v3_api()
-            else r"""
+        r"""
         [I] ==== TensorRT Engine ====
             Name: Unnamed Network 0 | Explicit Batch Engine
 
@@ -487,193 +456,44 @@ ENGINE_CASES = [
                 Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
 
             ---- 1 Layer(s) Per Profile ----
-        """
-        ),
-    ),
-    (
-        ["layers"],
-        process_expected_engine_output(
-            r"""
-        [I] ==== TensorRT Engine ====
-            Name: Unnamed Network 0 | Explicit Batch Engine
-
-            ---- 1 Engine Input(s) ----
-            {X [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- 1 Engine Output(s) ----
-            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- Memory ----
-            Device Memory: 0 bytes
-
-            ---- 2 Profile(s) (2 Tensor(s) Each) ----
-            - Profile: 0
-                Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
-                Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
-
-            - Profile: 1
-                Binding Index: 2 (Input)  [Name: X [profile 1]] | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
-                Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
-
-            ---- 1 Layer(s) Per Profile ----
-            - Profile: 0
-                Layer 0    | node_of_Y [Op: Reformat]
-                    {X [shape=(1, 2, -1, -1)]}
-                     -> {Y [shape=(1, 2, -1, -1)]}
-
-            - Profile: 1
-                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
-                    {X [profile 1] [shape=(1, 2, -1, -1)]}
-                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
-        """
-            if not trt_util._should_use_v3_api()
-            else r"""
-        [I] ==== TensorRT Engine ====
-            Name: Unnamed Network 0 | Explicit Batch Engine
-
-            ---- 1 Engine Input(s) ----
-            {X [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- 1 Engine Output(s) ----
-            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- Memory ----
-            Device Memory: 0 bytes
-
-            ---- 2 Profile(s) (2 Tensor(s) Each) ----
-            - Profile: 0
-                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
-                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
-
-            - Profile: 1
-                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
-                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
-
-            ---- 1 Layer(s) Per Profile ----
-            - Profile: 0
-                Layer 0    | node_of_Y [Op: Reformat]
-                    {X [shape=(1, 2, -1, -1)]}
-                     -> {Y [shape=(1, 2, -1, -1)]}
-
-            - Profile: 1
-                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
-                    {X [profile 1] [shape=(1, 2, -1, -1)]}
-                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
-        """
-        ),
-    ),
-    (
-        ["layers", "attrs"],
-        process_expected_engine_output(
-            r"""
-        [I] ==== TensorRT Engine ====
-            Name: Unnamed Network 0 | Explicit Batch Engine
-
-            ---- 1 Engine Input(s) ----
-            {X [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- 1 Engine Output(s) ----
-            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- Memory ----
-            Device Memory: 0 bytes
-
-            ---- 2 Profile(s) (2 Tensor(s) Each) ----
-            - Profile: 0
-                Binding Index: 0 (Input)  [Name: X]             | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
-                Binding Index: 1 (Output) [Name: Y]             | Shape: (1, 2, -1, -1)
-
-            - Profile: 1
-                Binding Index: 2 (Input)  [Name: X [profile 1]] | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
-                Binding Index: 3 (Output) [Name: Y [profile 1]] | Shape: (1, 2, -1, -1)
-
-            ---- 1 Layer(s) Per Profile ----
-            - Profile: 0
-                Layer 0    | node_of_Y [Op: Reformat]
-                    {X [shape=(1, 2, -1, -1)]}
-                     -> {Y [shape=(1, 2, -1, -1)]}
-                    ---- Attributes ----
-                    Origin = CAST
-                    Tactic = 0x0
-
-            - Profile: 1
-                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
-                    {X [profile 1] [shape=(1, 2, -1, -1)]}
-                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
-                    ---- Attributes ----
-                    Origin = CAST
-                    Tactic = 0x0
-        """
-            if not trt_util._should_use_v3_api()
-            else r"""
-        [I] ==== TensorRT Engine ====
-            Name: Unnamed Network 0 | Explicit Batch Engine
-
-            ---- 1 Engine Input(s) ----
-            {X [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- 1 Engine Output(s) ----
-            {Y [dtype=float32, shape=(1, 2, -1, -1)]}
-
-            ---- Memory ----
-            Device Memory: 0 bytes
-
-            ---- 2 Profile(s) (2 Tensor(s) Each) ----
-            - Profile: 0
-                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 1, 1), opt=(1, 2, 3, 3), max=(1, 2, 5, 5)
-                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
-
-            - Profile: 1
-                Tensor: X          (Input), Index: 0 | Shapes: min=(1, 2, 2, 2), opt=(1, 2, 4, 4), max=(1, 2, 6, 6)
-                Tensor: Y         (Output), Index: 1 | Shape: (1, 2, -1, -1)
-
-            ---- 1 Layer(s) Per Profile ----
-            - Profile: 0
-                Layer 0    | node_of_Y [Op: Reformat]
-                    {X [shape=(1, 2, -1, -1)]}
-                     -> {Y [shape=(1, 2, -1, -1)]}
-                    ---- Attributes ----
-                    Origin = CAST
-                    Tactic = 0x0
-
-            - Profile: 1
-                Layer 0    | node_of_Y [profile 1] [Op: Reformat]
-                    {X [profile 1] [shape=(1, 2, -1, -1)]}
-                     -> {Y [profile 1] [shape=(1, 2, -1, -1)]}
-                    ---- Attributes ----
-                    Origin = CAST
-                    Tactic = 0x0
-        """
-        ),
+        """,
     ),
 ]
 
 
 class TestInspectModel:
-    @pytest.mark.parametrize("case", ONNX_CASES, ids=lambda case: f"{case[0]}-{case[1]}")
+    @pytest.mark.parametrize(
+        "case", ONNX_CASES, ids=lambda case: f"{case[0]}-{case[1]}"
+    )
     def test_onnx(self, case, poly_inspect):
         model, show, expected, additional_opts = case
         status = poly_inspect(
-            ["model", ONNX_MODELS[model].path] + (["--show"] + show if show else []) + additional_opts
+            ["model", ONNX_MODELS[model].path, "--log-format=no-colors"]
+            + (["--show"] + show if show else [])
+            + additional_opts
         )
 
         expected = dedent(expected).strip()
         actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
 
-        check_lines_match(actual, expected, should_check_line=lambda line: "Note: Error was:" not in line)
+        check_lines_match(
+            actual,
+            expected,
+            should_check_line=lambda line: "Note: Error was:" not in line,
+        )
 
     def test_list_unbounded_dds(self, poly_inspect):
-        cmd = ["model", ONNX_MODELS["unbounded_dds"].path, "--list-unbounded-dds", "--shape-inference"]
+        cmd = [
+            "model",
+            ONNX_MODELS["unbounded_dds"].path,
+            "--list-unbounded-dds",
+            "--shape-inference",
+        ]
         status = poly_inspect(cmd)
-        assert ("cast_out_6" in status.stdout)
+        assert "cast_out_6" in status.stdout
 
     @pytest.mark.parametrize("model", ["identity", "scan", "tensor_attr"])
     def test_trt_sanity(self, run_inspect_model, model):
-        import tensorrt as trt
-
-        if model == "tensor_attr" and mod.version(trt.__version__) < mod.version("7.2"):
-            pytest.skip("Models with constant outputs were not supported before 7.2")
-
         run_inspect_model([ONNX_MODELS[model].path, "--display-as=trt"])
 
     def test_trt_network_script(self, poly_inspect):
@@ -698,12 +518,13 @@ class TestInspectModel:
 
             poly_inspect(["model", f.name])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.2"), reason="Unsupported for TRT 8.0 and older")
     @pytest.mark.parametrize("case", ENGINE_CASES, ids=lambda case: f"{case[0]}")
     @pytest.mark.flaky(max_runs=3)
     def test_trt_engine(self, case, dynamic_identity_engine, poly_inspect):
         show, expected = case
-        status = poly_inspect(["model", dynamic_identity_engine] + (["--show"] + show if show else []))
+        status = poly_inspect(
+            ["model", dynamic_identity_engine] + (["--show"] + show if show else [])
+        )
 
         expected = dedent(expected).strip()
         actual = "\n".join(status.stdout.splitlines()[1:])  # Ignore loading message
@@ -727,13 +548,27 @@ class TestInspectData:
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
     def test_outputs(self, opts, poly_run, poly_inspect):
         with util.NamedTemporaryFile() as outpath:
-            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", outpath.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--save-outputs",
+                    outpath.name,
+                ]
+            )
             poly_inspect(["data", outpath.name] + opts)
 
     @pytest.mark.parametrize("opts", [[], ["--show-values"]])
     def test_inputs(self, opts, poly_run, poly_inspect):
         with util.NamedTemporaryFile() as outpath:
-            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", outpath.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--save-inputs",
+                    outpath.name,
+                ]
+            )
             poly_inspect(["data", outpath.name] + opts)
 
     @pytest.mark.parametrize("num_items", [-1, 1, 2, 10, 12])
@@ -749,14 +584,22 @@ class TestInspectData:
                 ]
             )
             status = poly_inspect(
-                ["data", outpath.name, "--show-values", "--line-width=-1", f"--num-items={num_items}"]
+                [
+                    "data",
+                    outpath.name,
+                    "--show-values",
+                    "--line-width=-1",
+                    f"--num-items={num_items}",
+                ]
             )
 
             # Process only lines containing array print outs (which are all indented)
             lines = [
                 line.strip()
                 for line in status.stdout.splitlines()
-                if line.strip() and line.startswith(constants.TAB * 2) and line.strip() != "..."
+                if line.strip()
+                and line.startswith(constants.TAB * 2)
+                and line.strip() != "..."
             ]
             for line in lines:
                 items = [e for e in line.strip("[]").split() if "..." not in e]
@@ -771,30 +614,46 @@ TACTIC_REPLAY_CASES = [
     [
         "pow_scalar",
         r"""
-
         [I] Layer: (Unnamed Layer* 0) [Shuffle]
-                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '()'),) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)'),)
+                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
             Layer: node_of_z
-                Algorithm: (Implementation: 2147483651, Tactic: 1) | Inputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)'), ('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)')) | Outputs: (('TensorFormat.LINEAR', 'DataType.FLOAT', '(1,)'),)
+                Algorithm: (Implementation: 2147483651, Tactic: 1) | Inputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1), TensorInfo(DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
+        """
+        if mod.version(trt.__version__) < mod.version("8.7")
+        else r"""
+        [I] Layer: ONNXTRT_Broadcast
+                Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
+            Layer: PWN(node_of_z)
+                Algorithm: (Implementation: 2147483688, Tactic: 1) | Inputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1), TensorInfo(DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
         """,
     ],
 ]
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestInspectTactics:
     @pytest.mark.parametrize("case", TACTIC_REPLAY_CASES, ids=lambda case: case[0])
     def test_show_tactics(self, case, poly_run, poly_inspect):
         with util.NamedTemporaryFile() as replay:
             model_name, expected = case
 
-            poly_run([ONNX_MODELS[model_name].path, "--trt", "--save-tactics", replay.name])
+            poly_run(
+                [
+                    ONNX_MODELS[model_name].path,
+                    "--trt",
+                    "--save-tactics",
+                    replay.name,
+                ]
+            )
             status = poly_inspect(["tactics", replay.name])
 
             expected = dedent(expected).strip()
             actual = status.stdout
 
-            check_lines_match(actual, expected, should_check_line=lambda line: "Algorithm: " not in line)
+            check_lines_match(
+                actual,
+                expected,
+                should_check_line=lambda line: "Algorithm: " not in line,
+            )
 
 
 # List[model, expected_files, expected_output]
@@ -815,6 +674,15 @@ TEST_CAPABILITY_CASES = [
             -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
             FAKE!    |       2 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[0, 1], [2, 3]]
             FAKER!   |       1 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[4, 5]]
+        """
+        if mod.version(trt.__version__) < mod.version("10.0")
+        else """
+        [I] ===== Summary =====
+            Operator | Count   | Reason                                                                                                                                                                           | Nodes
+            --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            FAKE!    |       1 | In node 0 with name: Fake1 and operator: FAKE! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"  | [[0, 1]]
+            FAKE!    |       1 | In node 0 with name: Fake2 and operator: FAKE! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"  | [[2, 3]]
+            FAKER!   |       1 | In node 0 with name: Fake3 and operator: FAKER! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[4, 5]]
         """,
     ),
     (
@@ -828,21 +696,27 @@ TEST_CAPABILITY_CASES = [
 
 
 class TestCapability:
-    @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.0"), reason="supports_model API not available before TRT 8.0"
-    )
     @pytest.mark.script_launch_mode("subprocess")
     @pytest.mark.parametrize("case", TEST_CAPABILITY_CASES, ids=lambda case: case[0])
     def test_capability(self, case, poly_inspect):
         model, expected_files, expected_summary = case
         with tempfile.TemporaryDirectory() as outdir:
             status = poly_inspect(
-                ["capability", ONNX_MODELS[model].path, "-o", os.path.join(outdir, "subgraphs")],
+                [
+                    "capability",
+                    "--with-partitioning",
+                    ONNX_MODELS[model].path,
+                    "-o",
+                    os.path.join(outdir, "subgraphs"),
+                ],
             )
-            assert sorted(map(os.path.basename, glob.glob(os.path.join(outdir, "subgraphs", "**")))) == sorted(
-                expected_files
-            )
-            assert dedent(expected_summary).strip() in status.stdout
+            assert sorted(
+                map(
+                    os.path.basename,
+                    glob.glob(os.path.join(outdir, "subgraphs", "**")),
+                )
+            ) == sorted(expected_files)
+            assert dedent(expected_summary).strip() in dedent(status.stdout).strip()
 
 
 class TestDiffTactics:
@@ -877,3 +751,14 @@ class TestDiffTactics:
         bad = find_file(os.path.join(replay_dir, "bad"), "1.json")
         status = poly_inspect(["diff-tactics", "--good", good, "--bad", bad])
         self.check_output(status, expected_output, expected_num=1)
+
+
+class TestInspectSparsity:
+    @pytest.mark.parametrize(
+        "model_name", ["matmul", "matmul.bf16", "matmul.bf16.i32data", "conv"]
+    )
+    def test_prune_check(self, poly_inspect, model_name):
+        with tempfile.TemporaryDirectory() as outdir:
+            ipath = ONNX_MODELS[model_name].path
+            status = poly_inspect(["sparsity", ipath])
+            assert status

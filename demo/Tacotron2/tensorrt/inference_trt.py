@@ -437,7 +437,8 @@ def main():
     measurements = {}
 
     sequences, sequence_lengths = prepare_input_sequence(texts)
-    sequences = sequences.to(torch.int32)
+    dt = encoder.get_tensor_dtype("sequences")
+    sequences = sequences.to(torch.int64 if dt == trt.DataType.INT64 else torch.int32)
     sequence_lengths = sequence_lengths.to(torch.int32)
 
     with MeasureTime(measurements, "latency"):

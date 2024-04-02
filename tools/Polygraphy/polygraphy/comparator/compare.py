@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import copy
 import functools
 from collections import OrderedDict
 
 from polygraphy import mod, util
 from polygraphy.comparator import util as comp_util
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER, LogMode
 
 np = mod.lazy_import("numpy")
@@ -31,7 +33,18 @@ class OutputCompareResult:
     between two runners.
     """
 
-    def __init__(self, passed, max_absdiff, max_reldiff, mean_absdiff, mean_reldiff, median_absdiff, median_reldiff):
+    def __init__(
+        self,
+        passed,
+        max_absdiff,
+        max_reldiff,
+        mean_absdiff,
+        mean_reldiff,
+        median_absdiff,
+        median_reldiff,
+        quantile_absdiff,
+        quantile_reldiff,
+    ):
         """
         Records the required tolerances and other statistics gathered during comparison.
 
@@ -50,6 +63,10 @@ class OutputCompareResult:
                     The median absolute error between the outputs.
             median_reldiff (float):
                     The median relative error between the outputs.
+            quantile_absdiff (float):
+                    The q-th quantile absolute error between the outputs.
+            quantile_reldiff (float):
+                    The q-th quantile relative error between the outputs.
         """
         self.passed = passed
         self.max_absdiff = max_absdiff
@@ -58,6 +75,8 @@ class OutputCompareResult:
         self.mean_reldiff = mean_reldiff
         self.median_absdiff = median_absdiff
         self.median_reldiff = median_reldiff
+        self.quantile_absdiff = quantile_absdiff
+        self.quantile_reldiff = quantile_reldiff
 
     def __bool__(self):
         """
@@ -82,9 +101,7 @@ def default_find_output_func(output_name, index, iter_result, base_iter_result):
             G_LOGGER.verbose(
                 f"Will not compare {found_name} with {output_name}, since the former already has an exact match: {exact_match}"
             )
-            return (
-                None  # If the found output is being compared against another output already, skip this non-exact match
-            )
+            return None  # If the found output is being compared against another output already, skip this non-exact match
         G_LOGGER.warning(
             f"Output names did not match exactly. Assuming {iter_result.runner_name} output: {found_name} corresponds to output: {output_name}"
         )
@@ -95,7 +112,9 @@ def run_comparison(func, fail_fast, iter_result0, iter_result1, find_output_func
     """
     Iterates over all the generated outputs and runs `func` to compare them.
     """
-    output_status = OrderedDict()  # OrderedDict[str, bool] Maps output names to whether they matched.
+    output_status = (
+        OrderedDict()
+    )  # OrderedDict[str, bool] Maps output names to whether they matched.
 
     for index, (out0_name, output0) in enumerate(iter_result0.items()):
         out1_names = util.default(find_output_func(out0_name, index, iter_result1), [])
@@ -115,18 +134,22 @@ def run_comparison(func, fail_fast, iter_result0, iter_result1, find_output_func
             output1 = iter_result1[out1_name]
 
             G_LOGGER.start(
-                f"Comparing Output: '{out0_name}' (dtype={output0.dtype}, shape={output0.shape}) with '{out1_name}' (dtype={output1.dtype}, shape={output1.shape})"
+                f"Comparing Output: '{out0_name}' (dtype={util.array.dtype(output0)}, shape={util.array.shape(output0)}) with '{out1_name}' (dtype={util.array.dtype(output1)}, shape={util.array.shape(output1)})"
             )
             with G_LOGGER.indent():
                 output_status[out0_name] = func(out0_name, output0, out1_name, output1)
                 if fail_fast and not output_status[out0_name]:
                     return output_status
 
-    mismatched_output_names = [name for name, matched in output_status.items() if not matched]
+    mismatched_output_names = [
+        name for name, matched in output_status.items() if not matched
+    ]
     if mismatched_output_names:
         G_LOGGER.error(f"FAILED | Mismatched outputs: {mismatched_output_names}")
     else:
-        G_LOGGER.finish(f"PASSED | All outputs matched | Outputs: {list(output_status.keys())}")
+        G_LOGGER.finish(
+            f"PASSED | All outputs matched | Outputs: {list(output_status.keys())}"
+        )
 
     # This is useful for catching cases were Polygraphy does something wrong with the runner output buffers
     if not output_status and (bool(iter_result0.keys()) or bool(iter_result1.keys())):
@@ -161,6 +184,7 @@ class CompareFunc:
         show_heatmaps=None,
         save_error_metrics_plot=None,
         show_error_metrics_plot=None,
+        error_quantile=None,
     ):
         """
         Creates a function that compares two IterationResults, and can be used as the `compare_func` argument
@@ -204,6 +228,7 @@ class CompareFunc:
                     - "max": Checks the maximum absolute/relative errors against the respective tolerances. This is the strictest possible check.
                     - "mean" Checks the mean absolute/relative errors against the respective tolerances.
                     - "median": Checks the median absolute/relative errors against the respective tolerances.
+                    - "quantile": Checks the quantile absolute/relative errors against the respective tolerances.
 
                     This can be provided on a per-output basis using a dictionary. In that case,
                     use an empty string ("") as the key to specify default error stat for outputs not explicitly listed.
@@ -223,6 +248,10 @@ class CompareFunc:
                     Defaults to None.
             show_error_metrics_plot (bool):
                     [EXPERIMENTAL] Whether to display the error metrics plot.
+            error_quantile (Union[float, Dict[str, float]]):
+                    Quantile error to compute when checking accuracy. This is expressed as a float in range [0, 1].
+                    For example, error_quantile=0.5 is the median.
+                    Defaults to 0.99.
 
         Returns:
             Callable(IterationResult, IterationResult) -> OrderedDict[str, OutputCompareResult]:
@@ -232,8 +261,10 @@ class CompareFunc:
         check_shapes = util.default(check_shapes, True)
         default_rtol = 1e-5
         default_atol = 1e-5
+        default_quantile = 0.99
         rtol = util.default(rtol, default_rtol)
         atol = util.default(atol, default_atol)
+        error_quantile = util.default(error_quantile, default_quantile)
         fail_fast = util.default(fail_fast, False)
         default_error_stat = "elemwise"
         check_error_stat = util.default(check_error_stat, default_error_stat)
@@ -251,119 +282,159 @@ class CompareFunc:
             per_out_err_stat,
             runner0_name,
             runner1_name,
+            per_out_quantile,
         ):
             """
             Checks whether two outputs matched.
 
             Args:
-                out0 (np.array): The first output.
+                out0 (Union[np.array, torch.Tensor]): The first output.
                 out0_name (str): The name of the first output.
-                out1 (np.array): The second output.
+                out1 (Union[np.array, torch.Tensor]): The second output.
                 out1_name (str): The name of the second output.
                 per_out_rtol (float): The relative tolerance to use for comparison.
                 per_out_atol (float): The absolute tolerance to use for comparison.
                 per_out_err_stat (str): The error statistic to check. See the docstring of ``simple`` for details.
                 runner0_name (str): The name of the runner that generated the first output.
                 runner1_name (str): The name of the runner that generated the second output.
+                per_out_quantile (float): The qunatile value to use for quantile comparison.
 
             Returns:
                 OutputCompareResult: Details on whether the outputs matched.
             """
-            VALID_CHECK_ERROR_STATS = ["max", "mean", "median", "elemwise"]
+            VALID_CHECK_ERROR_STATS = ["max", "mean", "median", "elemwise", "quantile"]
             if per_out_err_stat not in VALID_CHECK_ERROR_STATS:
                 G_LOGGER.critical(
                     f"Invalid choice for check_error_stat: {per_out_err_stat}.\nNote: Valid choices are: {VALID_CHECK_ERROR_STATS}"
                 )
 
             G_LOGGER.super_verbose(
-                f"{runner0_name:35} | Output: {out0_name} (dtype={out0.dtype}, shape={out0.shape}):\n{util.indent_block(out0)}"
+                f"{runner0_name:35} | Output: {out0_name} (dtype={util.array.dtype(out0)}, shape={util.array.shape(out0)}):\n{util.indent_block(out0)}"
             )
             G_LOGGER.super_verbose(
-                f"{runner1_name:35} | Output: {out1_name} (dtype={out1.dtype}, shape={out1.shape}):\n{util.indent_block(out1)}"
+                f"{runner1_name:35} | Output: {out1_name} (dtype={util.array.dtype(out1)}, shape={util.array.shape(out1)}):\n{util.indent_block(out1)}"
             )
 
             # Check difference vs. tolerances
-            if np.issubdtype(out0.dtype, np.bool_) and np.issubdtype(out1.dtype, np.bool_):
-                absdiff = np.logical_xor(out0, out1)
+            if (
+                util.array.dtype(out0) == DataType.BOOL
+                and util.array.dtype(out1) == DataType.BOOL
+            ):
+                absdiff = util.array.logical_xor(out0, out1)
             else:
-                absdiff = np.abs(comp_util.cast_up(out0) - comp_util.cast_up(out1))
+                absdiff = util.array.abs(
+                    util.array.subtract(
+                        comp_util.cast_up(out0), comp_util.cast_up(out1)
+                    )
+                )
                 if infinities_compare_equal:
-                    out0_infinite = np.isinf(out0)
-                    cond = np.logical_and(out0_infinite, out0 == out1)
-                    absdiff = np.where(cond, 0, absdiff)
+                    out0_infinite = util.array.isinf(out0)
+                    cond = util.array.logical_and(out0_infinite, out0 == out1)
+                    absdiff = util.array.where(cond, 0, absdiff)
 
             # Add a small epsilon (2e-16) to zero values in the array to prevent NaN in relative error.
-            cast_up_out1 = comp_util.cast_up(out1)
+            out1_with_eps = copy.copy(comp_util.cast_up(out1))
 
-            if np.issubdtype(cast_up_out1.dtype, np.floating):
-                if np.any(cast_up_out1 == 0):
+            if util.array.dtype(out1_with_eps).is_floating:
+                if util.array.any(out1_with_eps == 0):
                     G_LOGGER.warning(
                         f"{runner1_name:35} | Output: {out1_name}: Some values are 0. "
                         f"Will add a small epsilon quantity to these when computing relative difference. "
                         f"Note that this may cause some relative differences to be extremely high. ",
                         mode=LogMode.ONCE,
                     )
-                cast_up_out1[cast_up_out1 == 0] += np.finfo(float).eps
+                EPSILON = 2.220446049250313e-16
+                out1_with_eps[out1_with_eps == 0] += EPSILON
 
-            reldiff = absdiff / np.abs(cast_up_out1)
+            # TODO: Only evaluate this if actually needed like we do for quantile_*.
+            reldiff = util.array.divide(absdiff, util.array.abs(out1_with_eps))
             min_reldiff = comp_util.compute_min(reldiff)
             max_reldiff = comp_util.compute_max(reldiff)
             mean_reldiff = comp_util.compute_mean(reldiff)
             median_reldiff = comp_util.compute_median(reldiff)
+            quantile_reldiff = None
 
             min_absdiff = comp_util.compute_min(absdiff)
             max_absdiff = comp_util.compute_max(absdiff)
             mean_absdiff = comp_util.compute_mean(absdiff)
             median_absdiff = comp_util.compute_median(absdiff)
+            quantile_absdiff = None
 
             def stat_failed(diff, tol):
-                return np.isnan(diff) or diff > tol
+                return util.array.isnan(diff) or diff > tol
 
             if per_out_err_stat == "mean":
-                failed = stat_failed(mean_absdiff, per_out_atol) and stat_failed(mean_reldiff, per_out_rtol)
+                failed = stat_failed(mean_absdiff, per_out_atol) and stat_failed(
+                    mean_reldiff, per_out_rtol
+                )
             elif per_out_err_stat == "median":
-                failed = stat_failed(median_absdiff, per_out_atol) and stat_failed(median_reldiff, per_out_rtol)
+                failed = stat_failed(median_absdiff, per_out_atol) and stat_failed(
+                    median_reldiff, per_out_rtol
+                )
             elif per_out_err_stat == "max":
-                failed = stat_failed(max_absdiff, per_out_atol) and stat_failed(max_reldiff, per_out_rtol)
+                failed = stat_failed(max_absdiff, per_out_atol) and stat_failed(
+                    max_reldiff, per_out_rtol
+                )
+            elif per_out_err_stat == "quantile":
+                quantile_reldiff = comp_util.compute_quantile(reldiff, per_out_quantile)
+                quantile_absdiff = comp_util.compute_quantile(absdiff, per_out_quantile)
+                failed = stat_failed(quantile_absdiff, per_out_atol) and stat_failed(
+                    quantile_reldiff, per_out_rtol
+                )
             else:
                 assert (
                     per_out_err_stat == "elemwise"
                 ), "This branch should be unreachable unless per_out_err_stat is 'elemwise'"
-                with np.testing.suppress_warnings() as sup:
-                    sup.filter(RuntimeWarning)
-                    mismatches = ((absdiff > per_out_atol) | np.isnan(absdiff)) & (
-                        (reldiff > per_out_rtol) | np.isnan(reldiff)
-                    )
+                mismatches = (
+                    util.array.greater(absdiff, per_out_atol)
+                    | util.array.isnan(absdiff)
+                ) & (
+                    util.array.greater(reldiff, per_out_rtol)
+                    | util.array.isnan(reldiff)
+                )
 
-                failed = np.any(mismatches)
+                failed = util.array.any(mismatches)
                 try:
                     with G_LOGGER.indent():
-                        G_LOGGER.super_verbose(f"Mismatched indices:\n{np.argwhere(mismatches)}")
-                        G_LOGGER.extra_verbose(f"{runner0_name:35} | Mismatched values:\n{out0[mismatches]}")
-                        G_LOGGER.extra_verbose(f"{runner1_name:35} | Mismatched values:\n{out1[mismatches]}")
+                        G_LOGGER.super_verbose(
+                            lambda: f"Mismatched indices:\n{util.array.argwhere(mismatches)}"
+                        )
+                        G_LOGGER.extra_verbose(
+                            lambda: f"{runner0_name:35} | Mismatched values:\n{out0[mismatches]}"
+                        )
+                        G_LOGGER.extra_verbose(
+                            lambda: f"{runner1_name:35} | Mismatched values:\n{out1[mismatches]}"
+                        )
                 except Exception as err:
-                    G_LOGGER.warning(f"Failing to log mismatches.\nNote: Error was: {err}")
+                    G_LOGGER.warning(
+                        f"Failing to log mismatches.\nNote: Error was: {err}"
+                    )
 
             # Log information about the outputs
             hist_bin_range = (
                 min(comp_util.compute_min(out0), comp_util.compute_min(out1)),
                 max(comp_util.compute_max(out0), comp_util.compute_max(out1)),
             )
-            comp_util.log_output_stats(out0, failed, f"{runner0_name}: {out0_name}", hist_range=hist_bin_range)
-            comp_util.log_output_stats(out1, failed, f"{runner1_name}: {out1_name}", hist_range=hist_bin_range)
+            comp_util.log_output_stats(
+                out0, failed, f"{runner0_name}: {out0_name}", hist_range=hist_bin_range
+            )
+            comp_util.log_output_stats(
+                out1, failed, f"{runner1_name}: {out1_name}", hist_range=hist_bin_range
+            )
 
             G_LOGGER.info(f"Error Metrics: {out0_name}")
             with G_LOGGER.indent():
 
-                def req_tol(mean_diff, median_diff, max_diff):
+                def req_tol(mean_diff, median_diff, max_diff, quantile_diff):
                     return {
                         "mean": mean_diff,
                         "median": median_diff,
                         "max": max_diff,
                         "elemwise": max_diff,
+                        "quantile": quantile_diff,
                     }[per_out_err_stat]
 
-                msg = f"Minimum Required Tolerance: {per_out_err_stat} error | [abs={req_tol(mean_absdiff, median_absdiff, max_absdiff):.5g}] OR [rel={req_tol(mean_reldiff, median_reldiff, max_reldiff):.5g}]"
+                msg = f"Minimum Required Tolerance: {per_out_err_stat} error | [abs={req_tol(mean_absdiff, median_absdiff, max_absdiff, quantile_absdiff):.5g}] OR [rel={req_tol(mean_reldiff, median_reldiff, max_reldiff, quantile_reldiff):.5g}]"
                 if per_out_err_stat == "elemwise":
                     msg += " (requirements may be lower if both abs/rel tolerances are set)"
                 G_LOGGER.info(msg)
@@ -401,13 +472,23 @@ class CompareFunc:
                 build_heatmaps(absdiff, min_absdiff, max_absdiff, "Absolute")
 
                 comp_util.log_output_stats(reldiff, failed, "Relative Difference")
-                build_heatmaps(reldiff, min_reldiff, max_reldiff, "Relative", use_lognorm=True)
+                build_heatmaps(
+                    reldiff, min_reldiff, max_reldiff, "Relative", use_lognorm=True
+                )
 
             G_LOGGER.extra_verbose(
-                f"Finished comparing: '{out0_name}' (dtype={out0.dtype}, shape={out0.shape}) [{runner0_name}] and '{out1_name}' (dtype={out1.dtype}, shape={out1.shape}) [{runner1_name}]"
+                lambda: f"Finished comparing: '{out0_name}' (dtype={util.array.dtype(out0)}, shape={util.array.shape(out0)}) [{runner0_name}] and '{out1_name}' (dtype={util.array.dtype(out1)}, shape={util.array.shape(out1)}) [{runner1_name}]"
             )
             return OutputCompareResult(
-                not failed, max_absdiff, max_reldiff, mean_absdiff, mean_reldiff, median_absdiff, median_reldiff
+                not failed,
+                max_absdiff,
+                max_reldiff,
+                mean_absdiff,
+                mean_reldiff,
+                median_absdiff,
+                median_reldiff,
+                quantile_absdiff,
+                quantile_reldiff,
             )
 
         def compare_output(iter_result0, iter_result1):
@@ -445,43 +526,62 @@ class CompareFunc:
             check_dict(rtol, "the rtol dictionary")
             check_dict(atol, "the atol dictionary")
             check_dict(check_error_stat, "the check_error_stat dictionary")
+            check_dict(error_quantile, "the quantile dictionary")
 
             if not check_shapes:
-                G_LOGGER.info("Strict shape checking disabled. Will attempt to match output shapes before comparisons")
+                G_LOGGER.info(
+                    "Strict shape checking disabled. Will attempt to match output shapes before comparisons"
+                )
 
             def match(out0_name, output0, out1_name, output1):
                 per_out_atol = util.value_or_from_dict(atol, out0_name, default_atol)
                 per_out_rtol = util.value_or_from_dict(rtol, out0_name, default_rtol)
-                per_out_err_stat = util.value_or_from_dict(check_error_stat, out0_name, default_error_stat)
+                per_out_err_stat = util.value_or_from_dict(
+                    check_error_stat, out0_name, default_error_stat
+                )
+                per_out_quantile = util.value_or_from_dict(
+                    error_quantile, out0_name, default_quantile
+                )
 
                 G_LOGGER.info(
                     f"Tolerance: [abs={per_out_atol:.5g}, rel={per_out_rtol:.5g}] | Checking {per_out_err_stat} error"
                 )
-                G_LOGGER.extra_verbose(f"Note: Comparing {iter_result0.runner_name} vs. {iter_result1.runner_name}")
+                G_LOGGER.extra_verbose(
+                    f"Note: Comparing {iter_result0.runner_name} vs. {iter_result1.runner_name}"
+                )
 
-                if check_shapes and output0.shape != output1.shape:
+                if check_shapes and util.array.shape(output0) != util.array.shape(
+                    output1
+                ):
                     G_LOGGER.error(
-                        f"Will not compare outputs of different shapes. Note: Output shapes are {output0.shape} and {output1.shape}."
+                        f"FAILED | Output: `{out0_name}` | Will not compare outputs of different shapes.\n"
+                        f"Note: Output shapes are {util.array.shape(output0)} and {util.array.shape(output1)}."
                     )
                     G_LOGGER.error(
-                        "Note: Use --no-shape-check or set check_shapes=False to " "attempt to compare values anyway.",
+                        "Note: Use --no-shape-check or set check_shapes=False to "
+                        "attempt to compare values anyway.",
                         mode=LogMode.ONCE,
                     )
-                    outputs_matched = False
-                else:
-                    output1 = util.try_match_shape(output1, output0.shape)
-                    output0 = output0.reshape(output1.shape)
-                    outputs_matched = check_outputs_match(
-                        output0,
-                        out0_name,
-                        output1,
-                        out1_name,
-                        per_out_rtol=per_out_rtol,
-                        per_out_atol=per_out_atol,
-                        per_out_err_stat=per_out_err_stat,
-                        runner0_name=iter_result0.runner_name,
-                        runner1_name=iter_result1.runner_name,
-                    )
+                    return False
+
+                output1 = util.try_match_shape(output1, util.array.shape(output0))
+                output0 = util.array.view(
+                    output0,
+                    DataType.from_dtype(util.array.dtype(output0)),
+                    util.array.shape(output1),
+                )
+                outputs_matched = check_outputs_match(
+                    output0,
+                    out0_name,
+                    output1,
+                    out1_name,
+                    per_out_rtol=per_out_rtol,
+                    per_out_atol=per_out_atol,
+                    per_out_err_stat=per_out_err_stat,
+                    runner0_name=iter_result0.runner_name,
+                    runner1_name=iter_result1.runner_name,
+                    per_out_quantile=per_out_quantile,
+                )
 
                 # Finally show summary.
                 if not outputs_matched:
@@ -497,9 +597,14 @@ class CompareFunc:
 
             nonlocal find_output_func
             find_output_func = util.default(
-                find_output_func, functools.partial(default_find_output_func, base_iter_result=iter_result0)
+                find_output_func,
+                functools.partial(
+                    default_find_output_func, base_iter_result=iter_result0
+                ),
             )
-            return run_comparison(match, fail_fast, iter_result0, iter_result1, find_output_func)
+            return run_comparison(
+                match, fail_fast, iter_result0, iter_result1, find_output_func
+            )
 
         return compare_output
 
@@ -575,14 +680,16 @@ class CompareFunc:
             """
 
             def match(out0_name, output0, out1_name, output1):
-                per_out_index_tol = util.value_or_from_dict(index_tolerance, out0_name, 0)
+                per_out_index_tol = util.value_or_from_dict(
+                    index_tolerance, out0_name, 0
+                )
 
-                if output0.shape != output1.shape:
+                if util.array.shape(output0) != util.array.shape(output1):
                     G_LOGGER.error("Cannot compare outputs of different shapes.")
                     return False
 
                 passed = True
-                for batch in np.ndindex(output0.shape[:-1]):
+                for batch in np.ndindex(util.array.shape(output0)[:-1]):
                     out0_vals = output0[batch]
                     if per_out_index_tol > 0:
                         out0_vals = out0_vals[:-per_out_index_tol]
@@ -592,9 +699,13 @@ class CompareFunc:
                         if val0 == out1_vals[index0]:
                             continue
 
-                        index1 = np.argwhere(out1_vals == val0).ravel()
-                        if index1.size < 1:
-                            G_LOGGER.error(f"FAILED | Value: {val0} not found in output")
+                        index1 = util.array.ravel(
+                            util.array.argwhere(out1_vals == val0)
+                        )
+                        if util.array.size(index1) < 1:
+                            G_LOGGER.error(
+                                f"FAILED | Value: {val0} not found in output"
+                            )
                             passed = False
                             if fail_fast:
                                 return False
@@ -603,7 +714,9 @@ class CompareFunc:
                         index1 = index1[0]
 
                         if abs(index1 - index0) > per_out_index_tol:
-                            G_LOGGER.error(f"FAILED | Difference exceeds index tolerance ({per_out_index_tol})")
+                            G_LOGGER.error(
+                                f"FAILED | Difference exceeds index tolerance ({per_out_index_tol})"
+                            )
                             passed = False
                             if fail_fast:
                                 return False
@@ -615,14 +728,22 @@ class CompareFunc:
                     max(comp_util.compute_max(output0), comp_util.compute_max(output1)),
                 )
                 comp_util.log_output_stats(
-                    output0, not passed, f"{iter_result0.runner_name}: {out0_name}", hist_range=hist_bin_range
+                    output0,
+                    not passed,
+                    f"{iter_result0.runner_name}: {out0_name}",
+                    hist_range=hist_bin_range,
                 )
                 comp_util.log_output_stats(
-                    output1, not passed, f"{iter_result1.runner_name}: {out1_name}", hist_range=hist_bin_range
+                    output1,
+                    not passed,
+                    f"{iter_result1.runner_name}: {out1_name}",
+                    hist_range=hist_bin_range,
                 )
 
                 if passed:
-                    G_LOGGER.finish(f"PASSED | Difference is within index tolerance ({per_out_index_tol})")
+                    G_LOGGER.finish(
+                        f"PASSED | Difference is within index tolerance ({per_out_index_tol})"
+                    )
                 return passed
 
             return run_comparison(
@@ -630,7 +751,9 @@ class CompareFunc:
                 fail_fast,
                 iter_result0,
                 iter_result1,
-                functools.partial(default_find_output_func, base_iter_result=iter_result0),
+                functools.partial(
+                    default_find_output_func, base_iter_result=iter_result0
+                ),
             )
 
         return compare_output

@@ -28,4 +28,3 @@ output of `polygraphy run`:
     ```bash
     polygraphy run sample.onnx --trtexec
     ```
-

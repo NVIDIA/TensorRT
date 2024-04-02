@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +51,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "ONNX GraphSurgeon"
-copyright = "2020, NVIDIA"
+copyright = "2024, NVIDIA"
 author = "NVIDIA"
 
 version = gs.__version__
@@ -82,9 +82,14 @@ templates_path = ["_templates"]
 autoclass_content = "both"
 
 # Unlimited depth sidebar.
-html_theme_options = {"navigation_depth": -1}
+html_theme_options = {
+    "navigation_depth": -1,
+}
 
-html_sidebars = {"**": ["globaltoc.html", "relations.html", "sourcelink.html", "searchbox.html"]}
+html_sidebars = {
+    "**": ["globaltoc.html", "relations.html", "sourcelink.html", "searchbox.html"]
+}
+
 
 # Allows us to override the default page width in the Sphinx theme.
 def setup(app):

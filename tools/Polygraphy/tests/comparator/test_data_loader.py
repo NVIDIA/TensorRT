@@ -17,16 +17,24 @@
 from collections import OrderedDict
 
 import numpy as np
+import torch
+import pytest
+
+from polygraphy import constants, util
 from polygraphy.common import TensorMetadata
 from polygraphy.comparator import DataLoader
 from polygraphy.comparator.data_loader import DataLoaderCache
-from polygraphy import constants
+from polygraphy.datatype import DataType
 from tests.models.meta import ONNX_MODELS
-import pytest
+from polygraphy.exception import PolygraphyException
 
 
 def meta(dtype):
-    return TensorMetadata().add("X", dtype=dtype, shape=(4, 4)).add("Y", dtype=dtype, shape=(5, 5))
+    return (
+        TensorMetadata()
+        .add("X", dtype=dtype, shape=(4, 4))
+        .add("Y", dtype=dtype, shape=(5, 5))
+    )
 
 
 class TestDataLoader:
@@ -75,7 +83,9 @@ class TestDataLoader:
     @pytest.mark.parametrize("dtype", [np.int32, bool, np.float32, np.int64])
     @pytest.mark.parametrize("range_val", [0, 1])
     def test_range_min_max_equal(self, dtype, range_val):
-        data_loader = DataLoader(input_metadata=meta(dtype), val_range=(range_val, range_val))
+        data_loader = DataLoader(
+            input_metadata=meta(dtype), val_range=(range_val, range_val)
+        )
         feed_dict = data_loader[0]
         assert np.all(feed_dict["X"] == range_val)
         assert np.all(feed_dict["Y"] == range_val)
@@ -94,7 +104,9 @@ class TestDataLoader:
     )
     def test_val_ranges(self, range):
         min_val, max_val, dtype = range
-        data_loader = DataLoader(input_metadata=meta(dtype), val_range=(min_val, max_val))
+        data_loader = DataLoader(
+            input_metadata=meta(dtype), val_range=(min_val, max_val)
+        )
         feed_dict = data_loader[0]
         assert np.all((feed_dict["X"] >= min_val) & (feed_dict["X"] <= max_val))
 
@@ -142,7 +154,9 @@ class TestDataLoader:
         data_loader.input_metadata = input_meta
 
         feed_dict = data_loader[0]
-        assert feed_dict["X"].shape == (3,)  # Shape IS (3, ), because this is NOT a shape tensor
+        assert feed_dict["X"].shape == (
+            3,
+        )  # Shape IS (3, ), because this is NOT a shape tensor
         assert np.any(
             feed_dict["X"] != INPUT_DATA
         )  # Contents are not INPUT_DATA, since it's not treated as a shape value
@@ -168,60 +182,102 @@ class TestDataLoader:
         feed_dict = data_loader[0]
         assert feed_dict["X"].shape == (3,)  # Treat as a normal tensor
 
+    @pytest.mark.parametrize("dtype", [np.float32, np.int32])
+    @pytest.mark.parametrize("data_loader_backend_module", ["torch", "numpy"])
+    def test_generate_scalar(self, dtype, data_loader_backend_module):
+        data_loader = DataLoader(
+            input_metadata=TensorMetadata().add("input", dtype=dtype, shape=[]),
+            data_loader_backend_module=data_loader_backend_module,
+        )
 
+        scalar = data_loader[0]["input"]
+        assert isinstance(
+            scalar,
+            np.ndarray if data_loader_backend_module == "numpy" else torch.Tensor,
+        )
+        assert scalar.shape == tuple()
+
+    def test_error_on_unsupported_numpy_type(self):
+        input_meta = TensorMetadata().add("X", dtype=DataType.BFLOAT16, shape=(3,))
+        data_loader = DataLoader()
+        data_loader.input_metadata = input_meta
+
+        with pytest.raises(
+            PolygraphyException,
+            match="Please use a custom data loader to provide inputs.",
+        ):
+            data_loader[0]
+
+    def test_bf16_supported_torch(self):
+        input_meta = TensorMetadata().add("X", dtype=DataType.BFLOAT16, shape=(3,))
+        data_loader = DataLoader(data_loader_backend_module="torch")
+        data_loader.input_metadata = input_meta
+
+        assert util.array.is_torch(data_loader[0]["X"])
+
+
+build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
+
+
+@pytest.mark.parametrize("array_type", [np.array, build_torch])
 class TestDataLoaderCache:
-    def test_can_cast_dtype(self):
+    def test_can_cast_dtype(self, array_type):
         # Ensure that the data loader can only be used once
         def load_data():
-            yield {"X": np.ones((1, 1), dtype=np.float32)}
+            yield {"X": array_type(np.ones((1, 1), dtype=np.float32))}
 
         cache = DataLoaderCache(load_data())
 
-        fp32_meta = TensorMetadata().add("X", dtype=np.float32, shape=(1, 1))
+        fp32_meta = TensorMetadata().add("X", dtype=DataType.FLOAT32, shape=(1, 1))
         cache.set_input_metadata(fp32_meta)
         feed_dict = cache[0]
-        assert feed_dict["X"].dtype == np.float32
+        assert util.array.dtype(feed_dict["X"]) == DataType.FLOAT32
 
-        fp64_meta = TensorMetadata().add("X", dtype=np.float64, shape=(1, 1))
+        fp64_meta = TensorMetadata().add("X", dtype=DataType.FLOAT64, shape=(1, 1))
         cache.set_input_metadata(fp64_meta)
         feed_dict = cache[0]
-        assert feed_dict["X"].dtype == np.float64
+        assert util.array.dtype(feed_dict["X"]) == DataType.FLOAT64
 
     # If one input isn't in the cache, we shouldn't give up looking
     # for other inputs
-    def test_will_not_give_up_on_first_cache_miss(self):
+    def test_will_not_give_up_on_first_cache_miss(self, array_type):
         SHAPE = (32, 32)
 
         DATA = [OrderedDict()]
-        DATA[0]["X"] = np.zeros(SHAPE, dtype=np.int64)
-        DATA[0]["Y"] = np.zeros(SHAPE, dtype=np.int64)
+        DATA[0]["X"] = array_type(np.zeros(SHAPE, dtype=np.int64))
+        DATA[0]["Y"] = array_type(np.zeros(SHAPE, dtype=np.int64))
 
         cache = DataLoaderCache(DATA)
-        cache.set_input_metadata(TensorMetadata().add("X", np.int64, shape=SHAPE).add("Y", np.int64, SHAPE))
+        cache.set_input_metadata(
+            TensorMetadata()
+            .add("X", DataType.INT64, shape=SHAPE)
+            .add("Y", DataType.INT64, SHAPE)
+        )
 
-        # Populate the cache with bad X but good Y
+        # Populate the cache with bad X but good Y.
+        # The data loader cache should fail to coerce X to the right shape and then reload it from the data loader.
         cache.cache[0] = OrderedDict()
-        cache.cache[0]["X"] = np.ones((64, 64), dtype=np.int64)
-        cache.cache[0]["Y"] = np.ones(SHAPE, dtype=np.int64)
+        cache.cache[0]["X"] = array_type(np.ones((64, 64), dtype=np.int64))
+        cache.cache[0]["Y"] = array_type(np.ones(SHAPE, dtype=np.int64))
 
         feed_dict = cache[0]
         # Cache cannot reuse X, so it'll reload - we'll get all 0s from the data loader
-        assert np.all(feed_dict["X"] == 0)
+        assert util.array.all(feed_dict["X"] == 0)
         # Cache can reuse Y, even though it's after X, so we'll get ones from the cache
-        assert np.all(feed_dict["Y"] == 1)
+        assert util.array.all(feed_dict["Y"] == 1)
 
     # The cache should ignore extra data generated by the data loader
-    def test_ignores_extra_data(self):
+    def test_ignores_extra_data(self, array_type):
         SHAPE = (32, 32)
 
         DATA = [OrderedDict()]
-        DATA[0]["X"] = np.zeros(SHAPE, dtype=np.int64)
-        DATA[0]["Y"] = np.zeros(SHAPE, dtype=np.int64)
+        DATA[0]["X"] = array_type(np.zeros(SHAPE, dtype=np.int64))
+        DATA[0]["Y"] = array_type(np.zeros(SHAPE, dtype=np.int64))
 
         cache = DataLoaderCache(DATA)
 
-        cache.set_input_metadata(TensorMetadata().add("X", np.int64, shape=SHAPE))
+        cache.set_input_metadata(TensorMetadata().add("X", DataType.INT64, shape=SHAPE))
 
         feed_dict = cache[0]
         assert list(feed_dict.keys()) == ["X"]
-        assert np.all(feed_dict["X"] == 0)
+        assert util.array.all(feed_dict["X"] == 0)

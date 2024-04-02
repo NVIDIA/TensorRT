@@ -18,6 +18,11 @@ These scripts help with conversion and execution of [Google EfficientDet](https:
 
 ## Changelog
 
+- August 2023:
+  - Removed support for Python versions < 3.8.
+  - Added support for TensorFlow 2.12.0
+  - Update ONNX version support to 1.14.0
+  - Update ONNX Runtime version support to 1.15.1 for Python>=3.8
 - January 2022:
   - Added support for EfficientDet Lite and AdvProp models.
   - Added dynamic batch support.
@@ -27,14 +32,14 @@ These scripts help with conversion and execution of [Google EfficientDet](https:
 
 ## Setup
 
-We recommend running these scripts on an environment with TensorRT >= 8.0.1 and TensorFlow >= 2.5.
+We recommend running these scripts on an environment with TensorRT >= 8.0.1 and TensorFlow 2.12.0.
 
 Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.
 
 To simplify TensorRT and TensorFlow installation, use an [NGC TensorFlow Docker Image](https://ngc.nvidia.com/catalog/containers/nvidia:tensorflow), such as:
 
 ```bash
-docker pull nvcr.io/nvidia/tensorflow:22.01-tf1-py3
+docker pull nvcr.io/nvidia/tensorflow:23.07-tf2-py3
 ```
 
 Install all dependencies listed in `requirements.txt`:
@@ -206,7 +211,7 @@ trtexec \
     --onnx=/path/to/model.onnx \
     --saveEngine=/path/to/engine.trt \
     --optShapes=input:$INPUT_SHAPE \
-    --workspace=1024
+    --memPoolSize=workspace:1024
 ```
 
 Where `$INPUT_SHAPE` defines the input spec to build the engine with, e.g. `--optShapes=input:8x512x512x3`. Other common `trtexec` functionality for lower precision modes or other options will also work as expected.

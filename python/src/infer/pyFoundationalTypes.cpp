@@ -33,6 +33,10 @@ namespace lambdas
 // For Weights
 static const auto weights_datatype_constructor = [](DataType const& type) { return new Weights{type, nullptr, 0}; };
 
+static const auto weights_pointer_constructor = [](DataType const& type, size_t const ptr, int64_t count) {
+    return new Weights{type, reinterpret_cast<void*>(ptr), count};
+};
+
 static const auto weights_numpy_constructor = [](py::array& arr) {
     arr = py::array::ensure(arr);
     // In order to construct a weights object, we must have a contiguous C-style array.
@@ -52,7 +56,7 @@ bool dimsEqual(DimsType const& self, PyIterable& other)
         return false;
     }
     bool eq = true;
-    std::vector<int32_t> o = other.template cast<std::vector<int32_t>>();
+    std::vector<int64_t> o = other.template cast<std::vector<int64_t>>();
     for (int32_t i = 0; i < self.nbDims; ++i)
     {
         eq = eq && (self.d[i] == o[i]);
@@ -61,11 +65,11 @@ bool dimsEqual(DimsType const& self, PyIterable& other)
 }
 
 // For base Dims class
-static const auto dims_vector_constructor = [](std::vector<int32_t> const& in) {
+static const auto dims_vector_constructor = [](std::vector<int64_t> const& in) {
     // This is required, because otherwise MAX_DIMS will not be resolved at compile time.
     int32_t const maxDims{static_cast<int32_t>(Dims::MAX_DIMS)};
     PY_ASSERT_VALUE_ERROR(in.size() <= maxDims,
-            "Input length " + std::to_string(in.size()) + ". Max expected length is " + std::to_string(maxDims));
+        "Input length " + std::to_string(in.size()) + ". Max expected length is " + std::to_string(maxDims));
 
     // Create the Dims object.
     Dims* self = new Dims{};
@@ -92,7 +96,7 @@ static const auto dims_to_str = [](Dims const& self) {
 static const auto dims_len = [](Dims const& self) { return self.nbDims; };
 
 // TODO: Add slicing support?
-static const auto dims_getter = [](Dims const& self, int32_t const pyIndex) -> int32_t const& {
+static const auto dims_getter = [](Dims const& self, int32_t const pyIndex) -> int64_t const& {
     // Without these bounds checks, horrible infinite looping will occur.
     int32_t const index{(pyIndex < 0) ? static_cast<int32_t>(self.nbDims) + pyIndex : pyIndex};
     PY_ASSERT_INDEX_ERROR(index >= 0 && index < self.nbDims);
@@ -112,7 +116,7 @@ static const auto dims_getter_slice = [](Dims const& self, py::slice slice) {
     return ret;
 };
 
-static const auto dims_setter = [](Dims& self, int32_t const pyIndex, int32_t const item) {
+static const auto dims_setter = [](Dims& self, int32_t const pyIndex, int64_t const item) {
     int32_t const index{(pyIndex < 0) ? static_cast<int32_t>(self.nbDims) + pyIndex : pyIndex};
     PY_ASSERT_INDEX_ERROR(index >= 0 && index < self.nbDims);
     self.d[index] = item;
@@ -130,28 +134,28 @@ static const auto dims_setter_slice = [](Dims& self, py::slice slice, Dims const
 };
 
 // For Dims2
-static const auto dims2_vector_constructor = [](std::vector<int32_t> const& in) {
+static const auto dims2_vector_constructor = [](std::vector<int64_t> const& in) {
     PY_ASSERT_VALUE_ERROR(in.size() == 2,
         "Input length " + std::to_string(in.size()) + " not equal to expected Dims2 length, which is 2");
     return new Dims2{in[0], in[1]};
 };
 
 // For DimsHW
-static const auto dimshw_vector_constructor = [](std::vector<int32_t> const& in) {
+static const auto dimshw_vector_constructor = [](std::vector<int64_t> const& in) {
     PY_ASSERT_VALUE_ERROR(in.size() == 2,
         "Input length " + std::to_string(in.size()) + " not equal to expected DimsHW length, which is 2");
     return new DimsHW{in[0], in[1]};
 };
 
 // For Dims3
-static const auto dims3_vector_constructor = [](std::vector<int32_t> const& in) {
+static const auto dims3_vector_constructor = [](std::vector<int64_t> const& in) {
     PY_ASSERT_VALUE_ERROR(in.size() == 3,
         "Input length " + std::to_string(in.size()) + " not equal to expected Dims3 length, which is 3");
     return new Dims3{in[0], in[1], in[2]};
 };
 
 // For Dims4
-static const auto dims4_vector_constructor = [](std::vector<int32_t> const& in) {
+static const auto dims4_vector_constructor = [](std::vector<int64_t> const& in) {
     PY_ASSERT_VALUE_ERROR(in.size() == 4,
         "Input length " + std::to_string(in.size()) + " not equal to expected Dims4 length, which is 4");
     return new Dims4{in[0], in[1], in[2], in[3]};
@@ -175,20 +179,26 @@ void bindFoundationalTypes(py::module& m)
     py::enum_<DataType>(m, "DataType", DataTypeDoc::descr, py::module_local())
         .value("FLOAT", DataType::kFLOAT, DataTypeDoc::float32)
         .value("HALF", DataType::kHALF, DataTypeDoc::float16)
+        .value("BF16", DataType::kBF16, DataTypeDoc::bfloat16)
         .value("INT8", DataType::kINT8, DataTypeDoc::int8)
         .value("INT32", DataType::kINT32, DataTypeDoc::int32)
+        .value("INT64", DataType::kINT64, DataTypeDoc::int64)
         .value("BOOL", DataType::kBOOL, DataTypeDoc::boolean)
         .value("UINT8", DataType::kUINT8, DataTypeDoc::uint8)
-        .value("FP8", DataType::kFP8, DataTypeDoc::fp8); // DataType
+        .value("FP8", DataType::kFP8, DataTypeDoc::fp8)
+        .value("INT4", DataType::kINT4, DataTypeDoc::int4); // DataType
 
     // Also create direct mappings (so we can call trt.float32, for example).
     m.attr("float32") = DataType::kFLOAT;
     m.attr("float16") = DataType::kHALF;
+    m.attr("bfloat16") = DataType::kBF16;
     m.attr("int8") = DataType::kINT8;
     m.attr("int32") = DataType::kINT32;
+    m.attr("int64") = DataType::kINT64;
     m.attr("bool") = DataType::kBOOL;
     m.attr("uint8") = DataType::kUINT8;
     m.attr("fp8") = DataType::kFP8;
+    m.attr("int4") = DataType::kINT4;
 
     py::enum_<WeightsRole>(m, "WeightsRole", WeightsRoleDoc::descr, py::module_local())
         .value("KERNEL", WeightsRole::kKERNEL, WeightsRoleDoc::KERNEL)
@@ -202,6 +212,7 @@ void bindFoundationalTypes(py::module& m)
     py::class_<Weights>(m, "Weights", WeightsDoc::descr, py::module_local())
         // Can construct an empty weights object with type. Defaults to float32.
         .def(py::init(lambdas::weights_datatype_constructor), "type"_a = DataType::kFLOAT, WeightsDoc::init_type)
+        .def(py::init(lambdas::weights_pointer_constructor), "type"_a, "ptr"_a, "count"_a, WeightsDoc::init_ptr)
         // Allows for construction through any contiguous numpy array. It then keeps a pointer to that buffer
         // (zero-copy).
         .def(py::init(lambdas::weights_numpy_constructor), "a"_a, py::keep_alive<1, 2>(), WeightsDoc::init_numpy)
@@ -221,8 +232,9 @@ void bindFoundationalTypes(py::module& m)
         // Allows for construction from python lists and tuples.
         .def(py::init(lambdas::dims_vector_constructor), "shape"_a)
         // static_cast is required here, or MAX_DIMS does not get pulled in until LOAD time.
-        .def_property_readonly(
-            "MAX_DIMS", [](Dims const& self) { return static_cast<int32_t const>(self.MAX_DIMS); }, DimsDoc::MAX_DIMS)
+        .def_property_readonly_static(
+            "MAX_DIMS", [](py::object /*self*/) { return static_cast<int32_t const>(Dims::MAX_DIMS); },
+            DimsDoc::MAX_DIMS)
         // Allow for string representations (displays like a python tuple).
         .def("__str__", lambdas::dims_to_str)
         .def("__repr__", lambdas::dims_to_str)
@@ -237,47 +249,47 @@ void bindFoundationalTypes(py::module& m)
         .def("__setitem__", lambdas::dims_setter_slice); // Dims
 
     // Make it possible to use tuples/lists in Python in place of Dims.
-    py::implicitly_convertible<std::vector<int32_t>, Dims>();
+    py::implicitly_convertible<std::vector<int64_t>, Dims>();
 
     // 2D
     py::class_<Dims2, Dims>(m, "Dims2", Dims2Doc::descr, py::module_local())
         .def(py::init<>())
-        .def(py::init<int32_t, int32_t>(), "dim0"_a, "dim1"_a)
+        .def(py::init<int64_t, int64_t>(), "dim0"_a, "dim1"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dims2_vector_constructor), "shape"_a); // Dims2
 
-    py::implicitly_convertible<std::vector<int32_t>, Dims2>();
+    py::implicitly_convertible<std::vector<int64_t>, Dims2>();
 
     py::class_<DimsHW, Dims2>(m, "DimsHW", DimsHWDoc::descr, py::module_local())
         .def(py::init<>())
-        .def(py::init<int32_t, int32_t>(), "h"_a, "w"_a)
+        .def(py::init<int64_t, int64_t>(), "h"_a, "w"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dimshw_vector_constructor), "shape"_a)
         // Expose these functions as attributes in Python.
         .def_property(
-            "h", [](DimsHW const& dims) { return dims.h(); }, [](DimsHW& dims, int32_t i) { dims.h() = i; })
+            "h", [](DimsHW const& dims) { return dims.h(); }, [](DimsHW& dims, int64_t i) { dims.h() = i; })
         .def_property(
-            "w", [](DimsHW const& dims) { return dims.w(); }, [](DimsHW& dims, int32_t i) { dims.w() = i; }); // DimsHW
+            "w", [](DimsHW const& dims) { return dims.w(); }, [](DimsHW& dims, int64_t i) { dims.w() = i; }); // DimsHW
 
-    py::implicitly_convertible<std::vector<int32_t>, DimsHW>();
+    py::implicitly_convertible<std::vector<int64_t>, DimsHW>();
 
     // 3D
     py::class_<Dims3, Dims>(m, "Dims3", Dims3Doc::descr, py::module_local())
         .def(py::init<>())
-        .def(py::init<int32_t, int32_t, int32_t>(), "dim0"_a, "dim1"_a, "dim2"_a)
+        .def(py::init<int64_t, int64_t, int64_t>(), "dim0"_a, "dim1"_a, "dim2"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dims3_vector_constructor), "shape"_a); // Dims3
 
-    py::implicitly_convertible<std::vector<int32_t>, Dims3>();
+    py::implicitly_convertible<std::vector<int64_t>, Dims3>();
 
     // 4D
     py::class_<Dims4, Dims>(m, "Dims4", Dims4Doc::descr, py::module_local())
         .def(py::init<>())
-        .def(py::init<int32_t, int32_t, int32_t, int32_t>(), "dim0"_a, "dim1"_a, "dim2"_a, "dim3"_a)
+        .def(py::init<int64_t, int64_t, int64_t, int64_t>(), "dim0"_a, "dim1"_a, "dim2"_a, "dim3"_a)
         // Allows for construction from a tuple/list.
         .def(py::init(lambdas::dims4_vector_constructor), "shape"_a); // Dims4
 
-    py::implicitly_convertible<std::vector<int32_t>, Dims4>();
+    py::implicitly_convertible<std::vector<int64_t>, Dims4>();
 
     py::class_<IHostMemory>(m, "IHostMemory", py::buffer_protocol(), IHostMemoryDoc::descr, py::module_local())
         .def_property_readonly("dtype", [](IHostMemory const& mem) { return mem.type(); })
@@ -285,6 +297,19 @@ void bindFoundationalTypes(py::module& m)
         // Expose buffer interface.
         .def_buffer(lambdas::host_memory_buffer_interface)
         .def("__del__", &utils::doNothingDel<IHostMemory>); // IHostMemory
+
+    py::class_<InterfaceInfo>(m, "InterfaceInfo", InterfaceInfoDoc::descr, py::module_local())
+        .def_readwrite("kind", &InterfaceInfo::kind)
+        .def_readwrite("major", &InterfaceInfo::major)
+        .def_readwrite("minor", &InterfaceInfo::minor);
+
+    py::enum_<APILanguage>(m, "APILanguage", APILanguageDoc::descr, py::module_local())
+        .value("CPP", APILanguage::kCPP)
+        .value("PYTHON", APILanguage::kPYTHON);
+
+    py::class_<IVersionedInterface>(m, "IVersionedInterface", IVersionedInterfaceDoc::descr, py::module_local())
+        .def_property_readonly("api_language", &IVersionedInterface::getAPILanguage)
+        .def_property_readonly("interface_info", &IVersionedInterface::getInterfaceInfo);
 }
 
 } // namespace tensorrt

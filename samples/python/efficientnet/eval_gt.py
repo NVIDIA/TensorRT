@@ -24,7 +24,6 @@ import numpy as np
 from infer import TensorRTInfer
 from image_batcher import ImageBatcher
 
-
 def main(args):
     annotations = {}
     for line in open(args.annotations, "r"):
@@ -35,7 +34,7 @@ def main(args):
         annotations[os.path.basename(line[0])] = int(line[1])
 
     trt_infer = TensorRTInfer(args.engine)
-    batcher = ImageBatcher(args.input, *trt_infer.input_spec(), preprocessor=args.preprocessor)
+    batcher = ImageBatcher(args.input, *trt_infer.input_spec(), max_num_images=args.num_images, preprocessor=args.preprocessor)
     top1 = 0
     top5 = 0
     total = 0
@@ -87,9 +86,17 @@ if __name__ == "__main__":
         choices=["V1", "V1MS", "V2"],
         help="Select the image preprocessor to use, either 'V2', 'V1' or 'V1MS', default: V2",
     )
+    parser.add_argument(
+        "-n",
+        "--num_images",
+        default=5000,
+        type=int,
+        help="The maximum number of images to use for validation, default: 5000",
+    )
     args = parser.parse_args()
     if not all([args.engine, args.input, args.annotations]):
         parser.print_help()
         print("\nThese arguments are required: --engine  --input and --annotations")
         sys.exit(1)
+
     main(args)

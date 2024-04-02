@@ -55,11 +55,12 @@ class OnnxrtSessionArgs(BaseArgs):
         """
         self.providers = args_util.get(args, "providers")
 
-    def add_to_script_impl(self, script):
-        if self.arg_groups[OnnxLoadArgs].must_use_onnx_loader():
-            onnx_name = self.arg_groups[OnnxLoadArgs].add_to_script(script, serialize_model=True)
-        else:
-            onnx_name = self.arg_groups[ModelArgs].path
+    def add_to_script_impl(self, script, onnx_name=None):
+        if onnx_name is None: # default behavior according to self.arg_groups
+            if self.arg_groups[OnnxLoadArgs].must_use_onnx_loader():
+                onnx_name = self.arg_groups[OnnxLoadArgs].add_to_script(script, serialize_model=True)
+            else:
+                onnx_name = self.arg_groups[ModelArgs].path
 
         script.add_import(imports=["SessionFromOnnx"], frm="polygraphy.backend.onnxrt")
         loader_name = script.add_loader(
@@ -67,12 +68,15 @@ class OnnxrtSessionArgs(BaseArgs):
         )
         return loader_name
 
-    def load_onnxrt_session(self):
+    def load_onnxrt_session(self, model=None):
         """
         Loads an ONNX-Runtime Inference Session according to arguments provided on the command-line.
+
+        Args:
+            model (Union[bytes, str]): The model bytes or path to a model. Defaults to None, in which case, the model specified on the command-line is used.
 
         Returns:
             onnxruntime.InferenceSession
         """
-        loader = args_util.run_script(self.add_to_script)
+        loader = args_util.run_script(self.add_to_script, model)
         return loader()

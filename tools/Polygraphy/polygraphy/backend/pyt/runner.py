@@ -20,7 +20,7 @@ from collections import OrderedDict
 from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
 
-torch = mod.lazy_import("torch")
+torch = mod.lazy_import("torch>=1.13.0")
 
 
 @mod.export()

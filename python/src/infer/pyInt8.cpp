@@ -154,6 +154,11 @@ public:
     using Derived = pyCalibratorTrampoline<IInt8Calibrator>;
     using Derived::Derived;
 
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return InterfaceInfo{"PYTHON CALIBRATOR", 1, 0};
+    }
+
     CalibrationAlgoType getAlgorithm() noexcept override
     {
         try
@@ -279,7 +284,7 @@ void bindInt8(py::module& m)
 
     py::class_<IInt8Calibrator, pyIInt8Calibrator>(m, "IInt8Calibrator", IInt8CalibratorDoc::descr, py::module_local())
         .def(py::init<>())
-        .def("get_batch_size", &IInt8Calibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
+        .def("get_batch_size", utils::deprecateMember(&IInt8Calibrator::getBatchSize, "Implicit batch dimensions support has been removed"), IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8Calibrator::getAlgorithm, IInt8CalibratorDoc::get_algorithm)
         // For documentation purposes only
         .def("get_batch", docGetBatch<IInt8Calibrator>, "names"_a, IInt8CalibratorDoc::get_batch)
@@ -291,7 +296,7 @@ void bindInt8(py::module& m)
     py::class_<IInt8LegacyCalibrator, IInt8Calibrator, pyIInt8LegacyCalibrator>(
         m, "IInt8LegacyCalibrator", IInt8LegacyCalibratorDoc::descr, py::module_local())
         .def(py::init<>())
-        .def("get_batch_size", &IInt8LegacyCalibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
+        .def("get_batch_size", utils::deprecateMember(&IInt8LegacyCalibrator::getBatchSize, "Implicit batch dimensions support has been removed"), IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8LegacyCalibrator::getAlgorithm, IInt8LegacyCalibratorDoc::get_algorithm)
         // For documentation purposes only
         .def("get_batch", docGetBatch<IInt8LegacyCalibrator>, "names"_a, IInt8CalibratorDoc::get_batch)
@@ -303,7 +308,7 @@ void bindInt8(py::module& m)
     py::class_<IInt8EntropyCalibrator, IInt8Calibrator, pyCalibratorTrampoline<IInt8EntropyCalibrator>>(
         m, "IInt8EntropyCalibrator", IInt8EntropyCalibratorDoc::descr, py::module_local())
         .def(py::init<>())
-        .def("get_batch_size", &IInt8EntropyCalibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
+        .def("get_batch_size", utils::deprecateMember(&IInt8EntropyCalibrator::getBatchSize, "Implicit batch dimensions support has been removed"), IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8EntropyCalibrator::getAlgorithm, IInt8EntropyCalibratorDoc::get_algorithm)
         // For documentation purposes only
         .def("get_batch", docGetBatch<IInt8EntropyCalibrator>, "names"_a, IInt8CalibratorDoc::get_batch)
@@ -315,7 +320,7 @@ void bindInt8(py::module& m)
     py::class_<IInt8EntropyCalibrator2, IInt8Calibrator, pyCalibratorTrampoline<IInt8EntropyCalibrator2>>(
         m, "IInt8EntropyCalibrator2", IInt8EntropyCalibrator2Doc::descr, py::module_local())
         .def(py::init<>())
-        .def("get_batch_size", &IInt8EntropyCalibrator2::getBatchSize, IInt8CalibratorDoc::get_batch_size)
+        .def("get_batch_size", utils::deprecateMember(&IInt8EntropyCalibrator2::getBatchSize, "Implicit batch dimensions support has been removed"), IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8EntropyCalibrator2::getAlgorithm, IInt8EntropyCalibrator2Doc::get_algorithm)
         // For documentation purposes only
         .def("get_batch", docGetBatch<IInt8EntropyCalibrator2>, "names"_a, IInt8CalibratorDoc::get_batch)
@@ -327,7 +332,7 @@ void bindInt8(py::module& m)
     py::class_<IInt8MinMaxCalibrator, IInt8Calibrator, pyCalibratorTrampoline<IInt8MinMaxCalibrator>>(
         m, "IInt8MinMaxCalibrator", IInt8MinMaxCalibratorDoc::descr, py::module_local())
         .def(py::init<>())
-        .def("get_batch_size", &IInt8MinMaxCalibrator::getBatchSize, IInt8CalibratorDoc::get_batch_size)
+        .def("get_batch_size", utils::deprecateMember(&IInt8MinMaxCalibrator::getBatchSize, "Implicit batch dimensions support has been removed"), IInt8CalibratorDoc::get_batch_size)
         .def("get_algorithm", &IInt8MinMaxCalibrator::getAlgorithm, IInt8MinMaxCalibratorDoc::get_algorithm)
         // For documentation purposes only
         .def("get_batch", docGetBatch<IInt8MinMaxCalibrator>, "names"_a, IInt8CalibratorDoc::get_batch)

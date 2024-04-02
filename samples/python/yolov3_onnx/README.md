@@ -101,9 +101,14 @@ The following resources provide a deeper understanding about the model used in t
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+August 2023
+- Removed support for Python versions < 3.8.
+- This sample was updated to support protobuf 3.20.3 for Python>=3.8
+- Update ONNX version support to 1.14.0
 
 March 2019
-This `README.md` file was recreated, updated and reviewed.
+- This `README.md` file was recreated, updated and reviewed.
+
 
 # Known issues
 

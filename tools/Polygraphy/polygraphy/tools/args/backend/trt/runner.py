@@ -42,6 +42,27 @@ class TrtRunnerArgs(BaseRunnerArgs):
             default=None,
             dest="optimization_profile",
         )
+        self.group.add_argument(
+            "--allocation-strategy",
+            help="The way activation memory is allocated. "
+            "static: Pre-allocate based on the max possible size across all profiles. "
+            "profile: Allocate what's needed for the profile to use."
+            "runtime: Allocate what's needed for the current input shapes.",
+            type=str,
+            default=None,
+            dest="allocation_strategy",
+            choices=["static", "profile", "runtime"],
+        )
+        self.group.add_argument(
+            "--weight-streaming-budget",
+            help="The amount of GPU memory in bytes that TensorRT can use for weights at runtime. The engine must be built with weight streaming enabled. It can take on the following values: "
+            "None or 0: Disables weight streaming at runtime. "
+            "-1: TensorRT will decide the streaming budget automatically. "
+            "0 to 100%%: The percentage of weights TRT will stream. 100%% will stream the maximum number of weights. "
+            ">0B: The exact amount of streamable weights that reside on the GPU (unit suffixes are supported).",
+            type=str,
+            default=None
+        )
 
     def parse_impl(self, args):
         """
@@ -49,10 +70,26 @@ class TrtRunnerArgs(BaseRunnerArgs):
 
         Attributes:
             optimization_profile (int): The index of the optimization profile to initialize the runner with.
+            allocation_strategy (str): The way activation memory is allocated.
+            weight_streaming_budget (int): The weight streaming budget in bytes.
+            weight_streaming_percent (float): The percentage of weights streamed.
         """
         self.optimization_profile = args_util.get(args, "optimization_profile")
+        self.allocation_strategy = args_util.get(args, "allocation_strategy")
+        self.weight_streaming_budget = None
+        self.weight_streaming_percent = None
+        
+        ws_arg = args_util.get(args, "weight_streaming_budget")
+        if ws_arg and ws_arg.endswith("%"):
+            percent = float(ws_arg[:-1])
+            assert 0 <= percent <= 100, "Invalid percentage for --weight-streaming-budget!"
+            self.weight_streaming_percent = percent
+        elif ws_arg:
+            budget = args_util.parse_num_bytes(ws_arg)
+            assert budget == -1 or budget >= 0, "Invalid amount for --weight-streaming-budget!"
+            self.weight_streaming_budget = budget
 
     def add_to_script_impl(self, script):
         script.add_import(imports=["TrtRunner"], frm="polygraphy.backend.trt")
         loader_name = self.arg_groups[TrtLoadEngineArgs].add_to_script(script)
-        script.add_runner(make_invocable("TrtRunner", loader_name, optimization_profile=self.optimization_profile))
+        script.add_runner(make_invocable("TrtRunner", loader_name, optimization_profile=self.optimization_profile, allocation_strategy=self.allocation_strategy, weight_streaming_budget=self.weight_streaming_budget, weight_streaming_percent=self.weight_streaming_percent))

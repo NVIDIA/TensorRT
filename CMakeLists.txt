@@ -22,21 +22,41 @@ include(cmake/modules/find_library_create_target.cmake)
 set_ifndef(TRT_LIB_DIR ${CMAKE_BINARY_DIR})
 set_ifndef(TRT_OUT_DIR ${CMAKE_BINARY_DIR})
 
+# Converts Windows paths
+if(CMAKE_VERSION VERSION_LESS 3.20)
+    file(TO_CMAKE_PATH "${TRT_LIB_DIR}" TRT_LIB_DIR)
+    file(TO_CMAKE_PATH "${TRT_OUT_DIR}" TRT_OUT_DIR)
+else()
+    cmake_path(SET TRT_LIB_DIR ${TRT_LIB_DIR})
+    cmake_path(SET TRT_OUT_DIR ${TRT_OUT_DIR})
+endif()
+
+# Required to export symbols to build *.libs
+if(WIN32)
+    add_compile_definitions(TENSORRT_BUILD_LIB 1)
+endif()
+
+# Set output paths
+set(RUNTIME_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for runtime target files")
+set(LIBRARY_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for library target files")
+set(ARCHIVE_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for archive target files")
+
+if(WIN32)
+    set(STATIC_LIB_EXT "lib")
+else()
+    set(STATIC_LIB_EXT "a")
+endif()
+
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
 
 foreach(TYPE MAJOR MINOR PATCH BUILD)
-    string(REGEX MATCH "NV_TENSORRT_${TYPE} [0-9]" TRT_TYPE_STRING ${VERSION_STRINGS})
-    string(REGEX MATCH "[0-9]" TRT_${TYPE} ${TRT_TYPE_STRING})
-endforeach(TYPE)
-
-foreach(TYPE MAJOR MINOR PATCH)
-    string(REGEX MATCH "NV_TENSORRT_SONAME_${TYPE} [0-9]" TRT_TYPE_STRING ${VERSION_STRINGS})
-    string(REGEX MATCH "[0-9]" TRT_SO_${TYPE} ${TRT_TYPE_STRING})
+    string(REGEX MATCH "NV_TENSORRT_${TYPE} [0-9]+" TRT_TYPE_STRING ${VERSION_STRINGS})
+    string(REGEX MATCH "[0-9]+" TRT_${TYPE} ${TRT_TYPE_STRING})
 endforeach(TYPE)
 
 set(TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "TensorRT project version")
 set(ONNX2TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "ONNX2TRT project version")
-set(TRT_SOVERSION "${TRT_SO_MAJOR}" CACHE STRING "TensorRT library so version")
+set(TRT_SOVERSION "${TRT_MAJOR}" CACHE STRING "TensorRT library so version")
 message("Building for TensorRT version: ${TRT_VERSION}, library version: ${TRT_SOVERSION}")
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -88,8 +108,8 @@ endif()
 ############################################################################################
 # Dependencies
 
-set(DEFAULT_CUDA_VERSION 12.0.1)
-set(DEFAULT_CUDNN_VERSION 8.8)
+set(DEFAULT_CUDA_VERSION 12.2.0)
+set(DEFAULT_CUDNN_VERSION 8.9)
 set(DEFAULT_PROTOBUF_VERSION 3.20.1)
 
 # Dependency Version Resolution
@@ -118,20 +138,12 @@ endif()
 
 include_directories(
     ${CUDA_INCLUDE_DIRS}
-    ${CUDNN_ROOT_DIR}/include
 )
-find_library(CUDNN_LIB cudnn HINTS
-    ${CUDA_TOOLKIT_ROOT_DIR} ${CUDNN_ROOT_DIR} PATH_SUFFIXES lib64 lib/x64 lib)
-find_library(CUBLAS_LIB cublas HINTS
-    ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/x64 lib/stubs)
-find_library(CUBLASLT_LIB cublasLt HINTS
-    ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib64 lib lib/x64 lib/stubs)
 if(BUILD_PARSERS)
     configure_protobuf(${PROTOBUF_VERSION})
 endif()
 
 find_library_create_target(nvinfer nvinfer SHARED ${TRT_LIB_DIR})
-find_library_create_target(nvuffparser nvparsers SHARED ${TRT_LIB_DIR})
 
 find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
 
@@ -149,18 +161,11 @@ if (DEFINED GPU_ARCHS)
   separate_arguments(GPU_ARCHS)
 else()
   list(APPEND GPU_ARCHS
-      53
-      60
-      61
       70
       75
     )
 
   string(REGEX MATCH "aarch64" IS_ARM "${TRT_PLATFORM_ID}")
-  if (IS_ARM)
-    # Xavier (SM72) only supported for aarch64.
-    list(APPEND GPU_ARCHS 72)
-  endif()
 
   if (CUDA_VERSION VERSION_GREATER_EQUAL 11.0)
     # Ampere GPU (SM80) support is only available in CUDA versions > 11.0
@@ -189,10 +194,10 @@ if (${LATEST_SM} GREATER_EQUAL 70)
 endif()
 
 if(NOT MSVC)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -Wno-deprecated-declarations")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xcompiler -Wno-deprecated-declarations")
 else()
     set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xcompiler")
 endif()
 
 ############################################################################################
@@ -207,7 +212,6 @@ endif()
 if(BUILD_PARSERS)
     add_subdirectory(parsers)
 else()
-    find_library_create_target(nvcaffeparser nvparsers SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
     find_library_create_target(nvonnxparser nvonnxparser SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
 endif()
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +18,6 @@
 #define TRT_NORMALIZE_PLUGIN_H
 #include "common/kernels/kernel.h"
 #include "common/plugin.h"
-#include "cudnn.h"
-#include <cublas_v2.h>
 #include <string>
 #include <vector>
 
@@ -28,7 +26,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class Normalize : public IPluginV2Ext
+class TRT_DEPRECATED Normalize : public IPluginV2Ext
 {
 public:
     Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpatial, bool channelShared, float eps);
@@ -93,7 +91,9 @@ private:
     void serializeFromDevice(char*& hostBuffer, Weights deviceWeights) const;
     Weights deserializeToDevice(char const*& hostBuffer, size_t count);
 
-    cublasHandle_t mCublas;
+    nvinfer1::pluginInternal::cublasHandle_t mCublas;
+    // the wrapper pointer is shared among all plugins attached to the same context.
+    std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 
     Weights mWeights{}; // mWeights.values is on the device
     int32_t mNbWeights{};
@@ -107,7 +107,7 @@ private:
     std::string mPluginNamespace;
 };
 
-class NormalizePluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED NormalizePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     NormalizePluginCreator();

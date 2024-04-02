@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #define CHECK_MACROS_PLUGIN_H
 
 #include "NvInfer.h"
+#include "common/cudnnWrapper.h"
 #include <mutex>
 #include <sstream>
 
@@ -216,7 +217,7 @@ inline void caughtError(std::exception const& e)
 #define PLUGIN_CUBLASASSERT(status_)                                                                                   \
     {                                                                                                                  \
         auto s_ = status_;                                                                                             \
-        if (s_ != CUBLAS_STATUS_SUCCESS)                                                                               \
+        if (s_ != nvinfer1::pluginInternal::CUBLAS_STATUS_SUCCESS)                                                     \
         {                                                                                                              \
             nvinfer1::plugin::throwCublasError(__FILE__, FN_NAME, __LINE__, s_);                                       \
         }                                                                                                              \
@@ -227,7 +228,8 @@ inline void caughtError(std::exception const& e)
         auto s_ = status_;                                                                                             \
         if (s_ != CUDNN_STATUS_SUCCESS)                                                                                \
         {                                                                                                              \
-            const char* msg = cudnnGetErrorString(s_);                                                                 \
+            nvinfer1::pluginInternal::CudnnWrapper& wapper = nvinfer1::pluginInternal::getCudnnWrapper();              \
+            const char* msg = wapper.cudnnGetErrorString(s_);                                                          \
             nvinfer1::plugin::throwCudnnError(__FILE__, FN_NAME, __LINE__, s_, msg);                                   \
         }                                                                                                              \
     }

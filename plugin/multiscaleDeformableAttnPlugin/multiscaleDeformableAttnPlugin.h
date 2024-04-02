@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,14 +33,13 @@
 #include <string>
 #include <vector>
 
-#include <cublas_v2.h>
 #include <cuda_runtime_api.h>
 
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
 #include "NvInferVersion.h"
 
-#include "plugin.h"
+#include "common/plugin.h"
 
 #if NV_TENSORRT_MAJOR > 7
 #define PLUGIN_NOEXCEPT noexcept

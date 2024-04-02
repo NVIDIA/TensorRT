@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -141,9 +141,8 @@ nvinfer1::DimsExprs HardmaxPlugin::getOutputDimensions(
 void HardmaxPlugin::attachToContext(
     cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
-    ASSERT(
-        cublasContext != nullptr && "HardmaxPlugin given a null cuBLAS Context. Was the CUBLAS TacticSource disabled?");
-    mCublas = cublasContext;
+    cublasStatus_t ret = cublasCreate(&mCublas);
+    ASSERT(ret == CUBLAS_STATUS_SUCCESS && mCublas != nullptr && "Failed to create cublasHandle_t.");
 }
 
 // Detach the plugin object from its execution context.

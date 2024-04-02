@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,10 +24,11 @@
  **************************************************************************
  */
 
-#include <cublas_v2.h>
-
 #include "commonCudaHelper.h"
 #include "modulatedDeformConvCudaHelper.h"
+
+using half = __half;
+using namespace nvinfer1::pluginInternal;
 
 namespace
 {
@@ -97,6 +98,9 @@ void memcpyPermute(
 template void memcpyPermute<float>(
     float* dst, float const* src, int32_t* srcSize, int32_t* permute, int32_t srcDim, cudaStream_t stream);
 
+template void memcpyPermute<half>(
+    half* dst, half const* src, int32_t* srcSize, int32_t* permute, int32_t srcDim, cudaStream_t stream);
+
 template <typename TScalar>
 cublasStatus_t cublasGemmWrap(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
     int32_t n, int32_t k, TScalar const* alpha, TScalar const* A, int32_t lda, TScalar const* B, int32_t ldb,
@@ -110,7 +114,8 @@ cublasStatus_t cublasGemmWrap<float>(cublasHandle_t handle, cublasOperation_t tr
     int32_t m, int32_t n, int32_t k, float const* alpha, float const* A, int32_t lda, float const* B, int32_t ldb,
     float const* beta, float* C, int32_t ldc)
 {
-    return cublasSgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
+    CublasWrapper& wrapper = getCublasWrapper();
+    return wrapper.cublasSgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
 }
 
 template <>
@@ -118,5 +123,6 @@ cublasStatus_t cublasGemmWrap<half>(cublasHandle_t handle, cublasOperation_t tra
     int32_t m, int32_t n, int32_t k, half const* alpha, half const* A, int32_t lda, half const* B, int32_t ldb,
     half const* beta, half* C, int32_t ldc)
 {
-    return cublasHgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
+    CublasWrapper& wrapper = getCublasWrapper();
+    return wrapper.cublasHgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
 }

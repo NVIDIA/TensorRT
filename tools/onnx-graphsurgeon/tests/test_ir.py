@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +16,17 @@
 #
 
 
+import copy
+
 import numpy as np
 import onnx
 import pytest
+
 from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Variable
-from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.logger import G_LOGGER
+from onnx_graphsurgeon.util.misc import SynchronizedList
 
 G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
@@ -76,6 +81,15 @@ class TensorBaseTests(object):
         assert tensor.outputs == self.tensor.outputs
         assert tensor.outputs is not self.tensor.outputs
 
+    # copy.copy/deepcopy should yield a regular list instead of a synchronized list
+    @pytest.mark.parametrize("copy_func", [copy.copy, copy.deepcopy])
+    def test_copy_makes_normal_list(self, copy_func):
+        assert isinstance(self.tensor.inputs, SynchronizedList)
+
+        inputs = copy_func(self.tensor.inputs)
+        assert not isinstance(inputs, SynchronizedList)
+        assert isinstance(inputs, list)
+
     def test_i(self):
         x = Variable(name="x")
         y = Variable(name="y")
@@ -108,7 +122,9 @@ class TensorBaseTests(object):
 
 class TestVariable(TensorBaseTests):
     def setup_method(self):
-        self.tensor = Variable(name="test_tensor", dtype=np.float32, shape=(1, 3, 224, 224))
+        self.tensor = Variable(
+            name="test_tensor", dtype=np.float32, shape=(1, 3, 224, 224)
+        )
         self.input_node = Node(op="Add", outputs=[self.tensor])
         self.output_node = Node(op="Add", inputs=[self.tensor])
 
@@ -119,7 +135,9 @@ class TestVariable(TensorBaseTests):
 
 class TestConstant(TensorBaseTests):
     def setup_method(self):
-        self.tensor = Constant(name="test_tensor", values=np.ones((1, 3, 5, 5), dtype=np.float64))
+        self.tensor = Constant(
+            name="test_tensor", values=np.ones((1, 3, 5, 5), dtype=np.float64)
+        )
         self.input_node = Node(
             op="Add", outputs=[self.tensor]
         )  # Doesn't make sense for Constants, but needed to make base tests happy.
@@ -132,11 +150,27 @@ class TestConstant(TensorBaseTests):
         assert self.tensor.dtype == np.float64
 
 
+@pytest.fixture
+def node_with_nested_subgraphs():
+    inner_subgraph = Graph(name="inner_subgraph")
+    outer_subgraph_1 = Graph(name="subgraph1")
+    outer_subgraph_2 = Graph(
+        name="subgraph2", nodes=[Node("Add", attrs={"x": inner_subgraph})]
+    )
+    node = Node(op="Add", attrs={"x": outer_subgraph_1, "y": outer_subgraph_2, "z": 5})
+    return node
+
+
 class TestNode(object):
     def setup_method(self):
         self.input_tensor = Variable(name="x")
         self.output_tensor = Variable(name="y")
-        self.node = Node(op="Add", name="Test", inputs=[self.input_tensor], outputs=[self.output_tensor])
+        self.node = Node(
+            op="Add",
+            name="Test",
+            inputs=[self.input_tensor],
+            outputs=[self.output_tensor],
+        )
 
     def test_equals(self):
         assert self.node == self.node
@@ -190,33 +224,81 @@ class TestNode(object):
 
     def test_i(self):
         intermediate_tensor = Variable(name="intermediate")
-        input_node = Node(op="Add", name="Input", inputs=[self.input_tensor], outputs=[intermediate_tensor])
-        output_node = Node(op="Add", name="Out", inputs=[intermediate_tensor], outputs=[self.output_tensor])
+        input_node = Node(
+            op="Add",
+            name="Input",
+            inputs=[self.input_tensor],
+            outputs=[intermediate_tensor],
+        )
+        output_node = Node(
+            op="Add",
+            name="Out",
+            inputs=[intermediate_tensor],
+            outputs=[self.output_tensor],
+        )
         assert output_node.i() == input_node
 
     def test_i_multiple_inputs(self):
         intermediate_tensor = Variable(name="intermediate")
         intermediate_tensor2 = Variable(name="intermediate2")
-        input_node = Node(op="Add", name="Input", inputs=[self.input_tensor], outputs=[intermediate_tensor])
-        input_node2 = Node(op="Add", name="Input2", inputs=[self.input_tensor], outputs=[intermediate_tensor2])
+        input_node = Node(
+            op="Add",
+            name="Input",
+            inputs=[self.input_tensor],
+            outputs=[intermediate_tensor],
+        )
+        input_node2 = Node(
+            op="Add",
+            name="Input2",
+            inputs=[self.input_tensor],
+            outputs=[intermediate_tensor2],
+        )
         output_node = Node(
-            op="Add", name="Out", inputs=[intermediate_tensor, intermediate_tensor2], outputs=[self.output_tensor]
+            op="Add",
+            name="Out",
+            inputs=[intermediate_tensor, intermediate_tensor2],
+            outputs=[self.output_tensor],
         )
         assert output_node.i() == input_node
         assert output_node.i(1) == input_node2
 
     def test_o(self):
         intermediate_tensor = Variable(name="intermediate")
-        input_node = Node(op="Add", name="Input", inputs=[self.input_tensor], outputs=[intermediate_tensor])
-        output_node = Node(op="Add", name="Out", inputs=[intermediate_tensor], outputs=[self.output_tensor])
+        input_node = Node(
+            op="Add",
+            name="Input",
+            inputs=[self.input_tensor],
+            outputs=[intermediate_tensor],
+        )
+        output_node = Node(
+            op="Add",
+            name="Out",
+            inputs=[intermediate_tensor],
+            outputs=[self.output_tensor],
+        )
         assert input_node.o() == output_node
 
     def test_o_multiple_outputs(self):
         intermediate_tensor = Variable(name="intermediate")
         intermediate_tensor2 = Variable(name="intermediate2")
-        input_node = Node(op="Add", name="Input", inputs=[self.input_tensor], outputs=[intermediate_tensor])
-        output_node = Node(op="Add", name="Out", inputs=[intermediate_tensor], outputs=[self.output_tensor])
-        output_node2 = Node(op="Add", name="Input2", inputs=[intermediate_tensor], outputs=[intermediate_tensor2])
+        input_node = Node(
+            op="Add",
+            name="Input",
+            inputs=[self.input_tensor],
+            outputs=[intermediate_tensor],
+        )
+        output_node = Node(
+            op="Add",
+            name="Out",
+            inputs=[intermediate_tensor],
+            outputs=[self.output_tensor],
+        )
+        output_node2 = Node(
+            op="Add",
+            name="Input2",
+            inputs=[intermediate_tensor],
+            outputs=[intermediate_tensor2],
+        )
         assert input_node.o() == output_node
         assert input_node.o(1) == output_node2
 
@@ -224,25 +306,49 @@ class TestNode(object):
         node = Node(op="Add", domain="test")
         assert node.domain == "test"
 
+    def test_subgraphs_not_recursive(self, node_with_nested_subgraphs):
+        unrelated_graph = Graph(name="unrelated")
+        subgraph_names = {
+            subgraph.name for subgraph in node_with_nested_subgraphs.subgraphs()
+        }
+        assert subgraph_names == {"subgraph1", "subgraph2"}
+
+    def test_subgraphs_recursive(self, node_with_nested_subgraphs):
+        unrelated_graph = Graph(name="unrelated")
+        subgraph_names = {
+            subgraph.name
+            for subgraph in node_with_nested_subgraphs.subgraphs(recursive=True)
+        }
+        assert subgraph_names == {"subgraph1", "subgraph2", "inner_subgraph"}
+
 
 class TestNodeIO(object):
     def setup_method(self, field_names):
         self.tensors = [
-            Variable(name="test_tensor_{:}".format(i), dtype=np.float32, shape=(1, 3, 224, 224)) for i in range(10)
+            Variable(
+                name="test_tensor_{:}".format(i),
+                dtype=np.float32,
+                shape=(1, 3, 224, 224),
+            )
+            for i in range(10)
         ]
         self.node = Node(op="Dummy")
 
     def get_lists(self, field_names):
         return getattr(self.node, field_names[0]), field_names[1]
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_append(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.append(self.tensors[0])
         assert nlist[0] == self.tensors[0]
         assert getattr(self.tensors[0], tensor_field)[0] == self.node
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_extend(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.extend(self.tensors)
@@ -250,7 +356,9 @@ class TestNodeIO(object):
             assert tensor in nlist
             assert getattr(tensor, tensor_field)[0] == self.node
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_insert(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.append(self.tensors[1])
@@ -258,7 +366,9 @@ class TestNodeIO(object):
         assert nlist[0] == self.tensors[0]
         assert getattr(self.tensors[0], tensor_field)[0] == self.node
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_remove(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.append(self.tensors[0])
@@ -266,7 +376,9 @@ class TestNodeIO(object):
         assert len(nlist) == 0
         assert len(getattr(self.tensors[0], tensor_field)) == 0
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_pop(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.append(self.tensors[0])
@@ -274,7 +386,9 @@ class TestNodeIO(object):
         assert len(nlist) == 0
         assert len(getattr(tensor, tensor_field)) == 0
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_pop_index(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.extend(self.tensors)
@@ -282,7 +396,9 @@ class TestNodeIO(object):
         assert self.tensors[1] not in nlist
         assert len(getattr(tensor, tensor_field)) == 0
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_del_index(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.extend(self.tensors)
@@ -291,7 +407,9 @@ class TestNodeIO(object):
         assert self.tensors[1] not in nlist
         assert len(getattr(tensor, tensor_field)) == 0
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_clear(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.extend(self.tensors)
@@ -299,14 +417,18 @@ class TestNodeIO(object):
         assert len(nlist) == 0
         assert all([len(getattr(tensor, tensor_field)) == 0 for tensor in self.tensors])
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_add(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist = nlist + self.tensors
         for tensor in self.tensors:
             assert tensor in nlist
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_iadd(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist += self.tensors
@@ -314,7 +436,9 @@ class TestNodeIO(object):
             assert tensor in nlist
             assert getattr(tensor, tensor_field)[0] == self.node
 
-    @pytest.mark.parametrize("field_names", [("inputs", "outputs"), ("outputs", "inputs")])
+    @pytest.mark.parametrize(
+        "field_names", [("inputs", "outputs"), ("outputs", "inputs")]
+    )
     def test_setitem(self, field_names):
         nlist, tensor_field = self.get_lists(field_names)
         nlist.append(self.tensors[0])
@@ -346,7 +470,9 @@ class TestTensorIO(object):
 class TestLazyValues(object):
     def test_basic(self):
         shape = (1, 5, 5)
-        onnx_tensor = onnx.helper.make_tensor_value_info("test", onnx.TensorProto.FLOAT, shape)
+        onnx_tensor = onnx.helper.make_tensor_value_info(
+            "test", onnx.TensorProto.FLOAT, shape
+        )
         values = LazyValues(onnx_tensor)
 
         assert values.dtype == np.float32

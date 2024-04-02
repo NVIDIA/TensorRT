@@ -15,22 +15,15 @@
 # limitations under the License.
 #
 
-from tacotron2.text import text_to_sequence
-import models
 import torch
 import argparse
 import numpy as np
 from scipy.io.wavfile import write
 
-import sys
+from inference import MeasureTime, prepare_input_sequence, load_and_setup_model
 
-from inference import checkpoint_from_distributed, unwrap_distributed, MeasureTime, prepare_input_sequence, load_and_setup_model
-
-import time
 import dllogger as DLLogger
 from dllogger import StdOutBackend, JSONStreamBackend, Verbosity
-
-from apex import amp
 
 from waveglow.denoiser import Denoiser
 

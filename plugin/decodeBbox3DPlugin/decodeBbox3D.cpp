@@ -232,11 +232,13 @@ size_t DecodeBbox3DPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* in
 }
 
 int32_t DecodeBbox3DPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
+    void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
         int32_t batchSize = inputDesc[0].dims.d[0];
 
         // Inputs

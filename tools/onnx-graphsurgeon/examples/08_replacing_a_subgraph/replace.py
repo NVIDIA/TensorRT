@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +43,11 @@ tmap = graph.tensors()
 # You can figure out the input and output tensors using Netron. In our case:
 # Inputs: [inp, MIN_VAL, MAX_VAL]
 # Outputs: [max_out]
-inputs = [tmap["identity_out_0"], tmap["onnx_graphsurgeon_constant_5"], tmap["onnx_graphsurgeon_constant_2"]]
+inputs = [
+    tmap["identity_out_0"],
+    tmap["onnx_graphsurgeon_constant_5"],
+    tmap["onnx_graphsurgeon_constant_2"],
+]
 outputs = [tmap["max_out_6"]]
 
 graph.replace_with_clip(inputs, outputs)

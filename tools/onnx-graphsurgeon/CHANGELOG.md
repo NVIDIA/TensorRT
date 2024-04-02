@@ -2,6 +2,79 @@
 
 Dates are in YYYY-MM-DD format.
 
+
+## v0.5.1 (2024-02-23)
+### Changed
+- Removed dependency on `typing_extensions` package.
+- Improved error messages when a function registered with a graph is not registered for the current opset.
+
+
+## v0.5.0 (2024-01-12)
+### Added
+- Added a `GraphPattern` API which can be used to find matching subgraphs in a graph.
+
+
+## v0.4.1 (2023-11-30)
+### Fixed
+- Fixed a bug where toposort would not correctly memoize intermediate values, leading to long runtimes.
+- Fixed a bug where `export_value_info_proto` would not handle constant tensors correctly.
+
+
+## v0.4.0 (2023-08-16)
+### Added
+- Added `Function` class representing a `Graph` implementing a Custom Op.
+- Added `functions` field to `Graph`
+- Added `Node.AttributeRef` dataclass representing an attribute value in a parent Function.
+- Added `subgraph()` methods to `Node` and `Graph` to iterate over the node's/graph's subgraphs.
+- Added new kwargs to `Graph.cleanup()`, `Graph.fold_constants()`, and `Graph.toposort()` to optionally recurse into the Graph's Functions.
+- Added 'mode' kwarg to `Graph.toposort()` to control whether nodes, functions, or both get sorted.
+- Added example 11 which demonstrates how to use `Function`s
+
+### Removed
+- Removed `do_type_check` kwarg from `OnnxExporter.export_node()`
+
+### Fixed
+- Fixed some warnings caused by using deprecated APIs in `onnx.mapping`.
+
+
+## v0.3.29 (2023-08-11)
+### Fixed
+- Fixed a bug where doing a copy (e.g. `copy.copy`) of node/tensor inputs/outputs would retain
+    their synchronization behavior. For example, for a graph like:
+    ```
+    inp -> node -> out
+    ```
+    Doing:
+    ```py
+    node_outputs = copy.copy(node.outputs)
+    del node_outputs[0]
+    ```
+    would have previously resulted in `out.inputs` being modified also.
+
+
+## v0.3.28 (2023-07-11)
+### Added
+- Added support for various 8-bit floating point types. Like `BFLOAT16`, these will not be converted to NumPy
+    data types.
+
+### Fixed
+- Fixed a bug in `fold_constants` where nodes with omitted optional inputs would not be folded even if
+    all their other inputs were constant.
+
+
+## v0.3.27 (2023-05-24)
+### Added
+- Added support for `BFLOAT16`. Tensors of `BFLOAT16` type will not have their data types converted to NumPy.
+    Additionally, attempting to access the values of a `BFLOAT16` constant tensor will cause them to be casted
+    to `float32`.
+
+### Changed
+- Updated the `Graph.layer` API to generate unique names for Tensors and Nodes.
+- Updated the exporter to provide a warning before exporting to ONNX if nodes within a graph have duplicate names.
+- Updated all `dtype` attributes to accept `onnx.TensorProto.DataType` types in addition to NumPy types.
+    This is required since some types, like `BFLOAT16` are not representable in NumPy.
+
+
 ## v0.3.26 (2022-12-09)
 ### Fixed
 - Fixed a bug where node domain was not preserved.

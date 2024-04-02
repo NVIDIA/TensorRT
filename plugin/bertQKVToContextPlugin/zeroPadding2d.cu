@@ -147,28 +147,26 @@ cudaError_t zeroPadding2d(
     return cudaPeekAtLastError();
 }
 
-QkvPaddingRunner::QkvPaddingRunner(int32_t headSize, DataType dtype)
+QkvPaddingRunner::QkvPaddingRunner(DataType dtype, int32_t maxPaddedSize)
+    :mMaxPaddingHeadSize(maxPaddedSize)
 {
-    PLUGIN_ASSERT(headSize > 0 && headSize <= 64);
-    mPaddingHeadSize = (headSize <= 32) ? 32 : 64;
-
     PLUGIN_ASSERT(dtype == DataType::kHALF || dtype == DataType::kINT8);
     mDtypeSize = (dtype == DataType::kHALF) ? 2 : 1;
 }
 
-int32_t QkvPaddingRunner::getPaddingHeadSize()
+int32_t QkvPaddingRunner::getMaxPaddingHeadSize()
 {
-    return mPaddingHeadSize;
+    return mMaxPaddingHeadSize;
 }
 
 size_t QkvPaddingRunner::getInputSize(int32_t sumSeqLen, int32_t numHeads)
 {
-    return (3U * sumSeqLen * numHeads * mPaddingHeadSize * mDtypeSize);
+    return (3U * sumSeqLen * numHeads * mMaxPaddingHeadSize* mDtypeSize);
 }
 
 size_t QkvPaddingRunner::getOutputSize(int32_t sumSeqLen, int32_t numHeads)
 {
-    return (1U * sumSeqLen * numHeads * mPaddingHeadSize * mDtypeSize);
+    return (1U * sumSeqLen * numHeads * mMaxPaddingHeadSize * mDtypeSize);
 }
 
 size_t QkvPaddingRunner::getWorkspaceSize(int32_t sumSeqLen, int32_t numHeads)
@@ -179,6 +177,7 @@ size_t QkvPaddingRunner::getWorkspaceSize(int32_t sumSeqLen, int32_t numHeads)
 
 void* QkvPaddingRunner::get16BytesAlignedPointer(void* workspace, size_t offset)
 {
+    PLUGIN_VALIDATE(workspace != nullptr);
     auto addr = reinterpret_cast<uintptr_t>(workspace) + offset;
     auto shift = 16 - (addr & 0xF);
     if (shift == 16)
@@ -189,26 +188,29 @@ void* QkvPaddingRunner::get16BytesAlignedPointer(void* workspace, size_t offset)
 }
 
 cudaError_t QkvPaddingRunner::pad(
-    const void* src, void* workspace, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream)
+    const void* src, void* workspace, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, int32_t padHeadSize, cudaStream_t stream)
 {
+    PLUGIN_VALIDATE(padHeadSize <= mMaxPaddingHeadSize);
     return zeroPadding2d(
-        src, headSize * mDtypeSize, workspace, mPaddingHeadSize * mDtypeSize, 3 * sumSeqLen * numHeads, stream);
+        src, headSize * mDtypeSize, workspace, padHeadSize * mDtypeSize, 3 * sumSeqLen * numHeads, stream);
 }
 
 cudaError_t QkvPaddingRunner::unpad(
-    const void* workspace, void* dst, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream)
+    const void* workspace, void* dst, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, int32_t padHeadSize, cudaStream_t stream)
 {
+    PLUGIN_VALIDATE(padHeadSize <= mMaxPaddingHeadSize);
     return zeroPadding2d(
-        workspace, mPaddingHeadSize * mDtypeSize, dst, headSize * mDtypeSize, sumSeqLen * numHeads, stream);
+        workspace, padHeadSize * mDtypeSize, dst, headSize * mDtypeSize, sumSeqLen * numHeads, stream);
 }
 
 MhaRunParameter QkvPaddingRunner::patchMhaArgs(const PluginTensorDesc* inputDesc, const PluginTensorDesc* outputDesc,
-    const void* const* inputs, void* const* outputs, void* paddingWorkspace, int32_t sumSeqLen, int32_t numHeads)
+    const void* const* inputs, void* const* outputs, void* paddingWorkspace, int32_t sumSeqLen, int32_t numHeads, int32_t padHeadSize)
 {
+    PLUGIN_VALIDATE(padHeadSize <= mMaxPaddingHeadSize);
     MhaRunParameter args;
 
     std::memcpy(args.inputDesc, inputDesc, 4 * sizeof(PluginTensorDesc));
-    auto paddingHiddenSize = numHeads * mPaddingHeadSize;
+    auto paddingHiddenSize = numHeads * padHeadSize;
     args.inputDesc[0].dims.d[1] = 3 * paddingHiddenSize;
 
     args.outputDesc[0] = outputDesc[0];

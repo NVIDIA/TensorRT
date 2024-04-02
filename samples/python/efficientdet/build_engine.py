@@ -130,7 +130,7 @@ class EngineBuilder:
 
         self.builder = trt.Builder(self.trt_logger)
         self.config = self.builder.create_builder_config()
-        self.config.max_workspace_size = workspace * (2 ** 30)
+        self.config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace * (2 ** 30))
 
         self.network = None
         self.parser = None
@@ -143,9 +143,8 @@ class EngineBuilder:
         :param dynamic_batch_size: Dynamic batch size to build the engine with, if given,
         batch_size is ignored, pass as a comma-separated string or int list as MIN,OPT,MAX
         """
-        network_flags = (1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
 
-        self.network = self.builder.create_network(network_flags)
+        self.network = self.builder.create_network(0)
         self.parser = trt.OnnxParser(self.network, self.trt_logger)
 
         onnx_path = os.path.realpath(onnx_path)
@@ -192,7 +191,9 @@ class EngineBuilder:
         Enable mixed-precision mode. When set, the layers defined here will be forced to FP16 to maximize
         INT8 inference accuracy, while having minimal impact on latency.
         """
-        self.config.set_flag(trt.BuilderFlag.STRICT_TYPES)
+        self.config.set_flag(trt.BuilderFlag.PREFER_PRECISION_CONSTRAINTS)
+        self.config.set_flag(trt.BuilderFlag.DIRECT_IO)
+        self.config.set_flag(trt.BuilderFlag.REJECT_EMPTY_ALGORITHMS)
 
         # All convolution operations in the first four blocks of the graph are pinned to FP16.
         # These layers have been manually chosen as they give a good middle-point between int8 and fp16
@@ -234,6 +235,9 @@ class EngineBuilder:
 
         inputs = [self.network.get_input(i) for i in range(self.network.num_inputs)]
 
+        log.info("Reading timing cache from file: {:}".format(args.timing_cache))
+        common.setup_timing_cache(self.config, args.timing_cache)
+
         if precision in ["fp16", "int8", "mixed"]:
             if not self.builder.platform_has_fast_fp16:
                 log.warning("FP16 is not supported natively on this platform/device")
@@ -250,14 +254,14 @@ class EngineBuilder:
                     ImageBatcher(calib_input, calib_shape, calib_dtype, max_num_images=calib_num_images,
                                  exact_batches=True, shuffle_files=True))
 
-        engine_bytes = None
-        try:
-            engine_bytes = self.builder.build_serialized_network(self.network, self.config)
-        except AttributeError:
-            engine = self.builder.build_engine(self.network, self.config)
-            engine_bytes = engine.serialize()
-            del engine
-        assert engine_bytes
+        engine_bytes = self.builder.build_serialized_network(self.network, self.config)
+        if engine_bytes is None:
+            log.error("Failed to create engine")
+            sys.exit(1)
+
+        log.info("Serializing timing cache to file: {:}".format(args.timing_cache))
+        common.save_timing_cache(self.config, args.timing_cache)
+
         with open(engine_path, "wb") as f:
             log.info("Serializing engine to file: {:}".format(engine_path))
             f.write(engine_bytes)
@@ -298,6 +302,8 @@ if __name__ == "__main__":
                         help="The maximum number of images to use for calibration, default: 5000")
     parser.add_argument("--calib_batch_size", default=8, type=int,
                         help="The batch size for the calibration process, default: 8")
+    parser.add_argument("--timing_cache", default="./timing.cache",
+                        help="The file path for timing cache, default: ./timing.cache")
     args = parser.parse_args()
     if args.precision in ["int8", "mixed"] and not (args.calib_input or os.path.exists(args.calib_cache)):
         parser.print_help()

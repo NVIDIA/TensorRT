@@ -19,7 +19,9 @@ import time
 from collections import defaultdict
 
 from polygraphy import config, func, mod, util
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER, LogMode
+from polygraphy.backend.base import util as base_util
 
 np = mod.lazy_import("numpy")
 
@@ -99,15 +101,26 @@ class BaseRunner:
         """
         Implemenation for `get_input_metadata`. Derived classes should override this function
         rather than `get_input_metadata`.
+
+        Derived classes may return any kind of data type supported by Polygraphy's DataType
+        class (e.g. np.dtype, torch.dtype, etc.)
         """
         raise NotImplementedError("BaseRunner is an abstract class")
 
     @func.constantmethod
-    def get_input_metadata(self):
+    def get_input_metadata(self, use_numpy_dtypes=None):
         """
         Returns information about the inputs of the model.
         Shapes here may include dynamic dimensions, represented by ``None``.
         Must be called only after ``activate()`` and before ``deactivate()``.
+
+        Args:
+            use_numpy_dtypes (bool):
+                    [DEPRECATED] Whether to return NumPy data types instead of Polygraphy ``DataType`` s.
+                    This is provided to retain backwards compatibility. In the future,
+                    this parameter will be removed and Polygraphy ``DataType`` s will
+                    always be returned. These can be converted to NumPy data types by calling the `numpy()` method.
+                    Defaults to True.
 
         Returns:
             TensorMetadata: Input names, shapes, and data types.
@@ -115,10 +128,24 @@ class BaseRunner:
         if not self.is_active:
             G_LOGGER.critical(f"{self.name:35} | Must be activated prior to calling get_input_metadata()")
 
-        return self.get_input_metadata_impl()
+        use_numpy_dtypes = util.default(use_numpy_dtypes, True)
+
+        meta = self.get_input_metadata_impl()
+
+        for name, (dtype, _) in meta.items():
+            dtype = DataType.from_dtype(dtype)
+            if use_numpy_dtypes:
+                mod.warn_deprecated(
+                    "Returning NumPy data types instead of Polygraphy `DataType`s from `get_input_metadata()`",
+                    use_instead=None,
+                    remove_in="0.60.0",
+                )
+                meta[name]._dtype = DataType.to_dtype(dtype, "numpy")
+        return meta
 
     # Implementation for runner inference. Derived classes should override this function
     # rather than ``infer()``
+    # Derived classes should also set the `inference_time` property so that performance metrics are accurate.
     def infer_impl(self, feed_dict):
         raise NotImplementedError("BaseRunner is an abstract class")
 
@@ -144,7 +171,6 @@ class BaseRunner:
         Attributes:
             inference_time (float):
                     The time required to run inference in seconds.
-                    Derived classes should set this so that performance metrics are accurate.
 
         Returns:
             OrderedDict[str, numpy.ndarray]:
@@ -157,22 +183,9 @@ class BaseRunner:
             G_LOGGER.critical(f"{self.name:35} | Must be activated prior to calling infer()")
 
         if check_inputs:
-            input_metadata = self.get_input_metadata()
+            input_metadata = self.get_input_metadata(use_numpy_dtypes=False)
             G_LOGGER.verbose(f"{self.name:35} | Input metadata is: {input_metadata}", mode=LogMode.ONCE)
-
-            util.check_sequence_contains(feed_dict.keys(), input_metadata.keys(), name="feed_dict", items_name="inputs")
-
-            for name, inp in feed_dict.items():
-                meta = input_metadata[name]
-                if not np.issubdtype(inp.dtype, meta.dtype):
-                    G_LOGGER.critical(
-                        f"Input tensor: {name} | Received unexpected dtype: {inp.dtype}.\nNote: Expected type: {meta.dtype}"
-                    )
-
-                if not util.is_valid_shape_override(inp.shape, meta.shape):
-                    G_LOGGER.critical(
-                        f"Input tensor: {name} | Received incompatible shape: {inp.shape}.\nNote: Expected a shape compatible with: {meta.shape}"
-                    )
+            base_util.check_inputs(feed_dict, input_metadata)
 
         return self.infer_impl(feed_dict, *args, **kwargs)
 

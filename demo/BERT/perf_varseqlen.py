@@ -81,7 +81,8 @@ def main():
         bench_times = {}
 
         for idx, batch_size in enumerate(sorted(args.batch_size)):
-            context.active_optimization_profile = 0
+            stream = cuda.Stream()
+            context.set_optimization_profile_async(0, stream.handle)
 
             # Each profile has unique bindings
             bindings = [buf.binding() for buf in buffers]
@@ -94,18 +95,20 @@ def main():
             }
 
             for binding, shape in shapes.items():
-                context.set_binding_shape(engine[binding], shape)
-            assert context.all_binding_shapes_specified
+                context.set_input_shape(binding, shape)
+            assert len(context.infer_shapes()) == 0
+
+            for i in range(engine.num_io_tensors):
+                context.set_tensor_address(engine.get_tensor_name(i), bindings[i])
 
             # Inference
             total_time = 0
             start = cuda.Event()
             end = cuda.Event()
-            stream = cuda.Stream()
 
             # Warmup
             for _ in range(args.warm_up_runs):
-                context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+                context.execute_async_v3(stream_handle=stream.handle)
                 stream.synchronize()
 
             # Timing loop
@@ -114,7 +117,7 @@ def main():
             start_time = time.time()
             while actual_iterations < args.iterations or (time.time() - start_time) < args.duration:
                 start.record(stream)
-                context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+                context.execute_async_v3(stream_handle=stream.handle)
                 end.record(stream)
                 stream.synchronize()
                 times.append(end.time_since(start))

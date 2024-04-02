@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,15 +15,31 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.logger import G_LOGGER
 from onnx_graphsurgeon.ir.tensor import Tensor
 from onnx_graphsurgeon.util import misc
 
 from collections import OrderedDict
+from dataclasses import dataclass
 from typing import List, Dict
 
 
 class Node(object):
+
+    @dataclass
+    class AttributeRef:
+        """
+        An AttributeRef is an attribute value which references an attribute in the parent function.
+        A node's attribute can only be an AttributeRef if the node lives inside a Function.
+
+        Args:
+            name (str): The name of the referenced attribute in the parent Function.
+            type (type): The attribute's type.
+        """
+
+        name: str
+        type: type
+
     def __init__(
         self,
         op: str,
@@ -48,8 +64,12 @@ class Node(object):
         self.op = op
         self.name = misc.default_value(name, "")
         self.attrs = misc.default_value(attrs, OrderedDict())
-        self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=misc.default_value(inputs, []))
-        self.outputs = misc.SynchronizedList(self, field_name="inputs", initial=misc.default_value(outputs, []))
+        self.inputs = misc.SynchronizedList(
+            self, field_name="outputs", initial=misc.default_value(inputs, [])
+        )
+        self.outputs = misc.SynchronizedList(
+            self, field_name="inputs", initial=misc.default_value(outputs, [])
+        )
         self.domain = domain
 
     def i(self, tensor_idx=0, producer_idx=0):
@@ -91,6 +111,33 @@ class Node(object):
         """
         return self.outputs[tensor_idx].outputs[consumer_idx]
 
+    def subgraphs(self, recursive=False):
+        """
+        Convenience function to iterate over all subgraphs which are contained in this node.
+        Node subgraphs are found in attributes of ONNX control flow nodes such as 'If' and 'Loop'.
+
+        Args:
+            recursive (bool): Whether to recurse into the subgraph nodes when looking for subgraphs. Defaults to False.
+
+        Returns:
+            A generator which iterates over this node's subgraphs.
+        """
+        from onnx_graphsurgeon.ir.graph import Graph
+
+        visit_queue = [self]
+
+        # This prevents infinite recursion in the (illegal) case of cyclical graphs.
+        visited = set()
+
+        while visit_queue:
+            node = visit_queue.pop()
+            for attr in node.attrs.values():
+                if isinstance(attr, Graph) and id(attr) not in visited:
+                    visited.add(id(attr))
+                    if recursive:
+                        visit_queue.extend(attr.nodes)
+                    yield attr
+
     def __setattr__(self, name, value):
         if name in ["inputs", "outputs"]:
             try:
@@ -107,7 +154,12 @@ class Node(object):
         else:
             super().__setattr__(name, value)
 
-    def copy(self, inputs: List["Tensor"] = None, outputs: List["Tensor"] = None, tensor_map=None):
+    def copy(
+        self,
+        inputs: List["Tensor"] = None,
+        outputs: List["Tensor"] = None,
+        tensor_map=None,
+    ):
         """
         Makes a shallow copy of this node, overriding input and output information.
 
@@ -122,7 +174,14 @@ class Node(object):
             else:
                 new_attrs[name] = attr
 
-        return Node(self.op, self.name, new_attrs, inputs=inputs, outputs=outputs, domain=self.domain)
+        return Node(
+            self.op,
+            self.name,
+            new_attrs,
+            inputs=inputs,
+            outputs=outputs,
+            domain=self.domain,
+        )
 
     def __str__(self):
         ret = "{:} ({:})".format(self.name, self.op)
@@ -153,7 +212,11 @@ class Node(object):
         Check whether two nodes are equal by comparing name, attributes, op, inputs, and outputs.
         """
         G_LOGGER.verbose("Comparing node: {:} with {:}".format(self.name, other.name))
-        attrs_match = self.name == other.name and self.op == other.op and self.attrs == other.attrs
+        attrs_match = (
+            self.name == other.name
+            and self.op == other.op
+            and self.attrs == other.attrs
+        )
         inputs_match = len(self.inputs) == len(other.inputs) and all(
             [inp == other_inp for inp, other_inp in zip(self.inputs, other.inputs)]
         )

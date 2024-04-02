@@ -3,6 +3,7 @@
 These scripts help with conversion and execution of Google [EfficientNet V1](https://arxiv.org/abs/1905.11946) and [EfficientNet V2](https://arxiv.org/abs/2104.00298) models with [NVIDIA TensorRT](https://developer.nvidia.com/tensorrt).
 
 ## Contents
+- [Changelog](#changelog)
 - [Setup](#setup)
 - [Model Conversion](#model-conversion)
   * [TensorFlow Saved Model](#tensorflow-saved-model)
@@ -15,9 +16,15 @@ These scripts help with conversion and execution of Google [EfficientNet V1](htt
   * [Validate against Ground Truth](#validate-against-ground-truth)
   * [Compare against TensorFlow](#compare-against-tensorflow)
 
+# Changelog
+
+August 2023: 
+  - Update ONNX version support to 1.14.0
+  - Removed support for Python versions < 3.8.
+
 ## Setup
 
-For best results, we recommend running these scripts on an environment with TensorRT >= 8.0.1 and TensorFlow 2.5.
+For best results, we recommend running these scripts on an environment with TensorRT >= 8.0.1 and TensorFlow 2.12.0.
 
 Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.
 

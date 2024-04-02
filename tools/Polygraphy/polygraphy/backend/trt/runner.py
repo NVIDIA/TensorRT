@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import contextlib
-import copy
 import time
 from collections import OrderedDict
 
@@ -23,35 +21,112 @@ from polygraphy import cuda, mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.common import FormattedArray
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
-trt = mod.lazy_import("tensorrt")
+torch = mod.lazy_import("torch>=1.13.0")
+trt = mod.lazy_import("tensorrt>=8.5")
 
+
+def _make_debug_listener():
+    class DebugTensorWriter(trt.IDebugListener):
+        def __init__(self):
+            trt.IDebugListener.__init__(self)
+            self.debug_tensor_outputs = {}
+
+        def process_debug_tensor(self, addr, location, type, shape, name, stream):
+            cuda.wrapper().stream_synchronize(stream)
+            datatype = DataType.from_dtype(type)
+            size = util.volume(shape)
+            buffer = np.zeros(shape, dtype=DataType.to_dtype(datatype, "numpy"))
+            buffer = util.array.resize_or_reallocate(buffer, size)
+            cuda.wrapper().memcpy(
+                dst=util.array.data_ptr(buffer),
+                src=addr,
+                nbytes=size*datatype.itemsize,
+                kind=cuda.MemcpyKind.DeviceToHost,
+                stream_ptr=stream)
+            cuda.wrapper().stream_synchronize(stream)
+            self.debug_tensor_outputs[name] = util.array.resize_or_reallocate(buffer, shape)
+
+    return DebugTensorWriter()
 
 def _make_output_allocator():
-    if mod.version(trt.__version__) <= mod.version("8.5.0.9"):
-        G_LOGGER.internal_error("This function should only be called in TensorRT 8.5 and newer")
 
     class OutputAllocator(trt.IOutputAllocator):
         def __init__(self):
             trt.IOutputAllocator.__init__(self)
             self.buffers = {}
             self.shapes = {}
+            self.use_torch = False
 
         def reallocate_output(self, tensor_name, memory, size, alignment):
             shape = (size,)
             if tensor_name not in self.buffers:
-                self.buffers[tensor_name] = cuda.DeviceArray.raw(shape)
+                self.buffers[tensor_name] = (
+                    cuda.DeviceArray.raw(shape)
+                    if not self.use_torch
+                    else torch.empty(shape, dtype=torch.uint8, device="cuda")
+                )
             else:
-                self.buffers[tensor_name].resize(shape)
+                self.buffers[tensor_name] = util.array.resize_or_reallocate(self.buffers[tensor_name], shape)
             G_LOGGER.extra_verbose(f"Reallocated output tensor: {tensor_name} to: {self.buffers[tensor_name]}")
-            return self.buffers[tensor_name].ptr
+            return util.array.data_ptr(self.buffers[tensor_name])
 
         def notify_shape(self, tensor_name, shape):
             self.shapes[tensor_name] = tuple(shape)
 
+        def set_use_torch(self, use_torch):
+            self.use_torch = use_torch
+    
     return OutputAllocator()
+
+
+def _get_array_on_cpu(arr, name, host_buffers, stream, nbytes, use_torch):
+    """
+    Copies the provided array to CPU memory and returns it.
+    If sufficient CPU memory has not been allocated for the array in
+    ``host_bufffers``, this function will allocate new memory.
+
+    If the input is a `torch.Tensor`, then a `torch.Tensor` is returned.
+    Otherwise, if the input is a `DeviceView`, a `NumPy` array is returned.
+
+    Args:
+        arr (Union[DeviceView, torch.Tensor]): The array.
+        name (str): The name of the array.
+        host_buffers (Dict[str, Union[numpy.ndarray, torch.Tensor]]):
+                A mapping of names to host buffers.
+        stream (cuda.Stream): The CUDA stream to use.
+        nbytes (int): The number of bytes to copy. This may be smaller than the size of the GPU memory.
+        use_torch (bool): Whether to use PyTorch tensors instead of NumPy arrays.
+
+    Returns:
+        Union[numpy.ndarray, torch.Tensor]: The host buffer as a flat array of bytes.
+    """
+    if not util.array.is_on_gpu(arr):
+        G_LOGGER.internal_error(f"_get_array_on_cpu() should only be called with input arrays on the GPU!")
+
+    # The host buffer will always be a "raw" array, i.e. a flat array of bytes.
+    shape = (nbytes,)
+    dtype = DataType.UINT8
+    # If we switch between torch tensors and DeviceViews between inferences, we need to reallocate the host buffer.
+    if name not in host_buffers or util.array.is_torch(host_buffers[name]) != use_torch:
+        host_buffers[name] = (
+            np.empty(shape, dtype=DataType.to_dtype(dtype, "numpy"))
+            if not use_torch
+            else torch.empty(shape, dtype=DataType.to_dtype(dtype, "torch"), device="cpu")
+        )
+
+    host_buffers[name] = util.array.resize_or_reallocate(host_buffers[name], shape)
+    cuda.wrapper().memcpy(
+        dst=util.array.data_ptr(host_buffers[name]),
+        src=util.array.data_ptr(arr),
+        nbytes=nbytes,
+        kind=cuda.MemcpyKind.DeviceToHost,
+        stream_ptr=stream.ptr,
+    )
+    return host_buffers[name]
 
 
 @mod.export()
@@ -63,7 +138,7 @@ class TrtRunner(BaseRunner):
     be used only for prototyping, testing, and debugging.
     """
 
-    def __init__(self, engine, name: str = None, optimization_profile: int = None):
+    def __init__(self, engine, name: str = None, optimization_profile: int = None, allocation_strategy: str = None, weight_streaming_budget: int = None, weight_streaming_percent: float = None):
         """
         Args:
             engine (Union[Union[trt.ICudaEngine, trt.IExecutionContext], Callable() -> Union[trt.ICudaEngine, trt.IExecutionContext]]):
@@ -77,91 +152,91 @@ class TrtRunner(BaseRunner):
                     The index of the optimization profile to set each time this runner is activated.
                     When this is not provided, the profile is not set explicitly and will default to the 0th profile.
                     You can also change the profile after the runner is active using the ``set_profile()`` method.
+            allocation_strategy (str):
+                    The way device memory (internal activation and scratch memory) is allocated for the execution context. The value of this argument can be:
+                        - "static": The default value. The execution context will pre-allocate a block of memory that is sufficient for any possible input size across all profiles.
+                        - "profile": Allocate device memory enough for the current profile based on profile max shapes.
+                        - "runtime": Allocate device meomry enough for the current input shapes.
+            weight_streaming_budget (int):
+                    The amount of GPU memory that TensorRT can use for weights at runtime. Tt can take on the following values:
+                        None or 0: Disables weight streaming at runtime.
+                        -1: TensorRT will decide the streaming budget automatically.
+                        > 0: The maximum amount of GPU memory TensorRT is allowed to use for weights in bytes.
+            weight_streaming_percent (float):
+                    The percentage of weights that TRT will stream from CPU to GPU. It can take on the following values:
+                        None or 0: Disables weight streaming at runtime.
+                        [0 to 100]: The percentage of weights TRT will stream. 100 will stream the maximum number of weights.
         """
         super().__init__(name=name, prefix="trt-runner")
         self._engine_or_context = engine
         self.optimization_profile = optimization_profile
-
-        # Check compatibility with NumPy before proceeding further
-        trt_util.check_numpy_trt_compatibility()
+        self.allocation_strategy = allocation_strategy
+        self.weight_streaming_budget = weight_streaming_budget
+        self.weight_streaming_percent = weight_streaming_percent
+        self.output_allocator = _make_output_allocator()
 
     @util.check_called_by("activate")
     def activate_impl(self):
-        engine_or_context, owning = util.invoke_if_callable(self._engine_or_context)
-
+        engine_or_context, _ = util.invoke_if_callable(self._engine_or_context)
 
         if isinstance(engine_or_context, trt.ICudaEngine):
             self.engine = engine_or_context
-            self.owns_engine = owning
-            self.context = self.engine.create_execution_context()
-            self.owns_context = True
+
+            # Setup weight streaming if applicable
+            if self.weight_streaming_budget != None and self.weight_streaming_percent != None:
+                G_LOGGER.critical(f"Cannot specify the weight streaming budget both in bytes and percentage.")
+
+            budget_bytes = None
+            if self.weight_streaming_budget is not None:
+                assert self.weight_streaming_budget == -1 or self.weight_streaming_budget >= 0
+                budget_bytes = self.weight_streaming_budget
+            elif self.weight_streaming_percent is not None:
+                assert 0 <= self.weight_streaming_percent <= 100
+                if self.weight_streaming_percent == 0:
+                    budget_bytes = 0 # Disable weight streaming
+                else:
+                    min_budget = self.engine.minimum_weight_streaming_budget
+                    max_budget = self.engine.streamable_weights_size
+                    budget_bytes = (1 - self.weight_streaming_percent / 100.0) * (max_budget - min_budget) + min_budget
+            if budget_bytes is not None:
+                budget_bytes = int(budget_bytes)
+                self.engine.weight_streaming_budget = budget_bytes
+                if self.engine.weight_streaming_budget != budget_bytes:
+                    G_LOGGER.critical(f"Failed to set weight streaming budget to {budget_bytes}!")
+                if budget_bytes == 0:
+                    G_LOGGER.info(f"Weight streaming is disabled.")
+                elif budget_bytes == -1:
+                    G_LOGGER.info(f"Weight streaming is enabled with TensorRT automatically determiing the budget.")
+                else:
+                    G_LOGGER.info(f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes.")
+            
+            allocation_strategy = util.default(self.allocation_strategy, "static")
+            if allocation_strategy == 'static':
+                self.context = self.engine.create_execution_context()
+            elif allocation_strategy in ['profile', 'runtime']:
+                # Device memory will be managed by polygraphy
+                self.context = self.engine.create_execution_context(trt.ExecutionContextAllocationStrategy.USER_MANAGED)
+            else:
+                 G_LOGGER.critical("Invalid allocation strategy specified.")
             if not self.context:
                 G_LOGGER.critical("Invalid Context. See error log for details.")
         elif isinstance(engine_or_context, trt.IExecutionContext):
             self.context = engine_or_context
-            self.owns_context = owning
             self.engine = self.context.engine
-            self.owns_engine = False
+            if self.allocation_strategy is not None:
+                G_LOGGER.warning(
+                    "An allocation strategy was specified. Please ensure the provided execution context uses the same strategy."
+                )
+
         else:
             G_LOGGER.critical(
                 "Invalid Engine or Context. Please ensure the engine was built correctly. See error log for details."
             )
 
-        if not owning:
-            G_LOGGER.verbose(
-                "Object was provided directly instead of via a Callable. This runner will not assume ownership. "
-                "Please ensure it is freed."
-            )
-
-        def make_buffers_legacy():
-            """
-            Creates empty host and device buffers for the specified engine.
-            Always uses binding names from Profile 0.
-            """
-            device_buffers = OrderedDict()
-            host_output_buffers = OrderedDict()
-
-            for idx in range(trt_util.get_bindings_per_profile(self.engine)):
-                binding = self.engine[idx]
-                dtype = trt_util.np_dtype_from_trt(self.engine.get_binding_dtype(binding))
-                device_buffers[binding] = cuda.DeviceArray(dtype=dtype)
-                if not self.engine.binding_is_input(binding):
-                    host_output_buffers[binding] = np.empty(shape=tuple(), dtype=dtype)
-
-            G_LOGGER.extra_verbose(f"Initialized device buffers: {device_buffers}")
-            return device_buffers, host_output_buffers, None
-
-        def make_buffers():
-            """
-            Creates empty host buffers for outputs and empty device buffers for inputs.
-            """
-            device_buffers = OrderedDict()
-            host_output_buffers = OrderedDict()
-            output_allocator = _make_output_allocator()
-
-            for idx in range(self.engine.num_io_tensors):
-                name = self.engine.get_tensor_name(idx)
-
-                # NOTE: We use raw arrays to enable vectorized formats.
-                if self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
-                    device_buffers[name] = cuda.DeviceArray.raw(shape=tuple())
-                elif self.engine.get_tensor_mode(name) == trt.TensorIOMode.OUTPUT:
-                    host_output_buffers[name] = np.empty(shape=tuple(), dtype=np.byte)
-                    if not self.context.set_output_allocator(name, output_allocator):
-                        G_LOGGER.critical(f"For output: {name}, failed to set output allocator")
-                else:
-                    G_LOGGER.internal_error(
-                        f"Unexpected tensor I/O mode encountered during inference: {self.engine.get_tensor_mode(name)}.\n"
-                        "Please update this implementation!"
-                    )
-
-            G_LOGGER.extra_verbose(f"Initialized device buffers: {device_buffers}")
-            return device_buffers, host_output_buffers, output_allocator
-
-        self.device_buffers, self.host_output_buffers, self.output_allocator = (
-            make_buffers() if trt_util._should_use_v3_api() else make_buffers_legacy()
-        )
+        self.device_input_buffers = OrderedDict()
+        self.host_output_buffers = OrderedDict()
         self.stream = cuda.Stream()
+        self.context_memory_buffer = None
 
         if self.optimization_profile is not None:
             self.set_profile(self.optimization_profile)
@@ -196,162 +271,41 @@ class TrtRunner(BaseRunner):
 
     @util.check_called_by("get_input_metadata")
     def get_input_metadata_impl(self):
-        if trt_util._should_use_v3_api():
-            return trt_util.get_metadata_from_engine(self.engine, self.context, mode=trt.TensorIOMode.INPUT)
-        else:
-            start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
-            # This function always uses binding names of the 0th profile.
-            return trt_util.get_input_metadata_from_engine(self.engine, start_binding, end_binding)
+        return trt_util.get_metadata_from_engine(self.engine, self.context, mode=trt.TensorIOMode.INPUT)
 
-    def _set_shapes_from_feed_dict_legacy(self, feed_dict):
-        """
-        Sets context shapes according to the provided feed_dict.
+    def _infer_impl(self, feed_dict, copy_outputs_to_host):
+        def get_io(mode):
+            for idx in range(self.engine.num_io_tensors):
+                name = self.engine.get_tensor_name(idx)
 
-        Note that ``infer()`` will call this function automatically, and hence
-        you should only use it if you plan to use this runner's context manually.
+                if self.engine.get_tensor_mode(name) == mode:
+                    yield name
 
-        Args:
-            feed_dict (OrderedDict[str, numpy.ndarray]):
-                    A mapping of input tensor names to corresponding input NumPy arrays.
+        use_torch = False
 
-        Returns:
-            Tuple[int, int]: The start and end binding indices of the modified bindings.
-        """
-
-        def is_dynamic_shape_input(binding):
-            return self.engine.is_shape_binding(binding) and self.engine.binding_is_input(binding)
-
-        start_binding, end_binding = trt_util.get_active_profile_bindings(self.context)
-        for name, inp in feed_dict.items():
-            binding = start_binding + self.engine[name]
-            # Only set shapes if required.
-            # get_shape/get_binding_shape will return what a shape input/data input is currently set to.
-            if is_dynamic_shape_input(binding):  # For input shape tensors
-                if isinstance(inp, cuda.DeviceView):
-                    G_LOGGER.critical(
-                        f"A DeviceView was provided for input: {name}, but since this is a shape tensor, "
-                        "it must reside in host memory. Please use a NumPy array instead. "
-                    )
-
-                if tuple(self.context.get_shape(binding)) != tuple(inp):
-                    G_LOGGER.verbose(lambda: f"Setting shape binding: {name} (index: {binding}) to: {inp}")
-                    if not self.context.set_shape_input(binding, inp):
-                        G_LOGGER.critical(
-                            f"Failed to set shape binding: {name} (index: {binding}) to: {inp}. "
-                            "Are these values valid for the binding?"
-                        )
-
-            elif util.is_shape_dynamic(self.engine.get_binding_shape(binding)):
-                shape = inp.shape
-                if tuple(self.context.get_binding_shape(binding)) != tuple(shape):
-                    G_LOGGER.verbose(lambda: f"Setting binding: {name} (index: {binding}) to shape: {shape}")
-                    if not self.context.set_binding_shape(binding, shape):
-                        G_LOGGER.critical(
-                            f"Failed to set binding: {name} (index: {binding}) to shape: {shape}. "
-                            "Is this shape valid for the binding?"
-                        )
-
-        if not self.context.all_binding_shapes_specified:
-            G_LOGGER.critical(
-                f"Some input shapes were not specified.\nNote: Network inputs are: {self.get_input_metadata()}"
-            )
-        if not self.context.all_shape_inputs_specified:
-            G_LOGGER.critical(
-                f"Some shape inputs were not specified.\nNote: Network inputs are: {self.get_input_metadata()}"
-            )
-
-        return start_binding, end_binding
-
-    def _infer_impl_legacy(self, feed_dict, copy_outputs_to_host):
-        start_binding, end_binding = self._set_shapes_from_feed_dict_legacy(feed_dict)
-
-        # Resize output device buffers - host buffers will be automatically resized by copy_to
-        for binding in range(start_binding, end_binding):
-            if not self.engine.binding_is_input(binding):
-                name = self.engine[binding - start_binding]  # Use profile 0 binding names for all buffers.
-                shape = tuple(self.context.get_binding_shape(binding))
-                self.device_buffers[name].resize(shape)
-
-        # Use a shallow copy in case we need to replace our allocated buffers with provided DeviceViews.
-        dev_bufs = copy.copy(self.device_buffers)
-        for name, buffer in feed_dict.items():
-            if isinstance(buffer, cuda.DeviceView):
-                dev_bufs[name] = buffer
-            elif isinstance(buffer, np.ndarray):
-                dev_bufs[name].resize(buffer.shape)
-                buffer = util.make_contiguous(buffer)
-                dev_bufs[name].copy_from(buffer, self.stream)
-            else:
-                G_LOGGER.critical(
-                    f"For input: {name}, unrecognized type in feed_dict: {type(buffer).__name__}.\n"
-                    "Please provide either a NumPy array or Polygraphy DeviceView. "
-                )
-
-        # Need to offset bindings in case the active profile is not 0.
-        bindings = [0] * start_binding + [buf.ptr for buf in dev_bufs.values()]
-        success = self.context.execute_async_v2(bindings=bindings, stream_handle=self.stream.ptr)
-        if not success:
-            G_LOGGER.critical("Model execution failed. Please see the log messages above for details")
-
-        output_buffers = OrderedDict()
-        for name, buffer in self.host_output_buffers.items():
-            if copy_outputs_to_host:
-                self.host_output_buffers[name] = util.resize_buffer(buffer, dev_bufs[name].shape)
-                dev_bufs[name].copy_to(self.host_output_buffers[name], self.stream)
-                output_buffers[name] = self.host_output_buffers[name]
-            else:
-                output_buffers[name] = dev_bufs[name].view()
-
-        self.stream.synchronize()
-        return output_buffers
-
-    def _infer_impl_v3(self, feed_dict, copy_outputs_to_host):
-        for idx in range(self.engine.num_io_tensors):
-            name = self.engine.get_tensor_name(idx)
-
-            if self.engine.get_tensor_mode(name) != trt.TensorIOMode.INPUT:
-                continue
-
+        for name in get_io(trt.TensorIOMode.INPUT):
             # Set up input tensor shapes and copy from host memory if needed
             array = feed_dict[name]
             if not isinstance(array, FormattedArray):
-                array = FormattedArray(array, shape=array.shape, dtype=array.dtype)
+                array = FormattedArray(array, shape=util.array.shape(array))
 
             underlying_array = array.array
+            use_torch = use_torch or util.array.is_torch(underlying_array)
 
             ptr = None
             if self.engine.is_shape_inference_io(name):
-                if not isinstance(underlying_array, np.ndarray):
+                if not util.array.is_on_cpu(underlying_array):
                     G_LOGGER.critical(
                         f"A {type(underlying_array).__name__} was provided for input: {name}, but since this is a shape tensor, "
-                        "it must reside in host memory. Please use a NumPy array instead. "
+                        "it must reside in host memory. "
                     )
 
-                ptr = underlying_array.ctypes.data
+                ptr = util.array.data_ptr(underlying_array)
             else:
-                if isinstance(underlying_array, cuda.DeviceView):
-                    ptr = underlying_array.ptr
-                elif isinstance(underlying_array, np.ndarray):
-                    underlying_array = util.make_contiguous(underlying_array)
-                    dev_array = self.device_buffers[name]
-                    dev_array.resize(shape=(underlying_array.nbytes,))
-
-                    # For scalars, we need to reshape the array to 1D before we can use `view()` or NumPy complains.
-                    if not underlying_array.shape:
-                        view = underlying_array.reshape(-1).view(np.byte)
-                    else:
-                        view = underlying_array.view(np.byte)
-
-                    dev_array.copy_from(view, stream=self.stream)
-                    ptr = dev_array.ptr
-                else:
-                    G_LOGGER.critical(
-                        f"For input: {name}, unrecognized type in feed_dict: {type(underlying_array).__name__}.\n"
-                        "Please provide either a NumPy array or Polygraphy DeviceView. "
-                    )
+                ptr = trt_util._get_array_on_gpu(underlying_array, name, self.device_input_buffers, self.stream)
 
             # If the format is HWC, make sure array.shape is considered after transposing back to CHW
-            if self.engine.get_tensor_format(name) == trt.TensorFormat.HWC:
+            if trt_util.get_tensor_format(self.engine, self.context, name) == trt.TensorFormat.HWC:
                 array_shape = trt_util.get_chw_shape_from_hwc(array.shape, self.context.get_tensor_strides(name))
             else:
                 array_shape = array.shape
@@ -368,44 +322,81 @@ class TrtRunner(BaseRunner):
                 if not self.context.set_tensor_address(name, ptr):
                     G_LOGGER.critical(f"For input: {name}, failed to set tensor address to: {ptr}")
 
+        try:
+            self.context.set_all_tensors_debug_state
+        except AttributeError:
+            pass
+        else:
+            # Set up the debug listener before running inference.
+            debug_listener = _make_debug_listener()
+            self.context.set_all_tensors_debug_state(True)
+            if not self.context.set_debug_listener(debug_listener):
+                G_LOGGER.critical(f"Failed to set debug listener.")
+
+        # Set up the output allocator before running inference.
+        self.output_allocator.set_use_torch(use_torch and torch.cuda.is_available())
+        for name in get_io(trt.TensorIOMode.OUTPUT):
+            if not self.context.set_output_allocator(name, self.output_allocator):
+                G_LOGGER.critical(f"For output: {name}, failed to set output allocator")
+
+        if self.allocation_strategy in ["profile", "runtime"]:
+            if self.allocation_strategy == "profile":
+                # Perform per-profile allocation.
+                size_to_allocate = self.engine.get_device_memory_size_for_profile(self.context.active_optimization_profile)
+            elif self.allocation_strategy =="runtime":
+                # Perform runtime allocation.
+                size_to_allocate = self.context.update_device_memory_size_for_shapes()
+
+            if self.context_memory_buffer is None:
+                self.context_memory_buffer = cuda.DeviceArray.raw((size_to_allocate,))
+
+            self.context_memory_buffer.resize((size_to_allocate,))
+            self.context.device_memory = self.context_memory_buffer.ptr
+
         if not self.context.execute_async_v3(self.stream.ptr):
             G_LOGGER.critical("`execute_async_v3()` failed. Please see the logging output above for details.")
 
         output_buffers = OrderedDict()
-        for name in self.host_output_buffers.keys():
+        for name in get_io(trt.TensorIOMode.OUTPUT):
             # If we're dealing with vectorized formats, we need to return a FormattedArray.
             # Otherwise, we create a view instead with the correct shape/dtype.
             raw_array = self.output_allocator.buffers[name]
+
             shape = self.output_allocator.shapes[name]
-            dtype = trt_util.np_dtype_from_trt(self.engine.get_tensor_dtype(name))
-
-            tensor_format = self.engine.get_tensor_format(name)
-
             # If the format is HWC, make sure the result is shaped accordingly
+            tensor_format = trt_util.get_tensor_format(self.engine, self.context, name)
             if tensor_format == trt.TensorFormat.HWC:
                 shape = trt_util.get_hwc_shape_from_chw(shape, self.context.get_tensor_strides(name))
-
             using_vectorized_format = tensor_format != trt.TensorFormat.LINEAR and tensor_format != trt.TensorFormat.HWC
+
+            dtype = DataType.from_dtype(self.engine.get_tensor_dtype(name), source_module="tensorrt")
+
             # The memory allocated by the output allocator may be larger than actually required.
             # If we're using a vectorized format, then we need to copy the whole thing.
             # Otherwise, we can determine how much we actually need.
-            nbytes = raw_array.nbytes if using_vectorized_format else (util.volume(shape) * dtype.itemsize)
+            nbytes = util.array.nbytes(raw_array) if using_vectorized_format else (util.volume(shape) * dtype.itemsize)
 
             if copy_outputs_to_host:
-                self.host_output_buffers[name] = util.resize_buffer(self.host_output_buffers[name], (nbytes,))
-                raw_array.view(shape=(nbytes,)).copy_to(self.host_output_buffers[name], stream=self.stream)
-                raw_array = self.host_output_buffers[name]
+                raw_array = _get_array_on_cpu(
+                    raw_array, name, self.host_output_buffers, self.stream, nbytes, use_torch=use_torch
+                )
 
             if using_vectorized_format:
-                array = FormattedArray(raw_array, shape=shape, dtype=dtype)
+                array = FormattedArray(raw_array, shape=shape)
             else:
-                if copy_outputs_to_host:
-                    array = raw_array.view(dtype).reshape(shape)
-                else:
-                    array = cuda.DeviceView(raw_array.ptr, shape, dtype)
+                array = util.array.view(raw_array, dtype, shape)
             output_buffers[name] = array
 
         self.stream.synchronize()
+
+        try:
+            self.context.set_all_tensors_debug_state
+        except AttributeError:
+            pass
+        else:
+            if debug_listener.debug_tensor_outputs:
+                output_buffers.update(debug_listener.debug_tensor_outputs)
+
         return output_buffers
 
     @util.check_called_by("infer")
@@ -415,32 +406,29 @@ class TrtRunner(BaseRunner):
         Do not call this method directly - use ``infer()`` instead,
         which will forward unrecognized arguments to this method.
 
-        In addition to accepting NumPy arrays in the feed_dict, this runner can also
-        accept Polygraphy DeviceViews. In that case, no host-to-device copy is necessary for the inputs.
-
         Args:
-            feed_dict (OrderedDict[str, Union[numpy.ndarray, DeviceView]]):
-                    A mapping of input tensor names to corresponding input NumPy arrays
-                    or Polygraphy DeviceViews.
+            feed_dict (OrderedDict[str, Union[numpy.ndarray, DeviceView, torch.Tensor]]):
+                    A mapping of input tensor names to corresponding input NumPy arrays,
+                    Polygraphy DeviceViews, or PyTorch tensors.
+                    If PyTorch tensors are provided in the feed_dict, then this function
+                    will return the outputs also as PyTorch tensors.
+                    If the provided inputs already reside in GPU memory, no additional copies are made.
 
             copy_outputs_to_host (bool):
                     Whether to copy inference outputs back to host memory.
-                    If this is False, Polygraphy DeviceViews are returned
-                    instead of NumPy arrays.
+                    If this is False, PyTorch GPU tensors or Polygraphy DeviceViews
+                    are returned instead of PyTorch CPU tensors or NumPy arrays respectively.
                     Defaults to True.
 
         Returns:
-            OrderedDict[str, Union[numpy.ndarray, DeviceView]]:
-                    A mapping of output tensor names to corresponding output NumPy arrays
-                    or Polygraphy DeviceViews.
+            OrderedDict[str, Union[numpy.ndarray, DeviceView, torch.Tensor]]:
+                    A mapping of output tensor names to corresponding output NumPy arrays,
+                    Polygraphy DeviceViews, or PyTorch tensors.
         """
         copy_outputs_to_host = util.default(copy_outputs_to_host, True)
 
         start = time.time()
-        if trt_util._should_use_v3_api():
-            output_buffers = self._infer_impl_v3(feed_dict, copy_outputs_to_host)
-        else:
-            output_buffers = self._infer_impl_legacy(feed_dict, copy_outputs_to_host)
+        output_buffers = self._infer_impl(feed_dict, copy_outputs_to_host)
         end = time.time()
         self.inference_time = end - start
 
@@ -448,22 +436,16 @@ class TrtRunner(BaseRunner):
 
     @util.check_called_by("deactivate")
     def deactivate_impl(self):
-        with contextlib.ExitStack() as stack:
-            if self.owns_engine:
-                stack.enter_context(self.engine)
-            if self.owns_context:
-                stack.enter_context(self.context)
-
-            [buf.free() for buf in self.device_buffers.values()]
-            self.stream.free()
+        [buf.free() for buf in self.device_input_buffers.values()]
+        if self.context_memory_buffer is not None:
+            self.context_memory_buffer.free()
+        self.stream.free()
 
         del (
             self.engine,
-            self.owns_engine,
             self.context,
-            self.owns_context,
-            self.device_buffers,
+            self.device_input_buffers,
             self.host_output_buffers,
-            self.output_allocator,
             self.stream,
+            self.context_memory_buffer,
         )

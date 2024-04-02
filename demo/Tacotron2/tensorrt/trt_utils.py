@@ -45,18 +45,18 @@ def is_shape_dynamic(shape):
 
 def run_trt_engine(context, engine, tensors):
 
-    bindings = [None]*engine.num_bindings
-    for name,tensor in tensors['inputs'].items():
-        idx = engine.get_binding_index(name)
-        bindings[idx] = tensor.data_ptr()
-        if engine.is_shape_binding(idx) and is_shape_dynamic(context.get_shape(idx)):
-            context.set_shape_input(idx, tensor)
-        elif is_shape_dynamic(engine.get_binding_shape(idx)):
-            context.set_binding_shape(idx, tensor.shape)
+    bindings = [0] * engine.num_io_tensors
 
-    for name,tensor in tensors['outputs'].items():
-        idx = engine.get_binding_index(name)
-        bindings[idx] = tensor.data_ptr()
+    for i in range(engine.num_io_tensors):
+        tensor_name = engine.get_tensor_name(i)
+        if engine.get_tensor_mode(tensor_name) == trt.TensorIOMode.INPUT:
+            tensor = tensors['inputs'][tensor_name]
+            bindings[i] = tensor.data_ptr()
+            if is_shape_dynamic(engine.get_tensor_shape(tensor_name)):
+                context.set_input_shape(tensor_name, tensor.shape)
+        elif engine.get_tensor_mode(tensor_name) == trt.TensorIOMode.OUTPUT:
+            tensor = tensors['outputs'][tensor_name]
+            bindings[i] = tensor.data_ptr()
 
     context.execute_v2(bindings=bindings)
 
@@ -84,22 +84,20 @@ def engine_info(engine_filepath):
                     "DataType.BOOL" : "TYPE_BOOL"}
 
     print("engine name", engine.name)
-    print("has_implicit_batch_dimension", engine.has_implicit_batch_dimension)
-    start_dim = 0 if engine.has_implicit_batch_dimension else 1
+    start_dim = 1
     print("num_optimization_profiles", engine.num_optimization_profiles)
-    print("max_batch_size:", engine.max_batch_size)
     print("device_memory_size:", engine.device_memory_size)
-    print("max_workspace_size:", engine.max_workspace_size)
+    print("max_workspace_size:", engine.get_memory_pool_limit(trt.MemoryPoolType.WORKSPACE))
     print("num_layers:", engine.num_layers)
 
-    for i in range(engine.num_bindings):
-        btype = "input" if engine.binding_is_input(i) else "output"
-        bname = engine.get_binding_name(i)
-        dtype = engine.get_binding_dtype(i)
-        bdims = engine.get_binding_shape(i)
+    for i in range(engine.num_io_tensors):
+        tensor_name = engine.get_tensor_name(i) 
+        btype = "input" if engine.get_tensor_mode(tensor_name) == trt.TensorIOMode.INPUT else "output"
+        dtype = engine.get_tensor_dtype(tensor_name)
+        bdims = engine.get_tensor_shape(tensor_name)
         config_values = {
             "btype": btype,
-            "bname": bname,
+            "bname": tensor_name,
             "dtype": type_mapping[str(dtype)],
             "dims": list(bdims[start_dim:])
         }
@@ -107,19 +105,15 @@ def engine_info(engine_filepath):
         print(final_binding_str)
 
 
-def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False, timing_cache=None, disable_preview_dynamic_shapes=False):
-    if not disable_preview_dynamic_shapes and float(trt.__version__[:3]) < 8.5:
-        print("Faster dynamic shapes preview feature is only supported on TRT 8.5+")
-        sys.exit(1)
+def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False, timing_cache=None):
 
     TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
     builder = trt.Builder(TRT_LOGGER)
 
     config = builder.create_builder_config()
-    config.max_workspace_size = max_ws
+    config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, max_ws)
     if fp16:
         config.flags |= 1 << int(trt.BuilderFlag.FP16)
-    config.set_preview_feature(trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805, not disable_preview_dynamic_shapes)
     profile = builder.create_optimization_profile()
     for s in shapes:
         profile.set_shape(s['name'], min=s['min'], opt=s['opt'], max=s['max'])
@@ -136,15 +130,17 @@ def build_engine(model_file, shapes, max_ws=512*1024*1024, fp16=False, timing_ca
             cache = config.create_timing_cache(b"")
             config.set_timing_cache(cache, ignore_mismatch = False)
 
-    explicit_batch = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-    network = builder.create_network(explicit_batch)
+    network_creation_flag = 0
+    if "EXPLICIT_BATCH" in trt.NetworkDefinitionCreationFlag.__members__.keys():
+        network_creation_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+    network = builder.create_network(network_creation_flag)
 
     with trt.OnnxParser(network, TRT_LOGGER) as parser:
         with open(model_file, 'rb') as model:
             parsed = parser.parse(model.read())
             for i in range(parser.num_errors):
                 print("TensorRT ONNX parser error:", parser.get_error(i))
-            engine = builder.build_engine(network, config=config)
+            engine = builder.build_serialized_network(network, config=config)
 
             # save global timing cache
             if timing_cache_available:

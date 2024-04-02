@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -67,6 +67,8 @@ class MaxCalibrator(_Calibrator):
 
         # Swap axis to reduce.
         axis = self._axis if isinstance(self._axis, (list, tuple)) else [self._axis]
+        # Handle negative axis.
+        axis = [x.dim() + i if isinstance(i, int) and i < 0 else i for i in axis]
         reduce_axis = []
         for i in range(x.dim()):
             if not i in axis:

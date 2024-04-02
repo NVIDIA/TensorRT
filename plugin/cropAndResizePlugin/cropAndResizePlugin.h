@@ -32,7 +32,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class CropAndResizePlugin : public IPluginV2Ext
+class TRT_DEPRECATED CropAndResizePlugin : public IPluginV2Ext
 {
 public:
     CropAndResizePlugin(int32_t cropWidth, int32_t cropHeight);
@@ -171,7 +171,7 @@ protected:
     std::string mPluginVersion;
 };
 
-class CropAndResizePluginCreator : public CropAndResizeBasePluginCreator
+class TRT_DEPRECATED CropAndResizePluginCreator : public CropAndResizeBasePluginCreator
 {
 public:
     CropAndResizePluginCreator();

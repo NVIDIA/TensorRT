@@ -20,27 +20,209 @@ namespace nvinfer1
 {
 namespace plugin
 {
-static char const* const kREORG_PLUGIN_VERSION{"1"};
+static char const* const kREORG_PLUGIN_STATIC_VERSION{"1"};
+static char const* const kREORG_PLUGIN_DYNAMIC_VERSION{"2"};
 static char const* const kREORG_PLUGIN_NAME{"Reorg_TRT"};
-PluginFieldCollection ReorgPluginCreator::mFC{};
-std::vector<PluginField> ReorgPluginCreator::mPluginAttributes;
+template <class TBaseClass>
+PluginFieldCollection ReorgPluginCreator<TBaseClass>::mFC{};
+template <class TBaseClass>
+std::vector<PluginField> ReorgPluginCreator<TBaseClass>::mPluginAttributes;
 
-Reorg::Reorg(int32_t C, int32_t H, int32_t W, int32_t stride)
-    : C(C)
+template <class TBaseClass>
+Reorg<TBaseClass>::Reorg(int32_t strideValue)
+    : stride(strideValue)
+{
+}
+
+template <class TBaseClass>
+int32_t Reorg<TBaseClass>::getNbOutputs() const noexcept
+{
+    return 1;
+}
+
+template <class TBaseClass>
+int32_t Reorg<TBaseClass>::initialize() noexcept
+{
+    return STATUS_SUCCESS;
+}
+
+template <class TBaseClass>
+void Reorg<TBaseClass>::terminate() noexcept
+{
+}
+
+template <class TBaseClass>
+char const* Reorg<TBaseClass>::getPluginType() const noexcept
+{
+    return kREORG_PLUGIN_NAME;
+}
+
+template <class TBaseClass>
+void Reorg<TBaseClass>::destroy() noexcept
+{
+    delete this;
+}
+
+// Set plugin namespace
+template <class TBaseClass>
+void Reorg<TBaseClass>::setPluginNamespace(char const* pluginNamespace) noexcept
+{
+    mPluginNamespace = pluginNamespace;
+}
+
+template <class TBaseClass>
+char const* Reorg<TBaseClass>::getPluginNamespace() const noexcept
+{
+    return mPluginNamespace.c_str();
+}
+
+// Return the DataType of the plugin output at the requested index
+template <class TBaseClass>
+DataType Reorg<TBaseClass>::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+{
+    // Only 1 input and 1 output from the plugin layer
+    PLUGIN_ASSERT(index == 0);
+
+    // Only DataType::kFLOAT is acceptable by the plugin layer
+    return DataType::kFLOAT;
+}
+
+// Attach the plugin object to an execution context and grant the plugin the access to some context resource.
+template <class TBaseClass>
+void Reorg<TBaseClass>::attachToContext(
+    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+{
+}
+
+// Detach the plugin object from its execution context.
+template <class TBaseClass>
+void Reorg<TBaseClass>::detachFromContext() noexcept
+{
+}
+
+ReorgDynamic::ReorgDynamic(int32_t stride)
+    : Reorg<IPluginV2DynamicExt>(stride)
+{
+}
+
+ReorgDynamic::ReorgDynamic(void const* buffer, size_t length)
+{
+    char const* d = reinterpret_cast<char const*>(buffer);
+    char const* a = d;
+    stride = read<int32_t>(d);
+    PLUGIN_VALIDATE(d == a + length);
+}
+
+char const* ReorgDynamic::getPluginVersion() const noexcept
+{
+    return kREORG_PLUGIN_DYNAMIC_VERSION;
+}
+
+size_t ReorgDynamic::getSerializationSize() const noexcept
+{
+    // stride
+    return sizeof(int32_t);
+}
+
+size_t ReorgDynamic::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+    PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+{
+    return 0;
+}
+
+void ReorgDynamic::serialize(void* buffer) const noexcept
+{
+    char *d = reinterpret_cast<char*>(buffer), *a = d;
+    write(d, stride);
+    PLUGIN_ASSERT(d == a + getSerializationSize());
+}
+
+DimsExprs ReorgDynamic::getOutputDimensions(
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+{
+    PLUGIN_ASSERT(nbInputs == 1);
+    PLUGIN_ASSERT(outputIndex == 0);
+    DimsExprs output{3, {}};
+    auto const* strideExpr = exprBuilder.constant(stride);
+    auto const* strideSquareExpr = exprBuilder.constant(stride * stride);
+    output.d[0] = exprBuilder.operation(DimensionOperation::kPROD, *inputs[0].d[0], *strideSquareExpr);
+    output.d[1] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[0].d[1], *strideExpr);
+    output.d[2] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[0].d[2], *strideExpr);
+    return output;
+}
+
+bool ReorgDynamic::supportsFormatCombination(
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+{
+    PLUGIN_ASSERT(pos >= 0 && pos <= 1);
+    PLUGIN_ASSERT(nbInputs == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    return (inOut[pos].type == DataType::kFLOAT && inOut[pos].format == PluginFormat::kLINEAR);
+}
+
+void ReorgDynamic::configurePlugin(
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+{
+    PLUGIN_ASSERT(nbInputs == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(in->desc.type == DataType::kFLOAT);
+    PLUGIN_ASSERT(out->desc.type == DataType::kFLOAT);
+    PLUGIN_ASSERT(in->desc.format == PluginFormat::kLINEAR);
+    PLUGIN_ASSERT(out->desc.format == PluginFormat::kLINEAR);
+    PLUGIN_ASSERT(stride > 0);
+
+    int32_t H = in->desc.dims.d[2];
+    int32_t W = in->desc.dims.d[3];
+    PLUGIN_ASSERT(H % stride == 0);
+    PLUGIN_ASSERT(W % stride == 0);
+}
+
+int32_t ReorgDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+{
+    void const* inputData = inputs[0];
+    void* outputData = outputs[0];
+    int32_t const N = inputDesc[0].dims.d[0];
+    int32_t const C = inputDesc[0].dims.d[1];
+    int32_t const H = inputDesc[0].dims.d[2];
+    int32_t const W = inputDesc[0].dims.d[3];
+    pluginStatus_t status = reorgInference(stream, N, C, H, W, stride, inputData, outputData);
+    return status;
+}
+
+IPluginV2DynamicExt* ReorgDynamic::clone() const noexcept
+{
+    try
+    {
+        ReorgDynamic* plugin = new ReorgDynamic(stride);
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+ReorgStatic::ReorgStatic(int32_t stride)
+    : Reorg<IPluginV2Ext>(stride)
+{
+}
+
+ReorgStatic::ReorgStatic(int32_t C, int32_t H, int32_t W, int32_t stride)
+    : Reorg<IPluginV2Ext>(stride)
+    , C(C)
     , H(H)
     , W(W)
-    , stride(stride)
 {
 }
 
-Reorg::Reorg(int32_t stride)
-    : stride(stride)
+ReorgStatic::ReorgStatic(void const* buffer, size_t length)
 {
-}
-
-Reorg::Reorg(void const* buffer, size_t length)
-{
-    char const *d = reinterpret_cast<char const*>(buffer), *a = d;
+    char const* d = reinterpret_cast<char const*>(buffer);
+    char const* a = d;
     C = read<int32_t>(d);
     H = read<int32_t>(d);
     W = read<int32_t>(d);
@@ -48,34 +230,23 @@ Reorg::Reorg(void const* buffer, size_t length)
     PLUGIN_VALIDATE(d == a + length);
 }
 
-int32_t Reorg::getNbOutputs() const noexcept
+char const* ReorgStatic::getPluginVersion() const noexcept
 {
-    return 1;
+    return kREORG_PLUGIN_STATIC_VERSION;
 }
 
-Dims Reorg::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
+size_t ReorgStatic::getWorkspaceSize(int32_t maxBatchSize) const noexcept
 {
-    PLUGIN_ASSERT(nbInputDims == 1);
-    PLUGIN_ASSERT(index == 0);
-    return Dims3(inputs[0].d[0] * stride * stride, inputs[0].d[1] / stride, inputs[0].d[2] / stride);
+    return 0;
 }
 
-int32_t Reorg::enqueue(
-    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
-{
-    void const* inputData = inputs[0];
-    void* outputData = outputs[0];
-    pluginStatus_t status = reorgInference(stream, batchSize, C, H, W, stride, inputData, outputData);
-    return status;
-}
-
-size_t Reorg::getSerializationSize() const noexcept
+size_t ReorgStatic::getSerializationSize() const noexcept
 {
     // C, H, W, stride
     return sizeof(int32_t) * 4;
 }
 
-void Reorg::serialize(void* buffer) const noexcept
+void ReorgStatic::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, C);
@@ -85,74 +256,57 @@ void Reorg::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-bool Reorg::supportsFormat(DataType type, PluginFormat format) const noexcept
+Dims ReorgStatic::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
+{
+    PLUGIN_ASSERT(nbInputDims == 1);
+    PLUGIN_ASSERT(index == 0);
+    return Dims3(inputs[0].d[0] * stride * stride, inputs[0].d[1] / stride, inputs[0].d[2] / stride);
+}
+
+int32_t ReorgStatic::enqueue(
+    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+{
+    void const* inputData = inputs[0];
+    void* outputData = outputs[0];
+    pluginStatus_t status = reorgInference(stream, batchSize, C, H, W, stride, inputData, outputData);
+    return status;
+}
+
+bool ReorgStatic::supportsFormat(DataType type, PluginFormat format) const noexcept
 {
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-int32_t Reorg::initialize() noexcept
+IPluginV2Ext* ReorgStatic::clone() const noexcept
 {
-    return STATUS_SUCCESS;
-}
-
-void Reorg::terminate() noexcept {}
-
-size_t Reorg::getWorkspaceSize(int32_t maxBatchSize) const noexcept
-{
-    return 0;
-}
-
-char const* Reorg::getPluginType() const noexcept
-{
-    return kREORG_PLUGIN_NAME;
-}
-
-char const* Reorg::getPluginVersion() const noexcept
-{
-    return kREORG_PLUGIN_VERSION;
-}
-
-void Reorg::destroy() noexcept
-{
-    delete this;
-}
-
-// Set plugin namespace
-void Reorg::setPluginNamespace(char const* pluginNamespace) noexcept
-{
-    mPluginNamespace = pluginNamespace;
-}
-
-char const* Reorg::getPluginNamespace() const noexcept
-{
-    return mPluginNamespace.c_str();
-}
-
-// Return the DataType of the plugin output at the requested index
-DataType Reorg::getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
-{
-    // Only 1 input and 1 output from the plugin layer
-    PLUGIN_ASSERT(index == 0);
-
-    // Only DataType::kFLOAT is acceptable by the plugin layer
-    return DataType::kFLOAT;
+    try
+    {
+        ReorgStatic* plugin = new ReorgStatic(C, H, W, stride);
+        plugin->setPluginNamespace(mPluginNamespace.c_str());
+        return plugin;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 // Return true if output tensor is broadcast across a batch.
-bool Reorg::isOutputBroadcastAcrossBatch(
+bool ReorgStatic::isOutputBroadcastAcrossBatch(
     int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool Reorg::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool ReorgStatic::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void Reorg::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
+void ReorgStatic::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
     bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
 {
@@ -167,31 +321,8 @@ void Reorg::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const*
     PLUGIN_ASSERT(W % stride == 0);
 }
 
-// Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void Reorg::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
-{
-}
-
-// Detach the plugin object from its execution context.
-void Reorg::detachFromContext() noexcept {}
-
-IPluginV2Ext* Reorg::clone() const noexcept
-{
-    try
-    {
-        IPluginV2Ext* plugin = new Reorg(C, H, W, stride);
-        plugin->setPluginNamespace(mPluginNamespace.c_str());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-ReorgPluginCreator::ReorgPluginCreator()
+template <class TPluginClass>
+ReorgPluginCreator<TPluginClass>::ReorgPluginCreator()
 {
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("stride", nullptr, PluginFieldType::kINT32, 1));
@@ -200,22 +331,34 @@ ReorgPluginCreator::ReorgPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-char const* ReorgPluginCreator::getPluginName() const noexcept
+template <class TPluginClass>
+char const* ReorgPluginCreator<TPluginClass>::getPluginName() const noexcept
 {
     return kREORG_PLUGIN_NAME;
 }
 
-char const* ReorgPluginCreator::getPluginVersion() const noexcept
+template <class TPluginClass>
+char const* ReorgPluginCreator<TPluginClass>::getPluginVersion() const noexcept
 {
-    return kREORG_PLUGIN_VERSION;
+    if (std::is_same<TPluginClass, ReorgStatic>::value)
+    {
+        return kREORG_PLUGIN_STATIC_VERSION;
+    }
+    else if (std::is_same<TPluginClass, ReorgDynamic>::value)
+    {
+        return kREORG_PLUGIN_DYNAMIC_VERSION;
+    }
+    return "";
 }
 
-PluginFieldCollection const* ReorgPluginCreator::getFieldNames() noexcept
+template <class TPluginClass>
+PluginFieldCollection const* ReorgPluginCreator<TPluginClass>::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* ReorgPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+template <class TPluginClass>
+IPluginV2Ext* ReorgPluginCreator<TPluginClass>::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -227,7 +370,7 @@ IPluginV2Ext* ReorgPluginCreator::createPlugin(char const* name, PluginFieldColl
 
         PLUGIN_VALIDATE(stride > 0);
 
-        Reorg* obj = new Reorg(stride);
+        TPluginClass* obj = new TPluginClass(stride);
         obj->setPluginNamespace(mNamespace.c_str());
         return obj;
     }
@@ -238,14 +381,15 @@ IPluginV2Ext* ReorgPluginCreator::createPlugin(char const* name, PluginFieldColl
     return nullptr;
 }
 
-IPluginV2Ext* ReorgPluginCreator::deserializePlugin(
+template <class TPluginClass>
+IPluginV2Ext* ReorgPluginCreator<TPluginClass>::deserializePlugin(
     char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
         // This object will be deleted when the network is destroyed, which will
         // call ReorgPlugin::destroy()
-        Reorg* obj = new Reorg(serialData, serialLength);
+        TPluginClass* obj = new TPluginClass(serialData, serialLength);
         obj->setPluginNamespace(mNamespace.c_str());
         return obj;
     }
@@ -255,5 +399,9 @@ IPluginV2Ext* ReorgPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
+
+template class ReorgPluginCreator<ReorgStatic>;
+template class ReorgPluginCreator<ReorgDynamic>;
+
 } // namespace plugin
 } // namespace nvinfer1

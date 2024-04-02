@@ -27,8 +27,6 @@ from polygraphy.comparator.data_loader import DataLoader, DataLoaderCache
 from polygraphy.comparator.struct import AccuracyResult, IterationResult, RunResults
 from polygraphy.logger import G_LOGGER, LogMode
 
-np = mod.lazy_import("numpy")
-
 
 @mod.export()
 class Comparator:
@@ -98,7 +96,7 @@ class Comparator:
             with runner as active_runner:
                 # DataLoaderCache will ensure that the feed_dict does not contain any extra entries
                 # based on the provided input_metadata.
-                loader_cache.set_input_metadata(active_runner.get_input_metadata())
+                loader_cache.set_input_metadata(active_runner.get_input_metadata(use_numpy_dtypes=False))
 
                 if warm_up:
                     G_LOGGER.start(f"{active_runner.name:35} | Running {warm_up} warm-up run(s)")
@@ -327,8 +325,8 @@ class Comparator:
         fail_fast = util.default(fail_fast, False)
 
         def is_finite(output):
-            non_finite = np.logical_not(np.isfinite(output))
-            if np.any(non_finite):
+            non_finite = util.array.logical_not(util.array.isfinite(output))
+            if util.array.any(non_finite):
                 G_LOGGER.error("Inf Detected | One or more non-finite values were encountered in this output")
                 G_LOGGER.info(
                     "Note: Use -vv or set logging verbosity to EXTRA_VERBOSE to display non-finite values",
@@ -340,8 +338,8 @@ class Comparator:
             return True
 
         def is_not_nan(output):
-            nans = np.isnan(output)
-            if np.any(nans):
+            nans = util.array.isnan(output)
+            if util.array.any(nans):
                 G_LOGGER.error("NaN Detected | One or more NaNs were encountered in this output")
                 G_LOGGER.info(
                     "Note: Use -vv or set logging verbosity to EXTRA_VERBOSE to display locations of NaNs",

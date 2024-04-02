@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,70 +24,65 @@ This file contains code to configure the GPU's working clocks.
 from typing import Tuple
 from threading import Thread, Condition
 from enum import Enum, auto
-import time
 import logging
+from contextlib import contextmanager
+import pynvml
 
 
-def install_pynvml():
-    logging.info("pynvml is not installed - attempting installation")
-    import subprocess
+@contextmanager
+def nvmlContext(*args, **kwds):
+    gpu_id = args[0]
+    pynvml.nvmlInit()
+    handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
     try:
-        subprocess.run(f"python3 -m pip install pynvml".split(), check=True)
-    except subprocess.CalledProcessError:
-        logging.warning("Failed to install pynvml.")
-        logging.warning(f"Exiting: GPU clocks were not configured!")
-        exit(1)
-
-try:
-    import pynvml
-except ImportError:
-    install_pynvml()
-    import pynvml
-
-
-# Initialize NVML at the module level.
-pynvml.nvmlInit()
+        yield handle
+    finally:
+        pynvml.nvmlShutdown()
 
 
 class GPUMonitor():
     """Monitor GPU activity"""
+
+    def _sample_gpu_state(handle):
+        assert handle
+        try:
+            temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            util_rate = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            pwr = pynvml.nvmlDeviceGetPowerUsage(handle) // 1000
+            cps = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+            # Clock list: https://github.com/nicolargo/nvidia-ml-py3/blob/master/pynvml.py#L95
+            sm_clock_mhz = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
+            mem_clock_mhz = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
+            graphics_clock_mhz = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_GRAPHICS)
+            print(f"pwr: {pwr} temp: {temp} util_rate.gpu={util_rate.gpu} "
+                f"util_rate.memory={util_rate.memory} cnt processes={len(cps)} "
+                f"Clocks: sm={sm_clock_mhz} mem={mem_clock_mhz} graphics={graphics_clock_mhz}")
+
+            # Throttle reasons
+            # https://github.com/nicolargo/nvidia-ml-py3/blob/master/pynvml.py#L570
+            # https://docs.nvidia.com/deploy/nvml-api/group__nvmlClocksThrottleReasons.html
+            tr = (pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle))
+            # GPU is idle
+            tr_idle = tr & pynvml.nvmlClocksThrottleReasonGpuIdle
+            # GPU clocks are limited by current setting of applications clocks
+            tr_appsettings = tr & pynvml.nvmlClocksThrottleReasonApplicationsClocksSetting
+            # SW Power Scaling algorithm is reducing the clocks below requested clocks
+            tr_sw_power = tr & pynvml.nvmlClocksThrottleReasonSwPowerCap
+            # HW Power Brake Slowdown (reducing the core clocks by a factor of 2 or more) is engaged
+            # This is an indicator of: External Power Brake Assertion being triggered (e.g. by the system power supply)
+            tr_hw_slowdown = tr & pynvml.nvmlClocksThrottleReasonHwSlowdown
+            if tr:
+                print(f"Throttling = idle={tr_idle} app={tr_appsettings} "
+                    f"power={tr_sw_power} hardware={tr_hw_slowdown}")
+        except pynvml.nvml.NVMLError as e:
+            logging.warning(f"Could not read GPU state")
+
     def gpu_monitor(self):
         self.done_cond.acquire()
-        handle = self.handle
-        while not self.is_done:
-            try:
-                temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-                util_rate = pynvml.nvmlDeviceGetUtilizationRates(handle)
-                pwr = pynvml.nvmlDeviceGetPowerUsage(handle) // 1000
-                cps = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
-                # Clock list: https://github.com/nicolargo/nvidia-ml-py3/blob/master/pynvml.py#L95
-                sm_clock_mhz = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_SM)
-                mem_clock_mhz = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_MEM)
-                graphics_clock_mhz = pynvml.nvmlDeviceGetClockInfo(handle, pynvml.NVML_CLOCK_GRAPHICS)
-                print(f"pwr: {pwr} temp: {temp} util_rate.gpu={util_rate.gpu} "
-                    f"util_rate.memory={util_rate.memory} cnt processes={len(cps)} "
-                    f"Clocks: sm={sm_clock_mhz} mem={mem_clock_mhz} graphics={graphics_clock_mhz}")
-
-                # Throttle reasons
-                # https://github.com/nicolargo/nvidia-ml-py3/blob/master/pynvml.py#L570
-                # https://docs.nvidia.com/deploy/nvml-api/group__nvmlClocksThrottleReasons.html
-                tr = (pynvml.nvmlDeviceGetCurrentClocksThrottleReasons(handle))
-                # GPU is idle
-                tr_idle = tr & pynvml.nvmlClocksThrottleReasonGpuIdle
-                # GPU clocks are limited by current setting of applications clocks
-                tr_appsettings = tr & pynvml.nvmlClocksThrottleReasonApplicationsClocksSetting
-                # SW Power Scaling algorithm is reducing the clocks below requested clocks
-                tr_sw_power = tr & pynvml.nvmlClocksThrottleReasonSwPowerCap
-                # HW Power Brake Slowdown (reducing the core clocks by a factor of 2 or more) is engaged
-                # This is an indicator of: External Power Brake Assertion being triggered (e.g. by the system power supply)
-                tr_hw_slowdown = tr & pynvml.nvmlClocksThrottleReasonHwSlowdown
-                if tr:
-                    print(f"Throttling = idle={tr_idle} app={tr_appsettings} "
-                          f"power={tr_sw_power} hardware={tr_hw_slowdown}")
-            except pynvml.nvml.NVMLError as e:
-                logging.warning(f"Could not read GPU state")
-
-            self.done_cond.wait(self.sampling_interval)
+        with nvmlContext(self.gpu_id) as handle:
+            while not self.is_done:
+                self._sample_gpu_state(handle)
+                self.done_cond.wait(self.sampling_interval)
         self.done_cond.release()
 
     def __init__(self, enabled: bool, gpu_id: int=0, sampling_interval: float=1.):
@@ -98,7 +94,6 @@ class GPUMonitor():
         self.is_done = False
         self.monitor = Thread(target=self.gpu_monitor)
         self.done_cond = Condition()
-        self.handle = pynvml.nvmlDeviceGetHandleByIndex(self.gpu_id)
 
     def __enter__(self):
         if not self.enabled:
@@ -139,34 +134,36 @@ class GPUConfigurator():
         self.dont_lock_clocks = dont_lock_clocks
         self.set_power_limit = power_limit is not None
         self.set_lock = (compute_clk is not None and memory_clk is not None) and (not dont_lock_clocks)
-        self.handle = pynvml.nvmlDeviceGetHandleByIndex(self.gpu_id)
-
         if self.set_power_limit:
-            self.power_readings_stats = self._extract_power_limits()
+            with nvmlContext(self.gpu_id) as handle:
+                self.power_readings_stats = self._extract_power_limits(handle)
 
     def __enter__(self):
-        if self.set_power_limit:
-            self._set_power_limit(self.power_limit)
-        if self.set_lock:
-            self._lock_clocks()
+        with nvmlContext(self.gpu_id) as handle:
+            if self.set_power_limit:
+                self._set_power_limit(handle, self.power_limit)
+            if self.set_lock:
+                self._lock_clocks(handle)
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        if self.set_power_limit:
-            init_power_limit = self.power_readings_stats[self.Key.INIT_POWER_LIMIT]
-            self._set_power_limit(init_power_limit)
-        if self.set_lock:
-            self._unlock_clocks()
+        with nvmlContext(self.gpu_id) as handle:
+            if self.set_power_limit:
+                init_power_limit = self.power_readings_stats[self.Key.INIT_POWER_LIMIT]
+                self._set_power_limit(handle, init_power_limit)
+            if self.set_lock:
+                self._unlock_clocks(handle)
 
     # Helper functions
-    def _extract_power_limits(self):
+    def _extract_power_limits(self, handle):
         def to_watt(power_milliwatt: int):
             return power_milliwatt // 1000
-        min_power_limit, max_power_limit = pynvml.nvmlDeviceGetPowerManagementLimitConstraints(self.handle)
+
+        min_power_limit, max_power_limit = pynvml.nvmlDeviceGetPowerManagementLimitConstraints(handle)
         try:
-            cur_power_limit = pynvml.nvmlDeviceGetPowerManagementLimit(self.handle)
+            cur_power_limit = pynvml.nvmlDeviceGetPowerManagementLimit(handle)
         except pynvml.nvml.NVMLError as e:
             logging.warning(f"Could read power limit constraints ({e}).")
-            cur_power_limit = pynvml.nvmlDeviceGetPowerManagementDefaultLimit(self.handle)
+            cur_power_limit = pynvml.nvmlDeviceGetPowerManagementDefaultLimit(handle)
 
         # Power limit stats in Watts.
         power_readings_stats = {
@@ -176,7 +173,7 @@ class GPUConfigurator():
         }
         return power_readings_stats
 
-    def _set_power_limit(self, power_limit: float):
+    def _set_power_limit(self, handle, power_limit: float):
         def to_milliwatt(power_watt: int):
             return power_watt * 1000
 
@@ -186,7 +183,7 @@ class GPUConfigurator():
         logging.warning(f"Setting power limit to {power_limit} Watts")
         try:
             power_limit = to_milliwatt(power_limit)
-            pynvml.nvmlDeviceSetPowerManagementLimit(self.handle, power_limit)
+            pynvml.nvmlDeviceSetPowerManagementLimit(handle, power_limit)
         except pynvml.nvml.NVMLError_InvalidArgument as e:
             self.set_power_limit = False
             logging.warning(f"Could not set power limits ({e})\n"
@@ -197,10 +194,10 @@ class GPUConfigurator():
             logging.warning(f"Could not set power limits ({e}).")
 
 
-    def _lock_clocks(self):
+    def _lock_clocks(self, handle):
         try:
-            pynvml.nvmlDeviceSetApplicationsClocks(self.handle, self.memory_clk, self.compute_clk)
-            pynvml.nvmlDeviceSetGpuLockedClocks(self.handle,
+            pynvml.nvmlDeviceSetApplicationsClocks(handle, self.memory_clk, self.compute_clk)
+            pynvml.nvmlDeviceSetGpuLockedClocks(handle,
                 minGpuClockMHz=self.compute_clk,
                 maxGpuClockMHz=self.compute_clk)
             logging.warning(f"Set max memory clock = {self.memory_clk} MHz")
@@ -219,22 +216,22 @@ class GPUConfigurator():
         except pynvml.nvml.NVMLError as e:
             logging.warning(f"Could not lock clocks ({e}).")
 
-    def _unlock_clocks(self):
+    def _unlock_clocks(self, handle):
         try:
-            pynvml.nvmlDeviceResetGpuLockedClocks(self.handle)
-            pynvml.nvmlDeviceResetApplicationsClocks(self.handle)
+            pynvml.nvmlDeviceResetGpuLockedClocks(handle)
+            pynvml.nvmlDeviceResetApplicationsClocks(handle)
             logging.warning(f"Unlocked device clocks.")
         except pynvml.nvml.NVMLError as e:
             logging.warning(f"Could not unlock clocks ({e}).\n"
             "\tTry running as root or unlocking the clocks from the commandline:\n"
             "\t\tsudo nvidia-smi --reset-gpu-clocks\n"
-		    "\t\tsudo nvidia-smi --reset-applications-clocks")
+            "\t\tsudo nvidia-smi --reset-applications-clocks")
 
 
 def get_max_clocks(dev: int) -> Tuple[int, int]:
-    handle = pynvml.nvmlDeviceGetHandleByIndex(dev)
-    mem_clks = pynvml.nvmlDeviceGetSupportedMemoryClocks(handle)
-    max_mem_clk = mem_clks[0]
-    gr_clocks = pynvml.nvmlDeviceGetSupportedGraphicsClocks(handle, max_mem_clk)
-    max_gr_clk = gr_clocks[0]
-    return max_mem_clk, max_gr_clk
+    with nvmlContext(dev) as handle:
+        mem_clks = pynvml.nvmlDeviceGetSupportedMemoryClocks(handle)
+        max_mem_clk = mem_clks[0]
+        gr_clocks = pynvml.nvmlDeviceGetSupportedGraphicsClocks(handle, max_mem_clk)
+        max_gr_clk = gr_clocks[0]
+        return max_mem_clk, max_gr_clk

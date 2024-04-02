@@ -1,5 +1,6 @@
 # Deterministic Engine Building In TensorRT
 
+**NOTE: This example requires TensorRT 8.7 or newer.**
 
 ## Introduction
 
@@ -8,40 +9,33 @@ the most optimal ones. Since kernel timings may vary slightly from run to run, t
 process is inherently non-deterministic.
 
 In many cases, deterministic engine builds may be desirable. One way of achieving this
-is to use the `IAlgorithmSelector` API to ensure the same kernels are picked each time.
-
-To make this process easier, Polygraphy provides two built-in algorithm selectors:
-`TacticRecorder` and `TacticReplayer`. The former can be used to record tactics selected
-during an engine build, and the latter to play them back during a subsequent build.
-The CLI tools include `--save-tactics` and `--load-tactics` options correspnding to these.
+is to use a timing cache to ensure the same kernels are picked each time.
 
 ## Running The Example
 
-1. Build an engine and save a replay file:
+1. Build an engine and save a timing cache:
 
     ```bash
     polygraphy convert identity.onnx \
-        --save-tactics replay.json \
+        --save-timing-cache timing.cache \
         -o 0.engine
     ```
 
-    The resulting `replay.json` file is human-readable. Optionally, we can
-    use `inspect tactics` to view it in a friendly format:
-
-    ```bash
-    polygraphy inspect tactics replay.json
-    ```
-
-2. Use the replay file for another engine build:
+2. Use the timing cache for another engine build:
 
     ```bash
     polygraphy convert identity.onnx \
-        --load-tactics replay.json \
+        --load-timing-cache timing.cache --error-on-timing-cache-miss \
         -o 1.engine
     ```
 
+    We specify `--error-on-timing-cache-miss` so that we can be sure that the new engine
+    used the entries from the timing cache for each layer.
+
 3. Verify that the engines are exactly the same:
 
+    <!-- Polygraphy Test: Ignore Start -->
     ```bash
-    diff -sa 0.engine 1.engine
+    diff <(polygraphy inspect model 0.engine --show layers attrs) <(polygraphy inspect model 1.engine --show layers attrs)
     ```
+    <!-- Polygraphy Test: Ignore End -->

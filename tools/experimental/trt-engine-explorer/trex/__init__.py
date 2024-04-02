@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,19 +15,12 @@
 #
 
 
+# Include only core modules.
 from trex.df_preprocessing import *
 from trex.misc import *
 from trex.lint import *
 from trex.activations import *
 from trex.engine_plan import *
-# The Jupyter notebook graphing and plotting are
-# not required in a terminal environment.
-from trex.plotting import *
-from trex.notebook import *
-from trex.graphing import *
-from trex.interactive import *
-from trex.report_card import *
-from trex.compare_engines import *
-from trex.excel_summary import *
+from trex.colors import *
 
-__version__ = "0.1.6"
+__version__ = "0.1.8"

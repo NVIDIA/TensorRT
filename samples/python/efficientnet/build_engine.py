@@ -127,7 +127,7 @@ class EngineBuilder:
 
         self.builder = trt.Builder(self.trt_logger)
         self.config = self.builder.create_builder_config()
-        self.config.max_workspace_size = 8 * (2 ** 30)  # 8 GB
+        self.config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 8 * (2 ** 30))  # 8 GB
 
         self.batch_size = None
         self.network = None
@@ -138,9 +138,8 @@ class EngineBuilder:
         Parse the ONNX graph and create the corresponding TensorRT network definition.
         :param onnx_path: The path to the ONNX graph to load.
         """
-        network_flags = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
-        self.network = self.builder.create_network(network_flags)
+        self.network = self.builder.create_network(0)
         self.parser = trt.OnnxParser(self.network, self.trt_logger)
 
         onnx_path = os.path.realpath(onnx_path)
@@ -161,7 +160,6 @@ class EngineBuilder:
         for output in outputs:
             log.info("Output '{}' with shape {} and dtype {}".format(output.name, output.shape, output.dtype))
         assert self.batch_size > 0
-        self.builder.max_batch_size = self.batch_size
 
     def create_engine(
         self,
@@ -190,6 +188,9 @@ class EngineBuilder:
 
         inputs = [self.network.get_input(i) for i in range(self.network.num_inputs)]
 
+        log.info("Reading timing cache from file: {:}".format(args.timing_cache))
+        common.setup_timing_cache(self.config, args.timing_cache)
+
         if precision == "fp16":
             if not self.builder.platform_has_fast_fp16:
                 log.warning("FP16 is not supported natively on this platform/device")
@@ -215,9 +216,17 @@ class EngineBuilder:
                         )
                     )
 
-        with self.builder.build_engine(self.network, self.config) as engine, open(engine_path, "wb") as f:
+        engine_bytes = self.builder.build_serialized_network(self.network, self.config)
+        if engine_bytes is None:
+            log.error("Failed to create engine")
+            sys.exit(1)
+
+        log.info("Serializing timing cache to file: {:}".format(args.timing_cache))
+        common.save_timing_cache(self.config, args.timing_cache)
+
+        with open(engine_path, "wb") as f:
             log.info("Serializing engine to file: {:}".format(engine_path))
-            f.write(engine.serialize())
+            f.write(engine_bytes)
 
 
 def main(args):
@@ -266,6 +275,11 @@ if __name__ == "__main__":
         default="V2",
         choices=["V1", "V1MS", "V2"],
         help="Set the calibration image preprocessor to use, either 'V2', 'V1' or 'V1MS', default: V2",
+    )
+    parser.add_argument(
+        "--timing_cache",
+        default="./timing.cache",
+        help="The file path for timing cache, default: ./timing.cache",
     )
     args = parser.parse_args()
     if not all([args.onnx, args.engine]):

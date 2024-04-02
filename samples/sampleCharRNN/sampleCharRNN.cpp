@@ -42,7 +42,6 @@
 #include <vector>
 
 #include "NvInfer.h"
-#include "NvUtils.h"
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -135,7 +134,6 @@ struct SampleCharRNNParams : samplesCommon::SampleParams
 
     std::vector<std::string> inputSentences;
     std::vector<std::string> outputSentences;
-    bool useILoop;
 };
 
 //!
@@ -220,23 +218,13 @@ private:
     //!
     void copyRNNOutputsToInputs(samplesCommon::BufferManager& buffers);
 
+    //!
+    //! \brief Transposes a sub-buffer of size height * width.
+    //!
+    bool transposeSubBuffers(void* data, int64_t height, int64_t width) noexcept;
+
     std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr}; //!< The TensorRT runtime used to run the network
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
-};
-
-class SampleCharRNNv2 : public SampleCharRNNBase
-{
-public:
-    SampleCharRNNv2(SampleCharRNNParams params)
-        : SampleCharRNNBase(params)
-    {
-    }
-
-protected:
-    //!
-    //! \brief Add inputs to the TensorRT network and configure LSTM layers using network definition API.
-    //!
-    nvinfer1::ILayer* addLSTMLayers(SampleUniquePtr<nvinfer1::INetworkDefinition>& network) final;
 };
 
 class SampleCharRNNLoop : public SampleCharRNNBase
@@ -275,6 +263,46 @@ private:
 };
 
 //!
+//! \brief Transpose a sub-buffer of size height * width.
+//!
+//! \param data The data to transpose. Serves as both input and output.
+//! \param height The size of the height dimension to transpose.
+//! \param width The size of the width dimension to transpose.
+//!
+//! \return True on success, false on failure.
+//!
+bool SampleCharRNNBase::transposeSubBuffers(void* data, int64_t height, int64_t width) noexcept
+{
+    try
+    {
+        ASSERT(data != nullptr);
+        ASSERT(height > 0);
+        ASSERT(width > 0);
+        int64_t const tmpSize = height * width * sizeof(float);
+        samplesCommon::HostBuffer tmpbuf(tmpSize, DataType::kFLOAT);
+        ASSERT(tmpbuf.data() != nullptr);
+        auto in = static_cast<float*>(data);
+        auto out = static_cast<float*>(tmpbuf.data());
+
+        for (int64_t i{}; i < height; ++i)
+        {
+            for (int64_t j{}; j < width; ++j)
+            {
+                out[j * height + i] = in[i * width + j];
+            }
+        }
+
+        std::copy(static_cast<uint8_t*>(tmpbuf.data()), static_cast<uint8_t*>(tmpbuf.data()) + tmpSize,
+            static_cast<uint8_t*>(data));
+    }
+    catch (...)
+    {
+        return false;
+    }
+    return true;
+}
+
+//!
 //! \brief Creates the network, configures the builder and creates
 //!        the network engine
 //!
@@ -296,14 +324,7 @@ bool SampleCharRNNBase::build()
         {
             return false;
         }
-        NetworkDefinitionCreationFlags flags{
-            1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)};
-        if (!mParams.useILoop)
-        {
-            flags = 0;
-            builder->setMaxBatchSize(mParams.batchSize);
-        }
-        auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(flags));
+        auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
         if (!network)
         {
             return false;
@@ -454,12 +475,12 @@ nvinfer1::Weights SampleCharRNNBase::convertRNNWeights(nvinfer1::Weights orig, i
     auto mem = new samplesCommon::FloatMemory(input.count);
     weightsMemory.emplace_back(mem);
     auto ptr = mem->raw();
-    const float* data = static_cast<const float*>(input.values);
-    int dimsW[2]{dataSize, 4 * mParams.hiddenSize};
-    int dimsR[2]{mParams.hiddenSize, 4 * mParams.hiddenSize};
+    float const* data = static_cast<float const*>(input.values);
+    int64_t dimsW[2]{dataSize, 4 * mParams.hiddenSize};
+    int64_t dimsR[2]{mParams.hiddenSize, 4 * mParams.hiddenSize};
     std::copy(data, data + input.count, ptr);
-    ASSERT(utils::transposeSubBuffers(ptr, DataType::kFLOAT, 1, dimsW[0], dimsW[1]));
-    ASSERT(utils::transposeSubBuffers(&ptr[dimsW[0] * dimsW[1]], DataType::kFLOAT, 1, dimsR[0], dimsR[1]));
+    ASSERT(transposeSubBuffers(ptr, dimsW[0], dimsW[1]));
+    ASSERT(transposeSubBuffers(&ptr[dimsW[0] * dimsW[1]], dimsR[0], dimsR[1]));
     return nvinfer1::Weights{input.type, ptr, input.count};
 }
 
@@ -661,108 +682,6 @@ nvinfer1::ILayer* SampleCharRNNLoop::addLSTMLayers(SampleUniquePtr<nvinfer1::INe
 
     return dataOut;
 }
-//!
-//! \brief Add inputs to the network and configure the RNNv2 layer using network definition API.
-//!
-//! \param network The network that will be used to build the engine.
-//! \param weightMap Map that contains all the weights required by the model.
-//!
-//! \return Configured and added RNNv2 layer.
-//!
-nvinfer1::ILayer* SampleCharRNNv2::addLSTMLayers(SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
-{
-    // Initialize data, hiddenIn, cellIn, and seqLenIn inputs into RNN Layer
-    nvinfer1::ITensor* data = network->addInput(mParams.bindingNames.INPUT_BLOB_NAME, nvinfer1::DataType::kFLOAT,
-        nvinfer1::Dims2(mParams.seqSize, mParams.dataSize));
-    ASSERT(data != nullptr);
-
-    nvinfer1::ITensor* hiddenIn = network->addInput(mParams.bindingNames.HIDDEN_IN_BLOB_NAME,
-        nvinfer1::DataType::kFLOAT, nvinfer1::Dims2(mParams.layerCount, mParams.hiddenSize));
-    ASSERT(hiddenIn != nullptr);
-
-    nvinfer1::ITensor* cellIn = network->addInput(mParams.bindingNames.CELL_IN_BLOB_NAME, nvinfer1::DataType::kFLOAT,
-        nvinfer1::Dims2(mParams.layerCount, mParams.hiddenSize));
-    ASSERT(cellIn != nullptr);
-
-    nvinfer1::ITensor* seqLenIn
-        = network->addInput(mParams.bindingNames.SEQ_LEN_IN_BLOB_NAME, nvinfer1::DataType::kINT32, nvinfer1::Dims{});
-    ASSERT(seqLenIn != nullptr);
-
-    // create an RNN layer w/ 2 layers and 512 hidden states
-    nvinfer1::IRNNv2Layer* rnn = network->addRNNv2(
-        *data, mParams.layerCount, mParams.hiddenSize, mParams.seqSize, nvinfer1::RNNOperation::kLSTM);
-    ASSERT(rnn != nullptr);
-
-    // Set RNNv2 optional inputs
-    rnn->getOutput(0)->setName("RNN output");
-    rnn->setHiddenState(*hiddenIn);
-    if (rnn->getOperation() == nvinfer1::RNNOperation::kLSTM)
-    {
-        rnn->setCellState(*cellIn);
-    }
-
-    // Specify sequence lengths.  Note this can be omitted since we are always using the maximum
-    // sequence length, but for illustrative purposes we explicitly pass in sequence length data
-    // in the sample
-    rnn->setSequenceLengths(*seqLenIn);
-    seqLenIn->setLocation(nvinfer1::TensorLocation::kDEVICE);
-
-    // convert tensorflow weight format to trt weight format
-    nvinfer1::Weights rnnwL0
-        = SampleCharRNNBase::convertRNNWeights(mWeightMap[mParams.weightNames.RNNW_L0_NAME], mParams.dataSize);
-    nvinfer1::Weights rnnbL0 = SampleCharRNNBase::convertRNNBias(mWeightMap[mParams.weightNames.RNNB_L0_NAME]);
-    nvinfer1::Weights rnnwL1
-        = SampleCharRNNBase::convertRNNWeights(mWeightMap[mParams.weightNames.RNNW_L1_NAME], mParams.hiddenSize);
-    nvinfer1::Weights rnnbL1 = SampleCharRNNBase::convertRNNBias(mWeightMap[mParams.weightNames.RNNB_L1_NAME]);
-
-    std::vector<nvinfer1::RNNGateType> gateOrder({nvinfer1::RNNGateType::kINPUT, nvinfer1::RNNGateType::kCELL,
-        nvinfer1::RNNGateType::kFORGET, nvinfer1::RNNGateType::kOUTPUT});
-    const nvinfer1::DataType dataType = static_cast<nvinfer1::DataType>(rnnwL0.type);
-    const float* wtsL0 = static_cast<const float*>(rnnwL0.values);
-    const float* biasesL0 = static_cast<const float*>(rnnbL0.values);
-    const float* wtsL1 = static_cast<const float*>(rnnwL1.values);
-    const float* biasesL1 = static_cast<const float*>(rnnbL1.values);
-    size_t kernelOffsetL0 = 0, kernelOffsetL1 = 0, biasOffset = 0;
-    const int numGates = gateOrder.size();
-    ASSERT(numGates > 0);
-    for (int gateIndex = 0; gateIndex < 2 * numGates; gateIndex++)
-    {
-        bool isW = (gateIndex < numGates);
-        int64_t weightCountL0 = (isW ? mParams.dataSize : mParams.hiddenSize) * mParams.hiddenSize;
-        int64_t weightCountL1 = mParams.hiddenSize * mParams.hiddenSize;
-        // extract weights and bias for a given gate and layer
-        nvinfer1::Weights gateWeightL0{dataType, wtsL0 + kernelOffsetL0, weightCountL0};
-        nvinfer1::Weights gateBiasL0{dataType, biasesL0 + biasOffset, mParams.hiddenSize};
-        nvinfer1::Weights gateWeightL1{dataType, wtsL1 + kernelOffsetL1, weightCountL1};
-        nvinfer1::Weights gateBiasL1{dataType, biasesL1 + biasOffset, mParams.hiddenSize};
-
-        // set weights and bias for given gate
-        rnn->setWeightsForGate(0, gateOrder[gateIndex % numGates], isW, gateWeightL0);
-        rnn->setBiasForGate(0, gateOrder[gateIndex % numGates], isW, gateBiasL0);
-        rnn->setWeightsForGate(1, gateOrder[gateIndex % numGates], isW, gateWeightL1);
-        rnn->setBiasForGate(1, gateOrder[gateIndex % numGates], isW, gateBiasL1);
-
-        // Update offsets
-        kernelOffsetL0 += weightCountL0;
-        kernelOffsetL1 += weightCountL1;
-        biasOffset += mParams.hiddenSize;
-    }
-
-    // Store the transformed weights in the weight map so the memory can be properly released later.
-    mWeightMap["rnnwL0"] = rnnwL0;
-    mWeightMap["rnnbL0"] = rnnbL0;
-    mWeightMap["rnnwL1"] = rnnwL1;
-    mWeightMap["rnnbL1"] = rnnbL1;
-
-    rnn->getOutput(1)->setName(mParams.bindingNames.HIDDEN_OUT_BLOB_NAME);
-    network->markOutput(*rnn->getOutput(1));
-    if (rnn->getOperation() == nvinfer1::RNNOperation::kLSTM)
-    {
-        rnn->getOutput(2)->setName(mParams.bindingNames.CELL_OUT_BLOB_NAME);
-        network->markOutput(*rnn->getOutput(2));
-    }
-    return rnn;
-}
 
 //!
 //! \brief Create full model using the TensorRT network definition API and build the engine.
@@ -777,8 +696,8 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
     auto rnn = addLSTMLayers(network);
 
     // Transpose FC weights since TensorFlow's weights are transposed when compared to TensorRT
-    ASSERT(utils::transposeSubBuffers((void*) mWeightMap[mParams.weightNames.FCW_NAME].values,
-        nvinfer1::DataType::kFLOAT, 1, mParams.hiddenSize, mParams.vocabSize));
+    ASSERT(transposeSubBuffers((void*) mWeightMap[mParams.weightNames.FCW_NAME].values,
+        mParams.hiddenSize, mParams.vocabSize));
 
     // add Constant layers for fully connected weights
     auto fcwts = network->addConstant(
@@ -834,7 +753,7 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
 bool SampleCharRNNBase::infer()
 {
     // Create RAII buffer manager object
-    samplesCommon::BufferManager buffers(mEngine, mParams.useILoop ? 0 : mParams.batchSize);
+    samplesCommon::BufferManager buffers(mEngine, 0);
 
     auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
 
@@ -936,12 +855,14 @@ bool SampleCharRNNBase::stepOnce(
     // Asynchronously copy data from host input buffers to device input buffers
     buffers.copyInputToDeviceAsync(stream);
 
-    // Asynchronously enqueue the inference work
-    if (mParams.useILoop ? !context->enqueueV2(buffers.getDeviceBindings().data(), stream, nullptr)
-                         : !context->enqueue(mParams.batchSize, buffers.getDeviceBindings().data(), stream, nullptr))
+    for (int32_t i = 0, e = mEngine->getNbIOTensors(); i < e; i++)
     {
-        return false;
+        auto const name = mEngine->getIOTensorName(i);
+        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
     }
+
+    // Asynchronously enqueue the inference work
+    ASSERT(context->enqueueV3(stream));
     // Asynchronously copy data from device output buffers to host output buffers
     buffers.copyOutputToHostAsync(stream);
 
@@ -1001,7 +922,6 @@ SampleCharRNNParams initializeSampleParams(const samplesCommon::Args& args)
     params.vocabSize = 65;
     params.outputSize = 1;
     params.weightFileName = locateFile("char-rnn.wts", params.dataDirs);
-    params.useILoop = args.useILoop;
     params.saveEngine = args.saveEngine;
     params.loadEngine = args.loadEngine;
 
@@ -1044,7 +964,6 @@ void printHelpInfo()
 {
     std::cout << "Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path to data directory>]\n";
     std::cout << "--help          Display help information\n";
-    std::cout << "--useILoop      Use ILoop LSTM definition\n";
     std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "data/samples/char-rnn/ and data/char-rnn/"
@@ -1082,14 +1001,7 @@ int main(int argc, char** argv)
     SampleCharRNNParams params = initializeSampleParams(args);
     std::unique_ptr<SampleCharRNNBase> sample;
 
-    if (args.useILoop)
-    {
-        sample.reset(new SampleCharRNNLoop(params));
-    }
-    else
-    {
-        sample.reset(new SampleCharRNNv2(params));
-    }
+    sample.reset(new SampleCharRNNLoop(params));
 
     sample::gLogInfo << "Building and running a GPU inference engine for Char RNN model..." << std::endl;
 

@@ -11,7 +11,9 @@
 
 ## Description
 
-The `cropAndResizePlugin` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT and used in [sampleUffFasterRCNN] to perform inference.
+> NOTE: The `IPluginV2Ext` version of this plugin is deprecated since TensorRT 9.0. `IPluginV2DynamicExt`-based `CropAndResizeDynamic` is recommended instead.
+
+The `cropAndResizePlugin` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT.
 
 `cropAndResizePlugin` implements the TensorFlow style of ROIPooling(a.k.a. CropAndResize). It crops multiple region of interests(ROIs) from the input image with given ROI coordinates and then (bilinearly) resizes the cropped patches to a target spatial(width and height) size. 
 
@@ -70,6 +72,9 @@ documentation.
 
 
 ## Changelog
+
+June 2023
+Add deprecation note for `IPluginV2Ext` version of the plugin.
 
 May 2019
 This is the first release of this `README.md` file.

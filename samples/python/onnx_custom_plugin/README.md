@@ -57,7 +57,9 @@ pip3 install -r requirements.txt
 
 2. [Install CMake](https://cmake.org/download/).
 
-3. (For Windows builds) [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/) 2017 Community or Enterprise edition
+3. [Install Cublas](https://developer.nvidia.com/cublas).
+
+4. (For Windows builds) [Visual Studio](https://visualstudio.microsoft.com/vs/older-downloads/) 2017 Community or Enterprise edition
 
 ## Download and preprocess the ONNX model
 
@@ -151,9 +153,15 @@ The following resources provide a deeper understanding about getting started wit
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+January 2024:
+  - Create cublas handle with cublasCreate instead of using the cublasContext argument from attachToContext. The cublasContext is still valid if TacticSource::kCUBLAS is enabled. TacticSource::kCUBLAS is deprecated.
+  - Added the Cublas library as a prerequisite.
 
-September 2022
-This `README.md` file was created and reviewed.
+August 2023: 
+  - Update ONNX version support to 1.14.0
+  - Removed support for Python versions < 3.8.
+
+September 2022: This `README.md` file was created and reviewed.
 
 # Known issues
 

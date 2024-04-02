@@ -213,15 +213,12 @@ int32_t CropAndResizePlugin::enqueue(
     return STATUS_FAILURE;
 }
 
-int32_t CropAndResizeDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t CropAndResizeDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
+    void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(inputDesc != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
-        PLUGIN_VALIDATE(outputDesc != nullptr);
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
         // Our plugin outputs only one tensor
         void* output = outputs[0];
@@ -543,6 +540,9 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(char const* /* name */, P
 {
     try
     {
+        gLogWarning << "CropAndResizePlugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
+                       "CropAndResizeDynamic plugin."
+                    << std::endl;
         PLUGIN_VALIDATE(fc != nullptr);
         PluginField const* fields = fc->fields;
         int32_t nbFields = fc->nbFields;
@@ -623,6 +623,9 @@ IPluginV2Ext* CropAndResizePluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "CropAndResizePlugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
+                       "CropAndResizeDynamic plugin."
+                    << std::endl;
         // This object will be deleted when the network is destroyed,
         IPluginV2Ext* plugin = new CropAndResizePlugin(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());

@@ -3,6 +3,148 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.49.9 (2024-03-19)
+### Added
+- Added `run_opts` argument to `tools.main` to allow calling polygraphy tools from within other Python scripts.
+
+### Changed
+- Updated weight streaming flag to accept a percentage.
+
+### Fixed
+- Fixed a bug where a large amount of mismatch between two runner outputs would generate an out of memory error.
+
+
+## v0.49.8 (2024-02-16)
+### Added
+- Added `--mark-debug` command-line option.
+- Initializes trt plugin library by default when using the TensorRT ONNX parser
+
+
+## v0.49.7 (2024-02-02)
+### Added
+- Added `plugin match` subtool that finds opportunities for plugin substitution in an ONNX Model and prepares an intermediate file to be used for actual substitution
+- Added `plugin list` subtool that lists opportunities for plugin substitution, without preparing an intermediate file.
+- Added support for building engines with the refittable weights stripped.
+    Setting the `strip_plan` parameter of `CreateConfig` or passing in the `--strip-plan` flag
+    enables building engines with the refittable weights stripped.
+- Added `plugin replace` subtool that replaces subgraphs with plugins, based on an intermediate file (config.yaml)
+- Added `polygraphy surgeon weight-strip` to strip the initializers of selective nodes in an ONNX model
+- Added `polygraphy surgeon weight-reconstruct` to read a weightless ONNX model and fill the empty initializers with proxy tensors
+- Added '--weight-streaming` and `--weight-streaming-budget` APIs to control TRT weight streaming
+
+
+## v0.49.6 (2024-01-18)
+### Fixed
+- Fixed a bug where `explicit_batch` would be provided by default on TRT 10.0, where it has been removed.
+
+
+## v0.49.5 (2024-01-16)
+### Added
+- Added an `allocation_strategy` to `TrtRunner` and corresponding `--allocation-strategy` argument to CLI tools.
+
+### Fixed
+- Fixed a bug where the reference count of the TensorRT engine would not be decremented correctly in `TrtRunner`.
+
+
+## v0.49.4 (2023-12-20)
+### Fixed
+- Fixed a bug where the comparator would modify the original output tensor in some cases instead of operating on a copy.
+- Fixed a bug where `is_installed()` for lazily imported modules would not work if the package name differed from the module name.
+
+
+## v0.49.3 (2023-11-30)
+### Changed
+- Improved error messages in the default data loader for invalid backend modules.
+
+
+## v0.49.2 (2023-11-27)
+### Added
+- Added `DataType.INT4` for 4-bit signed integers.
+
+### Changed
+- Removed internal usage of several deprecated TensorRT APIs.
+
+### Fixed
+- Fixed a bug in the default data loader where scalars would not be generated correctly.
+
+
+## v0.49.1 (2023-10-03)
+### Added
+- Added `--profiling-verbosity` command-line option.
+- Added a `progress_monitor` parameter to `CreateConfig`.
+- Added a `data_loader_backend_module` parameter to `DataLoader` and corresponding `--data-loader-backend-module` argument to CLI tools to
+    choose between generating `numpy.ndarray` and `torch.tensor` in the default dataloader.
+
+### Fixed
+- Fixed a bug where warnings would be issued for unsupported versions of `torch` even if
+    `torch` was not being used.
+
+
+## v0.49.0 (2023-07-28)
+### Added
+- Added `check lint` subtool that validates ONNX Models and generates human-readable console output and
+    a JSON report detailing unused or invalid nodes as well as model errors.
+- Added a new `inspect sparsity` subtool that can check whether the weights in a model are sparse.
+- Added a `disable_compilation_cache` parameter to `CreateConfig` and corresponding `--disable-compilation-cache` argument
+    to CLI tools.
+- Added a `"quantile"` mode to `CompareFunc.simple()`'s `check_error_stat` parameter.
+- Added an `error_quantile` parameter to `CompareFunc.simple()` and corresponding `--error-quantile` argument to
+    CLI tools to specify the error quantile when `check_error_stat="quantile"`.
+
+### Changed
+- Improved error messages when deserialization fails due to a missing module.
+- Changed `SaveOnnx` to use `external_data_path=""` when the model exceeds the protobuf size limit and no external data path is provided.
+    This prevents scenarios where a long running command like `surgeon sanitize --fold-constants` would finally
+    complete only to fail when attempting to save the final model. With the new behavior, the model will be saved successfully
+    with external data in a default location.
+
+
+## v0.48.1 (2023-07-05)
+### Changed
+- Updated default `DataLoader` to show better errors when it can't generate inputs due to data types unsupported by NumPy.
+    In such cases, you must provide a custom data loader.
+
+### Fixed
+- Fixed a bug where older versions of ONNX would cause failures due to missing data types.
+- Fixed a bug where top-K implementation would not work for PyTorch FP16 tensors on CPU.
+
+
+## v0.48.0 (2023-06-13)
+### Added
+- Added a `quantization_flags` parameter to `CreateConfig` and corresponding `--quantization-flags` argument
+    to CLI tools to enable setting TensorRT builder quantization flags.
+- Added a `error_on_timing_cache_miss` parameter to `CreateConfig` and corresponding `--error-on-timing-cache-miss` argument
+    to CLI tools.
+- Added a `bf16` option to the TensorRT `CreateConfig` loader and corresponding `--bf16` argument to CLI tools.
+- Added a common `DataType` class which can convert between data type classes of various other frameworks,
+    like NumPy, PyTorch, and TensorRT.
+- Added support for PyTorch tensors in `TrtRunner` and `Calibrator`. See [the example](examples/api/09_working_with_pytorch_tensors/) for details.
+- Added support for PyTorch tensors in `OnnxrtRunner`.
+- Added a `strongly_typed` option to TensorRT network loaders and a corresponding `--strongly-typed` argument to CLI tools.
+- Added `polygraphy surgeon prune` to prune a model to be sparse. Note that this will *not* retain the accuracy of the model and should hence be used only for functional testing.
+- Added a `--toposort` option to `surgeon sanitize` to topologically sort nodes.
+
+### Changed
+- `TensorMetadata` will now automatically convert data types to Polygraphy's `DataType` class.
+    The data types can be converted to corresponding NumPy types using the `numpy()` method.
+    This affects any interface that returns instances of this class. For example, the `Calibrator`
+    sets input metadata on the provided data loader in the form of a `TensorMetadata` instance.
+    *NOTE: For compatibility, the runner method, `get_input_metadata` will retain its previous behavior of using NumPy types.*
+        *In a future version of Polygraphy, it will be updated to return only Polygraphy `DataType`s.*
+
+### Fixed
+- Fixed a bug where the `DataLoader` would not generate inputs correctly if a scalar was provided
+    in the input metadata. Note that since scalars have fixed shapes, they do need to be specified
+    via the `input_metadata` argument, so a workaround on older versions is to simply omit scalars.
+
+### Removed
+- Removed the TensorRT Legacy runner which supported UFF and Caffe models.
+- Removed support for TensorRT versions older than 8.5.
+- Removed `max_workspace_size` option in TensorRT's `CreateConfig` and corresponding `--workspace` argument from CLI tools.
+- Removed `strict_types` option in TensorRT's `CreateConfig` and corresponding `--strict-types` argument from CLI tools.
+- Removed `debug diff-tactics` alias for `inspect diff-tactics`. `diff-tactics` is now available only under the `inspect` tool.
+
+
 ## v0.47.1 (2023-03-29)
 ### Changed
 - Updated `TrtOnnxFlagArgs` to automatically enable `NATIVE_INSTANCENORM` when either hardware or
@@ -793,8 +935,8 @@ Dates are in YYYY-MM-DD format.
     the shape/data type arguments.
 - ONNX shape inference will now be skipped when `--force-fallback-shape-inference` is enabled in `surgeon extract/sanitize`.
 - `debug reduce` will now freeze intermediate shapes in the model if `--model-input-shapes` is provided.
-- `IterationResult`s now store `LazyNumpyArray` rather than `np.ndarray`.
-    The public interface for `IterationResult` will automatically pack or unpack `np.ndarray`s into/from `LazyNumpyArray`,
+- `IterationResult`s now store `LazyArray` rather than `np.ndarray`.
+    The public interface for `IterationResult` will automatically pack or unpack `np.ndarray`s into/from `LazyArray`,
     so the change is completely transparent.
     This can significantly reduce memory usage for tools like `debug reduce` and `run`.
 

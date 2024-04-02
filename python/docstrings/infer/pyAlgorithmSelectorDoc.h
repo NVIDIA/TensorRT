@@ -27,7 +27,6 @@ constexpr const char* descr = R"trtdoc(
     IAlgorithmIOInfo for all the input and output along with IAlgorithmVariant denotes the variation of algorithm
     and can be used to select or reproduce an algorithm using IAlgorithmSelector.select_algorithms().
 
-    :ivar tensor_format: :class:`TensorFormat` [DEPRECATED] TensorFormat of the input/output of algorithm. This is deprecated since the strides, data type, and vectorization information is sufficient to uniquely identify tensor formats.
     :ivar dtype: :class:`DataType`  DataType of the input/output of algorithm.
     :ivar strides: :class:`Dims` strides of the input/output tensor of algorithm.
     :ivar vectorized_dim: :class:`int` the index of the vectorized dimension or -1 for non-vectorized formats.
@@ -60,7 +59,14 @@ constexpr const char* descr = R"trtdoc(
     :ivar name: :class:`str` name of the algorithm node.
     :ivar num_inputs: :class:`int`  number of inputs of the algorithm.
     :ivar num_outputs: :class:`int` number of outputs of the algorithm.
-)trtdoc";
+)trtdoc"
+// remove md
+#if ENABLE_MDTRT
+                              R"trtdoc(
+    :ivar instance_id: Read-only. The multi-device instance ID.
+)trtdoc"
+#endif // ENABLE_MDTRT
+    ;
 
 constexpr const char* get_shape = R"trtdoc(
     Get the minimum / optimum / maximum dimensions for a dynamic input tensor.

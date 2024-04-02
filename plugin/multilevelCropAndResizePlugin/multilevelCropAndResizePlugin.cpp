@@ -323,12 +323,19 @@ void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int32_t nbI
     PLUGIN_ASSERT(nbOutputs == 1);
     PLUGIN_ASSERT(nbInputs == 1 + mFeatureMapCount);
 
-    mROICount = inputDims[0].d[0];
-    mFeatureLength = inputDims[1].d[0];
-
-    for (size_t layer = 0; layer < mFeatureMapCount; ++layer)
+    try
     {
-        mFeatureSpatialSize[layer] = {inputDims[layer + 1].d[1], inputDims[layer + 1].d[2]};
+        mROICount = dimToInt32(inputDims[0].d[0]);
+        mFeatureLength = dimToInt32(inputDims[1].d[0]);
+
+        for (size_t layer = 0; layer < mFeatureMapCount; ++layer)
+        {
+            mFeatureSpatialSize[layer] = {dimToInt32(inputDims[layer + 1].d[1]), dimToInt32(inputDims[layer + 1].d[2])};
+        }
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
     }
 
     mPrecision = inputTypes[1];

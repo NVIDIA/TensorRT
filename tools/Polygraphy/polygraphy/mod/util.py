@@ -18,17 +18,21 @@
 
 def version(version_str):
     def process_version_part(num):
+        suffix = None
+        if "+" in num:
+            num, suffix = num.split("+")
+
         try:
-            return [int(num)]
+            num = int(num)
         except ValueError:
             VERSION_SUFFIXES = ["a", "b", "rc", "post", "dev"]
             # One version part can only contain one of the above suffixes
-            for suffix in VERSION_SUFFIXES:
-                if suffix in num:
-                    return num.partition(suffix)
+            for version_suffix in VERSION_SUFFIXES:
+                if version_suffix in num:
+                    num = num.partition(version_suffix)
+                    break
 
-            # For unrecognized suffixes, just return as-is
-            return [num]
+        return [num, suffix] if suffix is not None else [num]
 
     ver_list = []
     for num in version_str.split("."):

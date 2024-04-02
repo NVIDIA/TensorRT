@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,4 +37,6 @@ fake_node.outputs.clear()
 
 # Remove the fake node from the graph completely
 graph.cleanup()
-onnx.save(gs.export_onnx(graph), "removed.onnx")
+
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "removed.onnx")

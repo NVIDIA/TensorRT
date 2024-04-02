@@ -119,7 +119,7 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
     // results in that integer when computing the bucket later on.
     // This corrects for the mathematical imprecision from using float.
     constexpr float kEPSILON = 1e-7;
-    float tmp = (mid - 1) / (logf(dimResult.y - 1) - tmp1) * (1 - kEPSILON);
+    float tmp = (mid - 1) / (logf(dimData1.z - 1) - tmp1) * (1 - kEPSILON);
 #endif
 
     __shared__ TDataType T[tTileSize][tTileSize + 1]; // +1 to avoid bank conflict

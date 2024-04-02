@@ -40,9 +40,6 @@ The ElementWise layer, also known as the Eltwise layer, implements per-element o
 [MatrixMultiply](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#matrixmultiply-layer)
 The MatrixMultiply layer implements matrix multiplication for a collection of matrices. The Matrix Multiplication layer is used to execute the first step of the functionality provided by a FullyConnected layer.
 
-[RNNv2](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#rnnv2-layer)
-The RNNv2 layer implements recurrent layers such as Recurrent Neural Network (RNN), Gated Recurrent Units (GRU), and Long Short-Term Memory (LSTM). Supported types are RNN, GRU, and LSTM. It performs a recurrent operation, where the operation is defined by one of several well-known recurrent neural network (RNN) "cells".  This is the first layer in the network is an RNN layer. This is added and configured in the `addRNNv2Layer()` function. Weights are set for each gate and layer individually. The input format for RNNv2 is BSE (Batch, Sequence, Embedding).
-
 [TopK](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#topk-layer)
 The TopK layer is used to identify the character that has the maximum probability of appearing next. The TopK layer finds the top K maximum (or minimum) elements along a dimension, returning a reduced tensor and a tensor of index positions.
 
@@ -124,6 +121,10 @@ documentation.
 
 
 # Changelog
+
+January 2024
+* Removed RNNv2Layer based addLSTMLayer implementation. addLSTMLayer is now implemented with ILoop only.
+* Default to use ILoop in paramaters.
 
 February 2019
 This is the first release of this `README.md` file.

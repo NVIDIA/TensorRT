@@ -34,7 +34,7 @@ from polygraphy.tools.base import Tool
 from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
 
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
-trt = mod.lazy_import("tensorrt")
+trt = mod.lazy_import("tensorrt>=8.5")
 
 
 class BaseCheckerSubtool(Tool):
@@ -110,52 +110,34 @@ class BaseCheckerSubtool(Tool):
         pass
 
     def run_impl(self, args):
-        # Hack to switch obey_precision_constraints to strict_types on older versions
-        if (
-            mod.version(trt.__version__) < mod.version("8.2")
-            and self.arg_groups[TrtConfigArgs].precision_constraints is not None
-        ):
-            G_LOGGER.warning(
-                "--precision-constraints is not supported on this version of TensorRT. "
-                "Treating it as --strict-types instead."
-            )
-            self.arg_groups[TrtConfigArgs].precision_constraints = None
-            self.arg_groups[TrtConfigArgs].strict_types = True
+        builder, network, _ = util.unpack_args(self.arg_groups[TrtLoadNetworkArgs].load_network(), 3)
 
-        builder, network, parser = util.unpack_args(self.arg_groups[TrtLoadNetworkArgs].load_network(), 3)
+        self.setup(args, network)
 
-        with contextlib.ExitStack() as stack:
-            stack.enter_context(builder)
-            stack.enter_context(network)
-            if parser:
-                stack.enter_context(parser)
+        def make_iter_art(_):
+            self.process_network(network)
 
-            self.setup(args, network)
-
-            def make_iter_art(_):
-                self.process_network(network)
-
-                try:
-                    serialized_engine = self.arg_groups[TrtLoadEngineBytesArgs].load_engine_bytes((builder, network))
-                except Exception as err:
-                    G_LOGGER.warning(
-                        f"Failed to create network or engine, continuing to the next iteration.\nNote: Error was: {err}"
+            try:
+                serialized_engine = self.arg_groups[TrtLoadEngineBytesArgs].load_engine_bytes((builder, network))
+            except Exception as err:
+                G_LOGGER.warning(
+                    f"Failed to create network or engine, continuing to the next iteration.\nNote: Error was: {err}"
+                )
+                G_LOGGER.internal_error("Failed to create network or engine. See warning above for details.")
+                self.arg_groups[IterativeDebugArgs].skip_iteration(success=False)
+            else:
+                # Don't need to keep the engine around in memory - just serialize to disk and free it.
+                with serialized_engine:
+                    self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(
+                        serialized_engine, self.arg_groups[IterativeDebugArgs].iter_artifact_path
                     )
-                    G_LOGGER.internal_error("Failed to create network or engine. See warning above for details.")
-                    self.arg_groups[IterativeDebugArgs].skip_iteration(success=False)
-                else:
-                    # Don't need to keep the engine around in memory - just serialize to disk and free it.
-                    with serialized_engine:
-                        self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(
-                            serialized_engine, self.arg_groups[IterativeDebugArgs].iter_artifact_path
-                        )
 
-            def advance(context):
-                if self.step(context.success):
-                    self.arg_groups[IterativeDebugArgs].stop_iteration()
+        def advance(context):
+            if self.step(context.success):
+                self.arg_groups[IterativeDebugArgs].stop_iteration()
 
-            self.arg_groups[IterativeDebugArgs].iterate(
-                make_iter_art_func=make_iter_art,
-                advance_func=advance if not self._allow_until_opt else None,
-                get_remaining_func=lambda: self.remaining(),
-            )
+        self.arg_groups[IterativeDebugArgs].iterate(
+            make_iter_art_func=make_iter_art,
+            advance_func=advance if not self._allow_until_opt else None,
+            get_remaining_func=lambda: self.remaining(),
+        )

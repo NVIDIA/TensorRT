@@ -20,6 +20,7 @@
 #include "common/bertCommon.h"
 #include "common/plugin.h"
 #include "common/serialize.hpp"
+
 #include <cstring>
 #include <cuda.h>
 #include <iostream>
@@ -46,8 +47,8 @@ REGISTER_TENSORRT_PLUGIN(QKVToContextInterleavedPluginCreator);
 
 constexpr uint32_t IIDX = 0; // index of the input tensor
 
-QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& name, int32_t const hiddenSize,
-    int32_t const numHeads, float const dqProbs, bool const useInt8ScaleMax)
+QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& name, int32_t hiddenSize,
+    int32_t numHeads, float dqProbs, bool useInt8ScaleMax, bool useExplicitInt8, float qkvScale, float ctxScale)
     : mLayerName(name)
     , mS(0)
     , mB(0)
@@ -56,6 +57,9 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& 
     , mNumHeads(numHeads)
     , mDqProbs(dqProbs)
     , mUseInt8ScaleMax(useInt8ScaleMax)
+    , mUseExplicitInt8(useExplicitInt8)
+    , mQkvScale(qkvScale)
+    , mCtxScale(ctxScale)
 {
     mSM = getSMVersion();
     // variable sequence length is only supported with the fused MHA kernels
@@ -78,6 +82,9 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& 
     deserialize_value(&data, &length, &mB);
     deserialize_value(&data, &length, &mDqProbs);
     deserialize_value(&data, &length, &mUseInt8ScaleMax);
+    deserialize_value(&data, &length, &mUseExplicitInt8);
+    deserialize_value(&data, &length, &mQkvScale);
+    deserialize_value(&data, &length, &mCtxScale);
 }
 
 int32_t QKVToContextInterleavedPlugin::getSMVersion() const noexcept
@@ -94,8 +101,8 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextInterleavedPlugin::clone() const noex
 {
     try
     {
-        QKVToContextInterleavedPlugin* ret
-            = new QKVToContextInterleavedPlugin(mLayerName, mHiddenSize, mNumHeads, mDqProbs, mUseInt8ScaleMax);
+        QKVToContextInterleavedPlugin* ret = new QKVToContextInterleavedPlugin(
+            mLayerName, mHiddenSize, mNumHeads, mDqProbs, mUseInt8ScaleMax, mUseExplicitInt8, mQkvScale, mCtxScale);
 
         ret->setPluginNamespace(mNamespace.c_str());
         return ret;
@@ -197,7 +204,8 @@ void QKVToContextInterleavedPlugin::terminate() noexcept {}
 size_t QKVToContextInterleavedPlugin::getSerializationSize() const noexcept
 {
     return sizeof(mNumHeads) + sizeof(mHeadSize) + sizeof(mHiddenSize) + sizeof(mSM) + sizeof(mS) + sizeof(mB)
-        + sizeof(mDqProbs) + sizeof(mUseInt8ScaleMax);
+        + sizeof(mDqProbs) + sizeof(mUseInt8ScaleMax) + sizeof(mUseExplicitInt8) + sizeof(mQkvScale)
+        + sizeof(mCtxScale);
 }
 
 void QKVToContextInterleavedPlugin::serialize(void* buffer) const noexcept
@@ -210,6 +218,9 @@ void QKVToContextInterleavedPlugin::serialize(void* buffer) const noexcept
     serialize_value(&buffer, mB);
     serialize_value(&buffer, mDqProbs);
     serialize_value(&buffer, mUseInt8ScaleMax);
+    serialize_value(&buffer, mUseExplicitInt8);
+    serialize_value(&buffer, mQkvScale);
+    serialize_value(&buffer, mCtxScale);
 }
 
 void QKVToContextInterleavedPlugin::destroy() noexcept
@@ -228,8 +239,9 @@ char const* QKVToContextInterleavedPlugin::getPluginNamespace() const noexcept
 }
 
 int32_t QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     int32_t const total = inputDesc[0].dims.d[2];
     int32_t const B = inputDesc[1].dims.d[0] - 1;
@@ -259,8 +271,8 @@ int32_t QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc
     params.qkv_ptr = const_cast<void*>(inputs[0]);
     params.cu_seqlens = static_cast<int32_t*>(const_cast<void*>(inputs[1]));
 
-    float scaleQkv = inputDesc[0].scale;
-    float scaleCtx = outputDesc[0].scale;
+    float scaleQkv = mUseExplicitInt8 ? mQkvScale : inputDesc[0].scale;
+    float scaleCtx = mUseExplicitInt8 ? mCtxScale : outputDesc[0].scale;
 
     float scaleBmm1 = scaleQkv * scaleQkv * 0.125; // 1 / sqrt(64)
     float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
@@ -296,6 +308,9 @@ QKVToContextInterleavedPluginCreator::QKVToContextInterleavedPluginCreator()
     mPluginAttributes.emplace_back(PluginField("num_heads", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("dq_probs", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("use_int8_scale_max", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("use_explicit_int8", nullptr, PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(PluginField("input_qkv_scale", nullptr, PluginFieldType::kFLOAT32, 1));
+    mPluginAttributes.emplace_back(PluginField("output_ctx_scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
@@ -330,6 +345,10 @@ IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(
         float dqProbs = -1;
         int32_t useInt8ScaleMax{-1};
 
+        int32_t useExplicitInt8{};
+        float qkvScale{1.F};
+        float ctxScale{1.F};
+
         plugin::validateRequiredAttributesExist({"hidden_size", "num_heads"}, fc);
 
         for (int32_t i = 0; i < fc->nbFields; i++)
@@ -342,24 +361,41 @@ IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(
                 PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
                 BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
             }
-            if (field_name.compare("num_heads") == 0)
+            else if (field_name.compare("num_heads") == 0)
             {
                 numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
                 BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
             }
-            if (field_name.compare("dq_probs") == 0)
+            else if (field_name.compare("dq_probs") == 0)
             {
                 dqProbs = *static_cast<float const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(dqProbs > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs)).c_str());
                 BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
             }
-            if (field_name.compare("use_int8_scale_max") == 0)
+            else if (field_name.compare("use_int8_scale_max") == 0)
             {
                 useInt8ScaleMax = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(useInt8ScaleMax == 0 || useInt8ScaleMax == 1,
                     ("QKV: Invalid useInt8ScaleMax " + std::to_string(useInt8ScaleMax)).c_str());
                 BERT_DEBUG_VALUE("Building useInt8ScaleMax: ", useInt8ScaleMax);
+            }
+            else if (field_name.compare("use_explicit_int8") == 0)
+            {
+                useExplicitInt8 = *static_cast<int32_t const*>(fc->fields[i].data);
+                BERT_DEBUG_VALUE("Building use_explicit_int8: ", useExplicitInt8);
+            }
+            else if (field_name.compare("input_qkv_scale") == 0)
+            {
+                qkvScale = *static_cast<float const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(qkvScale > 0, ("QKV: Invalid input_qkv_scale" + std::to_string(qkvScale)).c_str());
+                BERT_DEBUG_VALUE("Building input_qkv_scale: ", qkvScale);
+            }
+            else if (field_name.compare("output_ctx_scale") == 0)
+            {
+                ctxScale = *static_cast<float const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(ctxScale > 0, ("QKV: Invalid output_ctx_scale " + std::to_string(ctxScale)).c_str());
+                BERT_DEBUG_VALUE("Building output_ctx_scale: ", ctxScale);
             }
         }
 
@@ -377,8 +413,8 @@ IPluginV2* QKVToContextInterleavedPluginCreator::createPlugin(
 
         auto const useInt8ScaleMaxFlag = static_cast<bool>(useInt8ScaleMax);
 
-        QKVToContextInterleavedPlugin* p
-            = new QKVToContextInterleavedPlugin(name, hiddenSize, numHeads, dqProbs, useInt8ScaleMaxFlag);
+        QKVToContextInterleavedPlugin* p = new QKVToContextInterleavedPlugin(
+            name, hiddenSize, numHeads, dqProbs, useInt8ScaleMaxFlag, useExplicitInt8 != 0, qkvScale, ctxScale);
         return p;
     }
     catch (std::exception const& e)

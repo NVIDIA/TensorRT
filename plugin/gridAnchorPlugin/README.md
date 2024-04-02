@@ -12,8 +12,8 @@
 
 ## Description
 
-Some object detection neural networks such as Faster R-CNN and SSD use region proposal networks that require anchor boxes to generate predicted bounding boxes. This plugin is included in TensorRT and used in [sampleUffSSD](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#uffssd_sample) to run SSD.
-  
+Some object detection neural networks such as Faster R-CNN and SSD use region proposal networks that require anchor boxes to generate predicted bounding boxes.
+
 The `gridAnchorPlugin` generates anchor boxes (prior boxes) from the feature map in object detection models such as SSD. It generates anchor box coordinates `[x_min, y_min, x_max, y_max]` with variances (scaling factors) `[var_0, var_1, var_2, var_3]` for the downstream bounding box decoding steps. It uses a series of CUDA kernels in the `gridAnchorLayer.cu` file to accelerate the process in TensorRT.
 
 If the feature maps are square, then the `GridAnchor_TRT` plugin should be used. If the feature maps

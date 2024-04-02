@@ -44,7 +44,7 @@ class IConsistencyChecker
 public:
     //!
     //! \brief Check that a blob that was input to createConsistencyChecker method represents a valid engine.
-    //
+    //!
     //! \return true if the original blob encoded an engine that belongs to valid engine domain with
     //! target capability EngineCapability::kSAFETY, false otherwise.
     //!

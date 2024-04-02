@@ -1,0 +1,15 @@
+cuda-python
+cupy-cuda12x
+numba
+triton; platform_system != "Windows"
+torch
+--extra-index-url https://pypi.ngc.nvidia.com
+polygraphy
+colored
+numpy==1.23.5; platform_system != "Windows"
+--extra-index-url https://pypi.ngc.nvidia.com
+onnx-graphsurgeon
+pywin32; platform_system == "Windows"
+pyyaml==6.0.1
+requests==2.31.0
+tqdm==4.66.1

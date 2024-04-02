@@ -29,6 +29,9 @@ class TestWheel:
         with pytest.raises(Exception, match="returned non-zero exit"):
             virtualenv.run(["python3", "-c", "import polygraphy"])
 
+        # Newer versions of setuptools break pytest-virtualenv
+        virtualenv.run([virtualenv.python, "-m", "pip", "install", "setuptools==59.6.0"])
+
         virtualenv.run(["make", "install"], cwd=ROOT_DIR)
 
         # Check Python package is installed
@@ -47,20 +50,21 @@ class TestWheel:
         # NOTE: This should be updated when new files are added to the top-level package.
         EXPECTED_FILES = set(
             [
-                "backend",
-                "mod",
                 "__init__.py",
-                "cuda",
-                "logger",
-                "constants.py",
-                "util",
+                "backend",
+                "common",
                 "comparator",
-                "tools",
+                "config.py",
+                "constants.py",
+                "cuda",
+                "datatype",
                 "exception",
                 "func",
-                "common",
                 "json",
-                "config.py",
+                "logger",
+                "mod",
+                "tools",
+                "util",
             ]
         )
         assert set(all_poly_files) == EXPECTED_FILES

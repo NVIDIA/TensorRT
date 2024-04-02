@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,6 @@
 #include "NvInferPlugin.h"
 #include "common/plugin.h"
 #include <cstdlib>
-#include <cudnn.h>
 #include <string>
 #include <vector>
 
@@ -28,7 +27,7 @@ namespace nvinfer1
 {
 namespace plugin
 {
-class ClipPlugin : public nvinfer1::pluginInternal::BasePlugin
+class TRT_DEPRECATED ClipPlugin : public nvinfer1::pluginInternal::BasePlugin
 {
 public:
     ClipPlugin(std::string name, float clipMin, float clipMax);
@@ -80,7 +79,7 @@ private:
     size_t mInputVolume{0};
 };
 
-class ClipPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED ClipPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     ClipPluginCreator();

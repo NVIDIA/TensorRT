@@ -83,8 +83,7 @@ struct BertInference
         }
         gLogInfo << "Done\n";
 
-        const int numBindingPerProfile = mEngine->getNbBindings() / mEngine->getNbOptimizationProfiles();
-        mEnableVariableLen = numBindingPerProfile == kBERT_INPUT_NUM + 1 ? false : true;
+        mEnableVariableLen = mEngine->getNbIOTensors() == kBERT_INPUT_NUM + 1 ? false : true;
         if (mEnableVariableLen)
         {
             gLogInfo << "Variable length is enabled\n";
@@ -153,15 +152,14 @@ struct BertInference
         mDeviceBuffers.emplace_back(devBuf);
         mHostOutput.resize(numOutputItems);
 
-        mBindings.resize(mEngine->getNbBindings());
+        mBindings.resize(mEngine->getNbIOTensors() * mEngine->getNbOptimizationProfiles());
     }
 
     void prepare(int profIdx, int batchSize)
     {
 
         mContext->setOptimizationProfile(profIdx);
-        const int numBindingPerProfile = mEngine->getNbBindings() / mEngine->getNbOptimizationProfiles();
-        const int bindingIdxOffset = profIdx * numBindingPerProfile;
+        const int bindingIdxOffset = profIdx * mEngine->getNbIOTensors();
         std::copy(mDeviceBuffers.begin(), mDeviceBuffers.end(), mBindings.begin() + bindingIdxOffset);
 
         if (mEnableVariableLen)
@@ -169,14 +167,16 @@ struct BertInference
             const int allocationSizes[] = {mSeqLength * batchSize, mSeqLength * batchSize, batchSize + 1, mSeqLength};
             for (int i = 0; i < sizeof(allocationSizes)/sizeof(allocationSizes[0]); i++)
             {
-                mContext->setBindingDimensions(i + bindingIdxOffset, Dims{1, {allocationSizes[i]}});
+                auto const tensorName = mEngine->getIOTensorName(i % mEngine->getNbIOTensors());
+                mContext->setInputShape(tensorName, Dims{1, {allocationSizes[i]}});
             }
         }
         else
         {
             for (int i = 0; i < kBERT_INPUT_NUM; i++)
             {
-                mContext->setBindingDimensions(i + bindingIdxOffset, Dims2(batchSize, mSeqLength));
+                auto const tensorName = mEngine->getIOTensorName(i);
+                mContext->setInputShape(tensorName, Dims2(batchSize, mSeqLength));
             }
         }
 
@@ -188,10 +188,16 @@ struct BertInference
 
         if (mEnableGraph)
         {
+            for (int32_t i = 0; i < mEngine->getNbIOTensors(); i++)
+            {
+                auto const& name = mEngine->getIOTensorName(i);
+                context->setTensorAddress(name, mBindings[i + bindingIdxOffset]);
+            }
+
             cudaGraph_t graph;
             cudaGraphExec_t exec;
             // warm up and let mContext do cublas initialization
-            bool status = mContext->enqueueV2(mBindings.data(), mStream, nullptr);
+            bool status = mContext->enqueueV3(mStream, nullptr);
             if (!status)
             {
                 gLogError << "Enqueue failed\n";
@@ -200,7 +206,7 @@ struct BertInference
             gLogVerbose << "Capturing graph\n";
 
             gpuErrChk(cudaStreamBeginCapture(mStream, cudaStreamCaptureModeRelaxed));
-            status = mContext->enqueueV2(mBindings.data(), mStream, nullptr);
+            status = mContext->enqueueV3(mStream, nullptr);
             if (!status)
             {
                 gLogError << "Enqueue failed\n";
@@ -234,7 +240,7 @@ struct BertInference
             }
             else
             {
-                bool status = mContext->enqueueV2(mBindings.data(), mStream, nullptr);
+                bool status = mContext->enqueueV3(mStream, nullptr);
                 if (!status)
                 {
                     gLogError << "Enqueue failed\n";
@@ -259,7 +265,7 @@ struct BertInference
             }
             else
             {
-                bool status = mContext->enqueueV2(mBindings.data(), mStream, nullptr);
+                bool status = mContext->enqueueV3(mStream, nullptr);
                 if (!status)
                 {
                     gLogError << "Enqueue failed\n";

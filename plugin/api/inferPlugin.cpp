@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,6 +49,7 @@
 #include "reorgPlugin/reorgPlugin.h"
 #include "resizeNearestPlugin/resizeNearestPlugin.h"
 #include "roiAlignPlugin/roiAlignPlugin.h"
+#include "scatterElementsPlugin/scatterElementsPlugin.h"
 #include "scatterPlugin/scatterPlugin.h"
 #include "specialSlicePlugin/specialSlicePlugin.h"
 #include "splitPlugin/split.h"
@@ -63,6 +64,7 @@
 #include <unordered_set>
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
+using namespace nvinfer1::pluginInternal;
 
 using nvinfer1::plugin::RPROIParams;
 
@@ -174,7 +176,7 @@ void initializePlugin(void* logger, char const* libNamespace)
 
 extern "C"
 {
-    bool initLibNvInferPlugins(void* logger, const char* libNamespace)
+    bool initLibNvInferPlugins(void* logger, char const* libNamespace)
     {
         initializePlugin<nvinfer1::plugin::BatchedNMSDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::BatchedNMSPluginCreator>(logger, libNamespace);
@@ -210,10 +212,12 @@ extern "C"
         initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::PyramidROIAlignPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::RegionPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::ReorgPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ReorgDynamicPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ReorgStaticPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ResizeNearestPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ROIAlignPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::RPROIPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ScatterElementsPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterNDPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SplitPluginCreator>(logger, libNamespace);

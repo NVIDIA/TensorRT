@@ -102,8 +102,26 @@ float findCoeffOfVariance(std::vector<InferenceTime> const& timings, T const& to
 
 inline InferenceTime traceToTiming(const InferenceTrace& a)
 {
-    return InferenceTime((a.enqEnd - a.enqStart), (a.h2dEnd - a.h2dStart), (a.computeEnd - a.computeStart),
-        (a.d2hEnd - a.d2hStart));
+    return InferenceTime(
+        (a.enqEnd - a.enqStart), (a.h2dEnd - a.h2dStart), (a.computeEnd - a.computeStart), (a.d2hEnd - a.d2hStart));
+}
+
+inline std::string dimsToString(Dims const& shape)
+{
+    std::stringstream ss;
+
+    if (shape.nbDims == 0)
+    {
+        ss << "scalar";
+    }
+    else
+    {
+        for (int32_t i = 0; i < shape.nbDims; i++)
+        {
+            ss << shape.d[i] << (i != shape.nbDims - 1 ? "x" : "");
+        }
+    }
+    return ss.str();
 }
 
 } // namespace
@@ -116,15 +134,27 @@ void printProlog(int32_t warmups, int32_t timings, float warmupMs, float benchTi
 
 void printTiming(std::vector<InferenceTime> const& timings, int32_t runsPerAvg, std::ostream& os)
 {
-    int32_t count = 0;
+    int64_t count = 0;
     InferenceTime sum;
 
     os << std::endl;
     os << "=== Trace details ===" << std::endl;
     os << "Trace averages of " << runsPerAvg << " runs:" << std::endl;
-    for (auto const& t : timings)
+
+    // Show only the first N lines and the last N lines, where N = kTIMING_PRINT_THRESHOLD.
+    constexpr int64_t kTIMING_PRINT_THRESHOLD{200};
+    int64_t const maxNbTimings{kTIMING_PRINT_THRESHOLD * runsPerAvg};
+
+    for (int64_t idx = 0, size = timings.size(); idx < size; ++idx)
     {
-        sum += t;
+        // Omit some latency printing to avoid very long logs.
+        if (size > 2 * maxNbTimings && idx == maxNbTimings)
+        {
+            os << "... Omitting " << (size - 2 * maxNbTimings) << " lines" << std::endl;
+            idx = size - kTIMING_PRINT_THRESHOLD * runsPerAvg - 1;
+        }
+
+        sum += timings[idx];
 
         if (++count == runsPerAvg)
         {
@@ -292,8 +322,6 @@ void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingO
     auto const noWarmup = std::find_if(trace.begin(), trace.end(), isNotWarmup);
     int32_t const warmups = noWarmup - trace.begin();
     float const benchTime = trace.back().d2hEnd - noWarmup->h2dStart;
-    // when implicit batch used, batchSize = options.inference.batch, which is parsed through --batch
-    // when explicit batch used, batchSize = options.inference.batch = 0
     // treat inference with explicit batch as a single query and report the throughput
     batchSize = batchSize ? batchSize : 1;
     printProlog(warmups * batchSize, (trace.size() - warmups) * batchSize, warmupMs, benchTime, osInfo);
@@ -471,7 +499,7 @@ void exportJSONOutput(
         os << sep << R"({ "name" : ")" << binding.first << "\"" << std::endl;
         sep = ", ";
         os << "  " << sep << R"("dimensions" : ")";
-        bindings.dumpBindingDimensions(binding.second, context, os);
+        bindings.dumpBindingDimensions(binding.first, context, os);
         os << "\"" << std::endl;
         os << "  " << sep << "\"values\" : [ ";
         bindings.dumpBindingValues(context, binding.second, os, sep, batch);
@@ -487,7 +515,7 @@ void exportJSONOutput(nvinfer1::IExecutionContext const& context, Bindings const
 template void exportJSONOutput(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings,
     std::string const& fileName, int32_t batch);
 
-bool printLayerInfo(
+void printLayerInfo(
     ReportingOptions const& reporting, nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context)
 {
     if (reporting.layerInfo)
@@ -501,7 +529,33 @@ bool printLayerInfo(
         std::ofstream os(reporting.exportLayerInfo, std::ofstream::trunc);
         os << getLayerInformation(engine, context, nvinfer1::LayerInformationFormat::kJSON) << std::flush;
     }
-    return true;
+}
+
+void printOptimizationProfileInfo(ReportingOptions const& reporting, nvinfer1::ICudaEngine const* engine)
+{
+    if (reporting.optProfileInfo)
+    {
+        sample::gLogInfo << "Optimization Profile Information:" << std::endl;
+        for (int32_t i = 0; i < engine->getNbOptimizationProfiles(); i++)
+        {
+            for (int32_t j = 0, e = engine->getNbIOTensors(); j < e; j++)
+            {
+                auto const tensorName = engine->getIOTensorName(j);
+
+                if (engine->getTensorIOMode(tensorName) == nvinfer1::TensorIOMode::kINPUT)
+                {
+                    auto tensorMinShape = engine->getProfileShape(tensorName, i, nvinfer1::OptProfileSelector::kMIN);
+                    auto tensorOptShape = engine->getProfileShape(tensorName, i, nvinfer1::OptProfileSelector::kOPT);
+                    auto tensorMaxShape = engine->getProfileShape(tensorName, i, nvinfer1::OptProfileSelector::kMAX);
+
+                    sample::gLogInfo << "Model input " << tensorName << " (profile " << i << "): "
+                                     << "min=" << dimsToString(tensorMinShape)
+                                     << ", opt=" << dimsToString(tensorOptShape)
+                                     << ", max=" << dimsToString(tensorMaxShape) << std::endl;
+                }
+            }
+        }
+    }
 }
 
 void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironment& iEnv)

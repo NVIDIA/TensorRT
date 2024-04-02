@@ -27,9 +27,9 @@ When `trtexec` times individual layers, the total engine latency (computed by su
 To measure per-layer execution times, when `trtexec` enqueues kernel layers for execution in a stream, it places CUDA event objects between the layers to monitor the start and completion of each layer. These CUDA events add a small overhead which is more noticeable with smaller networks (shallow and narrow networks or networks with small activation data).
 
 ## Supported TensorRT Versions
-Starting with TensorRT 8.2, engine-plan graph and profiling data can be exported to JSON files. `trex` supports TensortRT 8.2 and 8.4.
+Starting with TensorRT 8.2, engine-plan graph and profiling data can be exported to JSON files. `trex` supports TensortRT 8.x, 9.x and 10.0.
 
-`trex` has only been tested on Ubuntu 18.04, 20.04, 22.04, with Python 3.8.<br>
+`trex` has only been tested on 22.04 with Python 3.10.12.<br>
 `trex` does not require a GPU, but generating the input JSON file(s) does require a GPU.
 
 <details><summary><h1>Installation</h1></summary>
@@ -51,16 +51,22 @@ $ python3 -m virtualenv env_trex
 $ source env_trex/bin/activate
 ```
 
-### 3. Install trex in development mode and the Jupyter extensions required for the notebooks
+### 3. Install trex in development mode
+To install core functionality only:
 ```
 $ python3 -m pip install -e .
-$ jupyter nbextension enable widgetsnbextension --user --py
+```
+
+To install all packages (core + packages required for using Jupyter notebooks):
+
+```
+$ python3 -m pip install -e .[notebook]
 ```
 
 ### 4. Install Graphviz
 Generating dot and SVG graphs requires Graphviz, an open source graph visualization software:
 ```
-$ sudo apt-get --yes install graphviz
+$ sudo apt --yes install graphviz
 ```
 </details>
 
@@ -92,6 +98,10 @@ Launch the Jupyter notebook server as detailed below and open your browser at `h
 $ jupyter-notebook --ip=0.0.0.0 --no-browser
 ```
 
+If you're using JupyterLab, you can launch the server with:
+```
+$ jupyter lab --ip=0.0.0.0 --port=8888
+```
 </details>
 
 <details><summary><h1>License</h1></summary>

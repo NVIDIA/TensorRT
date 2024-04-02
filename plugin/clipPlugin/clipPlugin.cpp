@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,6 @@
 #include "clip.h"
 #include "common/checkMacrosPlugin.h"
 #include <cstring>
-#include <cudnn.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -217,6 +216,9 @@ IPluginV2* ClipPluginCreator::createPlugin(char const* name, PluginFieldCollecti
 {
     try
     {
+        gLogWarning << "ClipPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() to add an "
+                       "IActivationLayer with ActivationType::kCLIP."
+                    << std::endl;
         float clipMin = 0.0, clipMax = 0.0;
         PluginField const* fields = fc->fields;
 
@@ -250,6 +252,9 @@ IPluginV2* ClipPluginCreator::deserializePlugin(char const* name, void const* se
 {
     try
     {
+        gLogWarning << "ClipPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() to add an "
+                       "IActivationLayer with ActivationType::kCLIP."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call ClipPlugin::destroy()
         return new ClipPlugin(name, serialData, serialLength);

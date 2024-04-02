@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +16,12 @@
  */
 
 #include "common/checkMacrosPlugin.h"
+#include "common/cublasWrapper.h"
 #include "common/vfcCommon.h"
 #include <cstdlib>
-#include <cublas_v2.h>
 #include <cuda_runtime.h>
+
+using namespace nvinfer1::pluginInternal;
 
 namespace nvinfer1
 {
@@ -144,7 +146,7 @@ void reportAssertion(char const* msg, char const* file, int32_t line)
     getLogger()->log(nvinfer1::ILogger::Severity::kINTERNAL_ERROR, stream.str().c_str());
 #endif
     PLUGIN_CUASSERT(cudaDeviceReset());
-    abort();
+    exit(EXIT_FAILURE);
 }
 
 void TRTException::log(std::ostream& logStream) const

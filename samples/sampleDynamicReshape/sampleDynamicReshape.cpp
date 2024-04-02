@@ -86,6 +86,8 @@ private:
     nvinfer1::Dims mPredictionInputDims;  //!< The dimensions of the input of the MNIST model.
     nvinfer1::Dims mPredictionOutputDims; //!< The dimensions of the output of the MNIST model.
 
+    SampleUniquePtr<nvinfer1::IRuntime> mRuntime{nullptr};
+
     // Engine plan files used for inference. One for resizing inputs, another for prediction.
     SampleUniquePtr<nvinfer1::ICudaEngine> mPreprocessorEngine{nullptr}, mPredictionEngine{nullptr};
 
@@ -121,8 +123,8 @@ bool SampleDynamicReshape::build()
         return false;
     }
 
-    auto runtime = makeUnique(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
-    if (!runtime)
+    mRuntime = makeUnique(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
+    if (!mRuntime)
     {
         sample::gLogError << "Runtime object creation failed." << std::endl;
         return false;
@@ -139,8 +141,8 @@ bool SampleDynamicReshape::build()
             return false;
         }
 
-        bool result = buildPredictionEngine(builder, runtime, *profileStream)
-            && buildPreprocessorEngine(builder, runtime, *profileStream);
+        bool result = buildPredictionEngine(builder, mRuntime, *profileStream)
+            && buildPreprocessorEngine(builder, mRuntime, *profileStream);
         return result;
     }
     catch (std::runtime_error& e)
@@ -159,8 +161,7 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
     const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
 {
     // Create the preprocessor engine using a network that supports full dimensions (createNetworkV2).
-    auto preprocessorNetwork = makeUnique(
-        builder->createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)));
+    auto preprocessorNetwork = makeUnique(builder->createNetworkV2(0));
     if (!preprocessorNetwork)
     {
         sample::gLogError << "Create network failed." << std::endl;
@@ -229,12 +230,14 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
         return false;
     }
 
+     auto const tensorName = mPreprocessorEngine->getIOTensorName(0);
+
     sample::gLogInfo << "Profile dimensions in preprocessor engine:" << std::endl;
-    sample::gLogInfo << "    Minimum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kMIN)
+    sample::gLogInfo << "    Minimum = " << mPreprocessorEngine->getProfileShape(tensorName, 0, OptProfileSelector::kMIN)
                      << std::endl;
-    sample::gLogInfo << "    Optimum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kOPT)
+    sample::gLogInfo << "    Optimum = " << mPreprocessorEngine->getProfileShape(tensorName, 0, OptProfileSelector::kOPT)
                      << std::endl;
-    sample::gLogInfo << "    Maximum = " << mPreprocessorEngine->getProfileDimensions(0, 0, OptProfileSelector::kMAX)
+    sample::gLogInfo << "    Maximum = " << mPreprocessorEngine->getProfileShape(tensorName, 0, OptProfileSelector::kMAX)
                      << std::endl;
 
 
@@ -254,8 +257,7 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
 {
     // Create a network using the parser.
-    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = makeUnique(builder->createNetworkV2(explicitBatch));
+    auto network = makeUnique(builder->createNetworkV2(0));
     if (!network)
     {
         sample::gLogError << "Create network failed." << std::endl;
@@ -292,6 +294,10 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
+    }
+    if (mParams.bf16)
+    {
+        config->setFlag(BuilderFlag::kBF16);
     }
     config->setProfileStream(profileStream);
 
@@ -388,7 +394,7 @@ bool SampleDynamicReshape::infer()
         mInput.deviceBuffer.data(), mInput.hostBuffer.data(), mInput.hostBuffer.nbBytes(), cudaMemcpyHostToDevice));
 
     // Set the input size for the preprocessor
-    CHECK_RETURN_W_MSG(mPreprocessorContext->setBindingDimensions(0, inputDims), false, "Invalid binding dimensions.");
+    CHECK_RETURN_W_MSG(mPreprocessorContext->setInputShape("input", inputDims), false, "Invalid binding dimensions.");
 
     // We can only run inference once all dynamic input shapes have been specified.
     if (!mPreprocessorContext->allInputDimensionsSpecified())
@@ -497,6 +503,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.outputTensorNames.push_back("Plus214_Output_0");
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
+    params.bf16 = args.runInBf16;
     return params;
 }
 
@@ -514,6 +521,7 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--int8          Run in Int8 mode." << std::endl;
     std::cout << "--fp16          Run in FP16 mode." << std::endl;
+    std::cout << "--bf16          Run in BF16 mode." << std::endl;
 }
 
 int main(int argc, char** argv)

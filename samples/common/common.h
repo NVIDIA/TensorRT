@@ -17,21 +17,11 @@
 
 #ifndef TENSORRT_COMMON_H
 #define TENSORRT_COMMON_H
-
-// For loadLibrary
-#ifdef _MSC_VER
-// Needed so that the max/min definitions in windows.h do not conflict with std::max/min.
-#define NOMINMAX
-#include <windows.h>
-#undef NOMINMAX
-#else
-#include <dlfcn.h>
-#endif
-
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
 #include "logger.h"
-#include "sampleEntrypoints.h"
+#include "safeCommon.h"
+#include "utils/timingCache.h"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -54,12 +44,14 @@
 #include <vector>
 
 #ifdef _MSC_VER
+// For loadLibrary
+// Needed so that the max/min definitions in windows.h do not conflict with std::max/min.
+#define NOMINMAX
+#include <windows.h>
+#undef NOMINMAX
 #else
-#include <stdio.h>  // fileno
-#include <unistd.h> // lockf
+#include <dlfcn.h>
 #endif
-
-#include "safeCommon.h"
 
 #ifdef _MSC_VER
 #define FN_NAME __FUNCTION__
@@ -89,7 +81,7 @@
         if (!(condition))                                                   \
         {                                                                   \
             sample::gLogError << "Assertion failure: " << #condition << std::endl;  \
-            abort();                                                        \
+            exit(EXIT_FAILURE);                                                       \
         }                                                                   \
     } while (0)
 
@@ -103,7 +95,7 @@ OBJ_GUARD(T)
 makeObjGuard(T_* t)
 {
     CHECK(!(std::is_base_of<T, T_>::value || std::is_same<T, T_>::value));
-    auto deleter = [](T* t) { t->destroy(); };
+    auto deleter = [](T* t) { delete t; };
     return std::unique_ptr<T, decltype(deleter)>{static_cast<T*>(t), deleter};
 }
 
@@ -206,80 +198,11 @@ private:
     std::map<std::string, Record> mProfile;
 };
 
-//! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
-//! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
-inline std::string locateFile(
-    const std::string& filepathSuffix, const std::vector<std::string>& directories, bool reportError = true)
-{
-    const int MAX_DEPTH{10};
-    bool found{false};
-    std::string filepath;
-
-    for (auto& dir : directories)
-    {
-        if (!dir.empty() && dir.back() != '/')
-        {
-#ifdef _MSC_VER
-            filepath = dir + "\\" + filepathSuffix;
-#else
-            filepath = dir + "/" + filepathSuffix;
-#endif
-        }
-        else
-        {
-            filepath = dir + filepathSuffix;
-        }
-
-        for (int i = 0; i < MAX_DEPTH && !found; i++)
-        {
-            const std::ifstream checkFile(filepath);
-            found = checkFile.is_open();
-            if (found)
-            {
-                break;
-            }
-
-            filepath = "../" + filepath; // Try again in parent dir
-        }
-
-        if (found)
-        {
-            break;
-        }
-
-        filepath.clear();
-    }
-
-    // Could not find the file
-    if (filepath.empty())
-    {
-        const std::string dirList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
-            [](const std::string& a, const std::string& b) { return a + "\n\t" + b; });
-        std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << dirList << std::endl;
-
-        if (reportError)
-        {
-            std::cout << "&&&& FAILED" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    return filepath;
-}
-
-inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int inH, int inW)
-{
-    std::ifstream infile(fileName, std::ifstream::binary);
-    assert(infile.is_open() && "Attempting to read from a file that is not open.");
-    std::string magic, w, h, max;
-    infile >> magic >> w >> h >> max;
-    infile.seekg(1, infile.cur);
-    infile.read(reinterpret_cast<char*>(buffer), inH * inW);
-}
-
 namespace samplesCommon
 {
-
+using nvinfer1::utils::loadTimingCacheFile;
+using nvinfer1::utils::saveTimingCacheFile;
+using nvinfer1::utils::updateTimingCacheFile;
 // Swaps endianness of an integral type.
 template <typename T, typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
 inline T swapEndianness(const T& value)
@@ -374,14 +297,13 @@ struct InferDeleter
 template <typename T>
 using SampleUniquePtr = std::unique_ptr<T, InferDeleter>;
 
-static auto StreamDeleter = [](cudaStream_t* pStream)
+static auto StreamDeleter = [](cudaStream_t* pStream) {
+    if (pStream)
     {
-        if (pStream)
-        {
-            cudaStreamDestroy(*pStream);
-            delete pStream;
-        }
-    };
+        static_cast<void>(cudaStreamDestroy(*pStream));
+        delete pStream;
+    }
+};
 
 inline std::unique_ptr<cudaStream_t, decltype(StreamDeleter)> makeCudaStream()
 {
@@ -504,22 +426,6 @@ inline float getMaxValue(const float* buffer, int64_t size)
     return *std::max_element(buffer, buffer + size);
 }
 
-inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
-{
-    ASSERT(prob != nullptr);
-    ASSERT(numDigits == 10);
-    float sum{0.0F};
-    std::transform(prob, prob + numDigits, prob, [&sum](float v) -> float {
-        sum += exp(v);
-        return exp(v);
-    });
-
-    ASSERT(sum != 0.0F);
-    std::transform(prob, prob + numDigits, prob, [sum](float v) -> float { return v / sum; });
-    int32_t idx = std::max_element(prob, prob + numDigits) - prob;
-    return idx;
-}
-
 // Ensures that every tensor used by a network has a dynamic range set.
 //
 // All tensors in a network must have a dynamic range specified if a calibrator is not used.
@@ -632,13 +538,16 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 {
     switch (t)
     {
-    case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kINT64: return 8;
+    case nvinfer1::DataType::kINT32:
     case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kBF16:
     case nvinfer1::DataType::kHALF: return 2;
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kFP8: return 1;
+    case nvinfer1::DataType::kINT4: ASSERT(false && "Element size is not implemented for sub-byte data-types (INT4)");
     }
     return 0;
 }
@@ -899,7 +808,7 @@ public:
         : mLibName{name}
     {
 #if defined(_WIN32)
-        mHandle = LoadLibrary(name.c_str());
+        mHandle = LoadLibraryA(name.c_str());
 #else // defined(_WIN32)
         int32_t flags{RTLD_LAZY};
 #if ENABLE_ASAN
@@ -980,25 +889,6 @@ inline std::unique_ptr<DynamicLibrary> loadLibrary(std::string const& path)
     return std::unique_ptr<DynamicLibrary>(new DynamicLibrary{path});
 }
 
-inline int32_t getSMVersion()
-{
-    int32_t deviceIndex = 0;
-    CHECK(cudaGetDevice(&deviceIndex));
-
-    int32_t major, minor;
-    CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
-    CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
-
-    return ((major << 8) | minor);
-}
-
-inline bool isSMSafe()
-{
-    const int32_t smVersion = getSMVersion();
-    return smVersion == 0x0700 || smVersion == 0x0702 || smVersion == 0x0705 || smVersion == 0x0800
-        || smVersion == 0x0806 || smVersion == 0x0807;
-}
-
 inline int32_t getMaxPersistentCacheSize()
 {
     int32_t deviceIndex{};
@@ -1030,183 +920,6 @@ inline bool isDataTypeSupported(nvinfer1::DataType dataType)
 
     return true;
 }
-
-class FileLock
-{
-public:
-    FileLock(std::string const& fileName)
-        : fileName(fileName)
-    {
-        std::string lockFileName = fileName + ".lock";
-#ifdef _MSC_VER
-        sample::gLogVerbose << "Trying to set exclusive file lock " << lockFileName << std::endl;
-        auto startTime = std::chrono::high_resolution_clock::now();
-        // MS docs said this is a blocking IO if "FILE_FLAG_OVERLAPPED" is not provided
-        lock = CreateFileA(lockFileName.c_str(), GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, 0, NULL);
-        if (lock != INVALID_HANDLE_VALUE)
-        {
-            float const time
-                = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
-            sample::gLogVerbose << "File locked in " << time << " seconds." << std::endl;
-        }
-        else
-        {
-            throw std::runtime_error("Failed to lock " + lockFileName + "!");
-        }
-#elif defined(__QNX__)
-        // We once enabled the file lock on QNX, lockf(F_TLOCK) return -1 and the reported error is
-        // The error generated was 89
-        // That means : Function not implemented
-#else
-        fp = fopen(lockFileName.c_str(), "wb+");
-        if (!fp)
-        {
-            throw std::runtime_error("Cannot open " + lockFileName + "!");
-        }
-        fd = fileno(fp);
-        sample::gLogVerbose << "Trying to set exclusive file lock " << lockFileName << std::endl;
-        auto startTime = std::chrono::high_resolution_clock::now();
-        auto ret = lockf(fd, F_LOCK, 0);
-        if (ret != 0)
-        {
-            fd = -1;
-            fclose(fp);
-            throw std::runtime_error("Failed to lock " + lockFileName + "!");
-        }
-        float const time = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
-        sample::gLogVerbose << "File locked in " << time << " seconds." << std::endl;
-#endif
-    }
-
-    ~FileLock()
-    {
-        std::string lockFileName = fileName + ".lock";
-#ifdef _MSC_VER
-        if (lock != INVALID_HANDLE_VALUE)
-        {
-            sample::gLogVerbose << "Trying to remove exclusive file lock " << lockFileName << std::endl;
-            auto startTime = std::chrono::high_resolution_clock::now();
-            CloseHandle(lock);
-            float const time
-                = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
-            sample::gLogVerbose << "File unlocked in " << time << " seconds." << std::endl;
-        }
-#elif defined(__QNX__)
-        // We once enabled the file lock on QNX, lockf(F_TLOCK) return -1 and the reported error is
-        // The error generated was 89
-        // That means : Function not implemented
-#else
-        if (fd != -1)
-        {
-            sample::gLogVerbose << "Trying to remove exclusive file lock " << lockFileName << std::endl;
-            auto startTime = std::chrono::high_resolution_clock::now();
-            auto ret = lockf(fd, F_ULOCK, 0);
-            if (ret != 0)
-            {
-                sample::gLogVerbose << "Failed to unlock " << lockFileName << "!" << std::endl;
-            }
-            else
-            {
-                fd = -1;
-                fclose(fp);
-                float const time
-                    = std::chrono::duration<float>(std::chrono::high_resolution_clock::now() - startTime).count();
-                sample::gLogVerbose << "File unlocked in " << time << " seconds." << std::endl;
-            }
-        }
-#endif
-    }
-
-private:
-    FileLock() = delete;                           // no default ctor
-    FileLock(FileLock const&) = delete;            // no copy ctor
-    FileLock& operator=(FileLock const&) = delete; // no copy assignment
-
-    const std::string fileName; // the file being protected
-#ifdef _MSC_VER
-    HANDLE lock;
-#else
-    FILE* fp;
-    int32_t fd;
-#endif
-};
-
-inline std::vector<char> loadTimingCacheFile(std::string const& inFileName)
-{
-    std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(inFileName)};
-    std::ifstream iFile(inFileName, std::ios::in | std::ios::binary);
-    if (!iFile)
-    {
-        sample::gLogWarning << "Could not read timing cache from: " << inFileName
-                            << ". A new timing cache will be generated and written." << std::endl;
-        return std::vector<char>();
-    }
-    iFile.seekg(0, std::ifstream::end);
-    size_t fsize = iFile.tellg();
-    iFile.seekg(0, std::ifstream::beg);
-    std::vector<char> content(fsize);
-    iFile.read(content.data(), fsize);
-    iFile.close();
-    sample::gLogInfo << "Loaded " << fsize << " bytes of timing cache from " << inFileName << std::endl;
-    return content;
-}
-
-inline void saveTimingCacheFile(std::string const& outFileName, nvinfer1::IHostMemory const* blob)
-{
-    std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(outFileName)};
-    std::ofstream oFile(outFileName, std::ios::out | std::ios::binary);
-    if (!oFile)
-    {
-        sample::gLogWarning << "Could not write timing cache to: " << outFileName << std::endl;
-        return;
-    }
-    oFile.write((char*) blob->data(), blob->size());
-    oFile.close();
-    sample::gLogInfo << "Saved " << blob->size() << " bytes of timing cache to " << outFileName << std::endl;
-}
-
-inline void updateTimingCacheFile(std::string const& fileName, nvinfer1::ITimingCache const* timingCache)
-{
-    // Prepare empty timingCache in case that there is no existing file to read
-    std::unique_ptr<nvinfer1::IBuilder> builder{createBuilder()};
-    std::unique_ptr<nvinfer1::IBuilderConfig> config{builder->createBuilderConfig()};
-    std::unique_ptr<nvinfer1::ITimingCache> fileTimingCache{
-        config->createTimingCache(static_cast<const void*>(nullptr), 0)};
-
-    std::unique_ptr<samplesCommon::FileLock> fileLock{new samplesCommon::FileLock(fileName)};
-    std::ifstream iFile(fileName, std::ios::in | std::ios::binary);
-    if (iFile)
-    {
-        iFile.seekg(0, std::ifstream::end);
-        size_t fsize = iFile.tellg();
-        iFile.seekg(0, std::ifstream::beg);
-        std::vector<char> content(fsize);
-        iFile.read(content.data(), fsize);
-        iFile.close();
-        sample::gLogInfo << "Loaded " << fsize << " bytes of timing cache from " << fileName << std::endl;
-        fileTimingCache.reset(config->createTimingCache(static_cast<const void*>(content.data()), content.size()));
-        if (!fileTimingCache)
-        {
-            throw std::runtime_error("Failed to create timingCache from " + fileName + "!");
-        }
-    }
-    fileTimingCache->combine(*timingCache, false);
-    std::unique_ptr<nvinfer1::IHostMemory> blob{fileTimingCache->serialize()};
-    if (!blob)
-    {
-        throw std::runtime_error("Failed to serialize ITimingCache!");
-    }
-    std::ofstream oFile(fileName, std::ios::out | std::ios::binary);
-    if (!oFile)
-    {
-        sample::gLogWarning << "Could not write timing cache to: " << fileName << std::endl;
-        return;
-    }
-    oFile.write((char*) blob->data(), blob->size());
-    oFile.close();
-    sample::gLogInfo << "Saved " << blob->size() << " bytes of timing cache to " << fileName << std::endl;
-}
-
 } // namespace samplesCommon
 
 inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)

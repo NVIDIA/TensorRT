@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import os
 import sys
-
 from setuptools import find_packages, setup
+
 
 def no_publish():
     blacklist = ["register"]
@@ -31,9 +32,12 @@ def main():
     with open('requirements.txt','r') as req_file:
         required_pckgs = [line.strip() for line in req_file.readlines()]
 
+    with open('requirements-notebook.txt','r') as notebook_req_file:
+        extras_require_notebook = [line.strip() for line in notebook_req_file.readlines()]
+
     setup(
         name="trex",
-        version="0.1.6",
+        version="0.1.8",
         description="TREX: TensorRT Engine Exploration Toolkit",
         long_description=open("README.md", "r", encoding="utf-8").read(),
         author="NVIDIA",
@@ -44,7 +48,9 @@ def main():
         ],
         license="Apache 2.0",
         install_requires=required_pckgs,
+        extras_require={"notebook": extras_require_notebook},
         packages=find_packages(exclude=("tests", "tests.*")),
+        scripts=[os.path.join("bin", "trex")],
         zip_safe=True,
     )
 

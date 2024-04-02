@@ -19,6 +19,7 @@
 #define TRT_PLUGIN_VFC_COMMON_H
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
+#include "NvInferRuntimeCommon.h"
 
 using namespace nvinfer1;
 
@@ -35,4 +36,6 @@ ILogger* getPluginLogger();
 extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::ILoggerFinder* finder);
 
 extern "C" TENSORRTAPI IPluginCreator* const* getPluginCreators(int32_t& nbCreators);
+
+extern "C" TENSORRTAPI IPluginCreatorInterface* const* getCreators(int32_t& nbCreators);
 #endif // TRT_PLUGIN_VFC_COMMON_H

@@ -16,3 +16,4 @@
 #
 
 from tensorrt_bindings import *
+from tensorrt_bindings import __version__

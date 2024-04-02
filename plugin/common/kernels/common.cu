@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,10 +17,11 @@
 
 #include "common/bboxUtils.h"
 #include "common/kernels/kernel.h"
-#include "cublas_v2.h"
 #include "cuda.h"
 #include <cub/cub.cuh>
 #include <stdint.h>
+
+using namespace nvinfer1::pluginInternal;
 
 #define CUDA_MEM_ALIGN 256
 namespace nvinfer1
@@ -98,6 +99,8 @@ size_t dataTypeSize(const DataType dtype)
     case DataType::kINT8: return sizeof(char);
     case DataType::kHALF: return sizeof(short);
     case DataType::kFLOAT: return sizeof(float);
+    case DataType::kBF16:
+    case DataType::kINT64: PLUGIN_FAIL("Unsupported data type");
     default: return 0;
     }
 }
@@ -132,56 +135,38 @@ size_t cubSortFloatBboxInfoPairsWorkspaceSize(int num_items, int num_segments)
 */
 
 template <unsigned nthds_per_cta>
-__launch_bounds__(nthds_per_cta)
-    __global__ void setUniformOffsets_kernel(
-        const int num_segments,
-        const int offset,
-        int* d_offsets)
+__launch_bounds__(nthds_per_cta) __global__
+    void setUniformOffsets_kernel(const int num_segments, const int offset, int* d_offsets)
 {
     const int idx = blockIdx.x * nthds_per_cta + threadIdx.x;
     if (idx <= num_segments)
         d_offsets[idx] = idx * offset;
 }
 
-void setUniformOffsets(
-    cudaStream_t stream,
-    const int num_segments,
-    const int offset,
-    int* d_offsets)
+void setUniformOffsets(cudaStream_t stream, const int num_segments, const int offset, int* d_offsets)
 {
     const int BS = 32;
     const int GS = (num_segments + 1 + BS - 1) / BS;
     setUniformOffsets_kernel<BS><<<GS, BS, 0, stream>>>(num_segments, offset, d_offsets);
 }
 
-
 const char* cublasGetErrorString(cublasStatus_t error)
 {
     switch (error)
     {
-    case CUBLAS_STATUS_SUCCESS:
-        return "CUBLAS_STATUS_SUCCESS";
-    case CUBLAS_STATUS_NOT_INITIALIZED:
-        return "CUBLAS_STATUS_NOT_INITIALIZED";
-    case CUBLAS_STATUS_ALLOC_FAILED:
-        return "CUBLAS_STATUS_ALLOC_FAILED";
-    case CUBLAS_STATUS_INVALID_VALUE:
-        return "CUBLAS_STATUS_INVALID_VALUE";
-    case CUBLAS_STATUS_ARCH_MISMATCH:
-        return "CUBLAS_STATUS_ARCH_MISMATCH";
-    case CUBLAS_STATUS_MAPPING_ERROR:
-        return "CUBLAS_STATUS_MAPPING_ERROR";
-    case CUBLAS_STATUS_EXECUTION_FAILED:
-        return "CUBLAS_STATUS_EXECUTION_FAILED";
-    case CUBLAS_STATUS_INTERNAL_ERROR:
-        return "CUBLAS_STATUS_INTERNAL_ERROR";
+    case CUBLAS_STATUS_SUCCESS: return "CUBLAS_STATUS_SUCCESS";
+    case CUBLAS_STATUS_NOT_INITIALIZED: return "CUBLAS_STATUS_NOT_INITIALIZED";
+    case CUBLAS_STATUS_ALLOC_FAILED: return "CUBLAS_STATUS_ALLOC_FAILED";
+    case CUBLAS_STATUS_INVALID_VALUE: return "CUBLAS_STATUS_INVALID_VALUE";
+    case CUBLAS_STATUS_ARCH_MISMATCH: return "CUBLAS_STATUS_ARCH_MISMATCH";
+    case CUBLAS_STATUS_MAPPING_ERROR: return "CUBLAS_STATUS_MAPPING_ERROR";
+    case CUBLAS_STATUS_EXECUTION_FAILED: return "CUBLAS_STATUS_EXECUTION_FAILED";
+    case CUBLAS_STATUS_INTERNAL_ERROR: return "CUBLAS_STATUS_INTERNAL_ERROR";
 #if CUDA_VERSION >= 6000
-    case CUBLAS_STATUS_NOT_SUPPORTED:
-        return "CUBLAS_STATUS_NOT_SUPPORTED";
+    case CUBLAS_STATUS_NOT_SUPPORTED: return "CUBLAS_STATUS_NOT_SUPPORTED";
 #endif
 #if CUDA_VERSION >= 6050
-    case CUBLAS_STATUS_LICENSE_ERROR:
-        return "CUBLAS_STATUS_LICENSE_ERROR";
+    case CUBLAS_STATUS_LICENSE_ERROR: return "CUBLAS_STATUS_LICENSE_ERROR";
 #endif
     }
     return "Unknown cublas status";

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,13 +26,13 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
-#include <cublasLt.h>
 #include <cuda_runtime.h>
 #include <vector>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 using namespace nvinfer1::plugin::bert;
+using namespace nvinfer1::pluginInternal;
 
 // plugin specific constants
 namespace
@@ -81,9 +81,10 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
 
     cublasLtMatmulHeuristicResult_t heurResult;
 
+    CublasLtWrapper& cublasLtWrapper = getCublasLtWrapper();
     // Looping over the Algo
-    cublasStatus_t algoStatus
-        = cublasLtMatmulAlgoCheck(ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Ddesc, &algo, &heurResult);
+    cublasStatus_t algoStatus = cublasLtWrapper.cublasLtMatmulAlgoCheck(
+        ltHandle, operationDesc, Adesc, Bdesc, Cdesc, Ddesc, &algo, &heurResult);
 
     if (algoStatus == CUBLAS_STATUS_SUCCESS)
     {
@@ -95,9 +96,10 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
             }
             for (int32_t loop = 0; loop < kNB_KERNEL_REPEATS; loop++)
             {
-                cublasStatus_t oneRunStatus = cublasLtMatmul(ltHandle, operationDesc, alpha, // host or device pointer
-                    A, Adesc, B, Bdesc, beta,                                                // host or device pointer
-                    C, Cdesc, D, Ddesc, &algo, workSpace, workSpaceSizeInBytes, stream);
+                cublasStatus_t oneRunStatus
+                    = cublasLtWrapper.cublasLtMatmul(ltHandle, operationDesc, alpha, // host or device pointer
+                        A, Adesc, B, Bdesc, beta,                                    // host or device pointer
+                        C, Cdesc, D, Ddesc, &algo, workSpace, workSpaceSizeInBytes, stream);
                 if (oneRunStatus != CUBLAS_STATUS_SUCCESS)
                 {
                     algoStatus = oneRunStatus;
@@ -133,15 +135,10 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
 
 // Sample wrapper running through multiple algo and config attributes
 // combination for single precision gemm using cublasLt low-level API
-void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb, int32_t const& m,
-    int32_t const& n, int32_t const& k, void const* alpha,                                  // host pointer
+void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb,
+    int32_t const& m, int32_t const& n, int32_t const& k, void const* alpha,                // host pointer
     void const* A, int32_t const& lda, void const* B, int32_t const& ldb, void const* beta, // host pointer
-    void* C, int32_t const& ldc, void* workSpace, size_t workSpaceSize,
-#if CUBLAS_VER_MAJOR < 11
-    cudaDataType_t computeType,
-#else
-    cublasComputeType_t computeType,
-#endif
+    void* C, int32_t const& ldc, void* workSpace, size_t workSpaceSize, cublasComputeType_t computeType,
     cudaDataType_t scaleType, cudaDataType_t Atype, cudaDataType_t Btype, cudaDataType_t Ctype,
     std::vector<customMatmulPerf_t>& perfResults)
 {
@@ -158,6 +155,8 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     cudaEvent_t stopEvent = nullptr;
     cudaStream_t stream = nullptr;
 
+    CublasLtWrapper& cublasLtWrapper = getCublasLtWrapper();
+
     // SplitK value that we are going to try when SplitK is supported for a given algo.
     int32_t const splitKSequenceA[] = {2, 3, 4, 5, 6, 8, 12, 16, 32};
 
@@ -166,38 +165,34 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     int32_t nbAlgoIds = 0;
     int32_t algoIdA[kNB_ALGO_IDS];
 
-    PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceCreate(&preference));
-    PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceSetAttribute(
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulPreferenceCreate(&preference));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulPreferenceSetAttribute(
         preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workSpaceSize, sizeof(workSpaceSize)));
 
     uint64_t const numericImplPrefer
         = Ctype == CUDA_R_16F ? CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA : CUBLASLT_NUMERICAL_IMPL_FLAGS_FMA;
-    PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceSetAttribute(
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulPreferenceSetAttribute(
         preference, CUBLASLT_MATMUL_PREF_IMPL_MASK, &numericImplPrefer, sizeof(numericImplPrefer)));
 
     // Create operation descriptor; see cublasLtMatmulDescAttributes_t for details
     // about defaults; here we just need to set the transforms for A and B
-#if CUBLAS_VER_MAJOR < 11
-    PLUGIN_CUBLASASSERT(cublasLtMatmulDescCreate(&operationDesc, computeType));
-#else
-    PLUGIN_CUBLASASSERT(cublasLtMatmulDescCreate(&operationDesc, computeType, scaleType));
-#endif
-    PLUGIN_CUBLASASSERT(
-        cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
-    PLUGIN_CUBLASASSERT(
-        cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa)));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescCreate(&operationDesc, computeType, scaleType));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescSetAttribute(
+        operationDesc, nvinfer1::pluginInternal::CUBLASLT_MATMUL_DESC_TRANSA, &transa, sizeof(transa)));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescSetAttribute(
+        operationDesc, nvinfer1::pluginInternal::CUBLASLT_MATMUL_DESC_TRANSB, &transb, sizeof(transa)));
 
     // Create matrix descriptors. We are good with the details here so no need to
     // set any extra attributes
-    PLUGIN_CUBLASASSERT(
-        cublasLtMatrixLayoutCreate(&Adesc, Atype, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-    PLUGIN_CUBLASASSERT(
-        cublasLtMatrixLayoutCreate(&Bdesc, Btype, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-    PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutCreate(&Cdesc, Ctype, m, n, ldc));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(
+        &Adesc, Atype, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(
+        &Bdesc, Btype, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(&Cdesc, Ctype, m, n, ldc));
 
     // Request the 4 first AlgoId available for SGEMM ( computeType = scaleType =
     // Atype = Btype = Ctype = Dtype = CUDA_R_32F)
-    PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoGetIds(
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoGetIds(
         ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, kNB_ALGO_IDS, algoIdA, &nbAlgoIds));
 
     gLogVerbose << "Number of algos" << nbAlgoIds << std::endl;
@@ -212,15 +207,15 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
         cublasLtMatmulAlgo_t algo;
         size_t sizeWritten = 0;
         // Initialize algo structure with given Algp ID.
-        status
-            = cublasLtMatmulAlgoInit(ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, algoIdA[idx], &algo);
+        status = cublasLtWrapper.cublasLtMatmulAlgoInit(
+            ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, algoIdA[idx], &algo);
         if (status != CUBLAS_STATUS_SUCCESS)
         {
             continue;
         }
 
         uint64_t numericImpl = -1;
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS, &numericImpl, sizeof(numericImpl), nullptr));
         if (Ctype == CUDA_R_32F && numericImpl == CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA)
         {
@@ -229,8 +224,8 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
         }
 
         // Query the tiles enums supported by that algo
-        PLUGIN_CUBLASASSERT(
-            cublasLtMatmulAlgoCapGetAttribute(&algo, CUBLASLT_ALGO_CAP_TILE_IDS, nullptr, 0, &sizeWritten));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
+            &algo, CUBLASLT_ALGO_CAP_TILE_IDS, nullptr, 0, &sizeWritten));
         int32_t nbTiles = int32_t(sizeWritten / sizeof(int32_t));
         int32_t* tileA = new int32_t[nbTiles == 0 ? 1 : nbTiles];
         if (nbTiles == 0)
@@ -246,18 +241,18 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
         int32_t epilogueMask;
         // Retrieve Algo Capabilities attributes to be able to setup loop over the
         // different combinations
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_TILE_IDS, tileA, sizeof(int32_t) * nbTiles, &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_SPLITK_SUPPORT, &splitkSupport, sizeof(splitkSupport), &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_REDUCTION_SCHEME_MASK, &redMask, sizeof(redMask), &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_CTA_SWIZZLING_SUPPORT, &swizzlingMax, sizeof(swizzlingMax), &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_CUSTOM_OPTION_MAX, &customOptionMax, sizeof(customOptionMax), &sizeWritten));
 
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_EPILOGUE_MASK, &epilogueMask, sizeof(epilogueMask), &sizeWritten));
 
         // Loop over the different tiles
@@ -266,7 +261,7 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
             // Loop over the different custom option if any
             for (int32_t customOption = 0; customOption <= customOptionMax; customOption++)
             {
-                PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
+                PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                     &algo, CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption)));
                 // Loop over the CTAs swizzling support
                 for (int32_t k = 0; k <= swizzlingMax; k++)
@@ -281,23 +276,23 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
                     for (int32_t l = 0; (l < (1 + splitkTrial)) && (algoCount < kNB_ALGO_COMBINATIONS); l++)
                     {
                         // Setup attribute of the algo to run
-                        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
+                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tileA[tileIdx], sizeof(tileA[tileIdx])));
                         int32_t splitK_val = 0;
                         int32_t redScheme = CUBLASLT_REDUCTION_SCHEME_NONE;
-                        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
+                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitK_val, sizeof(splitK_val)));
-                        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
+                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &k, sizeof(k)));
-                        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
+                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(int32_t)));
 
                         if (l > 0)
                         { // Split-K case
                             splitK_val = splitKSequenceA[l - 1];
-                            PLUGIN_CUBLASASSERT(
-                                cublasLtMatmulAlgoConfigSetAttribute(&algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
-                                    &splitKSequenceA[l - 1], sizeof(splitKSequenceA[l - 1])));
+                            PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(&algo,
+                                CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitKSequenceA[l - 1],
+                                sizeof(splitKSequenceA[l - 1])));
                             // Going over all the reduction scheme
                             for (redScheme = 1; redScheme < static_cast<int32_t>(CUBLASLT_REDUCTION_SCHEME_MASK)
                                  && (algoCount < kNB_ALGO_COMBINATIONS);
@@ -305,7 +300,7 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
                             {
                                 if (redScheme & redMask)
                                 {
-                                    PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigSetAttribute(
+                                    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                                         &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(redScheme)));
 
                                     status = customMatmulRun(ltHandle, operationDesc, alpha, // host or device pointer
@@ -357,11 +352,11 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOpe
     }
 
     // Descriptors are no longer needed as all GPU work was already enqueued
-    PLUGIN_CUBLASASSERT(cublasLtMatmulPreferenceDestroy(preference));
-    PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Cdesc));
-    PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Bdesc));
-    PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Adesc));
-    PLUGIN_CUBLASASSERT(cublasLtMatmulDescDestroy(operationDesc));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulPreferenceDestroy(preference));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutDestroy(Cdesc));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutDestroy(Bdesc));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutDestroy(Adesc));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescDestroy(operationDesc));
     PLUGIN_CUASSERT(cudaEventDestroy(startEvent));
     PLUGIN_CUASSERT(cudaEventDestroy(stopEvent));
 }
@@ -570,6 +565,9 @@ int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+            && workSpace != nullptr);
+
         size_t const workspaceSize = getWorkspaceSize(inputDesc, 1, outputDesc, 1);
 
         int32_t const S = inputDesc->dims.d[SDIM];

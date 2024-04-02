@@ -19,7 +19,10 @@
 #include "ForwardDeclarations.h"
 #include "utils.h"
 #include <pybind11/stl.h>
-
+// remove md
+#if ENABLE_MDTRT
+#include "api/internal.h"
+#endif // ENABLE_MDTRT
 #include "infer/pyAlgorithmSelectorDoc.h"
 #include <cuda_runtime_api.h>
 #include <vector>
@@ -146,9 +149,6 @@ void bindAlgorithm(py::module& m)
     // IAlgorithmIOInfo
     py::class_<IAlgorithmIOInfo, std::unique_ptr<IAlgorithmIOInfo, py::nodelete>>(
         m, "IAlgorithmIOInfo", IAlgorithmIOInfoDOC::descr, py::module_local())
-        .def_property_readonly("tensor_format",
-            utils::deprecateMember(
-                &IAlgorithmIOInfo::getTensorFormat, "the strides, data type, and vectorization information"))
         .def_property_readonly("dtype", &IAlgorithmIOInfo::getDataType)
         .def_property_readonly("strides", &IAlgorithmIOInfo::getStrides)
         .def_property_readonly("vectorized_dim", &IAlgorithmIOInfo::getVectorizedDim)
@@ -166,7 +166,12 @@ void bindAlgorithm(py::module& m)
         .def_property_readonly("name", &IAlgorithmContext::getName)
         .def("get_shape", lambdas::get_shape, "index"_a, IAlgorithmContextDoc::get_shape)
         .def_property_readonly("num_inputs", &IAlgorithmContext::getNbInputs)
-        .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs);
+        .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs)
+// remove md
+#if ENABLE_MDTRT
+        .def_property_readonly("instance_id", &nvinfer1AlgorithmGetInstanceID)
+#endif // ENABLE_MDTRT
+        ;
 
     // IAlgorithm
     py::class_<IAlgorithm, std::unique_ptr<IAlgorithm, py::nodelete>>(

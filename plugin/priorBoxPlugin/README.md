@@ -11,7 +11,7 @@
 
 ## Description
 
-The `priorBoxPlugin` generates prior boxes (anchor boxes) from a feature map in object detection models such as SSD. This plugin is included in TensorRT and used in [sampleSSD](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#sample_ssd) to run SSD.
+The `priorBoxPlugin` generates prior boxes (anchor boxes) from a feature map in object detection models such as SSD. This plugin is included in TensorRT.
 
 This sample generates anchor box coordinates `[x_min, y_min, x_max, y_max]` with variances (scaling factors) `[var_0, var_1, var_2, var_3]` for the downstream bounding box decoding steps. The `priorBoxPlugin` uses a series of CUDA kernels in the `priorBoxLayer.cu` file to accelerate the process. The differences between `priorBoxPlugin` and `gridAnchorPlugin` is that `priorBoxPlugin` generates prior boxes for one feature map in the model at one time, while `gridAnchorPlugin` generates all prior boxes for all feature maps in the model at one time.
   

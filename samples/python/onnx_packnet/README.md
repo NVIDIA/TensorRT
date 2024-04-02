@@ -63,7 +63,7 @@ python3 convert_to_onnx.py --output model.onnx
 Once the ONNX graph is generated, use `trtexec` tool (located in `bin` directory of TensorRT package) to perform inference on a random input image.
 
 ```
-trtexec --onnx=model.onnx --explicitBatch
+trtexec --onnx=model.onnx
 ```
 
 Please refer to `trtexec` tool for more commandline options.
@@ -98,6 +98,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+August 2023: 
+  - Update ONNX version support to 1.14.0
+  - Removed support for Python versions < 3.8.
 August 2021: Update sample to work with latest torch version
 June 2020: Initial release of this sample
 

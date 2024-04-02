@@ -130,7 +130,7 @@ class EngineBuilder:
 
         self.builder = trt.Builder(self.trt_logger)
         self.config = self.builder.create_builder_config()
-        self.config.max_workspace_size = workspace * (2 ** 30)
+        self.config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace * (2 ** 30))
 
         self.batch_size = None
         self.network = None
@@ -141,9 +141,7 @@ class EngineBuilder:
         Parse the ONNX graph and create the corresponding TensorRT network definition.
         :param onnx_path: The path to the ONNX graph to load.
         """
-        network_flags = (1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
-
-        self.network = self.builder.create_network(network_flags)
+        self.network = self.builder.create_network(0)
         self.parser = trt.OnnxParser(self.network, self.trt_logger)
 
         onnx_path = os.path.realpath(onnx_path)
@@ -164,7 +162,6 @@ class EngineBuilder:
         for output in outputs:
             log.info("Output '{}' with shape {} and dtype {}".format(output.name, output.shape, output.dtype))
         assert self.batch_size > 0
-        self.builder.max_batch_size = self.batch_size
 
     def create_engine(self, engine_path, precision, config_file, calib_input=None, calib_cache=None, calib_num_images=5000,
                       calib_batch_size=8):
@@ -200,14 +197,11 @@ class EngineBuilder:
                     ImageBatcher(calib_input, calib_shape, calib_dtype, max_num_images=calib_num_images,
                                  exact_batches=True, config_file=config_file))
 
-        engine_bytes = None
-        try:
-            engine_bytes = self.builder.build_serialized_network(self.network, self.config)
-        except AttributeError:
-            engine = self.builder.build_engine(self.network, self.config)
-            engine_bytes = engine.serialize()
-            del engine
-        assert engine_bytes
+        engine_bytes = self.builder.build_serialized_network(self.network, self.config)
+        if engine_bytes is None:
+            log.error("Failed to create engine")
+            sys.exit(1)
+
         with open(engine_path, "wb") as f:
             log.info("Serializing engine to file: {:}".format(engine_path))
             f.write(engine_bytes)

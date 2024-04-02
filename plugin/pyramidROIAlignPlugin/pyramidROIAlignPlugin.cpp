@@ -78,7 +78,7 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
         bool plusOneCoords = false;
         bool legacy = false;
         int32_t samplingRatio = 0;
-        xy_t imageSize = {MaskRCNNConfig::IMAGE_SHAPE.d[1], MaskRCNNConfig::IMAGE_SHAPE.d[2]};
+        xy_t imageSize = {dimToInt32(MaskRCNNConfig::IMAGE_SHAPE.d[1]), dimToInt32(MaskRCNNConfig::IMAGE_SHAPE.d[2])};
         int32_t fpnScale = 224;
 
         PluginField const* fields = fc->fields;
@@ -433,7 +433,7 @@ void PyramidROIAlign::configurePlugin(Dims const* inputDims, int32_t nbInputs, D
 
     for (size_t layer = 0; layer < mFeatureMapCount; ++layer)
     {
-        mFeatureSpatialSize[layer] = {inputDims[layer + 1].d[1], inputDims[layer + 1].d[2]};
+        mFeatureSpatialSize[layer] = {dimToInt32(inputDims[layer + 1].d[1]), dimToInt32(inputDims[layer + 1].d[2])};
     }
 }
 

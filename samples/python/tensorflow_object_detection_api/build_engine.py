@@ -128,7 +128,7 @@ class EngineBuilder:
 
         self.builder = trt.Builder(self.trt_logger)
         self.config = self.builder.create_builder_config()
-        self.config.max_workspace_size = workspace * (2 ** 30)
+        self.config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace * (2 ** 30))
 
         self.batch_size = None
         self.network = None
@@ -139,9 +139,8 @@ class EngineBuilder:
         Parse the ONNX graph and create the corresponding TensorRT network definition.
         :param onnx_path: The path to the ONNX graph to load.
         """
-        network_flags = (1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
 
-        self.network = self.builder.create_network(network_flags)
+        self.network = self.builder.create_network(0)
         self.parser = trt.OnnxParser(self.network, self.trt_logger)
 
         onnx_path = os.path.realpath(onnx_path)
@@ -162,7 +161,6 @@ class EngineBuilder:
         for output in outputs:
             log.info("Output '{}' with shape {} and dtype {}".format(output.name, output.shape, output.dtype))
         assert self.batch_size > 0
-        self.builder.max_batch_size = self.batch_size
 
         # TODO: These overrides are to improve fp16/int8 performance on FRCNN models
         # it might be possible to avoid doing this by using different box encoding
@@ -198,7 +196,9 @@ class EngineBuilder:
 
         # TODO: Strict type is only needed If the per-layer precision overrides are used
         # If a better method is found to deal with that issue, this flag can be removed.
-        self.config.set_flag(trt.BuilderFlag.STRICT_TYPES)
+        self.config.set_flag(trt.BuilderFlag.PREFER_PRECISION_CONSTRAINTS)
+        self.config.set_flag(trt.BuilderFlag.DIRECT_IO)
+        self.config.set_flag(trt.BuilderFlag.REJECT_EMPTY_ALGORITHMS)
 
         if precision == "fp16":
             if not self.builder.platform_has_fast_fp16:
@@ -221,9 +221,14 @@ class EngineBuilder:
                         ImageBatcher(calib_input, calib_shape, calib_dtype, max_num_images=calib_num_images,
                                      exact_batches=True))
 
-        with self.builder.build_engine(self.network, self.config) as engine, open(engine_path, "wb") as f:
+        engine_bytes = self.builder.build_serialized_network(self.network, self.config)
+        if engine_bytes is None:
+            log.error("Failed to create engine")
+            sys.exit(1)
+
+        with open(engine_path, "wb") as f:
             log.info("Serializing engine to file: {:}".format(engine_path))
-            f.write(engine.serialize())
+            f.write(engine_bytes)
 
 
 def main(args):

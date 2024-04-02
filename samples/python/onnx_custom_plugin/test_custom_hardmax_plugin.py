@@ -44,8 +44,9 @@ def make_trt_network_and_engine(input_shape, axis):
     plugin = plugin_creator.create_plugin(name="CustomHardmax", field_collection=field_collection)
 
     builder = trt.Builder(TRT_LOGGER)
-    network = builder.create_network(common.EXPLICIT_BATCH)
+    network = builder.create_network(0)
     config = builder.create_builder_config()
+    config.set_tactic_sources(config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS))
     runtime = trt.Runtime(TRT_LOGGER)
 
     input_layer = network.add_input(name="input_layer", dtype=trt.float32, shape=input_shape)
@@ -61,9 +62,7 @@ def custom_plugin_impl(input_arr, engine):
     inputs, outputs, bindings, stream = common.allocate_buffers(engine)
     context = engine.create_execution_context()
     inputs[0].host = input_arr.astype(trt.nptype(trt.float32))
-    trt_outputs = common.do_inference_v2(
-        context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream
-    )
+    trt_outputs = common.do_inference(context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
     output = trt_outputs[0].copy()
     common.free_buffers(inputs, outputs, stream)
     return output

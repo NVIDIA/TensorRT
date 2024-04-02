@@ -330,11 +330,13 @@ int32_t ProposalPlugin::enqueue(
     return STATUS_FAILURE;
 }
 
-int32_t ProposalDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t ProposalDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
         int32_t status = STATUS_FAILURE;
         // Our plugin outputs only one tensor
         void* output = outputs[0];
@@ -512,7 +514,7 @@ void ProposalPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace == nullptr);
+        PLUGIN_VALIDATE(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -525,7 +527,7 @@ void ProposalDynamicPlugin::setPluginNamespace(char const* libNamespace) noexcep
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace == nullptr);
+        PLUGIN_VALIDATE(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -679,6 +681,9 @@ IPluginV2Ext* ProposalPluginCreator::createPlugin(char const* name, PluginFieldC
 {
     try
     {
+        gLogWarning << "Proposal plugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
+                       "ProposalDynamic plugin."
+                    << std::endl;
         PluginField const* fields = fc->fields;
         int32_t nbFields = fc->nbFields;
         int32_t inputHeight = 0;
@@ -887,6 +892,9 @@ IPluginV2Ext* ProposalPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "Proposal plugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
+                       "ProposalDynamic plugin."
+                    << std::endl;
         // This object will be deleted when the network is destroyed,
         IPluginV2Ext* plugin = new ProposalPlugin(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());

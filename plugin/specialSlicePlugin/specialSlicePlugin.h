@@ -30,7 +30,7 @@ namespace nvinfer1
 {
 namespace plugin
 {
-class SpecialSlice : public IPluginV2Ext
+class TRT_DEPRECATED SpecialSlice : public IPluginV2Ext
 {
 public:
     SpecialSlice();
@@ -97,7 +97,7 @@ private:
     std::string mNameSpace;
 };
 
-class SpecialSlicePluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED SpecialSlicePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     SpecialSlicePluginCreator();

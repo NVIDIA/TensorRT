@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@
 #include <stdexcept>
 
 using namespace nvinfer1;
+using namespace nvinfer1::pluginInternal;
 using nvinfer1::plugin::GroupNormalizationPlugin;
 using nvinfer1::plugin::GroupNormalizationPluginCreator;
 
@@ -95,10 +96,11 @@ void GroupNormalizationPlugin::attachToContext(
 {
     try
     {
-        PLUGIN_VALIDATE(cudnnContext);
-        mCudnnHandle = cudnnContext;
-        PLUGIN_CUDNNASSERT(cudnnCreateTensorDescriptor(&mTensorDesc));
-        PLUGIN_CUDNNASSERT(cudnnCreateTensorDescriptor(&mBNTensorDesc));
+        mCudnnWrapper = createPluginCudnnWrapper(gpuAllocator);
+        mCudnnHandle = mCudnnWrapper->getCudnnHandle();
+        PLUGIN_VALIDATE(mCudnnHandle);
+        PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnCreateTensorDescriptor(&mTensorDesc));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnCreateTensorDescriptor(&mBNTensorDesc));
     }
     catch (std::exception const& e)
     {
@@ -111,9 +113,8 @@ void GroupNormalizationPlugin::detachFromContext() noexcept
 {
     try
     {
-        PLUGIN_CUDNNASSERT(cudnnDestroyTensorDescriptor(mTensorDesc));
-        PLUGIN_CUDNNASSERT(cudnnDestroyTensorDescriptor(mBNTensorDesc));
-        mCudnnHandle = nullptr;
+        PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnDestroyTensorDescriptor(mTensorDesc));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnDestroyTensorDescriptor(mBNTensorDesc));
     }
     catch (std::exception const& e)
     {
@@ -122,14 +123,12 @@ void GroupNormalizationPlugin::detachFromContext() noexcept
 }
 
 int32_t GroupNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
+    void* /* workspace */, cudaStream_t stream) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr);
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
         PLUGIN_VALIDATE(mBnScales != nullptr && mBnScales->mPtr != nullptr);
         PLUGIN_VALIDATE(mBnBias != nullptr && mBnBias->mPtr != nullptr);
         PLUGIN_VALIDATE(mCudnnHandle != nullptr);
@@ -142,7 +141,7 @@ int32_t GroupNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inpu
         return STATUS_FAILURE;
     }
 
-    PLUGIN_CHECK_CUDNN(cudnnSetStream(mCudnnHandle, stream));
+    PLUGIN_CHECK_CUDNN(mCudnnWrapper->cudnnSetStream(mCudnnHandle, stream));
 
     // The tensor descriptors were set up in configurePlugin() to make Batch Normalization actually
     // perform Group Normalization. This was done by setting the tensor descriptor shape to
@@ -150,23 +149,23 @@ int32_t GroupNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inpu
     // cudnnBatchNorm will normalize over the last two dimensions.
     float const one = 1.F;
     float const zero = 0.F;
-    PLUGIN_CHECK_CUDNN(cudnnBatchNormalizationForwardTraining(mCudnnHandle, // handle
-        CUDNN_BATCHNORM_SPATIAL,                                            // BatchNormMode_t, try also non persistent
-        &one,                                                               //
-        &zero,                                                              //
-        mTensorDesc,                                                        // in/out descriptor
-        inputs[0],                                                          // input
-        mTensorDesc,                                                        // in/out descriptor
-        outputs[0],                                                         // output
-        mBNTensorDesc,                                                      //
-        mBnScales->mPtr,                                                    // 1
-        mBnBias->mPtr,                                                      // 0
-        0.0,                                                                // exponential average factor
-        nullptr,                                                            // resultRunningMean
-        nullptr,                                                            // resultRunningVar
-        mEpsilon,                                                           //  eps
-        nullptr,                                                            // resultSaveMean
-        nullptr                                                             // resultSaveInvVar
+    PLUGIN_CHECK_CUDNN(mCudnnWrapper->cudnnBatchNormalizationForwardTraining(mCudnnHandle, // handle
+        CUDNN_BATCHNORM_SPATIAL, // BatchNormMode_t, try also non persistent
+        &one,                    //
+        &zero,                   //
+        mTensorDesc,             // in/out descriptor
+        inputs[0],               // input
+        mTensorDesc,             // in/out descriptor
+        outputs[0],              // output
+        mBNTensorDesc,           //
+        mBnScales->mPtr,         // 1
+        mBnBias->mPtr,           // 0
+        0.0,                     // exponential average factor
+        nullptr,                 // resultRunningMean
+        nullptr,                 // resultRunningVar
+        mEpsilon,                //  eps
+        nullptr,                 // resultSaveMean
+        nullptr                  // resultSaveInvVar
         ));
 
     // Apply an additional scale and bias on each channel.
@@ -290,15 +289,16 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
         mChannelVolume = pluginInternal::volume(inputDims, /*start*/ 2, /*stop*/ inputDims.nbDims);
 
         // Set tensor descriptor in a way that cudnnBatchNorm will perform Group Normalization.
-        PLUGIN_CUDNNASSERT(cudnnSetTensor4dDescriptor(mTensorDesc, // descriptor
-            CUDNN_TENSOR_NCHW,                                     // tensor format
-            CUDNN_DATA_FLOAT,                                      // type
-            1,                                                     // Batchsize
-            batchSize * mNbGroups,                                 // Channels
-            groupSize,                                             // Height
-            mChannelVolume                                         // Width
+        PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnSetTensor4dDescriptor(mTensorDesc, // descriptor
+            CUDNN_TENSOR_NCHW,                                                    // tensor format
+            CUDNN_DATA_FLOAT,                                                     // type
+            1,                                                                    // Batchsize
+            batchSize * mNbGroups,                                                // Channels
+            groupSize,                                                            // Height
+            mChannelVolume                                                        // Width
             ));
-        PLUGIN_CUDNNASSERT(cudnnDeriveBNTensorDescriptor(mBNTensorDesc, mTensorDesc, CUDNN_BATCHNORM_SPATIAL));
+        PLUGIN_CUDNNASSERT(
+            mCudnnWrapper->cudnnDeriveBNTensorDescriptor(mBNTensorDesc, mTensorDesc, CUDNN_BATCHNORM_SPATIAL));
     }
     catch (std::exception const& e)
     {

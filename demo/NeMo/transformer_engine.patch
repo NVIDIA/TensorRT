@@ -1,0 +1,17 @@
+--- common/__init__.py	2023-06-22 17:22:59.046208583 +0000
++++ common/backup.py	2023-06-22 20:53:01.154819280 +0000
+@@ -7,12 +7,13 @@
+ import os
+ import platform
+ import subprocess
++import sys
+
+
+ def get_te_path():
+     """Find Transformer Engine install path using pip"""
+
+-    command = ["pip", "show", "transformer_engine"]
++    command = [sys.executable, "-m", "pip", "show", "transformer_engine"]
+     result = subprocess.run(command, capture_output=True, check=True, text=True)
+     result = result.stdout.replace("\n", ":").split(":")
+     return result[result.index("Location")+1].strip()

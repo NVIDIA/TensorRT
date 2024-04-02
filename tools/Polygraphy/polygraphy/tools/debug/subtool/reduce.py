@@ -20,6 +20,7 @@ import math
 from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.comparator import IterationResult
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools import util as tools_util
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
@@ -320,7 +321,9 @@ class Reduce(Tool):
                     # If a tensor is not in `fallback_metadata`, it means it doesn't require metadata to be updated.
                     if tensor.name in fallback_metadata:
                         tensor.shape = tensor.shape or fallback_metadata[tensor.name].shape
-                        tensor.dtype = tensor.dtype or fallback_metadata[tensor.name].dtype
+                        tensor.dtype = DataType.to_dtype(
+                            DataType.from_dtype(tensor.dtype or fallback_metadata[tensor.name].dtype), "onnx"
+                        )
 
             fix_tensor_metadata(graph.inputs)
             fix_tensor_metadata(graph.outputs)

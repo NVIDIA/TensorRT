@@ -28,7 +28,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class BatchedNMSPlugin : public IPluginV2Ext
+class TRT_DEPRECATED BatchedNMSPlugin : public IPluginV2Ext
 {
 public:
     BatchedNMSPlugin(NMSParameters param);
@@ -79,7 +79,7 @@ private:
     pluginStatus_t mPluginStatus{};
 };
 
-class BatchedNMSDynamicPlugin : public IPluginV2DynamicExt
+class TRT_DEPRECATED BatchedNMSDynamicPlugin : public IPluginV2DynamicExt
 {
 public:
     BatchedNMSDynamicPlugin(NMSParameters param);
@@ -131,7 +131,7 @@ private:
     pluginStatus_t mPluginStatus{};
 };
 
-class BatchedNMSBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED BatchedNMSBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     BatchedNMSBasePluginCreator();
@@ -145,7 +145,7 @@ protected:
     static std::vector<PluginField> mPluginAttributes;
 };
 
-class BatchedNMSPluginCreator : public BatchedNMSBasePluginCreator
+class TRT_DEPRECATED BatchedNMSPluginCreator : public BatchedNMSBasePluginCreator
 {
 public:
     char const* getPluginName() const noexcept override;
@@ -153,7 +153,7 @@ public:
     IPluginV2Ext* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept override;
 };
 
-class BatchedNMSDynamicPluginCreator : public BatchedNMSBasePluginCreator
+class TRT_DEPRECATED BatchedNMSDynamicPluginCreator : public BatchedNMSBasePluginCreator
 {
 public:
     char const* getPluginName() const noexcept override;

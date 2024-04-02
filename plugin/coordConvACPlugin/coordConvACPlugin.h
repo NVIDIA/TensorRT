@@ -30,7 +30,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class CoordConvACPlugin : public IPluginV2Ext
+class TRT_DEPRECATED CoordConvACPlugin : public IPluginV2Ext
 {
 public:
     CoordConvACPlugin();
@@ -68,6 +68,9 @@ public:
 
     char const* getPluginVersion() const noexcept override;
 
+    void attachToContext(
+        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
+
     void destroy() noexcept override;
 
     IPluginV2Ext* clone() const noexcept override;
@@ -96,7 +99,7 @@ private:
     char const* mPluginNamespace{};
 };
 
-class CoordConvACPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED CoordConvACPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     CoordConvACPluginCreator();

@@ -18,11 +18,17 @@
 Generates data and writes it to a file.
 """
 
-import numpy as np
+from polygraphy import mod
 from polygraphy.common import TensorMetadata
 from polygraphy.json import save_json
 from polygraphy.tools import Tool
 from polygraphy.tools.args import DataLoaderArgs
+
+# Your tool should lazily import any external dependencies. By doing so,
+# we avoid creating hard dependencies on other packages.
+# Additionally, this allows Polygraphy to automatically install required packages
+# as they are needed, instead of requiring the user to do so up front.
+np = mod.lazy_import("numpy")
 
 
 class GenData(Tool):
@@ -31,6 +37,7 @@ class GenData(Tool):
     """
     Generate random data and write it to a file.
     """
+
     # First, we'll implement `get_subscriptions_impl()` to subscribe to argument groups
     # that we're intrested in.
     # All the argument groups we subscribe to will be stored in a member called
@@ -59,5 +66,9 @@ class GenData(Tool):
         save_json(list(data_loader), dest=args.output, description="randomly generated numbers")
 
 
-# Now we just use the tool's main() method to make this script behave like a CLI tool.
+# NOTE: To integrate a tool into Polygraphy, you will need to add it to the registry in
+# `polygraphy/tools/registry.py`.
+#
+# Alternatively, we can create a standalone tool by invoking the `main()` method, which will allow
+# our script to be used on the command-line.
 GenData().main()

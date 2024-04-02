@@ -2,6 +2,36 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.1.8 (2024-March)
+- Added `trex` command-line tool (see `bin/README.md`)
+- Updated to support Python 3.10, new package installations and TensorRT 10.0.
+- Made the scripts in the `utils/` directory executable for easier usage.
+- Enabled JupyterLab
+- Added notebooks/q_dq_placement.ipynb for experimenting with Q/DQ placement, data types and strong typing. Shows how to quickly iterate between ONNX definition, visualization and engine visualization.
+- Installation:
+  - Shortened the installation time (removed qgrid and its dependencies).
+  - Separated the installation to core packages and notebook packages.
+  - Removed non-core modules from inclusion in the default trex namespace. This is meant to simplify for users that don't require Jupyter etc.
+  - Updated the installation instructions for [PyTorch Quantization Toolkit](https://github.com/NVIDIA/TensorRT/tree/master/tools/pytorch-quantization) to use source installation which is more reliable.
+  - Updates script `install.sh` with options for full or core installation. Installation of a virtual environment is now an opt-in.
+- Graph rendering:
+  - Updated the graph rendering for TensorRT 10.0 `kgen` kernels.
+  - Added an option to display engine layer metadata. TensorRT 10.0 adds ONNX layer information as a metadata field in the layer information.
+  - Added a color for FP8 tensors when rendering SVG.
+  - Added an option to prevent rendering of disconnected layer nodes.
+  - Moved the colormap definitions to a separate file (trex/colors.py) to decouple graph rendering from non-core trex code.
+  - Added support for TrainStation engine layers. A TrainStation is an internal TensorRT engine layer that manages data-dependent-shapes device memory allocation. TrainStation layers synchronize the stream they are invoked from.
+- Deprecated functionality:
+  - Removed display_df_qgrid. Data frames now display using the default panda's table renderer.
+- Miscellaneous
+  - Added copyright message to test files
+  - Updated and fixed the build-log parsing for TensorRT 9.x/10.x.
+
+
+## v0.1.7 (2023-August)
+- Updated graph rendering for TensorRT 9.0 `kgen` kernels.
+- Updated TensorRT data formats dictionary.
+
 ## v0.1.6 (2023-April)
 - Graph rendering:
   - Add node highlighting option.

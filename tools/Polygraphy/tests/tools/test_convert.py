@@ -60,9 +60,6 @@ class TestConvertToTrt:
             poly_convert([ONNX_MODELS["identity"].path, "--model-type=onnx", "-o", outmodel.name])
             self.check_engine(outmodel.name)
 
-    @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.0"), reason="Bug in older versions of TRT breaks this test"
-    )
     def test_tf_to_onnx_to_trt(self, poly_convert):
         pytest.importorskip("tensorflow")
 
@@ -116,7 +113,6 @@ class TestConvertToTrt:
 
 
 class TestConvertToOnnxLikeTrt:
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Unsupported for TRT 7.1 and older")
     @pytest.mark.parametrize(
         "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]
     )

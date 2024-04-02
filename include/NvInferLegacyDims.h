@@ -36,6 +36,7 @@ namespace nvinfer1
 {
 //!
 //! \class Dims2
+//!
 //! \brief Descriptor for two-dimensional data.
 //!
 class Dims2 : public Dims
@@ -55,12 +56,12 @@ public:
     //! \param d0 The first element.
     //! \param d1 The second element.
     //!
-    Dims2(int32_t d0, int32_t d1)
+    Dims2(int64_t d0, int64_t d1)
     {
         nbDims = 2;
         d[0] = d0;
         d[1] = d1;
-        for (int32_t i{nbDims}; i < Dims::MAX_DIMS; ++i)
+        for (int64_t i{nbDims}; i < Dims::MAX_DIMS; ++i)
         {
             d[i] = 0;
         }
@@ -69,6 +70,7 @@ public:
 
 //!
 //! \class DimsHW
+//!
 //! \brief Descriptor for two-dimensional spatial data.
 //!
 class DimsHW : public Dims2
@@ -88,7 +90,7 @@ public:
     //! \param height the height of the data
     //! \param width the width of the data
     //!
-    DimsHW(int32_t height, int32_t width)
+    DimsHW(int64_t height, int64_t width)
         : Dims2(height, width)
     {
     }
@@ -98,7 +100,7 @@ public:
     //!
     //! \return The height.
     //!
-    int32_t& h()
+    int64_t& h()
     {
         return d[0];
     }
@@ -108,7 +110,7 @@ public:
     //!
     //! \return The height.
     //!
-    int32_t h() const
+    int64_t h() const
     {
         return d[0];
     }
@@ -118,7 +120,7 @@ public:
     //!
     //! \return The width.
     //!
-    int32_t& w()
+    int64_t& w()
     {
         return d[1];
     }
@@ -128,7 +130,7 @@ public:
     //!
     //! \return The width.
     //!
-    int32_t w() const
+    int64_t w() const
     {
         return d[1];
     }
@@ -136,6 +138,7 @@ public:
 
 //!
 //! \class Dims3
+//!
 //! \brief Descriptor for three-dimensional data.
 //!
 class Dims3 : public Dims2
@@ -156,7 +159,7 @@ public:
     //! \param d1 The second element.
     //! \param d2 The third element.
     //!
-    Dims3(int32_t d0, int32_t d1, int32_t d2)
+    Dims3(int64_t d0, int64_t d1, int64_t d2)
         : Dims2(d0, d1)
     {
         nbDims = 3;
@@ -166,6 +169,7 @@ public:
 
 //!
 //! \class Dims4
+//!
 //! \brief Descriptor for four-dimensional data.
 //!
 class Dims4 : public Dims3
@@ -187,7 +191,7 @@ public:
     //! \param d2 The third element.
     //! \param d3 The fourth element.
     //!
-    Dims4(int32_t d0, int32_t d1, int32_t d2, int32_t d3)
+    Dims4(int64_t d0, int64_t d1, int64_t d2, int64_t d3)
         : Dims3(d0, d1, d2)
     {
         nbDims = 4;

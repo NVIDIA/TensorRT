@@ -21,12 +21,14 @@ import subprocess as sp
 import sys
 import tempfile
 from textwrap import dedent
+import tensorrt as trt
 
 import onnx
 import pytest
-import tensorrt as trt
+import torch
+
 from polygraphy import mod, util
-from polygraphy.json import load_json
+from polygraphy.json import load_json, save_json
 from tests.helper import ROOT_DIR, get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
@@ -58,11 +60,6 @@ class TestLogging:
         with tempfile.TemporaryDirectory() as outdir:
             poly_run(["--log-file", log_path], cwd=outdir)
             assert open(os.path.join(outdir, log_path)).read()
-
-
-class TestTrtLegacy:
-    def test_uff(self, poly_run):
-        poly_run([TF_MODELS["identity"].path, "--trt-legacy"])
 
 
 class TestTrt:
@@ -124,7 +121,6 @@ class TestTrt:
     def test_int8(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--trt", "--int8"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="API was added after TRT 7.2")
     def test_sparse_weights(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--trt", "--sparse-weights"])
 
@@ -208,9 +204,42 @@ class TestTrt:
             "X:[1,2,4,4]" if optimization_profile == 1 else "X:[1,2,1,1]",
         ]
         if optimization_profile is not None:
-            if mod.version(trt.__version__) <= mod.version("7.3"):
-                pytest.skip("Unsupported for TRT 7.2")
             cmd += [f"--optimization-profile={optimization_profile}"]
+
+        poly_run(cmd)
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.0"),
+        reason="Feature not present before 10.0",
+    )
+    @pytest.mark.parametrize("allocation_strategy", [None, "static", "profile", "runtime"])
+    def test_allocation_strategies(self, poly_run, allocation_strategy):
+        cmd = [
+            ONNX_MODELS["residual_block"].path,
+            "--trt",
+            "--onnxrt",
+            # Profile 0
+            "--trt-min-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-opt-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-max-shapes",
+            "gpu_0/data_0:[2,3,224,224]",
+            # Profile 1
+            "--trt-min-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-opt-shapes",
+            "gpu_0/data_0:[1,3,224,224]",
+            "--trt-max-shapes",
+            "gpu_0/data_0:[4,3,224,224]",
+            # Input shapes
+            "--input-shapes",
+            "gpu_0/data_0:[2,3,224,224]",
+            "--optimization-profile",
+            "1",
+        ]
+        if allocation_strategy is not None:
+            cmd += ["--allocation-strategy", allocation_strategy]
 
         poly_run(cmd)
 
@@ -227,7 +256,6 @@ class TestTrt:
         cmd += ["--onnxrt"]
         poly_run()
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
     def test_timing_cache(self, poly_run):
         with tempfile.TemporaryDirectory() as dir:
             # Test with files that haven't already been created instead of using NamedTemporaryFile().
@@ -256,18 +284,15 @@ class TestTrt:
             assert is_file_non_empty(outpath.name)
             poly_run(["--trt", outpath.name, "--model-type=engine"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
     def test_tactic_replay(self, poly_run):
         with util.NamedTemporaryFile() as tactic_replay:
             poly_run([ONNX_MODELS["identity"].path, "--trt", "--save-tactics", tactic_replay.name])
             assert is_file_non_empty(tactic_replay.name)
             poly_run([ONNX_MODELS["identity"].path, "--trt", "--load-tactics", tactic_replay.name])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Unsupported before TRT 7.2")
     def test_tactic_sources(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--trt", "--tactic-sources", "CUBLAS", "CUBLAS_LT"])
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported before TRT 8.3")
     def test_pool_limits(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--trt", "--pool-limit", "workspace:32M"])
 
@@ -291,17 +316,18 @@ class TestTrt:
 
 
 class TestTf:
-    pytest.importorskip("tensorflow")
-
     def test_tf(self, poly_run):
+        pytest.importorskip("tensorflow")
         poly_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5"])
 
     def test_tf_save_pb(self, poly_run):
+        pytest.importorskip("tensorflow")
         with util.NamedTemporaryFile() as outpath:
             poly_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-pb", outpath.name])
             assert is_file_non_empty(outpath.name)
 
     def test_tf_save_tensorboard(self, poly_run):
+        pytest.importorskip("tensorflow")
         with tempfile.TemporaryDirectory() as outdir:
             poly_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-tensorboard", outdir])
             files = glob.glob(f"{outdir}{os.path.sep}*")
@@ -309,6 +335,7 @@ class TestTf:
 
     @pytest.mark.skip(reason="Non-trivial to set up - requires CUPTI")
     def test_tf_save_timeline(self, poly_run):
+        pytest.importorskip("tensorflow")
         with util.NamedTemporaryFile() as outpath:
             poly_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-timeline", outpath.name])
             timelines = glob.glob(os.path.join(outpath.name, "*"))
@@ -317,19 +344,11 @@ class TestTf:
 
     @pytest.mark.skip(reason="Non-trivial to set up")
     def test_tftrt(self, poly_run):
+        pytest.importorskip("tensorflow")
         poly_run([TF_MODELS["identity"].path, "--tf", "--tftrt"])
 
 
 class TestOnnxrt:
-    def test_tf2onnxrt(self, poly_run):
-        poly_run([TF_MODELS["identity"].path, "--onnxrt", "--model-type=frozen"])
-
-    def test_tf2onnx_save_onnx(self, poly_run):
-        with util.NamedTemporaryFile() as outpath:
-            poly_run([TF_MODELS["identity"].path, "--onnxrt", "--model-type=frozen", "--save-onnx", outpath.name])
-            assert is_file_non_empty(outpath.name)
-            assert onnx.load(outpath.name)
-
     def test_onnx_rt(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt"])
 
@@ -430,7 +449,7 @@ class TestOther:
     def test_index_comparison(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--postprocess", "top-1", "--compare-func=indices"])
 
-    @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean"])
+    @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "quantile"])
     def test_check_error_stat(self, poly_run, check_error_stat):
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--onnxrt", "--check-error-stat", check_error_stat])
 
@@ -478,8 +497,26 @@ class TestOther:
             )  # Copy
             poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-input-data", infile0.name, infile1.name])
 
+    def test_load_torch_inputs(self, poly_run):
+        with util.NamedTemporaryFile() as infile:
+            inp = torch.ones((1, 1, 2, 2), dtype=torch.float32)
+            feed_dict = [{"x": inp}]
+            save_json(feed_dict, infile.name)
+            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--onnxrt", "--load-inputs", infile.name])
+
     def test_runner_coexistence(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--trt"])
+
+    def test_tf2onnxrt(self, poly_run):
+        pytest.importorskip("tensorflow")
+        poly_run([TF_MODELS["identity"].path, "--onnxrt", "--model-type=frozen"])
+
+    def test_tf2onnx_save_onnx(self, poly_run):
+        pytest.importorskip("tensorflow")
+        with util.NamedTemporaryFile() as outpath:
+            poly_run([TF_MODELS["identity"].path, "--onnxrt", "--model-type=frozen", "--save-onnx", outpath.name])
+            assert is_file_non_empty(outpath.name)
+            assert onnx.load(outpath.name)
 
 
 class TestPluginRef:

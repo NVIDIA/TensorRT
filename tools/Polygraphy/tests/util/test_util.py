@@ -92,11 +92,14 @@ SHAPE_MATCHING_CASES = [
     (arange((1, 3, 2, 2)), (None, 2, 2, 3), np.transpose(arange((1, 3, 2, 2)), [0, 2, 3, 1])),  # Permute
 ]
 
+build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
 
+
+@pytest.mark.parametrize("array_type", [np.array, build_torch])
 @pytest.mark.parametrize("arr, shape, expected", SHAPE_MATCHING_CASES)
-def test_shape_matching(arr, shape, expected):
-    arr = util.try_match_shape(arr, shape)
-    assert np.array_equal(arr, expected)
+def test_shape_matching(arr, shape, expected, array_type):
+    arr = util.try_match_shape(array_type(arr), shape)
+    assert util.array.equal(arr, array_type(expected))
 
 
 UNPACK_ARGS_CASES = [
@@ -197,14 +200,6 @@ def test_atomic_open():
     assert os.path.exists(outfile.name + ".lock")
 
 
-def test_make_contiguous():
-    arr = np.transpose(np.ones(shape=(5, 10), dtype=np.float32))
-    assert not util.is_contiguous(arr)
-
-    arr = util.make_contiguous(arr)
-    assert util.is_contiguous(arr)
-
-
 class TestMakeRepr:
     def test_basic(self):
         assert util.make_repr("Example", 1, x=2) == ("Example(1, x=2)", False, False)
@@ -247,7 +242,6 @@ class TestMakeRepr:
 def test_check_called_by():
     outfile = io.StringIO()
     with contextlib.redirect_stdout(outfile):
-
         warn_msg = "Calling 'test_check_called_by.<locals>.callee()' directly is not recommended. Please use 'caller()' instead."
 
         @util.check_called_by("caller")

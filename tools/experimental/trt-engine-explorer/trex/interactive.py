@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,7 @@ This file contains configurable interactive widget wrappers.
 
 from ipywidgets import widgets
 import IPython
-from IPython.core.display import display
+from IPython.display import display
 from typing import List
 
 
@@ -32,16 +32,8 @@ class InteractiveDiagram:
         def get_default_choice_key():
             return list(self.choices.keys())[0]
 
-        def get_default_choice_value():
-            val = list(self.choices.values())[0]
-            if not isinstance(val, list) and not isinstance(val, tuple):
-                return (val,)
-            return val
-
         self.diagram_renderer = diagram_renderer
         self.choices = choices
-
-        display(get_default_choice_key())
 
         self.choice_widget = widgets.Dropdown(
             options=self.choices.keys(),
@@ -49,21 +41,18 @@ class InteractiveDiagram:
             description=description,
             disabled=False,
         )
-        dropdown_state_eventhandler = lambda change: self.dropdown_state_eventhandler(change)
-        self.choice_widget.observe(dropdown_state_eventhandler, names='value')
-        self._render(get_default_choice_key(), get_default_choice_value())
+        out = widgets.interactive_output(self.dropdown_state_eventhandler, {'user_choice': self.choice_widget})
+        display(out)
 
     def _render(self, choice, values):
-        IPython.display.clear_output(wait=True)
         display(self.choice_widget)
         self.diagram_renderer(choice, *values)
 
-    def dropdown_state_eventhandler(self, change):
-        state_choice = change.new
-        values = self.choices[state_choice]
+    def dropdown_state_eventhandler(self, user_choice):
+        values = self.choices[user_choice]
         if not isinstance(values, list) and not isinstance(values, tuple):
             values = (values,)
-        self._render(state_choice, values)
+        self._render(user_choice, values)
 
 
 class InteractiveDiagram_2:
@@ -72,29 +61,20 @@ class InteractiveDiagram_2:
         def get_default_choice():
             return list(self.choices.keys())[0]
 
-        def get_default_renderer():
-            val = list(self.choices.values())[0]
-            return val
-
         self.choices = choices
-        display(get_default_choice())
-
         self.choice_widget = widgets.Dropdown(
             options=self.choices.keys(),
             value=get_default_choice(),
             description=description,
             disabled=False,
         )
-        dropdown_state_eventhandler = lambda change: self.dropdown_state_eventhandler(change)
-        self.choice_widget.observe(dropdown_state_eventhandler, names='value')
-        self._render(get_default_choice(), get_default_renderer())
+        out = widgets.interactive_output(self.dropdown_state_eventhandler, {'user_choice': self.choice_widget})
+        display(out)
 
     def _render(self, title, renderer):
-        IPython.display.clear_output(wait=True)
         display(self.choice_widget)
         renderer(title=title)
 
-    def dropdown_state_eventhandler(self, change):
-        state_choice = change.new
-        renderer = self.choices[state_choice]
-        self._render(state_choice, renderer)
+    def dropdown_state_eventhandler(self, user_choice):
+        renderer = self.choices[user_choice]
+        self._render(user_choice, renderer)

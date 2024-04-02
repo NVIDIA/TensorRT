@@ -187,7 +187,7 @@ class OnnxInferShapesArgs(BaseArgs):
             ) as runner:
                 data_loader = self.arg_groups[DataLoaderArgs].get_data_loader()
                 loader_cache = DataLoaderCache(data_loader)
-                loader_cache.set_input_metadata(runner.get_input_metadata())
+                loader_cache.set_input_metadata(runner.get_input_metadata(use_numpy_dtypes=False))
 
                 feed_dict = loader_cache[0]
 
@@ -486,14 +486,14 @@ class OnnxLoadArgs(BaseArgs):
             self.group.add_argument(
                 "--set-unbounded-dds-upper-bound",
                 help="""
-                Set upper bounds for tensors with unbounded DDS(data-dependent shape). 
-                Tensors with unbounded DDS can make it difficult for TensorRT to optimize inference performance 
-                and memory usage. In the worst case, they can cause TensorRT engine build failures. To fix this, 
-                Polygraphy supports setting upper bounds for tensors with unbounded DDS by inserting the ONNX 
-                min operator. To specify per-tensor upper bounds, use the format: 
+                Set upper bounds for tensors with unbounded DDS(data-dependent shape).
+                Tensors with unbounded DDS can make it difficult for TensorRT to optimize inference performance
+                and memory usage. In the worst case, they can cause TensorRT engine build failures. To fix this,
+                Polygraphy supports setting upper bounds for tensors with unbounded DDS by inserting the ONNX
+                min operator. To specify per-tensor upper bounds, use the format:
                 --set-unbounded-dds-upper-bound [<tensor_name>:]<upper_bound>.
-                If no tensor name is provided, the upper bound is used for any tensors with unbounded DDS that 
-                are not explicitly specified. For example: 
+                If no tensor name is provided, the upper bound is used for any tensors with unbounded DDS that
+                are not explicitly specified. For example:
                 --set-unbounded-dds-upper-bound 10000 tensor_a:5000 tensor_b:4000.
 
                 Note that setting upper bounds only works for models that have been constant folded and have shapes inferred.

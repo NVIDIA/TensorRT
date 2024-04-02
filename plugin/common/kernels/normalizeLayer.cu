@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,9 @@
  */
 #include "common/bboxUtils.h"
 #include "common/kernels/kernel.h"
-#include <cublas_v2.h>
+#include "common/cublasWrapper.h"
+
+using namespace nvinfer1::pluginInternal;
 
 namespace nvinfer1
 {
@@ -180,6 +182,7 @@ pluginStatus_t normalizeInference(
     void* outputData,
     void* workspace)
 {
+    CublasWrapper& mCublasWrapper = getCublasWrapper();
     const int dim = C * H * W;
     // Normalization is conducted for each sample from the batch indepdently
     if (acrossSpatial)
@@ -193,18 +196,18 @@ pluginStatus_t normalizeInference(
             squareKernel<<<(dim + 511) / 512, 512, 0, stream>>>(dim, input, buffer);
             float normsqr = 0.0F;
             // Sum up all the squared elements
-            CUBLAS_CHECK(cublasSasum(handle, dim, buffer, 1, &normsqr));
+            CUBLAS_CHECK(mCublasWrapper.cublasSasum(handle, dim, buffer, 1, &normsqr));
             // Make a copy of the input to the output
-            CUBLAS_CHECK(cublasScopy(handle, dim, input, 1, output, 1));
+            CUBLAS_CHECK(mCublasWrapper.cublasScopy(handle, dim, input, 1, output, 1));
             // Calculate the inverse of the square root of the sum
             // Use eps to prevent being divided by zero
             normsqr = 1 / sqrt(normsqr + eps);
             // Scale all the outputs by normsqr
-            CUBLAS_CHECK(cublasSscal(handle, dim, &normsqr, output, 1));
+            CUBLAS_CHECK(mCublasWrapper.cublasSscal(handle, dim, &normsqr, output, 1));
             // If channel shared is true, scale all the outputs
             if (channelShared)
             {
-                CUBLAS_CHECK(cublasSscal(handle, dim, (float*) scale, output, 1));
+                CUBLAS_CHECK(mCublasWrapper.cublasSscal(handle, dim, (float*) scale, output, 1));
             }
             // Use different scale factors for different channels
             else
@@ -249,24 +252,25 @@ pluginStatus_t normalizeInference(
         float* input = (float*) const_cast<void*>(inputData);
         float* output = (float*) outputData;
         float* buffer = (float*) workspace;
+        CublasWrapper& mCublasWrapper = getCublasWrapper();
         for (int n = 0; n < N; ++n)
         {
             // Take the square of each element in the input
             squareKernel<<<(dim + 511) / 512, 512, 0, stream>>>(dim, input, buffer);
             float normsqr = 0.0F;
             // Sum up all the squared elements
-            CUBLAS_CHECK(cublasSasum(handle, dim, buffer, 1, &normsqr));
+            CUBLAS_CHECK(mCublasWrapper.cublasSasum(handle, dim, buffer, 1, &normsqr));
             // Make a copy of the input to the output
-            CUBLAS_CHECK(cublasScopy(handle, dim, input, 1, output, 1));
+            CUBLAS_CHECK(mCublasWrapper.cublasScopy(handle, dim, input, 1, output, 1));
             // Calculate the inverse of the square root of the sum
             // Use eps to prevent being divided by zero
             normsqr = 1 / sqrt(normsqr + eps);
             // Scale all the outputs by normsqr
-            CUBLAS_CHECK(cublasSscal(handle, dim, &normsqr, output, 1));
+            CUBLAS_CHECK(mCublasWrapper.cublasSscal(handle, dim, &normsqr, output, 1));
             // If channel shared is true, scale all the outputs
             if (channelShared)
             {
-                CUBLAS_CHECK(cublasSscal(handle, dim, (float*) scale, output, 1));
+                CUBLAS_CHECK(mCublasWrapper.cublasSscal(handle, dim, (float*) scale, output, 1));
             }
             // Use different scale factors for different channels
             else

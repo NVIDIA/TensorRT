@@ -95,9 +95,11 @@ int CoordConvACPlugin::enqueue(
     case DataType::kINT8:
     case DataType::kUINT8:
     case DataType::kINT32:
-    case DataType::kBOOL:
-        break;
-    case DataType::kFP8: PLUGIN_FAIL("FP8 not supported"); break;
+    case DataType::kBOOL: break;
+    case DataType::kFP8:
+    case DataType::kBF16:
+    case DataType::kINT64:
+    case DataType::kINT4: PLUGIN_FAIL("Unsupported data type");
     }
     return 1;
 }

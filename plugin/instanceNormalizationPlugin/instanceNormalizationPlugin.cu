@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
+using namespace nvinfer1::pluginInternal;
 using namespace instance_norm_impl;
 using nvinfer1::plugin::InstanceNormalizationPlugin;
 using nvinfer1::plugin::InstanceNormalizationPluginV2;
@@ -152,11 +153,11 @@ int32_t InstanceNormalizationPlugin::initialize() noexcept
 {
     if (!mInitialized)
     {
-        PLUGIN_CHECK_CUDNN(cudnnCreate(&mCudnnHandle));
+        PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnCreate(&mCudnnHandle));
 
-        PLUGIN_CHECK_CUDNN(cudnnCreateTensorDescriptor(&mBDescriptor));
-        PLUGIN_CHECK_CUDNN(cudnnCreateTensorDescriptor(&mXDescriptor));
-        PLUGIN_CHECK_CUDNN(cudnnCreateTensorDescriptor(&mYDescriptor));
+        PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnCreateTensorDescriptor(&mBDescriptor));
+        PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnCreateTensorDescriptor(&mXDescriptor));
+        PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnCreateTensorDescriptor(&mYDescriptor));
 
         // NDHWC path
         // Device info.
@@ -185,11 +186,11 @@ void InstanceNormalizationPlugin::terminate() noexcept
 {
     if (mInitialized)
     {
-        PLUGIN_CUDNNASSERT(cudnnDestroyTensorDescriptor(mYDescriptor));
-        PLUGIN_CUDNNASSERT(cudnnDestroyTensorDescriptor(mXDescriptor));
-        PLUGIN_CUDNNASSERT(cudnnDestroyTensorDescriptor(mBDescriptor));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnDestroyTensorDescriptor(mYDescriptor));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnDestroyTensorDescriptor(mXDescriptor));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnDestroyTensorDescriptor(mBDescriptor));
 
-        PLUGIN_CUDNNASSERT(cudnnDestroy(mCudnnHandle));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnDestroy(mCudnnHandle));
 
         PLUGIN_CUASSERT(cudaFree(mDeviceBias));
         PLUGIN_CUASSERT(cudaFree(mDeviceScale));
@@ -255,6 +256,8 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+    
     nvinfer1::Dims input_dims = inputDesc[0].dims;
     // early return for empty tensor
     if (std::any_of(input_dims.d, input_dims.d + input_dims.nbDims, [](int32_t d) { return d == 0; }))
@@ -302,16 +305,16 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
         }
 
         PLUGIN_CUDNNASSERT(
-            cudnnSetTensor4dDescriptor(mBDescriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, n * c, 1, 1));
+            mCudnnWrapper.cudnnSetTensor4dDescriptor(mBDescriptor, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, 1, n * c, 1, 1));
         cudnnDataType_t cudnn_dtype{};
         PLUGIN_CUDNNASSERT(convertTrt2cudnnDtype(inputDesc[0].type, &cudnn_dtype));
-        PLUGIN_CUDNNASSERT(cudnnSetTensor4dDescriptor(mXDescriptor, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
-        PLUGIN_CUDNNASSERT(cudnnSetTensor4dDescriptor(mYDescriptor, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnSetTensor4dDescriptor(mXDescriptor, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnSetTensor4dDescriptor(mYDescriptor, CUDNN_TENSOR_NCHW, cudnn_dtype, 1, n * c, h, w));
         float alpha = 1;
         float beta = 0;
         void const* x_ptr = inputs[0];
         void* y_ptr = outputs[0];
-        PLUGIN_CUDNNASSERT(cudnnSetStream(mCudnnHandle, stream));
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnSetStream(mCudnnHandle, stream));
         // Note: Use of CUDNN_BATCHNORM_SPATIAL_PERSISTENT can cause numerical
         //       overflows (NaNs) for fp32 data in some circumstances. The lower-
         //       performance CUDNN_BATCHNORM_SPATIAL should be used if this is not
@@ -330,7 +333,7 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL;
         }
 
-        PLUGIN_CUDNNASSERT(cudnnBatchNormalizationForwardTraining(mCudnnHandle, cudnnBatchNormMode,
+        PLUGIN_CUDNNASSERT(mCudnnWrapper.cudnnBatchNormalizationForwardTraining(mCudnnHandle, cudnnBatchNormMode,
             &alpha, &beta, mXDescriptor, x_ptr, mYDescriptor, y_ptr, mBDescriptor, d_scale, d_bias, 1., nullptr,
             nullptr, mEpsilon, nullptr, nullptr));
 
@@ -340,7 +343,7 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     {
         if (inputDesc[0].format == nvinfer1::PluginFormat::kLINEAR)
         {
-            PLUGIN_CHECK_CUDNN(cudnnSetStream(mCudnnHandle, stream));
+            PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnSetStream(mCudnnHandle, stream));
             nvinfer1::Dims input_dims = inputDesc[0].dims;
             int32_t n = input_dims.d[0];
             int32_t c = input_dims.d[1];
@@ -369,11 +372,11 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             int32_t img_strideA[] = {img_dimA[1] * img_dimA[2] * img_dimA[3] * img_dimA[4],
                 img_dimA[2] * img_dimA[3] * img_dimA[4], img_dimA[3] * img_dimA[4], img_dimA[4], 1};
 
-            PLUGIN_CHECK_CUDNN(cudnnSetTensorNdDescriptor(mBDescriptor, CUDNN_DATA_FLOAT, 5, nc_dimA, nc_strideA));
+            PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnSetTensorNdDescriptor(mBDescriptor, CUDNN_DATA_FLOAT, 5, nc_dimA, nc_strideA));
             cudnnDataType_t cudnn_dtype;
             PLUGIN_CHECK_CUDNN(convertTrt2cudnnDtype(inputDesc[0].type, &cudnn_dtype));
-            PLUGIN_CHECK_CUDNN(cudnnSetTensorNdDescriptor(mXDescriptor, cudnn_dtype, 5, img_dimA, img_strideA));
-            PLUGIN_CHECK_CUDNN(cudnnSetTensorNdDescriptor(mYDescriptor, cudnn_dtype, 5, img_dimA, img_strideA));
+            PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnSetTensorNdDescriptor(mXDescriptor, cudnn_dtype, 5, img_dimA, img_strideA));
+            PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnSetTensorNdDescriptor(mYDescriptor, cudnn_dtype, 5, img_dimA, img_strideA));
             float alpha = 1;
             float beta = 0;
 
@@ -398,7 +401,7 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
                 cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL;
             }
 
-            PLUGIN_CHECK_CUDNN(cudnnBatchNormalizationForwardTraining(mCudnnHandle, cudnnBatchNormMode,
+            PLUGIN_CHECK_CUDNN(mCudnnWrapper.cudnnBatchNormalizationForwardTraining(mCudnnHandle, cudnnBatchNormMode,
                 &alpha, &beta, mXDescriptor, x_ptr, mYDescriptor, y_ptr, mBDescriptor, d_scale, d_bias, 1., nullptr,
                 nullptr, mEpsilon, nullptr, nullptr));
 

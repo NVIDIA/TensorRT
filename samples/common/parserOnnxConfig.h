@@ -61,7 +61,6 @@ public:
 #endif
     }
 
-protected:
     ~ParserOnnxConfig() override
     {
 #ifdef ONNX_DEBUG
@@ -141,12 +140,6 @@ public:
         return false;
 #endif
     }
-
-    void destroy() noexcept override
-    {
-        delete this;
-    }
-
 }; // class ParserOnnxConfig
 
 #endif

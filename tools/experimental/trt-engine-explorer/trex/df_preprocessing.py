@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -157,12 +157,18 @@ def __fix_columns_types(df: pd.DataFrame):
             df[col] = df[col].astype('int32')
         except KeyError:
             pass
-    df.fillna("", inplace=True)
+    df.fillna(0, inplace=True)
 
 
 def __fix_output_precision(df: pd.DataFrame):
-    df['output_precision'] = [Activation(outputs[0]).precision for outputs in df['Outputs']]
-
+    fixed_outputs = []
+    for outputs in df['Outputs']:
+        try:
+            fixed_outputs.append(Activation(outputs[0]).precision)
+        except IndexError:
+            # Some layers may have empty outputs.
+            fixed_outputs.append('')
+    df['output_precision'] = fixed_outputs
 
 
 def fix_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -205,7 +211,7 @@ def filter_by_layer(df: pd.DataFrame, layer_type: str) -> pd.DataFrame:
     if len(layers) == 0:
         return layers
 
-    copy_cols = set(copy_cols) & set(layers.columns)
+    copy_cols = list(set(copy_cols) & set(layers.columns))
     layers = layers[copy_cols]
 
     if layer_type == 'Convolution':
@@ -285,8 +291,12 @@ def annotate_convolutions(convs: pd.DataFrame):
         # Arithmetic intensity: ops/bytes
         convs.loc[index, 'attr.arithmetic_intensity'] = nb_macs / nb_bytes
         latency = convs.loc[index, 'latency.avg_time']
-        convs.loc[index, 'attr.compute_efficiency'] = nb_macs / latency
-        convs.loc[index, 'attr.memory_efficiency'] = nb_bytes / latency
+        if latency > 0:
+            convs.loc[index, 'attr.compute_efficiency'] = nb_macs / latency
+            convs.loc[index, 'attr.memory_efficiency'] = nb_bytes / latency
+        else:
+            convs.loc[index, 'attr.compute_efficiency'] = 0
+            convs.loc[index, 'attr.memory_efficiency'] = 0
         # Conversion to matrices (M, K) * (K, N)
         M = N * P * Q
         N = K

@@ -26,6 +26,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 using namespace nvinfer1;
@@ -79,12 +80,12 @@ __global__ void skiplnDQQ(int32_t const ld, int8_t const* input, int8_t const* s
     __shared__ __half mu;     // mean
     __shared__ __half rsigma; // 1 / std.dev.
 
-    const __half2 sum2 = BlockReduce(tempStorage).Reduce(loc, cub::Sum());
+    const __half2 sum2 = BlockReduce(tempStorage).Reduce(loc, [](auto const& lhs, auto const& rhs){return lhs + rhs;});
 
     if (threadIdx.x == 0)
     {
         mu = __low2half(sum2);
-        rsigma = rsqrt(__high2half(sum2) - mu * mu);
+        rsigma = rsqrt(__high2half(sum2) - mu * mu + std::numeric_limits<half>::epsilon());
     }
     __syncthreads();
 
@@ -139,12 +140,12 @@ __global__ void skipln_vec(
     __shared__ T mu;     // mean
     __shared__ T rsigma; // 1 / std.dev.
 
-    auto const sumKV = BlockReduce(tempStorage).Reduce(kvp<T>(local, local2), cub::Sum());
+    auto const sumKV = BlockReduce(tempStorage).Reduce(kvp<T>(local, local2), [](auto const& lhs, auto const& rhs){return lhs + rhs;});
 
     if (threadIdx.x == 0)
     {
         mu = sumKV.key;
-        rsigma = rsqrt(sumKV.value - mu * mu);
+        rsigma = rsqrt(sumKV.value - mu * mu + std::numeric_limits<T>::epsilon());
     }
     __syncthreads();
     ///*
@@ -166,7 +167,6 @@ __global__ void skipLayerNormKernelSmall(
     const T rld = T(1) / T(ld);
     int32_t const offset = blockIdx.x * ld;
 
-    cub::Sum pairSum;
     // reduce x and x^2
     kvp<T> threadData(0, 0);
     int32_t const idx = offset + threadIdx.x;
@@ -182,7 +182,7 @@ __global__ void skipLayerNormKernelSmall(
         }
 
         const T rldval = rld * val;
-        threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
+        threadData = threadData + kvp<T>(rldval, rldval * val);
     }
 
     layerNormSmall<T, T, TPB>(val, threadData, ld, idx, beta, gamma, output);
@@ -195,7 +195,6 @@ __global__ void skipLayerNormKernel(
     const T rld = T(1) / T(ld);
     int32_t const offset = blockIdx.x * ld;
 
-    cub::Sum pairSum;
     // reduce x and x^2
     kvp<T> threadData(0, 0);
 
@@ -209,7 +208,7 @@ __global__ void skipLayerNormKernel(
             val += T(bias[i]);
         }
         const T rldval = rld * val;
-        threadData = pairSum(threadData, kvp<T>(rldval, rldval * val));
+        threadData = threadData + kvp<T>(rldval, rldval * val);
         output[idx] = val;
     }
 

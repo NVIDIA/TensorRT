@@ -24,7 +24,7 @@ namespace nvinfer1
 {
 namespace plugin
 {
-class BatchTilePlugin : public IPluginV2Ext
+class TRT_DEPRECATED BatchTilePlugin : public IPluginV2Ext
 {
 public:
     BatchTilePlugin(std::string const& name);
@@ -83,7 +83,7 @@ private:
     std::string mNamespace;
 };
 
-class BatchTilePluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED BatchTilePluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     BatchTilePluginCreator();
