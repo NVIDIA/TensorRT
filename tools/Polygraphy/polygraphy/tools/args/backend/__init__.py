@@ -18,5 +18,4 @@ from polygraphy.tools.args.backend.onnxrt import *
 from polygraphy.tools.args.backend.pluginref import *
 from polygraphy.tools.args.backend.tf import *
 from polygraphy.tools.args.backend.trt import *
-from polygraphy.tools.args.backend.trt_legacy import *
 from polygraphy.tools.args.backend.runner_select import *

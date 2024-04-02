@@ -46,7 +46,13 @@ set(BUILD_LIBRARY_ONLY 1)
 set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_ROOT})
 set(CUDA_INCLUDE_DIRS ${CUDA_ROOT}/include)
 
-set(RT_LIB /usr/aarch64-linux-gnu/lib/librt.so)
+find_library(RT_LIB rt PATHS /usr/aarch64-linux-gnu/lib /usr/lib/aarch64-linux-gnu)
+
+if(NOT RT_LIB)
+    message(WARNING "librt.so not found in default paths")
+endif()
+
+message("RT_LIB: ${RT_LIB}")
 
 # Use host nvcc
 set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
@@ -56,4 +62,4 @@ set(CMAKE_CUDA_COMPILER_FORCED TRUE)
 
 set(CUDA_LIBS -L${CUDA_ROOT}/lib)
 
-set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas -lcudart -lstdc++ -lm)
+set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lstdc++ -lm)

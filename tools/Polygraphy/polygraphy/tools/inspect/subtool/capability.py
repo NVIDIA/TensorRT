@@ -16,6 +16,7 @@
 #
 import os
 
+from collections import OrderedDict
 from polygraphy import mod
 from polygraphy.common.interface import TypedDict
 from polygraphy.logger import G_LOGGER
@@ -26,7 +27,7 @@ common_backend = mod.lazy_import("polygraphy.backend.common")
 gs = mod.lazy_import("onnx_graphsurgeon")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
-trt = mod.lazy_import("tensorrt")
+trt = mod.lazy_import("tensorrt>=8.5")
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
 util = mod.lazy_import("polygraphy.util")
@@ -88,6 +89,30 @@ def supports_model(path):
     return supported, nodelists, parser
 
 
+def parse(path):
+    """
+    Invokes the ONNX parser's `parse` on the specified model.
+
+    Args:
+        path (str): The path to the ONNX model.
+
+    Returns:
+        Tuple[bool, parser]:
+            (1) Whether the model was parsed successfully.
+            (2) The TensorRT ONNX parser instance.
+    """
+    _, network = trt_backend.create_network()
+    parser = trt.OnnxParser(network, trt_backend.get_trt_logger())
+
+    try:
+        parser.parse
+    except AttributeError:
+        trt_util.fail_unavailable("parse in tensorrt.OnnxParser")
+
+    supported = parser.parse(common_backend.bytes_from_path(path), path)
+    return supported, parser
+
+
 def save_subgraph(onnx_save_args, graph, start, end, prefix="", use_tmp_file=False):
     """
     Extracts a subgraph from the main graph and saves it to disk.
@@ -147,9 +172,37 @@ def gen_results_summary(final_unsupported):
     return summary
 
 
+def gen_results_summary_no_partitioning(stack_trace_to_errors):
+    """
+    Generates a results summary given all the errors with a corresponding stack trace.
+
+    Args:
+        stack_trace_to_errors (``OrderedDict[str, List[Tuple[str, str, str]]]``):
+                Reported errors with a corresponding stack trace.
+
+    Returns:
+        str: A summary of all the unsupported ops in model, along with reasons and stack traces.
+    """
+    stack_trace_width = max(map(len, list(stack_trace_to_errors.keys()) + ["Stack trace "]))
+    op_width = max(max(len(op) for errors_per_stack in stack_trace_to_errors.values() for op, _, _ in errors_per_stack), len("Operator "))
+    node_width = max(max(len(node) for errors_per_stack in stack_trace_to_errors.values() for _, node, _ in errors_per_stack), len("Node "))
+    reason_width = max(len(reason) for errors_per_stack in stack_trace_to_errors.values() for _, _, reason in errors_per_stack)
+
+    summary = "===== Summary =====\n"
+
+    header = f"{'Stack trace':{stack_trace_width}} | {'Operator':{op_width}} | {'Node':{node_width}} | {'Reason':{reason_width}}\n"
+    summary += header + "-" * len(header) + "\n"
+
+    for stack_trace, op_node_reason in stack_trace_to_errors.items():
+        for op, node, reason in op_node_reason:
+            summary += f"{stack_trace:{stack_trace_width}} | {op:{op_width}} | {node:{node_width}} | {reason:{reason_width}}\n"
+    return summary
+
+
 class Capability(Tool):
     """
-    Determine the capability of TensorRT to run an ONNX graph. Graph will be paritioned into supported and unsupported subgraphs.
+    Determine the capability of TensorRT to run an ONNX graph. Graph will be either partitioned into supported and unsupported subgraphs
+    or only analyzed in terms of statically checked errors.
     """
 
     def __init__(self):
@@ -162,8 +215,52 @@ class Capability(Tool):
             OnnxLoadArgs(outputs_opt_prefix=False),
             OnnxSaveArgs(output_default_path="polygraphy_capability_dumps", allow_multiple_models=True),
         ]
+    
+    def add_parser_args_impl(self, parser):
+        parser.add_argument(
+            "--with-partitioning",
+            help="Whether to partition the model graph on the nodes with parsing failures",
+            action="store_true",
+        )
 
     def run_impl(self, args):
+        if args.with_partitioning:
+            self.supports_model_variant()
+        else:
+            self.no_partitioning_variant()
+
+    def no_partitioning_variant(self):
+        supported, parser = parse(self.arg_groups[ModelArgs].path)
+        if supported:
+            G_LOGGER.info("Graph is fully supported by TensorRT; Will not report errors.")
+            return
+        
+        stack_trace_to_errors = OrderedDict()
+        for err_idx in range(parser.num_errors):
+            parser_error = parser.get_error(err_idx)
+            stack_trace = ""
+            if parser_error.local_function_stack_size() > 0:
+                for function_idx in range(parser_error.local_function_stack_size()):
+                    stack_trace += parser_error.local_function_stack()[function_idx]
+                    if function_idx != parser_error.local_function_stack_size() - 1:
+                        stack_trace += " -> "
+                
+            if stack_trace not in stack_trace_to_errors:
+                stack_trace_to_errors[stack_trace] = []
+
+            node_operator = parser_error.node_operator()
+            node_name = parser_error.node_name()
+            parser_error_desc = str(parser_error)
+            stack_trace_to_errors[stack_trace].append(tuple((node_operator, node_name, parser_error_desc)))
+        
+        summary = gen_results_summary_no_partitioning(stack_trace_to_errors)
+
+        G_LOGGER.info(summary)
+        util.save_file(
+            summary, os.path.join(self.arg_groups[OnnxSaveArgs].path, "results.txt"), "w", description="results"
+        )
+
+    def supports_model_variant(self):
         supported, nodelists, _ = supports_model(self.arg_groups[ModelArgs].path)
         if supported:
             G_LOGGER.info("Graph is fully supported by TensorRT; Will not generate subgraphs.")
@@ -185,7 +282,7 @@ class Capability(Tool):
                         A list of subgraphs supported by TensorRT, each described by a list of node indices.
             """
             supported_subgraphs = []
-            for (node_indices, supported) in nodelists:
+            for node_indices, supported in nodelists:
                 if supported:
                     supported_subgraphs.append([index + offset for index in node_indices])
                     continue

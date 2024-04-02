@@ -91,6 +91,8 @@ The following resources provide a deeper understanding about getting started wit
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+August 2023
+Removed support for Python versions < 3.8.
 
 September 2021
 Updated the sample to use explicit batch network definition.

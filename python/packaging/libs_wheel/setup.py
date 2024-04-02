@@ -15,29 +15,15 @@
 # limitations under the License.
 #
 
-import os
 
 from setuptools import setup
 
-module_name = "##TENSORRT_MODULE##_libs"
+module_name = "##TENSORRT_MODULE##-cu##CUDA_MAJOR##_libs"
+package_name = "##TENSORRT_MODULE##_libs"
 
 
 def get_requirements():
-    def get_version_range():
-        def get_vers(var):
-            vers = os.environ.get(var).replace("cuda-", "")
-            major, minor = map(int, vers.split("."))
-            return major, minor
-
-        cuda_major, _ = get_vers("CUDA")
-        return "-cu{cuda_major}".format(cuda_major=cuda_major)
-
-    reqs = ["nvidia-cuda-runtime" + get_version_range()]
-    if "##TENSORRT_MODULE##" == "tensorrt":
-        reqs += [
-            "nvidia-cudnn" + get_version_range(),
-            "nvidia-cublas" + get_version_range(),
-        ]
+    reqs = ["nvidia-cuda-runtime-cu##CUDA_MAJOR##"]
     return reqs
 
 
@@ -53,9 +39,9 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[module_name],
+    packages=[package_name],
     install_requires=get_requirements(),
-    package_data={module_name: ["*.so*", "*.pyd", "*.pdb"]},
+    package_data={package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

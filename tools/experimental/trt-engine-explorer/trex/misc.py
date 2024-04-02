@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,13 +26,13 @@ import functools
 
 
 def group_count(df, grouping_attr):
-    grp = df.groupby([grouping_attr]).size().to_frame().reset_index()
+    grp = df.groupby([grouping_attr]).size().reset_index()
     grp.rename(columns = {0: 'count'}, inplace = True)
     return grp
 
 
 def group_sum_attr(df, grouping_attr, reduced_attr):
-    grp = df.groupby([grouping_attr]).sum()[reduced_attr].to_frame().reset_index()
+    grp = df.groupby([grouping_attr])[reduced_attr].sum().reset_index()
     return grp
 
 

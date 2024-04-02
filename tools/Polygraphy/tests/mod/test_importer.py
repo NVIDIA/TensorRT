@@ -79,7 +79,9 @@ class TestImporter:
             assert example is not None
             example()
 
-            with pytest.raises(PolygraphyException, match="Could not import symbol: non_existent from"):
+            with pytest.raises(
+                PolygraphyException, match="Could not import symbol: non_existent from"
+            ):
                 mod.import_from_script(f.name, "non_existent")
             assert sys.path == orig_sys_path
 
@@ -101,3 +103,46 @@ class TestImporter:
     )
     def test_version_ok(self, ver, pref, expected):
         assert _version_ok(ver, pref) == expected
+
+    def test_is_installed_works_when_package_name_differs_from_module_name(
+        self, poly_venv
+    ):
+        assert "onnxruntime" not in poly_venv.installed_packages()
+        assert "onnxruntime-gpu" not in poly_venv.installed_packages()
+
+        poly_venv.run(
+            [poly_venv.python, "-m", "pip", "install", "onnxruntime-gpu", "--no-deps"]
+        )
+
+        # The `onnxruntime-gpu` package provides the `onnxruntime` module.
+        # `is_installed()` should be able to understand that.
+        poly_venv.run(
+            [
+                poly_venv.python,
+                "-c",
+                "from polygraphy import mod; onnxrt = mod.lazy_import('onnxruntime<0'); assert onnxrt.is_installed()",
+            ]
+        )
+
+    @pytest.mark.parametrize(
+        "mod_check", ["mod.has_mod('colored')", "colored.is_installed()"]
+    )
+    def test_has_mod(self, poly_venv, mod_check):
+        assert "colored" not in poly_venv.installed_packages()
+        poly_venv.run(
+            [
+                poly_venv.python,
+                "-c",
+                f"from polygraphy import mod; colored = mod.lazy_import('colored'); assert not {mod_check}",
+            ]
+        )
+
+        poly_venv.run([poly_venv.python, "-m", "pip", "install", "colored==1.4.0"])
+        # Make sure `has_mod` doesn't actually import the package.
+        poly_venv.run(
+            [
+                poly_venv.python,
+                "-c",
+                "from polygraphy import mod; import sys; assert mod.has_mod('colored'); assert 'colored' not in sys.modules; import colored; assert 'colored' in sys.modules",
+            ]
+        )

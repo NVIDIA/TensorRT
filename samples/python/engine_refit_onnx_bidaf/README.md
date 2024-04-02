@@ -61,41 +61,68 @@ And unsupported HardMax nodes and Compress nodes are replaced by ArgMax nodes an
 
 
 * Build a TensorRT engine, refit the engine and run inference.
-`python3 build_and_refit_engine.py`
+`python3 build_and_refit_engine.py --weights-location GPU`
 
-The script will build a TensorRT engine from the modified ONNX model, and then refit the engine and run inference on sample context and query sentences.
+The script will build a TensorRT engine from the modified ONNX model, and then refit the engine from GPU weights and run inference on sample context and query sentences.
 
 When running the above command for the first time, the output should look similar to the following:
 ```
 Loading ONNX file from path bidaf-modified.onnx...
 Beginning ONNX file parsing
-[TensorRT] WARNING: onnx2trt_utils.cpp:283: Your ONNX model has been generated with INT64 weights, while TensorRT does not natively support INT64. Attempting to cast down to INT32.
-[TensorRT] WARNING: Tensor DataType is determined at build time for tensors not marked as input or output.
-[TensorRT] WARNING: Tensor DataType is determined at build time for tensors not marked as input or output.
+[09/25/2023-08:48:16] [TRT] [W] ModelImporter.cpp:407: Make sure input CategoryMapper_4 has Int64 binding.
+[09/25/2023-08:48:16] [TRT] [W] ModelImporter.cpp:407: Make sure input CategoryMapper_5 has Int64 binding.
+[09/25/2023-08:48:16] [TRT] [W] ModelImporter.cpp:407: Make sure input CategoryMapper_6 has Int64 binding.
+[09/25/2023-08:48:16] [TRT] [W] ModelImporter.cpp:407: Make sure input CategoryMapper_7 has Int64 binding.
 Completed parsing of ONNX file
 Network inputs:
-CategoryMapper_4 <class 'numpy.int32'> (-1, 1)
-CategoryMapper_5 <class 'numpy.int32'> (-1, 1, 1, 16)
-CategoryMapper_6 <class 'numpy.int32'> (-1, 1)
-CategoryMapper_7 <class 'numpy.int32'> (-1, 1, 1, 16)
+CategoryMapper_4 <class 'numpy.int64'> (-1, 1)
+CategoryMapper_5 <class 'numpy.int64'> (-1, 1, 1, 16)
+CategoryMapper_6 <class 'numpy.int64'> (-1, 1)
+CategoryMapper_7 <class 'numpy.int64'> (-1, 1, 1, 16)
 Building an engine from file bidaf-modified.onnx; this may take a while...
 Completed creating Engine
-Refitting engine...
+Refitting engine from GPU weights...
+Engine refitted in 39.88 ms.
 Doing inference...
-Refitting engine...
+Doing inference...
+Refitting engine from GPU weights...
+Engine refitted in 0.27 ms.
+Doing inference...
 Doing inference...
 Passed
 ```
 
+Note that refitting for second time will be much faster than the first time.
 When running the above command again, engine will be deserialized from the plan file, the output should look similar to the following:
 ```
-Reading engine from file bidaf.trt
-Refitting engine...
+Reading engine from file bidaf.trt...
+Refitting engine from GPU weights...
+Engine refitted in 32.64 ms.
 Doing inference...
-Refitting engine...
+Doing inference...
+Refitting engine from GPU weights...
+Engine refitted in 0.41 ms.
+Doing inference...
 Doing inference...
 Passed
 ```
+
+To refit the engine from CPU weights, change the command to be `python3 build_and_refit_engine.py --weights-location CPU`. And the output should look similar to the following
+```
+Reading engine from file bidaf.trt...
+Refitting engine from CPU weights...
+Engine refitted in 45.18 ms.
+Doing inference...
+Doing inference...
+Refitting engine from CPU weights...
+Engine refitted in 1.20 ms.
+Doing inference...
+Doing inference...
+Passed
+```
+
+There is also an option `--version-compatible` to enable engine version compatibility. If installed, `tensorrt_dispatch` package will used for refitting and running version compatible engines instead of `tensorrt` package.
+To build and refit a version compatible engine, run the command `python3 build_and_refit_engine.py --version-compatible` and the output should look similar to the above cases.
 
 # Additional resources
 
@@ -117,6 +144,13 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 # Changelog
 
 October 2020: This sample was recreated, updated and reviewed.
+
+August 2023: 
+  - Add support for refitting engines from GPU weights.
+  - Removed support for Python versions < 3.8.
+
+January 2024:
+  - Add support for refitting version compatible engines.
 
 # Known issues
 

@@ -71,7 +71,6 @@ public:
 #endif
     }
 
-protected:
     ~SampleConfig() override
     {
 #ifdef ONNX_DEBUG
@@ -327,12 +326,6 @@ public:
         return false;
 #endif
     }
-
-    void destroy() noexcept override
-    {
-        delete this;
-    }
-
 }; // class SampleConfig
 
 #endif

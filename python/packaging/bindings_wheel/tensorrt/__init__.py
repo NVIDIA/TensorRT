@@ -16,22 +16,24 @@
 #
 
 import ctypes
-import glob
 import os
 import sys
 import warnings
 
 
 # For standalone wheels, attempt to import the wheel containing the libraries.
+_libs_wheel_imported = False
 try:
     import ##TENSORRT_MODULE##_libs
 except (ImportError, ModuleNotFoundError):
     pass
+else:
+    _libs_wheel_imported = True
 
 
-if sys.platform.startswith("win"):
+if not _libs_wheel_imported and sys.platform.startswith("win"):
     # On Windows, we need to manually open the TensorRT libraries - otherwise we are unable to
-    # load the bindings.
+    # load the bindings. If we imported the tensorrt_libs wheel, then that should have taken care of it for us.
     def find_lib(name):
         paths = os.environ["PATH"].split(os.path.pathsep)
         for path in paths:
@@ -39,31 +41,37 @@ if sys.platform.startswith("win"):
             if os.path.isfile(libpath):
                 return libpath
 
+        if name.startswith("cudnn") or name.startswith("cublas"):
+            return ""
+
         raise FileNotFoundError(
             "Could not find: {:}. Is it on your PATH?\nNote: Paths searched were:\n{:}".format(name, paths)
         )
 
-
     # Order matters here because of dependencies
-    LIBRARIES = {"tensorrt": [
-        "nvinfer.dll",
-        "cublas64_##CUDA_MAJOR##.dll",
-        "cublasLt64_##CUDA_MAJOR##.dll",
-        "cudnn64_##CUDNN_MAJOR##.dll",
-        "nvinfer_plugin.dll",
-        "nvonnxparser.dll",
-        "nvparsers.dll",
-    ],
-    "tensorrt_dispatch": [
-        "nvinfer_dispatch.dll",
-    ],
-    "tensorrt_lean": [
-        "nvinfer_lean.dll",
-    ]}["##TENSORRT_MODULE##"]
+    LIBRARIES = {
+        "tensorrt": [
+            "nvinfer.dll",
+            "cublas64_##CUDA_MAJOR##.dll",
+            "cublasLt64_##CUDA_MAJOR##.dll",
+            "cudnn64_##CUDNN_MAJOR##.dll",
+            "nvinfer_plugin.dll",
+            "nvonnxparser.dll",
+        ],
+        "tensorrt_dispatch": [
+            "nvinfer_dispatch.dll",
+        ],
+        "tensorrt_lean": [
+            "nvinfer_lean.dll",
+        ],
+    }["##TENSORRT_MODULE##"]
 
     for lib in LIBRARIES:
-        ctypes.CDLL(find_lib(lib))
+        lib_path = find_lib(lib)
+        if lib_path != "":
+            ctypes.CDLL(lib_path)
 
+del _libs_wheel_imported
 
 from .##TENSORRT_MODULE## import *
 
@@ -111,18 +119,8 @@ if "##TENSORRT_MODULE##" == "tensorrt":
     INetworkDefinition.__enter__ = common_enter
     INetworkDefinition.__exit__ = common_exit
 
-    UffParser.__enter__ = common_enter
-    UffParser.__exit__ = common_exit
-
-    CaffeParser.__enter__ = common_enter
-    CaffeParser.__exit__ = common_exit
-
     OnnxParser.__enter__ = common_enter
     OnnxParser.__exit__ = common_exit
-
-
-    Refitter.__enter__ = common_enter
-    Refitter.__exit__ = common_exit
 
     IBuilderConfig.__enter__ = common_enter
     IBuilderConfig.__exit__ = common_exit
@@ -133,6 +131,7 @@ Logger.Severity = ILogger.Severity
 
 for attr, value in ILogger.Severity.__members__.items():
     setattr(Logger, attr, value)
+
 
 # Computes the volume of an iterable.
 def volume(iterable):
@@ -165,9 +164,10 @@ def nptype(trt_type):
         float16: np.float16,
         int8: np.int8,
         int32: np.int32,
+        int64: np.int64,
         bool: np.bool_,
         uint8: np.uint8,
-        # Note: fp8 has no equivalent numpy type
+        # Note: fp8 and bfloat16 have no equivalent numpy type
     }
     if trt_type in mapping:
         return mapping[trt_type]
@@ -177,7 +177,8 @@ def nptype(trt_type):
 # Add a numpy-like itemsize property to the datatype.
 def _itemsize(trt_type):
     """
-    Returns the size in bytes of this :class:`DataType` .
+    Returns the size in bytes of this :class:`DataType`.
+    The returned size is a rational number, possibly a `Real` denoting a fraction of a byte.
 
     :arg trt_type: The TensorRT data type.
 
@@ -186,11 +187,14 @@ def _itemsize(trt_type):
     mapping = {
         float32: 4,
         float16: 2,
+        bfloat16: 2,
         int8: 1,
         int32: 4,
+        int64: 8,
         bool: 1,
         uint8: 1,
         fp8: 1,
+        int4: 0.5,
     }
     if trt_type in mapping:
         return mapping[trt_type]

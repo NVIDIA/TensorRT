@@ -27,7 +27,7 @@ from tests.tools.args.helper import ArgGroupTestHelper
 
 
 class TestCompareFuncSimple:
-    @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "elemwise"])
+    @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "elemwise", "quantile"])
     def test_error_stat(self, check_error_stat):
         arg_group = ArgGroupTestHelper(
             CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]

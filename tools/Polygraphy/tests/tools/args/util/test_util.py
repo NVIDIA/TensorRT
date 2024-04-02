@@ -15,8 +15,9 @@
 # limitations under the License.
 #
 
-import numpy as np
 import pytest
+
+from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.script import inline, safe
@@ -50,13 +51,13 @@ class TestParseMeta:
         meta_args = [f"{name}:float32"]
         meta = args_util.parse_meta(meta_args, includes_shape=False)
         assert meta[name].shape is None
-        assert meta[name].dtype == np.float32
+        assert meta[name].dtype == DataType.FLOAT32
 
     def test_parse_shape_dtype(self, name):
         meta_args = [f"{name}:[1,3,224,224]:float32"]
         meta = args_util.parse_meta(meta_args)
         assert meta[name].shape == [1, 3, 224, 224]
-        assert meta[name].dtype == np.float32
+        assert meta[name].dtype == DataType.FLOAT32
 
     def test_parse_shape_dtype_auto(self, name):
         meta_args = [f"{name}:auto:auto"]

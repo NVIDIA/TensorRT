@@ -42,6 +42,9 @@ DetectionOutput::DetectionOutput(DetectionOutputParameters params)
     , mType(DataType::kFLOAT)
     , mScoreBits(16)
 {
+    gLogWarning << "NMS_TRT is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an INMSLayer OR "
+                   "use EfficientNMS plugin."
+                << std::endl;
 }
 
 DetectionOutputDynamic::DetectionOutputDynamic(DetectionOutputParameters params)
@@ -241,9 +244,11 @@ int32_t DetectionOutput::enqueue(
     return status;
 }
 
-int32_t DetectionOutputDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t DetectionOutputDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
     // Input order {loc, conf, prior}
     void const* const locData = inputs[param.inputOrder[0]];
     void const* const confData = inputs[param.inputOrder[1]];
@@ -630,6 +635,9 @@ IPluginV2Ext* NMSPluginCreator::createPlugin(char const* name, PluginFieldCollec
 {
     try
     {
+        gLogWarning << "NMS_TRT is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         PluginField const* fields = fc->fields;
         // Default init values for TF SSD network
         params.codeType = CodeTypeSSD::TF_CENTER;
@@ -735,6 +743,9 @@ IPluginV2DynamicExt* NMSDynamicPluginCreator::createPlugin(char const* name, Plu
 {
     try
     {
+        gLogWarning << "NMSDynamic_TRT is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         PluginField const* fields = fc->fields;
         // Default init values for TF SSD network
         params.codeType = CodeTypeSSD::TF_CENTER;
@@ -836,6 +847,9 @@ IPluginV2Ext* NMSPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "NMS_TRT is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call NMS::destroy()
         DetectionOutput* obj = new DetectionOutput(serialData, serialLength);
@@ -854,6 +868,9 @@ IPluginV2DynamicExt* NMSDynamicPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "NMSDynamic_TRT is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call NMS::destroy()
         DetectionOutputDynamic* obj = new DetectionOutputDynamic(serialData, serialLength);

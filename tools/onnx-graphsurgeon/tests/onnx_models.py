@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from onnx_graphsurgeon.logger.logger import G_LOGGER
+from onnx_graphsurgeon.logger import G_LOGGER
 from onnx_graphsurgeon.ir.tensor import Tensor, Constant, Variable
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
@@ -60,7 +60,11 @@ class Model(object):
 
             def check_tensor_io(actensor, extensor):
                 def check_list(aclist, exlist):
-                    G_LOGGER.debug("Actual node list: {:}\n\nExpected node list: {:}".format(aclist, exlist))
+                    G_LOGGER.debug(
+                        "Actual node list: {:}\n\nExpected node list: {:}".format(
+                            aclist, exlist
+                        )
+                    )
                     assert len(aclist) == len(exlist)
                     for acnode, exnode in zip(aclist, exlist):
                         assert acnode == exnode
@@ -70,7 +74,9 @@ class Model(object):
                 G_LOGGER.debug("Checking tensor: {:} outputs".format(actensor.name))
                 check_list(actensor.outputs, extensor.outputs)
 
-            G_LOGGER.debug("Actual Node: {:}\n\nExpected Node: {:}".format(actual, expected))
+            G_LOGGER.debug(
+                "Actual Node: {:}\n\nExpected Node: {:}".format(actual, expected)
+            )
             assert actual.op == expected.op
             assert actual.inputs == expected.inputs
             # Check I/O of input tensors
@@ -84,7 +90,9 @@ class Model(object):
 
             assert actual.name == expected.name
             assert len(actual.attrs) == len(expected.attrs)
-            for (ackey, acval), (exkey, exval) in zip(actual.attrs.items(), expected.attrs.items()):
+            for (ackey, acval), (exkey, exval) in zip(
+                actual.attrs.items(), expected.attrs.items()
+            ):
                 assert ackey == exkey
                 assert acval == exval
             assert actual == expected
@@ -105,7 +113,9 @@ def identity_model():
     y = Variable(name="y", dtype=np.float32, shape=(1, 1, 2, 2))
     node = Node(op="Identity", inputs=[x], outputs=[y])
 
-    return Model(path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model)
+    )
 
 
 def dim_param_model():
@@ -116,7 +126,9 @@ def dim_param_model():
     y = Variable(name="Output:0", dtype=np.float32, shape=("dim0", 16, 128))
     node = Node(op="Identity", inputs=[x], outputs=[y])
 
-    return Model(path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path, inputs=[x], outputs=[y], nodes=[node], opset=OnnxImporter.get_opset(model)
+    )
 
 
 def lstm_model():
@@ -172,7 +184,12 @@ def scan_model():
         Node(op="Add", inputs=[sum_in, next], outputs=[sum_out]),
         Node(op="Identity", inputs=[sum_out], outputs=[scan_out]),
     ]
-    body_graph = Graph(nodes=body_nodes, inputs=[sum_in, next], outputs=[sum_out, scan_out], name="scan_body")
+    body_graph = Graph(
+        nodes=body_nodes,
+        inputs=[sum_in, next],
+        outputs=[sum_out, scan_out],
+        name="scan_body",
+    )
 
     # Outer graph
     inputs = [
@@ -203,7 +220,9 @@ def initializer_is_output_model():
 
     X = Constant(name="X", values=np.ones((64, 64), dtype=np.float32))
 
-    return Model(path, inputs=[], outputs=[X], nodes=[], opset=OnnxImporter.get_opset(model))
+    return Model(
+        path, inputs=[], outputs=[X], nodes=[], opset=OnnxImporter.get_opset(model)
+    )
 
 
 # Node includes a subgraph whose I/O names are the same as that of the node.
@@ -215,8 +234,12 @@ def nested_dup_names():
     subgraph_inputs = [Variable("X", shape=(2, 2), dtype=np.float32)]
     subgraph_outputs = [Variable("Y", shape=(2, 2), dtype=np.float32)]
 
-    subgraph_node = Node(op="Identity", inputs=subgraph_inputs, outputs=subgraph_outputs)
-    subgraph = Graph(nodes=[subgraph_node], inputs=subgraph_inputs, outputs=subgraph_outputs)
+    subgraph_node = Node(
+        op="Identity", inputs=subgraph_inputs, outputs=subgraph_outputs
+    )
+    subgraph = Graph(
+        nodes=[subgraph_node], inputs=subgraph_inputs, outputs=subgraph_outputs
+    )
 
     # Outer - problem happens if outer node has same I/O names as subgraph
     inputs = [Variable("X", shape=(2, 2), dtype=np.float32)]
@@ -263,9 +286,27 @@ def ext_weights():
 
 def const_foldable():
     path = os.path.join(TEST_ROOT, "models", "const_foldable.onnx")
-    return Model(path, inputs=None, outputs=None, nodes=None, opset=None)  # Only used for path.
+    return Model(
+        path, inputs=None, outputs=None, nodes=None, opset=None
+    )  # Only used for path.
 
 
 def shape_cast_elision():
     path = os.path.join(TEST_ROOT, "models", "shape_cast_elision.onnx")
-    return Model(path, inputs=None, outputs=None, nodes=None, opset=None)  # Only used for path.
+    return Model(
+        path, inputs=None, outputs=None, nodes=None, opset=None
+    )  # Only used for path.
+
+
+def sparse_nnz_model():
+    path = os.path.join(TEST_ROOT, "models", "sparse_nnz.onnx")
+    return Model(
+        path, inputs=None, outputs=None, nodes=None, opset=None
+    )  # Only used for path.
+
+
+def sparse_nnz_rank_model():
+    path = os.path.join(TEST_ROOT, "models", "sparse_nnz_rank.onnx")
+    return Model(
+        path, inputs=None, outputs=None, nodes=None, opset=None
+    )  # Only used for path.

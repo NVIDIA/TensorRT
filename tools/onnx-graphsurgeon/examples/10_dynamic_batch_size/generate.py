@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,13 +24,19 @@ import onnx
 ##########################################################################################################
 # Register functions to simplify the graph building process later on.
 
+
 @gs.Graph.register()
 def conv(self, inp, weights, dilations, group, strides):
     out = self.layer(
         op="Conv",
         inputs=[inp, weights],
         outputs=["conv_out"],
-        attrs={"dilations": dilations, "group": group, "kernel_shape": weights.shape[2:], "strides": strides},
+        attrs={
+            "dilations": dilations,
+            "group": group,
+            "kernel_shape": weights.shape[2:],
+            "strides": strides,
+        },
     )[0]
     out.dtype = inp.dtype
     return out
@@ -49,6 +55,7 @@ def matmul(self, lhs, rhs):
     out.dtype = lhs.dtype
     return out
 
+
 ##########################################################################################################
 
 
@@ -58,7 +65,11 @@ graph = gs.Graph(inputs=[X])
 
 # Connect intermediate tensors
 conv_out = graph.conv(
-    X, weights=np.ones(shape=(32, 3, 3, 3), dtype=np.float32), dilations=[1, 1], group=1, strides=[1, 1]
+    X,
+    weights=np.ones(shape=(32, 3, 3, 3), dtype=np.float32),
+    dilations=[1, 1],
+    group=1,
+    strides=[1, 1],
 )
 reshape_out = graph.reshape(conv_out, np.array([1, 21632], dtype=np.int64))
 matmul_out = graph.matmul(reshape_out, np.ones(shape=(21632, 10), dtype=np.float32))
@@ -67,4 +78,5 @@ matmul_out = graph.matmul(reshape_out, np.ones(shape=(21632, 10), dtype=np.float
 graph.outputs = [matmul_out]
 
 # Save graph
-onnx.save(gs.export_onnx(graph), "model.onnx")
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "model.onnx")

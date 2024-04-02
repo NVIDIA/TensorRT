@@ -1,6 +1,0 @@
---find-links https://download.pytorch.org/whl/cu113
-
-nvidia-pyindex
-pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com
-torch
-torchvision

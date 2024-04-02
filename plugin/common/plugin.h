@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,13 +18,17 @@
 #define TRT_PLUGIN_H
 #include "NvInferPlugin.h"
 #include "common/checkMacrosPlugin.h"
+#include "cublasWrapper.h"
+#include "cudnnWrapper.h"
 #include <cstring>
 #include <cuda_runtime.h>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 // Enumerator for status
 typedef enum
@@ -75,6 +79,8 @@ protected:
     std::string mNamespace;
 };
 
+std::shared_ptr<nvinfer1::pluginInternal::CudnnWrapper> createPluginCudnnWrapper(void* executionContextIdentifier);
+std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> createPluginCublasWrapper(void* executionContextIdentifier);
 } // namespace pluginInternal
 
 namespace plugin
@@ -100,15 +106,9 @@ OutType read(BufferType const*& buffer)
     return val;
 }
 
-inline int32_t getTrtSMVersionDec(int32_t smVersion)
-{
-    // Treat SM89 as SM86 temporarily.
-    return (smVersion == 89) ? 86 : smVersion;
-}
-
 inline int32_t getTrtSMVersionDec(int32_t majorVersion, int32_t minorVersion)
 {
-    return getTrtSMVersionDec(majorVersion * 10 + minorVersion);
+    return majorVersion * 10 + minorVersion;
 }
 
 // Check that all required field names are present in the PluginFieldCollection.
@@ -137,6 +137,10 @@ struct CudaBind
     }
 };
 
+// Convert a 64-bit dimension to a 32-bit dimension.
+// Throw exception if it doesn't fit.
+int32_t dimToInt32(int64_t);
+
 } // namespace plugin
 } // namespace nvinfer1
 
@@ -146,7 +150,7 @@ struct CudaBind
     do                                                                                                                 \
     {                                                                                                                  \
         if (status != 0)                                                                                               \
-            abort();                                                                                                   \
+            exit(EXIT_FAILURE);                                                                                                   \
     } while (0)
 
 #define ASSERT_PARAM(exp)                                                                                              \
@@ -216,7 +220,7 @@ struct CudaBind
         if (status != 0)                                                                                               \
         {                                                                                                              \
             DEBUG_PRINTF("%s %d CUDA FAIL %s\n", __FILE__, __LINE__, cudaGetErrorString(status));                      \
-            abort();                                                                                                   \
+            exit(EXIT_FAILURE);                                                                                                 \
         }                                                                                                              \
     }
 

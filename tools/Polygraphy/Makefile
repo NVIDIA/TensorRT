@@ -23,8 +23,15 @@ NPROC ?= 8
 BUILD_DIR := build
 TESTS_DIR := tests
 
+RUN_ALL_TESTS ?= 0
 EXTRA_PYTEST_OPTS ?=
-PYTEST_OPTS := -v -x --durations=5 --failed-first --new-first --script-launch-mode=subprocess $(EXTRA_PYTEST_OPTS)
+PYTEST_OPTS := $(EXTRA_PYTEST_OPTS) -v -x --durations=15 --failed-first --new-first --script-launch-mode=subprocess
+
+EXTRA_PYTEST_MARKERS :=
+
+ifeq ($(RUN_ALL_TESTS),0)
+    EXTRA_PYTEST_MARKERS +=  and not slow
+endif
 
 # Tests also check that docs can build
 test: docs install
@@ -32,8 +39,8 @@ test: docs install
 	export POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS=1
 	export CUDA_MODULE_LOADING=LAZY
     # Some tests need to be run serially - we annotate those with a `serial` marker.
-	python3 -m pytest $(TESTS_DIR) -m "serial" $(PYTEST_OPTS) && \
-		python3 -m pytest $(TESTS_DIR) -n $(NPROC) --dist=loadscope -m "not serial" $(PYTEST_OPTS)
+	python3 -m pytest $(TESTS_DIR) -m "serial $(EXTRA_PYTEST_MARKERS)" $(PYTEST_OPTS) && \
+		python3 -m pytest $(TESTS_DIR) -n $(NPROC) --dist=loadscope -m "not serial $(EXTRA_PYTEST_MARKERS)" $(PYTEST_OPTS)
 
 leak_check:
 	export PYTHONPATH=$(CURDIR):$${PYTHONPATH}
@@ -53,6 +60,6 @@ install_deps: build
 install: install_deps
 	- python3 -m pip install --force-reinstall $(CURDIR)/dist/*.whl
 
-docs:
+docs: build
 	mkdir -p $(BUILD_DIR)/docs
 	python3 `which sphinx-build` docs $(BUILD_DIR)/docs/ -j $(NPROC) -W

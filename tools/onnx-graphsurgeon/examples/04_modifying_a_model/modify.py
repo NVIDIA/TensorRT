@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,6 +43,7 @@ graph.outputs = [identity_out]
 # Therefore, you should only need to sort the graph when you have added new nodes out-of-order.
 # In this case, the identity node is already in the correct spot (it is the last node,
 # and was appended to the end of the list), but to be on the safer side, we can sort anyway.
-graph.cleanup().toposort()
+graph.cleanup(remove_unused_graph_inputs=True).toposort()
 
-onnx.save(gs.export_onnx(graph), "modified.onnx")
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "modified.onnx")

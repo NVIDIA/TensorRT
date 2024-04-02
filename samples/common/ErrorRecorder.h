@@ -17,7 +17,7 @@
 
 #ifndef ERROR_RECORDER_H
 #define ERROR_RECORDER_H
-#include "NvInferRuntimeCommon.h"
+#include "NvInferRuntimeBase.h"
 #include "logger.h"
 #include <atomic>
 #include <cstdint>

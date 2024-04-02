@@ -80,6 +80,14 @@ class TrtOnnxFlagArgs(BaseArgs):
             nargs="+",
             default=None,
         )
+        self.group.add_argument(
+            "--plugin-instancenorm",
+            help="Switch to clear the `trt.OnnxParserFlag.NATIVE_INSTANCENORM` flag and"
+            "force the usage of the plugin implementation of ONNX InstanceNorm."
+            "Note that `trt.OnnxParserFlag.NATIVE_INSTANCENORM` is ON by default since TensorRT 10.0.",
+            action="store_true",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -89,6 +97,7 @@ class TrtOnnxFlagArgs(BaseArgs):
             flags (List[str]): flags for onnxparser
         """
         self._flags = args_util.get(args, "onnx_flags", default=[])
+        self._plugin_instancenorm = args_util.get(args, "plugin_instancenorm", default=None)
 
     def get_flags(self):
         """
@@ -110,7 +119,7 @@ class TrtOnnxFlagArgs(BaseArgs):
             )
             flags.append("native_instancenorm")
 
-        return [make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None
+        return ([make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None, self._plugin_instancenorm)
 
 
 @mod.export()
@@ -175,7 +184,7 @@ class TrtLoadNetworkArgs(BaseArgs):
         self.group.add_argument(
             "--tensor-dtypes",
             "--tensor-datatypes",
-            help="Data type to use for each tensor. This should be specified on a per-tensor basis, using the format: "
+            help="Data type to use for each network I/O tensor. This should be specified on a per-tensor basis, using the format: "
             "--tensor-datatypes <tensor_name>:<tensor_datatype>. Data type values come from the TensorRT data type aliases, like "
             "float32, float16, int8, bool, etc. For example: --tensor-datatypes example_tensor:float16 other_tensor:int8. ",
             nargs="+",
@@ -185,7 +194,7 @@ class TrtLoadNetworkArgs(BaseArgs):
         if self._allow_tensor_formats:
             self.group.add_argument(
                 "--tensor-formats",
-                help="Formats to allow for each tensor. This should be specified on a per-tensor basis, using the format: "
+                help="Formats to allow for each network I/O tensor. This should be specified on a per-tensor basis, using the format: "
                 "--tensor-formats <tensor_name>:[<tensor_formats>,...]. Format values come from the `trt.TensorFormat` enum "
                 "and are case-insensitve. "
                 "For example: --tensor-formats example_tensor:[linear,chw4] other_tensor:[chw16]. ",
@@ -214,6 +223,21 @@ class TrtLoadNetworkArgs(BaseArgs):
             default=None,
         )
 
+        self.group.add_argument(
+            "--strongly-typed",
+            help="Mark the network as being strongly typed.",
+            action="store_true",
+            default=None,
+        )
+
+        self.group.add_argument(
+            "--mark-debug",
+            help="Specify list of names of tensors to be marked as debug tensors."
+            "For example, `--mark-debug tensor1 tensor2 tensor3`. ",
+            nargs="+",
+            default=None,
+        )
+
     def parse_impl(self, args):
         """
         Parses command-line arguments and populates the following attributes:
@@ -227,6 +251,8 @@ class TrtLoadNetworkArgs(BaseArgs):
             tensor_formats (Dict[str, List[str]]): Tensor names mapped to their desired formats, in string form.
             postprocess_scripts (List[Tuple[str, str]]):
                     A list of tuples specifying a path to a network postprocessing script and the name of the postprocessing function.
+            strongly_typed (bool): Whether to mark the network as being strongly typed.
+            mark_debug (List[str]): Names of tensors which should be marked as debug tensors.
         """
         self.outputs = args_util.get_outputs(args, "trt_outputs")
 
@@ -272,6 +298,10 @@ class TrtLoadNetworkArgs(BaseArgs):
                 G_LOGGER.warning(f"Could not find postprocessing script {script_path}")
             self.postprocess_scripts.append((script_path, func))
 
+        self.strongly_typed = args_util.get(args, "strongly_typed")
+        
+        self.mark_debug = args_util.get(args, "mark_debug")
+
     def add_to_script_impl(self, script):
         network_func_name = self.arg_groups[ModelArgs].extra_model_info
         if self.trt_network_func_name is not None:
@@ -281,10 +311,10 @@ class TrtLoadNetworkArgs(BaseArgs):
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
         outputs = args_util.get_outputs_for_script(script, self.outputs)
-        parser_flags = self.arg_groups[TrtOnnxFlagArgs].get_flags()
+        parser_flags, plugin_instancenorm = self.arg_groups[TrtOnnxFlagArgs].get_flags()
 
         if any(
-            arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats, parser_flags]
+            arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats, parser_flags, plugin_instancenorm]
         ):
             script.add_import(imports="tensorrt", imp_as="trt")
 
@@ -308,6 +338,8 @@ class TrtLoadNetworkArgs(BaseArgs):
                     "NetworkFromOnnxBytes",
                     self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader),
                     flags=parser_flags,
+                    plugin_instancenorm=plugin_instancenorm,
+                    strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
             else:
@@ -316,6 +348,8 @@ class TrtLoadNetworkArgs(BaseArgs):
                     "NetworkFromOnnxPath",
                     self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file),
                     flags=parser_flags,
+                    plugin_instancenorm=plugin_instancenorm,
+                    strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:
@@ -346,6 +380,9 @@ class TrtLoadNetworkArgs(BaseArgs):
         )
         loader_name = add_loader_if_nondefault(
             "SetTensorFormats", "set_tensor_formats", tensor_formats=self.tensor_formats
+        )
+        loader_name = add_loader_if_nondefault(
+            "MarkDebug", "mark_debug", mark_debug=self.mark_debug
         )
 
         return loader_name

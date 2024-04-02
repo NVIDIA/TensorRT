@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,6 @@
 #ifndef TRT_MODULATED_DEFORM_CONV_PLUGIN_H
 #define TRT_MODULATED_DEFORM_CONV_PLUGIN_H
 #include <cstdint>
-#include <cublas_v2.h>
 
 #include <memory>
 #include <string>
@@ -97,7 +96,9 @@ private:
     int32_t mGroup;
     bool mWithBias;
 
-    cublasHandle_t mCublasHandle;
+    nvinfer1::pluginInternal::cublasHandle_t mCublasHandle{nullptr};
+    // the wrapper pointer is shared among all plugins attached to the same context.
+    std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 };
 
 class ModulatedDeformableConvPluginDynamicCreator : public nvinfer1::IPluginCreator

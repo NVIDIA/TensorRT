@@ -61,14 +61,18 @@ class IRuntime
 {
 public:
     //!
-    //! \brief Deserialize an engine from a stream.
+    //! \brief Deserialize an engine from a byte array.
     //!
     //! If the serialized engine requires plugins the plugin creator must be registered by calling
-    //! IPluginRegistry::registerCreator() before calling deserializeCudaEngine(). Every plugin creator
-    //! registered must have a unique combination of namespace, plugin name, and version.
+    //! IPluginRegistry::registerCreator() before calling deserializeCudaEngine().
     //!
-    //! \param blob The memory that holds the serialized engine.
-    //! \param size The size of the memory in bytes.
+    //! \param blob The memory that holds the serialized engine. The content must be a copy of
+    //! the result of calling IHostMemory::data() on a serialized plan that was created via calling
+    //! IBuilder::buildSerializedNetwork() on a network within the supported safety scope.
+    //! Additionally, it must have been validated via IConsistencyChecker::validate().
+    //!
+    //! \param size The size of the memory in bytes. This must be the result of calling IHostMemory::size()
+    //! on the same IHostMemory object that is associated with the blob parameter.
     //!
     //! \return The engine, or nullptr if it could not be deserialized.
     //!
@@ -83,12 +87,9 @@ public:
 
     //!
     //! \brief Set the GPU allocator.
-    //! \param allocator Set the GPU allocator to be used by the runtime. All GPU memory acquired will use this
-    //! allocator. If NULL is passed, the default allocator will be used.
     //!
-    //! Default: uses cudaMalloc/cudaFree.
-    //!
-    //! If nullptr is passed, the default allocator will be used.
+    //! \param allocator The GPU allocator to be used by the runtime. All GPU memory acquired will use this
+    //! allocator. If nullptr is passed, the default allocator will be used, which calls cudaMalloc and cudaFree.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -100,12 +101,13 @@ public:
     //! \brief Set the ErrorRecorder for this interface.
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, an error code of ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has already been
+    //! registered, or ILogger::Severity::kERROR will be logged if the recorder has not yet been registered.
     //!
-    //! \param recorder The error recorder to register with this interface.
-    //
+    //! \param recorder The error recorder to register with this interface, or nullptr to deregister the current
+    //! error recorder.
+    //!
     //! \see getErrorRecorder()
     //!
     //! \usage
@@ -118,9 +120,10 @@ public:
     //! \brief Get the ErrorRecorder assigned to this interface.
     //!
     //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
-    //! so a nullptr will be returned if setErrorRecorder has not been called.
+    //! so a nullptr will be returned if setErrorRecorder has not been called or a previously assigned error recorder
+    //! has been deregistered.
     //!
-    //! \return A pointer to the IErrorRecorder object that has been registered.
+    //! \return A pointer to the IErrorRecorder object that has been registered, or nullptr if no error recorder is set.
     //!
     //! \see setErrorRecorder()
     //!
@@ -149,118 +152,19 @@ class ICudaEngine
 {
 public:
     //!
-    //! \brief Get the number of binding indices.
-    //!
-    //! \return The number of binding indices.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getNbIOTensors.
-    //!
-    //! \see getBindingIndex()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual std::int32_t getNbBindings() const noexcept = 0;
-
-    //!
-    //! \brief Retrieve the binding index for a named tensor.
-    //!
-    //! safe::IExecutionContext::enqueueV2() requires an array of buffers.
-    //! Engine bindings map from tensor names to indices in this array.
-    //! Binding indices are assigned at engine build time, and take values in the range [0 ... n-1] where n is the total
-    //! number of inputs and outputs.
-    //!
-    //! \warning Strings passed to the runtime must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
-    //!
-    //! \param name The tensor name.
-    //! \return The binding index for the named tensor, or -1 if the name is not found.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
-    //! based methods.
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual std::int32_t getBindingIndex(AsciiChar const* const name) const noexcept = 0;
-
-    //!
-    //! \brief Retrieve the name corresponding to a binding index.
-    //!
-    //! This is the reverse mapping to that provided by getBindingIndex().
-    //!
-    //! \param bindingIndex The binding index.
-    //! \return The name corresponding to the index, or nullptr if the index is out of range.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by name-based methods. Use them instead of binding-index
-    //! based methods.
-    //!
-    //! \see getBindingIndex()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual AsciiChar const* getBindingName(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
-    //! \brief Determine whether a binding is an input binding.
-    //!
-    //! \param bindingIndex The binding index.
-    //! \return True if the index corresponds to an input binding and the index is in range.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by tensorIOMode().
-    //!
-    //! \see safe::ICudaEngine::tensorIOMode()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual bool bindingIsInput(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
-    //! \brief Get the dimensions of a binding.
-    //!
-    //! \param bindingIndex The binding index.
-    //! \return The dimensions of the binding if the index is in range, otherwise Dims()
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorShape().
-    //!
-    //! \see safe::ICudaEngine::getTensorShape()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual Dims getBindingDimensions(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
-    //! \brief Determine the required data type for a buffer from its binding index.
-    //!
-    //! \param bindingIndex The binding index.
-    //! \return The type of the data in the buffer.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorDataType().
-    //!
-    //! \see safe::ICudaEngine::getTensorDataType()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual DataType getBindingDataType(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
     //! \brief Create an execution context.
     //!
     //! \see safe::IExecutionContext.
     //!
+    //! \return An execution context object if it can be constructed, or nullptr if the construction fails.
+    //!
+    //! \details Reasons for failure may include but not be limited to:
+    //! - Heap memory exhaustion
+    //! - Device memory exhaustion
+    //!
     //! \usage
     //! - Allowed context for the API call
-    //!   - Thread-safe: Yes; if createExecutionContext fails, users should treat this as a critical
+    //!   - Thread-safe: Yes; if createExecutionContext fails, users must treat this as a critical
     //!                  error and not perform any subsequent TensorRT operations apart from outputting
     //!                  the error logs.
     //!
@@ -269,13 +173,18 @@ public:
     //!
     //! \brief Create an execution context without any device memory allocated.
     //!
-    //! The memory for execution of this device context must be supplied by the application.
+    //! The memory for execution of this device context must be supplied by the application by calling
+    //! safe::IExecutionContext::setDeviceMemory().
     //!
     //! \see getDeviceMemorySize() safe::IExecutionContext::setDeviceMemory()
     //!
+    //! \return An execution context object if it can be constructed, or nullptr if the construction fails.
+    //!
+    //! \details Reasons for failure may include but not be limited to heap memory exhaustion.
+    //!
     //! \usage
     //! - Allowed context for the API call
-    //!   - Thread-safe: Yes; if createExecutionContext fails, users should treat this as a critical
+    //!   - Thread-safe: Yes; if createExecutionContext fails, users must treat this as a critical
     //!                  error and not perform any subsequent TensorRT operations apart from outputting
     //!                  the error logs.
     //!
@@ -286,77 +195,15 @@ public:
     //!
     //! \see safe::IExecutionContext::setDeviceMemory()
     //!
+    //! \return Size of a contiguous memory buffer (in bytes) that users need to provide to
+    //! safe::IExecutionContext::setDeviceMemory() if the execution context has been created by calling
+    //! createExecutionContextWithoutDeviceMemory().
+    //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
     virtual size_t getDeviceMemorySize() const noexcept = 0;
-
-    //!
-    //! \brief Return the number of bytes per component of an element.
-    //!
-    //! The vector component size is returned if getBindingVectorizedDim() != -1.
-    //!
-    //! \param bindingIndex The binding Index.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorBytesPerComponent().
-    //!
-    //! \see safe::ICudaEngine::getTensorBytesPerComponent()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual std::int32_t getBindingBytesPerComponent(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
-    //! \brief Return the number of components included in one element.
-    //!
-    //! The number of elements in the vectors is returned if getBindingVectorizedDim() != -1.
-    //!
-    //! \param bindingIndex The binding Index.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorComponentsPerElement().
-    //!
-    //! \see safe::ICudaEngine::getTensorComponentsPerElement()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual std::int32_t getBindingComponentsPerElement(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
-    //! \brief Return the binding format.
-    //!
-    //! \param bindingIndex The binding Index.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorFormat().
-    //!
-    //! \see safe::ICudaEngine::getTensorFormat()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual TensorFormat getBindingFormat(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
-    //! \brief Return the dimension index that the buffer is vectorized.
-    //!
-    //! Specifically -1 is returned if scalars per vector is 1.
-    //!
-    //! \param bindingIndex The binding Index.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorVectorizedDim().
-    //!
-    //! \see safe::ICudaEngine::getTensorVectorizedDim()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual std::int32_t getBindingVectorizedDim(std::int32_t const bindingIndex) const noexcept = 0;
 
     //!
     //! \brief Returns the name of the network associated with the engine.
@@ -366,7 +213,8 @@ public:
     //!
     //! \see INetworkDefinition::setName(), INetworkDefinition::getName()
     //!
-    //! \return A null-terminated C-style string representing the name of the network.
+    //! \return A NULL-terminated C-style string representing the name of the network, which will have a length of
+    //! 1024 bytes or less including the NULL terminator.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -378,12 +226,12 @@ public:
     //! \brief Set the ErrorRecorder for this interface.
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, the error code ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has been registered.
     //!
-    //! \param recorder The error recorder to register with this interface.
-    //
+    //! \param recorder The error recorder to register with this interface, or nullptr to deregister the current.
+    //! error recorder.
+    //!
     //! \see getErrorRecorder()
     //!
     //! \usage
@@ -399,7 +247,8 @@ public:
     //! nullptr will be returned if an error reporter has not been inherited
     //! from the IRuntime, and setErrorReporter() has not been called.
     //!
-    //! \return A pointer to the IErrorRecorder object that has been registered.
+    //! \return A pointer to the IErrorRecorder object that has been registered, or nullptr if none has been
+    //! registered.
     //!
     //! \see setErrorRecorder()
     //!
@@ -417,71 +266,77 @@ public:
     ICudaEngine& operator=(ICudaEngine&&) & = delete;
 
     //!
-    //! \brief Get extent of an input or output tensor.
+    //! \brief Get the extent of an input or output tensor.
+    //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less including the
+    //! NULL terminator.
     //!
-    //! \return Extent of the tensor. Dims{-1, {}} will be returned if
-    //! (1) name is not the name of an input or output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit.
+    //! \return Extent of the tensor. The invalid value Dims{-1, {}} will be returned if
+    //! - name is not the name of an input or output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual Dims getTensorShape(AsciiChar const* tensorName) const noexcept = 0;
+    virtual Dims getTensorShape(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
     //! \brief Determine the required data type for a buffer from its tensor name.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less including the
+    //! NULL terminator.
     //!
-    //! \return The type of the data in the buffer. DataType::kFLOAT will be returned if
-    //! (1) name is not the name of an input or output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit.
+    //! \return The type of the data in the buffer. The default value DataType::kFLOAT will be returned if
+    //! - name is not the name of an input or output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual DataType getTensorDataType(AsciiChar const* tensorName) const noexcept = 0;
+    virtual DataType getTensorDataType(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
     //! \brief Determine whether a tensor is an input or output tensor.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less including the
+    //! NULL terminator.
     //!
-    //! \return kINPUT if tensorName is an input, kOUTPUT if tensorName is an output, or kNONE if neither.
+    //! \return kINPUT if tensorName is the name of an input tensor, kOUTPUT if tensorName is the name of an output
+    //! tensor. The invalid value kNONE is returned if
+    //! - tensorName exceeds the string length limit, or
+    //! - tensorName is nullptr, or
+    //! - tensorName does not correspond to any input or output tensor.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual TensorIOMode getTensorIOMode(AsciiChar const* tensorName) const noexcept = 0;
+    virtual TensorIOMode getTensorIOMode(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
-    //! \brief Return the number of bytes per component of an element.
+    //! \brief Return the size of the tensor data type in bytes for a vectorized tensor.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less including the
+    //! NULL terminator.
     //!
-    //! \return The vector component size. 0 will be returned if
-    //! (1) name is not the name of an input or output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit, or
-    //! (4) the tensor of given name is not vectorized.
+    //! \return The size of the tensor data type in bytes if the tensor is vectorized (4 for float and int32,
+    //! 2 for half, 1 for int8). 0 will be returned if
+    //! - name is not the name of an input or output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit, or
+    //! - the tensor of the given name is not vectorized.
     //!
     //! \see safe::ICudaEngine::getTensorVectorizedDim()
     //!
@@ -489,21 +344,21 @@ public:
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getTensorBytesPerComponent(AsciiChar const* tensorName) const noexcept = 0;
+    virtual std::int32_t getTensorBytesPerComponent(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
-    //! \brief Return the number of components included in one element.
+    //! \brief Return the number of components included in one element for a vectorized tensor.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less including the
+    //! NULL terminator.
     //!
-    //! \return The vector component size. -1 will be returned if
-    //! (1) name is not the name of an input or output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit, or
-    //! (4) the tensor of given name is not vectorized.
+    //! \return The vector length (in scalars) for a vectorized tensor, or 1 for a scalar tensor.
+    //! The invalid value -1 will be returned if
+    //! - name is not the name of an input or output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit.
     //!
     //! \see safe::ICudaEngine::getTensorVectorizedDim()
     //!
@@ -511,48 +366,48 @@ public:
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getTensorComponentsPerElement(AsciiChar const* tensorName) const noexcept = 0;
+    virtual std::int32_t getTensorComponentsPerElement(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
     //! \brief Return the tensor format.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less including the
+    //! NULL terminator.
     //!
     //! \return The tensor format. TensorFormat::kLINEAR will be returned if
-    //! (1) name is not the name of an input or output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit.
+    //! - name is not the name of an input or output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual TensorFormat getTensorFormat(AsciiChar const* tensorName) const noexcept = 0;
+    virtual TensorFormat getTensorFormat(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
-    //! \brief Return the dimension index along which buffer is vectorized.
+    //! \brief Return the dimension index along which the buffer is vectorized.
     //!
-    //! Specifically -1 is returned if scalars per vector is 1.
+    //! Specifically, -1 is returned if the tensor is scalar.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less including the
+    //! NULL terminator.
     //!
     //! \return The dimension index along which the buffer is vectorized. -1 will be returned if
-    //! (1) name is not the name of an input or output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit, or
-    //! (4) the tensor of given name is not vectorized.
+    //! - name is not the name of an input or output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit (1024 bytes or less including the NULL terminator), or
+    //! - the tensor of given name is not vectorized.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual std::int32_t getTensorVectorizedDim(AsciiChar const* tensorName) const noexcept = 0;
+    virtual std::int32_t getTensorVectorizedDim(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
     //! \brief Return the number of input and output tensors for the network from which the engine was built.
@@ -570,13 +425,14 @@ public:
     //!
     //! \brief Return the name of an IO tensor.
     //!
-    //! If the index does not fall between 0 and getNbIOTensors()-1, the function will fail with an error code of ErrorCode::kINVALID_ARGUMENT(3) that is
-    //! emitted to the registered IErrorRecorder.
+    //! If the index does not fall between 0 and getNbIOTensors()-1, the function will fail with an error code
+    //! of ErrorCode::kINVALID_ARGUMENT(3) that is emitted to the registered IErrorRecorder.
     //!
-    //! \param index The value that falls between 0 and getNbIOTensors()-1.
+    //! \param index The IO tensor index.
     //!
-    //! \return The name of an IO tensor. nullptr will be returned if the index does not fall between 0 and
-    //! getNbIOTensors()-1.
+    //! \return The name of an IO tensor, which will be a NULL-terminated string of 1024 bytes or less (including the
+    //! NULL terminator) if the index is in the range (between 0 and getNbIOTensors()-1). nullptr will be returned if
+    //! the index is not in range.
     //!
     //! \see getNbIOTensors()
     //!
@@ -588,17 +444,35 @@ public:
 };
 
 //!
-//! \brief Space to record information about floating point runtime errors
+//! \brief Space to record information about runtime errors.
 //!
-//! NAN errors occur when NAN values are stored in an INT8 quantized datatype.
-//! INF errors occur when +-INF values are stored in an INT8 quantized datatype.
+//! kNAN_CONSUMED errors occur when NAN values are stored in an INT8 quantized datatype.
+//! kINF_CONSUMED errors occur when +-INF values are stored in an INT8 quantized datatype.
+//! kGATHER_OOB errors occur when a gather index tensor contains a value that is outside of the data tensor.
+//! kSCATTER_OOB and kSCATTER_RACE are reserved for future use.
 //!
-struct FloatingPointErrorInformation
+//! Mark the RuntimeErrorType that occurs during asynchronous kernel execution.
+struct RuntimeErrorInformation
 {
-    //! Total count of errors relating to NAN values (0 if none)
-    int32_t nbNanErrors;
-    //! Total count of errors relating to INF values (0 if none)
-    int32_t nbInfErrors;
+    //! Each bit represents a RuntimeErrorType that has occurred during kernel execution.
+    uint64_t bitMask;
+};
+
+//!
+//! \brief Enum to represent runtime error types.
+//!
+enum class RuntimeErrorType : uint64_t
+{
+    //! NaN floating-point value was silently consumed
+    kNAN_CONSUMED = 1ULL << 0,
+    //! Inf floating-point value was silently consumed
+    kINF_CONSUMED = 1ULL << 1,
+    //! Out-of-bounds access in gather operation
+    kGATHER_OOB = 1ULL << 2,
+    //! Out-of-bounds access in scatter operation
+    kSCATTER_OOB = 1ULL << 3,
+    //! Race condition in scatter operation
+    kSCATTER_RACE = 1ULL << 4,
 };
 
 //!
@@ -633,8 +507,9 @@ public:
     //!
     //! This method copies the name string.
     //!
-    //! \warning Strings passed to the runtime must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning Strings passed to the runtime must be NULL terminated and have a length of 1024 bytes or less
+    //! including the NULL terminator. Otherwise, the operation will not change the execution context name, and
+    //! an error message will be recorded via the error recorder.
     //!
     //! \see getName()
     //!
@@ -647,6 +522,9 @@ public:
     //!
     //! \brief Return the name of the execution context.
     //!
+    //! \return The name that was passed to setName(), as a NULL-terminated string of 1024 bytes or less including
+    //! the NULL terminator. An empty string will be returned as the default value.
+    //!
     //! \see setName()
     //!
     //! \usage
@@ -658,11 +536,17 @@ public:
     //!
     //! \brief Set the device memory for use by this execution context.
     //!
+    //! \param memory The start address of a device memory buffer whose size in bytes must be at least the value
+    //! returned by getEngine().getDeviceMemorySize().
+    //!
     //! If using enqueueV2() to run the network, The memory is in use
     //! from the invocation of enqueueV2() until network execution is complete.
     //! Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
     //!
     //! \warning Do not release or use for other purposes the memory set here during network execution.
+    //!
+    //! \warning If the execution context has been created by calling createExecutionContext(), this
+    //! function must not be used and will fail with an error message if called.
     //!
     //! \see safe::ICudaEngine::getDeviceMemorySize() safe::ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
@@ -673,30 +557,16 @@ public:
     virtual void setDeviceMemory(void* const memory) noexcept = 0;
 
     //!
-    //! \brief Return the strides of the buffer for the given binding.
-    //!
-    //! \param bindingIndex The binding index.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by getTensorStrides().
-    //!
-    //! \see safe::IExecutionContext::getTensorStrides()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    TRT_DEPRECATED virtual Dims getStrides(std::int32_t const bindingIndex) const noexcept = 0;
-
-    //!
     //! \brief Set the ErrorRecorder for this interface.
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, the error code ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has been registered. The
+    //! lifetime of the error recorder object must exceed the lifetime of the execution context.
     //!
-    //! \param recorder The error recorder to register with this interface.
-    //
+    //! \param recorder Either a pointer to a valid error recorder object to register with this interface,
+    //!                 or nullptr to deregister the current recorder.
+    //!
     //! \see getErrorRecorder()
     //!
     //! \usage
@@ -711,39 +581,16 @@ public:
     //! Retrieves the assigned error recorder object for the given class. A default error recorder does not exist,
     //! so a nullptr will be returned if setErrorRecorder has not been called.
     //!
-    //! \return A pointer to the IErrorRecorder object that has been registered.
+    //! \return A pointer to the IErrorRecorder object that has been registered, or nullptr if the error recorder
+    //! has been deregistered or not set.
     //!
     //! \see setErrorRecorder()
     //!
     //! \usage
     //! - Allowed context for the API call
-    //!   - Thread-safe: No
+    //!   - Thread-safe: Yes
     //!
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
-
-    //!
-    //! \brief Enqueue inference of a batch on a stream.
-    //!
-    //! This method requires an array of input and output buffers. The mapping from tensor names to indices can be
-    //! queried using safe::ICudaEngine::getBindingIndex().
-    //! This method only works for an execution context built from a network without an implicit batch dimension.
-    //! \param bindings An array of pointers to input and output buffers for the network.
-    //! \param stream A cuda stream on which the inference kernels will be enqueued.
-    //! \param inputConsumed An optional event which will be signaled when the input buffers can be refilled with new
-    //! data.
-    //!
-    //! \return True if the kernels were enqueued successfully.
-    //!
-    //! \deprecated Deprecated in TensorRT 8.5. Superseded by enqueueV3().
-    //!
-    //! \see safe::IExecutionContext::enqueueV3()
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: No
-    //!
-    TRT_DEPRECATED virtual bool enqueueV2(
-        void* const* const bindings, cudaStream_t const stream, cudaEvent_t const* const inputConsumed) noexcept = 0;
 
     IExecutionContext() = default;
     virtual ~IExecutionContext() noexcept = default;
@@ -753,17 +600,18 @@ public:
     IExecutionContext& operator=(IExecutionContext&&) & = delete;
 
     //!
-    //! \brief Set error buffer output for floating point errors.
+    //! \brief Set error buffer output for runtime errors.
     //!
     //! The error buffer output must be allocated in device memory and will be used for subsequent
-    //! calls to enqueueV2. Checking the contents of the error buffer after inference is the responsibility
-    //! of the application. The pointer passed here must have alignment adequate for the FloatingPointErrorInformation
-    //! struct.
+    //! calls to enqueueV2() or enqueueV3(). Checking the contents of the error buffer after inference is the
+    //! responsibility of the application. The pointer passed here must have alignment adequate for the
+    //! RuntimeErrorInformation struct.
     //!
-    //! \warning Do not release or use the contents of the error buffer for any other purpose before synchronizing
-    //! on the CUDA stream passed to enqueueV2.
+    //! \warning The buffer is written if reportable errors are encountered during network execution. Releasing the
+    //! buffer before network execution is complete will result in undefined behavior. Accessing the memory before
+    //! network execution is complete may not correctly capture the error state.
     //!
-    //! \param buffer The device memory to use as floating point error buffer
+    //! \param buffer The device memory address of the runtime error information buffer.
     //!
     //! \see getErrorBuffer()
     //!
@@ -771,12 +619,12 @@ public:
     //! - Allowed context for the API call
     //!   - Thread-safe: No
     //!
-    virtual void setErrorBuffer(FloatingPointErrorInformation* const buffer) noexcept = 0;
+    virtual void setErrorBuffer(RuntimeErrorInformation* const buffer) noexcept = 0;
 
     //!
-    //! \brief Get error buffer output for floating point errors.
+    //! \brief Get error buffer output for runtime errors.
     //!
-    //! \return Pointer to device memory to use as floating point error buffer or nullptr if not set.
+    //! \return Pointer to device memory to use as runtime error buffer or nullptr if not set.
     //!
     //! \see setErrorBuffer()
     //!
@@ -784,29 +632,30 @@ public:
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual FloatingPointErrorInformation* getErrorBuffer() const noexcept = 0;
+    virtual RuntimeErrorInformation* getErrorBuffer() const noexcept = 0;
 
     //!
     //! \brief Return the strides of the buffer for the given tensor name.
     //!
     //! The strides are in units of elements, not components or bytes.
+    //! Elements are vectors (for a vectorized format) or scalars (for a scalar format).
     //! For example, for TensorFormat::kHWC8, a stride of one spans 8 scalars.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less
+    //! including the NULL terminator.
     //!
     //! \return The strides of the buffer for the given tensor name. Dims{-1, {}} will be returned if
-    //! (1) name is not the name of an input or output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit.
+    //! - name is not the name of an input or output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual Dims getTensorStrides(AsciiChar const* tensorName) const noexcept = 0;
+    virtual Dims getTensorStrides(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
     //! \brief Set memory address for given input tensor.
@@ -816,23 +665,27 @@ public:
     //! Before calling enqueueV3(), each input must have a non-null address.
     //!
     //! \param tensorName The name of an input tensor.
-    //! \param data The pointer (void const*) to the const data owned by the user.
+    //! \param data The pointer (void const*) to the input tensor data, which is device memory owned by the user.
+    //! Users are responsible for ensuring that the buffer size has at least the expected length, which is
+    //! the product of the tensor dimensions (with the vectorized dimension padded to a multiple of the vector length)
+    //! times the data type size.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
-    //! \warning The pointer must have at least 256-byte alignment.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less
+    //! including the NULL terminator.
+    //!
+    //! \warning The data pointer must have 256-byte alignment.
     //!
     //! \return True on success, false if
-    //! (1) name is not the name of an input tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit, or
-    //! (4) pointer to the const data is nullptr or not aligned.
+    //! - name is not the name of an input tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit, or
+    //! - pointer to the const data is nullptr or not correctly aligned.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: No
     //!
-    virtual bool setInputTensorAddress(AsciiChar const* tensorName, void const* data) noexcept = 0;
+    virtual bool setInputTensorAddress(AsciiChar const* const tensorName, void const* const data) noexcept = 0;
 
     //!
     //! \brief Set memory address for given output tensor.
@@ -842,43 +695,48 @@ public:
     //! Before calling enqueueV3(), each output must have a non-null address.
     //!
     //! \param tensorName The name of an output tensor.
-    //! \param data The pointer (void*) to the data owned by the user.
+    //! \param data The pointer (void*) to the output tensor data, which is device memory owned by the user.
+    //! Users are responsible for ensuring that the buffer size has at least the expected length, which is
+    //! the product of the tensor dimensions (with the vectorized dimension padded to a multiple of the vector length)
+    //! times the data type size.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
-    //! \warning The pointer must have at least 256-byte alignment.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less
+    //! including the NULL terminator.
+    //! \warning The data pointer must have 256-byte alignment.
     //!
     //! \return True on success. Return false if
-    //! (1) name is not the name of an output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit, or
-    //! (4) pointer to data is nullptr or not aligned.
+    //! - name is not the name of an output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit, or
+    //! - pointer to data is nullptr or not aligned.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: No
     //!
-    virtual bool setOutputTensorAddress(AsciiChar const* tensorName, void* data) noexcept = 0;
+    virtual bool setOutputTensorAddress(AsciiChar const* const tensorName, void* const data) noexcept = 0;
 
     //!
-    //! \brief Mark input as consumed.
+    //! \brief Set the event to mark inputs as consumed.
     //!
     //! Passing event==nullptr removes whatever event was set, if any.
     //!
-    //! \param event The cuda event that is triggered after all input tensors have been consumed.
+    //! \param event The CUDA event that is signaled after all input tensors have been consumed, or nullptr to remove
+    //!        an event that was previously set.
     //!
-    //! \return True on success, false if error occurred.
+    //! \return True on success, false if an error occurred.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: No
     //!
-    virtual bool setInputConsumedEvent(cudaEvent_t event) noexcept = 0;
+    virtual bool setInputConsumedEvent(cudaEvent_t const event) noexcept = 0;
 
     //!
     //! \brief Return the event associated with consuming the input.
     //!
-    //! \return The cuda event, nullptr will be returned if the event is not set yet.
+    //! \return The CUDA event that was passed to setInputConsumedEvent(). nullptr will be returned if the event is
+    //! not set.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -891,57 +749,61 @@ public:
     //!
     //! \param tensorName The name of an input tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less
+    //! including the NULL terminator.
     //!
-    //! \return The memory address for the given input tensor. nullptr will be returned if
-    //! (1) name is not the name of an input tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit, or
-    //! (4) the memory address for the given input tensor is not set yet.
+    //! \return The device memory address for the given input tensor. nullptr will be returned if
+    //! - name is not the name of an input tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit, or
+    //! - the memory address for the given input tensor is not set.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual void const* getInputTensorAddress(AsciiChar const* tensorName) const noexcept = 0;
+    virtual void const* getInputTensorAddress(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
     //! \brief Get memory address for given output tensor.
     //!
     //! \param tensorName The name of an output tensor.
     //!
-    //! \warning The string tensorName must be 1024 characters or less including NULL terminator and must be
-    //! NULL terminated.
+    //! \warning The string tensorName must be NULL terminated and have a length of 1024 bytes or less
+    //! including the NULL terminator.
     //!
-    //! \return Raw output data pointer (void*) for given output tensor, return nullptr if
-    //! (1) name is not the name of an output tensor, or
-    //! (2) name is nullptr, or
-    //! (3) name exceeds the string length limit, or
-    //! (4) the memory address for the given output tensor is not set yet.
+    //! \return The device memory address for the given output tensor. Return nullptr if
+    //! - name is not the name of an output tensor, or
+    //! - name is nullptr, or
+    //! - name exceeds the string length limit, or
+    //! - the memory address for the given output tensor is not set.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual void* getOutputTensorAddress(AsciiChar const* tensorName) const noexcept = 0;
+    virtual void* getOutputTensorAddress(AsciiChar const* const tensorName) const noexcept = 0;
 
     //!
     //! \brief Enqueue inference on a stream.
     //!
     //! Modifying or releasing memory that has been registered for the tensors before stream
-    //! synchronization or the event passed to setInputConsumedEvent has been being triggered results in undefined
+    //! synchronization or the event passed to setInputConsumedEvent has been signaled results in undefined
     //! behavior.
     //!
-    //! \param stream A cuda stream on which the inference kernels will be enqueued.
+    //! \param stream A CUDA stream on which the inference kernels will be enqueued.
     //!
     //! \return True on success, false if any execution error occurred.
+    //! Errors may include but not be limited to:
+    //! - Internal errors during executing one engine layer
+    //! - CUDA errors
+    //! - Some input or output tensor addresses have not been set.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
-    virtual bool enqueueV3(cudaStream_t stream) noexcept = 0;
+    virtual bool enqueueV3(cudaStream_t const stream) noexcept = 0;
 };
 
 //!
@@ -952,7 +814,7 @@ public:
 //! Internally, the plugin registry is considered to be a singleton so all
 //! plugins in an application are part of the same global registry.
 //! Note that the plugin registry is only supported for plugins of type
-//! IPluginV2 and should also have a corresponding IPluginCreator implementation.
+//! IPluginV2 and must also have a corresponding IPluginCreator implementation.
 //!
 //! \see IPluginV2 and IPluginCreator
 //!
@@ -966,11 +828,23 @@ class IPluginRegistry
 {
 public:
     //!
-    //! \brief Register a plugin creator. Returns false if one with same type
-    //! is already registered.
+    //! \brief Register a plugin creator.
     //!
-    //! \warning The string pluginNamespace must be 1024 bytes or less including the NULL terminator and must be NULL
-    //! terminated.
+    //! \param creator The plugin creator to be registered.
+    //!
+    //! \param pluginNamespace A NULL-terminated namespace string, which must be 1024 bytes or less including the NULL
+    //! terminator. It must be identical with the result of calling
+    //! IPluginCreator::getPluginNamespace() on the creator object.
+    //!
+    //! \return True if the registration succeeded, else false.
+    //!
+    //! \details Registration may fail for any of the following reasons:
+    //! - The pluginNamespace string is a nullptr.
+    //! - The pluginNamespace string exceeds the maximum length.
+    //! - The pluginNamespace string does not match the result of creator.getPluginNamespace().
+    //! - There have already been 100 plugin creators registered (maximum number of plugins exceeded).
+    //! - Another plugin creator with the same combination of plugin name, version and namespace has already been
+    //!   registered.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -980,7 +854,12 @@ public:
 
     //!
     //! \brief Return all the registered plugin creators and the number of
-    //! registered plugin creators. Returns nullptr if none found.
+    //! registered plugin creators. Returns nullptr if none is found.
+    //!
+    //! \param[out] numCreators If the call completes successfully, the number of registered plugin creators (which
+    //!                         will be an integer between 0 and 100 inclusive)
+    //! \return The start address of an IPluginCreator* array of length numCreators if at least one plugin creator
+    //!         has been registered, or nullptr if there are no registered plugin creators.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -992,27 +871,37 @@ public:
     //! \brief Return plugin creator based on plugin name, version, and
     //! namespace associated with plugin during network creation.
     //!
-    //! \warning The strings pluginName, pluginVersion, and pluginNamespace must be 1024 bytes or less including the
-    //! NULL terminator and must be NULL terminated.
+    //! \warning The strings pluginName, pluginVersion, and pluginNamespace must be NULL terminated and have a length
+    //! of 1024 bytes or less including the NULL terminator.
+    //!
+    //! \param pluginName The plugin name string
+    //! \param pluginVersion The plugin version string
+    //! \param pluginNamespace The plugin namespace (by default empty string)
+    //!
+    //! \return If a plugin creator corresponding to the passed name, version and namespace can be found in the
+    //!         registry, it is returned. nullptr is returned in the following situations:
+    //!         - Any of the input arguments is nullptr.
+    //!         - Any of the input arguments exceeds the string length limit.
+    //!         - No plugin creator corresponding to the input arguments can be found in the registry.
+    //!         - A plugin creator can be found, but its stored namespace attribute does not match the pluginNamespace.
     //!
     //! \usage
     //! - Allowed context for the API call
     //!   - Thread-safe: Yes
     //!
     virtual IPluginCreator* getPluginCreator(AsciiChar const* const pluginName, AsciiChar const* const pluginVersion,
-        AsciiChar const* const pluginNamespace = "") noexcept
-        = 0;
+        AsciiChar const* const pluginNamespace = "") noexcept = 0;
 
     //!
     //! \brief Set the ErrorRecorder for this interface
     //!
     //! Assigns the ErrorRecorder to this interface. The ErrorRecorder will track all errors during execution.
-    //! This function will call incRefCount of the registered ErrorRecorder at least once. Setting
-    //! recorder to nullptr unregisters the recorder with the interface, resulting in a call to decRefCount if
-    //! a recorder has been registered.
+    //! This function will call incRefCount of the registered ErrorRecorder at least once. If the recorder is set to
+    //! nullptr, the error code ErrorCode::kINVALID_ARGUMENT will be emitted if the recorder has been registered.
     //!
-    //! \param recorder The error recorder to register with this interface.
-    //
+    //! \param recorder The error recorder to register with this interface, or nullptr to deregister the current
+    //!                 recorder.
+    //!
     //! \see getErrorRecorder()
     //!
     //! \usage
@@ -1028,7 +917,9 @@ public:
     //! so a nullptr will be returned if setErrorRecorder has not been called, or an ErrorRecorder has not been
     //! inherited.
     //!
-    //! \return A pointer to the IErrorRecorder object that has been registered.
+    //! \return A pointer to the IErrorRecorder object that has been registered, or nullptr if:
+    //!         - no error recorder has been set, or
+    //!         - the last error recorder has been deregistered via setErrorRecorder(nullptr).
     //!
     //! \see setErrorRecorder()
     //!
@@ -1044,6 +935,8 @@ public:
     //! Since there may be a desire to limit the number of plugins,
     //! this function provides a mechanism for removing plugin creators registered in TensorRT.
     //! The plugin creator that is specified by \p creator is removed from TensorRT and no longer tracked.
+    //!
+    //! \param creator The plugin creator to deregister.
     //!
     //! \return True if the plugin creator was deregistered, false if it was not found in the registry or otherwise
     //! could
@@ -1068,7 +961,12 @@ protected:
 };
 
 //!
-//! \brief Create an instance of an safe::IRuntime class.
+//! \brief Create an instance of a safe::IRuntime class.
+//!
+//! \param logger A logger object whose lifetime must exceed that of the returned runtime.
+//! Loggers must be thread-safe.
+//!
+//! \return A safe runtime object that can be used for safe plan file deserialization.
 //!
 //! This class is the logging class for the runtime.
 //!
@@ -1093,8 +991,8 @@ extern "C" TENSORRTAPI IPluginRegistry* getSafePluginRegistry() noexcept;
 //! loaded. This static object will register all creators available in the
 //! library to the registry.
 //!
-//! \warning Statically registering plugins should be avoided in the automotive
-//!  safety context as the application developer should first register an error recorder
+//! \warning Statically registering plugins must be avoided in the automotive
+//!  safety context as the application developer must first register an error recorder
 //!  with the plugin registry via IPluginRegistry::setErrorRecorder() before using
 //!  IPluginRegistry::registerCreator() or other methods.
 //!

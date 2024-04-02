@@ -43,7 +43,7 @@ trtexec --onnx=resnet50.onnx \
 Before we proceed to the next step, it is important that we know the names of the "input" and "output" layers of your network, as these would be required by Triton. One easy way is to use `polygraphy` which comes packaged with the TensorRT container. If you want to learn more about Polygraphy and its usage, visit [this](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy) repository. You can checkout a plethora of [examples](https://github.com/NVIDIA/TensorRT/tree/main/tools/Polygraphy/examples/cli/inspect) demonstrating the utility of Polygraphy to inspect models.
 
 ```
-polygraphy inspect model model.plan --mode=basic
+polygraphy inspect model model.plan --model-type engine
 ```
 A section of the output mode looks like this:
 ```

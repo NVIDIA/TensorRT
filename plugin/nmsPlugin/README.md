@@ -17,7 +17,9 @@
 
 ## Description
 
-The `nmsPlugin`, similar to the `batchedNMSPlugin`, implements a `non_max_suppression` (NMS) operation over bounding boxes for object detection networks. This plugin is included in TensorRT and used in [sampleSSD](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#sample_ssd) and [uff_ssd](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#uff_ssd) to run SSD.
+> NOTE: `nmsPlugin` is deprecated since TensorRT 9.0. Its functionality has been superseded by the `INMSLayer` and `EfficientNMS` plugin.
+
+The `nmsPlugin`, similar to the `batchedNMSPlugin`, implements a `non_max_suppression` (NMS) operation over bounding boxes for object detection networks. This plugin is included in TensorRT.
   
 Additionally, the `nmsPlugin` has a bounding box decoding step prior to the `non_max_suppression` step. The `nmsPlugin` takes the predicted encoded bounding box data as input, decodes them, followed by the non maximum suppression step in a GPU-accelerated fashion in TensorRT.
 
@@ -147,6 +149,9 @@ documentation.
 
 
 ## Changelog
+
+June 2023
+Add deprecation note.
 
 May 2019
 This is the first release of this `README.md` file.

@@ -32,7 +32,6 @@ from tests.helper import POLYGRAPHY_CMD
 from tests.models.meta import ONNX_MODELS
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestBuild:
     def test_good_bad(self, poly_debug):
         with tempfile.TemporaryDirectory() as outdir:

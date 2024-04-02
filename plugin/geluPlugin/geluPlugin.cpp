@@ -180,14 +180,12 @@ int32_t GeluPluginDynamic::enqueueTyped(
 }
 
 int32_t GeluPluginDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
+    void* /* workspace */, cudaStream_t stream) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc != nullptr);
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
     }
     catch (std::exception const& e)
     {
@@ -203,6 +201,8 @@ int32_t GeluPluginDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     {
     case DataType::kFLOAT: return enqueueTyped<float>(inputs[0], outputs[0], inputVolume, stream);
     case DataType::kHALF: return enqueueTyped<half>(inputs[0], outputs[0], inputVolume, stream);
+    case DataType::kBF16:
+    case DataType::kINT64: PLUGIN_FAIL("Unsupported data type");
     default: return STATUS_FAILURE;
     }
 }
@@ -330,6 +330,10 @@ IPluginV2* GeluPluginDynamicCreator::createPlugin(char const* name, PluginFieldC
 {
     try
     {
+        gLogWarning << "GeluPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() "
+                       "[IActivationLayer] and INetworkDefinition::addElementWise() [IElementWiseLayer] to perform the "
+                       "same function."
+                    << std::endl;
         gLogVerbose << "GeluPluginDynamicCreator createPlugin\n";
         PLUGIN_VALIDATE(fc != nullptr);
 
@@ -376,6 +380,10 @@ IPluginV2* GeluPluginDynamicCreator::deserializePlugin(
     // call GeluPluginDynamic::destroy()
     try
     {
+        gLogWarning << "GeluPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() "
+                       "[IActivationLayer] and INetworkDefinition::addElementWise() [IElementWiseLayer] to perform the "
+                       "same function."
+                    << std::endl;
         return new GeluPluginDynamic(name, serialData, serialLength);
     }
     catch (std::exception const& e)

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
-#include <cublas_v2.h>
+#include <cuda_fp16.h>
 
 #define DEBUG_ENABLE 0
 namespace nvinfer1
@@ -80,7 +80,7 @@ pluginStatus_t sortScoresPerClass(cudaStream_t stream, int32_t num, int32_t num_
 
 size_t calculateTotalWorkspaceSize(size_t* workspaces, int32_t count);
 
-char const* cublasGetErrorString(cublasStatus_t error);
+char const* cublasGetErrorString(nvinfer1::pluginInternal::cublasStatus_t error);
 
 pluginStatus_t permuteData(cudaStream_t stream, int32_t nthreads, int32_t num_classes, int32_t num_data,
     int32_t num_dim, nvinfer1::DataType DT_DATA, bool confSigmoid, void const* data, void* new_data);
@@ -96,9 +96,9 @@ pluginStatus_t decodeBBoxes(cudaStream_t stream, int32_t nthreads, nvinfer1::plu
 
 size_t normalizePluginWorkspaceSize(bool acrossSpatial, int32_t C, int32_t H, int32_t W);
 
-pluginStatus_t normalizeInference(cudaStream_t stream, cublasHandle_t handle, bool acrossSpatial, bool channelShared,
-    int32_t N, int32_t C, int32_t H, int32_t W, float eps, void const* scale, void const* inputData, void* outputData,
-    void* workspace);
+pluginStatus_t normalizeInference(cudaStream_t stream, nvinfer1::pluginInternal::cublasHandle_t handle,
+    bool acrossSpatial, bool channelShared, int32_t N, int32_t C, int32_t H, int32_t W, float eps, void const* scale,
+    void const* inputData, void* outputData, void* workspace);
 
 pluginStatus_t scatterNDInference(cudaStream_t stream, int32_t* outputDims, int32_t nOutputDims, int32_t sliceRank,
     int32_t nRows, int32_t rowSize, int32_t CopySize, int32_t sizeOfElementInBytes, void const* index,
@@ -266,7 +266,6 @@ int32_t generateFeatures_launch(int32_t batch_size, int32_t dense_pillar_num, fl
     uint32_t* voxel_num_points, uint32_t* coords, uint32_t* params, float voxel_x, float voxel_y, float voxel_z,
     float range_min_x, float range_min_y, float range_min_z, uint32_t voxel_features_size, uint32_t max_points,
     uint32_t max_voxels, uint32_t num_point_values, float* features, cudaStream_t stream);
-
 
 #endif // TRT_RPNLAYER_H
 } // namespace plugin

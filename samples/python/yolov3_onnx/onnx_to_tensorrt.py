@@ -69,14 +69,13 @@ def get_engine(onnx_file_path, engine_file_path=""):
     def build_engine():
         """Takes an ONNX file and creates a TensorRT engine to run inference with"""
         with trt.Builder(TRT_LOGGER) as builder, builder.create_network(
-            common.EXPLICIT_BATCH
+           0 
         ) as network, builder.create_builder_config() as config, trt.OnnxParser(
             network, TRT_LOGGER
         ) as parser, trt.Runtime(
             TRT_LOGGER
         ) as runtime:
-            config.max_workspace_size = 1 << 28  # 256MiB
-            builder.max_batch_size = 1
+            config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 28) # 256MiB
             # Parse model file
             if not os.path.exists(onnx_file_path):
                 print(
@@ -138,7 +137,7 @@ def main():
         print("Running inference on image {}...".format(input_image_path))
         # Set host input to the image. The common.do_inference function will copy the input to the GPU before executing.
         inputs[0].host = image
-        trt_outputs = common.do_inference_v2(context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        trt_outputs = common.do_inference(context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
 
     # Before doing post-processing, we need to reshape the outputs as the common.do_inference will give us flat arrays.
     trt_outputs = [output.reshape(shape) for output, shape in zip(trt_outputs, output_shapes)]

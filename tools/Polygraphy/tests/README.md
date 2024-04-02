@@ -19,3 +19,16 @@ For example:
 def my_not_parallel_test():
     ...
 ```
+
+## Slow Tests
+
+Some tests are long-running, so we'd prefer to avoid running them during local development.
+You can mark tests with the `pytest.mark.slow` marker so that those tests are only run when
+the `RUN_ALL_TESTS` make option is enabled.
+
+For example:
+```python
+@pytest.mark.slow
+def my_long_running_test():
+    ...
+```

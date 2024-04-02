@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,10 @@ def shape(self, a):
 @gs.Graph.register()
 def reduce_prod(self, a, axes, keepdims=True):
     return self.layer(
-        op="ReduceProd", inputs=[a], attrs={"axes": axes, "keepdims": int(keepdims)}, outputs=["reduce_prod_out_gs"]
+        op="ReduceProd",
+        inputs=[a],
+        attrs={"axes": axes, "keepdims": int(keepdims)},
+        outputs=["reduce_prod_out_gs"],
     )[0]
 
 
@@ -47,14 +50,22 @@ def gather(self, data, indices):
 
 @gs.Graph.register()
 def concat(self, inputs, axis=0):
-    return self.layer(op="Concat", inputs=inputs, attrs={"axis": axis}, outputs=["concat_out_gs"])[0]
+    return self.layer(
+        op="Concat", inputs=inputs, attrs={"axis": axis}, outputs=["concat_out_gs"]
+    )[0]
 
 
 # Create the graph.
 graph = gs.Graph()
 
 # First we set up the inputs, using gs.Tensor.DYNAMIC to specify dynamic dimensions.
-graph.inputs = [gs.Variable(name="data", dtype=np.float32, shape=(gs.Tensor.DYNAMIC, 3, gs.Tensor.DYNAMIC, 5))]
+graph.inputs = [
+    gs.Variable(
+        name="data",
+        dtype=np.float32,
+        shape=(gs.Tensor.DYNAMIC, 3, gs.Tensor.DYNAMIC, 5),
+    )
+]
 
 input_shape = graph.shape(graph.inputs[0])
 
@@ -73,9 +84,15 @@ partially_flattened = graph.reshape(graph.inputs[0], new_shape)
 
 # Finally, set up the outputs and export.
 flattened.name = "flattened"  # Rename output tensor to make it easy to find.
-flattened.dtype = np.float32  # NOTE: We must include dtype information for graph outputs
+flattened.dtype = (
+    np.float32
+)  # NOTE: We must include dtype information for graph outputs
+flattened.shape = (gs.Tensor.DYNAMIC,)
 partially_flattened.name = "partially_flattened"
 partially_flattened.dtype = np.float32
+partially_flattened.shape = (gs.Tensor.DYNAMIC, 3, gs.Tensor.DYNAMIC)
 
 graph.outputs = [flattened, partially_flattened]
-onnx.save(gs.export_onnx(graph), "model.onnx")
+
+model = onnx.shape_inference.infer_shapes(gs.export_onnx(graph))
+onnx.save(model, "model.onnx")

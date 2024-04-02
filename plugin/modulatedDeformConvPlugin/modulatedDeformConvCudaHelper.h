@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,8 @@
 
 #ifndef TRT_MODULATED_DEFORM_CONV_CUDA_HELPER_H
 #define TRT_MODULATED_DEFORM_CONV_CUDA_HELPER_H
+#include "common/cublasWrapper.h"
 #include <cstdint>
-#include <cublas_v2.h>
 
 struct TensorDesc
 {
@@ -46,7 +46,8 @@ void memcpyPermute(
     TScalar* dst, TScalar const* src, int32_t* src_size, int32_t* permute, int32_t src_dim, cudaStream_t stream = 0);
 
 template <typename TScalar>
-cublasStatus_t cublasGemmWrap(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+nvinfer1::pluginInternal::cublasStatus_t cublasGemmWrap(nvinfer1::pluginInternal::cublasHandle_t handle,
+    nvinfer1::pluginInternal::cublasOperation_t transa, nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m,
     int32_t n, int32_t k, TScalar const* alpha, TScalar const* A, int32_t lda, TScalar const* B, int32_t ldb,
     TScalar const* beta, TScalar* C, int32_t ldc);
 

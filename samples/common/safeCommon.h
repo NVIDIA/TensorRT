@@ -18,9 +18,12 @@
 #ifndef TENSORRT_SAFE_COMMON_H
 #define TENSORRT_SAFE_COMMON_H
 
+#include "NvInferRuntimeBase.h"
 #include "cuda_runtime.h"
-#include "NvInferRuntimeCommon.h"
+#include "sampleEntrypoints.h"
+#include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -36,6 +39,10 @@
 #else
 #include <dlfcn.h>
 #endif
+#if IS_QNX_SAFE
+#include <cuda_runtime_api_safe_ex.h>
+#include <sys/procmgr.h>
+#endif // IS_QNX_SAFE
 
 #undef CHECK
 #define CHECK(status)                                                                                                  \
@@ -45,20 +52,91 @@
         if (ret != 0)                                                                                                  \
         {                                                                                                              \
             std::cerr << "Cuda failure: " << ret << std::endl;                                                         \
-            abort();                                                                                                   \
+            exit(EXIT_FAILURE);                                                                                        \
         }                                                                                                              \
     } while (0)
 
 #undef SAFE_ASSERT
-#define SAFE_ASSERT(condition)                                                   \
-    do                                                                      \
-    {                                                                       \
-        if (!(condition))                                                   \
-        {                                                                   \
-            std::cerr << "Assertion failure: " << #condition << std::endl;  \
-            abort();                                                        \
-        }                                                                   \
+#define SAFE_ASSERT(condition)                                                                                         \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(condition))                                                                                              \
+        {                                                                                                              \
+            std::cerr << "Assertion failure: " << #condition << std::endl;                                             \
+            exit(EXIT_FAILURE);                                                                                        \
+        }                                                                                                              \
     } while (0)
+
+//! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
+//! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
+inline std::string locateFile(
+    const std::string& filepathSuffix, const std::vector<std::string>& directories, bool reportError = true)
+{
+    const int MAX_DEPTH{10};
+    bool found{false};
+    std::string filepath;
+
+    for (auto& dir : directories)
+    {
+        if (!dir.empty() && dir.back() != '/')
+        {
+#ifdef _MSC_VER
+            filepath = dir + "\\" + filepathSuffix;
+#else
+            filepath = dir + "/" + filepathSuffix;
+#endif
+        }
+        else
+        {
+            filepath = dir + filepathSuffix;
+        }
+
+        for (int i = 0; i < MAX_DEPTH && !found; i++)
+        {
+            const std::ifstream checkFile(filepath);
+            found = checkFile.is_open();
+            if (found)
+            {
+                break;
+            }
+
+            filepath = "../" + filepath; // Try again in parent dir
+        }
+
+        if (found)
+        {
+            break;
+        }
+
+        filepath.clear();
+    }
+
+    // Could not find the file
+    if (filepath.empty())
+    {
+        const std::string dirList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
+            [](const std::string& a, const std::string& b) { return a + "\n\t" + b; });
+        std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << dirList << std::endl;
+
+        if (reportError)
+        {
+            std::cout << "&&&& FAILED" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    return filepath;
+}
+
+inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int32_t inH, int32_t inW)
+{
+    std::ifstream infile(fileName, std::ifstream::binary);
+    SAFE_ASSERT(infile.is_open() && "Attempting to read from a file that is not open.");
+    std::string magic, w, h, max;
+    infile >> magic >> w >> h >> max;
+    infile.seekg(1, infile.cur);
+    infile.read(reinterpret_cast<char*>(buffer), inH * inW);
+}
 
 namespace samplesCommon
 {
@@ -76,13 +154,17 @@ inline uint32_t elementSize(nvinfer1::DataType t)
 {
     switch (t)
     {
+    case nvinfer1::DataType::kINT64: return 8;
     case nvinfer1::DataType::kINT32:
     case nvinfer1::DataType::kFLOAT: return 4;
-    case nvinfer1::DataType::kHALF: return 2;
-    case nvinfer1::DataType::kINT8: return 1;
-    case nvinfer1::DataType::kUINT8: return 1;
-    case nvinfer1::DataType::kBOOL: return 1;
+    case nvinfer1::DataType::kHALF:
+    case nvinfer1::DataType::kBF16: return 2;
+    case nvinfer1::DataType::kINT8:
+    case nvinfer1::DataType::kUINT8:
+    case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kFP8: return 1;
+    case nvinfer1::DataType::kINT4:
+        SAFE_ASSERT(false && "Element size is not implemented for sub-byte data-types (INT4)");
     }
     return 0;
 }
@@ -98,10 +180,13 @@ inline int64_t volume(nvinfer1::Dims const& d)
     return std::accumulate(d.d, d.d + d.nbDims, int64_t{1}, std::multiplies<int64_t>{});
 }
 
-// Return m rounded up to nearest multiple of n
-template <typename T>
-inline T roundUp(T m, T n)
+//! Return m rounded up to nearest multiple of n
+template <typename T1, typename T2>
+inline T1 roundUp(T1 m, T2 n)
 {
+    static_assert(std::is_integral<T1>::value && std::is_integral<T2>::value, "arguments must be integers");
+    static_assert(std::is_signed<T1>::value == std::is_signed<T2>::value, "mixed signedness not allowed");
+    static_assert(sizeof(T1) >= sizeof(T2), "first type must be as least as wide as second type");
     return ((m + n - 1) / n) * n;
 }
 
@@ -113,6 +198,40 @@ inline int64_t volume(nvinfer1::Dims dims, int32_t vecDim, int32_t comps, int32_
         dims.d[vecDim] = roundUp(dims.d[vecDim], comps);
     }
     return samplesCommon::volume(dims) * std::max(batch, 1);
+}
+
+inline int32_t getSMVersion()
+{
+    int32_t deviceIndex = 0;
+    CHECK(cudaGetDevice(&deviceIndex));
+    int32_t major, minor;
+    CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
+    CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
+
+    return ((major << 8) | minor);
+}
+
+inline bool isSMSafe()
+{
+    const int32_t smVersion = getSMVersion();
+    return smVersion == 0x0700 || smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806
+        || smVersion == 0x0807;
+}
+
+inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
+{
+    SAFE_ASSERT(prob != nullptr);
+    SAFE_ASSERT(numDigits == 10);
+    float sum{0.0F};
+    std::transform(prob, prob + numDigits, prob, [&sum](float v) -> float {
+        sum += exp(v);
+        return exp(v);
+    });
+
+    SAFE_ASSERT(sum != 0.0F);
+    std::transform(prob, prob + numDigits, prob, [sum](float v) -> float { return v / sum; });
+    int32_t idx = std::max_element(prob, prob + numDigits) - prob;
+    return idx;
 }
 
 //!
@@ -190,7 +309,7 @@ private:
 inline void safeLoadLibrary(const std::string& path)
 {
 #ifdef _MSC_VER
-    void* handle = LoadLibrary(path.c_str());
+    void* handle = LoadLibraryA(path.c_str());
 #else
     int32_t flags{RTLD_LAZY};
     void* handle = dlopen(path.c_str(), flags);
@@ -220,5 +339,35 @@ inline std::vector<std::string> safeSplitString(std::string str, char delimiter 
 }
 
 } // namespace samplesCommon
+
+namespace safetyCompliance
+{
+inline void initSafeCuda()
+{
+    // According to CUDA initialization in NVIDIA CUDA SAFETY API REFERENCE FOR DRIVE OS
+    // We will need to do the following in order
+    // 1. Initialize the calling thread with CUDA specific information (Call any CUDA RT API identified as init)
+    // 2. Query/Configure and choose the desired CUDA device
+    // 3. CUDA context initialization. (Call cudaDeviceGetLimit or cuCtxCreate)
+    size_t stackSizeLimit = 0;
+    int32_t deviceIndex = 0;
+    CHECK(cudaGetDevice(&deviceIndex));
+    CHECK(cudaDeviceGetLimit(&stackSizeLimit, cudaLimitStackSize));
+#if IS_QNX_SAFE
+    CHECK(cudaSafeExSelectAPIMode(cudaSafeExAPIModeAsilB));
+#endif // IS_QNX_SAFE
+}
+
+inline void setPromgrAbility()
+{
+#if IS_QNX_SAFE
+    // Comply with DEEPLRN_RES_117 on QNX-safe by dropping PROCMGR_AID_MEM_PHYS ability and locking out any further
+    // changes
+    procmgr_ability(
+        0, PROCMGR_ADN_NONROOT | PROCMGR_AOP_DENY | PROCMGR_AOP_LOCK | PROCMGR_AID_MEM_PHYS, PROCMGR_AID_EOL);
+#endif // IS_QNX_SAFE
+}
+
+} // namespace safetyCompliance
 
 #endif // TENSORRT_SAFE_COMMON_H

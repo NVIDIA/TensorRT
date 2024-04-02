@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +35,7 @@
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 using namespace nvinfer1::plugin::bert;
+using namespace nvinfer1::pluginInternal;
 
 namespace
 {
@@ -108,17 +109,17 @@ void QKVToContextPluginDynamic::createMHARunner()
     {
         if (mType == DataType::kHALF)
         {
-            fusedDispatcher.reset(new FusedMHARunnerFP16(mNumHeads, mHeadSize, mSM));
+            fusedDispatcher.reset(new FusedMHARunnerFP16(mNumHeads, mSM));
         }
         else if (mType == DataType::kINT8)
         {
-            fusedDispatcher.reset(new FusedMHARunnerInt8(mNumHeads, mHeadSize, mSM, mDqProbs));
+            fusedDispatcher.reset(new FusedMHARunnerInt8(mNumHeads, mSM, mDqProbs));
         }
     }
 
     if (!unfusedDispatcher.get())
     {
-        unfusedDispatcher.reset(new UnfusedMHARunner(mType, mNumHeads, mHeadSize, mSM));
+        unfusedDispatcher.reset(new UnfusedMHARunner(mType, mNumHeads, mSM));
     }
 }
 
@@ -309,9 +310,9 @@ void QKVToContextPluginDynamic::configurePlugin(
         {
             for (int32_t i = Smax; i >= Smin; --i)
             {
-                if (!fusedDispatcher->isValid(i))
+                if (!fusedDispatcher->isValid(mHeadSize, i))
                 {
-                    unfusedDispatcher->setup(i, B);
+                    unfusedDispatcher->setup(i, B, mHeadSize);
                     mS = i;
                     mB = B;
                     break;
@@ -320,7 +321,7 @@ void QKVToContextPluginDynamic::configurePlugin(
         }
         else
         {
-            unfusedDispatcher->setup(Smax, B);
+            unfusedDispatcher->setup(Smax, B, mHeadSize);
             mS = Smax;
             mB = B;
         }
@@ -328,13 +329,13 @@ void QKVToContextPluginDynamic::configurePlugin(
     else
     {
         // in inference stage or in static shape build stage
-        if (fusedDispatcher.get() && fusedDispatcher->isValid(S))
+        if (fusedDispatcher.get() && fusedDispatcher->isValid(mHeadSize, S))
         {
-            fusedDispatcher->setup(S, B);
+            fusedDispatcher->setup(S, B, mHeadSize);
         }
         else
         {
-            unfusedDispatcher->setup(S, B);
+            unfusedDispatcher->setup(S, B, mHeadSize);
         }
         mS = S;
         mB = B;
@@ -359,6 +360,21 @@ DataType QKVToContextPluginDynamic::getOutputDataType(
     PLUGIN_ASSERT(
         inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF || inputTypes[0] == DataType::kINT8);
     return inputTypes[0];
+}
+
+void QKVToContextPluginDynamic::attachToContext(
+    cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept
+{
+    try
+    {
+        mCublasWrapper = createPluginCublasWrapper(allocator);
+        mCublas = mCublasWrapper->getCublasHandle();
+        PLUGIN_VALIDATE(mCublas != nullptr);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
 }
 
 // IPluginV2 Methods
@@ -435,20 +451,24 @@ char const* QKVToContextPluginDynamic::getPluginNamespace() const noexcept
 int32_t QKVToContextPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
     PLUGIN_ASSERT(mS == inputDesc->dims.d[SDIM]);
     PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
 
     try
     {
         void const* const maskPtr = mHasImask ? inputs[1] : nullptr;
-        if (fusedDispatcher.get() && fusedDispatcher->isValid(inputDesc->dims.d[SDIM]))
+        if (mHasImask && fusedDispatcher.get() && fusedDispatcher->isValid(mHeadSize, inputDesc->dims.d[SDIM]))
         {
-            fusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+            fusedDispatcher->run(
+                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
         }
         else
         {
             PLUGIN_VALIDATE(unfusedDispatcher.get(), "The Unfused MHARunner is uninitialized, no MHARunner available!");
-            unfusedDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+            PLUGIN_VALIDATE(mType != DataType::kINT8, "The Unfused MHARunner does not support INT8!");
+            unfusedDispatcher->run(
+                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
         }
     }
     catch (std::exception const& e)
@@ -633,41 +653,40 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(const std::string name,
     deserialize_value(&data, &length, &mUseInt8ScaleMax);
 
     createMHARunner();
-    dispatcher->deserialize(data, length);
+    mDispatcher->deserialize(data, length);
 
     BERT_DEBUG_MSG("QKV Deser done");
 }
 
 void QKVToContextVarSeqlenPlugin::createMHARunner()
 {
-    if (dispatcher.get())
+    if (mDispatcher.get())
     {
         return;
     }
 
-    if (mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75
-        || mSM == kSM_72)
+    if (mUseVarSeqlen)
     {
-        int32_t headSize = mHeadSize;
-        if (mHeadSize != 32 && mHeadSize != 64)
+        PLUGIN_ASSERT(mHeadSize <= 64);
         {
-            patcher.reset(new QkvPaddingRunner(mHeadSize, mType));
-            headSize = patcher->getPaddingHeadSize();
-        }
-
-        if (mType == DataType::kHALF)
-        {
-            dispatcher.reset(new FusedMHARunnerFP16v2(mNumHeads, headSize, mSM));
-        }
-        else if (mType == DataType::kINT8)
-        {
-            dispatcher.reset(new FusedMHARunnerInt8v2(mNumHeads, headSize, mSM, mDqProbs, mUseInt8ScaleMax));
+            if (mHeadSize != 64)
+            {
+                mPatcher.reset(new QkvPaddingRunner(mType));
+            }
+            if (mType == DataType::kHALF)
+            {
+                mDispatcher.reset(new FusedMHARunnerFP16v2(mNumHeads, mSM));
+            }
+            else if (mType == DataType::kINT8)
+            {
+                mDispatcher.reset(new FusedMHARunnerInt8v2(mNumHeads, mSM, mDqProbs, mUseInt8ScaleMax));
+            }
         }
     }
     else
     {
-        PLUGIN_ASSERT(!mUseVarSeqlen);
-        dispatcher.reset(new UnfusedMHARunner(mType, mNumHeads, mHeadSize, mSM));
+        PLUGIN_ASSERT(mType != DataType::kINT8);
+        mDispatcher.reset(new UnfusedMHARunner(mType, mNumHeads, mSM));
     }
 }
 
@@ -677,7 +696,7 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextVarSeqlenPlugin::clone() const noexce
     BERT_DEBUG_MSG("QKV Clone");
 
     QKVToContextVarSeqlenPlugin* ret = nullptr;
-    if (dispatcher.get())
+    if (mDispatcher.get())
     {
         std::vector<char> buff;
         buff.resize(getSerializationSize());
@@ -712,14 +731,14 @@ DimsExprs QKVToContextVarSeqlenPlugin::getOutputDimensions(
 bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    // we only support int8 IO in fused mha runner, and we only support fused mha runner on Turing and Ampere
-    if (mType == DataType::kINT8 && mSM != kSM_90 && mSM != kSM_89 && mSM != kSM_87 && mSM != kSM_86 && mSM != kSM_80
-        && mSM != kSM_75 && mSM != kSM_72)
-    {
-        BERT_DEBUG_VALUE(
-            "INT8 IO is only supported on Xavier, Turing and Ampere for plugin ", kQKV_TO_CONTEXT_PLUGIN_NAME);
-        return false;
-    }
+    // we only support variable sequence and int8 IO in fused mha runner, and we only support fused mha runner on
+    // Turing, Ampere and Hopper
+    bool const hasV2Kernels = (mSM == kSM_90 || mSM == kSM_89 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80
+        || mSM == kSM_75 || mSM == kSM_72);
+    PLUGIN_ASSERT(
+        (mType != DataType::kINT8 || hasV2Kernels) && "INT8 IO is only supported on Xavier, Turing, Ampere and Hopper");
+    PLUGIN_ASSERT(
+        (!mUseVarSeqlen || hasV2Kernels) && "Variable sequence is only supported on Xavier, Turing, Ampere and Hopper");
 
     PLUGIN_ASSERT(pos >= 0);
     PLUGIN_ASSERT(pos < 2 + mHasImask + 2 * mUseVarSeqlen);
@@ -827,7 +846,7 @@ void QKVToContextVarSeqlenPlugin::configurePlugin(
         {
             BERT_DEBUG_MSG("setting up MHA runner for single sequence length");
             createMHARunner();
-            this->dispatcher->setup(S, B);
+            this->mDispatcher->setup(S, B, mHeadSize);
             mS = S;
             mB = B;
         }
@@ -838,19 +857,15 @@ void QKVToContextVarSeqlenPlugin::configurePlugin(
         createMHARunner();
         // need to initialize S and B with somewhat useful values, they will be reset at enqueue for the actual
         // batchsize
-        this->dispatcher->setup(256, 1);
+        this->mDispatcher->setup(256, 1, mHeadSize);
     }
 }
 
-size_t QKVToContextVarSeqlenPlugin::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t QKVToContextVarSeqlenPlugin::getWorkspaceSize(PluginTensorDesc const* inputs, int32_t /* nbInputs */,
+    PluginTensorDesc const* /* outputs */, int32_t /* nbOutputs */) const noexcept
 {
-    size_t paddingWorkpaceSize = 0;
-    if (patcher)
-    {
-        paddingWorkpaceSize = patcher->getWorkspaceSize(inputs[0].dims.d[0], mNumHeads);
-    }
-    return this->dispatcher->getWorkspaceSize() + paddingWorkpaceSize;
+    size_t paddingWorkpaceSize = mPatcher ? mPatcher->getWorkspaceSize(inputs[0].dims.d[0], mNumHeads) : 0;
+    return mDispatcher->getWorkspaceSize() + paddingWorkpaceSize;
 }
 
 // IPluginV2Ext Methods
@@ -861,6 +876,21 @@ DataType QKVToContextVarSeqlenPlugin::getOutputDataType(
     PLUGIN_ASSERT(
         inputTypes[0] == DataType::kFLOAT || inputTypes[0] == DataType::kHALF || inputTypes[0] == DataType::kINT8);
     return inputTypes[0];
+}
+
+void QKVToContextVarSeqlenPlugin::attachToContext(
+    cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept
+{
+    try
+    {
+        mCublasWrapper = createPluginCublasWrapper(allocator);
+        mCublas = mCublasWrapper->getCublasHandle();
+        PLUGIN_VALIDATE(mCublas != nullptr);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
 }
 
 // IPluginV2 Methods
@@ -889,7 +919,7 @@ void QKVToContextVarSeqlenPlugin::terminate() noexcept {}
 size_t QKVToContextVarSeqlenPlugin::getSerializationSize() const noexcept
 {
     return sizeof(mNumHeads) + sizeof(mHeadSize) + sizeof(DataType) + sizeof(mHasImask) + sizeof(mHiddenSize)
-        + sizeof(mSM) + sizeof(mS) + sizeof(mB) + sizeof(mDqProbs) + dispatcher->getSerializationSize()
+        + sizeof(mSM) + sizeof(mS) + sizeof(mB) + sizeof(mDqProbs) + mDispatcher->getSerializationSize()
         + sizeof(mUseVarSeqlen) + sizeof(mHdim) + sizeof(mUseInt8ScaleMax);
 }
 
@@ -908,7 +938,7 @@ void QKVToContextVarSeqlenPlugin::serialize(void* buffer) const noexcept
     serialize_value(&buffer, mUseVarSeqlen);
     serialize_value(&buffer, mHdim);
     serialize_value(&buffer, mUseInt8ScaleMax);
-    dispatcher->serialize(buffer);
+    mDispatcher->serialize(buffer);
 }
 
 void QKVToContextVarSeqlenPlugin::destroy() noexcept
@@ -930,6 +960,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
+    PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
     if (mUseVarSeqlen)
     {
@@ -968,48 +999,66 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             S = 384;
         }
 
-        this->dispatcher->setup(S, B);
+        auto runV2Kernel = [this, &S, &B, &workspace, &inputDesc, &outputDesc, &stream, &inputs, &outputs](
+                               MHARunner* dispatcher, QkvPaddingRunner* patcher, int32_t padSize) {
+            PLUGIN_ASSERT(dispatcher);
+            // Validate that we can padding to the dispatch required head size also there is kernel exist for this
+            // sequence length.
+            if (mHeadSize > padSize || !dispatcher->isValid(padSize, S))
+            {
+                return false;
+            }
+            dispatcher->setup(S, B, padSize);
 
-        if (patcher)
+            // Need pad and unpad to run the V2 kernel.
+            if (mHeadSize < padSize)
+            {
+                PLUGIN_ASSERT(patcher);
+                PLUGIN_ASSERT(padSize <= patcher->getMaxPaddingHeadSize());
+                auto sumSeqLen = inputDesc[0].dims.d[0];
+                auto paddingWorkspace = patcher->get16BytesAlignedPointer(workspace, dispatcher->getWorkspaceSize());
+                auto ret = mPatcher->pad(inputs[0], paddingWorkspace, sumSeqLen, mNumHeads, mHeadSize, padSize, stream);
+                if (ret != cudaSuccess)
+                {
+                    return false;
+                }
+
+                MhaRunParameter paddingArgs = patcher->patchMhaArgs(
+                    inputDesc, outputDesc, inputs, outputs, paddingWorkspace, sumSeqLen, mNumHeads, padSize);
+                try
+                {
+                    dispatcher->run(paddingArgs.inputDesc, paddingArgs.outputDesc, paddingArgs.inputs,
+                        paddingArgs.outputs, workspace, stream, mCublas);
+                }
+                catch (std::exception const& e)
+                {
+                    caughtError(e);
+                    return false;
+                }
+
+                ret = patcher->unpad(
+                    paddingArgs.outputs[0], outputs[0], sumSeqLen, mNumHeads, mHeadSize, padSize, stream);
+                return ret == cudaSuccess;
+            }
+            else
+            {
+                // No pad/unpad is needed.
+                try
+                {
+                    dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream, mCublas);
+                }
+                catch (std::exception const& e)
+                {
+                    caughtError(e);
+                    return false;
+                }
+                return true;
+            }
+        };
+        // Try pad head size to 32 first, if it failed, then try to pad head size to 64.
+        if (!runV2Kernel(mDispatcher.get(), mPatcher.get(), 32) && !runV2Kernel(mDispatcher.get(), mPatcher.get(), 64))
         {
-            auto sumSeqLen = inputDesc[0].dims.d[0];
-            auto paddingWorkspace = patcher->get16BytesAlignedPointer(workspace, dispatcher->getWorkspaceSize());
-            auto ret = patcher->pad(inputs[0], paddingWorkspace, sumSeqLen, mNumHeads, mHeadSize, stream);
-            if (ret != cudaSuccess)
-            {
-                return ret;
-            }
-
-            MhaRunParameter paddingArgs
-                = patcher->patchMhaArgs(inputDesc, outputDesc, inputs, outputs, paddingWorkspace, sumSeqLen, mNumHeads);
-            try
-            {
-                this->dispatcher->run(paddingArgs.inputDesc, paddingArgs.outputDesc, paddingArgs.inputs,
-                    paddingArgs.outputs, workspace, stream);
-            }
-            catch (std::exception const& e)
-            {
-                caughtError(e);
-                return -1;
-            }
-
-            ret = patcher->unpad(paddingArgs.outputs[0], outputs[0], sumSeqLen, mNumHeads, mHeadSize, stream);
-            if (ret != cudaSuccess)
-            {
-                return ret;
-            }
-        }
-        else
-        {
-            try
-            {
-                this->dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream);
-            }
-            catch (std::exception const& e)
-            {
-                caughtError(e);
-                return -1;
-            }
+            return false;
         }
 
         return cudaGetLastError();
@@ -1019,7 +1068,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
 
     void const* maskPtr = mHasImask ? inputs[1] : nullptr;
-    this->dispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream);
+    mDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
     return cudaGetLastError();
 }
 

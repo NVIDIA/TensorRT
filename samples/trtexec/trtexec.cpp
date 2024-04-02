@@ -55,38 +55,21 @@ using LibraryPtr = std::unique_ptr<DynamicLibrary>;
 std::string const kNVINFER_PLUGIN_LIBNAME{"nvinfer_plugin.dll"};
 std::string const kNVINFER_LIBNAME{"nvinfer.dll"};
 std::string const kNVONNXPARSER_LIBNAME{"nvonnxparser.dll"};
-std::string const kNVPARSERS_LIBNAME{"nvparsers.dll"};
 std::string const kNVINFER_LEAN_LIBNAME{"nvinfer_lean.dll"};
 std::string const kNVINFER_DISPATCH_LIBNAME{"nvinfer_dispatch.dll"};
-
-std::string const kMANGLED_UFF_PARSER_CREATE_NAME{"?createUffParser@nvuffparser@@YAPEAVIUffParser@1@XZ"};
-std::string const kMANGLED_CAFFE_PARSER_CREATE_NAME{"?createCaffeParser@nvcaffeparser1@@YAPEAVICaffeParser@1@XZ"};
-std::string const kMANGLED_UFF_PARSER_SHUTDOWN_NAME{"?shutdownProtobufLibrary@nvuffparser@@YAXXZ"};
-std::string const kMANGLED_CAFFE_PARSER_SHUTDOWN_NAME{"?shutdownProtobufLibrary@nvcaffeparser1@@YAXXZ"};
 #else
 std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"libnvinfer_plugin.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_LIBNAME = std::string{"libnvinfer.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVONNXPARSER_LIBNAME = std::string{"libnvonnxparser.so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVPARSERS_LIBNAME = std::string{"libnvparsers.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_LEAN_LIBNAME = std::string{"libnvinfer_lean.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_DISPATCH_LIBNAME
     = std::string{"libnvinfer_dispatch.so."} + std::to_string(NV_TENSORRT_MAJOR);
-
-std::string const kMANGLED_UFF_PARSER_CREATE_NAME{"_ZN11nvuffparser15createUffParserEv"};
-std::string const kMANGLED_CAFFE_PARSER_CREATE_NAME{"_ZN14nvcaffeparser117createCaffeParserEv"};
-std::string const kMANGLED_UFF_PARSER_SHUTDOWN_NAME{"_ZN11nvuffparser23shutdownProtobufLibraryEv"};
-std::string const kMANGLED_CAFFE_PARSER_SHUTDOWN_NAME{"_ZN14nvcaffeparser123shutdownProtobufLibraryEv"};
 #endif
 #endif // !TRT_STATIC
-std::function<void*(void*, int32_t)>
-    pCreateInferRuntimeInternal{};
+std::function<void*(void*, int32_t)> pCreateInferRuntimeInternal{};
 std::function<void*(void*, void*, int32_t)> pCreateInferRefitterInternal{};
 std::function<void*(void*, int32_t)> pCreateInferBuilderInternal{};
 std::function<void*(void*, void*, int)> pCreateNvOnnxParserInternal{};
-std::function<nvuffparser::IUffParser*()> pCreateUffParser{};
-std::function<nvcaffeparser1::ICaffeParser*()> pCreateCaffeParser{};
-std::function<void()> pShutdownUffLibrary{};
-std::function<void(void)> pShutdownCaffeLibrary{};
 
 //! Track runtime used for the execution of trtexec.
 //! Must be tracked as a global variable due to how library init functions APIs are organized.
@@ -139,11 +122,18 @@ bool initNvinfer()
     static LibraryPtr libnvinferPtr{};
     auto fetchPtrs = [](DynamicLibrary* l) {
         pCreateInferRuntimeInternal = l->symbolAddress<void*(void*, int32_t)>("createInferRuntime_INTERNAL");
-
-        if (gUseRuntime == RuntimeMode::kFULL)
+        try
         {
             pCreateInferRefitterInternal
                 = l->symbolAddress<void*(void*, void*, int32_t)>("createInferRefitter_INTERNAL");
+        }
+        catch (const std::exception& e)
+        {
+            sample::gLogWarning << "Could not load function createInferRefitter_INTERNAL : " << e.what() << std::endl;
+        }
+
+        if (gUseRuntime == RuntimeMode::kFULL)
+        {
             pCreateInferBuilderInternal = l->symbolAddress<void*(void*, int32_t)>("createInferBuilder_INTERNAL");
         }
     };
@@ -166,28 +156,6 @@ bool initNvonnxparser()
     return initLibrary(libnvonnxparserPtr, kNVONNXPARSER_LIBNAME, fetchPtrs);
 #else
     pCreateNvOnnxParserInternal = createNvOnnxParser_INTERNAL;
-    return true;
-#endif // !TRT_STATIC
-}
-
-bool initNvparsers()
-{
-#if !TRT_STATIC
-    static LibraryPtr libnvparsersPtr{};
-    auto fetchPtrs = [](DynamicLibrary* l) {
-        // TODO: get equivalent Windows symbol names
-        pCreateUffParser = l->symbolAddress<nvuffparser::IUffParser*()>(kMANGLED_UFF_PARSER_CREATE_NAME.c_str());
-        pCreateCaffeParser
-            = l->symbolAddress<nvcaffeparser1::ICaffeParser*()>(kMANGLED_CAFFE_PARSER_CREATE_NAME.c_str());
-        pShutdownUffLibrary = l->symbolAddress<void()>(kMANGLED_UFF_PARSER_SHUTDOWN_NAME.c_str());
-        pShutdownCaffeLibrary = l->symbolAddress<void(void)>(kMANGLED_CAFFE_PARSER_SHUTDOWN_NAME.c_str());
-    };
-    return initLibrary(libnvparsersPtr, kNVPARSERS_LIBNAME, fetchPtrs);
-#else
-    pCreateUffParser = nvuffparser::createUffParser;
-    pCreateCaffeParser = nvcaffeparser1::createCaffeParser;
-    pShutdownUffLibrary = nvuffparser::shutdownProtobufLibrary;
-    pShutdownCaffeLibrary = nvcaffeparser1::shutdownProtobufLibrary;
     return true;
 #endif // !TRT_STATIC
 }
@@ -235,46 +203,6 @@ nvonnxparser::IParser* createONNXParser(INetworkDefinition& network)
         pCreateNvOnnxParserInternal(&network, &gLogger.getTRTLogger(), NV_ONNX_PARSER_VERSION));
 }
 
-nvcaffeparser1::ICaffeParser* sampleCreateCaffeParser()
-{
-    if (!initNvparsers())
-    {
-        return {};
-    }
-    ASSERT(pCreateCaffeParser != nullptr);
-    return pCreateCaffeParser();
-}
-
-void shutdownCaffeParser()
-{
-    if (!initNvparsers())
-    {
-        return;
-    }
-    ASSERT(pShutdownCaffeLibrary != nullptr);
-    pShutdownCaffeLibrary();
-}
-
-nvuffparser::IUffParser* sampleCreateUffParser()
-{
-    if (!initNvparsers())
-    {
-        return {};
-    }
-    ASSERT(pCreateUffParser != nullptr);
-    return pCreateUffParser();
-}
-
-void shutdownUffParser()
-{
-    if (!initNvparsers())
-    {
-        return;
-    }
-    ASSERT(pShutdownUffLibrary != nullptr);
-    pShutdownUffLibrary();
-}
-
 using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
 
@@ -306,22 +234,23 @@ int main(int argc, char** argv)
 
                 if (!args.empty())
                 {
+                    AllOptions::help(std::cout);
                     for (auto const& arg : args)
                     {
-                        sample::gLogError << "Unknown option: " << arg.first << " " << arg.second << std::endl;
+                        sample::gLogError << "Unknown option: " << arg.first << " " << arg.second.first << std::endl;
                     }
                     failed = true;
                 }
             }
             catch (std::invalid_argument const& arg)
             {
+                AllOptions::help(std::cout);
                 sample::gLogError << arg.what() << std::endl;
                 failed = true;
             }
 
             if (failed)
             {
-                AllOptions::help(std::cout);
                 return sample::gLogger.reportFail(sampleTest);
             }
         }
@@ -356,23 +285,16 @@ int main(int argc, char** argv)
         std::vector<LibraryPtr> pluginLibs;
         if (gUseRuntime == RuntimeMode::kFULL)
         {
-            if (!options.build.versionCompatible)
-            {
-                sample::gLogInfo << "Loading standard plugins" << std::endl;
+            sample::gLogInfo << "Loading standard plugins" << std::endl;
 #if !TRT_STATIC
-                nvinferPluginLib = loadLibrary(kNVINFER_PLUGIN_LIBNAME);
-                auto pInitLibNvinferPlugins
-                    = nvinferPluginLib->symbolAddress<bool(void*, char const*)>("initLibNvInferPlugins");
+            nvinferPluginLib = loadLibrary(kNVINFER_PLUGIN_LIBNAME);
+            auto pInitLibNvinferPlugins
+                = nvinferPluginLib->symbolAddress<bool(void*, char const*)>("initLibNvInferPlugins");
 #else
-                auto pInitLibNvinferPlugins = initLibNvInferPlugins;
+            auto pInitLibNvinferPlugins = initLibNvInferPlugins;
 #endif
-                ASSERT(pInitLibNvinferPlugins != nullptr);
-                pInitLibNvinferPlugins(&sample::gLogger.getTRTLogger(), "");
-            }
-            else
-            {
-                sample::gLogInfo << "Not loading standard plugins since --versionCompatible is specified." << std::endl;
-            }
+            ASSERT(pInitLibNvinferPlugins != nullptr);
+            pInitLibNvinferPlugins(&sample::gLogger.getTRTLogger(), "");
             for (auto const& pluginPath : options.system.plugins)
             {
                 sample::gLogInfo << "Loading supplied plugin library: " << pluginPath << std::endl;
@@ -400,9 +322,7 @@ int main(int argc, char** argv)
         std::unique_ptr<BuildEnvironment> bEnv(new BuildEnvironment(options.build.safe, options.build.versionCompatible,
             options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath));
 
-        time_point const buildStartTime{std::chrono::high_resolution_clock::now()};
         bool buildPass = getEngineBuildEnv(options.model, options.build, options.system, *bEnv, sample::gLogError);
-        time_point const buildEndTime{std::chrono::high_resolution_clock::now()};
 
         if (!buildPass)
         {
@@ -410,13 +330,16 @@ int main(int argc, char** argv)
             return sample::gLogger.reportFail(sampleTest);
         }
 
+        // Exit as version is already printed during getEngineBuildEnv
+        if (options.build.getPlanVersionOnly)
+        {
+            return sample::gLogger.reportPass(sampleTest);
+        }
+
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
 
-        sample::gLogInfo << "Engine " << (options.build.load ? "loaded" : "built") << " in "
-                         << duration(buildEndTime - buildStartTime).count() << " sec." << std::endl;
-
-        if (!options.build.safe && options.build.refittable)
+        if (!options.build.safe && !options.build.buildDLAStandalone && options.build.refittable)
         {
             auto* engine = bEnv->engine.get();
             if (options.reporting.refit)
@@ -443,9 +366,10 @@ int main(int argc, char** argv)
 
         if (options.build.skipInference)
         {
-            if (!options.build.safe)
+            if (!options.build.safe && !options.build.buildDLAStandalone)
             {
                 printLayerInfo(options.reporting, bEnv->engine.get(), nullptr);
+                printOptimizationProfileInfo(options.reporting, bEnv->engine.get());
             }
             sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
             return sample::gLogger.reportPass(sampleTest);
@@ -507,6 +431,7 @@ int main(int argc, char** argv)
         if (!options.build.safe)
         {
             printLayerInfo(options.reporting, iEnv->engine.get(), iEnv->contexts.front().get());
+            printOptimizationProfileInfo(options.reporting, iEnv->engine.get());
         }
 
         std::vector<InferenceTrace> trace;

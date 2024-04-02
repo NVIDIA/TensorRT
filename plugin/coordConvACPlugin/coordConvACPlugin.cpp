@@ -197,6 +197,11 @@ bool CoordConvACPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const n
     return false;
 }
 
+void CoordConvACPlugin::attachToContext(
+    cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept
+{
+}
+
 // Plugin creator
 CoordConvACPluginCreator::CoordConvACPluginCreator() {}
 
@@ -219,6 +224,7 @@ IPluginV2Ext* CoordConvACPluginCreator::createPlugin(char const* name, PluginFie
 {
     try
     {
+        gLogWarning << "CoordConvACPlugin is deprecated since TensorRT 9.0." << std::endl;
         CoordConvACPlugin* plugin = new CoordConvACPlugin();
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
@@ -235,6 +241,7 @@ IPluginV2Ext* CoordConvACPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "CoordConvACPlugin is deprecated since TensorRT 9.0." << std::endl;
         CoordConvACPlugin* plugin = new CoordConvACPlugin(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;

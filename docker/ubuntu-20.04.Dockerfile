@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +15,27 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.0.1
+ARG CUDA_VERSION=12.3.2
 
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu20.04
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 8.6.1.6
+ENV NV_CUDNN_VERSION 8.9.6.50
+ENV NV_CUDNN_PACKAGE_NAME "libcudnn8"
+
+ENV CUDA_VERSION_MAJOR_MINOR=12.2
+
+ENV NV_CUDNN_PACKAGE "libcudnn8=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
+ENV NV_CUDNN_PACKAGE_DEV "libcudnn8-dev=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
+
+ENV TRT_VERSION 10.0.0.6
 SHELL ["/bin/bash", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ${NV_CUDNN_PACKAGE} \
+    ${NV_CUDNN_PACKAGE_DEV} \
+    && apt-mark hold ${NV_CUDNN_PACKAGE_NAME} \
+    && rm -rf /var/lib/apt/lists/*
 
 # Setup user account
 ARG uid=1000
@@ -69,24 +83,19 @@ RUN apt-get install -y --no-install-recommends \
     ln -s /usr/bin/pip3 pip;
 
 # Install TensorRT
-RUN if [ "${CUDA_VERSION}" = "10.2" ] ; then \
-    v="${TRT_VERSION%.*}-1+cuda${CUDA_VERSION}" &&\
-    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub &&\
-    apt-get update &&\
-    sudo apt-get install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
-        libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
-        python3-libnvinfer=${v} libnvinfer-dispatch8=${v} libnvinfer-dispatch-dev=${v} libnvinfer-lean8=${v} \
-        libnvinfer-lean-dev=${v} libnvinfer-vc-plugin8=${v} libnvinfer-vc-plugin-dev=${v} \
-        libnvinfer-headers-dev=${v} libnvinfer-headers-plugin-dev=${v}; \
+RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.0.0/tars/TensorRT-10.0.0.6.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && tar -xf TensorRT-10.0.0.6.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && cp -a TensorRT-10.0.0.6/lib/*.so* /usr/lib/x86_64-linux-gnu \
+        && pip install TensorRT-10.0.0.6/python/tensorrt-10.0.0b6-cp38-none-linux_x86_64.whl ;\
+elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.0.0/tars/TensorRT-10.0.0.6.Linux.x86_64-gnu.cuda-12.4.tar.gz \
+        && tar -xf TensorRT-10.0.0.6.Linux.x86_64-gnu.cuda-12.4.tar.gz \
+        && cp -a TensorRT-10.0.0.6/lib/*.so* /usr/lib/x86_64-linux-gnu \
+        && pip install TensorRT-10.0.0.6/python/tensorrt-10.0.0b6-cp38-none-linux_x86_64.whl ;\
 else \
-    v="${TRT_VERSION}-1+cuda${CUDA_VERSION%.*}" &&\
-    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/3bf863cc.pub &&\
-    apt-get update &&\
-    sudo apt-get -y install libnvinfer8=${v} libnvonnxparsers8=${v} libnvparsers8=${v} libnvinfer-plugin8=${v} \
-        libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvparsers-dev=${v} libnvinfer-plugin-dev=${v} \
-        python3-libnvinfer=${v} libnvinfer-dispatch8=${v} libnvinfer-dispatch-dev=${v} libnvinfer-lean8=${v} \
-        libnvinfer-lean-dev=${v} libnvinfer-vc-plugin8=${v} libnvinfer-vc-plugin-dev=${v} \
-        libnvinfer-headers-dev=${v} libnvinfer-headers-plugin-dev=${v}; \
+    echo "Invalid CUDA_VERSION"; \
+    exit 1; \
 fi
 
 # Install PyPI packages

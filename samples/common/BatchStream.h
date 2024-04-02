@@ -216,7 +216,7 @@ public:
             return false;
         }
 
-        for (int csize = 1, batchPos = 0; batchPos < mBatchSize; batchPos += csize, mFileBatchPos += csize)
+        for (int64_t csize = 1, batchPos = 0; batchPos < mBatchSize; batchPos += csize, mFileBatchPos += csize)
         {
             ASSERT(mFileBatchPos > 0 && mFileBatchPos <= mDims.d[0]);
             if (mFileBatchPos == mDims.d[0] && !update())
@@ -225,7 +225,7 @@ public:
             }
 
             // copy the smaller of: elements left to fulfill the request, or elements left in the file buffer.
-            csize = std::min(mBatchSize - batchPos, mDims.d[0] - mFileBatchPos);
+            csize = std::min<int64_t>(mBatchSize - batchPos, mDims.d[0] - mFileBatchPos);
             std::copy_n(
                 getFileBatch() + mFileBatchPos * mImageSize, csize * mImageSize, getBatch() + batchPos * mImageSize);
             std::copy_n(getFileLabels() + mFileBatchPos, csize, getLabels() + batchPos);
@@ -359,7 +359,7 @@ private:
         return true;
     }
 
-    int mBatchSize{0};
+    int64_t mBatchSize{0};
     int mMaxBatches{0};
     int mBatchCount{0};
     int mFileCount{0};

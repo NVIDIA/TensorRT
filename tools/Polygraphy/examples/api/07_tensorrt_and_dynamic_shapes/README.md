@@ -19,22 +19,8 @@ Using the TensorRT API, the process involves two steps:
     - `max`: The maximum shape for which the profile should work.
 
 2. During inference, set the input shape(s) in the execution context, then
-    query the execution context (*not* the engine) to determine the shape(s) of the output(s).
-    Based on the output shape(s), the device buffers can be resized to accomodate
-    the entire output(s).
-
-    For a single-input, single-output model, this would look roughly as follows:
-
-    <!-- Polygraphy Test: Ignore Start -->
-    ```python
-    context.set_binding_shape(0, inp.shape)
-
-    out_shape = context.get_binding_shape(1)
-    out_buf.resize(out_shape)
-
-    # Rest of inference code...
-    ```
-    <!-- Polygraphy Test: Ignore End -->
+    use the `IOutputAllocator` API to provide a callback to allocate enough
+    device memory for the outputs.
 
 Polygraphy can simplify both steps and help you avoid common pitfalls:
 

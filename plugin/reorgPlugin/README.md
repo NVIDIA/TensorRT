@@ -23,7 +23,7 @@ The input is a tensor that has a shape of `[N, C, H, W]` where:
 -   `C` is the number of channels
 -   `H` is the height of tensor
 -   `W` is the width of the tensor
- 
+
 After a [unique one-to-one mapping](https://github.com/pjreddie/darknet/blob/8215a8864d4ad07e058acafd75b2c6ff6600b9e8/src/blas.c#L9), the output tensor of shape `[N, C x s x s, H / s, W / s]`, where s is the stride, is generated.
 
 For example, if we have an input tensor of shape `[2, 4, 6, 6]`.
@@ -55,7 +55,7 @@ For example, if we have an input tensor of shape `[2, 4, 6, 6]`.
 [126 127 128 129 130 131]
 [132 133 134 135 136 137]
 [138 139 140 141 142 143]]]
-  
+
 
 [[[144 145 146 147 148 149]
 [150 151 152 153 154 155]
@@ -85,7 +85,7 @@ For example, if we have an input tensor of shape `[2, 4, 6, 6]`.
 [276 277 278 279 280 281]
 [282 283 284 285 286 287]]]]
 ```
- 
+
 We set `stride = 2` and perform the reorganization, we will get the following output tensor of shape `[2, 16, 3, 3]`.
 ```
 [[[[ 0 2 4]
@@ -151,7 +151,7 @@ We set `stride = 2` and perform the reorganization, we will get the following ou
 [[115 117 119]
 [133 135 137]
 [139 141 143]]]
-  
+
 
 [[[144 146 148]
 [150 152 154]
@@ -231,20 +231,22 @@ The following parameters were used to create the `Reorg` instance.
 
 ## Additional resources
 
-The following resources provide a deeper understanding of the `regionPlugin` plugin:
+The following resources provide a deeper understanding of the `reorgPlugin` plugin:
 
-- [YOLOv2 paper](https://arxiv.org/abs/1612.08242) 
+- [YOLOv2 paper](https://arxiv.org/abs/1612.08242)
 - [Reorg layer in YOLOv2](https://github.com/pjreddie/darknet/blob/8215a8864d4ad07e058acafd75b2c6ff6600b9e8/src/blas.c#L9)
 - [YOLOv2 architecture](https://ethereon.github.io/netscope/#/gist/d08a41711e48cf111e330827b1279c31)
 
 
 ## License
 
-For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) 
+For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html)
 documentation.
 
 
 ## Changelog
+Feb 2024
+Support IPluginV2DynamicExt in version 2.
 
 May 2019
 This is the first release of this `README.md` file.

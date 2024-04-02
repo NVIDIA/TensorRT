@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <cudnn.h>
 #include <iostream>
 #include <numeric>
 #include <string>
@@ -27,6 +26,7 @@
 #include <vector>
 
 using namespace nvinfer1;
+using namespace nvinfer1::pluginInternal;
 using nvinfer1::plugin::FlattenConcat;
 using nvinfer1::plugin::FlattenConcatPluginCreator;
 
@@ -163,8 +163,8 @@ int32_t FlattenConcat::enqueue(
             auto const* input = static_cast<float const*>(inputs[i]);
             for (int32_t n = 0; n < numConcats; ++n)
             {
-                auto status = cublasScopy(mCublas, mInputConcatAxis[i], input + n * mInputConcatAxis[i], 1,
-                    output + (n * mOutputConcatAxis + offset), 1);
+                auto status = mCublasWrapper->cublasScopy(mCublas, mInputConcatAxis[i], input + n * mInputConcatAxis[i],
+                    1, output + (n * mOutputConcatAxis + offset), 1);
 
                 if (status != CUBLAS_STATUS_SUCCESS)
                 {
@@ -213,7 +213,16 @@ void FlattenConcat::serialize(void* buffer) const noexcept
 void FlattenConcat::attachToContext(
     cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
 {
-    mCublas = cublasContext;
+    try
+    {
+        mCublasWrapper = createPluginCublasWrapper(gpuAllocator);
+        mCublas = mCublasWrapper->getCublasHandle();
+        PLUGIN_VALIDATE(mCublas != nullptr);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
 }
 
 // Detach the plugin object from its execution context.

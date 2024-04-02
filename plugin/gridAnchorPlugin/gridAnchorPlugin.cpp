@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,14 +16,14 @@
  */
 
 #include "gridAnchorPlugin.h"
+#include <cmath>
 #include <cstring>
-#include <cublas_v2.h>
-#include <cudnn.h>
 #include <iostream>
 #include <sstream>
 #include <vector>
 
 using namespace nvinfer1;
+using namespace nvinfer1::pluginInternal;
 
 namespace nvinfer1
 {
@@ -107,7 +107,7 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
             auto scale_next = (id == mNumLayers - 1)
                 ? 1.0
                 : (mParam[id].minSize + (mParam[id].maxSize - mParam[id].minSize) * (id + 1) / (mNumLayers - 1));
-            scales.push_back(sqrt(tmpScales[id] * scale_next));
+            scales.push_back(std::sqrt(tmpScales[id] * scale_next));
 
             mNumPriors[id] = mParam[id].numAspectRatios + 1;
         }
@@ -117,7 +117,7 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
         // Calculate the width and height of the prior boxes
         for (int32_t i = 0; i < mNumPriors[id]; i++)
         {
-            float sqrt_AR = sqrt(aspect_ratios[i]);
+            float sqrt_AR = std::sqrt(aspect_ratios[i]);
             tmpWidths.push_back(scales[i] * sqrt_AR);
             tmpHeights.push_back(scales[i] / sqrt_AR);
         }

@@ -29,6 +29,7 @@
 #include "NvInfer.h"
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <string>
 
 namespace tensorrt
@@ -42,16 +43,22 @@ namespace py = pybind11;
 size_t size(nvinfer1::DataType type);
 
 // Converts a TRT datatype to its corresponding numpy dtype.
-py::dtype nptype(nvinfer1::DataType type);
+// Returns nullptr if the type could not be converted to NumPy.
+std::unique_ptr<py::dtype> nptype(nvinfer1::DataType type);
 
 // Returns the TRT type corresponding to the specified numpy type.
 nvinfer1::DataType type(py::dtype const& type);
 
 // Return a numpy array (that doesn't own the data, but rather refers to it)
-static const auto weights_to_numpy = [](nvinfer1::Weights const& self) {
+static const auto weights_to_numpy = [](nvinfer1::Weights const& self) -> py::object {
     // The py::cast(self) allows us to return the buffer by reference rather than by copy.
     // See https://stackoverflow.com/questions/49181258/pybind11-create-numpy-view-of-data
-    return py::array{nptype(self.type), self.count, self.values, py::cast(self)};
+    auto const npType = nptype(self.type);
+    if (npType)
+    {
+        return py::array{*npType, self.count, self.values, py::cast(self)};
+    }
+    return py::cast(self);
 };
 
 inline int64_t volume(nvinfer1::Dims const& dims)
@@ -69,7 +76,7 @@ py::function getOverride(const T* self, std::string const& overloadName, bool sh
     if (!overload && showWarning)
     {
         std::cerr << "Method: " << overloadName
-                  << " was not overriden. Please provide an implementation for this method.";
+                  << " was not overriden. Please provide an implementation for this method." << std::endl;
     }
     return overload;
 }

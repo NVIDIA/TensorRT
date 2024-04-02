@@ -100,6 +100,12 @@ inline void cuErrCheck_(CUresult stat, CUDADriverWrapper const& wrap, char const
     }
 }
 
+//! Return CUDA major version
+constexpr int32_t getCudaLibVersionMaj() noexcept
+{
+    return CUDA_VERSION / 1000U;
+}
+
 } // namespace nvinfer1
 
 #endif // CUDA_DRIVER_WRAPPER_H

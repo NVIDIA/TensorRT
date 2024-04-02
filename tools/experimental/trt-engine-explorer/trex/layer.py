@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,8 +31,12 @@ class Layer:
         self.name = raw_dict['Name']
         try:
             self.type = raw_dict['ParameterType']
-        except:
+        except KeyError:
             self.type = raw_dict['LayerType']
+        try:
+            self.metadata = raw_dict['Metadata']
+        except KeyError:
+            self.metadata = None
         self.subtype = raw_dict['LayerType']
         self.inputs = [Activation(tensor) for tensor in raw_dict['Inputs']]
         self.outputs = [Activation(tensor) for tensor in raw_dict['Outputs']]
@@ -99,12 +103,12 @@ def fold_no_ops(layers: List, bindings: List) -> List:
             for loc, input in enumerate(layer.inputs):
                 try:
                     consumers[input.name].append((layer.name, loc))
-                except:
+                except KeyError:
                     consumers[input.name] = [(layer.name, loc)]
             for loc, output in enumerate(layer.outputs):
                 try:
                     producers[output.name].append((layer.name, loc))
-                except:
+                except KeyError:
                     producers[output.name] = [(layer.name, loc)]
         return consumers, producers
 

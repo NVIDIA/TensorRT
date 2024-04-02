@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,7 @@
 #ifndef COMMON_CUH
 #define COMMON_CUH
 
-#include "cublas_v2.h"
+#include "common/cublasWrapper.h"
 #include <cub/cub.cuh>
 
 #define HDI inline __host__ __device__
@@ -254,7 +254,7 @@ __device__ inline void layerNorm(
     __shared__ R mu;     // mean
     __shared__ R rsigma; // 1 / std.dev.
 
-    const auto sumKV = BlockReduce(temp_storage).Reduce(threadData, cub::Sum());
+    const auto sumKV = BlockReduce(temp_storage).Reduce(threadData, [](auto const& lhs, auto const& rhs){return lhs + rhs;});
 
     if (threadIdx.x == 0)
     {
@@ -286,7 +286,7 @@ __device__ inline void layerNormSmall(
     __shared__ T mu;     // mean
     __shared__ T rsigma; // 1 / std.dev.
 
-    const auto sumKV = BlockReduce(temp_storage).Reduce(threadData, cub::Sum());
+    const auto sumKV = BlockReduce(temp_storage).Reduce(threadData, [](auto const& lhs, auto const& rhs){return lhs + rhs;});
 
     if (threadIdx.x == 0)
     {
@@ -318,7 +318,6 @@ __device__ inline void scaledSoftmaxSmall(
     const int32_t offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
     const float w(rsqrtHeadSize);
-    cub::Sum sum;
     float threadData(-FLT_MAX);
 
     const int32_t idx = offset + threadIdx.x;
@@ -343,7 +342,7 @@ __device__ inline void scaledSoftmaxSmall(
         threadData = 0;
     }
 
-    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
+    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, [](auto const& lhs, auto const& rhs){return lhs + rhs;});
 
     if (threadIdx.x == 0)
     {
@@ -371,7 +370,6 @@ __device__ inline void scaledSoftmax(
     const int32_t offset = (blockIdx.y * gridDim.x + blockIdx.x) * ld;
 
     const float w(rsqrtHeadSize);
-    cub::Sum sum;
     float threadData(-FLT_MAX);
 
     if (lastValid >= blockDim.x)
@@ -399,7 +397,7 @@ __device__ inline void scaledSoftmax(
         threadData += exp((static_cast<float>(input[idx]) - fMax) * w);
     }
 
-    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, sum);
+    const auto Z = BlockReduce(tmpStorage).Reduce(threadData, [](auto const& lhs, auto const& rhs){return lhs + rhs;});
 
     if (threadIdx.x == 0)
     {

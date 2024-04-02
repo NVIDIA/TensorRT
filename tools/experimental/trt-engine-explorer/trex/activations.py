@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,9 @@ _regionFormatDict = {
     "Channel major FP16 format where channel % 16 == 0": "FP16 NHWC16",
     "Channel major FP16 format where channel == 4 and column stride % 32 == 0": "FP16 NHWC4",
     "Channel major INT8 format where channel == 4 and column stride % 32 == 0": "Int8 NHWC4",
+    "Channel major FP16 format where channel % 2 == 0": "FP16 NHWC2",
     "Channel major INT8 format where column stride % 32 == 0": "Int8 NHWC1",
+    "Channel major INT8 format where channel % 16 == 0": "Int8 NHWC16",
     "Row major INT8 format where column stride % 64 == 0": "Int8 NCHW",
     "Channel major FP16 format where channel % 8 == 0 with 3 spatial dimensions": "FP16 NDHWC8",
     "Channel major FP16 format where channel == 1 and column stride % 32 == 0": "FP16 NHWC1",
@@ -56,33 +58,70 @@ _regionFormatDict = {
     "Channel major FP16 format": "FP16 NHWC",
     "Channel major Int8 format": "Int8 NHWC",
     "Row major linear BOOL": "Bool",
-    "Unknown format": "Unknown format"
+    "Channel major FP32 format with 3 spatial dimensions": "FP32 NDHWC",
+    "Channel major FP32 format with 3 spatial dimensions where channel % 4 == 0": "FP32 NDHWC4",
+    "Channel major FP32 format where channel % 4 == 0 with 3 spatial dimensions": "FP32 NDHWC4",
+    "Row major linear UInt8 format" : "UInt8 NCHW",
+    "Channel major UInt8 format": "UInt8 NHWC",
+    "Row major linear Int64 format": "Int64 NCHW",
+    "Row major linear BFloat16 format": "BF16 NCHW",
+    "Channel major BFloat16 format where channel % 8 == 0": "BF16 NHWC8",
+    "Channel major BFloat16 format where channel % 4 == 0": "BF16 NHWC4",
+    "Channel major BFloat16 format where channel % 8 == 0 with 3 spatial dimensions": "BF16 NDHWC8",
+    "Channel major BFloat16 format where channel % 2 == 0": "BF16 NHWC2",
+    "Two wide channel vectorized row major BFloat16 format": "BF16 NC2HW",
+    "Row major linear FP8 format": "FP8 NCHW",
+    "Unknown format": "Unknown format",
+    # kgen formats
+    "BFloat16": "BFloat16",
+    "Bool": "Bool",
+    "Double": "Double",
+    "DoubleComplex": "DoubleComplex",
+    "Float": "Float",
+    "FloatComplex": "FloatComplex",
+    "FP8": "FP8",
+    "Half": "Half",
+    "Int16": "Int16",
+    "Int32": "Int32",
+    "Int64": "Int64",
+    "Int8": "Int8",
+    "None": "None",
+    "UInt16": "UInt16",
+    "UInt32": "UInt32",
+    "UInt64": "UInt64",
+    "UInt8": "UInt8",
 }
 
 class Activation:
     """Convenience class wrapping activation regions."""
     def __init__(self, raw_dict: Dict):
         def parse_tensor_info(desc):
-            if 'Int8' in desc:
-                precision = 'INT8'
-                data_size = 1
-            elif 'FP32' in desc:
-                precision = 'FP32'
-                data_size = 4
-            elif 'FP16' in desc:
-                precision = 'FP16'
-                data_size = 2
-            elif 'INT32' in desc:
-                precision = 'INT32'
-                data_size = 4
-            elif 'Bool' in desc:
-                precision = 'BOOL'
-                data_size = 4
-            elif desc == "Unknown format":
-                precision = 'Unknown'
-                data_size = 0
-            else:
-                raise ValueError(f"Uknown precision {desc}")
+            try:
+                data_type, layout = desc.split(' ')
+            except ValueError:
+                data_type = desc
+            unknown_format = ('Unknown format', 0)
+            precision, data_size = {
+                'FP8':            ('FP8',    1),
+                'FP16':           ('FP16',   2),
+                'Half':           ('FP16',   2),
+                'FP32':           ('FP32',   4),
+                'Float':          ('FP32',   4),
+                'Double':         ('FP64',   8),
+                'BFloat16':       ('FP32',   2),
+                'Int8':           ('INT8',   1),
+                'Int16':          ('INT16',  2),
+                'INT32':          ('INT32',  4),
+                'Int32':          ('INT32',  4),
+                'Int64':          ('INT64',  8),
+                'UInt8':          ('UINT8',  1),
+                'UInt16':         ('UINT16', 2),
+                'UInt32':         ('UINT32', 4),
+                'UInt64':         ('UINT64', 8),
+                'Unknown format': unknown_format,
+                'None':           unknown_format,
+            }.get(data_type, (data_type, 0))
+
             return precision, data_size
 
         self.name = raw_dict['Name']

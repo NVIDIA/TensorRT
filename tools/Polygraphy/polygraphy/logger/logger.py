@@ -273,14 +273,14 @@ class Logger:
     @property
     def severity(self):
         print(
-            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.48.0. Use `module_severity` instead"
+            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.50.0. Use `module_severity` instead"
         )
         return self._module_severity.get()
 
     @severity.setter
     def severity(self, value):
         print(
-            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.48.0. Use `module_severity` instead"
+            "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.50.0. Use `module_severity` instead"
         )
         self.module_severity = value
 
@@ -402,7 +402,14 @@ class Logger:
                     import colored
 
                     color = Logger.SEVERITY_COLOR_MAPPING[severity]
-                    return colored.stylize(message, [colored.fg(color)]) if color else message
+
+                    if color:
+                        try:
+                            color = [colored.fg(color)]
+                        except AttributeError:
+                            color = colored.fore(color)
+
+                    return colored.stylize(message, color) if color else message
                 return message
 
             prefix = get_prefix()
@@ -577,24 +584,25 @@ class Logger:
         """
         self.log(message, Logger.ERROR, mode=mode, stack_depth=3)
 
-    def critical(self, message):
+    def critical(self, message, ExceptionType=None):
         """
         Logs a message to stdout with CRITICAL severity and raises an exception.
 
         Args:
             message (Union[str, Callable() -> str]):
                     A string or callable which returns a string of the message to log.
-            mode (LogMode):
-                    Controls how the message is logged.
-                    See LogMode for details.
+            ExceptionType (type):
+                    The type of exception to raise.
+                    Defaults to PolygraphyException.
 
         Raises:
-            PolygraphyException
+            ExceptionType
         """
         self.log(message, Logger.CRITICAL, stack_depth=3)
         from polygraphy.exception import PolygraphyException
 
-        raise PolygraphyException(message) from None
+        ExceptionType = ExceptionType or PolygraphyException
+        raise ExceptionType(message) from None
 
     def internal_error(self, message):
         from polygraphy import config

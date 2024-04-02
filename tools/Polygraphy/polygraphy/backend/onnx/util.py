@@ -17,13 +17,14 @@
 import copy
 from collections import OrderedDict
 
-from polygraphy import mod, util, constants
+from polygraphy import mod, util
 from polygraphy.common import TensorMetadata
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER, LogMode
 
 gs = mod.lazy_import("onnx_graphsurgeon")
-numpy_helper = mod.lazy_import("onnx.numpy_helper")
 onnx = mod.lazy_import("onnx")
+onnx_numpy_helper = mod.lazy_import("onnx.numpy_helper")
 
 
 def get_num_nodes(model):
@@ -117,14 +118,12 @@ def get_dtype(tensor):
         onnx_type = tensor.data_type
     else:
         onnx_type = tensor.type.tensor_type.elem_type
-    if onnx_type in onnx.mapping.TENSOR_TYPE_TO_NP_TYPE:
-        return onnx.mapping.TENSOR_TYPE_TO_NP_TYPE[onnx_type]
-    return None
+    return DataType.from_dtype(onnx_type, source_module="onnx")
 
 
 def get_values(tensor):
     try:
-        return numpy_helper.to_array(tensor)
+        return onnx_numpy_helper.to_array(tensor)
     except Exception as err:
         G_LOGGER.error(f"Failed to load weights.\nNote: Error was: {err}", mode=LogMode.ONCE)
     return "<error: failed to load weights>"
@@ -189,7 +188,6 @@ def str_from_onnx(model, show_layers=None, show_attrs=None, show_weights=None):
 
 
 def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, indent_level=0):
-
     input_metadata = get_input_metadata(graph)
     output_metadata = get_output_metadata(graph)
     initializer_metadata = get_tensor_metadata(graph.initializer)
@@ -335,7 +333,7 @@ def set_shapes_from_layerwise_meta(graph, layerwise_meta):
     for tensor in graph.tensors().values():
         if isinstance(tensor, gs.Variable) and tensor.name in layerwise_meta:
             tensor.shape = layerwise_meta[tensor.name].shape
-            tensor.dtype = layerwise_meta[tensor.name].dtype
+            tensor.dtype = DataType.to_dtype(DataType.from_dtype(layerwise_meta[tensor.name].dtype), "onnx")
 
 
 def lower_constant_nodes(graph):
@@ -375,7 +373,11 @@ def get_unbounded_dds_tensors(graph):
                     input_tensor = node.inputs[input_idx]
                     # Check if the corresponding input tensor is a runtime value and its producer is not Min operator.
                     # If a tensor is produced by a Min operator, its upper bound has already been set.
-                    if input_tensor.name not in const_tensor_set and len(input_tensor.inputs) >= 1 and input_tensor.inputs[0].op != 'Min':
+                    if (
+                        input_tensor.name not in const_tensor_set
+                        and len(input_tensor.inputs) >= 1
+                        and input_tensor.inputs[0].op != "Min"
+                    ):
                         return input_tensor
         return None
 
@@ -401,7 +403,7 @@ def get_unbounded_dds_tensors(graph):
         const_tensor_set = get_const_tensors(graph)
 
         # Our target is to find those input tensors that cause its consumer nodes generated unbounded outputs.
-        # If a tensor has named dimensions that appeared before in its symbolic shape, it means that the shape is *not* data dependent, 
+        # If a tensor has named dimensions that appeared before in its symbolic shape, it means that the shape is *not* data dependent,
         # and so will have an upper bound.
         target_tensor_names = set()
         target_tensor_list = []

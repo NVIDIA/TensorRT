@@ -17,11 +17,14 @@
 import os
 
 import numpy as np
-from polygraphy import util
+import tensorrt as trt
+
+from polygraphy import mod, util
 from polygraphy.backend.common import BytesFromPath
 from polygraphy.backend.onnx import OnnxFromPath
 from polygraphy.backend.tf import GraphFromFrozen
 from polygraphy.common import TensorMetadata
+from polygraphy.datatype import DataType
 
 
 def model_path(name=None):
@@ -45,6 +48,7 @@ def check_tf_identity(runner):
     outputs = runner.infer(feed_dict)
     assert np.all(outputs["Identity_2:0"] == feed_dict["Input:0"])
 
+MODELS_DIR = os.path.join(os.path.dirname(__file__))
 
 TF_MODELS = {
     "identity": Model(path=model_path("tf_identity.pb"), LoaderType=GraphFromFrozen, check_runner=check_tf_identity),
@@ -71,7 +75,10 @@ def check_dynamic_identity(runner, shapes):
 
 def check_empty_tensor_expand(runner, shapes):
     shape = shapes["new_shape"]
-    feed_dict = {"data": np.zeros(shape=(2, 0, 3, 0), dtype=np.float32), "new_shape": np.array(shape, dtype=np.int32)}
+    feed_dict = {
+        "data": np.zeros(shape=(2, 0, 3, 0), dtype=np.float32),
+        "new_shape": np.array(shape, dtype=np.int32 if mod.version(trt.__version__) < mod.version("9.0") else np.int64),
+    }
     outputs = runner.infer(feed_dict)
     # Empty tensor will still be empty after broadcast
     assert outputs["expanded"].shape == shape
@@ -84,6 +91,16 @@ def check_reshape(runner):
     assert np.all(outputs["output"] == feed_dict["data"].ravel())
 
 
+def check_residual_block(runner,shapes):
+    feed_dict = {"gpu_0/data_0": np.random.random_sample(size=shapes["gpu_0/data_0"]).astype(np.float32)}
+    # Confirm inference can go through without error
+    outputs = runner.infer(feed_dict)
+
+def check_matmul_2layer(runner, shape=(2, 8)):
+    feed_dict = {"onnx::MatMul_0": np.random.random_sample(size=shape).astype(np.float32)}
+    # Confirm inference can go through without error
+    outputs = runner.infer(feed_dict)
+
 def no_check_implemented(runner):
     raise NotImplementedError("No check_runner implemented for this model")
 
@@ -93,7 +110,7 @@ ONNX_MODELS = {
         path=model_path("identity.onnx"),
         LoaderType=BytesFromPath,
         check_runner=check_identity,
-        input_metadata=TensorMetadata().add("x", dtype=np.float32, shape=(1, 1, 2, 2)),
+        input_metadata=TensorMetadata().add("x", dtype=DataType.FLOAT32, shape=(1, 1, 2, 2)),
     ),
     "identity_identity": Model(
         path=model_path("identity_identity.onnx"), LoaderType=BytesFromPath, check_runner=check_identity_identity
@@ -102,13 +119,13 @@ ONNX_MODELS = {
         path=model_path("dynamic_identity.onnx"),
         LoaderType=BytesFromPath,
         check_runner=check_dynamic_identity,
-        input_metadata=TensorMetadata().add("X", dtype=np.float32, shape=(1, 1, -1, -1)),
+        input_metadata=TensorMetadata().add("X", dtype=DataType.FLOAT32, shape=(1, 1, -1, -1)),
     ),
     "identity_multi_ch": Model(
         path=model_path("identity_multi_ch.onnx"),
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
-        input_metadata=TensorMetadata().add("x", dtype=np.float32, shape=(2, 4, 3, 3)),
+        input_metadata=TensorMetadata().add("x", dtype=DataType.FLOAT32, shape=(2, 4, 3, 3)),
     ),
     "empty_tensor_expand": Model(
         path=model_path("empty_tensor_expand.onnx"), LoaderType=BytesFromPath, check_runner=check_empty_tensor_expand
@@ -133,7 +150,9 @@ ONNX_MODELS = {
         path=model_path("reducable.onnx"),
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
-        input_metadata=TensorMetadata().add("X0", shape=(1,), dtype=np.float32).add("Y0", shape=(1,), dtype=np.float32),
+        input_metadata=TensorMetadata()
+        .add("X0", shape=(1,), dtype=DataType.FLOAT32)
+        .add("Y0", shape=(1,), dtype=DataType.FLOAT32),
     ),
     "reducable_with_const": Model(
         path=model_path("reducable_with_const.onnx"),
@@ -165,10 +184,20 @@ ONNX_MODELS = {
         path=model_path("needs_constraints.onnx"),
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
-        input_metadata=TensorMetadata().add("x", dtype=np.float32, shape=(1, 1, 256, 256)),
+        input_metadata=TensorMetadata().add("x", dtype=DataType.FLOAT32, shape=(1, 1, 256, 256)),
     ),
     "constant_fold_bloater": Model(
         path=model_path("constant_fold_bloater.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
+    "renamable" : Model(
+        path=model_path("renamable.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
+    "cleanable" : Model(
+        path=model_path("cleanable.onnx"),
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
     ),
@@ -181,5 +210,104 @@ ONNX_MODELS = {
     ),
     "unbounded_dds": Model(
         path=model_path("unbounded_dds.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "loop": Model(
+        path=model_path("loop.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "matmul.fp16": Model(
+        path=model_path("matmul.fp16.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "matmul": Model(
+        path=model_path("matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "sparse.matmul": Model(
+        path=model_path("sparse.matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "matmul.bf16": Model(
+        path=model_path("matmul.bf16.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "matmul.bf16.i32data": Model(
+        path=model_path("matmul.bf16.i32data.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "matmul_2layer": Model(
+        path=model_path("matmul_2layer.onnx"), LoaderType=BytesFromPath, check_runner=check_matmul_2layer
+    ),
+    "unsorted": Model(path=model_path("unsorted.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented),
+    "conv": Model(
+        path=model_path("conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "sparse.conv": Model(
+        path=model_path("sparse.conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "no_op_reshape": Model(
+        path=model_path("no_op_reshape.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "bad_graph_with_dup_value_info": Model(
+        path=model_path("bad_graph_with_dup_value_info.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "bad_graph_with_no_name": Model(
+        path=model_path("bad_graph_with_no_name.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "bad_graph_with_no_import_domains": Model(
+    path=model_path("bad_graph_with_no_import_domains.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "bad_graph_with_parallel_invalid_nodes": Model(
+        path=model_path("bad_graph_with_parallel_invalid_nodes.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "bad_graph_conditionally_invalid": Model(
+        path=model_path("bad_graph_conditionally_invalid.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "custom_op_node": Model(
+        path=model_path("custom_op_node.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "bad_graph_with_duplicate_node_names": Model(
+        path=model_path("bad_graph_with_duplicate_node_names.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "bad_graph_with_multi_level_errors": Model(
+        path=model_path("bad_graph_with_multi_level_errors.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "invalid": Model(
+        path=model_path("invalid.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "empty": Model(
+        path=model_path("empty.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "residual_block": Model(
+        path=model_path("residual_block.onnx"), LoaderType=BytesFromPath, check_runner=check_residual_block
+    ),
+    "graph_with_subgraph_matching_toy_plugin": Model(
+        path=model_path("graph_with_subgraph_matching_toy_plugin.onnx"), 
+        LoaderType=BytesFromPath, 
+        check_runner=no_check_implemented
+    ),
+    "transpose_matmul": Model(
+        path=model_path("transpose_matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "qdq_conv": Model(
+        path=model_path("qdq_conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.matmul.fp16": Model(
+        path=model_path("weightless.matmul.fp16.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.matmul.bf16": Model(
+        path=model_path("weightless.matmul.bf16.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.conv": Model(
+        path=model_path("weightless.conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.sparse.matmul": Model(
+        path=model_path("weightless.sparse.matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.sparse.conv": Model(
+        path=model_path("weightless.sparse.conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.transpose_matmul": Model(
+        path=model_path("weightless.transpose_matmul.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "weightless.qdq_conv": Model(
+        path=model_path("weightless.qdq_conv.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
+    ),
+    "roialign": Model(
+        path=model_path("roialign.onnx"), LoaderType=BytesFromPath, check_runner=no_check_implemented
     ),
 }

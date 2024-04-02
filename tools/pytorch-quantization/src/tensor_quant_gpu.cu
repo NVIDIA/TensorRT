@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,110 +15,145 @@
  * limitations under the License.
  */
 
-
 #include <ATen/ATen.h>
-#include <torch/extension.h>
-
-#include <math.h>
 #include <cuda.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#include <math.h>
+#include <torch/extension.h>
 
 #define BLOCK_SIZE 128
+#define EPSILON (1. / (1<<24))  // Minimum representable of fp16
+
+#define AT_DISPATCH_CASE_FLOATING_TYPES(...)   \
+  AT_DISPATCH_CASE(at::ScalarType::Double, __VA_ARGS__)  \
+  AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__)  \
+  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__)   \
+  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__)
+
+#define AT_DISPATCH_FLOATING_TYPES(TYPE, NAME, ...) \
+  AT_DISPATCH_SWITCH(                                        \
+      TYPE, NAME, AT_DISPATCH_CASE_FLOATING_TYPES(__VA_ARGS__))
 
 __host__ __device__ float bits_to_bound(int num_bits, int is_unsigned) {
   float bound = (1 << (num_bits - 1 + int(is_unsigned))) - 1;
   return bound;
 }
 
-template <typename T> __device__ T fake_tensor_quant_device(T input, T amax, int bound);
+__device__ float fake_tensor_quant_device(float input, float amax, int min_bound, int max_bound) {
+  CUDA_KERNEL_ASSERT(amax >= 0);
 
-template <>
-__device__ float fake_tensor_quant_device(float input, float amax, int bound) {
-  float scale = bound / amax;
-  float output = round(input * scale);
-  output = output > bound ? bound : output;
-  output = output < -bound ? -bound : output;
+  if (amax < EPSILON) {
+    return 0.f;
+  }
+
+  float scale = max_bound / amax;
+  float output = rint(input * scale);
+  output = output > max_bound ? max_bound : output;
+  output = output < min_bound ? min_bound : output;
 
   return output / scale;
 }
 
-template <>
-__device__ at::Half fake_tensor_quant_device(at::Half input, at::Half amax, int bound) {
-  float output = fake_tensor_quant_device(__half2float(input), __half2float(amax), bound);
-
-  return __float2half(output);
-}
-
-// Sepcialize double only to pass Aten dispatch macros
-template <>
-__device__ double fake_tensor_quant_device(double input, double amax, int bound) {
-  float output = fake_tensor_quant_device(input, amax, bound);
-
-  return output;
-}
-
 template <typename T>
-__global__ void fake_tensor_quant_kernel(
-    const T *inputs, size_t n, T *outputs,
-    const T *amax, int num_bits=8, bool is_unsigned=false) {
+__global__ void fake_tensor_quant_kernel(const T* inputs, size_t n, T* outputs, const float* amax,
+                                         int num_bits = 8, bool is_unsigned = false,
+                                         bool narrow_range = true) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (tid < n) {
+    if (is_unsigned) {
+      CUDA_KERNEL_ASSERT(inputs[tid] >= 0);
+    }
     float bound = bits_to_bound(num_bits, is_unsigned);
-    outputs[tid] = fake_tensor_quant_device(inputs[tid], amax[0], bound);
+    float max_bound = bound;
+    float min_bound = -(bound + !narrow_range);
+    outputs[tid] = fake_tensor_quant_device((float)inputs[tid], amax[0], min_bound, max_bound);
   }
 }
 
-void fake_tensor_quant_cuda_inplace(at::Tensor inputs, at::Tensor amax, int num_bits=8, bool is_unsigned=false) {
+void fake_tensor_quant_cuda_inplace(at::Tensor inputs, at::Tensor amax, int num_bits = 8,
+                                    bool is_unsigned = false, bool narrow_range = true) {
   size_t numel = inputs.numel();
-  AT_DISPATCH_FLOATING_TYPES_AND_HALF(inputs.type().scalarType(), "fake_tensor_quant_cuda_inplace", [&] {
-    fake_tensor_quant_kernel<<<numel/BLOCK_SIZE + 1, BLOCK_SIZE>>>(
-        inputs.data_ptr<scalar_t>(), numel, inputs.data_ptr<scalar_t>(),
-        amax.data_ptr<scalar_t>(), num_bits, is_unsigned);
-  });
+  AT_DISPATCH_FLOATING_TYPES(
+      inputs.type().scalarType(), "fake_tensor_quant_cuda_inplace", [&] {
+        fake_tensor_quant_kernel<<<numel / BLOCK_SIZE + 1, BLOCK_SIZE>>>(
+            inputs.data_ptr<scalar_t>(), numel, inputs.data_ptr<scalar_t>(),
+            amax.to(at::ScalarType::Float).data_ptr<float>(), num_bits, is_unsigned);
+      });
 }
 
-at::Tensor fake_tensor_quant_cuda(at::Tensor inputs, at::Tensor amax, int num_bits=8, bool is_unsigned=false) {
+at::Tensor fake_tensor_quant_cuda(at::Tensor inputs, at::Tensor amax, int num_bits = 8,
+                                  bool is_unsigned = false, bool narrow_range = true) {
   size_t numel = inputs.numel();
-  auto outputs = torch::zeros_like(inputs);
-  AT_DISPATCH_FLOATING_TYPES_AND_HALF(inputs.type().scalarType(), "fake_tensor_quant_cuda", [&] {
-    fake_tensor_quant_kernel<<<numel/BLOCK_SIZE + 1, BLOCK_SIZE>>>(
+  auto outputs = torch::empty_like(inputs);
+  AT_DISPATCH_FLOATING_TYPES(inputs.type().scalarType(), "fake_tensor_quant_cuda", [&] {
+    fake_tensor_quant_kernel<<<numel / BLOCK_SIZE + 1, BLOCK_SIZE>>>(
         inputs.data_ptr<scalar_t>(), numel, outputs.data_ptr<scalar_t>(),
-        amax.data_ptr<scalar_t>(), num_bits, is_unsigned);
+        amax.to(at::ScalarType::Float).data_ptr<float>(), num_bits, is_unsigned);
   });
 
   return outputs;
 }
 
-__global__ void fake_tensor_quant_with_axis_cuda_kernel(
-    const float *inputs, size_t n, float *outputs,
-    const float *amax, int axis_size, int outer_size, int num_bits=8, bool is_unsigned=false) {
+template <typename T>
+__global__ void fake_tensor_quant_with_axis_cuda_kernel(const T* inputs, size_t n,
+                                                        T* outputs, const float* amax,
+                                                        int axis_size, int outer_size,
+                                                        int num_bits = 8, bool is_unsigned = false,
+                                                        bool narrow_range = true) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
   float bound = bits_to_bound(num_bits, is_unsigned);
+  float max_bound = bound;
+  float min_bound = -(bound + !narrow_range);
 
   for (int idx = 4 * tid; idx < 4 * (tid + 1) && idx < n; ++idx) {
+    if (is_unsigned) {
+      CUDA_KERNEL_ASSERT(inputs[idx] >= 0);
+    }
     int axis_idx = (idx / outer_size) % axis_size;
 
-    outputs[idx] = fake_tensor_quant_device(inputs[idx], amax[axis_idx], bound);
+    outputs[idx] = fake_tensor_quant_device((float)inputs[idx], amax[axis_idx], min_bound, max_bound);
   }
 }
 
-at::Tensor fake_tensor_quant_with_axis_cuda(
-    at::Tensor inputs, at::Tensor amax, int axis, int num_bits=8, bool is_unsigned=false) {
+at::Tensor fake_tensor_quant_with_axis_cuda(at::Tensor inputs, at::Tensor amax, int axis,
+                                            int num_bits = 8, bool is_unsigned = false,
+                                            bool narrow_range = true) {
   auto outputs = torch::empty_like(inputs);
   size_t numel = inputs.numel();
   int axis_size = inputs.size(axis);
 
-  int outer_size = 1;
-  for (int i = axis + 1; i < inputs.dim(); ++i) {
-    outer_size *= inputs.size(i);
-  }
+  int outer_size = inputs.stride(axis);
 
-  fake_tensor_quant_with_axis_cuda_kernel<<<numel / (BLOCK_SIZE*4) + 1, BLOCK_SIZE>>>(
-      inputs.data_ptr<float>(), numel, outputs.data_ptr<float>(), amax.data_ptr<float>(), axis_size, outer_size,
-      num_bits, is_unsigned);
+  AT_DISPATCH_FLOATING_TYPES(inputs.type().scalarType(), "fake_tensor_quant_cuda_with_axis", [&] {
+    fake_tensor_quant_with_axis_cuda_kernel<<<numel / (BLOCK_SIZE * 4) + 1, BLOCK_SIZE>>>(
+        inputs.data_ptr<scalar_t>(), numel, outputs.data_ptr<scalar_t>(),
+        amax.to(at::ScalarType::Float).data_ptr<float>(), axis_size, outer_size, num_bits, is_unsigned);
+  });
   return outputs;
 }
 
+#if CUDA_VERSION > 11070
+  #include <cuda_fp8.h>
+
+  template <typename T>
+  __global__ void fake_e4m3fy_kernel(const T* inputs, size_t n, T* outputs) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    for (int idx = 4 * tid; idx < 4 * (tid + 1) && idx < n; ++idx) {
+      outputs[idx] = static_cast<T>(static_cast<float>(static_cast<__nv_fp8_e4m3>(static_cast<float>(inputs[idx]))));
+    }
+  }
+
+  at::Tensor fake_e4m3fy_cuda(at::Tensor inputs) {
+    size_t numel = inputs.numel();
+    auto outputs = torch::empty_like(inputs);
+    AT_DISPATCH_FLOATING_TYPES(inputs.type().scalarType(), "fake_e4m3fy_cuda", [&] {
+      fake_e4m3fy_kernel<<<numel / (BLOCK_SIZE * 4) + 1, BLOCK_SIZE>>>(
+          inputs.data_ptr<scalar_t>(), numel, outputs.data_ptr<scalar_t>());
+    });
+    return outputs;
+  }
+#endif

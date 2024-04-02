@@ -39,7 +39,7 @@ from builder_utils import SQD_W, SQD_B  # SQuAD Output Keys
 TensorRT Initialization
 """
 TRT_LOGGER = trt.Logger(trt.Logger.INFO)
-trt_version = [int(n) for n in trt.__version__.split('.')]
+trt_version = [n for n in trt.__version__.split('.')]
 
 # Import necessary plugins for demoBERT
 plugin_lib_name = "nvinfer_plugin.dll" if sys.platform == "win32" else "libnvinfer_plugin.so"
@@ -107,10 +107,7 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, mask_i
     Ball = init_dict[prefix + BQKV]
 
     # FC_attention
-    if config.use_int8:
-        mult_all = network.add_convolution_nd(input_tensor, 3 * hidden_size, (1, 1), Wall, Ball)
-    else:
-        mult_all = network.add_fully_connected(input_tensor, 3 * hidden_size, Wall, Ball)
+    mult_all = network.add_convolution_nd(input_tensor, 3 * hidden_size, (1, 1), Wall, Ball)
 
     if config.use_qat:
         dr_qkv = max(
@@ -202,10 +199,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, resi
     # FC0
     B_aout = init_dict[prefix + B_AOUT]
     W_aout = init_dict[prefix + W_AOUT]
-    if config.use_int8:
-        attention_out_fc = network.add_convolution_nd(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
-    else:
-        attention_out_fc = network.add_fully_connected(attention_heads, hidden_size, W_aout, B_aout)
+    attention_out_fc = network.add_convolution_nd(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
     if config.use_int8 and config.use_qat:
         dr_fc_aout = init_dict[prefix + 'attention_output_add_local_input_quantizer_amax']
         set_output_range(attention_out_fc, dr_fc_aout)
@@ -225,10 +219,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, resi
     # FC1 + GELU
     B_mid = init_dict[prefix + B_MID]
     W_mid = init_dict[prefix + W_MID]
-    if config.use_int8:
-        mid_dense = network.add_convolution_nd(attention_ln, config.intermediate_size, (1, 1), W_mid, B_mid)
-    else:
-        mid_dense = network.add_fully_connected(attention_ln, config.intermediate_size, W_mid, B_mid)
+    mid_dense = network.add_convolution_nd(attention_ln, config.intermediate_size, (1, 1), W_mid, B_mid)
 
     gelu_layer = add_gelu(network, mid_dense.get_output(0))
 
@@ -247,10 +238,7 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, resi
     B_lout = init_dict[prefix + B_LOUT]
     W_lout = init_dict[prefix + W_LOUT]
 
-    if config.use_int8:
-        out_dense = network.add_convolution_nd(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
-    else:
-        out_dense = network.add_fully_connected(intermediate_act, hidden_size, W_lout, B_lout)
+    out_dense = network.add_convolution_nd(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
     if config.use_int8 and config.use_qat:
         dr_fc_out = init_dict[prefix + 'output_add_local_input_quantizer_amax']
         set_output_range(out_dense, dr_fc_out)
@@ -327,6 +315,7 @@ def bert_model(config, init_dict, network, input_tensor, residual, mask_idx, cu_
 
     squad_logits = squad_output("cls_", config, init_dict, network, prev_input)
     squad_logits_out = squad_logits.get_output(0)
+    squad_logits_out.name = "logits_out"
     network.mark_output(squad_logits_out)
 
 
@@ -339,11 +328,7 @@ def squad_output(prefix, config, init_dict, network, input_tensor):
     W_out = init_dict[prefix + SQD_W]
     B_out = init_dict[prefix + SQD_B]
 
-    if config.use_int8:
-        dense = network.add_convolution_nd(input_tensor, 2, (1, 1), W_out, B_out)
-    else:
-        dense = network.add_fully_connected(input_tensor, 2, W_out, B_out)
-
+    dense = network.add_convolution_nd(input_tensor, 2, (1, 1), W_out, B_out)
     OUT = network.add_shuffle(dense.get_output(0))
     if config.use_int8 and config.interleaved:
         OUT.second_transpose = (1, 2, 0, 3)
@@ -394,10 +379,13 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, max_se
     return emb_layer, cu_seqlens, max_seqlen
 
 def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_dict, squad_json, vocab_file, calibrationCacheFile, calib_num, verbose):
-    explicit_batch_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
-    with trt.Builder(TRT_LOGGER) as builder, builder.create_network(explicit_batch_flag) as network, builder.create_builder_config() as builder_config:
-        builder_config.max_workspace_size = workspace_size * (1024 * 1024)
+    network_creation_flag = 0
+    if "EXPLICIT_BATCH" in trt.NetworkDefinitionCreationFlag.__members__.keys():
+        network_creation_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+
+    with trt.Builder(TRT_LOGGER) as builder, builder.create_network(network_creation_flag) as network, builder.create_builder_config() as builder_config:
+        builder_config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace_size * (1024 * 1024))
         builder_config.avg_timing_iterations = 8
         if config.use_fp16:
             builder_config.set_flag(trt.BuilderFlag.FP16)
@@ -412,7 +400,7 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
         # speed up the engine build for trt major version >= 8
         # 1. disable cudnn tactic
         # 2. load global timing cache
-        if trt_version[0] >= 8:
+        if int(trt_version[0]) >= 8:
             tactic_source = builder_config.get_tactic_sources() & ~(1 << int(trt.TacticSource.CUDNN))
             builder_config.set_tactic_sources(tactic_source)
             if config.timing_cache != None:
@@ -454,12 +442,12 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
         bert_model(config, weights_dict, network, embeddings, residual, mask_idx, cu_seqlens, max_seqlen)
 
         build_start_time = time.time()
-        engine = builder.build_engine(network, builder_config)
+        serialized_engine = builder.build_serialized_network(network, builder_config)
         build_time_elapsed = (time.time() - build_start_time)
         TRT_LOGGER.log(TRT_LOGGER.INFO, "build engine in {:.3f} Sec".format(build_time_elapsed))
 
         # save global timing cache
-        if trt_version[0] >= 8 and config.timing_cache != None:
+        if int(trt_version[0]) >= 8 and config.timing_cache != None:
             cache = builder_config.get_timing_cache()
             with cache.serialize() as buffer:
                 with open(config.timing_cache, "wb") as f:
@@ -467,7 +455,7 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
                     f.flush()
                     os.fsync(f)
 
-        return engine
+        return serialized_engine
 
 def main():
     parser = argparse.ArgumentParser(description="TensorRT BERT Sample", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -533,9 +521,7 @@ def main():
                            "PyTorch using option --pytorch, or Pickle weight dictionary using option --pickle "
                            "to build TRT BERT model.")
 
-    with build_engine(args.max_batch_size, args.workspace_size, args.max_sequence_length, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num, args.verbose) as engine:
-        TRT_LOGGER.log(TRT_LOGGER.VERBOSE, "Serializing Engine...")
-        serialized_engine = engine.serialize()
+    with build_engine(args.max_batch_size, args.workspace_size, args.max_sequence_length, config, weights_dict, args.squad_json, args.vocab_file, calib_cache, args.calib_num, args.verbose) as serialized_engine:
         TRT_LOGGER.log(TRT_LOGGER.INFO, "Saving Engine to {:}".format(args.output))
         with open(args.output, "wb") as fout:
             fout.write(serialized_engine)

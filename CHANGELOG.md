@@ -1,5 +1,134 @@
 # TensorRT OSS Release Changelog
 
+## 10.0.0 EA - 2024-04-02
+
+Key Features and Updates:
+
+ - Samples changes
+   - Added a [sample](samples/python/sample_weight_stripping) showcasing weight-stripped engines.
+   - Added a [sample](samples/python/python_plugin/circ_pad_plugin_multi_tactic.py) demonstrating the use of custom tactics with IPluginV3.
+   - Added a [sample](samples/sampleNonZeroPlugin) to showcase plugins with data-dependent output shapes, using IPluginV3.
+ - Parser changes
+   - Added a new class `IParserRefitter` that can be used to refit a TensorRT engine with the weights of an ONNX model.
+   - `kNATIVE_INSTANCENORM` is now set to ON by default.
+   - Added support for `IPluginV3` interfaces from TensorRT.
+   - Added support for `INT4` quantization.
+   - Added support for the `reduction` attribute in `ScatterElements`.
+   - Added support for `wrap` padding mode in `Pad`
+ - Plugin changes
+   - A [new plugin](plugin/scatterElementsPlugin) has been added in compliance with [ONNX ScatterElements](https://github.com/onnx/onnx/blob/main/docs/Operators.md#ScatterElements).
+   - The TensorRT plugin library no longer has a load-time link dependency on cuBLAS or cuDNN libraries.
+   - All plugins which relied on cuBLAS/cuDNN handles passed through `IPluginV2Ext::attachToContext()` have moved to use cuBLAS/cuDNN resources initialized by the plugin library itself. This works by dynamically loading the required cuBLAS/cuDNN library. Additionally, plugins which independently initialized their cuBLAS/cuDNN resources have also moved to dynamically loading the required library. If the respective library is not discoverable through the library path(s), these plugins will not work.
+   - bertQKVToContextPlugin: Version 2 of this plugin now supports head sizes less than or equal to 32.
+   - reorgPlugin: Added a version 2 which implements IPluginV2DynamicExt.
+   - disentangledAttentionPlugin: Fixed a kernel bug.
+ - Demo changes
+   - HuggingFace demos have been removed. For all users using TensorRT to accelerate Large Language Model inference, please use [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM/).
+ - Updated tooling
+   - Polygraphy v0.49.9
+   - ONNX-GraphSurgeon v0.5.1
+   - TensorRT Engine Explorer v0.1.8
+ - Build Containers
+   - RedHat/CentOS 7.x are no longer officially supported starting with TensorRT 10.0. The corresponding container has been removed from TensorRT-OSS.
+
+## 9.3.0 GA - 2024-02-09
+
+Key Features and Updates:
+
+ - Demo changes
+   - Faster Text-to-image using SDXL & INT8 quantization using AMMO
+ - Updated tooling
+   - Polygraphy v0.49.7
+
+## 9.2.0 GA - 2023-11-27
+
+Key Features and Updates:
+
+ - `trtexec` enhancement: Added `--weightless` flag to mark the engine as weightless.
+ - Parser changes
+   - Added support for Hardmax operator.
+   - Changes to a few operator importers to ensure that TensorRT preserves the precision of operations when using strongly typed mode.
+ - Plugin changes
+   - Explicit INT8 support added to `bertQKVToContextPlugin`.
+   - Various bug fixes.
+ - Updated HuggingFace demo to use transformers v4.31.0 and PyTorch v2.1.0.
+
+
+## 9.1.0 GA - 2023-10-18
+
+Key Features and Updates:
+
+ - Update the [trt_python_plugin](samples/python/python_plugin) sample.
+   - Python plugins API reference is part of the offical TRT Python API.
+ - Added samples demonstrating the usage of the progress monitor API.
+   - Check [sampleProgressMonitor](samples/sampleProgressMonitor) for the C++ sample.
+   - Check [simple_progress_monitor](samples/python/simple_progress_monitor) for the Python sample.
+ - Remove dependencies related to python<3.8 in python samples as we no longer support python<3.8 for python samples. 
+ - Demo changes
+   - Added LAMBADA dataset accuracy checks in the [HuggingFace](demo/HuggingFace) demo.
+   - Enabled structured sparsity and FP8 quantized batch matrix multiplication(BMM)s in attention in the [NeMo](demo/NeMo) demo.
+   - Replaced deprecated APIs in the [BERT](demo/BERT) demo.
+ - Updated tooling
+   - Polygraphy v0.49.1
+
+
+## 9.0.1 GA - 2023-09-07
+
+Key Features and Updates:
+
+ - TensorRT plugin autorhing in Python is now supported
+   - See the [trt_python_plugin](samples/python/python_plugin) sample for reference.
+ - Updated default CUDA version to 12.2
+ - Support for BLIP models, Seq2Seq and Vision2Seq abstractions in HuggingFace demo.
+ - demoDiffusion refactoring and SDXL enhancements
+ - Additional validation asserts for NV Plugins
+ - Updated tooling
+   - TensorRT Engine Explorer v0.1.7: graph rendering for TensorRT 9.0 `kgen` kernels
+   - ONNX-GraphSurgeon v0.3.29
+   - PyTorch quantization toolkit v2.2.0
+
+
+## 9.0.0 EA - 2023-08-06
+
+Key Features and Updates:
+
+ - Added the NeMo demo to demonstrate the performance benefit of using E4M3 FP8 data type with the GPT models trained with the [NVIDIA NeMo Toolkit](https://github.com/NVIDIA/NeMo) and [TransformerEngine](https://github.com/NVIDIA/TransformerEngine).
+ - Demo Diffusion updates
+   - Added SDXL 1.0 txt2img pipeline
+   - Added ControlNet pipeline
+   - Huggingface demo updates
+     - Added Flan-T5, OPT, BLOOM, BLOOMZ, GPT-Neo, GPT-NeoX, Cerebras-GPT support with accuracy check
+     - Refactored code and extracted common utils into Seq2Seq class 
+     - Optimized shape-changing overhead and achieved a >30% e2e performance gain
+     - Added stable KV-cache, beam search and fp16 support for all models
+     - Added dynamic batch size TRT inference
+     - Added uneven-length multi-batch inference with attention_mask support
+     - Added `chat` command – interactive CLI
+     - Upgraded PyTorch and HuggingFace version to support Hopper GPU
+     - Updated notebooks with much simplified demo API.
+
+  - Added two new TensorRT samples: sampleProgressMonitor (C++) and simple_progress_reporter (Python) that are examples for using Progress Monitor during engine build.
+  - The following plugins were deprecated:
+     - ``BatchedNMS_TRT``
+     - ``BatchedNMSDynamic_TRT``
+     - ``BatchTilePlugin_TRT``
+     - ``Clip_TRT``
+     - ``CoordConvAC``
+     - ``CropAndResize``
+     - ``EfficientNMS_ONNX_TRT``
+     - ``CustomGeluPluginDynamic``
+     - ``LReLU_TRT``
+     - ``NMSDynamic_TRT``
+     - ``NMS_TRT``
+     - ``Normalize_TRT``
+     - ``Proposal``
+     - ``SingleStepLSTMPlugin``
+     - ``SpecialSlice_TRT``
+     - ``Split``
+
+  - Ubuntu 18.04 has reached end of life and is no longer supported by TensorRT starting with 9.0, and the corresponding Dockerfile(s) have been removed.
+  - Support for aarch64 builds will not be available in this release, and the corresponding Dockerfiles have been removed.
+
 ## [8.6.1 GA](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/#rel-8-6-1) - 2023-05-02
 
 TensorRT OSS release corresponding to TensorRT 8.6.1.6 GA release.

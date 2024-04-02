@@ -26,7 +26,7 @@ ONNX GraphSurgeon is a tool that allows you to easily generate new ONNX graphs, 
 
 ### Using Prebuilt Wheels
 ```bash
-python3 -m pip install onnx_graphsurgeon --index-url https://pypi.ngc.nvidia.com
+python3 -m pip install onnx_graphsurgeon --extra-index-url https://pypi.ngc.nvidia.com
 ```
 
 ### Building From Source

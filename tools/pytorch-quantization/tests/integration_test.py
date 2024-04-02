@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,18 +19,19 @@
 """tests of integrating Quant layers into a network"""
 
 import pytest
+import io
 
 import numpy as np
 
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
-from apex.amp import _amp_state
 
 from pytorch_quantization import tensor_quant
 from pytorch_quantization import quant_modules
 from pytorch_quantization import nn as quant_nn
 from pytorch_quantization.tensor_quant import QuantDescriptor
+from pytorch_quantization.nn.modules import tensor_quantizer
 from tests.fixtures.models import LeNet, QuantLeNet
 from tests.fixtures import verbose
 
@@ -79,26 +80,6 @@ class TestNetwork():
         loss.backward()
         optimizer.step()
 
-    def test_apex_amp_fp16(self):
-        """test one iteration with random data and labels"""
-        try:
-            from apex import amp
-        except ImportError:
-            pytest.skip("AMP is not available.")
-        input_desc = tensor_quant.QUANT_DESC_8BIT_PER_TENSOR
-        weight_desc = tensor_quant.QUANT_DESC_8BIT_PER_TENSOR
-        model = QuantLeNet(quant_desc_input=input_desc, quant_desc_weight=weight_desc)
-        optimizer = optim.SGD(model.parameters(), lr=0.01)
-        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
-        optimizer.zero_grad()
-        output = model(torch.empty(16, 1, 28, 28))
-        loss = F.nll_loss(output, torch.randint(10, (16,), dtype=torch.int64))
-        with amp.scale_loss(loss, optimizer) as scaled_loss:
-            scaled_loss.backward()
-        optimizer.step()
-        assert loss.dtype == torch.float32
-        _amp_state.handle._deactivate()
-
     def test_native_amp_fp16(self):
         """test one iteration with random data and labels"""
         input_desc = tensor_quant.QUANT_DESC_8BIT_PER_TENSOR
@@ -140,7 +121,8 @@ class TestNetwork():
                 quant_nn.QuantConvTranspose2d: ['weight'],
                 quant_nn.QuantConvTranspose3d: ['weight'],
                 quant_nn.QuantLinear: ['weight']
-            })
+            },
+            allow_permutation=False)
         ASP.init_optimizer_for_pruning(optimizer)
         ASP.compute_sparse_masks()
 
@@ -220,3 +202,15 @@ class TestNetwork():
                     module.enable()
         quant_model.cuda()
 
+    def test_state_load(self):
+        quant_desc = tensor_quant.QuantDescriptor(axis=1, num_bits=8, amax=127.0)
+        quantizer = tensor_quantizer.TensorQuantizer(quant_desc).cuda()
+        quantizer2 = tensor_quantizer.TensorQuantizer(quant_desc).cuda()
+        quantizer2.pre_quant_scale = torch.Tensor([[1.0, 2.0, 3.0, 4.0]]).cuda()
+        buffer = io.BytesIO()
+        torch.save(quantizer2.state_dict(), buffer)
+
+        buffer.seek(0)
+        quantizer.load_state_dict(torch.load(buffer))
+
+        assert torch.allclose(quantizer.pre_quant_scale, quantizer2.pre_quant_scale)

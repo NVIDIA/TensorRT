@@ -48,8 +48,8 @@ polygraphy run dynamic_identity.onnx --trt --onnxrt \
 ### Comparing TensorRT Precisions
 
 To build a TensorRT engine with reduced precision layers for comparison against
-ONNXRT, use one of the supported precision flags (`--tf32`, `--fp16`, or
-`--int8`). For example:
+ONNXRT, use one of the supported precision flags (e.g. `--tf32`, `--fp16`,`--int8`, etc.).
+For example:
 
 ```bash
 polygraphy run dynamic_identity.onnx --trt --fp16 --onnxrt \
@@ -89,7 +89,7 @@ reldiff = absdiff / abs(out1)
 <!-- Polygraphy Test: Ignore End -->
 
 Then, for each index `i` in the output, Polygraphy checks whether
-`absdiff[i] > atol and reldiff[i] > rtol`. If any index  satisfies this,
+`absdiff[i] > atol and reldiff[i] > rtol`. If any index satisfies this,
 then the comparison will fail.  This is less stringent than comparing the maximum
 absolute and relative error across the entire tensor (`--check-error-stat max`) since if
 *different* indices `i` and `j` satisfy `absdiff[i] > atol` and `reldiff[j] > rtol`,

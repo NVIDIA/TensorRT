@@ -77,8 +77,6 @@ def main():
         cuda.memcpy_htod(buffers[1].buf, test_segment_ids.ravel())
         cuda.memcpy_htod(buffers[2].buf, test_input_mask.ravel())
 
-        num_binding_per_profile = engine.num_bindings // engine.num_optimization_profiles
-
         bench_times = {}
 
         stream = cuda.Stream()
@@ -86,7 +84,7 @@ def main():
             # Select engine profile
             selected_profile = -1
             for idx in range(engine.num_optimization_profiles):
-                profile_shape = engine.get_profile_shape(profile_index = idx, binding = idx * num_binding_per_profile)
+                profile_shape = engine.get_tensor_profile_shape(name = "input_ids", profile_index = idx)
                 if profile_shape[0][0] <= batch_size and profile_shape[2][0] >= batch_size and profile_shape[0][1] <= args.sequence_length and profile_shape[2][1] >= args.sequence_length:
                     selected_profile = idx
                     break
@@ -95,18 +93,16 @@ def main():
             context.set_optimization_profile_async(selected_profile, stream.handle)
 
             # Each profile has unique bindings
-            binding_idx_offset = selected_profile * num_binding_per_profile
+            binding_idx_offset = selected_profile * engine.num_io_tensors
             bindings = [0] * binding_idx_offset + [buf.binding() for buf in buffers]
 
-            shapes = {
-                "input_ids": (batch_size, args.sequence_length),
-                "segment_ids": (batch_size, args.sequence_length),
-                "input_mask": (batch_size, args.sequence_length),
-            }
+            input_shape = (batch_size, args.sequence_length)
+            for name in ["input_ids", "segment_ids", "input_mask"]:
+                context.set_input_shape(name, input_shape)
+            assert len(context.infer_shapes()) == 0
 
-            for binding, shape in shapes.items():
-                context.set_binding_shape(engine[binding] + binding_idx_offset, shape)
-            assert context.all_binding_shapes_specified
+            for i in range(engine.num_io_tensors):
+                context.set_tensor_address(engine.get_tensor_name(i), bindings[i + binding_idx_offset])
 
             # Inference
             total_time = 0
@@ -115,7 +111,7 @@ def main():
 
             # Warmup
             for _ in range(args.warm_up_runs):
-                context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+                context.execute_async_v3(stream_handle=stream.handle)
                 stream.synchronize()
 
             # Timing loop
@@ -124,7 +120,7 @@ def main():
             start_time = time.time()
             while actual_iterations < args.iterations or (time.time() - start_time) < args.duration:
                 start.record(stream)
-                context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
+                context.execute_async_v3(stream_handle=stream.handle)
                 end.record(stream)
                 stream.synchronize()
                 times.append(end.time_since(start))

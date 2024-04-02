@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ easily, and load pretrained weight. Aliases with Quant prefix are defined and ar
 when start scratch.
 """
 
+import inspect
 import torch
 import torch.nn
 import torch.nn.functional as F
@@ -266,6 +267,19 @@ class _QuantConvTransposeNd(torch.nn.modules.conv._ConvTransposeNd, _utils.Quant
 
         return (quant_input, quant_weight)
 
+    def _output_padding_nd(self,
+                           input,
+                           output_size,
+                           stride,
+                           padding,
+                           kernel_size,
+                           num_spatial_dims,
+                           dilation=None):
+        if "num_spatial_dims" in inspect.signature(self._output_padding).parameters:
+            return self._output_padding(input, output_size, stride, padding, kernel_size, num_spatial_dims)
+        else:
+            return self._output_padding(input, output_size, stride, padding, kernel_size)
+
 
 class QuantConvTranspose1d(_QuantConvTransposeNd):
     """Quantized ConvTranspose1d"""
@@ -299,7 +313,9 @@ class QuantConvTranspose1d(_QuantConvTransposeNd):
         if self.padding_mode != 'zeros':
             raise ValueError('Only `zeros` padding mode is supported for QuantConvTranspose1d')
 
-        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size)
+        num_spatial_dims = 1
+        output_padding = self._output_padding_nd(input, output_size, self.stride, self.padding, self.kernel_size,
+                                                 num_spatial_dims)
 
         quant_input, quant_weight = self._quant(input)
         output = F.conv_transpose1d(quant_input, quant_weight, self.bias, self.stride, self.padding, output_padding,
@@ -339,7 +355,9 @@ class QuantConvTranspose2d(_QuantConvTransposeNd):
         if self.padding_mode != 'zeros':
             raise ValueError('Only `zeros` padding mode is supported for QuantConvTranspose2d')
 
-        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size)
+        num_spatial_dims = 2
+        output_padding = self._output_padding_nd(input, output_size, self.stride, self.padding, self.kernel_size,
+                                                 num_spatial_dims)
 
         quant_input, quant_weight = self._quant(input)
         output = F.conv_transpose2d(quant_input, quant_weight, self.bias, self.stride, self.padding, output_padding,
@@ -380,7 +398,9 @@ class QuantConvTranspose3d(_QuantConvTransposeNd):
         if self.padding_mode != 'zeros':
             raise ValueError('Only `zeros` padding mode is supported for QuantConvTranspose3d')
 
-        output_padding = self._output_padding(input, output_size, self.stride, self.padding, self.kernel_size)
+        num_spatial_dims = 3
+        output_padding = self._output_padding_nd(input, output_size, self.stride, self.padding, self.kernel_size,
+                                                 num_spatial_dims)
 
         quant_input, quant_weight = self._quant(input)
         output = F.conv_transpose3d(quant_input, quant_weight, self.bias, self.stride, self.padding, output_padding,

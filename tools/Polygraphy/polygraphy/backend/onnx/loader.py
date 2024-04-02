@@ -22,6 +22,7 @@ import tempfile
 from polygraphy import constants, mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.onnx import util as onnx_util
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER, LogMode
 
 np = mod.lazy_import("numpy")
@@ -31,14 +32,13 @@ onnxmltools = mod.lazy_import("onnxmltools==1.11.1", requires=["onnxconverter_co
 tf = mod.lazy_import("tensorflow<2.0")
 tf2onnx = mod.lazy_import("tf2onnx")
 tf_util = mod.lazy_import("polygraphy.backend.tf.util", log=False)
-gs = mod.lazy_import("onnx_graphsurgeon>=0.3.21")
-shape_inference = mod.lazy_import("onnx.shape_inference")
-external_data_helper = mod.lazy_import("onnx.external_data_helper")
+gs = mod.lazy_import("onnx_graphsurgeon>=0.3.27")
 # ONNX-RT's shape inference also requires "sympy", but it is not reported as a dependency,
 # so we work around it by checking for it manually.
 onnxrt_symbolic_shape_inference = mod.lazy_import("onnxruntime.tools.symbolic_shape_infer>=1.10.0", requires=["sympy"])
 
 LARGE_MODEL_THRESHOLD = 512 << 20  # 512 MiB
+PROTOBUF_THRESHOLD = 2e9
 
 
 class BaseLoadOnnxCopy(BaseLoader):
@@ -165,7 +165,7 @@ class OnnxFromPath(BaseLoader):
 
         if self.external_data_dir is not None:
             G_LOGGER.verbose(f"Loading external data from: {self.external_data_dir}")
-            external_data_helper.load_external_data_for_model(model, self.external_data_dir)
+            onnx.external_data_helper.load_external_data_for_model(model, self.external_data_dir)
         return model
 
 
@@ -396,8 +396,9 @@ class FoldConstants(BaseLoadOnnxCopy):
                 model = infer_shapes(model, allow_onnxruntime=self.allow_onnxruntime_shape_inference)
             return model
 
+        # Need to manually trigger the autoinstall this since it's used by ONNX-GS, which does not have an autoinstall mechanism.
         mod.autoinstall(onnxrt)
-        if not mod.has_mod("onnxruntime"):
+        if not onnxrt.is_installed() or not onnxrt.is_importable():
             G_LOGGER.error(
                 f"ONNX-Runtime is not installed, so constant folding may be suboptimal or not work at all.\n"
                 f"Consider installing ONNX-Runtime: {sys.executable} -m pip install onnxruntime"
@@ -437,7 +438,7 @@ class SetUpperBound(BaseLoadOnnxCopy):
     """
     Functor that sets upper bounds for tensors with unbounded DDS in an ONNX model.
 
-    Requires that the model has been constant folded and has shapes inferred. 
+    Requires that the model has been constant folded and has shapes inferred.
     """
 
     def __init__(
@@ -456,7 +457,7 @@ class SetUpperBound(BaseLoadOnnxCopy):
             upper_bounds (Union[int, Dict[str, int]]):
                     The upper bounds for tensors with unbounded DDS.
                     If a single integer is provided, it will be used as the default upper bound for all tensors with unbounded DDS.
-                    This can also be provided on a per-tensor basis using a dictionary. In that case, use an empty string ("") as the 
+                    This can also be provided on a per-tensor basis using a dictionary. In that case, use an empty string ("") as the
                     key to specify default upper bound for tensors not explicitly listed.
             copy (bool):
                     Whether to create a copy of the model first.
@@ -480,24 +481,20 @@ class SetUpperBound(BaseLoadOnnxCopy):
                     continue
                 # Insert a min operator to set the upper bound for the target tensor.
                 # A target tensor should always be produced from a single node.
-                assert (len(tensor.inputs) == 1)
+                assert len(tensor.inputs) == 1
                 producer = tensor.inputs[0]
                 producer_idx = producer.outputs.index(tensor)
-                tensor_copy = gs.Variable(
-                    tensor.name + "_copy", dtype=tensor.dtype, shape=tensor.shape)
+                tensor_copy = gs.Variable(tensor.name + "_copy", dtype=tensor.dtype, shape=tensor.shape)
                 upper_bound_values = np.array(upper_bound)
                 if tensor.shape is not None and len(tensor.shape) > 0:
                     upper_bound_values = np.array([upper_bound] * len(tensor.shape))
-                tensor_upper_bound = gs.Constant(
-                    tensor.name + "_upper_bound", values=upper_bound_values)
-                min_node = gs.Node(op="Min", inputs=[
-                    tensor_copy, tensor_upper_bound], outputs=[tensor])
+                tensor_upper_bound = gs.Constant(tensor.name + "_upper_bound", values=upper_bound_values)
+                min_node = gs.Node(op="Min", inputs=[tensor_copy, tensor_upper_bound], outputs=[tensor])
                 producer.outputs[producer_idx] = tensor_copy
                 tensor.inputs = [min_node]
                 graph.nodes.append(min_node)
                 applied_bounds[tensor.name] = upper_bound
-            G_LOGGER.info(
-                f"Set tensor upper bounds: {applied_bounds}")
+            G_LOGGER.info(f"Set tensor upper bounds: {applied_bounds}")
             return graph
 
         model = self.load()
@@ -554,7 +551,7 @@ class InferShapes(BaseLoader):
         Args:
             model (Union[onnx.ModelProto, Callable() -> onnx.ModelProto, str, Callable() -> str]):
                     An ONNX model or a callable that returns one, or a path to a model.
-                    Supports models larger than the 2 GiB protobuf limit.
+                    Supports models larger than the 2 GB protobuf limit.
 
             error_ok (bool):
                     Whether errors during shape inference should be suppressed.
@@ -565,8 +562,8 @@ class InferShapes(BaseLoader):
             save_to_disk_threshold_bytes (int):
                     The size in bytes above which a ModelProto will be serialized to the disk
                     before running shape inference.
-                    This can be used to work around the 2 GiB protobuf limitation.
-                    Defaults to ~2 GiB.
+                    This can be used to work around the 2 GB protobuf limitation.
+                    Defaults to 2 GB.
             allow_onnxruntime (bool):
                     Allow ONNX-Runtime's shape inference to be used if available instead of ONNX's
                     shape inference utilities. The former may provide performance or memory usage benefits.
@@ -576,7 +573,7 @@ class InferShapes(BaseLoader):
         self.error_ok = util.default(error_ok, True)
         self.external_data_dir = external_data_dir
         # Subtract a little so we're below the real threshold
-        self.save_to_disk_threshold_bytes = util.default(save_to_disk_threshold_bytes, (2 << 30) - 8192)
+        self.save_to_disk_threshold_bytes = util.default(save_to_disk_threshold_bytes, PROTOBUF_THRESHOLD)
         self.allow_onnxruntime = util.default(allow_onnxruntime, True)
 
     def _run_onnx_shape_inference(self, model, external_data_dir):
@@ -590,7 +587,7 @@ class InferShapes(BaseLoader):
                     mode=LogMode.ONCE,
                 )
 
-            if MODEL_SIZE > self.save_to_disk_threshold_bytes:
+            if MODEL_SIZE >= self.save_to_disk_threshold_bytes:
                 G_LOGGER.warning(
                     f"Model size ({MODEL_SIZE / 1024.0 ** 2} MiB) exceeds the in-memory size threshold: "
                     f"{self.save_to_disk_threshold_bytes / 1024.0 ** 2} MiB.\n"
@@ -604,11 +601,11 @@ class InferShapes(BaseLoader):
                 external_data_dir = outdir.name
 
         if isinstance(model, onnx.ModelProto):
-            model = shape_inference.infer_shapes(model)
+            model = onnx.shape_inference.infer_shapes(model)
         else:
             tmp_path = util.NamedTemporaryFile(prefix="tmp_polygraphy_", suffix=".onnx").name
             G_LOGGER.verbose(f"Writing shape-inferred model to: {tmp_path}")
-            shape_inference.infer_shapes_path(model, tmp_path)
+            onnx.shape_inference.infer_shapes_path(model, tmp_path)
             # In cases where the original model had external data stored in the same directory,
             # the external data directory may not be explicitly specified.
             # In such cases, we need to use the model's directory as the external data path
@@ -724,7 +721,9 @@ class ExtractSubgraph(BaseLoader):
                 tensor = get_tensor(name)
                 # No need to update constants
                 if isinstance(tensor, gs.Variable):
-                    tensor.dtype, tensor.shape = dtype or tensor.dtype, shape or tensor.shape
+                    tensor.dtype, tensor.shape = (
+                        DataType.to_dtype(DataType.from_dtype(dtype), "onnx") if dtype is not None else None
+                    ) or tensor.dtype, shape or tensor.shape
                 return tensor
 
             def check_meta(name, dtype, shape, meta_type, needs_shape=True):
@@ -790,7 +789,7 @@ class SaveOnnx(BaseLoader):
                     directory as the model.
                     Set to an empty string to use the default path.
                     Set to None to disable.
-                    Defaults to None.
+                    Defaults to None if the model is within the protobuf size threshold and an empty string otherwise.
             size_threshold (int):
                     Tensor size threshold, in bytes, above which tensor data will be
                     stored in the external file.
@@ -816,12 +815,24 @@ class SaveOnnx(BaseLoader):
         """
         model, _ = util.invoke_if_callable(self._model)
         G_LOGGER.info(f"Saving ONNX model to: {self.path}")
-        if self.external_data_path is not None:
-            G_LOGGER.verbose(f"Saving external data for ONNX model to: {self.external_data_path}")
+
+        model_size = model.ByteSize()
+        if self.external_data_path is None and model_size >= PROTOBUF_THRESHOLD:
+            external_data_path = ""
+            G_LOGGER.warning(
+                f"Model size ({model_size // 1024.0 ** 2} MiB) exceeds protobuf size threshold ({PROTOBUF_THRESHOLD // 1024 ** 2} MiB). "
+                f"Will save weight data to an external file.\n"
+                f"To control the location of this file, use the `external_data_path` parameter or the `--external-data-path` command-line option. "
+            )
+        else:
+            external_data_path = self.external_data_path
+
+        if external_data_path is not None:
+            G_LOGGER.verbose(f"Saving external data for ONNX model to: {external_data_path}")
             try:
-                external_data_helper.convert_model_to_external_data(
+                onnx.external_data_helper.convert_model_to_external_data(
                     model,
-                    location=self.external_data_path,
+                    location=external_data_path,
                     all_tensors_to_one_file=util.default(self.all_tensors_to_one_file, True),
                     size_threshold=util.default(self.size_threshold, 1024),
                 )
@@ -830,9 +841,9 @@ class SaveOnnx(BaseLoader):
                     G_LOGGER.warning(
                         "This version of onnx does not support size_threshold in convert_model_to_external_data"
                     )
-                external_data_helper.convert_model_to_external_data(
+                onnx.external_data_helper.convert_model_to_external_data(
                     model,
-                    location=self.external_data_path,
+                    location=external_data_path,
                     all_tensors_to_one_file=util.default(self.all_tensors_to_one_file, True),
                 )
         else:

@@ -16,7 +16,6 @@
 #
 import sys
 
-import numpy as np
 import pytest
 import tensorrt as trt
 
@@ -47,8 +46,9 @@ from polygraphy.backend.trt import (
     set_tensor_datatypes,
     set_tensor_formats,
 )
-from polygraphy.common.struct import BoundedShape, MetadataTuple
+from polygraphy.common.struct import BoundedShape
 from polygraphy.comparator import DataLoader
+from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
@@ -79,29 +79,27 @@ def identity_vc_engine_bytes():
 @pytest.fixture(scope="session")
 def identity_builder_network():
     builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
-    with builder, network, parser:
-        yield builder, network
+    yield builder, network
 
 
 @pytest.fixture(scope="session")
 def identity_network():
     builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
-    with builder, network, parser:
-        yield builder, network, parser
+    yield builder, network, parser
 
 
 @pytest.fixture(scope="session")
 def identity_identity_network():
-    builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity_identity"].loader)
-    with builder, network, parser:
-        yield builder, network, parser
+    builder, network, parser = network_from_onnx_bytes(
+        ONNX_MODELS["identity_identity"].loader
+    )
+    yield builder, network, parser
 
 
 @pytest.fixture(scope="session")
 def reshape_network():
     builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["reshape"].loader)
-    with builder, network, parser:
-        yield builder, network, parser
+    yield builder, network, parser
 
 
 @pytest.fixture(scope="session")
@@ -127,7 +125,11 @@ class TestLoadPlugins:
             return [pc.name for pc in trt.get_plugin_registry().plugin_creator_list]
 
         loader = LoadPlugins(
-            plugins=["nvinfer_plugin.dll" if sys.platform.startswith("win") else "libnvinfer_plugin.so"]
+            plugins=[
+                "nvinfer_plugin.dll"
+                if sys.platform.startswith("win")
+                else "libnvinfer_plugin.so"
+            ]
         )
         loader()
         assert get_plugin_names()
@@ -156,7 +158,9 @@ class TestSerializedEngineLoader:
                 assert isinstance(engine, trt.ICudaEngine)
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6")
+@pytest.mark.skipif(
+    mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6"
+)
 class TestLoadRuntime:
     def test_load_lean_runtime(self, nvinfer_lean_path):
         loader = LoadRuntime(nvinfer_lean_path)
@@ -164,7 +168,9 @@ class TestLoadRuntime:
             assert isinstance(runtime, trt.Runtime)
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6")
+@pytest.mark.skipif(
+    mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6"
+)
 class TestSerializedVCEngineLoader:
     def test_serialized_vc_engine_loader_from_lambda(self, identity_vc_engine_bytes):
         with util.NamedTemporaryFile() as outpath:
@@ -181,79 +187,109 @@ class TestSerializedVCEngineLoader:
             assert isinstance(engine, trt.ICudaEngine)
 
 
-class TestOnnxNetworkLoader:
+class TestNetworkFromOnnxBytes:
     def test_loader(self):
-        builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["identity"].loader)
-        with builder, network, parser:
-            assert not network.has_implicit_batch_dimension
-            assert not network.has_explicit_precision
+        builder, network, parser = network_from_onnx_bytes(
+            ONNX_MODELS["identity"].loader
+        )
+        assert not network.has_implicit_batch_dimension
+
+    @pytest.mark.parametrize(
+        "kwargs, flag",
+        [({"strongly_typed": True}, trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)]
+        if mod.version(trt.__version__) >= mod.version("8.7")
+        else [],
+    )
+    def test_network_flags(self, kwargs, flag):
+        builder, network, parser = network_from_onnx_bytes(
+            ONNX_MODELS["identity"].loader, **kwargs
+        )
+        assert network.get_flag(flag)
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.1.0.0"), reason="API was added in TRT 7.1")
 class TestNetworkFromOnnxPath:
     def test_loader(self):
         builder, network, parser = network_from_onnx_path(ONNX_MODELS["identity"].path)
-        with builder, network, parser:
-            assert not network.has_implicit_batch_dimension
-            assert not network.has_explicit_precision
+        assert not network.has_implicit_batch_dimension
+
+    @pytest.mark.parametrize(
+        "kwargs, flag",
+        [({"strongly_typed": True}, trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)]
+        if mod.version(trt.__version__) >= mod.version("8.7")
+        else [],
+    )
+    def test_network_flags(self, kwargs, flag):
+        builder, network, parser = network_from_onnx_path(
+            ONNX_MODELS["identity"].path, **kwargs
+        )
+        assert network.get_flag(flag)
 
 
 class TestModifyNetwork:
     def test_mark_layerwise(self, modifiable_network):
-        load_network = ModifyNetworkOutputs(modifiable_network, outputs=constants.MARK_ALL)
+        load_network = ModifyNetworkOutputs(
+            modifiable_network, outputs=constants.MARK_ALL
+        )
         builder, network, parser = load_network()
-        with builder, network, parser:
-            for layer in network:
-                for index in range(layer.num_outputs):
-                    assert layer.get_output(index).is_network_output
+
+        for layer in network:
+            for index in range(layer.num_outputs):
+                assert layer.get_output(index).is_network_output
 
     def test_mark_custom_outputs(self, modifiable_network):
-        builder, network, parser = modify_network_outputs(modifiable_network, outputs=["identity_out_0"])
-        with builder, network, parser:
-            assert network.num_outputs == 1
-            assert network.get_output(0).name == "identity_out_0"
+        builder, network, parser = modify_network_outputs(
+            modifiable_network, outputs=["identity_out_0"]
+        )
+
+        assert network.num_outputs == 1
+        assert network.get_output(0).name == "identity_out_0"
 
     def test_exclude_outputs_with_mark_layerwise(self, modifiable_network):
         builder, network, parser = modify_network_outputs(
-            modifiable_network, outputs=constants.MARK_ALL, exclude_outputs=["identity_out_2"]
+            modifiable_network,
+            outputs=constants.MARK_ALL,
+            exclude_outputs=["identity_out_2"],
         )
-        with builder, network, parser:
-            assert network.num_outputs == 1
-            assert network.get_output(0).name == "identity_out_0"
+
+        assert network.num_outputs == 1
+        assert network.get_output(0).name == "identity_out_0"
 
     def test_mark_shape_outputs(self, modifiable_reshape_network):
         builder, network, parser = modify_network_outputs(
             modifiable_reshape_network, outputs=["output", "reduce_prod_out_gs_2"]
         )
-        with builder, network, parser:
-            assert network.num_outputs == 2
-            assert network.get_output(1).name == "reduce_prod_out_gs_2"
+
+        assert network.num_outputs == 2
+        assert network.get_output(1).name == "reduce_prod_out_gs_2"
 
     def test_unmark_shape_outputs(self, modifiable_reshape_network):
         builder, network, parser = modify_network_outputs(
-            modifiable_reshape_network, outputs=constants.MARK_ALL, exclude_outputs=["reduce_prod_out_gs_2"]
+            modifiable_reshape_network,
+            outputs=constants.MARK_ALL,
+            exclude_outputs=["shape_out_gs_0", "reduce_prod_out_gs_2"],
         )
-        with builder, network, parser:
-            assert network.num_outputs == 1
+
+        assert network.num_outputs == 1
 
     def test_mark_outputs_layer_with_optional_inputs(self):
         builder, network = create_network()
-        with builder, network:
-            inp = network.add_input("input", shape=(1, 3, 224, 224), dtype=trt.float32)
-            slice_layer = network.add_slice(inp, (0, 0, 0, 0), (1, 3, 224, 224), (1, 1, 1, 1))
+        inp = network.add_input("input", shape=(1, 3, 224, 224), dtype=trt.float32)
+        slice_layer = network.add_slice(
+            inp, (0, 0, 0, 0), (1, 3, 224, 224), (1, 1, 1, 1)
+        )
 
-            # Set a tensor for `stride` to increment `num_inputs` so we have some inputs
-            # which are `None` in between.
-            slice_layer.set_input(3, inp)
-            assert slice_layer.num_inputs == 4
+        # Set a tensor for `stride` to increment `num_inputs` so we have some inputs
+        # which are `None` in between.
+        slice_layer.set_input(3, inp)
+        assert slice_layer.num_inputs == 4
 
-            slice = slice_layer.get_output(0)
-            slice.name = "Slice"
+        slice = slice_layer.get_output(0)
+        slice.name = "Slice"
 
-            builder, network = modify_network_outputs((builder, network), outputs=["Slice"])
-            assert network.num_outputs == 1
-            assert network.get_output(0).name == "Slice"
-            assert network.get_output(0) == slice
+        builder, network = modify_network_outputs((builder, network), outputs=["Slice"])
+        assert network.num_outputs == 1
+        assert network.get_output(0).name == "Slice"
+        assert network.get_output(0) == slice
 
 
 class TestPostprocessNetwork:
@@ -294,9 +330,8 @@ class TestPostprocessNetwork:
 
         builder, network, parser = postprocess_network(modifiable_network, func)
 
-        with builder, network, parser:
-            assert network[0].precision == trt.float16
-            assert network[1].precision == trt.int8
+        assert network[0].precision == trt.float16
+        assert network[1].precision == trt.int8
 
     def test_negative_non_callable(self, modifiable_network):
         """Tests that PostprocessNetwork properly rejects `func` objects that
@@ -310,11 +345,14 @@ class TestSetLayerPrecisions:
     def test_basic(self, modifiable_network):
         builder, network, parser = set_layer_precisions(
             modifiable_network,
-            layer_precisions={"onnx_graphsurgeon_node_1": trt.float16, "onnx_graphsurgeon_node_3": trt.int8},
+            layer_precisions={
+                "onnx_graphsurgeon_node_1": trt.float16,
+                "onnx_graphsurgeon_node_3": trt.int8,
+            },
         )
-        with builder, network, parser:
-            assert network[0].precision == trt.float16
-            assert network[1].precision == trt.int8
+
+        assert network[0].precision == trt.float16
+        assert network[1].precision == trt.int8
 
 
 class TestSetTensorDatatypes:
@@ -323,15 +361,12 @@ class TestSetTensorDatatypes:
             modifiable_network,
             tensor_datatypes={
                 "X": trt.float16,
-                "identity_out_0": trt.float32,
                 "identity_out_2": trt.float16,
             },
         )
-        with builder, network, parser:
-            assert network[0].get_input(0).dtype == trt.float16
-            assert network[0].get_output(0).dtype == trt.float32
-            assert network[1].get_input(0).dtype == trt.float32
-            assert network[1].get_output(0).dtype == trt.float16
+
+        assert network.get_input(0).dtype == trt.float16
+        assert network.get_output(0).dtype == trt.float16
 
 
 class TestSetTensorFormats:
@@ -343,11 +378,11 @@ class TestSetTensorFormats:
                 "identity_out_2": [trt.TensorFormat.HWC8],
             },
         )
-        with builder, network, parser:
-            assert network[0].get_input(0).allowed_formats == (
-                1 << int(trt.TensorFormat.LINEAR) | 1 << int(trt.TensorFormat.CHW4)
-            )
-            assert network[1].get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
+
+        assert network.get_input(0).allowed_formats == (
+            1 << int(trt.TensorFormat.LINEAR) | 1 << int(trt.TensorFormat.CHW4)
+        )
+        assert network.get_output(0).allowed_formats == 1 << int(trt.TensorFormat.HWC8)
 
 
 class TestEngineBytesFromNetwork:
@@ -375,12 +410,19 @@ class TestEngineFromNetwork:
 
     def test_custom_runtime(self, identity_builder_network):
         builder, network = identity_builder_network
-        loader = EngineFromNetwork((builder, network), runtime=trt.Runtime(get_trt_logger()))
+        loader = EngineFromNetwork(
+            (builder, network), runtime=trt.Runtime(get_trt_logger())
+        )
         with loader() as engine:
             assert isinstance(engine, trt.ICudaEngine)
 
-    @pytest.mark.parametrize("use_config_loader, set_calib_profile", [(True, None), (False, False), (False, True)])
-    def test_can_build_with_calibrator(self, identity_builder_network, use_config_loader, set_calib_profile):
+    @pytest.mark.parametrize(
+        "use_config_loader, set_calib_profile",
+        [(True, None), (False, False), (False, True)],
+    )
+    def test_can_build_with_calibrator(
+        self, identity_builder_network, use_config_loader, set_calib_profile
+    ):
         builder, network = identity_builder_network
         calibrator = Calibrator(DataLoader())
 
@@ -389,9 +431,9 @@ class TestEngineFromNetwork:
             # which in turn should be passed to the data loader.
             assert calibrator.input_metadata is not None
             assert "x" in calibrator.data_loader.input_metadata
-            assert calibrator.data_loader.input_metadata["x"] == MetadataTuple(
-                shape=BoundedShape((1, 1, 2, 2)), dtype=np.dtype(np.float32)
-            )
+            meta = calibrator.data_loader.input_metadata["x"]
+            assert meta.shape == BoundedShape((1, 1, 2, 2))
+            assert meta.dtype == DataType.FLOAT32
 
         if use_config_loader:
             config = create_config(builder, network, int8=True, calibrator=calibrator)
@@ -402,7 +444,9 @@ class TestEngineFromNetwork:
             config.int8_calibrator = calibrator
             # Since this network has static shapes, we shouldn't need to set a calibration profile.
             if set_calib_profile:
-                calib_profile = Profile().fill_defaults(network).to_trt(builder, network)
+                calib_profile = (
+                    Profile().fill_defaults(network).to_trt(builder, network)
+                )
                 config.add_optimization_profile(calib_profile)
                 config.set_calibration_profile(calib_profile)
 
@@ -412,9 +456,10 @@ class TestEngineFromNetwork:
         check_calibrator()
 
         # Calibrator buffers should be freed after the build
-        assert all([buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()])
+        assert all(
+            [buf.allocated_nbytes == 0 for buf in calibrator.device_buffers.values()]
+        )
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
     @pytest.mark.parametrize("path_mode", [True, False], ids=["path", "file-like"])
     def test_timing_cache_generate_and_append(self, path_mode):
         with util.NamedTemporaryFile() as total_cache, util.NamedTemporaryFile() as identity_cache:
@@ -450,7 +495,10 @@ class TestEngineFromNetwork:
             total_cache_size = get_file_size(total_cache.name)
 
             # The total cache should be larger than either of the individual caches.
-            assert total_cache_size >= const_foldable_cache_size and total_cache_size >= identity_cache_size
+            assert (
+                total_cache_size >= const_foldable_cache_size
+                and total_cache_size >= identity_cache_size
+            )
             # The total cache should also be smaller than or equal to the sum of the individual caches since
             # header information should not be duplicated.
             assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)
@@ -466,15 +514,34 @@ class TestBytesFromEngine:
 class TestSaveEngine:
     def test_save_engine(self, identity_network):
         with util.NamedTemporaryFile() as outpath:
-            engine_loader = SaveEngine(EngineFromNetwork(identity_network), path=outpath.name)
+            engine_loader = SaveEngine(
+                EngineFromNetwork(identity_network), path=outpath.name
+            )
             with engine_loader():
                 assert is_file_non_empty(outpath.name)
 
 
 class TestOnnxLikeFromNetwork:
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Unsupported for TRT 7.1 and older")
     @pytest.mark.parametrize(
-        "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]
+        "model_name",
+        [
+            "identity",
+            "empty_tensor_expand",
+            "const_foldable",
+            "and",
+            "scan",
+            "dim_param",
+            "tensor_attr",
+        ],
     )
     def test_onnx_like_from_network(self, model_name):
-        assert onnx_like_from_network(NetworkFromOnnxBytes(ONNX_MODELS[model_name].loader))
+        assert onnx_like_from_network(
+            NetworkFromOnnxBytes(ONNX_MODELS[model_name].loader)
+        )
+
+class TestDefaultPlugins:
+    def test_default_plugins(self):
+        network_loader = NetworkFromOnnxBytes(ONNX_MODELS["roialign"].loader)
+        engine_loader = EngineFromNetwork(network_loader)
+        engine = engine_loader()
+        assert engine is not None

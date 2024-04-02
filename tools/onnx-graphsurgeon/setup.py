@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +29,7 @@ def no_publish():
 
 REQUIRED_PACKAGES = [
     "numpy",
-    "onnx",
+    "onnx>=1.14.0",
 ]
 
 
@@ -41,7 +41,7 @@ def main():
         description="ONNX GraphSurgeon",
         long_description=open("README.md", "r", encoding="utf-8").read(),
         license="Apache 2.0",
-        url="https://github.com/nvidia/tensorrt/tools/onnx-graphsurgeon",
+        url="https://github.com/NVIDIA/TensorRT/tree/main/tools/onnx-graphsurgeon",
         author="NVIDIA",
         author_email="svc_tensorrt@nvidia.com",
         classifiers=[

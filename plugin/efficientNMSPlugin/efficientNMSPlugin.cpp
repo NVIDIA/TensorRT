@@ -367,11 +367,13 @@ size_t EfficientNMSPlugin::getWorkspaceSize(
     return EfficientNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
 }
 
-int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
         mParam.batchSize = inputDesc[0].dims.d[0];
 
         if (mParam.outputONNXIndices)
@@ -561,6 +563,9 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
 {
     try
     {
+        gLogWarning << "EfficientNMSONNXPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to "
+                       "add an INMSLayer."
+                    << std::endl;
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
@@ -607,6 +612,9 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "EfficientNMSONNXPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to "
+                       "add an INMSLayer."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call EfficientNMSPlugin::destroy()
         auto* plugin = new EfficientNMSPlugin(serialData, serialLength);

@@ -34,7 +34,7 @@ Specifically, this sample:
 ### Creating the preprocessing network
 
 First, create a network with full dims support:
-`auto preprocessorNetwork = makeUnique(builder->createNetworkV2(1U << static_cast<int32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH)));`
+`auto preprocessorNetwork = makeUnique(builder->createNetworkV2(0));`
 
 Next, add an input layer that accepts an input with a dynamic shape, followed by a resize layer that will reshape the input to the shape the model expects:
 ```
@@ -50,8 +50,7 @@ The -1 dimensions denote dimensions that will be supplied at runtime.
 
 First, create an empty full-dims network, and parser:
 ```
-const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-auto network = makeUnique(builder->createNetworkV2(explicitBatch));
+auto network = makeUnique(builder->createNetworkV2(0));
 auto parser = nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger());
 ```
 
@@ -91,8 +90,8 @@ Prepare and set int8 calibrator if running in int8 mode:
 std::unique_ptr<IInt8Calibrator> calibrator;
 if (mParams.int8)
 {
-    preprocessorConfig->setFlag(BuilderFlag::kINT8);
-    const int nCalibBatches{10};
+    preprocessorConfig->setFlag(BuilderFlag::kINT8);    
+    const int nCalibBatches{10}; 
     MNISTBatchStream calibrationStream(calibBatchSize, nCalibBatches, "train-images-idx3-ubyte",
         "train-labels-idx1-ubyte", mParams.dataDirs);
     calibrator.reset(new Int8EntropyCalibrator2<MNISTBatchStream>(
@@ -101,7 +100,7 @@ if (mParams.int8)
 }
 ```
 
-Run engine build with config:
+Run engine build with config: 
 ```
 SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan = makeUnique(
         builder->buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
@@ -156,7 +155,7 @@ CHECK(cudaMemcpy(mInput.deviceBuffer.data(), mInput.hostBuffer.data(), mInput.ho
 ```
 
 Since the preprocessor engine accepts dynamic shapes, specify the actual shape of the current input to the execution context:
-`mPreprocessorContext->setBindingDimensions(0, inputDims);`
+`mPreprocessorContext->setInputShape(inputTensorName, inputDims);`, where inputTensorName is the name of the input tensor on binding index 0.
 
 Next, run the preprocessor using the `executeV2` function. The example writes the output of the preprocessor engine directly to the input device buffer of the MNIST engine:
 ```
@@ -217,7 +216,7 @@ The IResizeLayer implements the resize operation on an input tensor.
     Producer version: 2.5.1
     Domain:           ai.cntk
     Model version:    1
-    Doc string:
+    Doc string:  
     ----------------------------------------------------------------
     [W] [TRT] onnx2trt_utils.cpp:214: Your ONNX model has been generated with INT64 weights, while TensorRT does not natively support INT64. Attempting to cast down to INT32.
     [W] [TRT] onnx2trt_utils.cpp:214: Your ONNX model has been generated with INT64 weights, while TensorRT does not natively support INT64. Attempting to cast down to INT32.
@@ -258,16 +257,16 @@ The IResizeLayer implements the resize operation on an input tensor.
     @@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
     [I] Output:
-    [I]  Prob 0  0.0000 Class 0:
-    [I]  Prob 1  0.0000 Class 1:
+    [I]  Prob 0  0.0000 Class 0: 
+    [I]  Prob 1  0.0000 Class 1: 
     [I]  Prob 2  1.0000 Class 2: **********
-    [I]  Prob 3  0.0000 Class 3:
-    [I]  Prob 4  0.0000 Class 4:
-    [I]  Prob 5  0.0000 Class 5:
-    [I]  Prob 6  0.0000 Class 6:
-    [I]  Prob 7  0.0000 Class 7:
-    [I]  Prob 8  0.0000 Class 8:
-    [I]  Prob 9  0.0000 Class 9:
+    [I]  Prob 3  0.0000 Class 3: 
+    [I]  Prob 4  0.0000 Class 4: 
+    [I]  Prob 5  0.0000 Class 5: 
+    [I]  Prob 6  0.0000 Class 6: 
+    [I]  Prob 7  0.0000 Class 7: 
+    [I]  Prob 8  0.0000 Class 8: 
+    [I]  Prob 9  0.0000 Class 9: 
     &&&& PASSED TensorRT.sample_dynamic_reshape # ./sample_dynamic_reshape
     ```
 

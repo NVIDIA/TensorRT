@@ -120,7 +120,8 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
 {
     try
     {
-        PLUGIN_VALIDATE(inputDesc && outputDesc && inputs && outputs);
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         switch (inputDesc[0].type)
         {
         case nvinfer1::DataType::kFLOAT:

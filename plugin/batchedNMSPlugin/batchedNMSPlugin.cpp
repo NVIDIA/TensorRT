@@ -72,6 +72,9 @@ static inline pluginStatus_t checkParams(NMSParameters const& param)
 BatchedNMSPlugin::BatchedNMSPlugin(NMSParameters params)
     : param(params)
 {
+    gLogWarning << "BatchedNMSPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                   "INMSLayer OR use EfficientNMS plugin."
+                << std::endl;
     mPluginStatus = checkParams(param);
     PLUGIN_VALIDATE(mPluginStatus == STATUS_SUCCESS);
 }
@@ -281,11 +284,13 @@ int32_t BatchedNMSPlugin::enqueue(
     return -1;
 }
 
-int32_t BatchedNMSDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t BatchedNMSDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
         void const* const locData = inputs[0];
         void const* const confData = inputs[1];
 
@@ -666,6 +671,9 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(char const* name, PluginFiel
 {
     try
     {
+        gLogWarning << "BatchedNMSPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         NMSParameters params;
         PluginField const* fields = fc->fields;
         bool clipBoxes = true;
@@ -758,6 +766,9 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
 {
     try
     {
+        gLogWarning << "BatchedNMSPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         NMSParameters params;
         PluginField const* fields = fc->fields;
         bool clipBoxes = true;
@@ -850,6 +861,9 @@ IPluginV2Ext* BatchedNMSPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "BatchedNMSPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call NMS::destroy()
         auto* plugin = new BatchedNMSPlugin(serialData, serialLength);
@@ -868,6 +882,9 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning << "BatchedNMSPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to add an "
+                       "INMSLayer OR use EfficientNMS plugin."
+                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call NMS::destroy()
         auto* plugin = new BatchedNMSDynamicPlugin(serialData, serialLength);

@@ -307,11 +307,13 @@ size_t EmbLayerNormPluginDynamic::getWorkspaceSize(
     return 0;
 }
 
-int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /* outputDesc */,
+    void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
+
         int32_t const batchSize = inputDesc->dims.d[BDIM];
         int32_t const S = inputDesc->dims.d[SDIM];
         int32_t status = STATUS_FAILURE;

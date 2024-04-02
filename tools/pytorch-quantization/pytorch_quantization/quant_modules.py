@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,28 +17,35 @@
 """Dynamically replace the modules with quantized versions."""
 
 from collections import namedtuple
+from contextlib import contextmanager
+
 import torch
 from pytorch_quantization import nn as quant_nn
+
+__all__ = ['initialize', 'deactivate', 'enable_onnx_export']
 
 # Definition of the named tuple that is used to store mapping of the quantized modules
 _quant_entry = namedtuple('quant_entry', 'orig_mod mod_name replace_mod')
 
 # Global member of the file that contains the mapping of quantized modules
-_DEFAULT_QUANT_MAP = [_quant_entry(torch.nn, "Conv1d", quant_nn.QuantConv1d),
-                      _quant_entry(torch.nn, "Conv2d", quant_nn.QuantConv2d),
-                      _quant_entry(torch.nn, "Conv3d", quant_nn.QuantConv3d),
-                      _quant_entry(torch.nn, "ConvTranspose1d", quant_nn.QuantConvTranspose1d),
-                      _quant_entry(torch.nn, "ConvTranspose2d", quant_nn.QuantConvTranspose2d),
-                      _quant_entry(torch.nn, "ConvTranspose3d", quant_nn.QuantConvTranspose3d),
-                      _quant_entry(torch.nn, "Linear", quant_nn.QuantLinear),
-                      _quant_entry(torch.nn, "LSTM", quant_nn.QuantLSTM),
-                      _quant_entry(torch.nn, "LSTMCell", quant_nn.QuantLSTMCell),
-                      _quant_entry(torch.nn, "AvgPool1d", quant_nn.QuantAvgPool1d),
-                      _quant_entry(torch.nn, "AvgPool2d", quant_nn.QuantAvgPool2d),
-                      _quant_entry(torch.nn, "AvgPool3d", quant_nn.QuantAvgPool3d),
-                      _quant_entry(torch.nn, "AdaptiveAvgPool1d", quant_nn.QuantAdaptiveAvgPool1d),
-                      _quant_entry(torch.nn, "AdaptiveAvgPool2d", quant_nn.QuantAdaptiveAvgPool2d),
-                      _quant_entry(torch.nn, "AdaptiveAvgPool3d", quant_nn.QuantAdaptiveAvgPool3d),]
+_DEFAULT_QUANT_MAP = [
+    _quant_entry(torch.nn, "Conv1d", quant_nn.QuantConv1d),
+    _quant_entry(torch.nn, "Conv2d", quant_nn.QuantConv2d),
+    _quant_entry(torch.nn, "Conv3d", quant_nn.QuantConv3d),
+    _quant_entry(torch.nn, "ConvTranspose1d", quant_nn.QuantConvTranspose1d),
+    _quant_entry(torch.nn, "ConvTranspose2d", quant_nn.QuantConvTranspose2d),
+    _quant_entry(torch.nn, "ConvTranspose3d", quant_nn.QuantConvTranspose3d),
+    _quant_entry(torch.nn, "Linear", quant_nn.QuantLinear),
+    _quant_entry(torch.nn, "LSTM", quant_nn.QuantLSTM),
+    _quant_entry(torch.nn, "LSTMCell", quant_nn.QuantLSTMCell),
+    _quant_entry(torch.nn, "AvgPool1d", quant_nn.QuantAvgPool1d),
+    _quant_entry(torch.nn, "AvgPool2d", quant_nn.QuantAvgPool2d),
+    _quant_entry(torch.nn, "AvgPool3d", quant_nn.QuantAvgPool3d),
+    _quant_entry(torch.nn, "AdaptiveAvgPool1d", quant_nn.QuantAdaptiveAvgPool1d),
+    _quant_entry(torch.nn, "AdaptiveAvgPool2d", quant_nn.QuantAdaptiveAvgPool2d),
+    _quant_entry(torch.nn, "AdaptiveAvgPool3d", quant_nn.QuantAdaptiveAvgPool3d),
+]
+
 
 class QuantModuleReplacementHelper():
     """To help replace torch.nn modules with quantized versions.
@@ -57,6 +64,7 @@ class QuantModuleReplacementHelper():
             which indicates the modules to leave out in monkey patching.
 
     """
+
     def __init__(self):
 
         # Will hold the original modules to be replaced back
@@ -86,8 +94,8 @@ class QuantModuleReplacementHelper():
                 # append the modules into the variable that will be used in monkey patching
                 self.quant_map.add(item)
                 # also store the original module to be used in reverse monkey patching
-                self.orginal_func_map.add(_quant_entry(item.orig_mod, item.mod_name,
-                                                       getattr(item.orig_mod, item.mod_name)))
+                self.orginal_func_map.add(
+                    _quant_entry(item.orig_mod, item.mod_name, getattr(item.orig_mod, item.mod_name)))
 
         # Add custom modules to the quant_map
         if custom_map is not None:
@@ -113,6 +121,7 @@ class QuantModuleReplacementHelper():
         """
         for entry in self.orginal_func_map:
             setattr(entry.orig_mod, entry.mod_name, entry.replace_mod)
+
 
 def initialize(float_module_list=None, custom_quant_modules=None):
     """Dynamic module replacement using monkey patching.
@@ -142,6 +151,7 @@ def initialize(float_module_list=None, custom_quant_modules=None):
     _quant_module_helper_object.prepare_state(float_module_list, custom_quant_modules)
     _quant_module_helper_object.apply_quant_modules()
 
+
 def deactivate():
     """Dynamic module replacement which reverses the monkey patching.
 
@@ -150,5 +160,23 @@ def deactivate():
     """
     _quant_module_helper_object.restore_float_modules()
 
+
 # Global object that maintains the state of the modules that are replaced.
 _quant_module_helper_object = QuantModuleReplacementHelper()
+
+
+@contextmanager
+def enable_onnx_export():
+    """Context manager to enable onnx export.
+    
+    .. code-block:: python
+
+        with pytorch_quantization.enable_onnx_export():
+            # export onnx model
+            torch.onnx.export(model, ...)
+    
+    """
+    quant_nn.TensorQuantizer._enable_onnx_export = True
+    yield
+
+    quant_nn.TensorQuantizer._enable_onnx_export = False

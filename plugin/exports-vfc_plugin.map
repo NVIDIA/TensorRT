@@ -19,6 +19,7 @@
 {
   global:
     getPluginCreators;
+    getCreators;
     setLoggerFinder;
   local: *;
 };

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,7 +48,7 @@ def read_graph_file(graph_file: str) -> List:
         if not isinstance(layers, list):
             raise ValueError(err_msg)
         if not isinstance(layers[0], dict):
-            details_msg = "\nMake sure to enable detailed ProfilingVerbosity."
+            details_msg = "\nMake sure to enable detailed ProfilingVerbosity when building the engine."
             details_msg += "\nSee https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#engine-inspector"
             raise ValueError(err_msg + details_msg)
         return layers, bindings
@@ -187,9 +187,37 @@ def import_graph_file(graph_file: str, profile_id: int=None):
                 pass
         return raw_layers
 
+    def fix_unicode(raw_layers: List) -> List:
+        """TensorRT 8.6 and 10.0 introduced non-ASCII characters to the graph JSON
+        that trigger SVG rendering errors. This function replaces these characters.
+
+        See: https://github.com/NVIDIA/TensorRT/issues/2779
+        """
+        UNICODE_UNIT_SEPARATOR = '\x1E'
+        UNICODE_REC_SEPARATOR = '\x1F'
+        TREX_SEPARATOR = '+'
+        replace_unicode = lambda s: s.replace(UNICODE_UNIT_SEPARATOR, TREX_SEPARATOR
+                                    ).replace(UNICODE_REC_SEPARATOR, TREX_SEPARATOR)
+        for l in raw_layers:
+            try:
+                l['Name'] = replace_unicode(l['Name'])
+                l['Metadata'] = replace_unicode(l['Metadata'])
+            except KeyError:
+                pass
+        return raw_layers
+
+    def __remove_signal_wait(raw_layers: List) -> List:
+        for raw_layer in raw_layers:
+            if raw_layer['LayerType'] in ("signal", "wait"):
+                raw_layers.remove(raw_layer)
+        return raw_layers
+
+
     raw_layers, bindings = read_graph_file(graph_file)
-    raw_layers = fix_metadata(raw_layers)
+    raw_layers = fix_unicode(raw_layers)
     raw_layers = convert_deconv(raw_layers)
+    raw_layers = __remove_signal_wait(raw_layers)
     raw_layers = disambiguate_layer_names(raw_layers)
     raw_layers, bindings = filter_profiles(raw_layers, bindings, profile_id)
+
     return raw_layers, bindings

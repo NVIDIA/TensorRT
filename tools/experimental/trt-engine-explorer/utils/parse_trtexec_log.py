@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +22,10 @@ trtexec log file parsing
 """
 
 
-import json
-from pickle import BUILD
 import re
 from typing import Tuple, List, Dict, Any
-from enum import Enum
+import argparse
+import trex.archiving as archiving
 
 
 def __to_float(line: str) -> float:
@@ -58,7 +58,7 @@ class FileSection:
         s = re.search(self.section_header, line)
         return s is not None
 
-    def parse_line(self, line: str):
+    def parse_line(self, line: str) -> bool:
         def parse_kv_line(line: str) -> Tuple[Any, Any]:
             """Parse a log line that reports a key-value pair.
 
@@ -68,12 +68,16 @@ class FileSection:
             if match is not None:
                 match_end = match.span()[1]
                 kv_line = line[match_end:].strip()
-                kv = kv_line.split(": ")
+                if not kv_line.count(":"):
+                    return None, None
+                kv = kv_line.split(":")
                 if len(kv) > 1:
-                    return kv[0], kv[1]
+                    return kv[0], kv[1][1:]
+                if len(kv) == 1:
+                    return kv[0], None
             return None, None
 
-        k,v = parse_kv_line(line)
+        k, v = parse_kv_line(line)
         if k is not None and v is not None:
             self.dict[k] = v
             return True
@@ -82,38 +86,45 @@ class FileSection:
         return False
 
 
-def __parse_log_file(file_name: str, sections: List) -> List[Dict]:
+def __parse_log_file(file_name: str, sections: List, tea: archiving.EngineArchive) -> List[Dict]:
+    def entered_section(sections, line) -> bool:
+        for section in sections:
+            if section.entered_section(line):
+                return section
+        return None
+
     current_section = None
-    with open(file_name, "r") as file:
-        for line in file.readlines():
+    with archiving.get_reader(tea, file_name) as reader:
+        for line in reader.readlines():
             if current_section is None:
-                for section in sections:
-                    if section.entered_section(line):
-                        current_section = section
-                        break
+                current_section = entered_section(sections, line)
             else:
                 if not current_section.parse_line(line):
-                    current_section = None
+                    sections.remove(current_section)
+                    current_section = entered_section(sections, line)
     dicts = [section.dict for section in sections]
     return dicts
 
 
-def parse_build_log(file_name: str) -> List[Dict]:
+def parse_build_log(file_name: str, tea: archiving.EngineArchive) -> List[Dict]:
     """Parse the TensorRT engine build log and extract the builder configuration.
 
     Returns the model and engine build configurations as dictionaries.
     """
     model_options = FileSection("=== Model Options ===")
     build_options = FileSection("=== Build Options ===")
-    sections = [model_options, build_options]
-    __parse_log_file(file_name, sections)
+    device_information = FileSection("=== Device Information ===")
+
+    sections = [model_options, build_options, device_information]
+    __parse_log_file(file_name, sections, tea)
     return {
         "model_options": model_options.dict,
         "build_options": build_options.dict,
+        "device_information": device_information.dict
     }
 
 
-def parse_profiling_log(file_name: str):
+def parse_profiling_log(file_name: str, tea: archiving.EngineArchive):
     performance_summary = FileSection("=== Performance summary ===")
     inference_options = FileSection("=== Inference Options ===")
     device_information = FileSection("=== Device Information ===")
@@ -121,7 +132,7 @@ def parse_profiling_log(file_name: str):
         performance_summary,
         inference_options,
         device_information]
-    __parse_log_file(file_name, sections)
+    __parse_log_file(file_name, sections, tea)
 
     def post_process_perf(perf_summary: dict):
         """Normalize the log results to a standard format"""
@@ -145,3 +156,10 @@ def parse_profiling_log(file_name: str):
         "inference_options": inference_options.dict,
         "device_information": post_process_device_info(device_information.dict)
     }
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input', help="name of engine build log file to parse.")
+    args = parser.parse_args()
+    parse_build_log(args.input)

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,6 @@
 #include "common/serialize.hpp"
 #include "instanceNormalizationPlugin/instanceNormFwd.h"
 #include <cuda_fp16.h>
-#include <cudnn.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -109,10 +108,12 @@ private:
     std::vector<float> mHostBias;
     float* mDeviceScale{nullptr};
     float* mDeviceBias{nullptr};
-    cudnnHandle_t mCudnnHandle{nullptr};
-    cudnnTensorDescriptor_t mXDescriptor{nullptr};
-    cudnnTensorDescriptor_t mYDescriptor{nullptr};
-    cudnnTensorDescriptor_t mBDescriptor{nullptr};
+    nvinfer1::pluginInternal::cudnnHandle_t mCudnnHandle{nullptr};
+    nvinfer1::pluginInternal::CudnnWrapper& mCudnnWrapper = nvinfer1::pluginInternal::getCudnnWrapper();
+
+    nvinfer1::pluginInternal::cudnnTensorDescriptor_t mXDescriptor{nullptr};
+    nvinfer1::pluginInternal::cudnnTensorDescriptor_t mYDescriptor{nullptr};
+    nvinfer1::pluginInternal::cudnnTensorDescriptor_t mBDescriptor{nullptr};
     std::string mPluginNamespace;
     std::string mNamespace;
     bool mInitialized{false};

@@ -17,7 +17,7 @@ from polygraphy import mod
 
 
 @mod.export()
-def main():
+def main(run_opts = None):
     """
     The Polygraphy CLI Toolkit
 
@@ -51,7 +51,10 @@ def main():
     for tool in TOOL_REGISTRY:
         tool.setup_parser(subparsers)
 
-    args, unknown = parser.parse_known_args()
+    if run_opts is not None:
+        args, unknown = parser.parse_known_args(run_opts)
+    else:
+        args, unknown = parser.parse_known_args()
 
     if unknown:
         G_LOGGER.error(f"Unrecognized Options: {unknown}")

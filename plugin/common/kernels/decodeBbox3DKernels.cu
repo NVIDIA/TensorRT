@@ -32,7 +32,7 @@ namespace plugin
               << " in file " << __FILE__                          \
               << " error status: " << status                      \
               << std::endl;                                       \
-              abort();                                            \
+              exit(EXIT_FAILURE);                                           \
     }                                                             \
 }
 

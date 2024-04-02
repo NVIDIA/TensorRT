@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +18,6 @@
 #define TRT_SCATTER_PLUGIN_H
 #include "common/kernels/kernel.h"
 #include "common/plugin.h"
-#include "cudnn.h"
-#include <cublas_v2.h>
 #include <string>
 #include <vector>
 
@@ -31,7 +29,7 @@ namespace plugin
 class ScatterND : public IPluginV2DynamicExt
 {
 public:
-    ScatterND();        
+    ScatterND();
 
     ~ScatterND() override = default;
 

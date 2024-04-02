@@ -86,7 +86,7 @@ public:
         if (!algorithmFile.good())
         {
             sample::gLogError << "Cannot open algorithm cache file: " << mCacheFileName << " to write." << std::endl;
-            abort();
+            exit(EXIT_FAILURE);
         }
 
         for (int32_t i = 0; i < nbAlgorithms; i++)
@@ -104,8 +104,6 @@ public:
             // Write input and output formats.
             for (int32_t j = 0; j < nbInputs + nbOutputs; j++)
             {
-                algorithmFile << static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getTensorFormat())
-                              << "\n";
                 algorithmFile << static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getDataType())
                               << "\n";
                 Dims const strides = algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getStrides();
@@ -196,8 +194,6 @@ public:
             auto nbFormats = algoItem.nbInputs + algoItem.nbOutputs;
             for (auto j = 0; j < nbFormats; j++)
             {
-                ASSERT(algoItem.inOutIOInfo[j].tensorFormat
-                    == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getTensorFormat()));
                 ASSERT(algoItem.inOutIOInfo[j].dataType
                     == static_cast<int32_t>(algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getDataType()));
                 Dims const strides = algoChoices[i]->getAlgorithmIOInfoByIndex(j)->getStrides();
@@ -220,7 +216,7 @@ public:
         if (!algorithmFile.good())
         {
             sample::gLogError << "Cannot open algorithm cache file: " << cacheFileName << " to read." << std::endl;
-            abort();
+            exit(EXIT_FAILURE);
         }
 
         std::string line;
@@ -247,8 +243,6 @@ public:
             for (int32_t i = 0; i < nbFormats; i++)
             {
                 getline(algorithmFile, line);
-                algoItem.inOutIOInfo[i].tensorFormat = std::stoi(line);
-                getline(algorithmFile, line);
                 algoItem.inOutIOInfo[i].dataType = std::stoi(line);
 
                 getline(algorithmFile, line);
@@ -273,7 +267,6 @@ public:
 private:
     struct AlgorithmIOCache
     {
-        int32_t tensorFormat{};
         int32_t dataType{};
         Dims strides{};
         int64_t vectorDim{};
@@ -304,9 +297,7 @@ private:
         auto const nbFormats = algoCacheItem.nbInputs + algoCacheItem.nbOutputs;
         for (auto j = 0; j < nbFormats; j++)
         {
-            if (algoCacheItem.inOutIOInfo[j].tensorFormat
-                    != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getTensorFormat())
-                || algoCacheItem.inOutIOInfo[j].dataType
+            if (algoCacheItem.inOutIOInfo[j].dataType
                     != static_cast<int32_t>(algoChoice.getAlgorithmIOInfoByIndex(j)->getDataType())
 
                 || algoCacheItem.inOutIOInfo[j].vectorDim
@@ -436,9 +427,8 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
     {
         return false;
     }
-    auto const networkFlags = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(networkFlags));
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -463,12 +453,15 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
         return false;
     }
 
-    builder->setMaxBatchSize(mParams.batchSize);
     config->setAlgorithmSelector(selector);
 
     if (mParams.fp16)
     {
         config->setFlag(BuilderFlag::kFP16);
+    }
+    if (mParams.bf16)
+    {
+        config->setFlag(BuilderFlag::kBF16);
     }
     if (mParams.int8)
     {
@@ -487,6 +480,7 @@ bool SampleAlgorithmSelector::build(IAlgorithmSelector* selector)
     {
         mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
     }
+
     if (!mRuntime)
     {
         return false;
@@ -639,6 +633,12 @@ bool SampleAlgorithmSelector::infer()
         return false;
     }
 
+    for (int32_t i = 0, e = mEngine->getNbIOTensors(); i < e; i++)
+    {
+        auto const name = mEngine->getIOTensorName(i);
+        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
+    }
+
     // Pick a random digit to try to infer.
     srand(time(NULL));
     int32_t const digit = rand() % 10;
@@ -659,7 +659,7 @@ bool SampleAlgorithmSelector::infer()
     buffers.copyInputToDeviceAsync(stream);
 
     // Asynchronously enqueue the inference work
-    if (!context->enqueueV2(buffers.getDeviceBindings().data(), stream, nullptr))
+    if (!context->enqueueV3(stream))
     {
         return false;
     }
@@ -699,6 +699,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const
     params.dlaCore = args.useDLACore;
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
+    params.bf16 = args.runInBf16;
 
     params.onnxFileName = "mnist.onnx";
     params.inputTensorNames.push_back("Input3");
@@ -724,6 +725,7 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--int8          Run in Int8 mode.\n";
     std::cout << "--fp16          Run in FP16 mode.\n";
+    std::cout << "--bf16          Run in BF16 mode.\n";
 }
 
 int32_t main(int32_t argc, char** argv)

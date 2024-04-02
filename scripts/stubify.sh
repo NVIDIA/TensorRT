@@ -47,15 +47,15 @@ if [ "$OS" = "Ubuntu-22.04" ] ; then
 fi
 
 # make stub library
+# This uses the system nm in containers that compile with SCL, but the output is identical to the SCL output
 if [ -z "${CC_ARGS}" ] ; then
     nm -D "${IN_LIBFILE}" ${EXTRA_NM_FLAG} | \
         awk '{if ($2 == "T") { print "void",$3,"() {}" }}' | \
-        "${CC}" -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" -
+        ${CC} -xc -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" -
 else
     nm -D "${IN_LIBFILE}" ${EXTRA_NM_FLAG} | \
         awk '{if ($2 == "T") { print "void",$3,"() {}" }}' | \
-        "${CC}" -x c -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" "${CC_ARGS}" -
+        ${CC} -xc -Og -fPIC -shared -Wl,-soname=${SONAME} -Wl,--strip-all -o "${OUT_LIBFILE}" "${CC_ARGS}" -
 fi
 
 exit $?
-

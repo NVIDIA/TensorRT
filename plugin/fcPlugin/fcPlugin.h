@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,7 @@
 #include "NvInferPlugin.h"
 
 #include "common/bertCommon.h"
-#include <cublasLt.h>
+#include "common/cublasLtWrapper.h"
 #include <string>
 #include <vector>
 
@@ -50,11 +50,8 @@ struct GemmTypes<half>
     using dataTypeO = half;
     static cudaDataType_t const cudaTypeS = CUDA_R_16F;
     using dataTypeS = half;
-#if CUBLAS_VER_MAJOR < 11
-    static cudaDataType_t const cudaTypeCom = CUDA_R_16F;
-#else
-    static cublasComputeType_t const cudaTypeCom = CUBLAS_COMPUTE_16F;
-#endif
+    static nvinfer1::pluginInternal::cublasComputeType_t const cudaTypeCom
+        = nvinfer1::pluginInternal::CUBLAS_COMPUTE_16F;
 };
 
 template <>
@@ -66,11 +63,8 @@ struct GemmTypes<float>
     using dataTypeO = float;
     static cudaDataType_t const cudaTypeS = CUDA_R_32F;
     using dataTypeS = float;
-#if CUBLAS_VER_MAJOR < 11
-    static cudaDataType_t const cudaTypeCom = CUDA_R_32F;
-#else
-    static cublasComputeType_t const cudaTypeCom = CUBLAS_COMPUTE_32F;
-#endif
+    static nvinfer1::pluginInternal::cublasComputeType_t const cudaTypeCom
+        = nvinfer1::pluginInternal::CUBLAS_COMPUTE_32F;
 };
 
 template <typename T>
@@ -91,8 +85,8 @@ struct Gemm
     bool transA;
     bool transB;
 
-    cublasOperation_t opA;
-    cublasOperation_t opB;
+    nvinfer1::pluginInternal::cublasOperation_t opA;
+    nvinfer1::pluginInternal::cublasOperation_t opB;
 
     int32_t const word_size{sizeof(T)};
     typename Types::dataTypeS alpha;
@@ -124,8 +118,8 @@ struct Gemm
         cB = transB ? k : n;
         cC = n;
 
-        opA = transA ? CUBLAS_OP_T : CUBLAS_OP_N;
-        opB = transB ? CUBLAS_OP_T : CUBLAS_OP_N;
+        opA = transA ? nvinfer1::pluginInternal::CUBLAS_OP_T : nvinfer1::pluginInternal::CUBLAS_OP_N;
+        opB = transB ? nvinfer1::pluginInternal::CUBLAS_OP_T : nvinfer1::pluginInternal::CUBLAS_OP_N;
 
         elemA = m * k;
         elemB = n * k;
@@ -148,20 +142,20 @@ auto constexpr kTHREADS_PER_BLOCK = 1024;
 typedef struct customMatMultPerfType_t
 {
     static constexpr float kMAX_TIME = 1000000.F;
-    cublasLtMatmulAlgo_t algo;
-    cublasStatus_t status;
+    nvinfer1::pluginInternal::cublasLtMatmulAlgo_t algo;
+    nvinfer1::pluginInternal::cublasStatus_t status;
     float time{kMAX_TIME};
     size_t workspaceSize; // actual memory workspace needed
-    cublasMath_t mathMode;
-    cublasLtReductionScheme_t reductionScheme;
+    nvinfer1::pluginInternal::cublasMath_t mathMode;
+    nvinfer1::pluginInternal::cublasLtReductionScheme_t reductionScheme;
     int32_t customOption;
     float wavesCount;
 } customMatmulPerf_t;
 
 // clang-format off
-void LtGemmSearch(cublasLtHandle_t ltHandle,
-                  cublasOperation_t transa,
-                  cublasOperation_t transb,
+void LtGemmSearch(nvinfer1::pluginInternal::cublasLtHandle_t ltHandle,
+                  nvinfer1::pluginInternal::cublasOperation_t transa,
+                  nvinfer1::pluginInternal::cublasOperation_t transb,
                   int32_t const &m,
                   int32_t const &n,
                   int32_t const &k,
@@ -175,7 +169,7 @@ void LtGemmSearch(cublasLtHandle_t ltHandle,
                   int32_t const &ldc,
                   void *workSpace,
                   size_t workSpaceSize,
-                  cudaDataType_t computeType,
+                  nvinfer1::pluginInternal::cublasComputeType_t computeType,
                   cudaDataType_t scaleType,
                   cudaDataType_t Atype,
                   cudaDataType_t Btype,
@@ -183,8 +177,8 @@ void LtGemmSearch(cublasLtHandle_t ltHandle,
                   std::vector<customMatmulPerf_t> &perfResults);
 // clang-format on
 template <typename T>
-void LtGemmSearch(cublasLtHandle_t ltHandle, Gemm<T> const& g, void* workSpace, size_t workSpaceSize,
-    std::vector<customMatmulPerf_t>& perfResults)
+void LtGemmSearch(nvinfer1::pluginInternal::cublasLtHandle_t ltHandle, Gemm<T> const& g, void* workSpace,
+    size_t workSpaceSize, std::vector<customMatmulPerf_t>& perfResults)
 {
     // clang-format off
     LtGemmSearch(
@@ -216,52 +210,49 @@ void LtGemmSearch(cublasLtHandle_t ltHandle, Gemm<T> const& g, void* workSpace, 
 
 struct LtContext
 {
-    cublasLtHandle_t cublas{nullptr};
+    nvinfer1::pluginInternal::cublasLtHandle_t cublas{nullptr};
+    nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
     cudaDataType_t typeA;
     cudaDataType_t typeB;
     cudaDataType_t typeC;
-#if CUBLAS_VER_MAJOR < 11
-    cudaDataType_t typeComp;
-#else
-    cublasComputeType_t typeComp;
-#endif
+    nvinfer1::pluginInternal::cublasComputeType_t typeComp;
     cudaDataType_t typeS;
-    cublasLtMatmulDesc_t operationDesc{nullptr};
-    cublasLtMatrixLayout_t Adesc{nullptr};
-    cublasLtMatrixLayout_t Bdesc{nullptr};
-    cublasLtMatrixLayout_t Cdesc{nullptr};
-    cublasLtMatmulHeuristicResult_t heuristicResult = {};
+    nvinfer1::pluginInternal::cublasLtMatmulDesc_t operationDesc{nullptr};
+    nvinfer1::pluginInternal::cublasLtMatrixLayout_t Adesc{nullptr};
+    nvinfer1::pluginInternal::cublasLtMatrixLayout_t Bdesc{nullptr};
+    nvinfer1::pluginInternal::cublasLtMatrixLayout_t Cdesc{nullptr};
+    nvinfer1::pluginInternal::cublasLtMatmulHeuristicResult_t heuristicResult = {};
 
     void attach()
     {
-        PLUGIN_CUBLASASSERT(cublasLtCreate(&cublas));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtCreate(&cublas));
     }
 
     void detach()
     {
-        PLUGIN_CUBLASASSERT(cublasLtDestroy(cublas));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(cublas));
     }
 
     void destroy()
     {
         if (operationDesc)
         {
-            PLUGIN_CUBLASASSERT(cublasLtMatmulDescDestroy(operationDesc));
+            PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescDestroy(operationDesc));
             operationDesc = nullptr;
         }
         if (Adesc)
         {
-            PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Adesc));
+            PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutDestroy(Adesc));
             Adesc = nullptr;
         }
         if (Bdesc)
         {
-            PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Bdesc));
+            PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutDestroy(Bdesc));
             Bdesc = nullptr;
         }
         if (Cdesc)
         {
-            PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutDestroy(Cdesc));
+            PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutDestroy(Cdesc));
             Cdesc = nullptr;
         }
     }
@@ -276,35 +267,34 @@ struct LtContext
         typeComp = Gemm<T>::Types::cudaTypeCom; // compute
 
         // OPERATION
-#if CUBLAS_VER_MAJOR < 11
-        PLUGIN_CUBLASASSERT(cublasLtMatmulDescCreate(&operationDesc, typeComp));
-#else
-        PLUGIN_CUBLASASSERT(cublasLtMatmulDescCreate(&operationDesc, typeComp, typeS));
-#endif
-        PLUGIN_CUBLASASSERT(
-            cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSA, &g.opA, sizeof(g.opA)));
-        PLUGIN_CUBLASASSERT(
-            cublasLtMatmulDescSetAttribute(operationDesc, CUBLASLT_MATMUL_DESC_TRANSB, &g.opB, sizeof(g.opB)));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescCreate(&operationDesc, typeComp, typeS));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescSetAttribute(
+            operationDesc, nvinfer1::pluginInternal::CUBLASLT_MATMUL_DESC_TRANSA, &g.opA, sizeof(g.opA)));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulDescSetAttribute(
+            operationDesc, nvinfer1::pluginInternal::CUBLASLT_MATMUL_DESC_TRANSB, &g.opB, sizeof(g.opB)));
 
         // MAT DESC
-        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutCreate(&Adesc, typeA, g.rA, g.cA, g.ldA));
-        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutCreate(&Bdesc, typeB, g.rB, g.cB, g.ldB));
-        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutCreate(&Cdesc, typeC, g.rC, g.cC, g.ldC));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(&Adesc, typeA, g.rA, g.cA, g.ldA));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(&Bdesc, typeB, g.rB, g.cB, g.ldB));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(&Cdesc, typeC, g.rC, g.cC, g.ldC));
     }
 
     void setN(uint64_t n)
     {
-        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutSetAttribute(Bdesc, CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n)));
-        PLUGIN_CUBLASASSERT(cublasLtMatrixLayoutSetAttribute(Cdesc, CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n)));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutSetAttribute(
+            Bdesc, nvinfer1::pluginInternal::CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n)));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutSetAttribute(
+            Cdesc, nvinfer1::pluginInternal::CUBLASLT_MATRIX_LAYOUT_COLS, &n, sizeof(n)));
     }
 };
 
 template <typename T>
-cublasStatus_t cublasLtMatmul(
-    LtContext& ctx, Gemm<T>& g, cublasLtMatmulAlgo_t algo, void* workspace, size_t workspaceSize, cudaStream_t stream)
+nvinfer1::pluginInternal::cublasStatus_t cublasLtMatmul(LtContext& ctx, Gemm<T>& g,
+    nvinfer1::pluginInternal::cublasLtMatmulAlgo_t algo, void* workspace, size_t workspaceSize, cudaStream_t stream)
 {
+    nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
     // clang-format off
-    return cublasLtMatmul(
+    return cublasLtWrapper.cublasLtMatmul(
         ctx.cublas,
         ctx.operationDesc,
         &g.alpha,
@@ -365,28 +355,32 @@ struct AlgoProps
     int32_t reductionScheme;
     uint64_t numericImpl;
 
-    void populate(cublasLtMatmulAlgo_t const& algo)
+    void populate(nvinfer1::pluginInternal::cublasLtMatmulAlgo_t const& algo)
     {
-        cublasLtMatmulAlgo_t const* matmulAlgo = &algo;
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_ID, &algoId, sizeof(algoId), nullptr));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tile, sizeof(tile), nullptr));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &numSplitsK, sizeof(numSplitsK), nullptr));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &reductionScheme, sizeof(reductionScheme), nullptr));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &swizzle, sizeof(swizzle), nullptr));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoConfigGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption), nullptr));
-        PLUGIN_CUBLASASSERT(cublasLtMatmulAlgoCapGetAttribute(
-            matmulAlgo, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS, &numericImpl, sizeof(numericImpl), nullptr));
+        nvinfer1::pluginInternal::cublasLtMatmulAlgo_t const* matmulAlgo = &algo;
+        nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, nvinfer1::pluginInternal::CUBLASLT_ALGO_CONFIG_ID, &algoId, sizeof(algoId), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigGetAttribute(
+            matmulAlgo, nvinfer1::pluginInternal::CUBLASLT_ALGO_CONFIG_TILE_ID, &tile, sizeof(tile), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigGetAttribute(matmulAlgo,
+            nvinfer1::pluginInternal::CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &numSplitsK, sizeof(numSplitsK), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigGetAttribute(matmulAlgo,
+            nvinfer1::pluginInternal::CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &reductionScheme, sizeof(reductionScheme),
+            nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigGetAttribute(matmulAlgo,
+            nvinfer1::pluginInternal::CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &swizzle, sizeof(swizzle), nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigGetAttribute(matmulAlgo,
+            nvinfer1::pluginInternal::CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption),
+            nullptr));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(matmulAlgo,
+            nvinfer1::pluginInternal::CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS, &numericImpl, sizeof(numericImpl),
+            nullptr));
     }
 };
 
 template <typename T>
-cublasLtMatmulAlgo_t gemmSearch(
+nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
     int32_t const m, int32_t const n, int32_t const k, size_t const workspaceSize, size_t& actualWorkspace)
 {
     Gemm<T> g(m, n, k, false, false);
@@ -398,11 +392,12 @@ cublasLtMatmulAlgo_t gemmSearch(
 
     void* workspace;
     PLUGIN_CUASSERT(cudaMalloc(&workspace, workspaceSize));
-    cublasLtHandle_t lt;
-    PLUGIN_CUBLASASSERT(cublasLtCreate(&lt));
+    nvinfer1::pluginInternal::cublasLtHandle_t lt;
+    nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtCreate(&lt));
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
     PLUGIN_CUASSERT(cudaDeviceSynchronize());
-    PLUGIN_CUBLASASSERT(cublasLtDestroy(lt));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
     PLUGIN_CUASSERT(cudaFree(workspace));
 
     PLUGIN_CUASSERT(cudaFree(g.A));
@@ -414,7 +409,8 @@ cublasLtMatmulAlgo_t gemmSearch(
 }
 
 template <typename T>
-cublasLtMatmulAlgo_t gemmSearch(Gemm<T>& g, size_t const workspaceSize, size_t& actualWorkspace)
+nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
+    Gemm<T>& g, size_t const workspaceSize, size_t& actualWorkspace)
 {
     std::vector<customMatmulPerf_t> perfResults(kNB_ALGO_COMBINATIONS);
 
@@ -424,11 +420,12 @@ cublasLtMatmulAlgo_t gemmSearch(Gemm<T>& g, size_t const workspaceSize, size_t& 
 
     void* workspace;
     PLUGIN_CUASSERT(cudaMalloc(&workspace, workspaceSize));
-    cublasLtHandle_t lt;
-    PLUGIN_CUBLASASSERT(cublasLtCreate(&lt));
+    nvinfer1::pluginInternal::cublasLtHandle_t lt;
+    nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtCreate(&lt));
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
     PLUGIN_CUASSERT(cudaDeviceSynchronize());
-    PLUGIN_CUBLASASSERT(cublasLtDestroy(lt));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
     PLUGIN_CUASSERT(cudaFree(workspace));
 
     PLUGIN_CUASSERT(cudaFree(g.A));
@@ -497,7 +494,7 @@ private:
     int32_t mNmax;
     int32_t mK;
 
-    cublasLtMatmulAlgo_t mAlgo;
+    nvinfer1::pluginInternal::cublasLtMatmulAlgo_t mAlgo;
 
     bert::WeightsWithOwnership mW;
     bert::cuda_unique_ptr<void> mWdev;

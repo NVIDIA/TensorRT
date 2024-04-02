@@ -32,6 +32,9 @@ The `inspect` tool can be used to display information about supported types of f
 
     See the [example](../../../examples/cli/debug/01_debugging_flaky_trt_tactics/) for details.
 
+- [EXPERIMENTAL] `sparsity` displays information about whether each weight tensor in an ONNX model
+    follows a 2:4 structured sparsity pattern.
+
 ## Usage
 
 See `polygraphy inspect -h` for usage information.

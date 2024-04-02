@@ -14,13 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import numpy as np
 from polygraphy.common import TensorMetadata
-
+from polygraphy.datatype import DataType
 
 class TestTensorMetadata:
     def test_str(self):
-        meta = TensorMetadata().add("X", dtype=np.float32, shape=(64, 64))
+        meta = TensorMetadata().add("X", dtype=DataType.FLOAT32, shape=(64, 64))
         assert str(meta) == "{X [dtype=float32, shape=(64, 64)]}"
 
     def test_str_no_dtype(self):
@@ -28,7 +27,7 @@ class TestTensorMetadata:
         assert str(meta) == "{X [shape=(64, 64)]}"
 
     def test_str_no_shape(self):
-        meta = TensorMetadata().add("X", dtype=np.float32, shape=None)
+        meta = TensorMetadata().add("X", dtype=DataType.FLOAT32, shape=None)
         assert str(meta) == "{X [dtype=float32]}"
 
     def test_str_no_meta(self):

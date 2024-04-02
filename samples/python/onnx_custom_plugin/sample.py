@@ -53,8 +53,9 @@ TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 def build_engine(model_path):
 
     builder = trt.Builder(TRT_LOGGER)
-    network = builder.create_network(common.EXPLICIT_BATCH)
+    network = builder.create_network(0)
     config = builder.create_builder_config()
+    config.set_tactic_sources(config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS))
     parser = trt.OnnxParser(network, TRT_LOGGER)
     runtime = trt.Runtime(TRT_LOGGER)
 
@@ -158,9 +159,7 @@ def main():
         if not interactive:
             print(f"Input context: {context_text}")
             print(f"Input query: {query_text}")
-        trt_outputs = common.do_inference_v2(
-            trt_context, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream
-        )
+        trt_outputs = common.do_inference(trt_context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
         start = trt_outputs[1].item()
         end = trt_outputs[0].item()
         answer = context_words[start : end + 1].flatten()

@@ -49,6 +49,7 @@ public:
     virtual ~IOnnxConfig() noexcept = default;
     //!
     //! \typedef Verbosity
+    //!
     //! \brief Defines Verbosity level.
     //!
     typedef int32_t Verbosity;
@@ -187,15 +188,6 @@ public:
     //! \see getPrintLayerInfo()
     //!
     virtual void setPrintLayerInfo(bool) noexcept = 0;
-
-    //!
-    //! \brief Destroy IOnnxConfig object.
-    //!
-    //! \deprecated Use `delete` instead. Deprecated in TRT 8.0.
-    //!
-    //! \warning Calling destroy on a managed pointer will result in a double-free error.
-    //!
-    TRT_DEPRECATED virtual void destroy() noexcept = 0;
 
 }; // class IOnnxConfig
 

@@ -146,7 +146,6 @@ def get_output_metadata(graph, layerwise=False):
 
     output_tensors = []
     for node in output_nodes:
-
         tensor_name = node.name + ":0"
         try:
             tensor = graph.get_tensor_by_name(tensor_name)

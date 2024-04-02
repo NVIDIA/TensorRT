@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,16 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-
 """Basic tensor quantization functions"""
 import numpy as np
+import numbers
 import yaml
 
 from absl import logging
 
 import torch
+import torch._C._onnx as _C_onnx
 from torch.autograd import Function
+
+from pytorch_quantization import cuda_ext
+
+from torch.onnx import symbolic_helper
+
 
 class ScaledQuantDescriptor():
     """Supportive descriptor of quantization
@@ -31,7 +36,16 @@ class ScaledQuantDescriptor():
     Describe how a tensor should be quantized. A QuantDescriptor and a tensor defines a quantized tensor.
 
     Args:
-        num_bits: An integer. Number of bits of quantization. It is used to calculate scaling factor. Default 8.
+        num_bits: An integer or a tuple of two integers. 
+            Specifically, `num_bits` can be:
+            
+            #. A positive integer argument for integer qunatization. `num_bits` specify 
+                the number of bits used for integer quantization.
+
+            #. Constant integer tuple (4,3) for E4M3 floating point quantization emulating
+                Nvidia's FP8 quantization. E4M3 quantization only supports per-tensor quantization.
+
+            Default: 8.
         name: Seems a nice thing to have
 
     Keyword Arguments:
@@ -67,13 +81,15 @@ class ScaledQuantDescriptor():
     """
 
     def __init__(self, num_bits=8, name=None, **kwargs):
-        if not isinstance(num_bits, int):
-            raise TypeError("num_bits must be an integer, not {}.".format(type(num_bits)))
-        if num_bits < 0:
-            raise ValueError("num_bits must be >= 0, not {}.".format(num_bits))
-        if num_bits == 0:
-            logging.error("num_bits is 0. This will result in the tensor being quantized to all zeros."
-                          " This mode should only be used for debugging purposes.")
+        if isinstance(num_bits, int):
+            if num_bits < 0:
+                raise ValueError("num_bits must be > 0, not {}.".format(num_bits))
+            if num_bits == 0:
+                logging.error("num_bits is 0. This will result in the tensor being quantized to all zeros."
+                              " This mode should only be used for debugging purposes.")
+        elif num_bits != (4, 3):
+            raise TypeError("num_bits must be a postive integer or tuple (4,3), not {}.".format(type(num_bits)))
+
         self._num_bits = num_bits
         if not isinstance(name, str) and name is not None:
             raise TypeError("name must be a string or None, not {}.".format(type(name)))
@@ -85,12 +101,11 @@ class ScaledQuantDescriptor():
             logging.debug("Meaning of axis has changed since v2.0. Make sure to update.")
         self._learn_amax = kwargs.pop('learn_amax', False)
         if self._learn_amax and self._axis is not None:
-            raise TypeError(
-                "axis is ignored and must be None when learn_amax is true, got {}.".format(type(self._axis)))
+            raise TypeError("axis is ignored and must be None when learn_amax is true, got {}.".format(type(
+                self._axis)))
         amax = kwargs.pop('amax', None)
         if amax is not None:
-            if not isinstance(amax, float) and not isinstance(
-                    amax, list) and not isinstance(amax, np.ndarray):
+            if not isinstance(amax, float) and not isinstance(amax, list) and not isinstance(amax, np.ndarray):
                 raise TypeError("amax must be float, list or ndarray, not {}".format(type(amax)))
             # Make it single precision array
             self._amax = np.array(amax, dtype=np.float32)
@@ -145,6 +160,7 @@ class ScaledQuantDescriptor():
     @property
     def narrow_range(self):
         return self._narrow_range
+
     # pylint:enable=missing-docstring
 
     def __str__(self):
@@ -153,8 +169,8 @@ class ScaledQuantDescriptor():
         s += " fake" if self._fake_quant else " real"
         s += " axis={}".format(self._axis if self._axis is not None else " per-tensor")
         if isinstance(self._amax, torch.Tensor):
-            s += " amax={}".format(np.array2string(self._amax.cpu().numpy().flatten(), edgeitems=1,
-                                                   formatter={'all': "{:.2e}".format}))
+            s += " amax={}".format(
+                np.array2string(self._amax.cpu().numpy().flatten(), edgeitems=1, formatter={'all': "{:.2e}".format}))
         elif self._amax is not None:
             s += " amax={_amax}"
             s += " full_range"
@@ -217,6 +233,7 @@ class ScaledQuantDescriptor():
 
         return quant_desc
 
+
 QuantDescriptor = ScaledQuantDescriptor
 
 # Predefined descriptors
@@ -231,6 +248,178 @@ QUANT_DESC_8BIT_CONVTRANSPOSE2D_WEIGHT_PER_CHANNEL = QuantDescriptor(num_bits=8,
 QUANT_DESC_8BIT_CONVTRANSPOSE3D_WEIGHT_PER_CHANNEL = QuantDescriptor(num_bits=8, axis=(0))
 
 
+@torch.jit.script
+def _fake_tensor_quant_backward(inputs, amax, grad_outputs):
+    zero = grad_outputs.new_zeros(1)
+    grad_inputs = torch.where(inputs.abs() <= amax, grad_outputs, zero)
+    return grad_inputs
+
+
+def _onnx_int8_helper(g, inputs, amax, num_bits, unsigned, narrow_range):
+    assert num_bits == 8, "Only INT8 ONNX export is supported for now."
+    maxbound = (1 << (num_bits - 1 + int(unsigned))) - 1
+
+    if amax.numel() == 1:
+        zero_point, axis = torch.tensor(0.0, device=amax.device), None
+    else:
+        amax_init_shape = amax.shape
+        amax = amax.squeeze().data
+        assert len(amax.shape) == 1, "ONNX does not support multi-axis quantization."
+        zero_point = torch.zeros_like(amax, dtype=torch.int32).data
+        axis = list(amax_init_shape).index(list(amax.shape)[0])
+
+    zero_point = g.op("Constant", value_t=zero_point)
+
+    if not unsigned:
+        assert not narrow_range, "ONNX does not support unsigned narrow range INT8."
+        zero_point = g.op("Cast", zero_point, to_i=_C_onnx.TensorProtoDataType.INT8)
+    else:
+        zero_point = g.op("Cast", zero_point, to_i=_C_onnx.TensorProtoDataType.UINT8)
+
+    scale = amax / maxbound
+    scale.masked_fill_(scale == 0, 1.0)
+    scale = g.op("Constant", value_t=scale)
+
+    input_type = inputs.type().scalarType()
+
+    # Q inputs are currently constrained to FP32 due to a similar limitation in ORT
+    # custom ops, so cast the input if needed.
+    if input_type == "Half" or input_type == "BFloat16":
+        inputs = g.op("Cast", inputs, to_i=_C_onnx.TensorProtoDataType.FLOAT)
+
+    quantized = g.op("QuantizeLinear", inputs, scale, zero_point, axis_i=axis)
+    out = g.op("DequantizeLinear", quantized, scale, zero_point, axis_i=axis)
+
+    # DQ outputs are currently constrained to FP32 due to a similar limitation in ORT
+    # custom ops, so cast the output if needed.
+    if input_type == "Half":
+        out = g.op("Cast", out, to_i=_C_onnx.TensorProtoDataType.FLOAT16)
+    elif input_type == "BFloat16":
+        out = g.op("Cast", out, to_i=_C_onnx.TensorProtoDataType.BFLOAT16)
+
+    return out
+
+
+class FakeTensorQuantFunction(Function):
+    """Fake version of TensorQuantFunction use CUDA extension"""
+
+    @staticmethod
+    @symbolic_helper.parse_args("v", "t", "i", "b", "b")
+    def symbolic(g, inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
+        return _onnx_int8_helper(g, inputs, amax, num_bits, unsigned, narrow_range)
+
+    @staticmethod
+    def forward(ctx, inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
+        ctx.save_for_backward(inputs, amax)
+
+        def legacy_quant_func():
+            # The LegacyFakeTensorQuantFunction support cpu and amax with any shape that can be broadcasted to inputs.
+            outputs, scale = _tensor_quant(inputs, amax, num_bits, unsigned, narrow_range)
+            return outputs / scale.to(inputs.dtype)
+
+        if not inputs.is_cuda:
+            outputs = legacy_quant_func()
+        else:
+            try:
+                if amax.numel() == 1:
+                    outputs = cuda_ext.fake_tensor_quant(inputs, amax, num_bits, unsigned, narrow_range)
+                else:
+                    axis = amax.shape.index(amax.numel())
+
+                    outputs = cuda_ext.fake_tensor_quant_with_axis(inputs, amax.squeeze(), axis, num_bits, unsigned,
+                                                                   narrow_range)
+            except (RuntimeError, ValueError) as error:
+                outputs = legacy_quant_func()
+
+        return outputs
+
+    @staticmethod
+    def backward(ctx, grad_outputs):
+        inputs, amax = ctx.saved_tensors
+        return _fake_tensor_quant_backward(inputs, amax, grad_outputs), None, None, None, None
+
+
+def _onnx_fp8_quantize(g, inputs, scale_inv):
+    """Helper Function for Quantization"""
+    output_shape = torch.onnx.symbolic_helper._get_tensor_sizes(inputs)
+
+    # Q inputs are currently constrained to FP32 due to a similar limitation in ORT
+    # custom ops, so cast the input if needed.
+    if inputs.type().scalarType() == "Half" or inputs.type().scalarType() == "BFloat16":
+        inputs = g.op("Cast", inputs, to_i=_C_onnx.TensorProtoDataType.FLOAT)
+
+    scale = g.op("Constant", value_t=torch.tensor(scale_inv))
+    q_op = g.op("trt::TRT_FP8QuantizeLinear", inputs,
+                scale).setType(inputs.type().with_dtype(torch.uint8).with_sizes(output_shape))
+    return q_op
+
+
+def _onnx_fp8_dequantize(g, inputs, scale_inv, otype=None):
+    """Helper Function for Dequantization"""
+    output_shape = torch.onnx.symbolic_helper._get_tensor_sizes(inputs)
+
+    scale = g.op("Constant", value_t=torch.tensor(scale_inv))
+    out = g.op("trt::TRT_FP8DequantizeLinear", inputs,
+               scale).setType(inputs.type().with_dtype(torch.float32).with_sizes(output_shape))
+
+    # DQ outputs are currently constrained to FP32 due to a similar limitation in ORT
+    # custom ops, so cast the output if needed.
+    if otype == "Half":
+        out = g.op("Cast", out, to_i=_C_onnx.TensorProtoDataType.FLOAT16)
+    elif otype == "BFloat16":
+        out = g.op("Cast", out, to_i=_C_onnx.TensorProtoDataType.BFLOAT16)
+    return out
+
+
+class ScaledE4M3Function(Function):
+    """E4M3fy input with scale"""
+
+    @staticmethod
+    @symbolic_helper.parse_args("v", "t", "i", "b", "b")
+    def symbolic(g, inputs, amax=None, E=4, M=3):
+        if amax is None:
+            scale = 1.0
+        else:
+            scale = 448.0 / amax
+            scale = float(scale.masked_fill_(scale == 0, 1.0))
+
+        input_type = inputs.type().scalarType()
+        q_tensor = _onnx_fp8_quantize(g, inputs, 1.0 / scale)
+        return _onnx_fp8_dequantize(g, q_tensor, 1.0 / scale, input_type)
+
+    @staticmethod
+    def forward(ctx, inputs, amax=None, E=4, M=3):
+        if E != 4 or M != 3:
+            raise NotImplementedError("Only support E=4 & M=3 for now.")
+
+        ctx.save_for_backward(inputs)
+        ctx.amax = amax
+        zero_mask = (inputs.abs() < 1. / (1 << 24))
+
+        if amax is None:
+            outputs = cuda_ext.fake_e4m3fy(inputs)
+        else:
+            # FP8 ONNX export requires scalar `scale`.
+            # To simplify implementation, amax is enforced to be a scalar.
+            scale = 448.0 / amax
+            outputs = cuda_ext.fake_e4m3fy(inputs * scale) / scale
+
+        # Zero out values that are tiny.
+        # Tiny values could lead to tiny amax and then large scale which cause overflow/saturation
+        # and won't go back to normal value after dividing by scale. The right behavior is to mark them
+        # as zero which also get rid of inf/nan
+        outputs[zero_mask] = 0.
+
+        return outputs
+
+    @staticmethod
+    def backward(ctx, grad_outputs):
+        inputs, = ctx.saved_tensors
+        amax = torch.tensor(ctx.amax if ctx.amax is not None else 448.0, dtype=torch.float32, device=inputs.device)
+        grad_inputs = _fake_tensor_quant_backward(inputs, amax, grad_outputs)
+        return grad_inputs, None, None, None
+
+
 class TensorQuantFunction(Function):
     """A universal tensor quantization function
 
@@ -241,6 +430,11 @@ class TensorQuantFunction(Function):
 
     It uses 2^num_bits -1 values instead of 2^num_bits. e.g., for num_bits=8, it uses [-127, 127] instead of [-128, 127]
     """
+
+    @staticmethod
+    @symbolic_helper.parse_args("v", "t", "i", "b", "b")
+    def symbolic(g, inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
+        return _onnx_int8_helper(g, inputs, amax, num_bits, unsigned, narrow_range)
 
     @staticmethod
     def forward(ctx, inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
@@ -290,12 +484,12 @@ class TensorQuantFunction(Function):
             grad_inputs: A tensor of gradient.
         """
         inputs, amax = ctx.saved_tensors
-        zero = grad_outputs.new_zeros(1) # create a zero tensor with the same type and device
+        zero = grad_outputs.new_zeros(1)  # create a zero tensor with the same type and device
         grad_inputs = torch.where(inputs.abs() <= amax, grad_outputs, zero)
         return grad_inputs, None, None, None, None
 
 
-class FakeTensorQuantFunction(Function):
+class LegacyFakeTensorQuantFunction(Function):
     """Fake version of TensorQuantFunction
     See comments of TensorQuantFunction, arguments are the same.
     """
@@ -313,12 +507,13 @@ class FakeTensorQuantFunction(Function):
         grad_inputs = torch.where(inputs.abs() <= amax, grad_outputs, zero)
         return grad_inputs, None, None, None, None
 
+
 def _tensor_quant(inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
     """Shared function body between TensorQuantFunction and FakeTensorQuantFunction"""
-        # Fine scale, per channel scale will be handled by broadcasting, which could be tricky. Pop a warning.
+    # Fine scale, per channel scale will be handled by broadcasting, which could be tricky. Pop a warning.
     if isinstance(amax, torch.Tensor) and inputs.dim() != amax.dim():
-        logging.debug("amax %s has different shape than inputs %s. Make sure broadcast works as expected!",
-                      amax.size(), inputs.size())
+        logging.debug("amax %s has different shape than inputs %s. Make sure broadcast works as expected!", amax.size(),
+                      inputs.size())
 
     logging.debug("{} bits quantization on shape {} tensor.".format(num_bits, inputs.size()))
 
@@ -346,7 +541,7 @@ def _tensor_quant(inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
         min_bound = -max_bound - 1
     scale = max_bound / amax
 
-    epsilon = 1. / (1<<24)
+    epsilon = 1. / (1 << 24)
     if min_amax <= epsilon:  # Treat amax smaller than minimum representable of fp16 0
         zero_amax_mask = (amax <= epsilon)
         scale[zero_amax_mask] = 0  # Value quantized with amax=0 should all be 0
@@ -360,6 +555,7 @@ def _tensor_quant(inputs, amax, num_bits=8, unsigned=False, narrow_range=True):
         outputs = outputs.half()
 
     return outputs, scale
+
 
 class FakeAffineTensorQuantFunction(Function):
     """Fake version of affine quantization
@@ -417,10 +613,12 @@ class FakeAffineTensorQuantFunction(Function):
 
         inputs, min_range, max_range = ctx.saved_tensors
         zero = grad_outputs.new_zeros(1)
-        grad_inputs = torch.where((inputs <= max_range)*(inputs >= min_range), grad_outputs, zero)
+        grad_inputs = torch.where((inputs <= max_range) * (inputs >= min_range), grad_outputs, zero)
         return grad_inputs, None, None, None
 
 
 tensor_quant = TensorQuantFunction.apply
+legacy_fake_tensor_quant = LegacyFakeTensorQuantFunction.apply
 fake_tensor_quant = FakeTensorQuantFunction.apply
 fake_affine_tensor_quant = FakeAffineTensorQuantFunction.apply
+scaled_e4m3 = ScaledE4M3Function.apply

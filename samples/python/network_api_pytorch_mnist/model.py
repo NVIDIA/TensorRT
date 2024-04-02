@@ -24,9 +24,9 @@ from torchvision import datasets, transforms
 from torch.autograd import Variable
 
 import numpy as np
-import os
 
 from random import randint
+
 
 # Network
 class Net(nn.Module):
@@ -78,6 +78,8 @@ class MnistModel(object):
             timeout=600,
         )
         self.network = Net()
+        if torch.cuda.is_available():
+            self.network = self.network.to("cuda")
 
     # Train the network for one or more epochs, validating after each epoch.
     def learn(self, num_epochs=2):
@@ -86,6 +88,9 @@ class MnistModel(object):
             self.network.train()
             optimizer = optim.SGD(self.network.parameters(), lr=self.learning_rate, momentum=self.sgd_momentum)
             for batch, (data, target) in enumerate(self.train_loader):
+                if torch.cuda.is_available():
+                    data = data.to("cuda")
+                    target = target.to("cuda")
                 data, target = Variable(data), Variable(target)
                 optimizer.zero_grad()
                 output = self.network(data)
@@ -110,6 +115,9 @@ class MnistModel(object):
             correct = 0
             for data, target in self.test_loader:
                 with torch.no_grad():
+                    if torch.cuda.is_available():
+                        data = data.to("cuda")
+                        target = target.to("cuda")
                     data, target = Variable(data), Variable(target)
                 output = self.network(data)
                 test_loss += F.nll_loss(output, target).data.item()
@@ -132,6 +140,6 @@ class MnistModel(object):
     def get_random_testcase(self):
         data, target = next(iter(self.test_loader))
         case_num = randint(0, len(data) - 1)
-        test_case = data.numpy()[case_num].ravel().astype(np.float32)
-        test_name = target.numpy()[case_num]
+        test_case = data.cpu().numpy()[case_num].ravel().astype(np.float32)
+        test_name = target.cpu().numpy()[case_num]
         return test_case, test_name

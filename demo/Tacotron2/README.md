@@ -9,11 +9,11 @@ NVIDIA TensorRT is a platform for high-performance deep learning inference. It i
 
 |Software|Version|
 |--------|-------|
-|Python|3.6.9|
-|CUDA|11.4.2|
+|Python|3.8.10|
+|CUDA|12.2|
 |Apex|0.1|
-|TensorRT|8.2.0.6|
-|PyTorch|1.9.1|
+|TensorRT|9.0|
+|PyTorch|2.0.1|
 
 
 ## Quick Start Guide
@@ -56,7 +56,7 @@ NVIDIA TensorRT is a platform for high-performance deep learning inference. It i
     ```
 
 	The above commands store the generated ONNX files under the `./output/` directory:
-    `encoder.onnx`, `decoder_iter.onnx`, `postnet.onnx`, `waveglow.onnx`, and `decoder.onnx` (on TensorRT 8.0+ if `--no-loop` option is not specified).
+    `encoder.onnx`, `decoder_iter.onnx`, `postnet.onnx`, `waveglow.onnx`, `loop_body_fp16.onnx`, and `decoder.onnx` (on TensorRT 8.0+ if `--no-loop` option is not specified).
 
 6. Export the ONNX IRs to TensorRT engines with fp16 mode enabled:
 

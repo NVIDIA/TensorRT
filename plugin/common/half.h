@@ -29,6 +29,10 @@
 #pragma clang diagnostic ignored "-Wmismatched-tags"
 #endif
 
+#ifndef HALF_ROUND_TIES_TO_EVEN
+#define HALF_ROUND_TIES_TO_EVEN 1
+#endif
+
 #include "ieee/half.h"
 
 #if defined(__clang__)

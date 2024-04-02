@@ -23,7 +23,12 @@ import polygraphy.tools.args.util as args_util
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
-from polygraphy.backend.trt import TacticRecorder, TacticReplayData, TacticReplayer, create_network
+from polygraphy.backend.trt import (
+    TacticRecorder,
+    TacticReplayData,
+    TacticReplayer,
+    create_network,
+)
 from polygraphy.exception import PolygraphyException
 from polygraphy.tools.args import DataLoaderArgs, ModelArgs, TrtConfigArgs
 from tests.helper import has_dla
@@ -33,20 +38,22 @@ from tests.tools.args.helper import ArgGroupTestHelper
 @pytest.fixture()
 def trt_config_args():
     return ArgGroupTestHelper(
-        TrtConfigArgs(allow_engine_capability=True, allow_tensor_formats=True), deps=[ModelArgs(), DataLoaderArgs()]
+        TrtConfigArgs(allow_engine_capability=True, allow_tensor_formats=True),
+        deps=[ModelArgs(), DataLoaderArgs()],
     )
 
 
 class TestTrtConfigArgs:
     def test_defaults(self, trt_config_args):
         trt_config_args.parse_args([])
-        assert trt_config_args._workspace is None
 
     def test_create_config(self, trt_config_args):
         trt_config_args.parse_args([])
         builder, network = create_network()
 
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert isinstance(config, trt.IBuilderConfig)
 
     @pytest.mark.parametrize(
@@ -54,74 +61,63 @@ class TestTrtConfigArgs:
         [
             (["--int8"], "INT8"),
             (["--fp16"], "FP16"),
+            (["--bf16"], "BF16"),
             (["--fp8"], "FP8"),
             (["--tf32"], "TF32"),
             (["--allow-gpu-fallback"], "GPU_FALLBACK"),
             (["--precision-constraints", "obey"], "OBEY_PRECISION_CONSTRAINTS"),
             (["--precision-constraints", "prefer"], "PREFER_PRECISION_CONSTRAINTS"),
             (["--direct-io"], "DIRECT_IO"),
+            (["--disable-compilation-cache"], "DISABLE_COMPILATION_CACHE"),
         ],
     )
     def test_flags(self, trt_config_args, args, flag):
-        if flag == "TF32" and mod.version(trt.__version__) < mod.version("7.1"):
-            pytest.skip("TF32 support was added in 7.1")
         if flag == "FP8" and mod.version(trt.__version__) < mod.version("8.6"):
             pytest.skip("FP8 support was added in 8.6")
-
-        if (
-            flag == "OBEY_PRECISION_CONSTRAINTS"
-            or flag == "PREFER_PRECISION_CONSTRAINTS"
-            or flag == "DIRECT_IO"
-            and mod.version(trt.__version__) < mod.version("8.2")
-        ):
-            pytest.skip("OBEY_PRECISION_CONSTRAINTS/PREFER_PRECISION_CONSTRAINTS/DIRECT_IO support was added in 8.2")
+        if flag == "BF16" and mod.version(trt.__version__) < mod.version("8.7"):
+            pytest.skip("BF16 support was added in 8.7")
+        if flag == "DISABLE_COMPILATION_CACHE" and mod.version(
+            trt.__version__
+        ) < mod.version("9.0"):
+            pytest.skip("BF16 support was added in 9.0")
 
         trt_config_args.parse_args(args)
 
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.get_flag(getattr(trt.BuilderFlag, flag))
 
     @pytest.mark.parametrize(
-        "workspace, expected",
+        "engine_capability, expected",
         [
-            ("16", 16),
-            ("1e9", 1e9),
-            ("2M", 2 << 20),
+            ("Standard", trt.EngineCapability.STANDARD),
+            ("SaFETY", trt.EngineCapability.SAFETY),
+            ("DLA_STANDALONE", trt.EngineCapability.DLA_STANDALONE),
         ],
     )
-    def test_workspace(self, trt_config_args, workspace, expected):
-        trt_config_args.parse_args(["--workspace", workspace])
-        assert trt_config_args._workspace == expected
+    def test_engine_capability(self, trt_config_args, engine_capability, expected):
+        trt_config_args.parse_args(["--engine-capability", engine_capability])
+        assert (
+            str(trt_config_args.engine_capability)
+            == f"trt.EngineCapability.{engine_capability.upper()}"
+        )
 
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
-            assert config.max_workspace_size == expected
-
-    if mod.version(trt.__version__) >= mod.version("8.0"):
-
-        @pytest.mark.parametrize(
-            "engine_capability, expected",
-            [
-                ("Standard", trt.EngineCapability.STANDARD),
-                ("SaFETY", trt.EngineCapability.SAFETY),
-                ("DLA_STANDALONE", trt.EngineCapability.DLA_STANDALONE),
-            ],
-        )
-        def test_engine_capability(self, trt_config_args, engine_capability, expected):
-            trt_config_args.parse_args(["--engine-capability", engine_capability])
-            assert str(trt_config_args.engine_capability) == f"trt.EngineCapability.{engine_capability.upper()}"
-
-            builder, network = create_network()
-            with builder, network, trt_config_args.create_config(builder, network=network) as config:
-                assert config.engine_capability == expected
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
+            assert config.engine_capability == expected
 
     def test_dla(self, trt_config_args):
         trt_config_args.parse_args(["--use-dla"])
         assert trt_config_args.use_dla
 
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.default_device_type == trt.DeviceType.DLA
             if has_dla():
                 assert config.DLA_core == 0
@@ -130,25 +126,42 @@ class TestTrtConfigArgs:
         trt_config_args.parse_args(["--use-dla", "--int8"])
 
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert isinstance(config.int8_calibrator, trt.IInt8EntropyCalibrator2)
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="SAFETY_SCOPE was added in TRT 8")
     def test_restricted_flags(self, trt_config_args):
         trt_config_args.parse_args(["--trt-safety-restricted"])
         builder, network = create_network()
 
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.get_flag(getattr(trt.BuilderFlag, "SAFETY_SCOPE"))
 
     def test_refittable_flags(self, trt_config_args):
         trt_config_args.parse_args(["--refittable"])
         builder, network = create_network()
 
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.get_flag(getattr(trt.BuilderFlag, "REFIT"))
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Bugged before TRT 8")
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.0"),
+        reason="Feature not present before 10.0",
+    )
+    def test_weight_streaming_flags(self, trt_config_args):
+        trt_config_args.parse_args(["--weight-streaming"])
+        builder, network = create_network()
+
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
+            assert config.get_flag(getattr(trt.BuilderFlag, "WEIGHT_STREAMING"))
+
     @pytest.mark.parametrize(
         "opt, cls",
         [
@@ -163,60 +176,87 @@ class TestTrtConfigArgs:
 
             trt_config_args.parse_args([opt, f.name])
             builder, network = create_network()
-            with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            with builder, network, trt_config_args.create_config(
+                builder, network=network
+            ) as config:
                 selector = config.algorithm_selector
                 assert selector.make_func == cls
                 assert selector.path == f.name
 
-    if mod.version(trt.__version__) < mod.version("8.0"):
-        TACTIC_SOURCES_CASES = [
-            ([], 3),  # By default, all sources are enabled.
-            (["--tactic-sources"], 0),
-            (["--tactic-sources", "CUBLAS"], 1),
-            (["--tactic-sources", "CUBLAS_LT"], 2),
-            (["--tactic-sources", "CUblAS", "cublas_lt"], 3),  # Not case sensitive
-        ]
+    TACTIC_SOURCES_CASES = [
+        ([], 31),  # By default, all sources are enabled.
+        (["--tactic-sources"], 0),
+        (["--tactic-sources", "CUBLAS"], 1),
+        (["--tactic-sources", "CUBLAS_LT"], 2),
+        (["--tactic-sources", "CUDNN"], 4),
+        (["--tactic-sources", "CUblAS", "cublas_lt"], 3),  # Not case sensitive
+        (["--tactic-sources", "CUBLAS", "cuDNN"], 5),
+        (["--tactic-sources", "CUBLAS_LT", "CUDNN"], 6),
+        (["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT"], 7),
+        (
+            [
+                "--tactic-sources",
+                "CUDNN",
+                "cuBLAS",
+                "CUBLAS_LT",
+                "edge_mask_convolutions",
+            ],
+            15,
+        ),
+        (
+            [
+                "--tactic-sources",
+                "CUDNN",
+                "cuBLAS",
+                "CUBLAS_LT",
+                "edge_mask_convolutions",
+                "jit_convolutions",
+            ],
+            31,
+        ),
+    ]
 
-    if mod.version(trt.__version__) >= mod.version("8.0"):
-        TACTIC_SOURCES_CASES = [
-            ([], 7),  # By default, all sources are enabled.
-            (["--tactic-sources"], 0),
-            (["--tactic-sources", "CUBLAS"], 1),
-            (["--tactic-sources", "CUBLAS_LT"], 2),
-            (["--tactic-sources", "CUDNN"], 4),
-            (["--tactic-sources", "CUblAS", "cublas_lt"], 3),  # Not case sensitive
-            (["--tactic-sources", "CUBLAS", "cuDNN"], 5),
-            (["--tactic-sources", "CUBLAS_LT", "CUDNN"], 6),
-            (["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT"], 7),
-        ]
+    if mod.version(trt.__version__) >= mod.version("10.0"):
+        TACTIC_SOURCES_CASES[0] = ([], 24)
+    elif mod.version(trt.__version__) >= mod.version("8.7"):
+        TACTIC_SOURCES_CASES[0] = ([], 29)
 
-    if mod.version(trt.__version__) >= mod.version("8.4"):
-        TACTIC_SOURCES_CASES[0] = ([], 15)
-        TACTIC_SOURCES_CASES.extend(
-            [(["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT", "edge_mask_convolutions"], 15)]
-        )
-
-    if mod.version(trt.__version__) >= mod.version("8.5"):
-        TACTIC_SOURCES_CASES[0] = ([], 31)
-        TACTIC_SOURCES_CASES.extend(
-            [(["--tactic-sources", "CUDNN", "cuBLAS", "CUBLAS_LT", "edge_mask_convolutions", "jit_convolutions"], 31)]
-        )
-
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("7.2"), reason="Not available before 7.2")
     @pytest.mark.parametrize("opt, expected", TACTIC_SOURCES_CASES)
     def test_tactic_sources(self, trt_config_args, opt, expected):
         trt_config_args.parse_args(opt)
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.get_tactic_sources() == expected
 
-    @pytest.mark.parametrize("base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"])
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.7"),
+        reason="ERROR_ON_TIMING_CACHE_MISS support was added in 8.7",
+    )
+    def test_error_on_timing_cache_miss(self, trt_config_args):
+        trt_config_args.parse_args(["--error-on-timing-cache-miss"])
+        builder, network = create_network()
+
+        assert trt_config_args.error_on_timing_cache_miss
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
+            assert config.get_flag(
+                getattr(trt.BuilderFlag, "ERROR_ON_TIMING_CACHE_MISS")
+            )
+
+    @pytest.mark.parametrize(
+        "base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"]
+    )
     def test_calibration_base_class(self, trt_config_args, base_class):
         trt_config_args.parse_args(["--int8", "--calibration-base-class", base_class])
         assert trt_config_args.calibration_base_class.unwrap() == f"trt.{base_class}"
 
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert isinstance(config.int8_calibrator, getattr(trt, base_class))
 
     def test_legacy_calibrator_params(self, trt_config_args):
@@ -236,7 +276,9 @@ class TestTrtConfigArgs:
         assert trt_config_args._regression_cutoff == regression_cutoff
 
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.int8_calibrator.get_quantile() == quantile
             assert config.int8_calibrator.get_regression_cutoff() == regression_cutoff
 
@@ -258,7 +300,9 @@ class TestTrtConfigArgs:
         builder, network = create_network()
         network.add_input("input", shape=(-1, 25, 25), dtype=trt.float32)
 
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert isinstance(config, trt.IBuilderConfig)
             # Unfortunately there is no API to check the contents of the profile in a config.
             # The checks above will have to do.
@@ -290,12 +334,16 @@ class TestTrtConfigArgs:
             f.flush()
             os.fsync(f.fileno())
 
-            trt_config_args.parse_args(["--trt-config-script", f"{f.name}:my_load_config"])
+            trt_config_args.parse_args(
+                ["--trt-config-script", f"{f.name}:my_load_config"]
+            )
             assert trt_config_args.trt_config_script == f.name
             assert trt_config_args.trt_config_func_name == "my_load_config"
 
             builder, network = create_network()
-            with builder, network, trt_config_args.create_config(builder, network) as config:
+            with builder, network, trt_config_args.create_config(
+                builder, network
+            ) as config:
                 assert isinstance(config, trt.IBuilderConfig)
                 assert config.get_flag(trt.BuilderFlag.FP16)
 
@@ -318,12 +366,23 @@ class TestTrtConfigArgs:
             f.flush()
             os.fsync(f.fileno())
 
-            trt_config_args.parse_args(["--trt-config-postprocess-script", f"{f.name}:my_postprocess_config", "--int8"])
+            trt_config_args.parse_args(
+                [
+                    "--trt-config-postprocess-script",
+                    f"{f.name}:my_postprocess_config",
+                    "--int8",
+                ]
+            )
             assert trt_config_args.trt_config_postprocess_script == f.name
-            assert trt_config_args.trt_config_postprocess_func_name == "my_postprocess_config"
+            assert (
+                trt_config_args.trt_config_postprocess_func_name
+                == "my_postprocess_config"
+            )
 
             builder, network = create_network()
-            with builder, network, trt_config_args.create_config(builder, network) as config:
+            with builder, network, trt_config_args.create_config(
+                builder, network
+            ) as config:
                 assert isinstance(config, trt.IBuilderConfig)
                 assert config.get_flag(trt.BuilderFlag.FP16)
                 assert config.get_flag(trt.BuilderFlag.INT8)
@@ -336,9 +395,21 @@ class TestTrtConfigArgs:
             ["--int8", "--calibration-base-class", "IInt8LegacyCalibrator)"],
             ["--int8", "--calibration-base-class", "IInt8LegacyCalibrator}"],
             ["--int8", "--calibration-base-class", "IInt8LegacyCalibrator]"],
-            ["--int8", "--calibration-base-class", "IInt8LegacyCalibrator));print(('hi'"],
-            ["--int8", "--calibration-base-class", "IInt8LegacyCalibrator;print(('hi')"],
-            ["--int8", "--calibration-base-class", "IInt8LegacyCalibrator';print('hi')"],
+            [
+                "--int8",
+                "--calibration-base-class",
+                "IInt8LegacyCalibrator));print(('hi'",
+            ],
+            [
+                "--int8",
+                "--calibration-base-class",
+                "IInt8LegacyCalibrator;print(('hi')",
+            ],
+            [
+                "--int8",
+                "--calibration-base-class",
+                "IInt8LegacyCalibrator';print('hi')",
+            ],
             ["--tactic-sources", "CUBLAS, fp16=True"],
         ],
     )
@@ -348,22 +419,40 @@ class TestTrtConfigArgs:
 
     with contextlib.suppress(AttributeError):
 
-        @pytest.mark.skipif(
-            mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported for TRT versions prior to 8.3"
-        )
         @pytest.mark.parametrize(
             "args,expected",
             [
-                (["--pool-limit", "workspace:250"], {trt.MemoryPoolType.WORKSPACE: 250}),
-                (["--pool-limit", "dla_managed_sram:250"], {trt.MemoryPoolType.DLA_MANAGED_SRAM: 250}),
-                (["--pool-limit", "dla_local_dram:250"], {trt.MemoryPoolType.DLA_LOCAL_DRAM: 250}),
-                (["--pool-limit", "dla_global_dram:250"], {trt.MemoryPoolType.DLA_GLOBAL_DRAM: 250}),
+                (
+                    ["--pool-limit", "workspace:250"],
+                    {trt.MemoryPoolType.WORKSPACE: 250},
+                ),
+                (
+                    ["--pool-limit", "dla_managed_sram:250"],
+                    {trt.MemoryPoolType.DLA_MANAGED_SRAM: 250},
+                ),
+                (
+                    ["--pool-limit", "dla_local_dram:250"],
+                    {trt.MemoryPoolType.DLA_LOCAL_DRAM: 250},
+                ),
+                (
+                    ["--pool-limit", "dla_global_dram:250"],
+                    {trt.MemoryPoolType.DLA_GLOBAL_DRAM: 250},
+                ),
                 # Test case insensitivity
-                (["--pool-limit", "wOrkSpaCE:250"], {trt.MemoryPoolType.WORKSPACE: 250}),
+                (
+                    ["--pool-limit", "wOrkSpaCE:250"],
+                    {trt.MemoryPoolType.WORKSPACE: 250},
+                ),
                 # Test works with K/M/G suffixes
-                (["--pool-limit", "workspace:2M"], {trt.MemoryPoolType.WORKSPACE: 2 << 20}),
+                (
+                    ["--pool-limit", "workspace:2M"],
+                    {trt.MemoryPoolType.WORKSPACE: 2 << 20},
+                ),
                 # Test works with scientific notation
-                (["--pool-limit", "workspace:2e3"], {trt.MemoryPoolType.WORKSPACE: 2e3}),
+                (
+                    ["--pool-limit", "workspace:2e3"],
+                    {trt.MemoryPoolType.WORKSPACE: 2e3},
+                ),
             ],
         )
         def test_memory_pool_limits(self, args, expected, trt_config_args):
@@ -377,9 +466,6 @@ class TestTrtConfigArgs:
                         pytest.skip("DLA is not available on this system")
                     config.get_memory_pool_limit(pool_type) == pool_size
 
-        @pytest.mark.skipif(
-            mod.version(trt.__version__) < mod.version("8.3"), reason="Unsupported for TRT versions prior to 8.3"
-        )
         @pytest.mark.parametrize(
             "args",
             [
@@ -390,15 +476,12 @@ class TestTrtConfigArgs:
             with pytest.raises(PolygraphyException, match="Could not parse argument"):
                 trt_config_args.parse_args(args)
 
-    @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.5"), reason="Unsupported for TRT versions prior to 8.5"
-    )
     @pytest.mark.parametrize(
         "preview_features",
         [
-            [],
-            ["FASter_DYNAMIC_ShAPeS_0805"],
-            ["FASter_DYNAMIC_ShAPeS_0805", "DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805"],
+            ["PROFILE_SHAriNG_0806"]
+            if mod.version(trt.__version__) >= mod.version("10.0")
+            else ["FASter_DYNAMIC_ShAPeS_0805"],
         ],
     )
     def test_preview_features(self, trt_config_args, preview_features):
@@ -408,13 +491,42 @@ class TestTrtConfigArgs:
 
         sanitized_preview_features = [pf.upper() for pf in preview_features]
 
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             # Check that only the enabled preview features are on.
             for name, pf in trt.PreviewFeature.__members__.items():
-                assert config.get_preview_feature(pf) == (name in sanitized_preview_features)
+                assert config.get_preview_feature(pf) == (
+                    name in sanitized_preview_features
+                )
+
+    @pytest.mark.parametrize(
+        "quantization_flags",
+        [
+            [],
+            ["CALIBRATE_BEFORE_FUSION"],
+            ["cAlIBRaTE_BEFORE_fUSIoN"],
+        ],
+    )
+    def test_quantization_flags(self, trt_config_args, quantization_flags):
+        # Flag should be case-insensitive
+        trt_config_args.parse_args(["--quantization-flags"] + quantization_flags)
+        builder, network = create_network()
+
+        sanitized_quantization_flags = [pf.upper() for pf in quantization_flags]
+
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
+            # Check that only the enabled quantization flags are on.
+            for name, qf in trt.QuantizationFlag.__members__.items():
+                assert config.get_quantization_flag(qf) == (
+                    name in sanitized_quantization_flags
+                )
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="Unsupported for TRT versions prior to 8.6",
     )
     @pytest.mark.parametrize("level", range(6))
     def test_builder_optimization_level(self, trt_config_args, level):
@@ -423,7 +535,9 @@ class TestTrtConfigArgs:
 
         builder, network = create_network()
 
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.builder_optimization_level == level
 
     if mod.version(trt.__version__) >= mod.version("8.6"):
@@ -439,16 +553,20 @@ class TestTrtConfigArgs:
         def test_hardware_compatibility_level(self, trt_config_args, level, expected):
             trt_config_args.parse_args(["--hardware-compatibility-level", str(level)])
             assert (
-                str(trt_config_args.hardware_compatibility_level) == f"trt.HardwareCompatibilityLevel.{expected.name}"
+                str(trt_config_args.hardware_compatibility_level)
+                == f"trt.HardwareCompatibilityLevel.{expected.name}"
             )
 
             builder, network = create_network()
 
-            with builder, network, trt_config_args.create_config(builder, network=network) as config:
+            with builder, network, trt_config_args.create_config(
+                builder, network=network
+            ) as config:
                 assert config.hardware_compatibility_level == expected
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported for TRT versions prior to 8.6"
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="Unsupported for TRT versions prior to 8.6",
     )
     @pytest.mark.parametrize("num_streams", range(5))
     def test_max_aux_streams(self, trt_config_args, num_streams):
@@ -457,15 +575,24 @@ class TestTrtConfigArgs:
 
         builder, network = create_network()
 
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.max_aux_streams == num_streams
 
-    @pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.6"), reason="Unsupported before TRT 8.6")
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="Unsupported before TRT 8.6",
+    )
     @pytest.mark.parametrize(
         "args, attr, expected_flag",
         [
             (["--version-compatible"], "version_compatible", "VERSION_COMPATIBLE"),
-            (["--version-compatible", "--exclude-lean-runtime"], "exclude_lean_runtime", "EXCLUDE_LEAN_RUNTIME"),
+            (
+                ["--version-compatible", "--exclude-lean-runtime"],
+                "exclude_lean_runtime",
+                "EXCLUDE_LEAN_RUNTIME",
+            ),
         ],
     )
     def test_version_compatibility(self, trt_config_args, args, attr, expected_flag):
@@ -473,5 +600,33 @@ class TestTrtConfigArgs:
         assert getattr(trt_config_args, attr)
 
         builder, network = create_network()
-        with builder, network, trt_config_args.create_config(builder, network=network) as config:
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
             assert config.get_flag(getattr(trt.BuilderFlag, expected_flag))
+
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("8.6"),
+        reason="Unsupported before 8.6",
+    )
+    @pytest.mark.parametrize(
+        "level, expected",
+        [
+            ("none", trt.ProfilingVerbosity.NONE),
+            ("detailed", trt.ProfilingVerbosity.DETAILED),
+            ("layer_names_only", trt.ProfilingVerbosity.LAYER_NAMES_ONLY),
+        ],
+    )
+    def test_profiling_verbosity(self, trt_config_args, level, expected):
+        trt_config_args.parse_args(["--profiling-verbosity", str(level)])
+        assert (
+            str(trt_config_args.profiling_verbosity)
+            == f"trt.ProfilingVerbosity.{expected.name}"
+        )
+
+        builder, network = create_network()
+
+        with builder, network, trt_config_args.create_config(
+            builder, network=network
+        ) as config:
+            assert config.profiling_verbosity == expected

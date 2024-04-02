@@ -19,6 +19,7 @@ import os
 import sys
 
 from polygraphy import func, mod, util
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
@@ -249,7 +250,7 @@ class DeviceView:
             ptr (int): A pointer to the region of memory.
 
             shape (Tuple[int]): The shape of the region.
-            dtype (numpy.dtype): The data type of the region.
+            dtype (DataType): The data type of the region.
         """
         self.ptr = int(ptr)
         """int: The memory address of the underlying GPU memory"""
@@ -257,15 +258,15 @@ class DeviceView:
         """Tuple[int]: The shape of the device buffer"""
         self.itemsize = None
         self.dtype = dtype
-        """np.dtype: The data type of the device buffer"""
+        """DataType: The data type of the device buffer"""
 
     def _check_host_buffer(self, host_buffer, copying_from):
-        if host_buffer.dtype != self.dtype:
+        if util.array.dtype(host_buffer) != self._dtype:
             G_LOGGER.error(
-                f"Host buffer type: {host_buffer.dtype} does not match the type of this device buffer: {self.dtype}. This may cause CUDA errors!"
+                f"Host buffer type: {util.array.dtype(host_buffer)} does not match the type of this device buffer: {self._dtype}. This may cause CUDA errors!"
             )
 
-        if not util.is_contiguous(host_buffer):
+        if not util.array.is_contiguous(host_buffer):
             G_LOGGER.critical(
                 "Provided host buffer is not contiguous in memory.\n"
                 "Hint: Use `util.make_contiguous()` or `np.ascontiguousarray()` to make the array contiguous in memory."
@@ -274,28 +275,38 @@ class DeviceView:
         # If the host buffer is an input, the device buffer should be large enough to accomodate it.
         # Otherwise, the host buffer needs to be large enough to accomodate the device buffer.
         if copying_from:
-            if host_buffer.nbytes > self.nbytes:
+            if util.array.nbytes(host_buffer) > self.nbytes:
                 G_LOGGER.critical(
                     f"Provided host buffer is larger than device buffer.\n"
-                    f"Note: host buffer is {host_buffer.nbytes} bytes but device buffer is only {self.nbytes} bytes.\n"
+                    f"Note: host buffer is {util.array.nbytes(host_buffer)} bytes but device buffer is only {self.nbytes} bytes.\n"
                     f"Hint: Use `resize()` to resize the device buffer to the correct shape."
                 )
         else:
-            if host_buffer.nbytes < self.nbytes:
+            if util.array.nbytes(host_buffer) < self.nbytes:
                 G_LOGGER.critical(
                     f"Provided host buffer is smaller than device buffer.\n"
-                    f"Note: host buffer is only {host_buffer.nbytes} bytes but device buffer is {self.nbytes} bytes.\n"
-                    f"Hint: Use `util.resize_buffer()` to resize the host buffer to the correct shape."
+                    f"Note: host buffer is only {util.array.nbytes(host_buffer)} bytes but device buffer is {self.nbytes} bytes.\n"
+                    f"Hint: Use `util.array.resize_or_reallocate()` to resize the host buffer to the correct shape."
                 )
 
     @property
     def dtype(self):
-        return self._dtype
+        try:
+            # For backwards compatibility
+            mod.warn_deprecated(
+                "Using NumPy data types in DeviceView/DeviceArray", use_instead=None, remove_in="0.50.0"
+            )
+            G_LOGGER.warning(
+                f"In the future, you will need to use `DataType.from_dtype(device_view.dtype).numpy()` to retrieve the NumPy data type"
+            )
+            return DataType.to_dtype(self._dtype, "numpy")
+        except:
+            return self._dtype
 
     @dtype.setter
     def dtype(self, new):
-        self._dtype = new
-        self.itemsize = np.dtype(new).itemsize
+        self._dtype = DataType.from_dtype(new)
+        self.itemsize = self._dtype.itemsize
 
     @property
     def nbytes(self):
@@ -310,10 +321,10 @@ class DeviceView:
         Copies from this device buffer to the provided host buffer.
 
         Args:
-            host_buffer (numpy.ndarray):
+            host_buffer (Union[numpy.ndarray, torch.Tensor]):
                     The host buffer to copy into. The buffer must be contiguous in
-                    memory (see np.ascontiguousarray) and large enough to accomodate
-                    the device buffer.
+                    memory (see np.ascontiguousarray or torch.Tensor.contiguous) and
+                    large enough to accomodate the device buffer.
             stream (Stream):
                     A Stream instance. Performs a synchronous copy if no stream is provided.
 
@@ -325,7 +336,7 @@ class DeviceView:
 
         self._check_host_buffer(host_buffer, copying_from=False)
         wrapper().memcpy(
-            dst=host_buffer.ctypes.data,
+            dst=util.array.data_ptr(host_buffer),
             src=self.ptr,
             nbytes=self.nbytes,
             kind=MemcpyKind.DeviceToHost,
@@ -341,15 +352,15 @@ class DeviceView:
         Returns:
             np.ndarray: The newly created NumPy array.
         """
-        arr = np.empty(self.shape, dtype=self.dtype)
+        arr = np.empty(self.shape, dtype=DataType.to_dtype(self._dtype, "numpy"))
         self.copy_to(arr)
         return arr
 
     def __str__(self):
-        return f"DeviceView[(dtype={np.dtype(self.dtype).name}, shape={self.shape}), ptr={hex(self.ptr)}]"
+        return f"DeviceView[(dtype={self._dtype.name}, shape={self.shape}), ptr={hex(self.ptr)}]"
 
     def __repr__(self):
-        return util.make_repr("DeviceView", ptr=self.ptr, shape=self.shape, dtype=self.dtype)[0]
+        return util.make_repr("DeviceView", ptr=self.ptr, shape=self.shape, dtype=self._dtype)[0]
 
 
 @mod.export()
@@ -362,9 +373,9 @@ class DeviceArray(DeviceView):
         """
         Args:
             shape (Tuple[int]): The initial shape of the buffer.
-            dtype (numpy.dtype): The data type of the buffer.
+            dtype (DataType): The data type of the buffer.
         """
-        super().__init__(ptr=0, shape=util.default(shape, tuple()), dtype=util.default(dtype, np.float32))
+        super().__init__(ptr=0, shape=util.default(shape, tuple()), dtype=util.default(dtype, DataType.FLOAT32))
         self.allocated_nbytes = 0
         self.resize(self.shape)
 
@@ -372,7 +383,7 @@ class DeviceArray(DeviceView):
         return self
 
     @staticmethod
-    def raw(shape):
+    def raw(shape=None):
         """
         Creates an untyped device array of the specified shape.
 
@@ -384,7 +395,7 @@ class DeviceArray(DeviceView):
         Returns:
             DeviceArray: The raw device array.
         """
-        return DeviceArray(shape=shape, dtype=np.byte)
+        return DeviceArray(shape=shape, dtype=DataType.UINT8)
 
     def resize(self, shape):
         """
@@ -395,6 +406,9 @@ class DeviceArray(DeviceView):
 
         Args:
             shape (Tuple[int]): The new shape.
+
+        Returns:
+            DeviceArray: self
         """
         nbytes = util.volume(shape) * self.itemsize
         if nbytes > self.allocated_nbytes:
@@ -402,6 +416,7 @@ class DeviceArray(DeviceView):
             self.ptr = wrapper().malloc(nbytes)
             self.allocated_nbytes = nbytes
         self.shape = shape
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         """
@@ -429,23 +444,24 @@ class DeviceArray(DeviceView):
         Copies from the provided host buffer into this device buffer.
 
         Args:
-            host_buffer (numpy.ndarray):
+            host_buffer (Union[numpy.ndarray, torch.Tensor]):
                     The host buffer to copy from. The buffer must be contiguous in
-                    memory (see np.ascontiguousarray) and not larger than this device buffer.
+                    memory (see np.ascontiguousarray or torch.Tensor.contiguous) and not
+                    larger than this device buffer.
             stream (Stream):
                     A Stream instance. Performs a synchronous copy if no stream is provided.
 
         Returns:
             DeviceArray: self
         """
-        if not host_buffer.nbytes:
+        if not util.array.nbytes(host_buffer):
             return self
 
         self._check_host_buffer(host_buffer, copying_from=True)
         wrapper().memcpy(
             dst=self.ptr,
-            src=host_buffer.ctypes.data,
-            nbytes=host_buffer.nbytes,
+            src=util.array.data_ptr(host_buffer),
+            nbytes=util.array.nbytes(host_buffer),
             kind=MemcpyKind.HostToDevice,
             stream_ptr=try_get_stream_handle(stream),
         )
@@ -459,7 +475,7 @@ class DeviceArray(DeviceView):
             shape (Sequence[int]):
                     The desired shape of the view.
                     Defaults to the shape of this array or view.
-            dtype (numpy.dtype):
+            dtype (DataType):
                     The desired data type of the view.
                     Defaults to the data type of this array or view.
 
@@ -467,19 +483,19 @@ class DeviceArray(DeviceView):
             DeviceView: A view of this arrays data on the device.
         """
         shape = util.default(shape, self.shape)
-        dtype = util.default(dtype, self.dtype)
+        dtype = util.default(dtype, self._dtype)
         view = DeviceView(self.ptr, shape, dtype)
 
         if view.nbytes > self.nbytes:
             G_LOGGER.critical(
                 "A view cannot exceed the number of bytes of the original array.\n"
-                f"Note: Original array has shape: {self.shape} and dtype: {self.dtype}, which requires {self.nbytes} bytes, "
+                f"Note: Original array has shape: {self.shape} and dtype: {self._dtype}, which requires {self.nbytes} bytes, "
                 f"while the view has shape: {shape} and dtype: {dtype}, which requires {view.nbytes} bytes, "
             )
         return view
 
     def __str__(self):
-        return f"DeviceArray[(dtype={np.dtype(self.dtype).name}, shape={self.shape}), ptr={hex(self.ptr)}]"
+        return f"DeviceArray[(dtype={self._dtype.name}, shape={self.shape}), ptr={hex(self.ptr)}]"
 
     def __repr__(self):
-        return util.make_repr("DeviceArray", shape=self.shape, dtype=self.dtype)[0]
+        return util.make_repr("DeviceArray", shape=self.shape, dtype=self._dtype)[0]

@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 SET(SAMPLE_SOURCES
+    ../common/sampleDevice.cpp
     ../common/sampleEngines.cpp
     ../common/sampleInference.cpp
     ../common/sampleOptions.cpp
     ../common/sampleReporting.cpp
     ../common/sampleUtils.cpp
+    ../common/bfloat16.cpp
     trtexec.cpp
 )
 
-set(SAMPLE_PARSERS "caffe" "uff" "onnx")
+set(SAMPLE_PARSERS "onnx")
 
 include(../CMakeSamplesTemplate.txt)

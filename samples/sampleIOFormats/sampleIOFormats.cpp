@@ -278,6 +278,7 @@ private:
         SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
         SampleUniquePtr<nvonnxparser::IParser>& parser);
 
+    SampleUniquePtr<IRuntime> mRuntime{};                    //!< The TensorRT Runtime used to deserialize the engine.
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
 
 public:
@@ -307,9 +308,8 @@ bool SampleIOFormats::build(int32_t dataWidth)
     {
         return false;
     }
-    auto const networkFlags = 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(networkFlags));
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         return false;
@@ -369,14 +369,18 @@ bool SampleIOFormats::build(int32_t dataWidth)
         return false;
     }
 
-    SampleUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    if (!runtime)
+    if (!mRuntime)
+    {
+        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+    }
+
+    if (!mRuntime)
     {
         return false;
     }
 
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        runtime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
     if (!mEngine)
     {
         return false;
@@ -436,14 +440,25 @@ bool SampleIOFormats::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
         return false;
     }
 
+    for (int32_t i = 0, e = mEngine->getNbIOTensors(); i < e; i++)
+    {
+        auto const name = mEngine->getIOTensorName(i);
+        if (mEngine->getTensorIOMode(name) == TensorIOMode::kINPUT)
+        {
+            context->setTensorAddress(name, devInput.get());
+        }
+        else
+        {
+            context->setTensorAddress(name, devOutput.get());
+        }
+    }
+
     // Create CUDA stream for the execution of this inference.
     cudaStream_t stream;
     CHECK(cudaStreamCreate(&stream));
 
-    void* bindings[2] = {devInput.get(), devOutput.get()};
-
     // Asynchronously enqueue the inference work
-    if (!context->enqueueV2(bindings, stream, nullptr))
+    if (!context->enqueueV3(stream))
     {
         return false;
     }
@@ -634,7 +649,7 @@ bool process(SampleIOFormats& sample, sample::Logger::TestAtom const& sampleTest
     sample::gLogInfo << "Building and running a GPU inference engine with specified I/O formats." << std::endl;
 
     inputBuf = SampleBuffer(sample.mInputDims, sizeof(T), sample.mTensorFormat, true);
-    outputBuf = SampleBuffer(sample.mOutputDims, sizeof(float), TensorFormat::kLINEAR, false);
+    outputBuf = SampleBuffer(sample.mOutputDims, sizeof(T), TensorFormat::kLINEAR, false);
     if (!sample.build(sizeof(T)))
     {
         return false;

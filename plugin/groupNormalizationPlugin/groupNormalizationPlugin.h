@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +19,6 @@
 #define TRT_GROUP_NORM_PLUGIN_H
 
 #include "common/plugin.h"
-
-#include <cudnn.h>
 #include <string>
 #include <vector>
 
@@ -100,11 +98,13 @@ private:
     int32_t mNbGroups;
     int32_t mChannelVolume;
 
-    cudnnHandle_t mCudnnHandle{};
+    nvinfer1::pluginInternal::cudnnHandle_t mCudnnHandle{};
+    // the wrapper pointer is shared among all plugins attached to the same context.
+    std::shared_ptr<nvinfer1::pluginInternal::CudnnWrapper> mCudnnWrapper;
 
     // Describes input and output.
-    cudnnTensorDescriptor_t mTensorDesc{};
-    cudnnTensorDescriptor_t mBNTensorDesc{};
+    nvinfer1::pluginInternal::cudnnTensorDescriptor_t mTensorDesc{};
+    nvinfer1::pluginInternal::cudnnTensorDescriptor_t mBNTensorDesc{};
 
     // These are buffers initialized to 1 and 0 respectively
     std::shared_ptr<CudaBind<float>> mBnScales{};

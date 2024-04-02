@@ -44,13 +44,26 @@ static const auto error_code_str = [](ErrorCode self) {
     case ErrorCode::kINVALID_NODE: return "INVALID_NODE";
     case ErrorCode::kUNSUPPORTED_GRAPH: return "UNSUPPORTED_GRAPH";
     case ErrorCode::kUNSUPPORTED_NODE: return "UNSUPPORTED_NODE";
+    case ErrorCode::kUNSUPPORTED_NODE_ATTR: return "UNSUPPORTED_NODE_ATTR";
+    case ErrorCode::kUNSUPPORTED_NODE_INPUT: return "UNSUPPORTED_NODE_INPUT";
+    case ErrorCode::kUNSUPPORTED_NODE_DATATYPE: return "UNSUPPORTED_NODE_DATATYPE";
+    case ErrorCode::kUNSUPPORTED_NODE_DYNAMIC: return "UNSUPPORTED_NODE_DYNAMIC";
+    case ErrorCode::kUNSUPPORTED_NODE_SHAPE: return "UNSUPPORTED_NODE_SHAPE";
+    case ErrorCode::kREFIT_FAILED: return "REFIT_FAILED";
     }
     return "UNKNOWN";
 };
 
 static const auto parser_error_str = [](IParserError& self) {
-    return "In node " + std::to_string(self.node()) + " (" + self.func() + "): " + error_code_str(self.code()) + ": "
-        + self.desc();
+    const std::string node_info = "In node " + std::to_string(self.node()) + " with name: " + self.nodeName()
+        + " and operator: " + self.nodeOperator() + " ";
+    const std::string error_info
+        = std::string("(") + self.func() + "): " + error_code_str(self.code()) + ": " + self.desc();
+    if (self.code() == ErrorCode::kMODEL_DESERIALIZE_FAILED || self.code() == ErrorCode::kREFIT_FAILED)
+    {
+        return error_info;
+    }
+    return node_info + error_info;
 };
 
 static const auto parse = [](IParser& self, const py::buffer& model, const char* path = nullptr) {
@@ -89,6 +102,29 @@ static const auto get_used_vc_plugin_libraries = [](IParser& self) {
     return vcPluginLibs;
 };
 
+static const auto get_local_function_stack = [](IParserError& self) {
+    std::vector<std::string> localFunctionStack;
+    int32_t localFunctionStackSize = self.localFunctionStackSize();
+    if (localFunctionStackSize > 0)
+    {
+        auto localFunctionStackCArray = self.localFunctionStack();
+        localFunctionStack.reserve(localFunctionStackSize);
+        for (int32_t i = 0; i < localFunctionStackSize; ++i)
+        {
+            localFunctionStack.emplace_back(std::string{localFunctionStackCArray[i]});
+        }
+    }
+    return localFunctionStack;
+};
+
+static const auto refitFromBytes = [](IParserRefitter& self, const py::buffer& model, const char* path = nullptr) {
+    py::buffer_info info = model.request();
+    return self.refitFromBytes(info.ptr, info.size * info.itemsize, path);
+};
+
+static const auto refitFromFile
+    = [](IParserRefitter& self, const std::string& model) { return self.refitFromFile(model.c_str()); };
+
 } // namespace lambdas
 
 void bindOnnx(py::module& m)
@@ -114,6 +150,8 @@ void bindOnnx(py::module& m)
         .def("clear_flag", &IParser::clearFlag, "flag"_a, OnnxParserDoc::clear_flag)
         .def("set_flag", &IParser::setFlag, "flag"_a, OnnxParserDoc::set_flag)
         .def("get_flag", &IParser::getFlag, "flag"_a, OnnxParserDoc::get_flag)
+        .def("get_layer_output_tensor", &IParser::getLayerOutputTensor, "name"_a, "i"_a,
+            OnnxParserDoc::get_layer_output_tensor)
         .def("get_used_vc_plugin_libraries", lambdas::get_used_vc_plugin_libraries,
             OnnxParserDoc::get_used_vc_plugin_libraries)
         .def("__del__", &utils::doNothingDel<IParser>);
@@ -131,6 +169,12 @@ void bindOnnx(py::module& m)
         .value("INVALID_NODE", ErrorCode::kINVALID_NODE)
         .value("UNSUPPORTED_GRAPH", ErrorCode::kUNSUPPORTED_GRAPH)
         .value("UNSUPPORTED_NODE", ErrorCode::kUNSUPPORTED_NODE)
+        .value("UNSUPPORTED_NODE_ATTR", ErrorCode::kUNSUPPORTED_NODE_ATTR)
+        .value("UNSUPPORTED_NODE_INPUT", ErrorCode::kUNSUPPORTED_NODE_INPUT)
+        .value("UNSUPPORTED_NODE_DATATYPE", ErrorCode::kUNSUPPORTED_NODE_DATATYPE)
+        .value("UNSUPPORTED_NODE_DYNAMIC", ErrorCode::kUNSUPPORTED_NODE_DYNAMIC)
+        .value("UNSUPPORTED_NODE_SHAPE", ErrorCode::kUNSUPPORTED_NODE_SHAPE)
+        .value("REFIT_FAILED", ErrorCode::kREFIT_FAILED)
         .def("__str__", lambdas::error_code_str)
         .def("__repr__", lambdas::error_code_str);
 
@@ -141,8 +185,24 @@ void bindOnnx(py::module& m)
         .def("line", &IParserError::line, ParserErrorDoc::line)
         .def("func", &IParserError::func, ParserErrorDoc::func)
         .def("node", &IParserError::node, ParserErrorDoc::node)
+        .def("node_name", &IParserError::nodeName, ParserErrorDoc::node_name)
+        .def("node_operator", &IParserError::nodeOperator, ParserErrorDoc::node_operator)
+        .def("local_function_stack", lambdas::get_local_function_stack, ParserErrorDoc::local_function_stack)
+        .def("local_function_stack_size", &IParserError::localFunctionStackSize,
+            ParserErrorDoc::local_function_stack_size)
         .def("__str__", lambdas::parser_error_str)
         .def("__repr__", lambdas::parser_error_str);
+
+    py::class_<IParserRefitter>(m, "OnnxParserRefitter", OnnxParserRefitterDoc::descr, py::module_local())
+        .def(py::init(&nvonnxparser::createParserRefitter), "refitter"_a, "logger"_a, OnnxParserRefitterDoc::init,
+            py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
+        .def("refit_from_bytes", lambdas::refitFromBytes, "model"_a, "path"_a = nullptr,
+            OnnxParserRefitterDoc::refit_from_bytes, py::call_guard<py::gil_scoped_release>{})
+        .def("refit_from_file", lambdas::refitFromFile, "model"_a, OnnxParserRefitterDoc::refit_from_file,
+            py::call_guard<py::gil_scoped_release>{})
+        .def_property_readonly("num_errors", &IParserRefitter::getNbErrors)
+        .def("get_error", &IParserRefitter::getError, "index"_a, OnnxParserRefitterDoc::get_error)
+        .def("clear_errors", &IParserRefitter::clearErrors, OnnxParserRefitterDoc::clear_errors);
 
     // Free functions.
     m.def("get_nv_onnx_parser_version", &getNvOnnxParserVersion, get_nv_onnx_parser_version);

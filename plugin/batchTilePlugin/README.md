@@ -11,6 +11,8 @@
 
 ## Description
 
+> NOTE: This plugin is deprecated since TensorRT 9.0. Its functionality has been superseded by the `ISliceLayer`.
+
 The `batchTilePlugin` tiles a tensor `N` times along its first dimension (batch dimension) where `N` is the batch size. The result tensor will have shape `N` on its first dimension and each `tensor[i: i+1,...]` is a copy of input tensor (for integer `i < N`).
 
 This plugin takes 2 input tensors, the first input tensor should have first dim `N` and the second tensor should have first dim 1. The output tensor will be the tile results of the second tensor.
@@ -85,6 +87,9 @@ documentation.
 
 
 ## Changelog
+
+June 2023
+Add deprecation note.
 
 Jul. 2019
 This is the first release of this `README.md` file.

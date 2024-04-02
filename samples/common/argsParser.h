@@ -39,20 +39,10 @@ struct SampleParams
     int32_t dlaCore{-1};               //!< Specify the DLA core to run network on.
     bool int8{false};                  //!< Allow runnning the network in Int8 mode.
     bool fp16{false};                  //!< Allow running the network in FP16 mode.
+    bool bf16{false};                  //!< Allow running the network in BF16 mode.
     std::vector<std::string> dataDirs; //!< Directory paths where sample data files are stored
     std::vector<std::string> inputTensorNames;
     std::vector<std::string> outputTensorNames;
-};
-
-//!
-//! \brief The CaffeSampleParams structure groups the additional parameters required by
-//!         networks that use caffe
-//!
-struct CaffeSampleParams : public SampleParams
-{
-    std::string prototxtFileName; //!< Filename of prototxt design file of a network
-    std::string weightsFileName;  //!< Filename of trained weights file of a network
-    std::string meanFileName;     //!< Filename of mean file of a network
 };
 
 //!
@@ -65,28 +55,20 @@ struct OnnxSampleParams : public SampleParams
 };
 
 //!
-//! \brief The UffSampleParams structure groups the additional parameters required by
-//!         networks that use Uff
-//!
-struct UffSampleParams : public SampleParams
-{
-    std::string uffFileName; //!< Filename of uff file of a network
-};
-
-//!
 //! /brief Struct to maintain command-line arguments.
 //!
 struct Args
 {
     bool runInInt8{false};
     bool runInFp16{false};
+    bool runInBf16{false};
     bool help{false};
     int32_t useDLACore{-1};
     int32_t batch{1};
     std::vector<std::string> dataDirs;
     std::string saveEngine;
     std::string loadEngine;
-    bool useILoop{false};
+    bool rowMajor{true};
 };
 
 //!
@@ -102,9 +84,10 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
     {
         int32_t arg;
         static struct option long_options[] = {{"help", no_argument, 0, 'h'}, {"datadir", required_argument, 0, 'd'},
-            {"int8", no_argument, 0, 'i'}, {"fp16", no_argument, 0, 'f'}, {"useILoop", no_argument, 0, 'l'},
-            {"saveEngine", required_argument, 0, 's'}, {"loadEngine", required_argument, 0, 'o'},
-            {"useDLACore", required_argument, 0, 'u'}, {"batch", required_argument, 0, 'b'}, {nullptr, 0, nullptr, 0}};
+            {"int8", no_argument, 0, 'i'}, {"fp16", no_argument, 0, 'f'}, {"bf16", no_argument, 0, 'z'},
+            {"columnMajor", no_argument, 0, 'c'}, {"saveEngine", required_argument, 0, 's'},
+            {"loadEngine", required_argument, 0, 'o'}, {"useDLACore", required_argument, 0, 'u'},
+            {"batch", required_argument, 0, 'b'}, {nullptr, 0, nullptr, 0}};
         int32_t option_index = 0;
         arg = getopt_long(argc, argv, "hd:iu", long_options, &option_index);
         if (arg == -1)
@@ -140,7 +123,8 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
             break;
         case 'i': args.runInInt8 = true; break;
         case 'f': args.runInFp16 = true; break;
-        case 'l': args.useILoop = true; break;
+        case 'z': args.runInBf16 = true; break;
+        case 'c': args.rowMajor = false; break;
         case 'u':
             if (optarg)
             {

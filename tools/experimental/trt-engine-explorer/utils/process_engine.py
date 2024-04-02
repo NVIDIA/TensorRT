@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,15 +33,17 @@ import os
 import json
 import argparse
 import subprocess
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
+import tensorrt as trt
 from parse_trtexec_log import parse_build_log, parse_profiling_log
 from config_gpu import GPUMonitor, GPUConfigurator, get_max_clocks
+import trex.archiving as archiving
 
 
-def run_trtexec(trt_cmdline: List[str], build_log_file: str):
+def run_trtexec(trt_cmdline: List[str], writer):
     '''Execute trtexec'''
     success = False
-    with open(build_log_file, 'w') as logf:
+    with writer:
         log_str = None
         try:
             log = subprocess.run(
@@ -57,7 +60,7 @@ def run_trtexec(trt_cmdline: List[str], build_log_file: str):
         except FileNotFoundError as err:
             log_str = f"\nError: {err.strerror}: {err.filename}"
             print(log_str)
-        logf.write(log_str)
+        writer.write(log_str)
     return success
 
 
@@ -67,16 +70,22 @@ def build_engine_cmd(
     engine_path: str,
     timing_cache_path: str
 ) -> Tuple[List[str], str]:
+    graph_json_fname = f"{engine_path}.graph.json"
     cmd_line = ["trtexec",
         "--verbose",
-        # nvtxMode=verbose is the same as profilingVerbosity=detailed, but backward-compatible
-        "--nvtxMode=verbose",
-        "--buildOnly",
-        "--workspace=8192",
         f"--onnx={onnx_path}",
         f"--saveEngine={engine_path}",
+        f"--exportLayerInfo={graph_json_fname}",
         f"--timingCacheFile={timing_cache_path}",
     ]
+    if trt.__version__ < "10.0":
+        # nvtxMode=verbose is the same as profilingVerbosity=detailed, but backward-compatible
+        cmd_line.append("--nvtxMode=verbose")
+        cmd_line.append("--buildOnly")
+        cmd_line.append("--workspace=8192")
+    else:
+        cmd_line.append("--profilingVerbosity=detailed")
+
     append_trtexec_args(args.trtexec, cmd_line)
 
     build_log_fname = f"{engine_path}.build.log"
@@ -85,32 +94,18 @@ def build_engine_cmd(
 
 def build_engine(
     args: Dict,
-    timing_cache_path: str
+    timing_cache_path: str,
+    tea: Optional[archiving.EngineArchive]
 ) -> bool:
-    def generate_build_metadata(log_file: str, output_json: str):
+    def generate_build_metadata(log_file: str, metadata_json_fname: str, tea: archiving.EngineArchive):
         """Parse trtexec engine build log file and write to a JSON file"""
-        build_metadata = parse_build_log(log_file)
-        with open(output_json, 'w') as fout:
-            json.dump(build_metadata , fout)
-            print(f"Engine building metadata: generated output file {output_json}")
+        build_metadata = parse_build_log(log_file, tea)
+        with archiving.get_writer(tea, metadata_json_fname) as writer:
+            json_str = json.dumps(build_metadata, ensure_ascii=False, indent=4)
+            writer.write(json_str)
+            print(f"Engine building metadata: generated output file {metadata_json_fname}")
 
-    onnx_path = args.input
-    onnx_fname = os.path.basename(onnx_path)
-    outdir = args.outdir
-    engine_path = os.path.join(outdir, onnx_fname) + ".engine"
-
-    print("Building the engine:")
-    cmd_line, build_log_file = build_engine_cmd(
-        args, onnx_path, engine_path, timing_cache_path)
-    print(" ".join(cmd_line))
-    if args.print_only:
-        return True
-    success = run_trtexec(cmd_line, build_log_file)
-    if success:
-        print("\nSuccessfully built the engine.\n")
-        build_md_json_fname = f"{engine_path}.build.metadata.json"
-        generate_build_metadata(build_log_file, build_md_json_fname)
-    else:
+    def print_error(build_log_file: str):
         print("\nFailed to build the engine.")
         print(f"See logfile in: {build_log_file}\n")
         print("Troubleshooting:")
@@ -118,6 +113,25 @@ def build_engine(
               "which has trtexec built and accessible from $PATH.")
         print("2. If this is a Jupyter notebook, make sure the "
               " trtexec is in the $PATH of the Jupyter server.")
+
+    onnx_path = args.input
+    engine_path = get_engine_path(args, add_suffix=True)
+
+    print(f"Building the engine: {engine_path}")
+    cmd_line, build_log_file = build_engine_cmd(
+        args, onnx_path, engine_path, timing_cache_path)
+    print(" ".join(cmd_line))
+    if args.print_only:
+        return True
+
+    writer = archiving.get_writer(tea, build_log_file)
+    success = run_trtexec(cmd_line, writer)
+    if success:
+        print("\nSuccessfully built the engine.\n")
+        build_md_json_fname = f"{engine_path}.build.metadata.json"
+        generate_build_metadata(build_log_file, build_md_json_fname, tea)
+    else:
+        print_error(build_log_file)
     return success
 
 
@@ -137,14 +151,16 @@ def profile_engine_cmd(
         # Always run and time without profiling.
         "--separateProfileRun",
         "--useSpinWait",
-        # nvtxMode=verbose is the same as profilingVerbosity=detailed, but backward-compatible
-        "--nvtxMode=verbose",
         f"--loadEngine={engine_path}",
         f"--exportTimes={timing_json_fname}",
         f"--exportProfile={profiling_json_fname}",
         f"--exportLayerInfo={graph_json_fname}",
         f"--timingCacheFile={timing_cache_path}",
     ]
+    if trt.__version__ < "10.0":
+        cmd_line.append("--nvtxMode=verbose")
+    else:
+        cmd_line.append("--profilingVerbosity=detailed")
 
     append_trtexec_args(args.trtexec, cmd_line)
 
@@ -183,31 +199,34 @@ def get_gpu_config_args(args):
 def profile_engine(
     args: Dict,
     timing_cache_path:str,
+    tea: archiving.EngineArchive,
     add_suffix: bool
 ) -> bool:
-    def generate_profiling_metadata(log_file: str, output_json: str):
+    def generate_profiling_metadata(log_file: str, metadata_json_fname: str, tea: archiving.EngineArchive):
         """Parse trtexec profiling session log file and write to a JSON file"""
-        profiling_metadata = parse_profiling_log(log_file)
-        with open(output_json, 'w') as fout:
-            json.dump(profiling_metadata , fout)
-            print(f"Profiling metadata: generated output file {output_json}")
+        profiling_metadata = parse_profiling_log(log_file, tea)
+        with archiving.get_writer(tea, metadata_json_fname) as writer:
+            json_str = json.dumps(profiling_metadata, ensure_ascii=False, indent=4)
+            writer.write(json_str)
+            print(f"Profiling metadata: generated output file {metadata_json_fname}")
 
     engine_path = get_engine_path(args, add_suffix)
-
-    print("Profiling the engine:")
+    print(f"Profiling the engine: {engine_path}")
     cmd_line, profile_log_file = profile_engine_cmd(
         args, engine_path, timing_cache_path)
     print(" ".join(cmd_line))
     if args.print_only:
         return True
 
-    with GPUMonitor(args.monitor), GPUConfigurator(*get_gpu_config_args(args)):
-        success = run_trtexec(cmd_line, profile_log_file)
+    writer = archiving.get_writer(tea, profile_log_file)
+
+    #with GPUMonitor(args.monitor), GPUConfigurator(*get_gpu_config_args(args)):
+    success = run_trtexec(cmd_line, writer)
 
     if success:
         print("\nSuccessfully profiled the engine.\n")
         profiling_md_json_fname = f"{engine_path}.profile.metadata.json"
-        generate_profiling_metadata(profile_log_file, profiling_md_json_fname)
+        generate_profiling_metadata(profile_log_file, profiling_md_json_fname, tea)
     else:
         print("\nFailed to profile the engine.")
         print(f"See logfile in: {profile_log_file}\n")
@@ -221,13 +240,14 @@ def generate_engine_svg(args: Dict, add_suffix: bool) -> bool:
 
     if add_suffix:
         graph_json_fname = f"{engine_path}.graph.json"
+        profiling_json_fname = f"{engine_path}.profile.json"
     else:
         graph_json_fname = engine_path
 
     try:
         from draw_engine import draw_engine
         print(f"Generating graph diagram: {graph_json_fname}")
-        draw_engine(graph_json_fname)
+        draw_engine(graph_json_fname, profiling_json_fname)
     except ModuleNotFoundError:
         print("Can't generate plan SVG graph because some package is not installed")
 
@@ -247,20 +267,28 @@ def process_engine(
 ) -> bool:
     timing_cache_path = "./timing.cache"
     success = True
+    engine_path = get_engine_path(args, add_suffix=True)
+    tea_name = f"{engine_path}.tea"
+    tea = archiving.EngineArchive(tea_name) if args.archive else None
+    if tea: tea.open()
     if build:
-        success = build_engine(args, timing_cache_path)
+        success = build_engine(args, timing_cache_path, tea)
     if profile and success:
-        success = profile_engine(args, timing_cache_path, add_suffix=build)
+        success = profile_engine(args, timing_cache_path, tea, add_suffix=build)
     if draw and success:
         success = generate_engine_svg(args, add_suffix=build)
+    if tea: tea.close()
     print(f"Artifcats directory: {args.outdir}")
     return success
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description='Utility to build and profile TensorRT engines.')
+def make_subcmd_parser(subparsers):
+    parser = subparsers.add_parser('process', help='Utility to build and profile TensorRT engines.')
+    parser.set_defaults(func=do_work)
+    _make_parser(parser)
 
+
+def _make_parser(parser):
     # Positional arguments.
     parser.add_argument('input', help="input file (ONNX model or TensorRT engine file)")
     parser.add_argument('outdir', help="directory to store output artifacts")
@@ -285,7 +313,6 @@ def parse_args():
     parser.add_argument('--monitor',
         action='store_true',
         help="Monitor GPU temperature, power, clocks and utilization while profiling.")
-
     parser.add_argument('--print-only', action='store_true',
         help='print the command-line and exit')
     parser.add_argument('--build-engine', '-b', action='store_true', default=None,
@@ -294,8 +321,8 @@ def parse_args():
         help='profile the engine')
     parser.add_argument('--draw-engine', '-d', action='store_true', default=None,
         help='draw the engine')
-    args = parser.parse_args()
-    return args
+    parser.add_argument('--archive', action='store_true',
+        help="create a TensorRT engine archive file (.tea)")
 
 
 def append_trtexec_args(trt_args: Dict, cmd_line: List[str]):
@@ -312,8 +339,13 @@ def get_subcmds(args: Dict):
     return build, profile, draw
 
 
-if __name__ == "__main__":
-    args = parse_args()
+def do_work(args):
     create_artifacts_directory(args.outdir)
     build, profile, draw = get_subcmds(args)
     process_engine(args, build, profile, draw)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    args = parser.parse_args(_make_parser(parser))
+    do_work(args)

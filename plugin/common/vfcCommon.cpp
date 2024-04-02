@@ -70,12 +70,27 @@ ILogger* getPluginLogger()
 } // namespace plugin
 } // namespace nvinfer1
 
+IPluginCreatorInterface* const* getCreatorsHelper(int32_t& nbAllCreators, int32_t& nbIPluginCreators)
+{
+    nbAllCreators = 1;
+    nbIPluginCreators = 1;
+    static ROIAlignPluginCreator sRoiAlignCreator;
+    static IPluginCreatorInterface* const kPLUGIN_CREATOR_LIST[] = {&sRoiAlignCreator};
+    return kPLUGIN_CREATOR_LIST;
+}
+
 extern "C" TENSORRTAPI IPluginCreator* const* getPluginCreators(int32_t& nbCreators)
 {
-    nbCreators = 1;
-    static ROIAlignPluginCreator roiAlignCreator;
-    static IPluginCreator* const pluginCreatorList[] = {&roiAlignCreator};
-    return pluginCreatorList;
+    int32_t nbAllCreators;
+    auto creators = getCreatorsHelper(nbAllCreators, nbCreators);
+
+    return reinterpret_cast<IPluginCreator* const*>(creators + (nbAllCreators - nbCreators));
+}
+
+extern "C" TENSORRTAPI IPluginCreatorInterface* const* getCreators(int32_t& nbCreators)
+{
+    int32_t nbIPluginCreators;
+    return getCreatorsHelper(nbCreators, nbIPluginCreators);
 }
 
 extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::ILoggerFinder* finder)

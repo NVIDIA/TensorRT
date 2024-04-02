@@ -61,3 +61,7 @@ from downloader import getFilePath
 
 cfg_file_path = getFilePath('samples/python/yolov3_onnx/yolov3.cfg')
 ```
+
+**Python Version Support**
+
+All Python samples are expected to be run with Python>=3.8. It is not recommended to use any lower version as there may be compatibility issues.

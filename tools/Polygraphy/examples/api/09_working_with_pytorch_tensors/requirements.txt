@@ -1,0 +1,2 @@
+tensorrt>=8.5
+torch>=1.13.0

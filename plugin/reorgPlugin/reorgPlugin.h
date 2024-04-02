@@ -26,43 +26,22 @@ namespace nvinfer1
 namespace plugin
 {
 
-class Reorg : public IPluginV2Ext
+template <class TBaseClass>
+class Reorg : public TBaseClass
 {
 public:
-    Reorg(int32_t stride);
-
-    Reorg(int32_t C, int32_t H, int32_t W, int32_t stride);
-
-    Reorg(void const* buffer, size_t length);
-
+    Reorg(int32_t stride = 0);
     ~Reorg() override = default;
 
     int32_t getNbOutputs() const noexcept override;
-
-    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
 
     int32_t initialize() noexcept override;
 
     void terminate() noexcept override;
 
-    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
-
-    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
-        cudaStream_t stream) noexcept override;
-
-    size_t getSerializationSize() const noexcept override;
-
-    void serialize(void* buffer) const noexcept override;
-
-    bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
-
     char const* getPluginType() const noexcept override;
 
-    char const* getPluginVersion() const noexcept override;
-
     void destroy() noexcept override;
-
-    IPluginV2Ext* clone() const noexcept override;
 
     void setPluginNamespace(char const* pluginNamespace) noexcept override;
 
@@ -71,26 +50,68 @@ public:
     DataType getOutputDataType(
         int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
-
-    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
-
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
-    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-        DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
-
     void detachFromContext() noexcept override;
 
-private:
-    int32_t C{}, H{}, W{};
+protected:
     int32_t stride{};
     std::string mPluginNamespace;
 };
 
+class TRT_DEPRECATED ReorgStatic : public Reorg<IPluginV2Ext>
+{
+public:
+    ReorgStatic(int32_t stride);
+    ReorgStatic(int32_t C, int32_t H, int32_t W, int32_t stride);
+    ReorgStatic(void const* buffer, size_t length);
+
+    char const* getPluginVersion() const noexcept override;
+    Dims getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept override;
+    size_t getWorkspaceSize(int32_t maxBatchSize) const noexcept override;
+    int32_t enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace,
+        cudaStream_t stream) noexcept override;
+    bool supportsFormat(DataType type, PluginFormat format) const noexcept override;
+    IPluginV2Ext* clone() const noexcept override;
+    bool isOutputBroadcastAcrossBatch(
+        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
+    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
+    void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
+        DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
+        bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept override;
+    size_t getSerializationSize() const noexcept override;
+    void serialize(void* buffer) const noexcept override;
+
+protected:
+    int32_t C{};
+    int32_t H{};
+    int32_t W{};
+};
+
+class ReorgDynamic : public Reorg<IPluginV2DynamicExt>
+{
+public:
+    ReorgDynamic(int32_t stride);
+    ReorgDynamic(void const* buffer, size_t length);
+
+    char const* getPluginVersion() const noexcept override;
+    DimsExprs getOutputDimensions(
+        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
+    bool supportsFormatCombination(
+        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    void configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
+        int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+    IPluginV2DynamicExt* clone() const noexcept override;
+    size_t getSerializationSize() const noexcept override;
+    void serialize(void* buffer) const noexcept override;
+};
+
+template <class TPluginClass>
 class ReorgPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
@@ -113,6 +134,9 @@ private:
     int32_t stride{};
     static std::vector<PluginField> mPluginAttributes;
 };
+
+using ReorgStaticPluginCreator = ReorgPluginCreator<ReorgStatic>;
+using ReorgDynamicPluginCreator = ReorgPluginCreator<ReorgDynamic>;
 } // namespace plugin
 } // namespace nvinfer1
 

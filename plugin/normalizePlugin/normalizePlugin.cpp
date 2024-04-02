@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +17,11 @@
 #include "normalizePlugin.h"
 #include "common/half.h"
 #include <cstring>
-#include <cublas_v2.h>
-#include <cudnn.h>
 #include <iostream>
 #include <sstream>
 
 using namespace nvinfer1;
+using namespace nvinfer1::pluginInternal;
 using nvinfer1::plugin::Normalize;
 using nvinfer1::plugin::NormalizePluginCreator;
 
@@ -40,6 +39,9 @@ Normalize::Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpati
     , channelShared(channelShared)
     , eps(eps)
 {
+    gLogWarning << "NormalizePlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNormalization() to "
+                   "add an INormalizationLayer."
+                << std::endl;
     mNbWeights = nbWeights;
     PLUGIN_VALIDATE(nbWeights == 1);
     PLUGIN_VALIDATE(weights[0].count >= 1);
@@ -240,7 +242,16 @@ void Normalize::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims co
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void Normalize::attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpuAllocator* gpuAllocator) noexcept
 {
-    mCublas = cublas;
+    try
+    {
+        mCublasWrapper = createPluginCublasWrapper(gpuAllocator);
+        mCublas = mCublasWrapper->getCublasHandle();
+        PLUGIN_VALIDATE(mCublas != nullptr);
+    }
+    catch (const std::exception& e)
+    {
+        caughtError(e);
+    }
 }
 
 // Detach the plugin object from its execution context.
@@ -314,6 +325,10 @@ IPluginV2Ext* NormalizePluginCreator::createPlugin(char const* name, PluginField
 {
     try
     {
+        gLogWarning
+            << "NormalizePlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNormalization() to add an "
+               "INormalizationLayer."
+            << std::endl;
         std::vector<float> weightValues;
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
@@ -370,6 +385,10 @@ IPluginV2Ext* NormalizePluginCreator::deserializePlugin(
 {
     try
     {
+        gLogWarning
+            << "NormalizePlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNormalization() to add an "
+               "INormalizationLayer."
+            << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call Normalize::destroy()
         Normalize* obj = new Normalize(serialData, serialLength);

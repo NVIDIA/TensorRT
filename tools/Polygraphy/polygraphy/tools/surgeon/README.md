@@ -26,6 +26,11 @@ to modify an ONNX model.
 
 - [EXPERIMENTAL] `insert` can insert a node into a model, optionally replacing existing subgraphs.
 
+- [EXPERIMENTAL] `prune` can prune an ONNX model to have [2:4 structured sparsity](https://developer.nvidia.com/blog/accelerating-inference-with-sparsity-using-ampere-and-tensorrt/) by setting the some values of the weights to zero. Note that this will *not* retain the accuracy of the model and should hence be used only for functional testing.
+
+- [EXPERIMENTAL] `weight-strip` can strip the initializers of selective nodes in an ONNX model. If an initializer is identified as 2:4 structured sparse, the sparsity structure is encoded in the initializer to preserve sparsity during reconstruction. The tool only supports 2:4 structured sparsity.
+
+- [EXPERIMENTAL] `weight-reconstruct` reads a weightless ONNX model and fills the empty initializers with proxy tensors. The reconstruction preserves 2:4 structed sparsity for initializers that were identified as sparse during weight stripping.
 
 ## Usage
 

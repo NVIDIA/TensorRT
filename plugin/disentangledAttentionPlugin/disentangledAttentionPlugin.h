@@ -19,8 +19,8 @@
 #define TRT_DISENTANGLED_ATTENTION_PLUGIN_H
 
 #include "NvInferPlugin.h"
-#include "plugin.h"
-#include "serialize.hpp"
+#include "common/plugin.h"
+#include "common/serialize.hpp"
 #include <cstdint>
 #include <iostream>
 #include <string>

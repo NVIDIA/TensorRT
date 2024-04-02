@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,11 +29,18 @@
 #include <chrono>
 
 using namespace nvinfer1;
+using namespace nvinfer1::pluginInternal;
 using nvinfer1::plugin::ModulatedDeformableConvPluginDynamic;
 using nvinfer1::plugin::ModulatedDeformableConvPluginDynamicCreator;
 
 void ModulatedDeformConvForwardCUDAKernelLauncherFloat(float const* input, float const* weight, float const* bias,
     float const* offset, float const* mask, float* output, void* workspace, int32_t batch, int32_t channels,
+    int32_t height, int32_t width, int32_t channelsOut, int32_t kernelW, int32_t kernelH, int32_t strideW,
+    int32_t strideH, int32_t padW, int32_t padH, int32_t dilationW, int32_t dilationH, int32_t group,
+    int32_t deformableGroup, int32_t im2colStep, cublasHandle_t cublasHandle, cudaStream_t stream);
+
+void ModulatedDeformConvForwardCUDAKernelLauncherHalf(half const* input, half const* weight, half const* bias,
+    half const* offset, half const* mask, half* output, void* workspace, int32_t batch, int32_t channels,
     int32_t height, int32_t width, int32_t channelsOut, int32_t kernelW, int32_t kernelH, int32_t strideW,
     int32_t strideH, int32_t padW, int32_t padH, int32_t dilationW, int32_t dilationH, int32_t group,
     int32_t deformableGroup, int32_t im2colStep, cublasHandle_t cublasHandle, cudaStream_t stream);
@@ -118,7 +125,8 @@ bool ModulatedDeformableConvPluginDynamic::supportsFormatCombination(
 {
     if (pos == 0)
     {
-        return (inOut[pos].type == nvinfer1::DataType::kFLOAT && inOut[pos].format == nvinfer1::TensorFormat::kLINEAR);
+        return ((inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF) &&
+                inOut[pos].format == nvinfer1::TensorFormat::kLINEAR);
     }
     else
     {
@@ -164,6 +172,9 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
+            && workSpace != nullptr);
+
         int32_t batch = inputDesc[0].dims.d[0];
         int32_t channels = inputDesc[0].dims.d[1];
         int32_t height = inputDesc[0].dims.d[2];
@@ -189,6 +200,12 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
                 kernelW, kernelH, mStride.d[0], mStride.d[1], mPadding.d[0], mPadding.d[1], mDilation.d[0],
                 mDilation.d[1], mGroup, mDeformableGroup, im2colStep, mCublasHandle, stream);
             break;
+        case nvinfer1::DataType::kHALF:
+            ModulatedDeformConvForwardCUDAKernelLauncherHalf((half*) x, (half*) weight, (half*) bias,
+                (half*) offset, (half*) mask, (half*) output, workSpace, batch, channels, height, width, channelsOut,
+		kernelW, kernelH, mStride.d[0], mStride.d[1], mPadding.d[0], mPadding.d[1], mDilation.d[0],
+		mDilation.d[1], mGroup, mDeformableGroup, im2colStep, mCublasHandle, stream);
+	    break;
         default: return 1;
         }
     }
@@ -253,7 +270,16 @@ void ModulatedDeformableConvPluginDynamic::destroy() noexcept
 void ModulatedDeformableConvPluginDynamic::attachToContext(
     cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) noexcept
 {
-    mCublasHandle = cublasContext;
+    try
+    {
+        mCublasWrapper = createPluginCublasWrapper(gpuAllocator);
+        mCublasHandle = mCublasWrapper->getCublasHandle();
+        PLUGIN_VALIDATE(mCublasHandle);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
 void ModulatedDeformableConvPluginDynamic::detachFromContext() noexcept {}

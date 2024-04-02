@@ -35,6 +35,22 @@
 namespace sample
 {
 
+// IDebugListener class for writing debug tensors to output file.
+class DebugTensorWriter : public nvinfer1::IDebugListener
+{
+public:
+    DebugTensorWriter(std::unordered_map<std::string, std::string> fileNames)
+        : mDebugTensorFileNames(fileNames)
+    {
+    }
+
+    bool processDebugTensor(void const* addr, nvinfer1::TensorLocation location, nvinfer1::DataType type,
+        nvinfer1::Dims const& shape, char const* name, cudaStream_t stream) override;
+
+private:
+    std::unordered_map<std::string, std::string> mDebugTensorFileNames;
+};
+
 struct InferenceEnvironment
 {
     InferenceEnvironment() = delete;
@@ -47,7 +63,10 @@ struct InferenceEnvironment
     LazilyDeserializedEngine engine;
     std::unique_ptr<Profiler> profiler;
     std::vector<std::unique_ptr<nvinfer1::IExecutionContext>> contexts;
+    std::vector<TrtDeviceBuffer>
+        deviceMemory; //< Device memory used for inference when the allocation strategy is not static.
     std::vector<std::unique_ptr<Bindings>> bindings;
+    std::unique_ptr<DebugTensorWriter> listener;
     bool error{false};
 
     bool safe{false};
@@ -60,7 +79,7 @@ struct InferenceEnvironment
     //!
     //! It's important that the addresses of the data do not change between the calls to
     //! setTensorAddress/setInputShape (which tells TensorRT where the input shape tensor is)
-    //! and enqueueV2/enqueueV3 (when TensorRT might use the input shape tensor).
+    //! and enqueueV3 (when TensorRT might use the input shape tensor).
     //!
     //! The input shape tensors could alternatively be handled via member bindings,
     //! but it simplifies control-flow to store the data here since it's shared across
@@ -165,7 +184,7 @@ public:
     }
 
     template <typename ContextType>
-    void dumpBindingDimensions(int32_t binding, ContextType const& context, std::ostream& os) const;
+    void dumpBindingDimensions(std::string const& name, ContextType const& context, std::ostream& os) const;
 
     template <typename ContextType>
     void dumpBindingValues(ContextType const& context, int32_t binding, std::ostream& os,
@@ -201,11 +220,12 @@ public:
     {
         for (auto const& n : mNames)
         {
+            auto const name = n.first;
             auto const binding = n.second;
             if (predicate(mBindings[binding]))
             {
                 os << n.first << ": (";
-                dumpBindingDimensions(binding, context, os);
+                dumpBindingDimensions(name, context, os);
                 os << ")" << std::endl;
 
                 dumpBindingValues(context, binding, os);
@@ -213,7 +233,6 @@ public:
             }
         }
     }
-
 
     std::unordered_map<std::string, int> getInputBindings() const
     {

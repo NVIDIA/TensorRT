@@ -22,10 +22,12 @@ set(OPENSOURCE_SAMPLES_LIST
     sampleCharRNN
     sampleDynamicReshape
     sampleINT8API
+    sampleNonZeroPlugin
     sampleOnnxMNIST
     sampleIOFormats
     sampleOnnxMnistCoordConvAC
     sampleNamedDimensions
+    sampleProgressMonitor
     trtexec)
 
 foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})

@@ -38,24 +38,24 @@ struct MhaRunParameter
 class QkvPaddingRunner
 {
 public:
-    QkvPaddingRunner(int32_t headSize, nvinfer1::DataType dtype);
+    QkvPaddingRunner(nvinfer1::DataType dtype, int32_t maxPadSize = 64);
     ~QkvPaddingRunner() = default;
-    int32_t getPaddingHeadSize();
+    int32_t getMaxPaddingHeadSize();
     size_t getWorkspaceSize(int32_t sumSeqLen, int32_t numHeads);
     void* get16BytesAlignedPointer(void* workspace, size_t offset);
-    cudaError_t pad(
-        void const* src, void* workspace, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream);
-    cudaError_t unpad(
-        void const* workspace, void* dst, int32_t sumSeqLen, int32_t numHeads, int32_t headSize, cudaStream_t stream);
+    cudaError_t pad(void const* src, void* workspace, int32_t sumSeqLen, int32_t numHeads, int32_t headSize,
+        int32_t padHeadSize, cudaStream_t stream);
+    cudaError_t unpad(void const* workspace, void* dst, int32_t sumSeqLen, int32_t numHeads, int32_t headSize,
+        int32_t padHeadSize, cudaStream_t stream);
     MhaRunParameter patchMhaArgs(nvinfer1::PluginTensorDesc const* inputDesc,
         nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs,
-        void* paddingWorkspace, int32_t sumSeqLen, int32_t numHeads);
+        void* paddingWorkspace, int32_t sumSeqLen, int32_t numHeads, int32_t padHeadSize);
 
 private:
     size_t getInputSize(int32_t sumSeqLen, int32_t numHeads);
     size_t getOutputSize(int32_t sumSeqLen, int32_t numHeads);
-    int32_t mPaddingHeadSize;
-    int32_t mDtypeSize;
+    int32_t mMaxPaddingHeadSize{};
+    int32_t mDtypeSize{};
 };
 
 } // namespace bert

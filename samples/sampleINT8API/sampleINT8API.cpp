@@ -161,28 +161,31 @@ private:
 //!
 void SampleINT8API::getInputOutputNames()
 {
-    int nbindings = mEngine.get()->getNbBindings();
+    int32_t nbindings = mEngine.get()->getNbIOTensors();
     ASSERT(nbindings == 2);
-    for (int b = 0; b < nbindings; ++b)
+    for (int32_t b = 0; b < nbindings; ++b)
     {
-        nvinfer1::Dims dims = mEngine.get()->getBindingDimensions(b);
-        if (mEngine.get()->bindingIsInput(b))
+        auto const bindingName = mEngine.get()->getIOTensorName(b);
+        nvinfer1::Dims dims = mEngine.get()->getTensorShape(bindingName);
+        if (mEngine.get()->getTensorIOMode(bindingName) == TensorIOMode::kINPUT)
         {
             if (mParams.verbose)
             {
-                sample::gLogInfo << "Found input: " << mEngine.get()->getBindingName(b) << " shape=" << dims
-                                 << " dtype=" << (int) mEngine.get()->getBindingDataType(b) << std::endl;
+                sample::gLogInfo << "Found input: " << bindingName << " shape=" << dims
+                                 << " dtype=" << static_cast<int32_t>(mEngine.get()->getTensorDataType(bindingName))
+                                 << std::endl;
             }
-            mInOut["input"] = mEngine.get()->getBindingName(b);
+            mInOut["input"] = bindingName;
         }
         else
         {
             if (mParams.verbose)
             {
-                sample::gLogInfo << "Found output: " << mEngine.get()->getBindingName(b) << " shape=" << dims
-                                 << " dtype=" << (int) mEngine.get()->getBindingDataType(b) << std::endl;
+                sample::gLogInfo << "Found output: " << bindingName << " shape=" << dims
+                                 << " dtype=" << static_cast<int32_t>(mEngine.get()->getTensorDataType(bindingName))
+                                 << std::endl;
             }
-            mInOut["output"] = mEngine.get()->getBindingName(b);
+            mInOut["output"] = bindingName;
         }
     }
 }
@@ -261,9 +264,10 @@ void SampleINT8API::setLayerPrecision(SampleUniquePtr<nvinfer1::INetworkDefiniti
 void SampleINT8API::writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
 {
     sample::gLogInfo << "Sample requires to run with per-tensor dynamic range." << std::endl;
-    sample::gLogInfo << "In order to run Int8 inference without calibration, user will need to provide dynamic range for all "
-                "the network tensors."
-             << std::endl;
+    sample::gLogInfo
+        << "In order to run Int8 inference without calibration, user will need to provide dynamic range for all "
+           "the network tensors."
+        << std::endl;
 
     std::ofstream tensorsFile{mParams.networkTensorsFileName};
 
@@ -315,12 +319,14 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
     sample::gLogInfo << "Setting Per Tensor Dynamic Range" << std::endl;
     if (mParams.verbose)
     {
-        sample::gLogInfo << "If dynamic range for a tensor is missing, TensorRT will run inference assuming dynamic range for "
-                    "the tensor as optional."
-                 << std::endl;
-        sample::gLogInfo << "If dynamic range for a tensor is required then inference will fail. Follow README.md to generate "
-                    "missing per-tensor dynamic range."
-                 << std::endl;
+        sample::gLogInfo
+            << "If dynamic range for a tensor is missing, TensorRT will run inference assuming dynamic range for "
+               "the tensor as optional."
+            << std::endl;
+        sample::gLogInfo
+            << "If dynamic range for a tensor is required then inference will fail. Follow README.md to generate "
+               "missing per-tensor dynamic range."
+            << std::endl;
     }
     // set dynamic range for network input tensors
     for (int i = 0; i < network->getNbInputs(); ++i)
@@ -381,6 +387,9 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
                     case DataType::kINT32: val = static_cast<const int32_t*>(wts.values)[wb]; break;
                     case DataType::kUINT8: val = static_cast<uint8_t const*>(wts.values)[wb]; break;
                     case DataType::kFP8: ASSERT(!"FP8 is not supported"); break;
+                    case DataType::kBF16:
+                    case DataType::kINT4:
+                    case DataType::kINT64: ASSERT(false && "Unsupported data type");
                     }
                     max = std::max(max, std::abs(val));
                 }
@@ -435,7 +444,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
     infile.seekg(1, infile.cur);
     infile.read(reinterpret_cast<char*>(fileData.data()), width * height * channels);
 
-    uint8_t* hostInputBuffer = static_cast<uint8_t*>(buffers.getHostBuffer(mInOut["input"]));
+    float* hostInputBuffer = static_cast<float*>(buffers.getHostBuffer(mInOut["input"]));
 
     // Convert HWC to CHW and Normalize
     for (int c = 0; c < channels; ++c)
@@ -446,7 +455,7 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
             {
                 int dstIdx = c * height * width + h * width + w;
                 int srcIdx = h * width * channels + w * channels + c;
-                hostInputBuffer[dstIdx] = fileData[srcIdx];
+                hostInputBuffer[dstIdx] = (2.0F / 255.0F) * static_cast<float>(fileData[srcIdx]) - 1.0F;
             }
         }
     }
@@ -502,12 +511,12 @@ sample::Logger::TestResult SampleINT8API::build()
 
     if (!builder->platformHasFastInt8())
     {
-        sample::gLogError << "Platform does not support INT8 inference. sampleINT8API can only run in INT8 Mode." << std::endl;
+        sample::gLogError << "Platform does not support INT8 inference. sampleINT8API can only run in INT8 Mode."
+                          << std::endl;
         return sample::Logger::TestResult::kWAIVED;
     }
 
-    const auto explicitBatch = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(explicitBatch));
+    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         sample::gLogError << "Unable to create network object." << mParams.referenceFileName << std::endl;
@@ -599,12 +608,8 @@ sample::Logger::TestResult SampleINT8API::build()
     // populates input output map structure
     getInputOutputNames();
 
-    // derive input/output dims from engine bindings
-    const int inputIndex = mEngine.get()->getBindingIndex(mInOut["input"].c_str());
-    mInputDims = mEngine.get()->getBindingDimensions(inputIndex);
-
-    const int outputIndex = mEngine.get()->getBindingIndex(mInOut["output"].c_str());
-    mOutputDims = mEngine.get()->getBindingDimensions(outputIndex);
+    mInputDims = mEngine.get()->getTensorShape(mInOut["input"].c_str());
+    mOutputDims = mEngine.get()->getTensorShape(mInOut["output"].c_str());
 
     return sample::Logger::TestResult::kRUNNING;
 }
@@ -626,6 +631,12 @@ sample::Logger::TestResult SampleINT8API::infer()
         return sample::Logger::TestResult::kFAILED;
     }
 
+    for (int32_t i = 0, e = mEngine->getNbIOTensors(); i < e; i++)
+    {
+        auto const name = mEngine->getIOTensorName(i);
+        context->setTensorAddress(name, buffers.getDeviceBuffer(name));
+    }
+
     // Read the input data into the managed buffers
     // There should be just 1 input tensor
 
@@ -642,7 +653,7 @@ sample::Logger::TestResult SampleINT8API::infer()
     buffers.copyInputToDeviceAsync(stream);
 
     // Asynchronously enqueue the inference work
-    if (!context->enqueueV2(buffers.getDeviceBindings().data(), stream, nullptr))
+    if (!context->enqueueV3(stream))
     {
         return sample::Logger::TestResult::kFAILED;
     }

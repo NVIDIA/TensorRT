@@ -116,7 +116,7 @@ constexpr char const* descr = R"trtdoc(
             def report_layer_time(self, layer_name, ms):
                 ... # Your implementation here
 
-    When this class is added to an :class:`IExecutionContext`, the profiler will be called once per layer for each invocation of :func:`IExecutionContext.execute_v2()` or :func:`IExecutionContext.execute_async_v2()`.
+    When this class is added to an :class:`IExecutionContext`, the profiler will be called once per layer for each invocation of :func:`IExecutionContext.execute_v2()`.
 
     It is not recommended to run inference with profiler enabled when the inference execution time is critical since the profiler may affect execution time negatively.
 )trtdoc";
@@ -132,7 +132,7 @@ constexpr char const* report_layer_time = R"trtdoc(
 namespace ProfilerDoc
 {
 constexpr char const* descr = R"trtdoc(
-    When this class is added to an :class:`IExecutionContext`, the profiler will be called once per layer for each invocation of :func:`IExecutionContext.execute_v2()` or :func:`IExecutionContext.execute_async_v2()`.
+    When this class is added to an :class:`IExecutionContext`, the profiler will be called once per layer for each invocation of :func:`IExecutionContext.execute_v2()`.
 
     It is not recommended to run inference with profiler enabled when the inference execution time is critical since the profiler may affect execution time negatively.
 )trtdoc";
@@ -261,8 +261,8 @@ constexpr char const* FAILED_INITIALIZATION = R"trtdoc(
 )trtdoc";
 
 constexpr char const* FAILED_EXECUTION = R"trtdoc(
-    An error occurred during execution that caused TensorRT to end prematurely, either an asynchronous error or
-    other execution errors reported by CUDA/DLA. In a dynamic system, the
+    An error occurred during execution that caused TensorRT to end prematurely, either an asynchronous error,
+    user cancellation, or other execution errors reported by CUDA/DLA. In a dynamic system, the
     data can be thrown away and the next frame can be processed or execution can be retried.
     This is either an execution error or a memory error.
 )trtdoc";
@@ -393,67 +393,31 @@ constexpr char const* descr = R"trtdoc(
     Multiple :class:`IExecutionContext` s may exist for one :class:`ICudaEngine` instance, allowing the same
     :class:`ICudaEngine` to be used for the execution of multiple batches simultaneously.
 
-    :ivar debug_sync: :class:`bool` The debug sync flag. If this flag is set to true, the :class:`ICudaEngine` will log the successful execution for each kernel during execute_v2(). It has no effect when using execute_async_v2().
+    :ivar debug_sync: :class:`bool` The debug sync flag. If this flag is set to true, the :class:`ICudaEngine` will log the successful execution for each kernel during execute_v2().
     :ivar profiler: :class:`IProfiler` The profiler in use by this :class:`IExecutionContext` .
     :ivar engine: :class:`ICudaEngine` The associated :class:`ICudaEngine` .
     :ivar name: :class:`str` The name of the :class:`IExecutionContext` .
-    :ivar device_memory: :class:`capsule` The device memory for use by this execution context. The memory must be aligned on a 256-byte boundary, and its size must be at least :attr:`engine.device_memory_size`. If using :func:`execute_async_v2()` to run the network, The memory is in use from the invocation of :func:`execute_async_v2()` until network execution is complete. If using :func:`execute_v2()`, it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
-    :ivar active_optimization_profile: :class:`int` The active optimization profile for the context. The selected profile will be used in subsequent calls to :func:`execute_v2()` or :func:`execute_async_v2()` . Profile 0 is selected by default. Changing this value will invalidate all dynamic bindings for the current execution context, so that they have to be set again using :func:`set_binding_shape` before calling either :func:`execute_v2()` or :func:`execute_async_v2()` .
-    :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_binding_shape` . Trivially true if network has no dynamically shaped input tensors. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
+    :ivar device_memory: :class:`capsule` The device memory for use by this execution context. The memory must be aligned on a 256-byte boundary, and its size must be at least :attr:`engine.device_memory_size`. If using :func:`execute_v2()`, it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
+    :ivar active_optimization_profile: :class:`int` The active optimization profile for the context. The selected profile will be used in subsequent calls to :func:`execute_v2()`. Profile 0 is selected by default. This is a readonly property and active optimization profile can be changed with :func:`set_optimization_profile_async()`. Changing this value will invalidate all dynamic bindings for the current execution context, so that they have to be set again using :func:`set_input_shape` before calling either :func:`execute_v2()`.
+    :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_input_shape` . Trivially true if network has no dynamically shaped input tensors. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
     :ivar all_shape_inputs_specified: :class:`bool` Whether values for all input shape tensors have been specified by calling :func:`set_shape_input` . Trivially true if network has no input shape bindings. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :func:`IExecutionContext::report_to_profiler()` needs to be called to obtain the profiling data and report to the profiler attached.
     :ivar persistent_cache_limit: The maximum size of persistent L2 cache that this execution context may use for activation caching. Activation caching is not supported on all architectures - see "How TensorRT uses Memory" in the developer guide for details. The default is 0 Bytes.
-    :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with kDETAILED verbosity will generally increase latency in enqueueV2/V3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
+    :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with DETAILED verbosity will generally increase latency in enqueueV3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
     :ivar temporary_allocator: :class:`IGpuAllocator` The GPU allocator used for internal temporary storage.
-)trtdoc";
-
-constexpr char const* execute = R"trtdoc(
-    [DEPRECATED] Please use execute_v2() instead if the engine is built from a network with explicit batch dimension mode enabled.
-
-    Synchronously execute inference on a batch.
-    This method requires a array of input and output buffers. The mapping from tensor names to indices can be queried using :func:`ICudaEngine.get_binding_index()` .
-
-    :arg batch_size: The batch size. This is at most the value supplied when the :class:`ICudaEngine` was built. This has no effect if the engine is built from a network with explicit batch dimension mode enabled.
-    :arg bindings: A list of integers representing input and output buffer addresses for the network.
-
-    :returns: True if execution succeeded.
-)trtdoc";
-
-constexpr char const* execute_async = R"trtdoc(
-    [DEPRECATED] Please use execute_async_v2() instead if the engine is built from a network with explicit batch dimension mode enabled.
-
-    Asynchronously execute inference on a batch.
-    This method requires a array of input and output buffers. The mapping from tensor names to indices can be queried using :func:`ICudaEngine::get_binding_index()` .
-
-    :arg batch_size: The batch size. This is at most the value supplied when the :class:`ICudaEngine` was built. This has no effect if the engine is built from a network with explicit batch dimension mode enabled.
-    :arg bindings: A list of integers representing input and output buffer addresses for the network.
-    :arg stream_handle: A handle for a CUDA stream on which the inference kernels will be executed.
-    :arg input_consumed: An optional event which will be signaled when the input buffers can be refilled with new data
-
-    :returns: True if the kernels were executed successfully.
+    :ivar weight_streaming_budget: Set and get the current weight streaming budget for inference. The budget may be set to -1 disabling weight streaming at runtime, 0 (default) enabling TRT to choose to weight stream or not, or a positive value in the inclusive range [minimum_weight_streaming_budget, streamable_weights_size - 1].
+    :ivar minimum_weight_streaming_budget: Returns the minimum weight streaming budget in bytes required to run the network successfully. The engine must have been built with kWEIGHT_STREAMING. 
+    :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
 )trtdoc";
 
 constexpr char const* execute_v2 = R"trtdoc(
     Synchronously execute inference on a batch.
-    This method requires a array of input and output buffers. The mapping from tensor names to indices can be queried using :func:`ICudaEngine.get_binding_index()` .
-    This method only works for execution contexts built from networks with no implicit batch dimension.
+    This method requires a array of input and output buffers.
 
     :arg bindings: A list of integers representing input and output buffer addresses for the network.
 
     :returns: True if execution succeeded.
-)trtdoc";
-
-constexpr char const* execute_async_v2 = R"trtdoc(
-    Asynchronously execute inference on a batch.
-    This method requires a array of input and output buffers. The mapping from tensor names to indices can be queried using :func:`ICudaEngine::get_binding_index()` .
-    This method only works for execution contexts built from networks with no implicit batch dimension.
-
-    :arg bindings: A list of integers representing input and output buffer addresses for the network.
-    :arg stream_handle: A handle for a CUDA stream on which the inference kernels will be executed.
-    :arg input_consumed: An optional event which will be signaled when the input buffers can be refilled with new data
-
-    :returns: True if the kernels were executed successfully.
 )trtdoc";
 
 // TODO: Check if this makes sense to have.
@@ -461,89 +425,9 @@ constexpr char const* device_memory = R"trtdoc(
     The device memory for use by this :class:`IExecutionContext` .
 
     The memory must be aligned on a 256-byte boundary, and its size must be at least that
-    returned by getDeviceMemorySize(). If using :func:`execute_async_v2()` to run the network, The memory is in
-    use from the invocation of :func:`execute_async_v2()` until network execution is complete. If using :func:`execute_v2()`,
+    returned by getDeviceMemorySize(). If using :func:`execute_v2()`,
     it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other
     purposes during this time will result in undefined behavior.
-)trtdoc";
-
-constexpr char const* get_strides = R"trtdoc(
-    Return the strides of the buffer for the given binding.
-
-    Note that strides can be different for different execution contexts with dynamic shapes.
-
-    :arg binding: The binding index.
-)trtdoc";
-
-constexpr char const* set_binding_shape = R"trtdoc(
-    Set the dynamic shape of a binding.
-
-    Requires the engine to be built without an implicit batch dimension.
-    The binding must be an input tensor, and all dimensions must be compatible with
-    the network definition (i.e. only the wildcard dimension -1 can be replaced with a
-    new dimension > 0). Furthermore, the dimensions must be in the valid range for the
-    currently selected optimization profile.
-
-    For all dynamic non-output bindings (which have at least one wildcard dimension of -1),
-    this method needs to be called after setting :attr:`active_optimization_profile` before
-    either :func:`execute_async_v2()` or :func:`execute_v2()` may be called. When all input shapes have been
-    specified, :attr:`all_binding_shapes_specified` is set to :class:`True` .
-
-    :arg binding: The binding index.
-    :arg shape: The shape to set.
-
-    :returns: :class:`False` if an error occurs (e.g. specified binding is out of range for the currently selected optimization profile or specified shape is inconsistent with min-max range of the optimization profile), else :class:`True`.
-
-    Note that the network can still be invalid for
-    certain combinations of input shapes that lead to invalid output shapes. To confirm the correctness
-    of the network input shapes, check whether the output binding has valid
-    shape using :func:`get_binding_shape` on the output binding.
-)trtdoc";
-
-constexpr char const* get_binding_shape = R"trtdoc(
-    Get the dynamic shape of a binding.
-
-    If :func:`set_binding_shape` has been called on this binding (or if there are no
-    dynamic dimensions), all dimensions will be positive. Otherwise, it is necessary to
-    call :func:`set_binding_shape` before :func:`execute_async_v2()` or :func:`execute_v2()` may be called.
-
-    If the ``binding`` is out of range, an invalid Dims with nbDims == -1 is returned.
-
-    If ``ICudaEngine.binding_is_input(binding)`` is :class:`False` , then both
-    :attr:`all_binding_shapes_specified` and :attr:`all_shape_inputs_specified` must be :class:`True`
-    before calling this method.
-
-    :arg binding: The binding index.
-
-    :returns: A :class:`Dims` object representing the currently selected shape.
-)trtdoc";
-
-constexpr char const* set_shape_input = R"trtdoc(
-    Set values of an input shape tensor required by shape calculations.
-
-    :arg binding: The binding index of an input tensor for which ``ICudaEngine.is_shape_binding(binding)`` and ``ICudaEngine.binding_is_input(binding)`` are both true.
-    :arg shape: An iterable containing the values of the input shape tensor. The number of values should be the product of the dimensions returned by ``get_binding_shape(binding)``.
-
-    If ``ICudaEngine.is_shape_binding(binding)`` and ``ICudaEngine.binding_is_input(binding)`` are both true, this method must be called before :func:`execute_async_v2()` or :func:`execute_v2()` may be called. Additionally, this method must not be called if either ``ICudaEngine.is_shape_binding(binding)`` or ``ICudaEngine.binding_is_input(binding)`` are false.
-
-    :returns: :class:`False` if an error occurs (e.g. specified binding is out of range for the currently selected optimization profile or specified shape values are inconsistent with min-max range of the optimization profile), else :class:`True`.
-
-    Note that the network can still be invalid for
-    certain combinations of input shapes that lead to invalid output shapes. To confirm the correctness
-    of the network input shapes, check whether the output binding has valid
-    shape using :func:`get_binding_shape` on the output binding.
-)trtdoc";
-
-constexpr char const* get_shape = R"trtdoc(
-    Get values of an input shape tensor required for shape calculations or an output tensor produced by shape calculations.
-
-    :arg binding: The binding index of an input tensor for which ``ICudaEngine.is_shape_binding(binding)`` is true.
-
-    If ``ICudaEngine.binding_is_input(binding) == False``, then both
-    :attr:`all_binding_shapes_specified` and :attr:`all_shape_inputs_specified` must be :class:`True`
-    before calling this method.
-
-    :returns: An iterable containing the values of the shape tensor.
 )trtdoc";
 
 constexpr char const* set_optimization_profile_async = R"trtdoc(
@@ -664,7 +548,7 @@ constexpr char const* execute_async_v3 = R"trtdoc(
 
     Input tensors can be released after the :func:`set_input_consumed_event` whereas output tensors require stream synchronization.
 
-    :arg stream_handle: The cuda stream on which the inference kernels will be enqueued.
+    :arg stream_handle: The cuda stream on which the inference kernels will be enqueued. Using default stream may lead to performance issues due to additional cudaDeviceSynchronize() calls by TensorRT to ensure correct synchronizations. Please use non-default stream instead.
 )trtdoc";
 
 constexpr char const* set_aux_streams = R"trtdoc(
@@ -681,7 +565,128 @@ constexpr char const* set_aux_streams = R"trtdoc(
     :arg aux_streams: A list of cuda streams. If the length of the list is greater than engine.num_aux_streams, then only the first "engine.num_aux_streams" streams will be used. If the length is less than engine.num_aux_streams, such as an empty list, then TensorRT will use the provided streams for the first few auxiliary streams, and will create additional streams internally for the rest of the auxiliary streams.
 )trtdoc";
 
+constexpr char const* set_debug_listener = R"trtdoc(
+    Set debug listener for execution context.
+
+    :arg listener: The :class:`IDebugListener`.
+)trtdoc";
+
+constexpr char const* get_debug_listener = R"trtdoc(
+    Get debug listener for execution context.
+
+    :returns: The :class:`IDebugListener` of the execution context.
+)trtdoc";
+
+constexpr char const* set_tensor_debug_state = R"trtdoc(
+    Turn the debug state of a tensor on or off. The Tensor must have been marked as a debug tensor during build time.
+
+    :arg name: The name of the target tensor.
+    :arg flag: True if turning on debug state of tensor. False if turning off.
+)trtdoc";
+
+constexpr const char* get_debug_state = R"trtdoc(
+    Get the debug state of the tensor.
+
+    :arg name: The name of the tensor.
+)trtdoc";
+
+constexpr char const* update_device_memory_size_for_shapes = R"trtdoc(
+    Recompute the internal activation buffer sizes based on the current input shapes, and return the total amount of memory required.
+
+    Users can allocate the device memory based on the size returned and provided the memory to TRT with an assignment to IExecutionContext.device_memory. Must specify all input shapes and the optimization profile to use before calling this function, otherwise the partition will be invalidated.
+)trtdoc";
+
+constexpr char const* set_all_tensors_debug_state = R"trtdoc(
+    Turn the debug state of all debug tensors on or off.
+
+    :arg flag: True if turning on debug state of tensor. False if turning off.
+)trtdoc";
 } // namespace IExecutionContextDoc
+
+namespace IDebugListenerDoc
+{
+constexpr char const* descr = R"trtdoc(
+    A user-implemented class for notification when value of a debug tensor is updated.
+)trtdoc";
+
+constexpr char const* get_interface_version = R"trtdoc(
+    The version of this interface.
+
+    :returns: The version number.
+)trtdoc";
+
+constexpr char const* process_debug_tensor = R"trtdoc(
+    User implemented callback function that is called when value of a debug tensor is updated and the debug state of the tensor is set to true. Content in the given address is only guaranteed to be valid for the duration of the callback.
+
+    :arg location: TensorLocation of the tensor
+    :arg addr: pointer to buffer
+    :arg type: data Type of the tensor
+    :arg shape: shape of the tensor
+    :arg name: name name of the tensor
+    :arg stream: Cuda stream object
+
+    :returns: True on success, False otherwise.
+)trtdoc";
+} // namespace IDebugListenerDoc
+
+namespace IProgressMonitorDoc
+{
+constexpr char const* descr = R"trtdoc(
+    Application-implemented progress reporting interface for TensorRT.
+
+    The IProgressMonitor is a user-defined object that TensorRT uses to report back when an internal algorithm has
+    started or finished a phase to help provide feedback on the progress of the optimizer.
+
+    The IProgressMonitor will trigger its start function when a phase is entered and will trigger its finish function
+    when that phase is exited. Each phase consists of one or more steps. When each step is completed, the step_complete
+    function is triggered. This will allow an application using the builder to communicate progress relative to when the
+    optimization step is expected to complete.
+
+    The implementation of IProgressMonitor must be thread-safe so that it can be called from multiple internal threads.
+    The lifetime of the IProgressMonitor must exceed the lifetime of all TensorRT objects that use it.
+)trtdoc";
+
+constexpr char const* phase_start = R"trtdoc(
+    Signal that a phase of the optimizer has started.
+
+    :arg phase_name: The name of this phase for tracking purposes.
+    :arg parent_phase: The parent phase that this phase belongs to, None if there is no parent.
+    :arg num_steps: The number of steps that are involved in this phase.
+
+    The phase_start function signals to the application that the current phase is beginning, and that it has a
+    certain number of steps to perform. If phase_parent is None, then the phase_start is beginning an
+    independent phase, and if phase_parent is specified, then the current phase, specified by phase_name, is
+    within the scope of the parent phase. num_steps will always be a positive number. The phase_start function
+    implies that the first step is being executed. TensorRT will signal when each step is complete.
+
+    Phase names are human readable English strings which are unique within a single phase hierarchy but which can be
+    reused once the previous instance has completed. Phase names and their hierarchies may change between versions
+    of TensorRT.
+)trtdoc";
+
+constexpr char const* step_complete = R"trtdoc(
+    Signal that a step of an optimizer phase has finished.
+
+    :arg phase_name: The name of the innermost phase being executed.
+    :arg step: The step number that was completed.
+
+    The step_complete function signals to the application that TensorRT has finished the current step for the phase
+    ``phase_name`` , and will move on to the next step if there is one. The application can return False for TensorRT to exit
+    the build early. The step value will increase on subsequent calls in the range [0, num_steps).
+
+    :returns: True to continue to the next step or False to stop the build.
+)trtdoc";
+
+constexpr char const* phase_finish = R"trtdoc(
+    Signal that a phase of the optimizer has finished.
+
+    :arg phase_name: The name of the phase that has finished.
+
+    The phase_finish function signals to the application that the phase is complete. This function may be called before
+    all steps in the range [0, num_steps) have been reported to step_complete. This scenario can be triggered by error
+    handling, internal optimizations, or when step_complete returns False to request cancellation of the build.
+)trtdoc";
+} // namespace IProgressMonitorDoc
 
 namespace ICudaEngineDoc
 {
@@ -690,10 +695,8 @@ constexpr char const* descr = R"trtdoc(
 
     The engine can be indexed with ``[]`` . When indexed in this way with an integer, it will return the corresponding binding name. When indexed with a string, it will return the corresponding binding index.
 
-    :ivar num_bindings: :class:`int` The number of binding indices.
     :ivar num_io_tensors: :class:`int` The number of IO tensors.
-    :ivar max_batch_size: :class:`int` [DEPRECATED] The maximum batch size which can be used for inference for an engine built from an :class:`INetworkDefinition` with implicit batch dimension. For an engine built from an :class:`INetworkDefinition` with explicit batch dimension, this will always be ``1`` .
-    :ivar has_implicit_batch_dimension: :class:`bool` Whether the engine was built with an implicit batch dimension. This is an engine-wide property. Either all tensors in the engine have an implicit batch dimension or none of them do. This is True if and only if the :class:`INetworkDefinition` from which this engine was built was created without the ``NetworkDefinitionCreationFlag.EXPLICIT_BATCH`` flag.
+    :ivar has_implicit_batch_dimension: :class:`bool` [DEPRECATED] Deprecated in TensorRT 10.0. Always flase since the implicit batch dimensions support has been removed.
     :ivar num_layers: :class:`int` The number of layers in the network. The number of layers in the network is not necessarily the number in the original :class:`INetworkDefinition`, as layers may be combined or eliminated as the :class:`ICudaEngine` is optimized. This value can be useful when building per-layer tables, such as when aggregating profiling data over a number of executions.
     :ivar max_workspace_size: :class:`int` The amount of workspace the :class:`ICudaEngine` uses. The workspace size will be no greater than the value provided to the :class:`Builder` when the :class:`ICudaEngine` was built, and will typically be smaller. Workspace will be allocated for each :class:`IExecutionContext` .
     :ivar device_memory_size: :class:`int` The amount of device memory required by an :class:`IExecutionContext` .
@@ -705,84 +708,10 @@ constexpr char const* descr = R"trtdoc(
     :ivar tactic_sources: :class:`int` The tactic sources required by this engine.
     :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
     :ivar hardware_compatibility_level: The hardware compatibility level of the engine.
-    :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.
-)trtdoc";
-
-constexpr char const* get_binding_index = R"trtdoc(
-    Retrieve the binding index for a named tensor.
-
-    You can also use engine's :func:`__getitem__` with ``engine[name]``. When invoked with a :class:`str` , this will return the corresponding binding index.
-
-    :func:`IExecutionContext.execute_async_v2()` and :func:`IExecutionContext.execute_v2()` require an array of buffers.
-    Engine bindings map from tensor names to indices in this array.
-    Binding indices are assigned at :class:`ICudaEngine` build time, and take values in the range [0 ... n-1] where n is the total number of inputs and outputs.
-
-    :arg name: The tensor name.
-
-    :returns: The binding index for the named tensor, or -1 if the name is not found.
-)trtdoc";
-
-constexpr char const* get_binding_name = R"trtdoc(
-    Retrieve the name corresponding to a binding index.
-
-    You can also use engine's :func:`__getitem__` with ``engine[index]``. When invoked with an :class:`int` , this will return the corresponding binding name.
-
-    This is the reverse mapping to that provided by :func:`get_binding_index()` .
-
-    :arg index: The binding index.
-
-    :returns: The name corresponding to the binding index.
-)trtdoc";
+    :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.)trtdoc"
+           ;
 
 // Documentation bug with parameters on these three functions because they are overloaded.
-constexpr char const* binding_is_input = R"trtdoc(
-    Determine whether a binding is an input binding.
-
-    :index: The binding index.
-
-    :returns: True if the index corresponds to an input binding and the index is in range.
-)trtdoc";
-
-constexpr char const* binding_is_input_str = R"trtdoc(
-    Determine whether a binding is an input binding.
-
-    :name: The name of the tensor corresponding to an engine binding.
-
-    :returns: True if the index corresponds to an input binding and the index is in range.
-)trtdoc";
-
-constexpr char const* get_binding_shape = R"trtdoc(
-    Get the shape of a binding.
-
-    :index: The binding index.
-
-    :Returns: The shape of the binding if the index is in range, otherwise Dims()
-)trtdoc";
-
-constexpr char const* get_binding_shape_str = R"trtdoc(
-    Get the shape of a binding.
-
-    :name: The name of the tensor corresponding to an engine binding.
-
-    :Returns: The shape of the binding if the tensor is present, otherwise Dims()
-)trtdoc";
-
-constexpr char const* get_binding_dtype = R"trtdoc(
-    Determine the required data type for a buffer from its binding index.
-
-    :index: The binding index.
-
-    :Returns: The type of data in the buffer.
-)trtdoc";
-
-constexpr char const* get_binding_dtype_str = R"trtdoc(
-    Determine the required data type for a buffer from its binding index.
-
-    :name: The name of the tensor corresponding to an engine binding.
-
-    :Returns: The type of data in the buffer.
-)trtdoc";
-
 constexpr char const* serialize = R"trtdoc(
     Serialize the engine to a stream.
 
@@ -790,27 +719,9 @@ constexpr char const* serialize = R"trtdoc(
 )trtdoc";
 
 constexpr char const* create_execution_context = R"trtdoc(
-    Create an :class:`IExecutionContext` .
+    Create an :class:`IExecutionContext` and specify the device memory allocation strategy.
 
     :returns: The newly created :class:`IExecutionContext` .
-)trtdoc";
-
-constexpr char const* get_location = R"trtdoc(
-    Get location of binding.
-    This lets you know whether the binding should be a pointer to device or host memory.
-
-    :index: The binding index.
-
-    :returns: The location of the bound tensor with given index.
-)trtdoc";
-
-constexpr char const* get_location_str = R"trtdoc(
-    Get location of binding.
-    This lets you know whether the binding should be a pointer to device or host memory.
-
-    :name: The name of the tensor corresponding to an engine binding.
-
-    :returns: The location of the bound tensor with given index.
 )trtdoc";
 
 constexpr char const* create_execution_context_without_device_memory = R"trtdoc(
@@ -829,90 +740,13 @@ constexpr char const* get_profile_shape = R"trtdoc(
     :returns: A ``List[Dims]`` of length 3, containing the minimum, optimum, and maximum shapes, in that order.
 )trtdoc";
 
-constexpr char const* get_profile_shape_input = R"trtdoc(
+constexpr char const* get_tensor_profile_values = R"trtdoc(
     Get minimum/optimum/maximum values for an input shape binding under an optimization profile. If the specified binding is not an input shape binding, an exception is raised.
 
+    :arg name: The tensor name.
     :arg profile_index: The index of the profile.
-    :arg binding: The binding index or name.
 
     :returns: A ``List[List[int]]`` of length 3, containing the minimum, optimum, and maximum values, in that order. If the values have not been set yet, an empty list is returned.
-)trtdoc";
-
-constexpr char const* is_shape_binding = R"trtdoc(
-    Returns :class:`True` if tensor is required as input for shape calculations or output from them.
-
-    TensorRT evaluates a network in two phases:
-
-    1. Compute shape information required to determine memory allocation requirements and validate that runtime sizes make sense.
-
-    2. Process tensors on the device.
-
-    Some tensors are required in phase 1. These tensors are called "shape tensors", and always
-    have type :class:`tensorrt.int32` and no more than one dimension. These tensors are not always shapes
-    themselves, but might be used to calculate tensor shapes for phase 2.
-
-    :func:`is_shape_binding` returns true if the tensor is a required input or an output computed in phase 1.
-    :func:`is_execution_binding` returns true if the tensor is a required input or an output computed in phase 2.
-
-    For example, if a network uses an input tensor with binding ``i`` as an input to an IElementWiseLayer that computes the reshape dimensions for an :class:`IShuffleLayer` , ``is_shape_binding(i) == True``
-
-    It's possible to have a tensor be required by both phases. For instance, a tensor can be used as a shape in an :class:`IShuffleLayer` and as the indices for an :class:`IGatherLayer` collecting floating-point data.
-
-    It's also possible to have a tensor required by neither phase that shows up in the engine's inputs. For example, if an input tensor is used only as an input to an :class:`IShapeLayer` , only its shape matters and its values are irrelevant.
-
-    :arg binding: The binding index.
-)trtdoc";
-
-constexpr char const* is_execution_binding = R"trtdoc(
-    Returns :class:`True` if tensor is required for execution phase, false otherwise.
-
-    For example, if a network uses an input tensor with binding i ONLY as the reshape dimensions for an :class:`IShuffleLayer` , then ``is_execution_binding(i) == False``, and a binding of `0` can be supplied for it when calling :func:`IExecutionContext.execute_v2()` or :func:`IExecutionContext.execute_async_v2()` .
-
-    :arg binding: The binding index.
-)trtdoc";
-
-constexpr char const* get_binding_bytes_per_component = R"trtdoc(
-    Return the number of bytes per component of an element.
-    The vector component size is returned if :func:`get_binding_vectorized_dim` != -1.
-
-    :arg index: The binding index.
-)trtdoc";
-
-constexpr char const* get_binding_components_per_element = R"trtdoc(
-    Return the number of components included in one element.
-
-    The number of elements in the vectors is returned if :func:`get_binding_vectorized_dim` != -1.
-
-    :arg index: The binding index.
-)trtdoc";
-
-constexpr char const* get_binding_format = R"trtdoc(
-    Return the binding format.
-
-    :arg index: The binding index.
-)trtdoc";
-
-constexpr char const* get_binding_format_desc = R"trtdoc(
-    Return the human readable description of the tensor format.
-
-    The description includes the order, vectorization, data type, strides, etc. For example:
-
-    |   Example 1: kCHW + FP32
-    |       "Row major linear FP32 format"
-    |   Example 2: kCHW2 + FP16
-    |       "Two wide channel vectorized row major FP16 format"
-    |   Example 3: kHWC8 + FP16 + Line Stride = 32
-    |       "Channel major FP16 format where C % 8 == 0 and H Stride % 32 == 0"
-
-    :arg index: The binding index.
-)trtdoc";
-
-constexpr char const* get_binding_vectorized_dim = R"trtdoc(
-    Return the dimension index that the buffer is vectorized.
-
-    Specifically -1 is returned if scalars per vector is 1.
-
-    :arg index: The binding index.
 )trtdoc";
 
 constexpr char const* create_engine_inspector = R"trtdoc(
@@ -985,11 +819,11 @@ constexpr char const* get_tensor_format_desc = R"trtdoc(
 
     The description includes the order, vectorization, data type, strides, etc. For example:
 
-    |   Example 1: kCHW + FP32
+    |   Example 1: CHW + FP32
     |       "Row major linear FP32 format"
-    |   Example 2: kCHW2 + FP16
+    |   Example 2: CHW2 + FP16
     |       "Two wide channel vectorized row major FP16 format"
-    |   Example 3: kHWC8 + FP16 + Line Stride = 32
+    |   Example 3: HWC8 + FP16 + Line Stride = 32
     |       "Channel major FP16 format where C % 8 == 0 and H Stride % 32 == 0"
 
     :arg name: The tensor name.
@@ -1010,6 +844,25 @@ constexpr char const* get_tensor_profile_shape = R"trtdoc(
     :arg profile_index: The index of the profile.
 )trtdoc";
 
+constexpr char const* get_device_memory_size_for_profile = R"trtdoc(
+    Return the device memory size required for a certain profile.
+
+    :arg profile_index: The index of the profile.
+)trtdoc";
+
+constexpr char const* create_serialization_config = R"trtdoc(
+    Create a serialization configuration object.
+)trtdoc";
+
+constexpr char const* serialize_with_config = R"trtdoc(
+    Serialize the network to a stream.
+)trtdoc";
+
+constexpr char const* is_debug_tensor = R"trtdoc(
+    Determine whether the given name corresponds to a debug tensor.
+
+    :arg name: The tensor name.
+)trtdoc";
 } // namespace ICudaEngineDoc
 
 namespace OutputAllocatorDoc
@@ -1027,6 +880,9 @@ To implement a custom output allocator, ensure that you explicitly instantiate t
         def reallocate_output(self, tensor_name, memory, size, alignment):
             ... # Your implementation here
 
+        def reallocate_output_async(self, tensor_name, memory, size, alignment, stream):
+            ... # Your implementation here
+                
         def notify_shape(self, tensor_name, shape):
             ... # Your implementation here
 
@@ -1045,6 +901,20 @@ constexpr char const* reallocate_output = R"trtdoc(
     :returns: The address of the output tensor memory.
 )trtdoc";
 
+constexpr char const* reallocate_output_async = R"trtdoc(
+    A callback implemented by the application to handle acquisition of output tensor memory.
+
+    If an allocation request cannot be satisfied, ``None`` should be returned.
+
+    :arg tensor_name: The output tensor name.
+    :arg memory: The output tensor memory address.
+    :arg size: The number of bytes required.
+    :arg alignment: The required alignment of memory.
+    :arg stream: CUDA stream
+
+    :returns: The address of the output tensor memory.
+)trtdoc";
+
 constexpr char const* notify_shape = R"trtdoc(
     Called by TensorRT when the shape of the output tensor is known.
 
@@ -1054,17 +924,46 @@ constexpr char const* notify_shape = R"trtdoc(
 
 } // namespace OutputAllocatorDoc
 
+namespace StreamReaderDoc
+{
+constexpr char const* descr = R"trtdoc(
+Application-implemented class for reading data from a stream.
+
+To implement a custom stream reader, ensure that you explicitly instantiate the base class in :func:`__init__` :
+::
+
+    class MyStreamReader(trt.IStreamReader):
+        def __init__(self):
+            trt.IStreamReader.__init__(self)
+
+        def read(self, memory, size):
+            ... # Your implementation here
+
+)trtdoc";
+
+constexpr char const* read = R"trtdoc(
+    A callback implemented by the application to read a particular chunk of memory.
+
+    If an allocation request cannot be satisfied, ``0`` should be returned.
+
+    :arg destination: The host memory address to copy read memory to.
+    :arg size: The number of bytes required.
+
+    :returns: The number of bytes read.
+)trtdoc";
+} // namespace StreamReaderDoc
+
 namespace BuilderFlagDoc
 {
 constexpr char const* descr
     = R"trtdoc(Valid modes that the builder can enable when creating an engine from a network definition.)trtdoc";
 
 constexpr char const* FP16 = R"trtdoc(Enable FP16 layer selection)trtdoc";
+constexpr char const* BF16 = R"trtdoc(Enable BF16 layer selection)trtdoc";
 constexpr char const* INT8 = R"trtdoc(Enable Int8 layer selection)trtdoc";
 constexpr char const* DEBUG = R"trtdoc(Enable debugging of layers via synchronizing after every layer)trtdoc";
 constexpr char const* GPU_FALLBACK
     = R"trtdoc(Enable layers marked to execute on GPU if layer cannot execute on DLA)trtdoc";
-constexpr char const* STRICT_TYPES = R"trtdoc([DEPRECATED] Enables strict type constraints. Equivalent to setting PREFER_PRECISION_CONSTRAINTS, DIRECT_IO, and REJECT_EMPTY_ALGORITHMS.)trtdoc";
 constexpr char const* REFIT = R"trtdoc(Enable building a refittable engine)trtdoc";
 constexpr char const* DISABLE_TIMING_CACHE
     = R"trtdoc(Disable reuse of timing information across identical layers.)trtdoc";
@@ -1082,12 +981,23 @@ constexpr char const* DIRECT_IO
     = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ITensor.allowed_formats was set. Build fails if a reformat is required for functional correctness.)trtdoc";
 constexpr char const* REJECT_EMPTY_ALGORITHMS
     = R"trtdoc(Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
-constexpr char const* ENABLE_TACTIC_HEURISTIC
-    = R"trtdoc([DEPRECATED] Enable heuristic-based tactic selection for shorter engine generation time. The performance of the generated engine may not be as performant as a profiling-based builder.)trtdoc";
 constexpr char const* VERSION_COMPATIBLE
     = R"trtdoc(Restrict to lean runtime operators to provide version forward compatibility for the plan files.)trtdoc";
 constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
 constexpr char const* FP8 = R"trtdoc(Enable FP8 layer selection)trtdoc";
+constexpr char const* ERROR_ON_TIMING_CACHE_MISS
+    = R"trtdoc(Emit error when a tactic being timed is not present in the timing cache.)trtdoc";
+constexpr char const* DISABLE_COMPILATION_CACHE
+    = R"trtdoc(Disable caching JIT compilation results during engine build.)trtdoc";
+constexpr char const* WEIGHTLESS
+    = R"trtdoc(Strip the perf-irrelevant weights from the plan file, update them later using refitting for better file size.
+               [DEPRECATED] Deprecated in TensorRT 10.0.
+               )trtdoc";
+constexpr char const* STRIP_PLAN = R"trtdoc(Strip the refittable weights from the engine plan file.)trtdoc";
+constexpr char const* REFIT_IDENTICAL
+    = R"trtdoc(Create a refittable engine using identical weights. Different weights during refits yield unpredictable behavior.)trtdoc";
+constexpr char const* WEIGHT_STREAMING
+    = R"trtdoc(Enable building with the ability to stream varying amounts of weights during Runtime. This decreases GPU memory of TRT at the expense of performance.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1095,7 +1005,6 @@ namespace MemoryPoolTypeDoc
 constexpr char const* descr = R"trtdoc(The type for memory pools used by TensorRT.)trtdoc";
 constexpr char const* WORKSPACE = R"trtdoc(
     WORKSPACE is used by TensorRT to store intermediate buffers within an operation.
-    This is equivalent to the deprecated IBuilderConfig.max_workspace_size and overrides that value.
     This defaults to max device memory. Set to a smaller value to restrict tactics that use over the threshold en masse.
     For more targeted removal of tactics use the IAlgorithmSelector interface.
 )trtdoc";
@@ -1103,7 +1012,7 @@ constexpr char const* DLA_MANAGED_SRAM = R"trtdoc(
     DLA_MANAGED_SRAM is a fast software managed RAM used by DLA to communicate within a layer.
     The size of this pool must be at least 4 KiB and must be a power of 2.
     This defaults to 1 MiB.
-    Orin has capacity of 1 MiB per core, and Xavier shares 4 MiB across all of its accelerator cores.
+    Orin has capacity of 1 MiB per core.
 )trtdoc";
 constexpr char const* DLA_LOCAL_DRAM = R"trtdoc(
     DLA_LOCAL_DRAM is host RAM used by DLA to share intermediate tensor data across operations.
@@ -1116,11 +1025,20 @@ constexpr char const* DLA_GLOBAL_DRAM = R"trtdoc(
     This defaults to 512 MiB.
 )trtdoc";
 constexpr char const* TACTIC_DRAM = R"trtdoc(
-    kTACTIC_DRAM is the host DRAM used by the optimizer to
+    TACTIC_DRAM is the host DRAM used by the optimizer to
     run tactics. On embedded devices, where host and device memory are unified, this includes all device
     memory required by TensorRT to build the network up to the point of each memory allocation.
     This defaults to 75% of totalGlobalMem as reported by cudaGetDeviceProperties when
     cudaGetDeviceProperties.embedded is true, and 100% otherwise.
+)trtdoc";
+constexpr char const* TACTIC_SHARED_MEMORY = R"trtdoc(
+    TACTIC_SHARED_MEMORY defines the maximum shared memory size utilized for executing
+    the backend CUDA kernel implementation. Adjust this value to restrict tactics that exceed
+    the specified threshold en masse. The default value is device max capability. This value must
+    be less than 1GiB.
+
+    Updating this flag will override the shared memory limit set by \ref HardwareCompatibilityLevel,
+    which defaults to 48KiB.
 )trtdoc";
 
 } // namespace MemoryPoolTypeDoc
@@ -1138,25 +1056,10 @@ namespace PreviewFeatureDoc
 constexpr char const* descr = R"trtdoc(
     List of Preview Features that can be enabled. Preview Features have been fully tested but are not yet as stable as other features in TensorRT.
     They are provided as opt-in features for at least one release.
-    For example, to enable faster dynamic shapes, call :func:`set_preview_feature` with ``PreviewFeature.FASTER_DYNAMIC_SHAPES_0805``
-)trtdoc";
-constexpr char const* FASTER_DYNAMIC_SHAPES_0805 = R"trtdoc(
-    [DEPRECATED - will be removed in TensorRT 9.0] Optimize runtime dimensions with TensorRT's DL Compiler.
-    Potentially reduces run time and decreases device memory usage and engine size.
-    Models most likely to benefit from enabling ``FASTER_DYNAMIC_SHAPES_0805`` are transformer-based models, and models containing dynamic control flows.
-    The default value for this flag is on. Turning it off is deprecated. 
-)trtdoc";
-constexpr char const* DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805 = R"trtdoc(
-    Disable usage of cuDNN/cuBLAS/cuBLASLt tactics in the TensorRT core library.
-    When the flag is enabled, TensorRT core will not use these tactics even if they are specified in
-    set_tactic_sources, but cudnnContext and cublasContext handles will still be passed to
-    plugins via IPluginV2::attachToContext() if the appropriate tactic sources are set.
-    This allows users to experiment with disabling external library tactics without having to modify their
-    application's plugins to support nullptr handles.
-    The default value for this flag is off.
+    For example, to enable faster dynamic shapes, call :func:`set_preview_feature` with ``PreviewFeature.PROFILE_SHARING_0806``
 )trtdoc";
 constexpr char const* PROFILE_SHARING_0806 = R"trtdoc(
-    Allows optimization profiles to be shared across execution contexts. This will become the default behavior in TensorRT 9.0 and the flag defaults to false.
+    [DEPRECATED] Allows optimization profiles to be shared across execution contexts. The default value for this flag is on in TensorRT 10.0. Turning if off is deprecated.
 )trtdoc";
 } // namespace PreviewFeatureDoc
 
@@ -1164,7 +1067,7 @@ namespace HardwareCompatibilityLevelDoc
 {
 constexpr char const* descr = R"trtdoc(
     Describes requirements of compatibility with GPU architectures other than that of the GPU on which the engine was
-    built. Levels except kNONE are only supported for engines built on NVIDIA Ampere and later GPUs.
+    built. Levels except NONE are only supported for engines built on NVIDIA Ampere and later GPUs.
     Note that compatibility with future hardware depends on CUDA forward compatibility support.
 )trtdoc";
 constexpr char const* NONE = R"trtdoc(
@@ -1181,12 +1084,21 @@ constexpr char const* AMPERE_PLUS = R"trtdoc(
 namespace NetworkDefinitionCreationFlagDoc
 {
 constexpr char const* descr
-    = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable explicit batch mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.EXPLICIT_BATCH)`` to :func:`create_network` )trtdoc";
+    = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable explicit batch mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.STRONGLY_TYPED)`` to :func:`create_network` )trtdoc";
 constexpr char const* EXPLICIT_BATCH
-    = R"trtdoc(Specify that the network should be created with an explicit batch dimension. Creating a network without this flag has been deprecated.)trtdoc";
-constexpr char const* EXPLICIT_PRECISION
-    = R"trtdoc([DEPRECATED] This flag has no effect now.)trtdoc";
+    = R"trtdoc([DEPRECATED] Ignored because networks are always "explicit batch" in TensorRT 10.0.)trtdoc";
+constexpr char const* STRONGLY_TYPED
+    = R"trtdoc(Specify that every tensor in the network has a data type defined in the network following only type inference rules and the inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network output types will be inferred based on the input types and the type inference rules)trtdoc";
 } // namespace NetworkDefinitionCreationFlagDoc
+
+namespace ISerializationConfigDoc
+{
+constexpr char const* descr
+    = R"trtdoc(Class to hold properties for configuring an engine to serialize the binary.)trtdoc";
+constexpr char const* clear_flag = R"trtdoc(Clears the serialization flag from the config.)trtdoc";
+constexpr char const* get_flag = R"trtdoc(Check if a serialization flag is set.)trtdoc";
+constexpr char const* set_flag = R"trtdoc(Add the input serialization flag to the already enabled flags.)trtdoc";
+} // namespace ISerializationConfigDoc
 
 namespace DeviceTypeDoc
 {
@@ -1229,9 +1141,6 @@ constexpr char const* LAYER_NAMES_ONLY = R"trtdoc(Print only the layer names. Th
 constexpr char const* DETAILED
     = R"trtdoc(Print detailed layer information including layer names and layer parameters.)trtdoc";
 constexpr char const* NONE = R"trtdoc(Do not print any layer information.)trtdoc";
-
-constexpr char const* DEFAULT = R"trtdoc([DEPRECATED] Same as LAYER_NAMES_ONLY.)trtdoc";
-constexpr char const* VERBOSE = R"trtdoc([DEPRECATED] Same as DETAILED.)trtdoc";
 } // namespace ProfilingVerbosityDoc
 
 namespace TensorIOModeDoc
@@ -1248,14 +1157,18 @@ namespace TacticSourceDoc
 constexpr char const* descr = R"trtdoc(Tactic sources that can provide tactics for TensorRT.)trtdoc";
 
 constexpr char const* CUBLAS = R"trtdoc(
-        Enables cuBLAS tactics. Enabled by default.
-        **NOTE:** Disabling this value will cause the cublas handle passed to plugins in attachToContext to be null.
+        Enables cuBLAS tactics. Disabled by default.
+        [DEPRECATED] Deprecated in TensorRT 10.0.
+        **NOTE:** Disabling CUBLAS tactic source will cause the cuBLAS handle passed to plugins in attachToContext to be null.
     )trtdoc";
 constexpr char const* CUBLAS_LT = R"trtdoc(
-        Enables cuBLAS LT tactics. Enabled for x86 platforms and only enabled for non-x86 platforms when CUDA >= 11.0 by default
+        Enables CUBLAS_LT tactics. Disabled by default.
+        [DEPRECATED] Deprecated in TensorRT 9.0.
     )trtdoc";
 constexpr char const* CUDNN = R"trtdoc(
-        Enables cuDNN tactics. Enabled by default.
+        Enables cuDNN tactics. Disabled by default.
+        [DEPRECATED] Deprecated in TensorRT 10.0.
+        **NOTE:** Disabling CUDNN tactic source will cause the cuDNN handle passed to plugins in attachToContext to be null.
     )trtdoc";
 constexpr char const* EDGE_MASK_CONVOLUTIONS = R"trtdoc(
         Enables convolution tactics implemented with edge mask tables. These tactics tradeoff memory for performance
@@ -1279,15 +1192,6 @@ constexpr char const* descr = R"trtdoc(
     EngineCapability.DLA_STANDALONE provides a restricted subset of network operations that are DLA compatible and
     the resulting serialized engine can be executed using standalone DLA runtime APIs. See sampleCudla for an
     example of integrating cuDLA APIs with TensorRT APIs.)trtdoc";
-
-constexpr char const* DEFAULT
-    = R"trtdoc([DEPRECATED] Unrestricted: TensorRT mode without any restrictions using TensorRT nvinfer1 APIs.)trtdoc";
-
-constexpr char const* SAFE_GPU
-    = R"trtdoc([DEPRECATED] Safety-restricted: TensorRT mode for GPU devices using TensorRT safety APIs. See safety documentation for list of supported layers and formats.)trtdoc";
-
-constexpr char const* SAFE_DLA
-    = R"trtdoc([DEPRECATED] DLA-restricted: TensorRT mode for DLA devices using cuDLA APIs. Only FP16 and Int8 modes are supported.)trtdoc";
 
 constexpr char const* STANDARD
     = R"trtdoc(Standard: TensorRT flow without targeting the standard runtime. This flow supports both DeviceType::kGPU and DeviceType::kDLA.)trtdoc";
@@ -1344,10 +1248,8 @@ namespace IBuilderConfigDoc
 {
 constexpr char const* descr = R"trtdoc(
 
-        :ivar min_timing_iterations: :class:`int` [DEPRECATED] The number of minimization iterations used when timing layers. When timing layers, the builder minimizes over a set of average times for layer execution. This parameter controls the number of iterations used in minimization. By default the minimum number of iterations is 1.
         :ivar avg_timing_iterations: :class:`int` The number of averaging iterations used when timing layers. When timing layers, the builder minimizes over a set of average times for layer execution. This parameter controls the number of iterations used in averaging. By default the number of averaging iterations is 1.
         :ivar int8_calibrator: :class:`IInt8Calibrator` Int8 Calibration interface. The calibrator is to minimize the information loss during the INT8 quantization process.
-        :ivar max_workspace_size: :class:`int` [DEPRECATED] The maximum workspace size. The maximum GPU temporary memory which the engine can use at execution time.
         :ivar flags: :class:`int` The build mode flags to turn on builder options for this network. The flags are listed in the BuilderFlags enum. The flags set configuration options to build the network. This should be in integer consisting of one or more :class:`BuilderFlag` s, combined via binary OR. For example, ``1 << BuilderFlag.FP16 | 1 << BuilderFlag.DEBUG``.
         :ivar profile_stream: :class:`int` The handle for the CUDA stream that is used to profile this network.
         :ivar num_optimization_profiles: :class:`int` The number of optimization profiles.
@@ -1360,6 +1262,16 @@ constexpr char const* descr = R"trtdoc(
         :ivar hardware_compatibility_level: Hardware compatibility allows an engine compatible with GPU architectures other than that of the GPU on which the engine was built.
         :ivar plugins_to_serialize: The plugin libraries to be serialized with forward-compatible engines.
         :ivar max_aux_streams: The maximum number of auxiliary streams that TRT is allowed to use. If the network contains operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one provided to the IExecutionContext::enqueueV3() call. The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on whether enabling multi-stream would improve the performance. This behavior can be overridden by calling this API to set the maximum number of auxiliary streams explicitly. Set this to 0 to enforce single-stream inference. The resulting engine may use fewer auxiliary streams than the maximum if the network does not contain enough parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance. Allowing more auxiliary streams does not always give better performance since there will be synchronizations overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by cross-stream synchronizations. Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not be able to be reused.
+        :ivar progress_monitor: The :class:`IProgressMonitor` to use.
+
+        Below are the descriptions about each builder optimization level:
+
+        - Level 0: This enables the fastest compilation by disabling dynamic kernel generation and selecting the first tactic that succeeds in execution. This will also not respect a timing cache.
+        - Level 1: Available tactics are sorted by heuristics, but only the top are tested to select the best. If a dynamic kernel is generated its compile optimization is low.
+        - Level 2: Available tactics are sorted by heuristics, but only the fastest tactics are tested to select the best.
+        - Level 3: Apply heuristics to see if a static precompiled kernel is applicable or if a new one has to be compiled dynamically.
+        - Level 4: Always compiles a dynamic kernel.
+        - Level 5: Always compiles a dynamic kernel and compares it to static kernels.
     )trtdoc";
 
 constexpr char const* set_memory_pool_limit = R"trtdoc(
@@ -1454,7 +1366,7 @@ constexpr char const* set_calibration_profile = R"trtdoc(
 
     Calibration optimization profile must be set if int8 calibration is used to set scales for a network with runtime dimensions.
 
-    :arg profile: The new calibration profile, which must satisfy ``bool(profile) == True`` or be nullptr. MIN and MAX values will be overwritten by kOPT.
+    :arg profile: The new calibration profile, which must satisfy ``bool(profile) == True`` or be None. MIN and MAX values will be overwritten by OPT.
 
     :returns: True if the calibration profile was set correctly.
 )trtdoc";
@@ -1462,7 +1374,7 @@ constexpr char const* set_calibration_profile = R"trtdoc(
 constexpr char const* get_calibration_profile = R"trtdoc(
     Get the current calibration profile.
 
-    :returns: The current calibration profile or nullptr if calibrartion profile is unset.
+    :returns: The current calibration profile or None if calibrartion profile is unset.
 )trtdoc";
 
 constexpr char const* set_device_type = R"trtdoc(
@@ -1470,7 +1382,7 @@ constexpr char const* set_device_type = R"trtdoc(
     default DeviceType set in the builder.
 
     The DeviceType for a layer must be compatible with the safety flow (if specified). For example a layer
-    cannot be marked for DLA execution while the builder is configured for kSAFE_GPU.
+    cannot be marked for DLA execution while the builder is configured for SAFE_GPU.
 
 
     :arg layer: The layer to set the DeviceType of
@@ -1576,15 +1488,28 @@ constexpr char const* get_preview_feature = R"trtdoc(
 
     :returns: true if the feature is enabled, false otherwise
 )trtdoc";
-
 } // namespace IBuilderConfigDoc
+
+namespace SerializationFlagDoc
+{
+constexpr char const* descr = R"trtdoc(Valid flags that can be use to creating binary file from engine.)trtdoc";
+constexpr char const* EXCLUDE_WEIGHTS = R"trtdoc(Exclude weights that can be refitted.)trtdoc";
+constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
+} // namespace SerializationFlagDoc
+
+namespace ExecutionContextAllocationStrategyDoc
+{
+constexpr char const* descr = R"trtdoc(Different memory allocation behaviors for IExecutionContext.)trtdoc";
+constexpr char const* STATIC = R"trtdoc(Default static allocation with the maximum size across all profiles.)trtdoc";
+constexpr char const* ON_PROFILE_CHANGE = R"trtdoc(Reallocate for a profile when it's selected.)trtdoc";
+constexpr char const* USER_MANAGED = R"trtdoc(The user supplies custom allocation to the execution context.)trtdoc";
+} // namespace ExecutionContextAllocationStrategyDoc
 
 namespace BuilderDoc
 {
 constexpr char const* descr = R"trtdoc(
     Builds an :class:`ICudaEngine` from a :class:`INetworkDefinition` .
 
-    :ivar max_batch_size: :class:`int` [DEPRECATED] For networks built with implicit batch, the maximum batch size which can be used at execution time, and also the batch size for which the :class:`ICudaEngine` will be optimized. This no effect for networks created with explicit batch dimension mode.
     :ivar platform_has_tf32: :class:`bool` Whether the platform has tf32 support.
     :ivar platform_has_fast_fp16: :class:`bool` Whether the platform has fast native fp16.
     :ivar platform_has_fast_int8: :class:`bool` Whether the platform has fast native int8.
@@ -1604,7 +1529,7 @@ constexpr char const* init = R"trtdoc(
 constexpr char const* create_network = R"trtdoc(
     Create a :class:`INetworkDefinition` object.
 
-    :arg flags: :class:`NetworkDefinitionCreationFlag` s combined using bitwise OR. Please enable the ``NetworkDefinitionCreationFlag.EXPLICIT_BATCH`` flag whenever possible.
+    :arg flags: :class:`NetworkDefinitionCreationFlag` s combined using bitwise OR.
 
     :returns: An empty TensorRT :class:`INetworkDefinition` .
 )trtdoc";
@@ -1621,17 +1546,6 @@ constexpr char const* create_builder_config = R"trtdoc(
     Create a builder configuration object.
 
     See :class:`IBuilderConfig`
-)trtdoc";
-
-constexpr char const* build_engine = R"trtdoc(
-    Builds an engine for the given :class:`INetworkDefinition` and :class:`IBuilderConfig` .
-
-    This enables the builder to build multiple engines based on the same network definition, but with different builder configurations.
-
-    :arg network: The TensorRT :class:`INetworkDefinition` .
-    :arg config: The TensorRT :class:`IBuilderConfig` .
-
-    :returns: A new :class:`ICudaEngine` .
 )trtdoc";
 
 constexpr char const* build_serialized_network = R"trtdoc(
@@ -1700,9 +1614,17 @@ constexpr char const* init = R"trtdoc(
 )trtdoc";
 
 constexpr char const* deserialize_cuda_engine = R"trtdoc(
-    Deserialize an :class:`ICudaEngine` from a stream.
+    Deserialize an :class:`ICudaEngine` from host memory.
 
-    :arg serialized_engine: The :class:`buffer` that holds the serialized :class:`ICudaEngine` .
+    :arg serialized_engine: The :class:`buffer` that holds the serialized :class:`ICudaEngine`.
+
+    :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
+)trtdoc";
+
+constexpr char const* deserialize_cuda_engine_reader = R"trtdoc(
+    Deserialize an :class:`ICudaEngine` from a stream reader.
+
+    :arg stream_reader: The :class:`PyStreamReader` that will read the serialized :class:`ICudaEngine`. This enables deserialization from a file directly.  
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";
@@ -1769,6 +1691,14 @@ constexpr char const* clear_inspection_source = R"trtdoc(
 
 } // namespace RuntimeInspectorDoc
 
+namespace TensorLocationDoc
+{
+constexpr const char* descr = R"trtdoc(The physical location of the data.)trtdoc";
+
+constexpr const char* DEVICE = R"trtdoc(Data is stored on the device.)trtdoc";
+constexpr const char* HOST = R"trtdoc(Data is stored on the host.)trtdoc";
+} // namespace TensorLocationDoc
+
 namespace RefitterDoc
 {
 constexpr char const* descr = R"trtdoc(
@@ -1777,6 +1707,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar logger: :class:`ILogger` The logger provided when creating the refitter.
     :ivar max_threads: :class:`int` The maximum thread that can be used by the :class:`Refitter`.
+    :ivar weights_validation: :class:`bool` The flag to indicate whether to validate weights in the refitting process.
 )trtdoc";
 
 constexpr char const* init = R"trtdoc(
@@ -1790,9 +1721,10 @@ constexpr char const* set_weights = R"trtdoc(
 
     * There is no such layer by that name.
     * The layer does not have weights with the specified role.
-    * The number of weights is inconsistent with the layer’s original specification.
+    * The size of weights is inconsistent with the layer’s original specification.
 
-    Modifying the weights before :func:`refit_cuda_engine` completes will result in undefined behavior.
+    Modifying the weights before :func:`refit_cuda_engine` or :func:`refit_cuda_engine_async` returns
+    will result in undefined behavior.
 
     :arg layer_name: The name of the layer.
     :arg role: The role of the weights. See :class:`WeightsRole` for more information.
@@ -1806,9 +1738,11 @@ constexpr char const* set_named_weights = R"trtdoc(
     Possible reasons for rejection are:
 
     * The name of weights is empty or does not correspond to any refittable weights.
-    * The number of weights is inconsistent with the original specification.
+    * The size of the weights is inconsistent with the size returned from calling :func:`get_weights_prototype` with the same name.
+    * The dtype of the weights is inconsistent with the dtype returned from calling :func:`get_weights_prototype` with the same name.
 
-    Modifying the weights before method refit_cuda_engine() completes will result in undefined behavior.
+    Modifying the weights before :func:`refit_cuda_engine` or :func:`refit_cuda_engine_async` returns
+    will result in undefined behavior.
 
     :arg name: The name of the weights to be refitted.
     :arg weights: The new weights to associate with the name.
@@ -1816,10 +1750,96 @@ constexpr char const* set_named_weights = R"trtdoc(
     :returns: ``True`` on success, or ``False`` if new weights are rejected.
 )trtdoc";
 
-constexpr char const* refit_cuda_engine = R"trtdoc(
-    Updates associated engine.  Return ``True`` if successful.
+constexpr char const* set_named_weights_with_location = R"trtdoc(
+    Specify new weights on a specified device of given name.
+    Possible reasons for rejection are:
 
-    Failure occurs if :func:`get_missing` != 0 before the call.
+    * The name of weights is empty or does not correspond to any refittable weights.
+    * The size of the weights is inconsistent with the size returned from calling :func:`get_weights_prototype` with the same name.
+    * The dtype of the weights is inconsistent with the dtype returned from calling :func:`get_weights_prototype` with the same name.
+
+    It is allowed to provide some weights on CPU and others on GPU.
+    Modifying the weights before :func:`refit_cuda_engine` or :func:`refit_cuda_engine_async` returns
+    will result in undefined behavior.
+
+    :arg name: The name of the weights to be refitted.
+    :arg weights: The new weights on the specified device.
+    :arg location: The location (host vs. device) of the new weights.
+
+    :returns: ``True`` on success, or ``False`` if new weights are rejected.
+)trtdoc";
+
+constexpr char const* get_named_weights = R"trtdoc(
+    Get weights associated with the given name.
+
+    If the weights were never set, returns null weights and reports an error to the refitter errorRecorder.
+
+    :arg weights_name: The name of the weights to be refitted.
+
+    :returns: Weights associated with the given name.
+)trtdoc";
+
+constexpr char const* get_weights_location = R"trtdoc(
+    Get location for the weights associated with the given name.
+
+    If the weights were never set, returns TensorLocation.HOST and reports an error to the refitter errorRecorder.
+
+    :arg weights_name: The name of the weights to be refitted.
+
+    :returns: Location for the weights associated with the given name.
+)trtdoc";
+
+constexpr char const* get_weights_prototype = R"trtdoc(
+    Get the weights prototype associated with the given name.
+
+    The dtype and size of weights prototype is the same as weights used for engine building.
+    The size of the weights prototype is -1 when the name of the weights is None or does not correspond to any refittable weights.
+   
+    :arg weights_name: The name of the weights to be refitted.
+   
+    :returns: weights prototype associated with the given name.
+)trtdoc";
+
+constexpr char const* unset_named_weights = R"trtdoc(
+    Unset weights associated with the given name.
+
+    Unset weights before releasing them.
+
+    :arg weights_name: The name of the weights to be refitted.
+
+    :returns: ``False`` if the weights were never set, returns ``True`` otherwise.
+)trtdoc";
+
+constexpr char const* refit_cuda_engine = R"trtdoc(
+   Refits associated engine.
+
+   If ``False`` is returned, a subset of weights may have been refitted.
+
+   The behavior is undefined if the engine has pending enqueued work.
+   Provided weights on CPU or GPU can be unset and released, or updated after refit_cuda_engine returns.
+
+   IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
+   weights repeatedly for multiple refit calls as the weights memory can be updated directly instead.
+
+   :returns: ``True`` on success, or ``False`` if new weights validation fails or get_missing_weights() != 0 before the call.
+)trtdoc";
+
+constexpr char const* refit_cuda_engine_async = R"trtdoc(
+    Enqueue weights refitting of the associated engine on the given stream.
+
+    If ``False`` is returned, a subset of weights may have been refitted.
+
+    The behavior is undefined if the engine has pending enqueued work on a different stream from the provided one.
+    Provided weights on CPU can be unset and released, or updated after refit_cuda_engine_async returns.
+    Freeing or updating of the provided weights on GPU can be enqueued on the same stream after refit_cuda_engine_async returns.
+
+    IExecutionContexts associated with the engine remain valid for use afterwards. There is no need to set the same
+    weights repeatedly for multiple refit calls as the weights memory can be updated directly instead. The weights
+    updating task should use the the same stream as the one used for the refit call.
+
+    :arg stream: The stream to enqueue the weights updating task.
+
+    :returns: ``True`` on success, or ``False`` if new weights validation fails or get_missing_weights() != 0 before the call.
 )trtdoc";
 
 constexpr char const* get_missing = R"trtdoc(
@@ -1901,9 +1921,11 @@ To implement a custom allocator, ensure that you explicitly instantiate the base
 
         ...
 
+Note that all methods below (allocate, reallocate, deallocate, allocate_async, deallocate_async) must be overridden in the custom allocator, or else pybind11 would not be able to call the method from a custom allocator.
 )trtdoc";
 
 constexpr char const* allocate = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.0. Please use allocate_async instead.
     A callback implemented by the application to handle acquisition of GPU memory.
     If an allocation request of size 0 is made, ``None`` should be returned.
 
@@ -1919,14 +1941,6 @@ constexpr char const* allocate = R"trtdoc(
     :returns: The address of the allocated memory
 )trtdoc";
 
-constexpr char const* free = R"trtdoc(
-    A callback implemented by the application to handle release of GPU memory.
-
-    TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
-
-    :arg memory: The memory address of the memory to release.
-)trtdoc";
-
 constexpr char const* reallocate = R"trtdoc(
     A callback implemented by the application to resize an existing allocation.
 
@@ -1935,9 +1949,9 @@ constexpr char const* reallocate = R"trtdoc(
     Options are one of:
     - resize in place leaving min(old_size, new_size) bytes unchanged and return the original address
     - move min(old_size, new_size) bytes to a new location of sufficient size and return its address
-    - return nullptr, to indicate that the request could not be fulfilled.
+    - return None, to indicate that the request could not be fulfilled.
 
-    If nullptr is returned, TensorRT will assume that resize() is not implemented, and that the
+    If None is returned, TensorRT will assume that resize() is not implemented, and that the
     allocation at address is still valid.
 
     This method is made available for use cases where delegating the resize
@@ -1956,6 +1970,7 @@ constexpr char const* reallocate = R"trtdoc(
 )trtdoc";
 
 constexpr char const* deallocate = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.0. Please use dealocate_async instead;
     A callback implemented by the application to handle release of GPU memory.
 
     TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
@@ -1965,6 +1980,115 @@ constexpr char const* deallocate = R"trtdoc(
     :returns: True if the acquired memory is released successfully.
 )trtdoc";
 
+constexpr char const* allocate_async = R"trtdoc(
+    A callback implemented by the application to handle acquisition of GPU memory asynchronously.
+    This is just a wrapper around a syncronous method allocate.
+    For the asynchronous allocation please use the corresponding IGpuAsyncAllocator class.
+    If an allocation request of size 0 is made, ``None`` should be returned.
+
+    If an allocation request cannot be satisfied, ``None`` should be returned.
+
+    :arg size: The size of the memory required.
+    :arg alignment: The required alignment of memory. Alignment will be zero
+        or a power of 2 not exceeding the alignment guaranteed by cudaMalloc.
+        Thus this allocator can be safely implemented with cudaMalloc/cudaFree.
+        An alignment value of zero indicates any alignment is acceptable.
+    :arg flags: Allocation flags. See :class:`AllocatorFlag`
+    :arg stream: CUDA stream
+
+    :returns: The address of the allocated memory
+)trtdoc";
+
+constexpr char const* deallocate_async = R"trtdoc(
+    A callback implemented by the application to handle release of GPU memory asynchronously.
+    This is just a wrapper around a syncronous method deallocate.
+    For the asynchronous deallocation please use the corresponding IGpuAsyncAllocator class.
+
+    TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
+
+    :arg memory: The memory address of the memory to release.
+    :arg stream: CUDA stream
+
+    :returns: True if the acquired memory is released successfully.
+)trtdoc";
+
 } // namespace GpuAllocatorDoc
+
+namespace GpuAsyncAllocatorDoc
+{
+constexpr char const* descr = R"trtdoc(Application-implemented class for controlling allocation on the GPU.
+
+To implement a custom allocator, ensure that you explicitly instantiate the base class in :func:`__init__` :
+::
+
+    class MyAllocator(trt.IGpuAsyncAllocator):
+        def __init__(self):
+            trt.IGpuAllocator.__init__(self)
+
+        ...
+
+Note that all methods below (allocate, reallocate, deallocate, allocate_async, reallocate_async, deallocate_async) must be overridden in the custom allocator, or else pybind11 would not be able to call the method from a custom allocator.
+)trtdoc";
+
+constexpr char const* allocate = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.0. Please use allocate_async instead.
+    A callback implemented by the application to handle acquisition of GPU memory.
+    This is just a wrapper around a syncronous method allocate_async passing the default stream.    
+
+    If an allocation request of size 0 is made, ``None`` should be returned.
+
+    If an allocation request cannot be satisfied, ``None`` should be returned.
+
+    :arg size: The size of the memory required.
+    :arg alignment: The required alignment of memory. Alignment will be zero
+        or a power of 2 not exceeding the alignment guaranteed by cudaMalloc.
+        Thus this allocator can be safely implemented with cudaMalloc/cudaFree.
+        An alignment value of zero indicates any alignment is acceptable.
+    :arg flags: Allocation flags. See :class:`AllocatorFlag`
+
+    :returns: The address of the allocated memory
+)trtdoc";
+
+constexpr char const* deallocate = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.0. Please use deallocate_async instead.
+    A callback implemented by the application to handle release of GPU memory.
+    This is just a wrapper around a syncronous method deallocate_async passing the default stream.    
+
+    TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
+
+    :arg memory: The memory address of the memory to release.
+
+    :returns: True if the acquired memory is released successfully.
+)trtdoc";
+
+constexpr char const* allocate_async = R"trtdoc(
+    A callback implemented by the application to handle acquisition of GPU memory asynchronously.
+    If an allocation request of size 0 is made, ``None`` should be returned.
+
+    If an allocation request cannot be satisfied, ``None`` should be returned.
+
+    :arg size: The size of the memory required.
+    :arg alignment: The required alignment of memory. Alignment will be zero
+        or a power of 2 not exceeding the alignment guaranteed by cudaMalloc.
+        Thus this allocator can be safely implemented with cudaMalloc/cudaFree.
+        An alignment value of zero indicates any alignment is acceptable.
+    :arg flags: Allocation flags. See :class:`AllocatorFlag`
+    :arg stream: CUDA stream
+
+    :returns: The address of the allocated memory
+)trtdoc";
+
+constexpr char const* deallocate_async = R"trtdoc(
+    A callback implemented by the application to handle release of GPU memory asynchronously.
+
+    TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
+
+    :arg memory: The memory address of the memory to release.
+    :arg stream: CUDA stream
+
+    :returns: True if the acquired memory is released successfully.
+)trtdoc";
+
+} // namespace GpuAsyncAllocatorDoc
 
 } // namespace tensorrt

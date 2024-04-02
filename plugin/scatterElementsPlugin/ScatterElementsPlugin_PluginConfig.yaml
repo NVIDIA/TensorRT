@@ -1,0 +1,133 @@
+---
+name: ScatterElements
+interface: "IPluginV2DynamicExt"
+versions:
+  "1":
+    inputs:
+      - data
+      - indices
+      - updates
+    supported_input_types:
+      - combination1:
+          data: float32
+          indices: int64
+          updates: float32
+      - combination2:
+          data: int32
+          indices: int64
+          updates: int32
+      - combination3:
+          data: int64
+          indices: int64
+          updates: int64
+      - combination4:
+          data: float16
+          indices: int64
+          updates: float16
+      - combination5:
+          data: bfloat16
+          indices: int64
+          updates: bfloat16
+    configs:
+      config1:
+        input_types:
+          data: float32
+          indices: int64
+          updates: float32
+        attribute_options:
+          axis:
+            - -1
+            - 0
+            - 1
+          reduction:
+            - "add"
+            - "mul"
+            - "min"
+            - "max"     
+      config2:
+        input_types:
+          data: float16
+          indices: int64
+          updates: float16
+        attribute_options:
+          axis:
+            - -1
+            - 0
+            - 1
+          reduction:
+            - "add"
+            - "mul"
+            - "min"
+            - "max"     
+      config3:
+        input_types:
+          data: int32
+          indices: int64
+          updates: int32
+        attribute_options:
+          axis:
+            - -1
+            - 0
+            - 1
+          reduction:
+            - "add"
+            - "mul"
+            - "min"
+            - "max"     
+      config4:
+        input_types:
+          data: int64
+          indices: int64
+          updates: int64
+        attribute_options:
+          axis:
+            - -1
+            - 0
+            - 1
+          reduction:
+            - "add"
+            - "mul"
+            - "min"
+            - "max"     
+      config5:
+        input_types:
+          data: bfloat16
+          indices: int64
+          updates: bfloat16
+        attribute_options:
+          axis:
+            - -1
+            - 0
+            - 1
+          reduction:
+            - "add"
+            - "mul"
+            - "min"
+            - "max"     
+    outputs:
+      - output
+    attributes:
+      - axis
+      - reduction
+    attribute_types:
+      axis: int32
+      reduction: char
+    attribute_length:
+      axis: 1
+      reduction: -1
+    attribute_options:
+      axis:
+        min: "=ninf"
+        max: "=pinf"
+      reduction:
+        - "add"
+        - "mul"
+        - "min"
+        - "max" 
+    attributes_required:
+      - reduction
+    golden_io_path: "plugin/scatterElementsPlugin/ScatterElementsPlugin_PluginGoldenIO.json"
+    abs_tol: 1e-2
+    rel_tol: 1e-2
+
+...

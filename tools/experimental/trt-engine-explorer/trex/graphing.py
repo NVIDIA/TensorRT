@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,18 +19,28 @@
 This file contains code to generate graph diagrams for an engine-plan.
 """
 
+__all__ = [
+    "to_dot",
+    "PlanGraph",
+    "DotGraph",
+    "OnnxGraph",
+    "render_dot",
+    "latency_types",
+    "layer_precision_formatter",
+    "layer_type_formatter",
+    "layer_node_formatters",
+    "layer_node_renderers"]
 
 import os
-import re
 import warnings
 from enum import Enum
 from graphviz import Digraph
 from typing import Callable, NamedTuple, List, Dict
 from dataclasses import dataclass, field
-from .engine_plan import EnginePlan
-from .layer import Layer
-from .activations import Activation
-from .plotting import precision_colormap, layer_colormap
+from trex.engine_plan import EnginePlan
+from trex.layer import Layer
+from trex.activations import Activation
+from trex.colors import precision_colormap, layer_colormap
 
 
 class PortDesc(NamedTuple):
@@ -202,7 +212,7 @@ def regions_factory(plan: EnginePlan) -> List[Region]:
     return regions
 
 
-def make_memory_node_name(region: Region, generation: RegionGeneration) -> str:
+def _make_memory_node_name(region: Region, generation: RegionGeneration) -> str:
     if generation.is_user:
         return region.name
     return ".".join((region.name, str(generation.id)))
@@ -253,7 +263,7 @@ class PlanGraph(object):
 
         # These lists will be populated by __create_graph
         self._edges_list: List[Edge] = []
-        self._layers_nodes: List[Layer] = []
+        self._layer_nodes: List[Layer] = []
         self._memory_nodes: List[MemoryNode] = []
         self.__create_graph(plan)
 
@@ -262,7 +272,7 @@ class PlanGraph(object):
     def edges_list(self): return self._edges_list
 
     @property
-    def layers_nodes(self): return self._layers_nodes
+    def layer_nodes(self): return self._layer_nodes
 
     @property
     def memory_nodes(self): return self._memory_nodes
@@ -273,13 +283,13 @@ class PlanGraph(object):
         self.__add_inter_region_edges()
 
     def __add_layer_nodes(self, plan):
-        self._layers_nodes = [LayerNode(layer) for layer in plan.all_layers]
+        self._layer_nodes = [LayerNode(layer) for layer in plan.all_layers]
 
     def __add_constant_node(self, region: Region, generation: RegionGeneration, constants_producers):
         assert not generation.writers
 
         is_user = generation.is_user
-        activation_name = make_memory_node_name(region, generation)
+        activation_name = _make_memory_node_name(region, generation)
         constant = constants_producers[activation_name]
         if self.include_regions:
             self._edges_list.append(Edge(
@@ -298,8 +308,9 @@ class PlanGraph(object):
         constants_outputs = [const.outputs[0].name for const in plan.constants]
         constants_producers = {const.outputs[0].name + ".0": const for const in plan.constants}
         for region in self.regions:
+            is_myelin_const = len(region.writers()) == 0 and region.name not in plan.bindings
             is_constant = region.name in constants_outputs
-            if is_constant and not self.include_constants:
+            if (is_constant or is_myelin_const) and not self.include_constants:
                 continue
             for generation in region.generations:
                 include_region = self.should_include_region(region, generation, is_constant)
@@ -315,7 +326,7 @@ class PlanGraph(object):
     def __add_memory_node(self, region, generation):
         # Add an activation node (represents a region generation that we chose to display)
         is_user = generation.is_user
-        node_name = make_memory_node_name(region, generation)
+        node_name = _make_memory_node_name(region, generation)
         self._memory_nodes.append(MemoryNode(node_name, generation.tensor, generation.id, is_user))
         self.__add_ingress_edges(region, generation)
         self.__add_egress_edges(region, generation)
@@ -327,7 +338,7 @@ class PlanGraph(object):
             self.__connect_writer_to_all_readers(writer_desc, generation)
 
     def __add_ingress_edges(self, region: Region, generation: RegionGeneration):
-        node_name = make_memory_node_name(region, generation)
+        node_name = _make_memory_node_name(region, generation)
         node_port = None if generation.is_user else 0
         for writer in generation.writers:
             self._edges_list.append(Edge(
@@ -337,7 +348,7 @@ class PlanGraph(object):
                 generation.id))
 
     def __add_egress_edges(self, region: Region, generation: RegionGeneration):
-        activation_name = make_memory_node_name(region, generation)
+        activation_name = _make_memory_node_name(region, generation)
         activation_port = None if generation.is_user else 0
         self.__connect_writer_to_all_readers(
             PortDesc(activation_name, activation_port),
@@ -361,8 +372,8 @@ class PlanGraph(object):
             for gen_id in range(1, len(region.generations)):
                 curr_generation = region.generations[gen_id]
                 self._edges_list.append(Edge(
-                        PortDesc(make_memory_node_name(region, prev_generation), 0),
-                        PortDesc(make_memory_node_name(region, curr_generation), 0),
+                        PortDesc(_make_memory_node_name(region, prev_generation), 0),
+                        PortDesc(_make_memory_node_name(region, curr_generation), 0),
                         curr_generation.tensor,
                         gen_id))
                 prev_generation = curr_generation
@@ -400,12 +411,31 @@ def render_dot(dot_graph: Digraph, engine_name: str, output_format: str):
     return output_fname
 
 
+def name_or_metadata(layer: Layer, prefer_matadata: bool=True):
+    def clean_layer_name(layer_name: str):
+        layer_name = layer_name.replace("||", "\|\|")
+        layer_name = layer_name.replace("{", "")
+        layer_name = layer_name.replace("}", "")
+        return layer_name
+
+    try:
+        metadata = layer.metadata
+        if metadata is not None and len(metadata) == 0:
+            metadata = None
+    except AttributeError:
+        metadata = None
+    if prefer_matadata and metadata is not None:
+        return metadata
+    return clean_layer_name(layer.name)
+
+
 def layer_node_renderer_simple(
     layer: Layer,
     latency: float,
     display_layer_names: bool=True,
     expand_layer_details: bool=False,
     stack_layer_names: bool=True,
+    prefer_matadata: bool=True,
 ) -> str:
     return f"{layer.name}\\n{layer.type}" if display_layer_names else f"{layer.type}"
 
@@ -416,6 +446,7 @@ def layer_node_renderer_keras(
     display_layer_names: bool=True,
     expand_layer_details: bool=False,
     stack_layer_names: bool=True,
+    prefer_matadata: bool=True,
 ) -> str:
     """Keras-style node label formatting."""
 
@@ -425,7 +456,8 @@ def layer_node_renderer_keras(
             io_desc_str += str(t.shape)
         return io_desc_str
 
-    label =  f"{layer.name}\\n" if display_layer_names else ""
+    name = name_or_metadata(layer, prefer_matadata)
+    label =  f"{name}\\n" if display_layer_names else ""
     label += f"{layer.type}"
     label += "|{input:|output:}|{{"
     label += add_io(layer.inputs)
@@ -452,13 +484,8 @@ def layer_node_configurable_renderer(
     display_layer_names: bool=True,
     expand_layer_details: bool=False,
     stack_layer_names: bool=True,
+    prefer_matadata: bool=True,
 ) -> str:
-    def clean_layer_name(layer_name: str):
-        layer_name = layer_name.replace("||", "\|\|")
-        layer_name = layer_name.replace("{", "")
-        layer_name = layer_name.replace("}", "")
-        return layer_name
-
     def html_tbl(rows: List[str]):
         def html_tbl_row(row_content, bold:bool, color: str=None):
             row_content = row_content if not bold else f"<b>{row_content}</b>"
@@ -531,8 +558,8 @@ def layer_node_configurable_renderer(
             return
         rows.append((layer.raw_dict['Origin'], None))
 
-    def add_node_name(layer: Layer, rows: List[str], stack_layer_names: bool):
-        layer_name = clean_layer_name(layer.name) if display_layer_names else ""
+    def add_node_name(layer: Layer, rows: List[str], stack_layer_names: bool, prefer_matadata: bool):
+        layer_name = name_or_metadata(layer, prefer_matadata) if display_layer_names else ""
         if stack_layer_names:
             # This is layer name "stacking": splitting on '+' and stacking in several rows
             parts = layer_name.split('+')
@@ -545,7 +572,7 @@ def layer_node_configurable_renderer(
     if latency:
         rows.append((f"{latency} ms",))
     if display_layer_names:
-        add_node_name(layer, rows, stack_layer_names)
+        add_node_name(layer, rows, stack_layer_names, prefer_matadata)
     handle_reformat(layer, rows)
     if expand_layer_details:
         handle_pwgen(layer, rows)
@@ -554,26 +581,14 @@ def layer_node_configurable_renderer(
     return tbl
 
 
-def parse_operation(op):
-    c = re.compile("\((.+\))")
-    args = c.findall(op)
-    args[0].split(",")
-    args = args[0].split(",")
-
-    c = re.compile("pwgen::.+\(")
-    w = c.findall(op)
-    opname = w[0][:-1]
-
-    output = op.split(" ")[2]
-    print(f"{opname}: {args} -> {output}")
-    return opname, args, output
-
-
-def precision_formatter(layer: Layer):
+def layer_precision_formatter(layer: Layer):
     """Format Dot nodes by layer precision"""
-    formatting = {'style': 'filled',
+    formatting = {'shape': 'Mrecord',
+                  'style': 'filled',
                   'tooltip': layer.tooltip(),
-                  'fillcolor': precision_colormap[layer.precision]}
+                  'fillcolor': precision_colormap[layer.precision],
+                  'color': 'lightgray',
+                  'fontname': 'Helvetica',}
     return formatting
 
 
@@ -612,13 +627,14 @@ def region_precision_formatter(tensor: Activation, is_user: bool):
         # Hover popup text
         'tooltip': tensor.name,
         'penwidth': '3',
-        'color': precision_colormap[tensor.precision]}
+        'color': precision_colormap[tensor.precision],
+        'fontname': 'Helvetica'}
     return formatting
 
 
-layer_layer_node_formatters = {
+layer_node_formatters = {
     "layer_type": layer_type_formatter,
-    "precision_formatter": precision_formatter,
+    "layer_precision_formatter": layer_precision_formatter,
 }
 
 layer_node_renderers = {
@@ -628,7 +644,7 @@ layer_node_renderers = {
 }
 
 
-def get_latency(plan: EnginePlan, layer: Layer, latency_type) -> float:
+def _get_latency(plan: EnginePlan, layer: Layer, latency_type) -> float:
     try:
         latency = plan.df[plan.df['Name'] == layer.name][f"latency.{latency_type}"].iloc[0]
     except (KeyError, IndexError):
@@ -636,6 +652,14 @@ def get_latency(plan: EnginePlan, layer: Layer, latency_type) -> float:
         latency = 0
     return latency
 
+def get_dot_id(layer_name: str) -> str:
+    return layer_name.replace(":", "###") # f"l_{dot_node_id}"
+
+def _get_dot_id(layer_name: str) -> str:
+    return layer_name.replace(":", "###")
+
+def _is_trainstation(layer):
+    return layer.type == 'TrainStation'
 
 def get_dot_id(layer_name: str) -> str:
     return layer_name.replace(":", "###") # f"l_{dot_node_id}"
@@ -662,6 +686,8 @@ class DotGraph(object):
         display_edge_name: bool=False,
         display_edge_details: bool=True,
         highlight_layers: list=None,
+        remove_disconnected_layers: bool=False,
+        display_matadata: bool=True,
     ):
         plan_graph = PlanGraph(
             plan, display_regions, display_constants, display_forking_regions)
@@ -685,35 +711,65 @@ class DotGraph(object):
         if highlight_layers:
             try:
                 highlight_layers_name = plan.df['Name'].iloc[highlight_layers].to_list()
-                self.highlighted_layers_ids = [get_dot_id(name) for name in highlight_layers_name]
+                self.highlighted_layers_ids = [_get_dot_id(name) for name in highlight_layers_name]
             except IndexError:
                 warnings.warn("The layers indices specified for highlighting are incorrect")
 
         node_name_2_node_id = {}
+        if remove_disconnected_layers:
+            self.__remove_disconnected_layers(plan_graph)
+        self.display_matadata = display_matadata
         self.__add_dot_region_nodes(plan_graph, node_name_2_node_id)
         self.__add_dot_layer_nodes(plan, plan_graph, node_name_2_node_id)
-
-        for edge in plan_graph.edges_list:
-            src_id = node_name_2_node_id[edge.src.layer_name]
-            dst_id = node_name_2_node_id[edge.dst.layer_name]
-            self.__create_dot_edge(src_id, dst_id, edge.tensor, edge.region_gen)
+        self.__add_edges(plan_graph, node_name_2_node_id)
+        self.__connect_train_station(plan_graph, node_name_2_node_id)
 
     def __add_dot_region_nodes(self, plan_graph, node_name_2_node_id):
         dot_node_id = 0
         for mem_node in plan_graph.memory_nodes:
-            node_name_2_node_id[mem_node.name] = dot_id = get_dot_id(mem_node.name)
+            node_name_2_node_id[mem_node.name] = dot_id = _get_dot_id(mem_node.name)
             self.__create_dot_region_node(dot_id, mem_node.tensor, mem_node.is_user, mem_node.region_gen)
             dot_node_id += 1
 
     def __add_dot_layer_nodes(self, plan, plan_graph, node_name_2_node_id):
-        for layer_node in plan_graph.layers_nodes:
+        for layer_node in plan_graph.layer_nodes:
             layer = layer_node.layer
-            latency = get_latency(plan, layer, self.latency_type)
+            latency = _get_latency(plan, layer, self.latency_type)
             if not layer.type == 'Constant' or plan_graph.include_constants:
-                dot_id = get_dot_id(layer.name)
+                dot_id = _get_dot_id(layer.name)
                 node_name_2_node_id[layer.name] = dot_id
                 self.__create_dot_layer_node(
                     dot_id, layer, latency, layer_node_renderer=self.layer_node_renderer)
+
+    def __remove_disconnected_layers(self, plan_graph):
+        # Remove layer nodes that have no inputs and no outputs.
+        # TrainStation layers are exempt.
+        disconnected = lambda layer_node: len(layer_node.layer.inputs) == len(layer_node.layer.outputs) == 0
+        nodes_to_remove = [layer_node for layer_node in plan_graph.layer_nodes if
+            disconnected(layer_node) and not _is_trainstation(layer_node.layer)]
+        for node in nodes_to_remove:
+            plan_graph.layer_nodes.remove(node)
+
+    def __connect_train_station(self, plan_graph, node_name_2_node_id):
+        prev_layer = None
+        n_layers = len(plan_graph.layer_nodes)
+        for i, layer_node in enumerate(plan_graph.layer_nodes):
+            layer = layer_node.layer
+            if _is_trainstation(layer) and prev_layer and i < n_layers-1:
+                src_id = node_name_2_node_id[prev_layer.name]
+                dst_id = node_name_2_node_id[layer.name]
+                self.__create_dot_dependency_edge(src_id, dst_id)
+            if prev_layer and _is_trainstation(prev_layer) and i>1:
+                src_id = node_name_2_node_id[prev_layer.name]
+                dst_id = node_name_2_node_id[layer.name]
+                self.__create_dot_dependency_edge(src_id, dst_id)
+            prev_layer = layer
+
+    def __add_edges(self, plan_graph, node_name_2_node_id):
+        for edge in plan_graph.edges_list:
+            src_id = node_name_2_node_id[edge.src.layer_name]
+            dst_id = node_name_2_node_id[edge.dst.layer_name]
+            self.__create_dot_edge(src_id, dst_id, edge.tensor, edge.region_gen)
 
     def __create_dot_region_node(self, node_id: int, tensor: Activation, is_user: bool, gen: int):
         formatter = self.region_formatter(tensor, is_user)
@@ -735,11 +791,10 @@ class DotGraph(object):
                 desc,
                 shape='rectangle',
                 fillcolor='gray' if is_user else None,
-                fontname="Helvetica",
                 **formatter)
 
     def __create_dot_layer_node(
-        self, node_id: int, layer: Layer, latency: float, layer_node_renderer: Callable
+        self, node_id: str, layer: Layer, latency: float, layer_node_renderer: Callable
     ):
         formatting = self.layer_node_formatter(layer)
         formatting.update(self.layer_node_highlighter(node_id, self.highlighted_layers_ids))
@@ -750,10 +805,14 @@ class DotGraph(object):
                 latency if (self.display_latency and latency) else None,
                 expand_layer_details=self.expand_layer_details,
                 display_layer_names=self.display_layer_names,
-                stack_layer_names=self.stack_layer_names),
+                stack_layer_names=self.stack_layer_names,
+                prefer_matadata=self.display_matadata),
                 **formatting)
 
-    def __create_dot_edge(self, src, end, tensor, region_gen):
+    def __create_dot_dependency_edge(self, src, dst):
+        self.dot.edge(src, dst, "", color='lightgray', style="dashed")
+
+    def __create_dot_edge(self, src, dst, tensor, region_gen):
         def generation_color(gen: int, line_color: str) -> str:
             edge_color = ""
             if self.render_region_reuse_edges:
@@ -772,7 +831,7 @@ class DotGraph(object):
         if self.display_edge_details:
             desc.append(tensor.tooltip())
         desc_str = "\n".join(desc)
-        self.dot.edge(src, end, desc_str, color=edge_color)
+        self.dot.edge(src, dst, desc_str, color=edge_color)
 
 
 def to_dot(*args, **kwargs) -> Digraph:
@@ -811,7 +870,7 @@ class OnnxGraph(object):
     def __init__(self, plan: EnginePlan, display_forking_regions: bool):
         def get_adjacency_lists():
             inputs_map, outputs_map = {}, {}
-            layer_nodes_names = [node.layer.name for node in self.plan_graph.layers_nodes]
+            layer_nodes_names = [node.layer.name for node in self.plan_graph.layer_nodes]
             for edge in self.plan_graph.edges_list:
                 if edge.src.port != None and edge.dst.port != None:
                     if False and edge.src.layer_name in layer_nodes_names and edge.dst.layer_name in layer_nodes_names:
@@ -834,7 +893,7 @@ class OnnxGraph(object):
             return inputs_map, outputs_map
 
         def add_layer_nodes():
-            for layer_id, layer_node in enumerate(self.plan_graph.layers_nodes):
+            for layer_id, layer_node in enumerate(self.plan_graph.layer_nodes):
                 layer = layer_node.layer
                 try:
                     self.__add_layer_node(layer_id, layer, inputs_map[layer.name], outputs_map[layer.name])

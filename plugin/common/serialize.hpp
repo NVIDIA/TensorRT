@@ -112,6 +112,33 @@ struct Serializer<std::vector<T>,
     }
 };
 
+template <>
+struct Serializer<std::string>
+{
+    static size_t serialized_size(std::string const& value)
+    {
+        return sizeof(value.size()) + value.size();
+    }
+    static void serialize(void** buffer, std::string const& value)
+    {
+        size_t nbyte = value.size();
+        serialize_value(buffer, nbyte);
+        ::memcpy(*buffer, value.data(), nbyte);
+        reinterpret_cast<char*&>(*buffer) += nbyte;
+    }
+    static void deserialize(void const** buffer, size_t* buffer_size, std::string* value)
+    {
+        size_t nbyte;
+        deserialize_value(buffer, buffer_size, &nbyte);
+        value->resize(nbyte);
+        assert(value->size() == nbyte);
+        assert(*buffer_size >= nbyte);
+        ::memcpy(const_cast<char*>(value->data()), *buffer, nbyte);
+        reinterpret_cast<char const*&>(*buffer) += nbyte;
+        *buffer_size -= nbyte;
+    }
+};
+
 } // namespace
 
 template <typename T>

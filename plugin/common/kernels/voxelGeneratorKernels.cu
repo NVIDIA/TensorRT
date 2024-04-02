@@ -384,7 +384,7 @@ int generateFeatures_launch(
       voxel_x, voxel_y, voxel_z,
       range_min_x, range_min_y, range_min_z,
       voxel_features_size, max_points,
-      max_voxels, 
+      max_voxels,
       features);
     }
     else {
@@ -398,7 +398,7 @@ int generateFeatures_launch(
       voxel_x, voxel_y, voxel_z,
       range_min_x, range_min_y, range_min_z,
       voxel_features_size, max_points,
-      max_voxels, 
+      max_voxels,
       features);
     }
     auto err = cudaGetLastError();

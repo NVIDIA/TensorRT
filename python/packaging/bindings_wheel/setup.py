@@ -20,12 +20,14 @@ import os
 from setuptools import setup
 
 tensorrt_module = "##TENSORRT_MODULE##"
+package_name = "##TENSORRT_MODULE##"
 
 # This file expects the following to be passed from the environment when using standalone wheels:
 # - STANDALONE: Whether we are building a standalone wheel
 IS_STANDALONE = os.environ.get("STANDALONE") == "1"
 if IS_STANDALONE:
-    tensorrt_module += "_bindings"
+    tensorrt_module += "-cu##CUDA_MAJOR##_bindings"
+    package_name += "_bindings"
 
 setup(
     name=tensorrt_module,
@@ -39,9 +41,9 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[tensorrt_module],
+    packages=[package_name],
     extras_require={"numpy": "numpy"},
-    package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
+    package_data={package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

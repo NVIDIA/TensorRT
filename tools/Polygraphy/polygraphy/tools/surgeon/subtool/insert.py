@@ -87,7 +87,7 @@ class Insert(BaseSurgeonSubtool):
             OnnxSaveArgs(allow_shape_inference=True, output_opt_required=True),
         ]
 
-    def run_impl(self, args):
+    def run_impl_surgeon(self, args):
         graph = onnx_backend.gs_from_onnx(super().load_model())
 
         TENSOR_MAP = graph.tensors()

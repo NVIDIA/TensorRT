@@ -1,3 +1,4 @@
+
 /*
  * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
@@ -174,7 +175,7 @@ __global__ void skipln_vec32_hface(int8_t const* input, int8_t const* skip, int8
 
         float mu = __low2float(statsLocal);
         float sos = __high2float(statsLocal);
-        float rsigma = rsqrtf(sos - mu * mu);
+        float rsigma = rsqrtf(sos - mu * mu + std::numeric_limits<float>::epsilon());
 
         smemRed[pos][0] = __floats2half2_rn(mu, rsigma);
     }
@@ -310,7 +311,7 @@ __global__ void skiplnDQQ_vec3(int32_t const ld, int8_t const* input, int8_t con
     if (tidx == 0)
     {
         mu = __low2half(sum2);
-        rsigma = rsqrtf(__high2half(sum2) - mu * mu);
+        rsigma = rsqrtf(__high2half(sum2) - mu * mu + std::numeric_limits<half>::epsilon());
     }
 
     __syncthreads();

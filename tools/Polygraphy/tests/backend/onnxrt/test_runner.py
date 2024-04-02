@@ -16,6 +16,8 @@
 #
 import numpy as np
 import pytest
+import torch
+
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER
@@ -42,6 +44,15 @@ class TestOnnxrtRunner:
             assert runner.last_inference_time() is not None
         assert not runner.is_active
 
+    def test_torch_tensors(self):
+        model = ONNX_MODELS["identity"]
+        with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
+            arr = torch.ones((1, 1, 2, 2), dtype=torch.float32)
+            outputs = runner.infer({"x": arr})
+
+            assert isinstance(outputs["y"], torch.Tensor)
+            assert torch.equal(outputs["y"], arr)
+
     @pytest.mark.serial
     def test_warn_if_impl_methods_called(self, check_warnings_on_runner_impl_methods):
         model = ONNX_MODELS["identity"]
@@ -56,7 +67,7 @@ class TestOnnxrtRunner:
     def test_dim_param_preserved(self):
         model = ONNX_MODELS["dim_param"]
         with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
-            input_meta = runner.get_input_metadata()
+            input_meta = runner.get_input_metadata(use_numpy_dtypes=False)
             # In Polygraphy, we only use None to indicate a dynamic input dimension - not strings.
             assert len(input_meta) == 1
             for _, (_, shape) in input_meta.items():

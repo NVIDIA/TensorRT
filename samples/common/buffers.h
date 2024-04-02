@@ -240,25 +240,52 @@ public:
     static const size_t kINVALID_SIZE_VALUE = ~size_t(0);
 
     //!
-    //! \brief Create a BufferManager for handling buffer interactions with engine.
+    //! \brief Create a BufferManager for handling buffer interactions with engine, when the I/O tensor volumes
+    //! are provided
     //!
-    BufferManager(std::shared_ptr<nvinfer1::ICudaEngine> engine, const int batchSize = 0,
-        const nvinfer1::IExecutionContext* context = nullptr)
+    BufferManager(
+        std::shared_ptr<nvinfer1::ICudaEngine> engine, std::vector<int64_t> const& volumes, int32_t batchSize = 0)
         : mEngine(engine)
         , mBatchSize(batchSize)
     {
-        // Full Dims implies no batch size.
-        assert(engine->hasImplicitBatchDimension() || mBatchSize == 0);
         // Create host and device buffers
-        for (int i = 0; i < mEngine->getNbBindings(); i++)
+        for (int32_t i = 0; i < mEngine->getNbIOTensors(); i++)
         {
-            auto dims = context ? context->getBindingDimensions(i) : mEngine->getBindingDimensions(i);
+            auto const name = engine->getIOTensorName(i);
+            mNames[name] = i;
+
+            nvinfer1::DataType type = mEngine->getTensorDataType(name);
+
+            std::unique_ptr<ManagedBuffer> manBuf{new ManagedBuffer()};
+            manBuf->deviceBuffer = DeviceBuffer(volumes[i], type);
+            manBuf->hostBuffer = HostBuffer(volumes[i], type);
+            void* deviceBuffer = manBuf->deviceBuffer.data();
+            mDeviceBindings.emplace_back(deviceBuffer);
+            mManagedBuffers.emplace_back(std::move(manBuf));
+        }
+    }
+
+    //!
+    //! \brief Create a BufferManager for handling buffer interactions with engine.
+    //!
+    BufferManager(std::shared_ptr<nvinfer1::ICudaEngine> engine, int32_t const batchSize = 0,
+        nvinfer1::IExecutionContext const* context = nullptr)
+        : mEngine(engine)
+        , mBatchSize(batchSize)
+    {
+        // Create host and device buffers
+        for (int32_t i = 0, e = mEngine->getNbIOTensors(); i < e; i++)
+        {
+            auto const name = engine->getIOTensorName(i);
+            mNames[name] = i;
+
+            auto dims = context ? context->getTensorShape(name) : mEngine->getTensorShape(name);
             size_t vol = context || !mBatchSize ? 1 : static_cast<size_t>(mBatchSize);
-            nvinfer1::DataType type = mEngine->getBindingDataType(i);
-            int vecDim = mEngine->getBindingVectorizedDim(i);
+            nvinfer1::DataType type = mEngine->getTensorDataType(name);
+            int32_t vecDim = mEngine->getTensorVectorizedDim(name);
             if (-1 != vecDim) // i.e., 0 != lgScalarsPerVector
             {
-                int scalarsPerVec = mEngine->getBindingComponentsPerElement(i);
+                int32_t scalarsPerVec = mEngine->getTensorComponentsPerElement(name);
                 dims.d[vecDim] = divUp(dims.d[vecDim], scalarsPerVec);
                 vol *= scalarsPerVec;
             }
@@ -266,7 +293,8 @@ public:
             std::unique_ptr<ManagedBuffer> manBuf{new ManagedBuffer()};
             manBuf->deviceBuffer = DeviceBuffer(vol, type);
             manBuf->hostBuffer = HostBuffer(vol, type);
-            mDeviceBindings.emplace_back(manBuf->deviceBuffer.data());
+            void* deviceBuffer = manBuf->deviceBuffer.data();
+            mDeviceBindings.emplace_back(deviceBuffer);
             mManagedBuffers.emplace_back(std::move(manBuf));
         }
     }
@@ -283,7 +311,7 @@ public:
     //!
     //! \brief Returns a vector of device buffers.
     //!
-    const std::vector<void*>& getDeviceBindings() const
+    std::vector<void*> const& getDeviceBindings() const
     {
         return mDeviceBindings;
     }
@@ -292,7 +320,7 @@ public:
     //! \brief Returns the device buffer corresponding to tensorName.
     //!        Returns nullptr if no such tensor can be found.
     //!
-    void* getDeviceBuffer(const std::string& tensorName) const
+    void* getDeviceBuffer(std::string const& tensorName) const
     {
         return getBuffer(false, tensorName);
     }
@@ -301,7 +329,7 @@ public:
     //! \brief Returns the host buffer corresponding to tensorName.
     //!        Returns nullptr if no such tensor can be found.
     //!
-    void* getHostBuffer(const std::string& tensorName) const
+    void* getHostBuffer(std::string const& tensorName) const
     {
         return getBuffer(true, tensorName);
     }
@@ -310,12 +338,12 @@ public:
     //! \brief Returns the size of the host and device buffers that correspond to tensorName.
     //!        Returns kINVALID_SIZE_VALUE if no such tensor can be found.
     //!
-    size_t size(const std::string& tensorName) const
+    size_t size(std::string const& tensorName) const
     {
-        int index = mEngine->getBindingIndex(tensorName.c_str());
-        if (index == -1)
+        auto record = mNames.find(tensorName);
+        if (record == mNames.end())
             return kINVALID_SIZE_VALUE;
-        return mManagedBuffers[index]->hostBuffer.nbBytes();
+        return mManagedBuffers[record->second]->hostBuffer.nbBytes();
     }
 
     //!
@@ -330,7 +358,7 @@ public:
         assert(bufSize % sizeof(T) == 0);
         T* typedBuf = static_cast<T*>(buf);
         size_t numItems = bufSize / sizeof(T);
-        for (int i = 0; i < static_cast<int>(numItems); i++)
+        for (int32_t i = 0; i < static_cast<int>(numItems); i++)
         {
             // Handle rowCount == 1 case
             if (rowCount == 1 && i != static_cast<int>(numItems) - 1)
@@ -366,7 +394,7 @@ public:
     //!
     //! \brief Copy the contents of input host buffers to input device buffers asynchronously.
     //!
-    void copyInputToDeviceAsync(const cudaStream_t& stream = 0)
+    void copyInputToDeviceAsync(cudaStream_t const& stream = 0)
     {
         memcpyBuffers(true, false, true, stream);
     }
@@ -374,7 +402,7 @@ public:
     //!
     //! \brief Copy the contents of output device buffers to output host buffers asynchronously.
     //!
-    void copyOutputToHostAsync(const cudaStream_t& stream = 0)
+    void copyOutputToHostAsync(cudaStream_t const& stream = 0)
     {
         memcpyBuffers(false, true, true, stream);
     }
@@ -382,25 +410,31 @@ public:
     ~BufferManager() = default;
 
 private:
-    void* getBuffer(const bool isHost, const std::string& tensorName) const
+    void* getBuffer(bool const isHost, std::string const& tensorName) const
     {
-        int index = mEngine->getBindingIndex(tensorName.c_str());
-        if (index == -1)
+        auto record = mNames.find(tensorName);
+        if (record == mNames.end())
             return nullptr;
-        return (isHost ? mManagedBuffers[index]->hostBuffer.data() : mManagedBuffers[index]->deviceBuffer.data());
+        return (isHost ? mManagedBuffers[record->second]->hostBuffer.data()
+                       : mManagedBuffers[record->second]->deviceBuffer.data());
     }
 
-    void memcpyBuffers(const bool copyInput, const bool deviceToHost, const bool async, const cudaStream_t& stream = 0)
+    bool tenosrIsInput(const std::string& tensorName) const
     {
-        for (int i = 0; i < mEngine->getNbBindings(); i++)
+        return mEngine->getTensorIOMode(tensorName.c_str()) == nvinfer1::TensorIOMode::kINPUT;
+    }
+
+    void memcpyBuffers(bool const copyInput, bool const deviceToHost, bool const async, cudaStream_t const& stream = 0)
+    {
+        for (auto const& n : mNames)
         {
-            void* dstPtr
-                = deviceToHost ? mManagedBuffers[i]->hostBuffer.data() : mManagedBuffers[i]->deviceBuffer.data();
-            const void* srcPtr
-                = deviceToHost ? mManagedBuffers[i]->deviceBuffer.data() : mManagedBuffers[i]->hostBuffer.data();
-            const size_t byteSize = mManagedBuffers[i]->hostBuffer.nbBytes();
+            void* dstPtr = deviceToHost ? mManagedBuffers[n.second]->hostBuffer.data()
+                                        : mManagedBuffers[n.second]->deviceBuffer.data();
+            void const* srcPtr = deviceToHost ? mManagedBuffers[n.second]->deviceBuffer.data()
+                                              : mManagedBuffers[n.second]->hostBuffer.data();
+            size_t const byteSize = mManagedBuffers[n.second]->hostBuffer.nbBytes();
             const cudaMemcpyKind memcpyType = deviceToHost ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice;
-            if ((copyInput && mEngine->bindingIsInput(i)) || (!copyInput && !mEngine->bindingIsInput(i)))
+            if ((copyInput && tenosrIsInput(n.first)) || (!copyInput && !tenosrIsInput(n.first)))
             {
                 if (async)
                     CHECK(cudaMemcpyAsync(dstPtr, srcPtr, byteSize, memcpyType, stream));
@@ -413,7 +447,8 @@ private:
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine;              //!< The pointer to the engine
     int mBatchSize;                                              //!< The batch size for legacy networks, 0 otherwise.
     std::vector<std::unique_ptr<ManagedBuffer>> mManagedBuffers; //!< The vector of pointers to managed buffers
-    std::vector<void*> mDeviceBindings;                          //!< The vector of device buffers needed for engine execution
+    std::vector<void*> mDeviceBindings;              //!< The vector of device buffers needed for engine execution
+    std::unordered_map<std::string, int32_t> mNames; //!< The map of tensor name and index pairs
 };
 
 } // namespace samplesCommon

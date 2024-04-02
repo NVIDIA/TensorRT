@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -70,7 +70,6 @@ class EnginePlan:
 
             if raw_perf is not None:
                 perf_df = pd.DataFrame.from_dict(raw_perf)
-                perf_df.drop(columns=['name'], inplace=True)
                 perf_df.rename(columns={
                     'percentage': 'latency.pct_time',
                     'averageMs': 'latency.avg_time',
@@ -78,14 +77,16 @@ class EnginePlan:
                     'timeMs': 'latency.time',
                     }, inplace=True)
                 if len(graph_df) == len(perf_df):
+                    perf_df.drop(columns=['name'], inplace=True)
                     df = graph_df.join(perf_df)
                 else:
                     warnings.warn(
-                        "Ignoring profiling data: The number of layers in the engine "
-                        "graph does not match the number of layers in the performance "
-                        "JSON.\n"
+                        "Partial profiling data: The number of layers in the engine "
+                        f"graph ({len(graph_df)}) does not match the number of layers "
+                        f"({len(perf_df)}) in the performance JSON.\n"
                         "This can happen if you're not using the first shape-profile.")
-                    df = add_zero_perf(graph_df)
+                    perf_df.rename(columns={'name': 'Name',}, inplace=True)
+                    df = graph_df.merge(perf_df, on='Name', how='left').fillna(0)
             else:
                 warnings.warn("Profiling data was not provided.")
                 df = add_zero_perf(graph_df)

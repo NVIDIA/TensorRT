@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +24,9 @@
 #include "NvInfer.h"
 #include "NvInferRuntimeCommon.h"
 #include "common/checkMacrosPlugin.h"
+#include "common/cublasWrapper.h"
 #include "common/plugin.h"
-#include "cublas_v2.h"
-#include "cuda_fp16.h"
+#include <cuda_fp16.h>
 
 #include <algorithm>
 #include <cassert>
@@ -105,7 +105,7 @@ inline int32_t getMHAMaskPackedSize(int32_t smVersion, nvinfer1::DataType dataTy
     // this code must match EmbLayerNormPluginDynamic::getOutputDimensions in embLayerNormPlugin.cpp
     int32_t packedSize = unfusedMaskSize;
     bool isSmOK = (smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86 || smVersion == kSM_87
-        || smVersion == kSM_90);
+        || smVersion == kSM_89 || smVersion == kSM_90);
     bool isPrecisionOK = (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF);
     if (isSmOK && isPrecisionOK)
     {
@@ -133,13 +133,16 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 {
     switch (t)
     {
-    case nvinfer1::DataType::kINT32: return 4;
+    case nvinfer1::DataType::kINT64: return 8;
+    case nvinfer1::DataType::kINT32:
     case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kBF16:
     case nvinfer1::DataType::kHALF: return 2;
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kFP8: return 1;
+    case nvinfer1::DataType::kINT4: PLUGIN_FAIL("Element size is not implemented for sub-byte data-types (INT4)");
     }
     return 0;
 }
@@ -196,97 +199,111 @@ inline T* devToDev(T const* data, size_t nbElem)
 }
 
 template <typename T>
-cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemm(nvinfer1::pluginInternal::cublasHandle_t handle,
+    nvinfer1::pluginInternal::cublasOperation_t transa, nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m,
     int32_t n, int32_t k, const T alpha, T const* A, int32_t lda, T const* B, int32_t ldb, const T beta, T* C,
     int32_t ldc);
 
 template <>
-cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemm(nvinfer1::pluginInternal::cublasHandle_t handle,
+    nvinfer1::pluginInternal::cublasOperation_t transa, nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m,
     int32_t n, int32_t k, float const alpha, float const* A, int32_t lda, float const* B, int32_t ldb, float const beta,
     float* C, int32_t ldc)
 {
-
-    return cublasSgemm(handle, transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C, ldc);
+    nvinfer1::pluginInternal::CublasWrapper& wrapper = nvinfer1::pluginInternal::getCublasWrapper();
+    return wrapper.cublasSgemm(handle, transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 template <>
-cublasStatus_t inline cublasGemm(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemm(nvinfer1::pluginInternal::cublasHandle_t handle,
+    nvinfer1::pluginInternal::cublasOperation_t transa, nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m,
     int32_t n, int32_t k, const half alpha, half const* A, int32_t lda, half const* B, int32_t ldb, const half beta,
     half* C, int32_t ldc)
 {
-    return cublasHgemm(handle, transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C, ldc);
+    nvinfer1::pluginInternal::CublasWrapper& wrapper = nvinfer1::pluginInternal::getCublasWrapper();
+    return wrapper.cublasHgemm(handle, transa, transb, m, n, k, &alpha, A, lda, B, ldb, &beta, C, ldc);
 }
 
 template <typename T>
-cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const T alpha, T const* A, int32_t lda, int64_t strideA,
-    T const* B, int32_t ldb, int64_t strideB, const T beta, T* C, int32_t ldc, int64_t strideC, int32_t batchCount,
-    cublasGemmAlgo_t algo);
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemmStridedBatchedEx(
+    nvinfer1::pluginInternal::cublasHandle_t handle, nvinfer1::pluginInternal::cublasOperation_t transa,
+    nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const T alpha, T const* A,
+    int32_t lda, int64_t strideA, T const* B, int32_t ldb, int64_t strideB, const T beta, T* C, int32_t ldc,
+    int64_t strideC, int32_t batchCount, nvinfer1::pluginInternal::cublasGemmAlgo_t algo);
 
 template <>
-cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, float const alpha, float const* A, int32_t lda,
-    int64_t strideA, float const* B, int32_t ldb, int64_t strideB, float const beta, float* C, int32_t ldc,
-    int64_t strideC, int32_t batchCount, cublasGemmAlgo_t algo)
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemmStridedBatchedEx(
+    nvinfer1::pluginInternal::cublasHandle_t handle, nvinfer1::pluginInternal::cublasOperation_t transa,
+    nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m, int32_t n, int32_t k, float const alpha,
+    float const* A, int32_t lda, int64_t strideA, float const* B, int32_t ldb, int64_t strideB, float const beta,
+    float* C, int32_t ldc, int64_t strideC, int32_t batchCount, nvinfer1::pluginInternal::cublasGemmAlgo_t algo)
 {
-
-    return ::cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_32F, lda, strideA, B,
+    nvinfer1::pluginInternal::CublasWrapper& wrapper = nvinfer1::pluginInternal::getCublasWrapper();
+    return wrapper.cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_32F, lda, strideA, B,
         CUDA_R_32F, ldb, strideB, &beta, C, CUDA_R_32F, ldc, strideC, batchCount, CUDA_R_32F, algo);
 }
 
 template <>
-cublasStatus_t inline cublasGemmStridedBatchedEx(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const half alpha, half const* A, int32_t lda,
-    int64_t strideA, half const* B, int32_t ldb, int64_t strideB, const half beta, half* C, int32_t ldc,
-    int64_t strideC, int32_t batchCount, cublasGemmAlgo_t algo)
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemmStridedBatchedEx(
+    nvinfer1::pluginInternal::cublasHandle_t handle, nvinfer1::pluginInternal::cublasOperation_t transa,
+    nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const half alpha,
+    half const* A, int32_t lda, int64_t strideA, half const* B, int32_t ldb, int64_t strideB, const half beta, half* C,
+    int32_t ldc, int64_t strideC, int32_t batchCount, nvinfer1::pluginInternal::cublasGemmAlgo_t algo)
 {
-    return ::cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_16F, lda, strideA, B,
+    nvinfer1::pluginInternal::CublasWrapper& wrapper = nvinfer1::pluginInternal::getCublasWrapper();
+    return wrapper.cublasGemmStridedBatchedEx(handle, transa, transb, m, n, k, &alpha, A, CUDA_R_16F, lda, strideA, B,
         CUDA_R_16F, ldb, strideB, &beta, C, CUDA_R_16F, ldc, strideC, batchCount, CUDA_R_16F, algo);
 }
 
 template <typename T>
-cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const T alpha, T const* A, int32_t lda, int64_t strideA,
-    T const* B, int32_t ldb, int64_t strideB, const T beta, T* C, int32_t ldc, int64_t strideC, int32_t batchCount);
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemmStridedBatched(
+    nvinfer1::pluginInternal::cublasHandle_t handle, nvinfer1::pluginInternal::cublasOperation_t transa,
+    nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const T alpha, T const* A,
+    int32_t lda, int64_t strideA, T const* B, int32_t ldb, int64_t strideB, const T beta, T* C, int32_t ldc,
+    int64_t strideC, int32_t batchCount);
 
 template <>
-cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, float const alpha, float const* A, int32_t lda,
-    int64_t strideA, float const* B, int32_t ldb, int64_t strideB, float const beta, float* C, int32_t ldc,
-    int64_t strideC, int32_t batchCount)
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemmStridedBatched(
+    nvinfer1::pluginInternal::cublasHandle_t handle, nvinfer1::pluginInternal::cublasOperation_t transa,
+    nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m, int32_t n, int32_t k, float const alpha,
+    float const* A, int32_t lda, int64_t strideA, float const* B, int32_t ldb, int64_t strideB, float const beta,
+    float* C, int32_t ldc, int64_t strideC, int32_t batchCount)
 {
-
-    return cublasSgemmStridedBatched(
+    nvinfer1::pluginInternal::CublasWrapper& wrapper = nvinfer1::pluginInternal::getCublasWrapper();
+    return wrapper.cublasSgemmStridedBatched(
         handle, transa, transb, m, n, k, &alpha, A, lda, strideA, B, ldb, strideB, &beta, C, ldc, strideC, batchCount);
 }
 
 template <>
-cublasStatus_t inline cublasGemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
-    cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const half alpha, half const* A, int32_t lda,
-    int64_t strideA, half const* B, int32_t ldb, int64_t strideB, const half beta, half* C, int32_t ldc,
-    int64_t strideC, int32_t batchCount)
+nvinfer1::pluginInternal::cublasStatus_t inline cublasGemmStridedBatched(
+    nvinfer1::pluginInternal::cublasHandle_t handle, nvinfer1::pluginInternal::cublasOperation_t transa,
+    nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m, int32_t n, int32_t k, const half alpha,
+    half const* A, int32_t lda, int64_t strideA, half const* B, int32_t ldb, int64_t strideB, const half beta, half* C,
+    int32_t ldc, int64_t strideC, int32_t batchCount)
 {
-    return cublasHgemmStridedBatched(
+    nvinfer1::pluginInternal::CublasWrapper& wrapper = nvinfer1::pluginInternal::getCublasWrapper();
+    return wrapper.cublasHgemmStridedBatched(
         handle, transa, transb, m, n, k, &alpha, A, lda, strideA, B, ldb, strideB, &beta, C, ldc, strideC, batchCount);
 }
 
 struct CublasConfigHelper
 {
-    cublasPointerMode_t pm;
-    cublasMath_t mm;
-    cublasHandle_t cublas;
-    CublasConfigHelper(cublasHandle_t cublas_)
+    nvinfer1::pluginInternal::cublasPointerMode_t pm;
+    nvinfer1::pluginInternal::cublasMath_t mm;
+    nvinfer1::pluginInternal::cublasHandle_t cublas;
+    nvinfer1::pluginInternal::CublasWrapper& wrapper = nvinfer1::pluginInternal::getCublasWrapper();
+    CublasConfigHelper(nvinfer1::pluginInternal::cublasHandle_t cublas_)
         : cublas(cublas_)
     {
-        PLUGIN_CUBLASASSERT(cublasGetPointerMode(cublas, &pm));
-        PLUGIN_CUBLASASSERT(cublasGetMathMode(cublas, &mm));
-        PLUGIN_CUBLASASSERT(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST));
-        PLUGIN_CUBLASASSERT(cublasSetMathMode(cublas, CUBLAS_TENSOR_OP_MATH));
+        PLUGIN_CUBLASASSERT(wrapper.cublasGetPointerMode(cublas, &pm));
+        PLUGIN_CUBLASASSERT(wrapper.cublasGetMathMode(cublas, &mm));
+        PLUGIN_CUBLASASSERT(wrapper.cublasSetPointerMode(cublas, nvinfer1::pluginInternal::CUBLAS_POINTER_MODE_HOST));
+        PLUGIN_CUBLASASSERT(wrapper.cublasSetMathMode(cublas, nvinfer1::pluginInternal::CUBLAS_TENSOR_OP_MATH));
     }
     ~CublasConfigHelper()
     {
-        cublasSetMathMode(cublas, mm);
-        cublasSetPointerMode(cublas, pm);
+        wrapper.cublasSetMathMode(cublas, mm);
+        wrapper.cublasSetPointerMode(cublas, pm);
     }
 };
 

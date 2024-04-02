@@ -1,10 +1,8 @@
 nltk>=3.5
-wget
-cuda-python
+wget==3.2
+cuda-python==12.2.0
 pywin32; platform_system == "Windows"
-pyyaml
-requests
-tqdm
-numpy==1.18.1; python_version<"3.8" and platform_system == "Windows"
-numpy==1.19.4; python_version<"3.8" and platform_system != "Windows"
-numpy==1.23.2; python_version>="3.8"
+pyyaml==6.0.1
+requests==2.31.0
+tqdm==4.66.1
+numpy==1.24.4

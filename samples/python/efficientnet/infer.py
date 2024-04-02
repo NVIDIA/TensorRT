@@ -51,13 +51,13 @@ class TensorRTInfer:
         self.inputs = []
         self.outputs = []
         self.allocations = []
-        for i in range(self.engine.num_bindings):
+        for i in range(self.engine.num_io_tensors):
+            name = self.engine.get_tensor_name(i)
             is_input = False
-            if self.engine.binding_is_input(i):
+            if self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
                 is_input = True
-            name = self.engine.get_binding_name(i)
-            dtype = self.engine.get_binding_dtype(i)
-            shape = self.engine.get_binding_shape(i)
+            dtype = self.engine.get_tensor_dtype(name)
+            shape = self.engine.get_tensor_shape(name)
             if is_input:
                 self.batch_size = shape[0]
             size = np.dtype(trt.nptype(dtype)).itemsize
@@ -72,7 +72,7 @@ class TensorRTInfer:
                 "allocation": allocation,
             }
             self.allocations.append(allocation)
-            if self.engine.binding_is_input(i):
+            if is_input:
                 self.inputs.append(binding)
             else:
                 self.outputs.append(binding)

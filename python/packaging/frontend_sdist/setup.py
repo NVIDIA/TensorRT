@@ -19,11 +19,13 @@ import os
 import platform
 import subprocess
 import sys
+import glob
 
 from setuptools import setup
 from setuptools.command.install import install
 
-tensorrt_module = "##TENSORRT_MODULE##"
+tensorrt_module = "##TENSORRT_MODULE##-cu##CUDA_MAJOR##"
+tensorrt_package = "##TENSORRT_MODULE##"
 tensorrt_version = "##TENSORRT_PYTHON_VERSION##"
 tensorrt_submodules = [
     "{}_libs=={}".format(tensorrt_module, tensorrt_version),
@@ -34,10 +36,26 @@ disable_internal_pip = os.environ.get("NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP", Fa
 
 
 def run_pip_command(args, call_func):
+    env = os.environ.copy()
+    env["PYTHONPATH"] = sys.exec_prefix
     try:
-        return call_func([sys.executable, "-m", "pip"] + args)
+        return call_func([sys.executable, "-m", "pip"] + args, env=env)
     except subprocess.CalledProcessError:
-        return call_func([os.path.join(sys.exec_prefix, "bin", "pip")] + args)
+
+        def find_pip():
+            pip_name = "pip"
+            if sys.platform.startswith("win"):
+                pip_name = "pip.exe"
+            for path in glob.iglob(os.path.join(sys.exec_prefix, "**"), recursive=True):
+                if os.path.isfile(path) and os.path.basename(path) == pip_name:
+                    return path
+            return None
+
+        pip_path = find_pip()
+        if pip_path is None:
+            # Couldn't find `pip` in `sys.exec_prefix`, so we have no option but to abort.
+            raise
+        return call_func([pip_path] + args, env=env)
 
 
 # check wheel availability using information from https://github.com/pypa/packaging/blob/23.1/src/packaging/markers.py#L175-L190
@@ -67,38 +85,36 @@ class InstallCommand(install):
 
 def pip_config_list():
     """Get the current pip config (env vars, config file, etc)."""
-    return run_pip_command(["config", "list"], subprocess.check_output).decode()
+    try:
+        return run_pip_command(["config", "list"], subprocess.check_output).decode()
+    except:
+        return ""
 
 
 def parent_command_line():
     """Get the command line of the parent PID."""
     pid = os.getppid()
+
     # try retrieval using psutil
     try:
         import psutil
 
         return " ".join(psutil.Process(pid).cmdline())
-    except ModuleNotFoundError:
+    except:
         pass
     # fall back to shell
     try:
-        return subprocess.check_output(
-            ["ps", "-p", str(pid), "-o", "command", "--no-headers"]
-        ).decode()
-    except subprocess.CalledProcessError:
+        return subprocess.check_output(["ps", "-p", str(pid), "-o", "command", "--no-headers"]).decode()
+    except:
         return ""
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
-if (
-    disable_internal_pip
-    or nvidia_pip_index_url in pip_config_list()
-    or nvidia_pip_index_url in parent_command_line()
-):
-    install_requires = tensorrt_submodules
+install_requires = []
+if disable_internal_pip or nvidia_pip_index_url in parent_command_line() or nvidia_pip_index_url in pip_config_list():
+    install_requires.extend(tensorrt_submodules)
     cmdclass = {}
 else:
-    install_requires = []
     cmdclass = {"install": InstallCommand}
 
 
@@ -106,7 +122,11 @@ setup(
     name=tensorrt_module,
     version=tensorrt_version,
     description="A high performance deep learning inference library",
-    long_description="""A high performance deep learning inference library
+    long_description="""
+NVIDIA TensorRT is an SDK that facilitates high-performance machine learning inference. It is designed to work in a complementary fashion with training frameworks such as TensorFlow, PyTorch, and MXNet. It focuses specifically on running an already-trained network quickly and efficiently on NVIDIA hardware.
+
+**IMPORTANT:** This is a special release of TensorRT designed to work only with TensorRT-LLM.
+Please refrain from upgrading to this version if you are not using TensorRT-LLM.
 
 To install, please execute the following:
 ```
@@ -129,12 +149,13 @@ When the extra index url does not contain `{}`, a nested `pip install` will run 
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[tensorrt_module],
+    packages=[tensorrt_package],
     install_requires=install_requires,
+    setup_requires=["wheel"],
     python_requires=">=3.6",  # ref https://pypi.nvidia.com/tensorrt-bindings/
     cmdclass=cmdclass,
     extras_require={"numpy": "numpy"},
-    package_data={tensorrt_module: ["*.so*", "*.pyd", "*.pdb"]},
+    package_data={tensorrt_package: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

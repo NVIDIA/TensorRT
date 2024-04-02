@@ -28,8 +28,7 @@ from polygraphy.backend.trt import TrtRunner, engine_from_bytes
 def main():
     engine = engine_from_bytes(bytes_from_path("identity.engine"))
 
-    # NOTE: In TensorRT 8.0 and newer, we do *not* need to use a context manager to free `engine`.
-    with engine, TrtRunner(engine) as runner:
+    with TrtRunner(engine) as runner:
         inp_data = np.ones((1, 1, 2, 2), dtype=np.float32)
 
         # NOTE: The runner owns the output buffers and is free to reuse them between `infer()` calls.

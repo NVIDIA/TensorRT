@@ -50,7 +50,7 @@ int32_t npRound(float x)
     {
         return lround(x / 2.0F + 0.5F) * 2;
     }
-    return lround(x + 0.5F);
+    return lround(x);
 }
 
 VoxelGeneratorPlugin::VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin,
@@ -256,11 +256,13 @@ size_t VoxelGeneratorPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* 
 }
 
 int32_t VoxelGeneratorPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
+    void* workspace, cudaStream_t stream) noexcept
 {
     try
     {
+        PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
+
         int32_t batchSize = inputDesc[0].dims.d[0];
         int32_t maxNumPoints = inputDesc[0].dims.d[1];
         // TRT-input

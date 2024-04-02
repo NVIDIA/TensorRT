@@ -49,7 +49,8 @@ class ImageBatcher:
             Create configs and perform basic setups.
             """
             cfg = get_cfg()
-            cfg.merge_from_file(config_file)
+            if config_file is not None:
+                cfg.merge_from_file(config_file)
             cfg.freeze()
             return cfg
 
@@ -64,7 +65,7 @@ class ImageBatcher:
         input = os.path.realpath(input)
         self.images = []
 
-        extensions = [".jpg", ".jpeg", ".png", ".bmp"]
+        extensions = [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]
 
         def is_image(path):
             return os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions

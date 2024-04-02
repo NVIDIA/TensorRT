@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,8 +20,6 @@
 #include "NvInferPlugin.h"
 #include "common/plugin.h"
 #include <cstdlib>
-#include <cublas_v2.h>
-#include <cudnn.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -104,7 +102,9 @@ private:
     int32_t mConcatAxisID{0}, mOutputConcatAxis{0}, mNumInputs{0};
     nvinfer1::Dims mCHW;
     std::string mPluginNamespace;
-    cublasHandle_t mCublas{nullptr};
+    nvinfer1::pluginInternal::cublasHandle_t mCublas{nullptr};
+    // the wrapper pointer is shared among all plugins attached to the same context.
+    std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 };
 
 class FlattenConcatPluginCreator : public nvinfer1::pluginInternal::BaseCreator

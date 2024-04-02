@@ -92,7 +92,7 @@ struct Fused_multihead_attention_params_v2
     float* max_scratch_ptr{};
     float* sum_scratch_ptr{};
     // Scratch buffer to finalize the output (not needed for FP16).
-    int* o_scratch_ptr{};
+    int32_t* o_scratch_ptr{};
 
     void clear()
     {
@@ -152,7 +152,7 @@ extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm80_cubin[
 extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin[];
 #endif // defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
-#if defined(ENABLE_SM86)
+#if defined(ENABLE_SM86) || defined(ENABLE_SM89)
 extern unsigned char fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin[];
 extern unsigned char fused_multihead_attention_v2_fp16_256_64_kernel_sm86_cubin[];
 extern unsigned char fused_multihead_attention_v2_fp16_384_64_kernel_sm86_cubin[];
@@ -162,7 +162,7 @@ extern unsigned char fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin[
 extern unsigned char fused_multihead_attention_v2_int8_192_64_kernel_sm86_cubin[];
 extern unsigned char fused_multihead_attention_v2_int8_256_64_kernel_sm86_cubin[];
 extern unsigned char fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin[];
-#endif // defined(ENABLE_SM86)
+#endif // defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
 #if defined(ENABLE_SM87)
 extern unsigned char cubin_fmha_v2_int8_384_64_sm87_cu_cubin[];
@@ -258,7 +258,7 @@ extern uint32_t cubin_fmha_v2_fp16_128_32_sm80_cu_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin_len;
 #endif // defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
-#if defined(ENABLE_SM86)
+#if defined(ENABLE_SM86) || defined(ENABLE_SM89)
 extern uint32_t fused_multihead_attention_v2_fp16_128_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_fp16_256_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_fp16_384_64_kernel_sm86_cubin_len;
@@ -268,7 +268,7 @@ extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_256_64_kernel_sm86_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin_len;
-#endif // defined(ENABLE_SM86)
+#endif // defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
 #if defined(ENABLE_SM87)
 extern uint32_t cubin_fmha_v2_int8_384_64_sm87_cu_cubin_len;
@@ -603,7 +603,7 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
         fused_multihead_attention_v2_int8_384_64_kernel_sm80_cubin_len,
         "fused_multihead_attention_v2_int8_384_64_kernel_sm80", 53248, 128, 0, false},
 #endif // defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM89)
-#if defined(ENABLE_SM86)
+#if defined(ENABLE_SM86) || defined(ENABLE_SM89)
     // GA10x
     // Note: For GA10X keep only kernels whose sharedMemBytes < 100KiB
     {DATA_TYPE_FP16, 64, 64, kSM_86, fused_multihead_attention_v2_fp16_64_64_kernel_sm86_cubin,
@@ -679,7 +679,7 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
     {DATA_TYPE_INT8, 384, 64, kSM_86, fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin,
         fused_multihead_attention_v2_int8_384_64_kernel_sm86_cubin_len,
         "fused_multihead_attention_v2_int8_384_64_kernel_sm86", 28672, 128, 0, false},
-#endif // defined(ENABLE_SM86)
+#endif // defined(ENABLE_SM86) || defined(ENABLE_SM89)
 
 #if defined(ENABLE_SM87)
     // GA10b (Orin-Auto)
@@ -850,12 +850,12 @@ public:
         return static_cast<uint64_t>(s) << 32 | (headsize << 2) | (interleaved ? 2U : 0U) | (unroll ? 1U : 0U);
     }
 
-    virtual uint64_t hashID(const KernelMeta& kernelMeta) const
+    uint64_t hashID(const KernelMeta& kernelMeta) const override
     {
         return hashID(kernelMeta.mS, kernelMeta.mD, kernelMeta.mInterleaved, kernelMeta.mUnrollStep);
     }
 
-    virtual void run(Fused_multihead_attention_params_v2& params, cudaStream_t ss) const
+    void run(Fused_multihead_attention_params_v2& params, cudaStream_t ss) const override
     {
         if (params.interleaved)
         {
@@ -893,6 +893,13 @@ public:
                       {kSM_86, bert::DATA_TYPE_INT8, 192, 16},
                       {kSM_86, bert::DATA_TYPE_INT8, 256, 8},
                       {kSM_86, bert::DATA_TYPE_INT8, 384, 8},
+
+                      {kSM_89, bert::DATA_TYPE_FP16, 128, 4},
+                      {kSM_89, bert::DATA_TYPE_FP16, 256, 4},
+                      {kSM_89, bert::DATA_TYPE_INT8, 128, 4},
+                      {kSM_89, bert::DATA_TYPE_INT8, 192, 16},
+                      {kSM_89, bert::DATA_TYPE_INT8, 256, 8},
+                      {kSM_89, bert::DATA_TYPE_INT8, 384, 8},
 #endif
 #if CUDA_VERSION >= 11040
                       {kSM_87, bert::DATA_TYPE_FP16, 128, 4},
@@ -913,7 +920,7 @@ public:
                       {kSM_90, bert::DATA_TYPE_INT8, 384, 8},
 #endif
                   };
-            for (uint32_t i = 0u; i < sizeof(unrollList) / sizeof(unrollList[0]); ++i)
+            for (uint32_t i = 0U; i < sizeof(unrollList) / sizeof(unrollList[0]); ++i)
             {
                 if (mSM == unrollList[i].mSM && mDataType == unrollList[i].mDataType && params.s == unrollList[i].mS
                     && params.b <= unrollList[i].mMaxBatch)
@@ -950,6 +957,9 @@ public:
 #endif
 #if defined(ENABLE_SM87)
                << "87 "
+#endif
+#if defined(ENABLE_SM89)
+               << "89 "
 #endif
 #if defined(ENABLE_SM90)
                << "90 "

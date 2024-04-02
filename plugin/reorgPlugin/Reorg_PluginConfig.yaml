@@ -1,8 +1,8 @@
 ---
 name: Reorg_TRT
-interface: "IPluginV2Ext"
+interface: "IPluginV2DynamicExt"
 versions:
-  "1":
+  "2":
     attributes:
       - stride
     attribute_types:

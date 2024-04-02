@@ -20,11 +20,19 @@ from collections import namedtuple
 import pytest
 import tensorrt as trt
 from polygraphy import mod, util
-from polygraphy.backend.trt import Algorithm, TacticRecorder, TacticReplayData, TacticReplayer, TensorInfo
+from polygraphy.backend.trt import (
+    Algorithm,
+    TacticRecorder,
+    TacticReplayData,
+    TacticReplayer,
+    TensorInfo,
+)
 from polygraphy.exception import PolygraphyException
 
 
-FakeAlgorithmContext = namedtuple("FakeAlgorithmContext", ["name", "num_inputs", "num_outputs"])
+FakeAlgorithmContext = namedtuple(
+    "FakeAlgorithmContext", ["name", "num_inputs", "num_outputs"]
+)
 FakeAlgorithm = namedtuple("FakeAlgorithm", ["algorithm_variant", "io_info"])
 FakeAlgorithm.get_algorithm_io_info = lambda this, index: this.io_info[index]
 
@@ -36,54 +44,53 @@ def fake_context(name):
 
 
 def make_tensor_info(
-    tensor_format=trt.TensorFormat.LINEAR,
     dtype=trt.float32,
     strides=(1, 2, 3),
     vectorized_dim=-1,
     components_per_element=1,
 ):
-    return TensorInfo(tensor_format, dtype, strides, vectorized_dim, components_per_element)
+    return TensorInfo(dtype, strides, vectorized_dim, components_per_element)
 
 
 def fake_algo(implementation=6, tactic=0, io=None):
     io_info = [make_tensor_info()] * 2
     if io:
         io_info = []
-        for fmt, dtype, strides in io:
+        for dtype, strides in io:
             io_info.append(
-                TensorInfo(tensor_format=fmt, dtype=dtype, strides=strides, vectorized_dim=-1, components_per_element=1)
+                TensorInfo(
+                    dtype=dtype,
+                    strides=strides,
+                    vectorized_dim=-1,
+                    components_per_element=1,
+                )
             )
 
-    trt_algo = FakeAlgorithm(algorithm_variant=FakeAlgorithmVariant(implementation, tactic), io_info=io_info)
+    trt_algo = FakeAlgorithm(
+        algorithm_variant=FakeAlgorithmVariant(implementation, tactic), io_info=io_info
+    )
     return trt_algo
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestTensorInfo:
     @pytest.mark.parametrize(
         "left, right, expected",
         [
             (
-                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
-                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.float32, (1, 2, 3), -1, 1),
                 True,
-            ),
-            # Different format
-            (
-                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
-                TensorInfo(trt.TensorFormat.HWC, trt.float32, (1, 2, 3), -1, 1),
-                False,
             ),
             # Different data type
             (
-                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
-                TensorInfo(trt.TensorFormat.LINEAR, trt.float16, (1, 2, 3), -1, 1),
+                TensorInfo(trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.float16, (1, 2, 3), -1, 1),
                 False,
             ),
             # Different vectotrization
             (
-                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), -1, 1),
-                TensorInfo(trt.TensorFormat.LINEAR, trt.float32, (1, 2, 3), 0, 2),
+                TensorInfo(trt.float32, (1, 2, 3), -1, 1),
+                TensorInfo(trt.float32, (1, 2, 3), 0, 2),
                 False,
             ),
         ],
@@ -92,7 +99,6 @@ class TestTensorInfo:
         assert (left == right) == expected
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestAlgorithm:
     @pytest.mark.parametrize(
         "left, right, expected",
@@ -101,14 +107,14 @@ class TestAlgorithm:
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 True,
             ),  # Same
@@ -116,14 +122,14 @@ class TestAlgorithm:
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 Algorithm(
                     7,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 False,
             ),  # Different implementation
@@ -131,14 +137,14 @@ class TestAlgorithm:
                 Algorithm(
                     6,
                     2,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 False,
             ),  # Different tactic
@@ -146,29 +152,14 @@ class TestAlgorithm:
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.CHW32, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                ),
-                False,
-            ),  # Different input format
-            (
-                Algorithm(
-                    6,
-                    1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                ),
-                Algorithm(
-                    6,
-                    1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.int8)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.int8)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 False,
             ),  # Different input data type
@@ -176,29 +167,14 @@ class TestAlgorithm:
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.CHW32, trt.float32)],
-                ),
-                False,
-            ),  # Different output format
-            (
-                Algorithm(
-                    6,
-                    1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                ),
-                Algorithm(
-                    6,
-                    1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.int8)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.int8)],
                 ),
                 False,
             ),  # Different output data type
@@ -206,14 +182,14 @@ class TestAlgorithm:
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)] * 2,
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)] * 2,
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 False,
             ),  # Different number of inputs
@@ -221,14 +197,14 @@ class TestAlgorithm:
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)] * 2,
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)] * 2,
                 ),
                 Algorithm(
                     6,
                     1,
-                    inputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
-                    outputs=[make_tensor_info(trt.TensorFormat.LINEAR, trt.float32)],
+                    inputs=[make_tensor_info(trt.float32)],
+                    outputs=[make_tensor_info(trt.float32)],
                 ),
                 False,
             ),  # Different number of outputs
@@ -274,26 +250,30 @@ def replay(request):
     yield context, poly_algo, trt_algo, in_replay_data, out_replay_data
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestReplayer:
     def test_basic(self, replay):
         context, _, algo, replay_data, _ = replay
         replayer = TacticReplayer(replay_data)
-        selected = replayer.select_algorithms(context, [fake_algo(implementation=2), algo, fake_algo(tactic=1)])
+        selected = replayer.select_algorithms(
+            context, [fake_algo(implementation=2), algo, fake_algo(tactic=1)]
+        )
         assert selected == [1]
 
     def test_new_layer_falls_back(self, replay):
         _, _, _, replay_data, _ = replay
         replayer = TacticReplayer(replay_data)
         selected = replayer.select_algorithms(
-            fake_context(name="new_layer"), [fake_algo(2, 1), fake_algo(3, 4), fake_algo(5, 6)]
+            fake_context(name="new_layer"),
+            [fake_algo(2, 1), fake_algo(3, 4), fake_algo(5, 6)],
         )
         assert selected == [0, 1, 2]
 
     def test_missing_algo_fails(self, replay):
         context, _, _, replay_data, _ = replay
         replayer = TacticReplayer(replay_data)
-        with pytest.raises(PolygraphyException, match="was not provided by TensorRT as a choice"):
+        with pytest.raises(
+            PolygraphyException, match="was not provided by TensorRT as a choice"
+        ):
             assert replayer.select_algorithms(context, [fake_algo(2, 1)]) == [0]
 
     @pytest.mark.parametrize(
@@ -302,32 +282,49 @@ class TestReplayer:
             fake_algo(2),
             fake_algo(tactic=2),
             fake_algo(
-                io=[(trt.TensorFormat.CHW32, trt.float32, (1, 2)), (trt.TensorFormat.LINEAR, trt.float32, (1, 2))]
+                io=[
+                    (trt.float32, (1, 2)),
+                    (trt.float32, (1, 2)),
+                ]
             ),
-            fake_algo(io=[(trt.TensorFormat.LINEAR, trt.int8, (1, 2)), (trt.TensorFormat.LINEAR, trt.float32, (1, 2))]),
             fake_algo(
-                io=[(trt.TensorFormat.LINEAR, trt.float32, (1, 2)), (trt.TensorFormat.CHW32, trt.float32, (1, 2))]
+                io=[
+                    (trt.int8, (1, 2)),
+                    (trt.float32, (1, 2)),
+                ]
             ),
             fake_algo(
-                io=[(trt.TensorFormat.LINEAR, trt.float32, (1, 2)), (trt.TensorFormat.LINEAR, trt.int32, (1, 2))]
+                io=[
+                    (trt.float32, (1, 2)),
+                    (trt.float32, (1, 2)),
+                ]
+            ),
+            fake_algo(
+                io=[
+                    (trt.float32, (1, 2)),
+                    (trt.int32, (1, 2)),
+                ]
             ),
         ],
     )
     def test_different_algo_fails(self, replay, algo):
         context, _, _, replay_data, _ = replay
         replayer = TacticReplayer(replay_data)
-        with pytest.raises(PolygraphyException, match="was not provided by TensorRT as a choice"):
+        with pytest.raises(
+            PolygraphyException, match="was not provided by TensorRT as a choice"
+        ):
             assert replayer.select_algorithms(context, [algo]) == [0]
 
     def test_fails_if_wrong_selected(self, replay):
         context, _, _, replay_data, _ = replay
         replayer = TacticReplayer(replay_data)
         # We should be able to check tactics even if we're not recording them.
-        with pytest.raises(PolygraphyException, match="TensorRT selected a tactic different"):
+        with pytest.raises(
+            PolygraphyException, match="TensorRT selected a tactic different"
+        ):
             replayer.report_algorithms([context], [fake_algo(implementation=9)])
 
 
-@pytest.mark.skipif(mod.version(trt.__version__) < mod.version("8.0"), reason="Unsupported for TRT 7.2 and older")
 class TestRecorder:
     def test_basic(self, replay):
         context, poly_algo, algo, _, replay_data = replay
