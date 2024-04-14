@@ -1,6 +1,6 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef TRT_PARSER_UTILS_H
-#define TRT_PARSER_UTILS_H
+
+#ifndef PARSER_HELPER_H
+#define PARSER_HELPER_H
 
 #include <algorithm>
-#include <bitset>
 #include <cassert>
-#include <cstdio>
 #include <iostream>
 #include <memory>
 
@@ -33,8 +32,8 @@
 
 #include "NvInfer.h"
 
-namespace parserutils
-{
+namespace parserhelper {
+
 #define RETURN_AND_LOG_ERROR_IMPL(ret, message, parserName)                                             \
     do                                                                                                  \
     {                                                                                                   \
@@ -45,8 +44,7 @@ namespace parserutils
     } while (0)
 
 // Helper function to compute unpadded volume of a Dims (1 if 0 dimensional)
-inline int64_t volume(const nvinfer1::Dims& d)
-{
+inline int64_t volume(const nvinfer1::Dims& d) {
     int64_t v = 1;
     for (int64_t i = 0; i < d.nbDims; i++)
         v *= d.d[i];
@@ -54,8 +52,7 @@ inline int64_t volume(const nvinfer1::Dims& d)
 }
 
 // Show some debugging output about how much memory is free
-inline void printMem(const char* where)
-{
+inline void printMem(const char* where) {
 #if !defined _MSC_VER && !defined __QNX__
     const unsigned mb = 1024 * 1024;
     auto pages = static_cast<uint64_t>(sysconf(_SC_PHYS_PAGES));
@@ -72,10 +69,8 @@ inline void printMem(const char* where)
 }
 
 // Compute size of datatypes
-inline unsigned int elementSize(nvinfer1::DataType t)
-{
-    switch (t)
-    {
+inline unsigned int elementSize(nvinfer1::DataType t) {
+    switch (t) {
     case nvinfer1::DataType::kINT32: return 4;
     case nvinfer1::DataType::kFLOAT: return 4;
     case nvinfer1::DataType::kHALF: return 2;
@@ -85,8 +80,7 @@ inline unsigned int elementSize(nvinfer1::DataType t)
     return 0;
 }
 
-inline std::ostream& operator<<(std::ostream& o, const nvinfer1::Dims& dims)
-{
+inline std::ostream& operator<<(std::ostream& o, const nvinfer1::Dims& dims) {
     o << "[";
     for (int i = 0; i < dims.nbDims; i++)
         o << (i ? "," : "") << dims.d[i];
@@ -94,10 +88,8 @@ inline std::ostream& operator<<(std::ostream& o, const nvinfer1::Dims& dims)
     return o;
 }
 
-inline std::ostream& operator<<(std::ostream& o, nvinfer1::DataType dt)
-{
-    switch (dt)
-    {
+inline std::ostream& operator<<(std::ostream& o, nvinfer1::DataType dt) {
+    switch (dt) {
     case nvinfer1::DataType::kINT32: o << "Int32"; break;
     case nvinfer1::DataType::kFLOAT: o << "Float"; break;
     case nvinfer1::DataType::kHALF: o << "Half"; break;
@@ -107,24 +99,20 @@ inline std::ostream& operator<<(std::ostream& o, nvinfer1::DataType dt)
     return o;
 }
 
-inline nvinfer1::Dims3 getCHW(const nvinfer1::Dims& d)
-{
+inline nvinfer1::Dims3 getCHW(const nvinfer1::Dims& d) {
     assert(d.nbDims >= 3);
     return nvinfer1::Dims3(d.d[d.nbDims - 3], d.d[d.nbDims - 2], d.d[d.nbDims - 1]);
 }
 
-inline int32_t getC(const nvinfer1::Dims& d)
-{
+inline int32_t getC(const nvinfer1::Dims& d) {
     return getCHW(d).d[0];
 }
 
-inline nvinfer1::Dims toDims(int32_t w, int32_t h) noexcept
-{
+inline nvinfer1::Dims toDims(int32_t w, int32_t h) noexcept {
     return nvinfer1::Dims{2, {w, h}};
 }
 
-inline int combineIndexDimensions(int batchSize, const nvinfer1::Dims& d)
-{
+inline int combineIndexDimensions(int batchSize, const nvinfer1::Dims& d) {
     int x = batchSize;
     for (int i = 0; i < d.nbDims - 3; i++)
         x *= d.d[i];
@@ -132,11 +120,10 @@ inline int combineIndexDimensions(int batchSize, const nvinfer1::Dims& d)
 }
 
 template <typename A, typename B>
-inline A divUp(A m, B n)
-{
+inline A divUp(A m, B n) {
     return (m + n - 1) / n;
 }
 
-} // namespace parserhelper
+}  // namespace parserhelper
 
-#endif // PARSER_HELPER_H
+#endif  // PARSER_HELPER_H
