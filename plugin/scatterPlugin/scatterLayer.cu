@@ -85,9 +85,9 @@ pluginStatus_t scatterNDInference(
     int* wo = (int*)(workspace);
     int* transformedIdx = wo + sizeof(int)*nOutputDims;
     int* deviceTransformCoeff = wo;
-    CSC(cudaMemcpy(workspace, transformCoeff, sizeof(int) * nOutputDims, cudaMemcpyHostToDevice), STATUS_FAILURE);
+    CSC(cudaMemcpyAsync(workspace, transformCoeff, sizeof(int) * nOutputDims, cudaMemcpyHostToDevice, stream), STATUS_FAILURE);
     transformIdxKernel<<<nRows, 1, 0, stream>>>(transformedIdx, deviceTransformCoeff, _index, sliceRank);
-    CSC(cudaMemcpy(output, data, copySize, cudaMemcpyDeviceToDevice), STATUS_FAILURE);
+    CSC(cudaMemcpyAsync(output, data, copySize, cudaMemcpyDeviceToDevice, stream), STATUS_FAILURE);
     // assuming output pitch = rowSize i.e no padding
     scatterKernel<<<nRows, 1, 0, stream>>>(_output, _updates, transformedIdx, rowSize * 4, rowSize * 4);
     return STATUS_SUCCESS;
