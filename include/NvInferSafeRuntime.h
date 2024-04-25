@@ -18,7 +18,9 @@
 #ifndef NV_INFER_SAFE_RUNTIME_H
 #define NV_INFER_SAFE_RUNTIME_H
 
+#define NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE 1
 #include "NvInferRuntimeBase.h"
+#undef NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE
 #include "NvInferRuntimePlugin.h"
 #include <cstddef>
 #include <cstdint>

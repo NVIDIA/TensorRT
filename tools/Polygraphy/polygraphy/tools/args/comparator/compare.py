@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,12 @@ from polygraphy import mod
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.script import inline, make_invocable, make_invocable_if_nondefault, safe
+from polygraphy.tools.script import (
+    inline,
+    make_invocable,
+    make_invocable_if_nondefault,
+    safe,
+)
 
 #
 # NOTE: The classes here are expected to use `None` as the default value for all arguments.
@@ -140,13 +145,17 @@ class CompareFuncSimpleArgs(BaseArgs):
         self.no_shape_check = args_util.get(args, "no_shape_check")
         self.rtol = args_util.parse_arglist_to_dict(args_util.get(args, "rtol"))
         self.atol = args_util.parse_arglist_to_dict(args_util.get(args, "atol"))
-        self.check_error_stat = args_util.parse_arglist_to_dict(args_util.get(args, "check_error_stat"))
+        self.check_error_stat = args_util.parse_arglist_to_dict(
+            args_util.get(args, "check_error_stat")
+        )
         self.infinities_compare_equal = args_util.get(args, "infinities_compare_equal")
         self.save_heatmaps = args_util.get(args, "save_heatmaps")
         self.show_heatmaps = args_util.get(args, "show_heatmaps")
         self.save_error_metrics_plot = args_util.get(args, "save_error_metrics_plot")
         self.show_error_metrics_plot = args_util.get(args, "show_error_metrics_plot")
-        self.error_quantile = args_util.parse_arglist_to_dict(args_util.get(args, "error_quantile"))
+        self.error_quantile = args_util.parse_arglist_to_dict(
+            args_util.get(args, "error_quantile")
+        )
 
         # Without this early check, failure would only happen after inference, which is clearly not desirable.
         if self.check_error_stat:
@@ -172,7 +181,7 @@ class CompareFuncSimpleArgs(BaseArgs):
             show_heatmaps=self.show_heatmaps,
             save_error_metrics_plot=self.save_error_metrics_plot,
             show_error_metrics_plot=self.show_error_metrics_plot,
-            error_quantile=self.error_quantile
+            error_quantile=self.error_quantile,
         )
         compare_func = None
         if compare_func_str:
@@ -211,7 +220,9 @@ class CompareFuncIndicesArgs(BaseArgs):
         Attributes:
             index_tolerance (Dict[str, int]): Per-tensor index tolerance.
         """
-        self.index_tolerance = args_util.parse_arglist_to_dict(args_util.get(args, "index_tolerance"))
+        self.index_tolerance = args_util.parse_arglist_to_dict(
+            args_util.get(args, "index_tolerance")
+        )
 
     def add_to_script_impl(self, script):
         from polygraphy.tools.args.comparator.comparator import ComparatorCompareArgs

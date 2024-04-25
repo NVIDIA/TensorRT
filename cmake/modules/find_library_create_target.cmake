@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,9 +25,6 @@ macro(find_library_create_target target_name lib libtype hints)
     find_library(${lib}_LIB_PATH ${lib})
     message(STATUS "Library that was found ${${lib}_LIB_PATH}")
     add_library(${target_name} ${libtype} IMPORTED)
-    set_property(TARGET ${target_name} PROPERTY IMPORTED_LOCATION ${${lib}_LIB_PATH}) # This should be .so or .dll file, currently its .a or .lib.
-    if (WIN32)
-        set_property(TARGET ${target_name} PROPERTY IMPORTED_IMPLIB ${${lib}_LIB_PATH}) # This should be a .lib file
-    endif()
+    set_property(TARGET ${target_name} PROPERTY IMPORTED_LOCATION ${${lib}_LIB_PATH})
     message(STATUS "==========================================================================================")
 endmacro()

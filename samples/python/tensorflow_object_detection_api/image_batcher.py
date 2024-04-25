@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,15 @@ class ImageBatcher:
     Creates batches of pre-processed images.
     """
 
-    def __init__(self, input, shape, dtype, max_num_images=None, exact_batches=False, preprocessor="fixed_shape_resizer"):
+    def __init__(
+        self,
+        input,
+        shape,
+        dtype,
+        max_num_images=None,
+        exact_batches=False,
+        preprocessor="fixed_shape_resizer",
+    ):
         """
         :param input: The input directory to read images from.
         :param shape: The tensor shape of the batch to prepare, either in NCHW or NHWC format.
@@ -45,10 +53,16 @@ class ImageBatcher:
         extensions = [".jpg", ".jpeg", ".png", ".bmp"]
 
         def is_image(path):
-            return os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            return (
+                os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            )
 
         if os.path.isdir(input):
-            self.images = [os.path.join(input, f) for f in os.listdir(input) if is_image(os.path.join(input, f))]
+            self.images = [
+                os.path.join(input, f)
+                for f in os.listdir(input)
+                if is_image(os.path.join(input, f))
+            ]
             self.images.sort()
         elif os.path.isfile(input):
             if is_image(input):
@@ -85,7 +99,7 @@ class ImageBatcher:
         if self.num_images < 1:
             print("Not enough images to create batches")
             sys.exit(1)
-        self.images = self.images[0:self.num_images]
+        self.images = self.images[0 : self.num_images]
 
         # Subdivide the list of images into batches
         self.num_batches = 1 + int((self.num_images - 1) / self.batch_size)
@@ -133,7 +147,10 @@ class ImageBatcher:
                 return image, scale
             elif self.preprocessor == "keep_aspect_ratio_resizer":
                 scale = 1.0 / max(width_scale, height_scale)
-                image = image.resize((round(width * scale), round(height * scale)), resample=Image.BILINEAR)
+                image = image.resize(
+                    (round(width * scale), round(height * scale)),
+                    resample=Image.BILINEAR,
+                )
                 pad = Image.new("RGB", (self.width, self.height))
                 pad.paste(pad_color, [0, 0, self.width, self.height])
                 pad.paste(image)
@@ -141,9 +158,12 @@ class ImageBatcher:
 
         scale = None
         image = Image.open(image_path)
-        image = image.convert(mode='RGB')
-        if self.preprocessor == "fixed_shape_resizer" or self.preprocessor == "keep_aspect_ratio_resizer":
-            #Resize & Pad with ImageNet mean values and keep as [0,255] Normalization
+        image = image.convert(mode="RGB")
+        if (
+            self.preprocessor == "fixed_shape_resizer"
+            or self.preprocessor == "keep_aspect_ratio_resizer"
+        ):
+            # Resize & Pad with ImageNet mean values and keep as [0,255] Normalization
             image, scale = resize_pad(image, (124, 116, 104))
             image = np.asarray(image, dtype=self.dtype)
         else:

@@ -73,9 +73,9 @@ The following software version configuration has been tested:
 
 |Software|Version|
 |--------|-------|
-|Python|>=3.6|
-|TensorRT|8.5.1|
-|CUDA|11.6|
+|Python|>=3.8|
+|TensorRT|10.0.1.6|
+|CUDA|12.4|
 
 ## Setup
 

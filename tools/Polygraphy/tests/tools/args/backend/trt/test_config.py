@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -479,9 +479,11 @@ class TestTrtConfigArgs:
     @pytest.mark.parametrize(
         "preview_features",
         [
-            ["PROFILE_SHAriNG_0806"]
-            if mod.version(trt.__version__) >= mod.version("10.0")
-            else ["FASter_DYNAMIC_ShAPeS_0805"],
+            (
+                ["PROFILE_SHAriNG_0806"]
+                if mod.version(trt.__version__) >= mod.version("10.0")
+                else ["FASter_DYNAMIC_ShAPeS_0805"]
+            ),
         ],
     )
     def test_preview_features(self, trt_config_args, preview_features):

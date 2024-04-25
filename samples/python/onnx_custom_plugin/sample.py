@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +30,7 @@ import common
 
 # Reuse some BiDAF-specific methods
 # ../engine_refit_onnx_bidaf/data_processing.py
-sys.path.insert(1, os.path.join(parent_dir, 'engine_refit_onnx_bidaf'))
+sys.path.insert(1, os.path.join(parent_dir, "engine_refit_onnx_bidaf"))
 from engine_refit_onnx_bidaf.data_processing import preprocess, get_inputs
 
 # Maxmimum number of words in context or query text.
@@ -38,10 +38,12 @@ from engine_refit_onnx_bidaf.data_processing import preprocess, get_inputs
 # Adjustable.
 MAX_TEXT_LENGTH = 64
 
-WORKING_DIR = os.environ.get("TRT_WORKING_DIR") or os.path.dirname(os.path.realpath(__file__))
+WORKING_DIR = os.environ.get("TRT_WORKING_DIR") or os.path.dirname(
+    os.path.realpath(__file__)
+)
 
 # Path to which trained model will be saved (check README.md)
-ENGINE_FILE_PATH = os.path.join(WORKING_DIR, 'bidaf.trt')
+ENGINE_FILE_PATH = os.path.join(WORKING_DIR, "bidaf.trt")
 
 # Define global logger object (it should be a singleton,
 # available for TensorRT from anywhere in code).
@@ -49,13 +51,16 @@ ENGINE_FILE_PATH = os.path.join(WORKING_DIR, 'bidaf.trt')
 # (or lower to display more messages)
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 
+
 # Builds TensorRT Engine
 def build_engine(model_path):
 
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(0)
     config = builder.create_builder_config()
-    config.set_tactic_sources(config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS))
+    config.set_tactic_sources(
+        config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS)
+    )
     parser = trt.OnnxParser(network, TRT_LOGGER)
     runtime = trt.Runtime(TRT_LOGGER)
 
@@ -90,17 +95,20 @@ def build_engine(model_path):
         f.write(plan)
     return engine
 
+
 def load_test_case(inputs, context_text, query_text, trt_context):
     # Part 1: Specify Input shapes
     cw, cc = preprocess(context_text)
     qw, qc = preprocess(query_text)
     for arr in (cw, cc, qw, qc):
-        assert arr.shape[0] <= MAX_TEXT_LENGTH, "Input context or query is too long! " + \
-                                                "Either decrease the input length or increase MAX_TEXT_LENGTH"
-    trt_context.set_input_shape('CategoryMapper_4', cw.shape)
-    trt_context.set_input_shape('CategoryMapper_5', cc.shape)
-    trt_context.set_input_shape('CategoryMapper_6', qw.shape)
-    trt_context.set_input_shape('CategoryMapper_7', qc.shape)
+        assert arr.shape[0] <= MAX_TEXT_LENGTH, (
+            "Input context or query is too long! "
+            + "Either decrease the input length or increase MAX_TEXT_LENGTH"
+        )
+    trt_context.set_input_shape("CategoryMapper_4", cw.shape)
+    trt_context.set_input_shape("CategoryMapper_5", cc.shape)
+    trt_context.set_input_shape("CategoryMapper_6", qw.shape)
+    trt_context.set_input_shape("CategoryMapper_7", qc.shape)
 
     # Part 2: load input data
     cw_flat, cc_flat, qw_flat, qc_flat = get_inputs(context_text, query_text)
@@ -138,20 +146,23 @@ def main():
     inputs, outputs, bindings, stream = common.allocate_buffers(engine, profile_idx=0)
 
     testcases = [
-        ('Garry the lion is 5 years old. He lives in the savanna.', 'Where does the lion live?'),
-        ('A quick brown fox jumps over the lazy dog.', 'What color is the fox?')
+        (
+            "Garry the lion is 5 years old. He lives in the savanna.",
+            "Where does the lion live?",
+        ),
+        ("A quick brown fox jumps over the lazy dog.", "What color is the fox?"),
     ]
 
     print("\n=== Testing ===")
 
-    interactive = '--interactive' in sys.argv
+    interactive = "--interactive" in sys.argv
     if interactive:
         context_text = input("Enter context: ")
         query_text = input("Enter query: ")
         testcases = [(context_text, query_text)]
 
     trt_context = engine.create_execution_context()
-    for (context_text, query_text) in testcases:
+    for context_text, query_text in testcases:
 
         context_words, _ = preprocess(context_text)
 
@@ -159,7 +170,14 @@ def main():
         if not interactive:
             print(f"Input context: {context_text}")
             print(f"Input query: {query_text}")
-        trt_outputs = common.do_inference(trt_context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        trt_outputs = common.do_inference(
+            trt_context,
+            engine=engine,
+            bindings=bindings,
+            inputs=inputs,
+            outputs=outputs,
+            stream=stream,
+        )
         start = trt_outputs[1].item()
         end = trt_outputs[0].item()
         answer = context_words[start : end + 1].flatten()
@@ -167,6 +185,7 @@ def main():
         print()
     common.free_buffers(inputs, outputs, stream)
     print("Passed")
+
 
 if __name__ == "__main__":
     main()

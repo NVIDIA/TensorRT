@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,8 +40,8 @@ static const auto weights_pointer_constructor = [](DataType const& type, size_t 
 static const auto weights_numpy_constructor = [](py::array& arr) {
     arr = py::array::ensure(arr);
     // In order to construct a weights object, we must have a contiguous C-style array.
-    PY_ASSERT_VALUE_ERROR(arr,
-        "Could not convert NumPy array to Weights. Is it using a data type supported by TensorRT?");
+    PY_ASSERT_VALUE_ERROR(
+        arr, "Could not convert NumPy array to Weights. Is it using a data type supported by TensorRT?");
     PY_ASSERT_VALUE_ERROR((arr.flags() & py::array::c_style),
         "Could not convert non-contiguous NumPy array to Weights. Please use numpy.ascontiguousarray() to fix this.");
     return new Weights{utils::type(arr.dtype()), arr.data(), arr.size()};
@@ -105,8 +105,8 @@ static const auto dims_getter = [](Dims const& self, int32_t const pyIndex) -> i
 
 static const auto dims_getter_slice = [](Dims const& self, py::slice slice) {
     size_t start, stop, step, slicelength;
-    PY_ASSERT_VALUE_ERROR(slice.compute(self.nbDims, &start, &stop, &step, &slicelength),
-        "Incorrect getter slice dims");
+    PY_ASSERT_VALUE_ERROR(
+        slice.compute(self.nbDims, &start, &stop, &step, &slicelength), "Incorrect getter slice dims");
     // Disallow out-of-bounds things.
     PY_ASSERT_INDEX_ERROR(stop <= self.nbDims);
 
@@ -124,8 +124,8 @@ static const auto dims_setter = [](Dims& self, int32_t const pyIndex, int64_t co
 
 static const auto dims_setter_slice = [](Dims& self, py::slice slice, Dims const& other) {
     size_t start, stop, step, slicelength;
-    PY_ASSERT_VALUE_ERROR(slice.compute(self.nbDims, &start, &stop, &step, &slicelength),
-        "Incorrect setter slice dims");
+    PY_ASSERT_VALUE_ERROR(
+        slice.compute(self.nbDims, &start, &stop, &step, &slicelength), "Incorrect setter slice dims");
     // Disallow out-of-bounds things.
     PY_ASSERT_INDEX_ERROR(stop < self.nbDims);
 

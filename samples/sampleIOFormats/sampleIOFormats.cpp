@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +33,7 @@
 #include "half.h"
 #include "logger.h"
 #include "parserOnnxConfig.h"
+#include "sampleOptions.h"
 
 #include "NvInfer.h"
 #include "NvOnnxParser.h"
@@ -144,6 +145,15 @@ public:
     }
 };
 
+//! Specification for a network I/O tensor.
+class TypeSpec
+{
+public:
+    DataType dtype;         //!< datatype
+    TensorFormat format;    //!< format
+    std::string formatName; //!< name of the format
+};
+
 class SampleBuffer
 {
 public:
@@ -245,30 +255,14 @@ public:
     bool build(int32_t dataWidth);
 
     //!
+    //! \brief Verify the built engine I/O types and formats.
+    //!
+    bool verify(TypeSpec const& spec);
+
+    //!
     //! \brief Runs the TensorRT inference engine for this sample
     //!
     bool infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf);
-
-    //!
-    //! \brief Used to run CPU reference and get result
-    //!
-    bool reference();
-
-    //!
-    //! \brief Used to compare the CPU reference with the TRT result
-    //!
-    void compareResult();
-
-    //!
-    //! \brief Reads the digit map from the file
-    //!
-    bool readDigits(SampleBuffer& buffer, int32_t groundTruthDigit);
-
-    //!
-    //! \brief Verifies that the output is correct and prints it
-    //!
-    template <typename T>
-    bool verifyOutput(SampleBuffer& outputBuf, int32_t groundTruthDigit) const;
 
 private:
     //!
@@ -292,6 +286,62 @@ public:
 
     int32_t mDigit;
 };
+
+//!
+//! \brief Validates engine I/O datatypes and formats against a reference.
+//!
+//! \details This function queries I/O datatype and format description from the built engine.
+//!           Validating them is sufficient to ensure that `ITensor::setType` and `ITensor::setAllowedFormats` API as
+//!           expected.
+//!
+//! \return true if type and format validation succeeds.
+//!
+bool SampleIOFormats::verify(TypeSpec const& spec)
+{
+    assert(mEngine->getNbIOTensors() == 2);
+    char const* inputName = mEngine->getIOTensorName(0);
+    char const* outputName = mEngine->getIOTensorName(1);
+
+    auto verifyType = [](DataType actual, DataType expected) {
+        if (actual != expected)
+        {
+            sample::gLogError << "Expected " << expected << " data type, got " << actual;
+            return false;
+        }
+        return true;
+    };
+
+    if (!verifyType(mEngine->getTensorDataType(inputName), spec.dtype))
+    {
+        return false;
+    }
+
+    if (!verifyType(mEngine->getTensorDataType(outputName), spec.dtype))
+    {
+        return false;
+    }
+
+    auto verifyFormat = [](std::string actual, std::string expected) {
+        if (expected.find(actual) != std::string::npos)
+        {
+            sample::gLogError << "Expected " << expected << " format, got " << actual;
+            return false;
+        }
+        return true;
+    };
+
+    if (!verifyFormat(std::string(mEngine->getTensorFormatDesc(inputName)), spec.formatName))
+    {
+        return false;
+    }
+
+    if (!verifyFormat(std::string(mEngine->getTensorFormatDesc(inputName)), "kLINEAR"))
+    {
+        return false;
+    }
+
+    return true;
+}
 
 //!
 //! \brief Creates the network, configures the builder and creates the network engine
@@ -475,134 +525,6 @@ bool SampleIOFormats::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
 }
 
 //!
-//! \brief Reads the digit map from file
-//!
-bool SampleIOFormats::readDigits(SampleBuffer& buffer, int32_t groundTruthDigit)
-{
-    int32_t const inputH = buffer.dims.d[2];
-    int32_t const inputW = buffer.dims.d[3];
-
-    // Read a random digit file
-    std::vector<uint8_t> fileData(inputH * inputW);
-    readPGMFile(
-        locateFile(std::to_string(groundTruthDigit) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
-
-    // Print ASCII representation of digit
-    for (int32_t i = 0; i < inputH * inputW; i++)
-    {
-        sample::gLogInfo << (" .:-=+*#%@"[fileData[i] / 26]) << (((i + 1) % inputW) ? "" : "\n");
-    }
-    sample::gLogInfo << std::endl;
-
-    float* inputBuf = reinterpret_cast<float*>(buffer.buffer);
-
-    for (int32_t i = 0; i < inputH * inputW; i++)
-    {
-        inputBuf[i] = 1.0F - static_cast<float>(fileData[i] / 255.0F);
-    }
-
-    return true;
-}
-
-//!
-//! \brief Verifies that the output is correct and prints it
-//!
-template <typename T>
-bool SampleIOFormats::verifyOutput(SampleBuffer& outputBuf, int32_t groundTruthDigit) const
-{
-    T const* prob = reinterpret_cast<T const*>(outputBuf.buffer);
-
-    float val{0.0F};
-    float elem{0.0F};
-    int32_t idx{0};
-    int32_t const kDIGITS = 10;
-
-    for (int32_t i = 0; i < kDIGITS; i++)
-    {
-        elem = static_cast<float>(prob[i]);
-        if (val < elem)
-        {
-            val = elem;
-            idx = i;
-        }
-    }
-    sample::gLogInfo << "Predicted Output: " << idx << std::endl;
-
-    return (idx == groundTruthDigit && val > 0.9F);
-}
-
-int32_t calcIndex(SampleBuffer& buffer, int32_t c, int32_t h, int32_t w)
-{
-    int32_t index;
-
-    if (!buffer.desc.channelPivot)
-    {
-        index = c / buffer.desc.dims[4] * buffer.desc.dims[2] * buffer.desc.dims[3] * buffer.desc.dims[4]
-            + h * buffer.desc.dims[3] * buffer.desc.dims[4] + w * buffer.desc.dims[4] + c % buffer.desc.dims[4];
-    }
-    else
-    {
-        index = h * buffer.desc.dims[3] * buffer.desc.dims[2] + w * buffer.desc.dims[3] + c;
-    }
-
-    return index;
-}
-
-//!
-//! \brief Reformats the buffer. Src and dst buffers should be of same datatype and dims.
-//!
-template <typename T>
-void reformat(SampleBuffer& src, SampleBuffer& dst)
-{
-    if (src.format == dst.format)
-    {
-        memcpy(dst.buffer, src.buffer, src.getBufferSize());
-        return;
-    }
-
-    int32_t srcIndex, dstIndex;
-
-    T* srcBuf = reinterpret_cast<T*>(src.buffer);
-    T* dstBuf = reinterpret_cast<T*>(dst.buffer);
-
-    for (int32_t c = 0; c < src.dims.d[1]; c++)
-    {
-        for (int32_t h = 0; h < src.dims.d[2]; h++)
-        {
-            for (int32_t w = 0; w < src.dims.d[3]; w++)
-            {
-                srcIndex = calcIndex(src, c, h, w);
-                dstIndex = calcIndex(dst, c, h, w);
-                dstBuf[dstIndex] = srcBuf[srcIndex];
-            }
-        }
-    }
-}
-
-template <typename T>
-void convertGoldenData(SampleBuffer& goldenInput, SampleBuffer& dstInput)
-{
-    SampleBuffer tmpBuf(goldenInput.dims, sizeof(T), goldenInput.format, true);
-
-    float* golden = reinterpret_cast<float*>(goldenInput.buffer);
-    T* tmp = reinterpret_cast<T*>(tmpBuf.buffer);
-
-    for (int32_t i = 0; i < goldenInput.desc.getElememtSize(); i++)
-    {
-        if (std::is_same<T, int8_t>::value)
-        {
-            tmp[i] = static_cast<T>(1 - ((1.0F - golden[i]) * 255.0F - 128) / 255.0F);
-        }
-        else
-        {
-            tmp[i] = static_cast<T>(golden[i]);
-        }
-    }
-
-    reformat<T>(tmpBuf, dstInput);
-}
-
-//!
 //! \brief Initializes members of the params struct using the command line args
 //!
 samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const& args)
@@ -644,66 +566,28 @@ void printHelpInfo()
 //!
 template <typename T>
 bool process(SampleIOFormats& sample, sample::Logger::TestAtom const& sampleTest, SampleBuffer& inputBuf,
-    SampleBuffer& outputBuf, SampleBuffer& goldenInput)
+    SampleBuffer& outputBuf, TypeSpec& spec)
 {
     sample::gLogInfo << "Building and running a GPU inference engine with specified I/O formats." << std::endl;
 
-    inputBuf = SampleBuffer(sample.mInputDims, sizeof(T), sample.mTensorFormat, true);
-    outputBuf = SampleBuffer(sample.mOutputDims, sizeof(T), TensorFormat::kLINEAR, false);
     if (!sample.build(sizeof(T)))
     {
         return false;
     }
-    convertGoldenData<T>(goldenInput, inputBuf);
+    if (!sample.verify(spec))
+    {
+        return false;
+    }
+
+    inputBuf = SampleBuffer(sample.mInputDims, sizeof(T), sample.mTensorFormat, true);
+    outputBuf = SampleBuffer(sample.mOutputDims, sizeof(T), TensorFormat::kLINEAR, false);
 
     if (!sample.infer(inputBuf, outputBuf))
     {
         return false;
     }
-
-    if (!sample.verifyOutput<T>(outputBuf, sample.mDigit))
-    {
-        return false;
-    }
-
     return true;
 }
-
-bool runFP32Reference(SampleIOFormats& sample, sample::Logger::TestAtom const& sampleTest, SampleBuffer& goldenInput,
-    SampleBuffer& goldenOutput)
-{
-    sample::gLogInfo << "Building and running a FP32 GPU inference to get golden input/output" << std::endl;
-
-    if (!sample.build(sizeof(float)))
-    {
-        return false;
-    }
-
-    goldenInput = SampleBuffer(sample.mInputDims, sizeof(float), TensorFormat::kLINEAR, true);
-    goldenOutput = SampleBuffer(sample.mOutputDims, sizeof(float), TensorFormat::kLINEAR, false);
-
-    sample.readDigits(goldenInput, sample.mDigit);
-
-    if (!sample.infer(goldenInput, goldenOutput))
-    {
-        return false;
-    }
-
-    if (!sample.verifyOutput<float>(goldenOutput, sample.mDigit))
-    {
-        return false;
-    }
-
-    return true;
-}
-
-//! Specification for a network I/O tensor.
-class IOSpec
-{
-public:
-    TensorFormat format;    //!< format
-    std::string formatName; //!< name of the format
-};
 
 int32_t main(int32_t argc, char** argv)
 {
@@ -727,56 +611,45 @@ int32_t main(int32_t argc, char** argv)
 
     samplesCommon::OnnxSampleParams params = initializeSampleParams(args);
 
-    std::vector<IOSpec> vecFP16TensorFmt = {
-        IOSpec{TensorFormat::kLINEAR, "kLINEAR"},
-        IOSpec{TensorFormat::kCHW2, "kCHW2"},
-        IOSpec{TensorFormat::kHWC8, "kHWC8"},
-    };
-    std::vector<IOSpec> vecINT8TensorFmt = {
-        IOSpec{TensorFormat::kLINEAR, "kLINEAR"},
-        IOSpec{TensorFormat::kCHW4, "kCHW4"},
-        IOSpec{TensorFormat::kCHW32, "kCHW32"},
+    std::vector<TypeSpec> fp16TypeSpec = {
+        TypeSpec{DataType::kHALF, TensorFormat::kLINEAR, "kLINEAR"},
+        TypeSpec{DataType::kHALF, TensorFormat::kCHW2, "kCHW2"},
+        TypeSpec{DataType::kHALF, TensorFormat::kHWC8, "kHWC8"},
     };
 
-    SampleBuffer goldenInput, goldenOutput;
+    std::vector<TypeSpec> int8TypeSpec = {
+        TypeSpec{DataType::kINT8, TensorFormat::kLINEAR, "kLINEAR"},
+        TypeSpec{DataType::kINT8, TensorFormat::kCHW4, "kCHW4"},
+        TypeSpec{DataType::kINT8, TensorFormat::kCHW32, "kCHW32"},
+    };
 
     SampleIOFormats sample(params);
 
-    srand(unsigned(time(nullptr)));
-    sample.mDigit = rand() % 10;
-
-    sample::gLogInfo << "The test chooses MNIST as the network and recognizes a randomly generated digit" << std::endl;
     sample::gLogInfo
-        << "Firstly it runs the FP32 as the golden data, then INT8/FP16 with different formats will be tested"
-        << std::endl
+        << "Build TRT engine with different IO data type and formats. Ensure that built engine abide by them"
         << std::endl;
 
-    if (!runFP32Reference(sample, sampleTest, goldenInput, goldenOutput))
-    {
-        return sample::gLogger.reportFail(sampleTest);
-    }
-
     // Test FP16 formats
-    for (auto spec : vecFP16TensorFmt)
+    for (auto spec : fp16TypeSpec)
     {
         sample::gLogInfo << "Testing datatype FP16 with format " << spec.formatName << std::endl;
         sample.mTensorFormat = spec.format;
         SampleBuffer inputBuf, outputBuf;
 
-        if (!process<half_float::half>(sample, sampleTest, inputBuf, outputBuf, goldenInput))
+        if (!process<half_float::half>(sample, sampleTest, inputBuf, outputBuf, spec))
         {
             return sample::gLogger.reportFail(sampleTest);
         }
     }
 
     // Test INT8 formats
-    for (auto spec : vecINT8TensorFmt)
+    for (auto spec : int8TypeSpec)
     {
         sample::gLogInfo << "Testing datatype INT8 with format " << spec.formatName << std::endl;
         sample.mTensorFormat = spec.format;
         SampleBuffer inputBuf, outputBuf;
 
-        if (!process<int8_t>(sample, sampleTest, inputBuf, outputBuf, goldenInput))
+        if (!process<int8_t>(sample, sampleTest, inputBuf, outputBuf, spec))
         {
             return sample::gLogger.reportFail(sampleTest);
         }

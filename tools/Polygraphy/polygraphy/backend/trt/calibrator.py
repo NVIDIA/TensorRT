@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +15,15 @@
 # limitations under the License.
 #
 import contextlib
+import copy
 from collections import OrderedDict
 
 from polygraphy import mod, util
+from polygraphy.backend.base import util as base_util
+from polygraphy.backend.trt import util as trt_util
+from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER, LogMode
-from polygraphy.backend.trt import util as trt_util
-from polygraphy.backend.base import util as base_util
 
 trt = mod.lazy_import("tensorrt>=8.5")
 np = mod.lazy_import("numpy")
@@ -29,7 +31,13 @@ np = mod.lazy_import("numpy")
 
 @mod.export()
 def Calibrator(
-    data_loader, cache=None, BaseClass=None, batch_size=None, quantile=None, regression_cutoff=None, algo=None
+    data_loader,
+    cache=None,
+    BaseClass=None,
+    batch_size=None,
+    quantile=None,
+    regression_cutoff=None,
+    algo=None,
 ):
     """
     Supplies calibration data to TensorRT to calibrate the network for INT8 inference.
@@ -112,10 +120,25 @@ def Calibrator(
                         using Polygraphy's included `DataLoader` to provide calibration data,
                         or if data type and shape checking is desired.
             """
-            self.input_metadata = input_metadata
-            if input_metadata is not None:
+            calibration_metadata = copy.copy(input_metadata)
+            for name, meta_tuple in calibration_metadata.items():
+                if meta_tuple.dtype not in {
+                    DataType.FLOAT32,
+                    DataType.INT32,
+                    DataType.INT64,
+                    DataType.BOOL,
+                }:
+                    G_LOGGER.warning(
+                        f"TensorRT requires non-index calibration inputs to be provided in float32. "
+                        f"Input: {name} has datatype: {meta_tuple.dtype}, so will override to float32 in the calibrator's metadata. "
+                        f"If you are using a custom data loader with the calibrator, please ensure that you return a float32 tensor for this input."
+                    )
+                    meta_tuple.dtype = DataType.FLOAT32
+
+            self.input_metadata = calibration_metadata
+            if calibration_metadata is not None:
                 with contextlib.suppress(AttributeError):
-                    self.data_loader.input_metadata = input_metadata
+                    self.data_loader.input_metadata = calibration_metadata
 
         def reset(self):
             """
@@ -160,7 +183,9 @@ def Calibrator(
                 if isinstance(buf, int):
                     ptrs.append(buf)
                 else:
-                    ptrs.append(trt_util._get_array_on_gpu(buf, name, self.device_buffers))
+                    ptrs.append(
+                        trt_util._get_array_on_gpu(buf, name, self.device_buffers)
+                    )
 
             return ptrs
 
@@ -182,7 +207,9 @@ def Calibrator(
                 try:
                     return util.load_file(self._cache, description="calibration cache")
                 except Exception as err:
-                    G_LOGGER.error(f"Could not read from calibration cache: {self._cache}\nNote: Error was: {err}")
+                    G_LOGGER.error(
+                        f"Could not read from calibration cache: {self._cache}\nNote: Error was: {err}"
+                    )
                     return None
 
             if self.cache_contents is not None:
@@ -208,9 +235,15 @@ def Calibrator(
                 return
 
             try:
-                util.save_file(contents=self.cache_contents, dest=self._cache, description="calibration cache")
+                util.save_file(
+                    contents=self.cache_contents,
+                    dest=self._cache,
+                    description="calibration cache",
+                )
             except Exception as err:
-                G_LOGGER.error(f"Could not write to calibration cache: {self._cache}.\nNote: Error was: {err}")
+                G_LOGGER.error(
+                    f"Could not write to calibration cache: {self._cache}.\nNote: Error was: {err}"
+                )
 
         def free(self):
             """

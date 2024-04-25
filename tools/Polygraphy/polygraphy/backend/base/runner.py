@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,7 +126,9 @@ class BaseRunner:
             TensorMetadata: Input names, shapes, and data types.
         """
         if not self.is_active:
-            G_LOGGER.critical(f"{self.name:35} | Must be activated prior to calling get_input_metadata()")
+            G_LOGGER.critical(
+                f"{self.name:35} | Must be activated prior to calling get_input_metadata()"
+            )
 
         use_numpy_dtypes = util.default(use_numpy_dtypes, True)
 
@@ -180,11 +182,16 @@ class BaseRunner:
                     outputs from multiple inferences, you should make a copy with ``copy.deepcopy(outputs)``.
         """
         if not self.is_active:
-            G_LOGGER.critical(f"{self.name:35} | Must be activated prior to calling infer()")
+            G_LOGGER.critical(
+                f"{self.name:35} | Must be activated prior to calling infer()"
+            )
 
         if check_inputs:
             input_metadata = self.get_input_metadata(use_numpy_dtypes=False)
-            G_LOGGER.verbose(f"{self.name:35} | Input metadata is: {input_metadata}", mode=LogMode.ONCE)
+            G_LOGGER.verbose(
+                f"{self.name:35} | Input metadata is: {input_metadata}",
+                mode=LogMode.ONCE,
+            )
             base_util.check_inputs(feed_dict, input_metadata)
 
         return self.infer_impl(feed_dict, *args, **kwargs)
@@ -246,4 +253,6 @@ class BaseRunner:
     def __del__(self):
         if self.is_active:
             # __del__ is not guaranteed to be called, but when it is, this could be a useful warning.
-            print(f"[W] {self.name:35} | Was activated but never deactivated. This could cause a memory leak!")
+            print(
+                f"[W] {self.name:35} | Was activated but never deactivated. This could cause a memory leak!"
+            )

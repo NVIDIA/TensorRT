@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -791,9 +791,11 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                                     name=elem["Name"],
                                     dtype=dtype_from_fmt_dtype(elem["Format/Datatype"]),
                                     shape=elem["Dimensions"],
-                                    docstring=f"Format: {elem['Format/Datatype']}"
-                                    if "N/A" not in elem["Format/Datatype"]
-                                    else None,
+                                    docstring=(
+                                        f"Format: {elem['Format/Datatype']}"
+                                        if "N/A" not in elem["Format/Datatype"]
+                                        else None
+                                    ),
                                 )
                             return names, meta
 

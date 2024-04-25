@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,5 +51,8 @@ class TestSessionFromOnnx:
     def test_invalid_providers_raise_errors(self):
         model = ONNX_MODELS["identity"]
         loader = SessionFromOnnx(model.loader, providers=["cpu", "not_a_real_provider"])
-        with pytest.raises(PolygraphyException, match="Could not find specified ONNX-Runtime execution provider"):
+        with pytest.raises(
+            PolygraphyException,
+            match="Could not find specified ONNX-Runtime execution provider",
+        ):
             loader()

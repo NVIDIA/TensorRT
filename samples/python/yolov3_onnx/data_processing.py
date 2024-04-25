@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,9 @@ def load_label_categories(label_file_path):
     return categories
 
 
-LABEL_FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "coco_labels.txt")
+LABEL_FILE_PATH = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), "coco_labels.txt"
+)
 ALL_CATEGORIES = load_label_categories(LABEL_FILE_PATH)
 
 # Let's make sure that there are 80 classes, as expected for the COCO data set:
@@ -103,7 +105,14 @@ class PreprocessYOLO(object):
 class PostprocessYOLO(object):
     """Class for post-processing the three outputs tensors from YOLOv3-608."""
 
-    def __init__(self, yolo_masks, yolo_anchors, obj_threshold, nms_threshold, yolo_input_resolution):
+    def __init__(
+        self,
+        yolo_masks,
+        yolo_anchors,
+        obj_threshold,
+        nms_threshold,
+        yolo_input_resolution,
+    ):
         """Initialize with all values that will be kept when processing several frames.
         Assuming 3 outputs of the network in the case of (large) YOLOv3.
 
@@ -135,7 +144,9 @@ class PostprocessYOLO(object):
         for output in outputs:
             outputs_reshaped.append(self._reshape_output(output))
 
-        boxes, categories, confidences = self._process_yolo_output(outputs_reshaped, resolution_raw)
+        boxes, categories, confidences = self._process_yolo_output(
+            outputs_reshaped, resolution_raw
+        )
 
         return boxes, categories, confidences
 
@@ -311,8 +322,12 @@ class PostprocessYOLO(object):
             keep.append(i)
             xx1 = np.maximum(x_coord[i], x_coord[ordered[1:]])
             yy1 = np.maximum(y_coord[i], y_coord[ordered[1:]])
-            xx2 = np.minimum(x_coord[i] + width[i], x_coord[ordered[1:]] + width[ordered[1:]])
-            yy2 = np.minimum(y_coord[i] + height[i], y_coord[ordered[1:]] + height[ordered[1:]])
+            xx2 = np.minimum(
+                x_coord[i] + width[i], x_coord[ordered[1:]] + width[ordered[1:]]
+            )
+            yy2 = np.minimum(
+                y_coord[i] + height[i], y_coord[ordered[1:]] + height[ordered[1:]]
+            )
 
             width1 = np.maximum(0.0, xx2 - xx1 + 1)
             height1 = np.maximum(0.0, yy2 - yy1 + 1)

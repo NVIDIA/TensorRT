@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,13 @@ This script builds and runs a TensorRT engine with FP16 precision enabled
 starting from an ONNX identity model.
 """
 import numpy as np
-from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, SaveEngine, TrtRunner
+from polygraphy.backend.trt import (
+    CreateConfig,
+    EngineFromNetwork,
+    NetworkFromOnnxPath,
+    SaveEngine,
+    TrtRunner,
+)
 
 
 def main():

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,10 +50,12 @@ class TestTrtLoadNetworkArgs:
     @pytest.mark.parametrize("force_onnx_loader", [True, False])
     @pytest.mark.parametrize(
         "opts,expected_flag",
-        [([], None)]
-        + [(["--strongly-typed"], trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)]
-        if mod.version(trt.__version__) >= mod.version("8.7")
-        else [],
+        (
+            [([], None)]
+            + [(["--strongly-typed"], trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)]
+            if mod.version(trt.__version__) >= mod.version("8.7")
+            else []
+        ),
     )
     def test_load_network(self, force_onnx_loader, opts, expected_flag):
         arg_group = ArgGroupTestHelper(

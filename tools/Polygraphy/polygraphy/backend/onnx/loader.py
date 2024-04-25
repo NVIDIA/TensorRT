@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,14 +28,18 @@ from polygraphy.logger import G_LOGGER, LogMode
 np = mod.lazy_import("numpy")
 onnx = mod.lazy_import("onnx>=1.8.1")
 onnxrt = mod.lazy_import("onnxruntime>=1.10.0")
-onnxmltools = mod.lazy_import("onnxmltools==1.11.1", requires=["onnxconverter_common==1.12.2"])
+onnxmltools = mod.lazy_import(
+    "onnxmltools==1.11.1", requires=["onnxconverter_common==1.12.2"]
+)
 tf = mod.lazy_import("tensorflow<2.0")
 tf2onnx = mod.lazy_import("tf2onnx")
 tf_util = mod.lazy_import("polygraphy.backend.tf.util", log=False)
 gs = mod.lazy_import("onnx_graphsurgeon>=0.3.27")
 # ONNX-RT's shape inference also requires "sympy", but it is not reported as a dependency,
 # so we work around it by checking for it manually.
-onnxrt_symbolic_shape_inference = mod.lazy_import("onnxruntime.tools.symbolic_shape_infer>=1.10.0", requires=["sympy"])
+onnxrt_symbolic_shape_inference = mod.lazy_import(
+    "onnxruntime.tools.symbolic_shape_infer>=1.10.0", requires=["sympy"]
+)
 
 LARGE_MODEL_THRESHOLD = 512 << 20  # 512 MiB
 PROTOBUF_THRESHOLD = 2e9
@@ -151,7 +155,9 @@ class OnnxFromPath(BaseLoader):
         """
         G_LOGGER.info(f"Loading model: {self.path}")
         # If external_data_dir is not None, we'll load external data ourselves
-        auto_load_ext_data = self.external_data_dir is None and not self.ignore_external_data
+        auto_load_ext_data = (
+            self.external_data_dir is None and not self.ignore_external_data
+        )
         try:
             model = onnx.load(self.path, load_external_data=auto_load_ext_data)
         except FileNotFoundError:
@@ -165,7 +171,9 @@ class OnnxFromPath(BaseLoader):
 
         if self.external_data_dir is not None:
             G_LOGGER.verbose(f"Loading external data from: {self.external_data_dir}")
-            onnx.external_data_helper.load_external_data_for_model(model, self.external_data_dir)
+            onnx.external_data_helper.load_external_data_for_model(
+                model, self.external_data_dir
+            )
         return model
 
 
@@ -202,13 +210,20 @@ class OnnxFromTfGraph(BaseLoader):
 
         graphdef = graph.as_graph_def()
         if self.optimize:
-            graphdef = tf2onnx.tfonnx.tf_optimize(input_names, output_names, graph.as_graph_def())
+            graphdef = tf2onnx.tfonnx.tf_optimize(
+                input_names, output_names, graph.as_graph_def()
+            )
 
-        with tf.Graph().as_default() as graph, tf.compat.v1.Session(graph=graph) as sess:
+        with tf.Graph().as_default() as graph, tf.compat.v1.Session(
+            graph=graph
+        ) as sess:
             tf.import_graph_def(graphdef, name="")
 
             onnx_graph = tf2onnx.tfonnx.process_tf_graph(
-                graph, input_names=input_names, output_names=output_names, opset=self.opset
+                graph,
+                input_names=input_names,
+                output_names=output_names,
+                opset=self.opset,
             )
             if self.optimize:
                 onnx_graph = tf2onnx.optimizer.optimize_graph(onnx_graph)
@@ -386,14 +401,18 @@ class FoldConstants(BaseLoadOnnxCopy):
             del model
 
             graph.fold_constants(
-                fold_shapes=self.fold_shapes, partitioning=self.partitioning, size_threshold=self.size_threshold
+                fold_shapes=self.fold_shapes,
+                partitioning=self.partitioning,
+                size_threshold=self.size_threshold,
             )
 
             model = gs.export_onnx(graph.cleanup(), do_type_check=False)
             del graph
 
             if self.fold_shapes and self.do_shape_inference:
-                model = infer_shapes(model, allow_onnxruntime=self.allow_onnxruntime_shape_inference)
+                model = infer_shapes(
+                    model, allow_onnxruntime=self.allow_onnxruntime_shape_inference
+                )
             return model
 
         # Need to manually trigger the autoinstall this since it's used by ONNX-GS, which does not have an autoinstall mechanism.
@@ -410,7 +429,9 @@ class FoldConstants(BaseLoadOnnxCopy):
         postfold_num_nodes = -1
         index = 0
 
-        while (prefold_num_nodes != postfold_num_nodes) and (self.num_passes is None or index < self.num_passes):
+        while (prefold_num_nodes != postfold_num_nodes) and (
+            self.num_passes is None or index < self.num_passes
+        ):
             prefold_num_nodes = onnx_util.get_num_nodes(model)
 
             G_LOGGER.start(f"Folding Constants | Pass {index + 1}")
@@ -419,7 +440,9 @@ class FoldConstants(BaseLoadOnnxCopy):
             except Exception as err:
                 if not self.error_ok:
                     raise
-                G_LOGGER.warning(f"Constant folding pass failed. Skipping subsequent passes.\nNote: Error was:\n{err}")
+                G_LOGGER.warning(
+                    f"Constant folding pass failed. Skipping subsequent passes.\nNote: Error was:\n{err}"
+                )
                 break
             else:
                 postfold_num_nodes = onnx_util.get_num_nodes(model)
@@ -484,12 +507,18 @@ class SetUpperBound(BaseLoadOnnxCopy):
                 assert len(tensor.inputs) == 1
                 producer = tensor.inputs[0]
                 producer_idx = producer.outputs.index(tensor)
-                tensor_copy = gs.Variable(tensor.name + "_copy", dtype=tensor.dtype, shape=tensor.shape)
+                tensor_copy = gs.Variable(
+                    tensor.name + "_copy", dtype=tensor.dtype, shape=tensor.shape
+                )
                 upper_bound_values = np.array(upper_bound)
                 if tensor.shape is not None and len(tensor.shape) > 0:
                     upper_bound_values = np.array([upper_bound] * len(tensor.shape))
-                tensor_upper_bound = gs.Constant(tensor.name + "_upper_bound", values=upper_bound_values)
-                min_node = gs.Node(op="Min", inputs=[tensor_copy, tensor_upper_bound], outputs=[tensor])
+                tensor_upper_bound = gs.Constant(
+                    tensor.name + "_upper_bound", values=upper_bound_values
+                )
+                min_node = gs.Node(
+                    op="Min", inputs=[tensor_copy, tensor_upper_bound], outputs=[tensor]
+                )
                 producer.outputs[producer_idx] = tensor_copy
                 tensor.inputs = [min_node]
                 graph.nodes.append(min_node)
@@ -573,7 +602,9 @@ class InferShapes(BaseLoader):
         self.error_ok = util.default(error_ok, True)
         self.external_data_dir = external_data_dir
         # Subtract a little so we're below the real threshold
-        self.save_to_disk_threshold_bytes = util.default(save_to_disk_threshold_bytes, PROTOBUF_THRESHOLD)
+        self.save_to_disk_threshold_bytes = util.default(
+            save_to_disk_threshold_bytes, PROTOBUF_THRESHOLD
+        )
         self.allow_onnxruntime = util.default(allow_onnxruntime, True)
 
     def _run_onnx_shape_inference(self, model, external_data_dir):
@@ -603,7 +634,9 @@ class InferShapes(BaseLoader):
         if isinstance(model, onnx.ModelProto):
             model = onnx.shape_inference.infer_shapes(model)
         else:
-            tmp_path = util.NamedTemporaryFile(prefix="tmp_polygraphy_", suffix=".onnx").name
+            tmp_path = util.NamedTemporaryFile(
+                prefix="tmp_polygraphy_", suffix=".onnx"
+            ).name
             G_LOGGER.verbose(f"Writing shape-inferred model to: {tmp_path}")
             onnx.shape_inference.infer_shapes_path(model, tmp_path)
             # In cases where the original model had external data stored in the same directory,
@@ -611,14 +644,19 @@ class InferShapes(BaseLoader):
             # In such cases, we need to use the model's directory as the external data path
             # for the newly generated model.
             model = onnx_from_path(
-                tmp_path, external_data_dir=util.default(external_data_dir, os.path.dirname(model) or None)
+                tmp_path,
+                external_data_dir=util.default(
+                    external_data_dir, os.path.dirname(model) or None
+                ),
             )
         return model
 
     def _run_onnxruntime_shape_inference(self, model, external_data_dir):
         if not isinstance(model, onnx.ModelProto):
             model = onnx_from_path(model, external_data_dir=external_data_dir)
-        return onnxrt_symbolic_shape_inference.SymbolicShapeInference.infer_shapes(model, auto_merge=True)
+        return onnxrt_symbolic_shape_inference.SymbolicShapeInference.infer_shapes(
+            model, auto_merge=True
+        )
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -635,7 +673,9 @@ class InferShapes(BaseLoader):
             use_onnx_shape_inference = not self.allow_onnxruntime
             if self.allow_onnxruntime:
                 try:
-                    model = self._run_onnxruntime_shape_inference(model, external_data_dir)
+                    model = self._run_onnxruntime_shape_inference(
+                        model, external_data_dir
+                    )
                     G_LOGGER.verbose(
                         "Inferred shapes in the model with `onnxruntime.tools.symbolic_shape_infer`.\n"
                         "Note: To force Polygraphy to use `onnx.shape_inference` instead, set `allow_onnxruntime=False` or "
@@ -659,7 +699,9 @@ class InferShapes(BaseLoader):
             if not self.error_ok:
                 raise
             G_LOGGER.warning(f"ONNX shape inference exited with an error:\n{err}")
-            G_LOGGER.internal_error(f"ONNX shape inference exited with an error:\n{err}")
+            G_LOGGER.internal_error(
+                f"ONNX shape inference exited with an error:\n{err}"
+            )
 
             if not isinstance(model, onnx.ModelProto):
                 model = onnx_from_path(model, external_data_dir=external_data_dir)
@@ -675,7 +717,9 @@ class ExtractSubgraph(BaseLoader):
     Functor that extracts a subgraph from an ONNX model.
     """
 
-    def __init__(self, model, input_metadata=None, output_metadata=None, check_meta=None):
+    def __init__(
+        self, model, input_metadata=None, output_metadata=None, check_meta=None
+    ):
         """
         Extracts a subgraph from an ONNX model.
 
@@ -722,7 +766,9 @@ class ExtractSubgraph(BaseLoader):
                 # No need to update constants
                 if isinstance(tensor, gs.Variable):
                     tensor.dtype, tensor.shape = (
-                        DataType.to_dtype(DataType.from_dtype(dtype), "onnx") if dtype is not None else None
+                        DataType.to_dtype(DataType.from_dtype(dtype), "onnx")
+                        if dtype is not None
+                        else None
                     ) or tensor.dtype, shape or tensor.shape
                 return tensor
 
@@ -750,15 +796,24 @@ class ExtractSubgraph(BaseLoader):
                 graph.outputs.clear()
                 for name, (dtype, shape) in self.output_metadata.items():
                     tensor = update_tensor(name, dtype, shape)
-                    check_meta(name, tensor.dtype, tensor.shape, "Output", needs_shape=False)
+                    check_meta(
+                        name, tensor.dtype, tensor.shape, "Output", needs_shape=False
+                    )
                     graph.outputs.append(tensor)
 
             graph.cleanup()
 
             tensor_map = graph.tensors()
             for tensor in tensor_map.values():
-                if isinstance(tensor, gs.Variable) and not tensor.inputs and tensor not in graph.inputs:
-                    consumer_nodes = [f"Node: '{node.name}' (Op: {node.op})" for node in tensor.outputs]
+                if (
+                    isinstance(tensor, gs.Variable)
+                    and not tensor.inputs
+                    and tensor not in graph.inputs
+                ):
+                    consumer_nodes = [
+                        f"Node: '{node.name}' (Op: {node.op})"
+                        for node in tensor.outputs
+                    ]
                     G_LOGGER.error(
                         f"Tensor: '{tensor.name}' is a variable tensor consumed by: {consumer_nodes}, "
                         "but is not produced by a node or marked as a graph input."
@@ -775,7 +830,14 @@ class SaveOnnx(BaseLoader):
     Functor that saves an ONNX model to the specified path.
     """
 
-    def __init__(self, model, path, external_data_path=None, size_threshold=None, all_tensors_to_one_file=None):
+    def __init__(
+        self,
+        model,
+        path,
+        external_data_path=None,
+        size_threshold=None,
+        all_tensors_to_one_file=None,
+    ):
         """
         Saves an ONNX model to the specified path.
 
@@ -828,12 +890,16 @@ class SaveOnnx(BaseLoader):
             external_data_path = self.external_data_path
 
         if external_data_path is not None:
-            G_LOGGER.verbose(f"Saving external data for ONNX model to: {external_data_path}")
+            G_LOGGER.verbose(
+                f"Saving external data for ONNX model to: {external_data_path}"
+            )
             try:
                 onnx.external_data_helper.convert_model_to_external_data(
                     model,
                     location=external_data_path,
-                    all_tensors_to_one_file=util.default(self.all_tensors_to_one_file, True),
+                    all_tensors_to_one_file=util.default(
+                        self.all_tensors_to_one_file, True
+                    ),
                     size_threshold=util.default(self.size_threshold, 1024),
                 )
             except TypeError:
@@ -844,7 +910,9 @@ class SaveOnnx(BaseLoader):
                 onnx.external_data_helper.convert_model_to_external_data(
                     model,
                     location=external_data_path,
-                    all_tensors_to_one_file=util.default(self.all_tensors_to_one_file, True),
+                    all_tensors_to_one_file=util.default(
+                        self.all_tensors_to_one_file, True
+                    ),
                 )
         else:
             if self.size_threshold is not None:

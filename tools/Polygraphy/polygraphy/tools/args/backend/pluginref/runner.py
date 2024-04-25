@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,8 +36,12 @@ class PluginRefRunnerArgs(BaseRunnerArgs):
 
     def add_to_script_impl(self, script):
         script.add_import(imports=["GsFromOnnx"], frm="polygraphy.backend.onnx")
-        script.add_import(imports=["PluginRefRunner"], frm="polygraphy.backend.pluginref")
+        script.add_import(
+            imports=["PluginRefRunner"], frm="polygraphy.backend.pluginref"
+        )
 
         onnx_name = self.arg_groups[OnnxLoadArgs].add_to_script(script)
-        loader_name = script.add_loader(make_invocable("GsFromOnnx", onnx_name), "pluginref")
+        loader_name = script.add_loader(
+            make_invocable("GsFromOnnx", onnx_name), "pluginref"
+        )
         script.add_runner(make_invocable("PluginRefRunner", loader_name))

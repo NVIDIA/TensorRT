@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,16 +21,14 @@ Analyzes onnx model for potential plugin substitutions.
 
 from polygraphy.tools.plugin.subtool.plugin_base import PluginBase
 
+
 class ListPlugins(PluginBase):
     """
     Analyze an onnx model for potential plugin substitutions.
     """
 
     def __init__(self):
-        super().__init__("list")
-        
+        super().__init__(list_plugins=True, name="list")
+
     def add_parser_args_impl(self, parser):
         super().add_parser_args_impl(parser)
-
-    def run_impl(self, args):
-        super().match_plugin(args=args, list_plugins=True)

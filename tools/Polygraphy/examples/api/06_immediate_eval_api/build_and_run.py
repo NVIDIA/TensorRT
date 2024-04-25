@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,13 @@ layer to the end of it, build an engine with FP16 mode enabled,
 save the engine, and finally run inference.
 """
 import numpy as np
-from polygraphy.backend.trt import TrtRunner, create_config, engine_from_network, network_from_onnx_path, save_engine
+from polygraphy.backend.trt import (
+    TrtRunner,
+    create_config,
+    engine_from_network,
+    network_from_onnx_path,
+    save_engine,
+)
 
 
 def main():

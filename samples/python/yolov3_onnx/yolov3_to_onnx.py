@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,7 +128,9 @@ class DarkNetParser(object):
             param_value = layer_indexes
         elif isinstance(param_value_raw, str) and not param_value_raw.isalpha():
             condition_param_value_positive = param_value_raw.isdigit()
-            condition_param_value_negative = param_value_raw[0] == "-" and param_value_raw[1:].isdigit()
+            condition_param_value_negative = (
+                param_value_raw[0] == "-" and param_value_raw[1:].isdigit()
+            )
             if condition_param_value_positive or condition_param_value_negative:
                 param_value = int(param_value_raw)
             else:
@@ -276,17 +278,29 @@ class WeightLoader(object):
         initializer = list()
         inputs = list()
         if conv_params.batch_normalize:
-            bias_init, bias_input = self._create_param_tensors(conv_params, "bn", "bias")
-            bn_scale_init, bn_scale_input = self._create_param_tensors(conv_params, "bn", "scale")
-            bn_mean_init, bn_mean_input = self._create_param_tensors(conv_params, "bn", "mean")
-            bn_var_init, bn_var_input = self._create_param_tensors(conv_params, "bn", "var")
+            bias_init, bias_input = self._create_param_tensors(
+                conv_params, "bn", "bias"
+            )
+            bn_scale_init, bn_scale_input = self._create_param_tensors(
+                conv_params, "bn", "scale"
+            )
+            bn_mean_init, bn_mean_input = self._create_param_tensors(
+                conv_params, "bn", "mean"
+            )
+            bn_var_init, bn_var_input = self._create_param_tensors(
+                conv_params, "bn", "var"
+            )
             initializer.extend([bn_scale_init, bias_init, bn_mean_init, bn_var_init])
             inputs.extend([bn_scale_input, bias_input, bn_mean_input, bn_var_input])
         else:
-            bias_init, bias_input = self._create_param_tensors(conv_params, "conv", "bias")
+            bias_init, bias_input = self._create_param_tensors(
+                conv_params, "conv", "bias"
+            )
             initializer.append(bias_init)
             inputs.append(bias_input)
-        conv_init, conv_input = self._create_param_tensors(conv_params, "conv", "weights")
+        conv_init, conv_input = self._create_param_tensors(
+            conv_params, "conv", "weights"
+        )
         initializer.append(conv_init)
         inputs.append(conv_input)
         return initializer, inputs
@@ -299,7 +313,11 @@ class WeightLoader(object):
         """
         weights_file = open(weights_file_path, "rb")
         length_header = 5
-        np.ndarray(shape=(length_header,), dtype="int32", buffer=weights_file.read(length_header * 4))
+        np.ndarray(
+            shape=(length_header,),
+            dtype="int32",
+            buffer=weights_file.read(length_header * 4),
+        )
         return weights_file
 
     def _create_param_tensors(self, conv_params, param_category, suffix):
@@ -312,10 +330,16 @@ class WeightLoader(object):
         suffix -- a string determining the sub-type of above param_category (e.g.,
         'weights' or 'bias')
         """
-        param_name, param_data, param_data_shape = self._load_one_param_type(conv_params, param_category, suffix)
+        param_name, param_data, param_data_shape = self._load_one_param_type(
+            conv_params, param_category, suffix
+        )
 
-        initializer_tensor = helper.make_tensor(param_name, TensorProto.FLOAT, param_data_shape, param_data)
-        input_tensor = helper.make_tensor_value_info(param_name, TensorProto.FLOAT, param_data_shape)
+        initializer_tensor = helper.make_tensor(
+            param_name, TensorProto.FLOAT, param_data_shape, param_data
+        )
+        input_tensor = helper.make_tensor_value_info(
+            param_name, TensorProto.FLOAT, param_data_shape
+        )
         return initializer_tensor, input_tensor
 
     def _load_one_param_type(self, conv_params, param_category, suffix):
@@ -337,7 +361,11 @@ class WeightLoader(object):
             elif suffix == "bias":
                 param_shape = [channels_out]
         param_size = np.product(np.array(param_shape))
-        param_data = np.ndarray(shape=param_shape, dtype="float32", buffer=self.weights_file.read(param_size * 4))
+        param_data = np.ndarray(
+            shape=param_shape,
+            dtype="float32",
+            buffer=self.weights_file.read(param_size * 4),
+        )
         param_data = param_data.flatten().astype(float)
         return param_name, param_data, param_shape
 
@@ -385,7 +413,9 @@ class GraphBuilderONNX(object):
             output_dims = [
                 self.batch_size,
             ] + self.output_tensors[tensor_name]
-            output_tensor = helper.make_tensor_value_info(tensor_name, TensorProto.FLOAT, output_dims)
+            output_tensor = helper.make_tensor_value_info(
+                tensor_name, TensorProto.FLOAT, output_dims
+            )
             outputs.append(output_tensor)
         inputs = [self.input_tensor]
         weight_loader = WeightLoader(weights_file_path)
@@ -395,20 +425,30 @@ class GraphBuilderONNX(object):
             _, layer_type = layer_name.split("_", 1)
             params = self.param_dict[layer_name]
             if layer_type == "convolutional":
-                initializer_layer, inputs_layer = weight_loader.load_conv_weights(params)
+                initializer_layer, inputs_layer = weight_loader.load_conv_weights(
+                    params
+                )
                 initializer.extend(initializer_layer)
                 inputs.extend(inputs_layer)
             elif layer_type == "upsample":
-                initializer_layer, inputs_layer = weight_loader.load_resize_scales(params)
+                initializer_layer, inputs_layer = weight_loader.load_resize_scales(
+                    params
+                )
                 initializer.extend(initializer_layer)
                 inputs.extend(inputs_layer)
         del weight_loader
         self.graph_def = helper.make_graph(
-            nodes=self._nodes, name="YOLOv3-608", inputs=inputs, outputs=outputs, initializer=initializer
+            nodes=self._nodes,
+            name="YOLOv3-608",
+            inputs=inputs,
+            outputs=outputs,
+            initializer=initializer,
         )
         if verbose:
             print(helper.printable_graph(self.graph_def))
-        model_def = helper.make_model(self.graph_def, producer_name="NVIDIA TensorRT sample")
+        model_def = helper.make_model(
+            self.graph_def, producer_name="NVIDIA TensorRT sample"
+        )
         return model_def
 
     def _make_onnx_node(self, layer_name, layer_dict):
@@ -423,8 +463,12 @@ class GraphBuilderONNX(object):
         layer_type = layer_dict["type"]
         if self.input_tensor is None:
             if layer_type == "net":
-                major_node_output_name, major_node_output_channels = self._make_input_tensor(layer_name, layer_dict)
-                major_node_specs = MajorNodeSpecs(major_node_output_name, major_node_output_channels)
+                major_node_output_name, major_node_output_channels = (
+                    self._make_input_tensor(layer_name, layer_dict)
+                )
+                major_node_specs = MajorNodeSpecs(
+                    major_node_output_name, major_node_output_channels
+                )
             else:
                 raise ValueError('The first node has to be of type "net".')
         else:
@@ -435,10 +479,17 @@ class GraphBuilderONNX(object):
             node_creators["upsample"] = self._make_resize_node
 
             if layer_type in node_creators.keys():
-                major_node_output_name, major_node_output_channels = node_creators[layer_type](layer_name, layer_dict)
-                major_node_specs = MajorNodeSpecs(major_node_output_name, major_node_output_channels)
+                major_node_output_name, major_node_output_channels = node_creators[
+                    layer_type
+                ](layer_name, layer_dict)
+                major_node_specs = MajorNodeSpecs(
+                    major_node_output_name, major_node_output_channels
+                )
             else:
-                print("Layer of type %s not supported, skipping ONNX node generation." % layer_type)
+                print(
+                    "Layer of type %s not supported, skipping ONNX node generation."
+                    % layer_type
+                )
                 major_node_specs = MajorNodeSpecs(layer_name, None)
         return major_node_specs
 
@@ -491,7 +542,10 @@ class GraphBuilderONNX(object):
         stride = layer_dict["stride"]
         filters = layer_dict["filters"]
         batch_normalize = False
-        if "batch_normalize" in layer_dict.keys() and layer_dict["batch_normalize"] == 1:
+        if (
+            "batch_normalize" in layer_dict.keys()
+            and layer_dict["batch_normalize"] == 1
+        ):
             batch_normalize = True
 
         kernel_shape = [kernel_size, kernel_size]
@@ -542,7 +596,11 @@ class GraphBuilderONNX(object):
             layer_name_lrelu = layer_name + "_lrelu"
 
             lrelu_node = helper.make_node(
-                "LeakyRelu", inputs=inputs, outputs=[layer_name_lrelu], name=layer_name_lrelu, alpha=self.alpha_lrelu
+                "LeakyRelu",
+                inputs=inputs,
+                outputs=[layer_name_lrelu],
+                name=layer_name_lrelu,
+                alpha=self.alpha_lrelu,
             )
             self._nodes.append(lrelu_node)
             inputs = [layer_name_lrelu]
@@ -633,7 +691,9 @@ class GraphBuilderONNX(object):
         """
         resize_scale_factors = float(layer_dict["stride"])
         # Create the scale factor array with node parameters
-        scales = np.array([1.0, 1.0, resize_scale_factors, resize_scale_factors]).astype(np.float32)
+        scales = np.array(
+            [1.0, 1.0, resize_scale_factors, resize_scale_factors]
+        ).astype(np.float32)
         previous_node_specs = self._get_previous_node_specs()
         inputs = [previous_node_specs.name]
 

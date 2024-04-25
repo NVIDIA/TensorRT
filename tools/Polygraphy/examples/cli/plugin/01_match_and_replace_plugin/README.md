@@ -39,8 +39,8 @@ The original and the replaced model can be compared to check if they behave the 
 1. Find and save matches of toyPlugin in the example network:
 
     ```bash
-    polygraphy plugin match graph_with_subgraph_matching_toy_plugin.onnx \
-        --plugin-dir ./plugins
+    polygraphy plugin match toy_subgraph.onnx \
+        --plugin-dir ./plugins -o config.yaml
     ```
 
     <!-- Polygraphy Test: Ignore Start -->
@@ -75,7 +75,7 @@ The original and the replaced model can be compared to check if they behave the 
 2. **[Optional]** List matches of toyPlugin in the example network, without saving config.yaml:
 
     ```bash
-    polygraphy plugin list graph_with_subgraph_matching_toy_plugin.onnx \
+    polygraphy plugin list toy_subgraph.onnx \
         --plugin-dir ./plugins
     ```
 
@@ -106,16 +106,15 @@ The `plugin replace` subtool replaces subgraphs in an onnx model with plugins
 3. Replace parts of the example network with toyPlugin:
 
     ```bash
-    polygraphy plugin replace graph_with_subgraph_matching_toy_plugin.onnx \
-        --plugin-dir ./plugins \
-        -o replaced.onnx
+    polygraphy plugin replace toy_subgraph.onnx \
+        --plugin-dir ./plugins --config config.yaml -o replaced.onnx
     ```
 
     <!-- Polygraphy Test: Ignore Start -->
     This will display something like:
 
     ```
-    [I] Loading model: /Users/pkisfaludi/Documents/git/Polygraphy/examples/cli/plugin/03_replace_subgraph_with_a_plugin/graph_with_subgraph_matching_toy_plugin.onnx
+    [I] Loading model: /Users/pkisfaludi/Documents/git/Polygraphy/examples/cli/plugin/03_replace_subgraph_with_a_plugin/toy_subgraph.onnx
     ```
 
     The result file is replaced.onnx, where a subgraph in the example network is replaced by toyPlugin

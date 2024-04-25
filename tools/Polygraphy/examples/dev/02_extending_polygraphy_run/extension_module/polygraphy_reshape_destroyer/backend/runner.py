@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,9 @@ class IdentityOnlyRunner(BaseRunner):
         VALID_SPEEDS = ["slow", "medium", "fast"]
         if self.speed not in VALID_SPEEDS:
             # Like Polygraphy, extension modules should use `G_LOGGER.critical()` for any unrecoverable errors.
-            G_LOGGER.critical(f"Invalid speed: {self.speed}. Note: Valid speeds are: {VALID_SPEEDS}")
+            G_LOGGER.critical(
+                f"Invalid speed: {self.speed}. Note: Valid speeds are: {VALID_SPEEDS}"
+            )
 
     @util.check_called_by("activate")
     def activate_impl(self):

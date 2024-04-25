@@ -25,7 +25,7 @@
 
 #define NV_TENSORRT_MAJOR 10 //!< TensorRT major version.
 #define NV_TENSORRT_MINOR 0 //!< TensorRT minor version.
-#define NV_TENSORRT_PATCH 0 //!< TensorRT patch version.
+#define NV_TENSORRT_PATCH 1 //!< TensorRT patch version.
 #define NV_TENSORRT_BUILD 6 //!< TensorRT build number.
 
 #define NV_TENSORRT_LWS_MAJOR 0 //!< TensorRT LWS major version.
@@ -36,6 +36,6 @@
 #define NV_TENSORRT_RELEASE_TYPE_RELEASE_CANDIDATE 1    //!< A release candidate
 #define NV_TENSORRT_RELEASE_TYPE_GENERAL_AVAILABILITY 2 //!< A final release
 
-#define NV_TENSORRT_RELEASE_TYPE NV_TENSORRT_RELEASE_TYPE_EARLY_ACCESS //!< TensorRT release type
+#define NV_TENSORRT_RELEASE_TYPE NV_TENSORRT_RELEASE_TYPE_GENERAL_AVAILABILITY //!< TensorRT release type
 
 #endif // NV_INFER_VERSION_H

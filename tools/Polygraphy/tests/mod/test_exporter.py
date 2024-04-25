@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +54,9 @@ class TestExporter:
                     self.x = x
 
     def test_funcify_duplicate_parameters_in_call_init(self):
-        with pytest.raises(AssertionError, match="call_impl and __init__ have the same argument names"):
+        with pytest.raises(
+            AssertionError, match="call_impl and __init__ have the same argument names"
+        ):
 
             @mod.export(funcify=True)
             class DupArgs(BaseLoader):
@@ -78,7 +80,10 @@ class TestExporter:
         assert "DocstringFunctor" in __all__
         assert "docstring_functor" in __all__
 
-        assert docstring_functor.__doc__ == "Immediately evaluated functional variant of :class:`DocstringFunctor` .\n"
+        assert (
+            docstring_functor.__doc__
+            == "Immediately evaluated functional variant of :class:`DocstringFunctor` .\n"
+        )
 
     def test_funcify_functor_no_call_args(self):
         @mod.export(funcify=True)

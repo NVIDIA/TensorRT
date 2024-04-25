@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -96,14 +96,20 @@ class ReplaceReshapeArgs(BaseArgs):
         # First, import the loader from Polygraphy:
         script.add_import(imports=["GsFromOnnx"], frm="polygraphy.backend.onnx")
         # Next, invoke the loader with arguments (in this case, the ONNX model loader name), and add it to the script.
-        loader_name = script.add_loader(make_invocable("GsFromOnnx", loader_name), loader_id="gs_from_onnx")
+        loader_name = script.add_loader(
+            make_invocable("GsFromOnnx", loader_name), loader_id="gs_from_onnx"
+        )
 
         # Finally, add the ReplaceReshapeArgs loader.
         # Unlike the Polygraphy loaders, we'll need to import our loader from the extension module.
-        script.add_import(imports=["ReplaceReshapes"], frm="polygraphy_reshape_destroyer.backend")
+        script.add_import(
+            imports=["ReplaceReshapes"], frm="polygraphy_reshape_destroyer.backend"
+        )
         # Add the loader and return the ID so that it can be used by subsequent loaders or runners.
         # NOTE: We can provide additional positional and keyword arguments to `make_invocable` to pass them on to the loader.
         return script.add_loader(
-            make_invocable("ReplaceReshapes", loader_name, rename_nodes=self.rename_nodes),
+            make_invocable(
+                "ReplaceReshapes", loader_name, rename_nodes=self.rename_nodes
+            ),
             loader_id="replace_reshapes",
         )

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,7 +49,11 @@ class TestTfRunner:
     def test_save_timeline(self):
         model = TF_MODELS["identity"]
         with util.NamedTemporaryFile() as outpath:
-            with TfRunner(SessionFromGraph(model.loader), allow_growth=True, save_timeline=outpath.name) as runner:
+            with TfRunner(
+                SessionFromGraph(model.loader),
+                allow_growth=True,
+                save_timeline=outpath.name,
+            ) as runner:
                 model.check_runner(runner)
                 assert is_file_non_empty(outpath.name)
 
@@ -65,16 +69,25 @@ class TestTfRunner:
         model = TF_MODELS["identity"]
         with TfRunner(SessionFromGraph(model.loader)) as runner:
             with pytest.raises(PolygraphyException, match=err):
-                runner.infer({name: np.ones(shape=(1, 15, 25, 30), dtype=np.float32) for name in names})
+                runner.infer(
+                    {
+                        name: np.ones(shape=(1, 15, 25, 30), dtype=np.float32)
+                        for name in names
+                    }
+                )
 
     def test_error_on_wrong_dtype_feed_dict(self):
         model = TF_MODELS["identity"]
         with TfRunner(SessionFromGraph(model.loader)) as runner:
             with pytest.raises(PolygraphyException, match="unexpected dtype."):
-                runner.infer({"Input:0": np.ones(shape=(1, 15, 25, 30), dtype=np.int32)})
+                runner.infer(
+                    {"Input:0": np.ones(shape=(1, 15, 25, 30), dtype=np.int32)}
+                )
 
     def test_error_on_wrong_shape_feed_dict(self):
         model = TF_MODELS["identity"]
         with TfRunner(SessionFromGraph(model.loader)) as runner:
             with pytest.raises(PolygraphyException, match="incompatible shape."):
-                runner.infer({"Input:0": np.ones(shape=(1, 1, 25, 30), dtype=np.float32)})
+                runner.infer(
+                    {"Input:0": np.ones(shape=(1, 1, 25, 30), dtype=np.float32)}
+                )

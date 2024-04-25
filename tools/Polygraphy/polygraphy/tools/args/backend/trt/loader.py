@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,13 @@ from polygraphy.tools.args.backend.trt.config import TrtConfigArgs
 from polygraphy.tools.args.backend.trt.helper import make_trt_enum_val
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import inline, inline_identifier, make_invocable, make_invocable_if_nondefault_kwargs, safe
+from polygraphy.tools.script import (
+    inline,
+    inline_identifier,
+    make_invocable,
+    make_invocable_if_nondefault_kwargs,
+    safe,
+)
 
 
 @mod.export()
@@ -36,7 +42,12 @@ class TrtLoadPluginsArgs(BaseArgs):
     """
 
     def add_parser_args_impl(self):
-        self.group.add_argument("--plugins", help="Path(s) of plugin libraries to load", nargs="+", default=None)
+        self.group.add_argument(
+            "--plugins",
+            help="Path(s) of plugin libraries to load",
+            nargs="+",
+            default=None,
+        )
 
     def parse_impl(self, args):
         """
@@ -56,7 +67,9 @@ class TrtLoadPluginsArgs(BaseArgs):
         """
         if self.plugins:
             script.add_import(imports=["LoadPlugins"], frm="polygraphy.backend.trt")
-            loader_str = make_invocable("LoadPlugins", plugins=self.plugins, obj=loader_name)
+            loader_str = make_invocable(
+                "LoadPlugins", plugins=self.plugins, obj=loader_name
+            )
             loader_name = script.add_loader(loader_str, "load_plugins")
         return loader_name
 
@@ -97,7 +110,9 @@ class TrtOnnxFlagArgs(BaseArgs):
             flags (List[str]): flags for onnxparser
         """
         self._flags = args_util.get(args, "onnx_flags", default=[])
-        self._plugin_instancenorm = args_util.get(args, "plugin_instancenorm", default=None)
+        self._plugin_instancenorm = args_util.get(
+            args, "plugin_instancenorm", default=None
+        )
 
     def get_flags(self):
         """
@@ -119,7 +134,10 @@ class TrtOnnxFlagArgs(BaseArgs):
             )
             flags.append("native_instancenorm")
 
-        return ([make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None, self._plugin_instancenorm)
+        return (
+            [make_trt_enum_val("OnnxParserFlag", f) for f in flags] or None,
+            self._plugin_instancenorm,
+        )
 
 
 @mod.export()
@@ -136,7 +154,10 @@ class TrtLoadNetworkArgs(BaseArgs):
     """
 
     def __init__(
-        self, allow_custom_outputs: bool = None, allow_onnx_loading: bool = None, allow_tensor_formats: bool = None
+        self,
+        allow_custom_outputs: bool = None,
+        allow_onnx_loading: bool = None,
+        allow_tensor_formats: bool = None,
     ):
         """
         Args:
@@ -266,26 +287,38 @@ class TrtLoadNetworkArgs(BaseArgs):
         self.layer_precisions = None
         if layer_precisions is not None:
             self.layer_precisions = {
-                name: inline(safe("trt.{}", inline_identifier(value))) for name, value in layer_precisions.items()
+                name: inline(safe("trt.{}", inline_identifier(value)))
+                for name, value in layer_precisions.items()
             }
 
-        tensor_datatypes = args_util.parse_arglist_to_dict(args_util.get(args, "tensor_dtypes"), allow_empty_key=False)
+        tensor_datatypes = args_util.parse_arglist_to_dict(
+            args_util.get(args, "tensor_dtypes"), allow_empty_key=False
+        )
         self.tensor_datatypes = None
         if tensor_datatypes is not None:
             self.tensor_datatypes = {
-                name: inline(safe("trt.{}", inline_identifier(value))) for name, value in tensor_datatypes.items()
+                name: inline(safe("trt.{}", inline_identifier(value)))
+                for name, value in tensor_datatypes.items()
             }
 
-        tensor_formats = args_util.parse_arglist_to_dict(args_util.get(args, "tensor_formats"), allow_empty_key=False)
+        tensor_formats = args_util.parse_arglist_to_dict(
+            args_util.get(args, "tensor_formats"), allow_empty_key=False
+        )
         self.tensor_formats = None
         if tensor_formats is not None:
             self.tensor_formats = {
-                name: [inline(safe("trt.TensorFormat.{}", inline_identifier(value.upper()))) for value in values]
+                name: [
+                    inline(
+                        safe("trt.TensorFormat.{}", inline_identifier(value.upper()))
+                    )
+                    for value in values
+                ]
                 for name, values in tensor_formats.items()
             }
 
         pps = args_util.parse_arglist_to_tuple_list(
-            args_util.get(args, "trt_network_postprocess_script"), treat_missing_sep_as_val=False
+            args_util.get(args, "trt_network_postprocess_script"),
+            treat_missing_sep_as_val=False,
         )
         if pps is None:
             pps = []
@@ -299,13 +332,18 @@ class TrtLoadNetworkArgs(BaseArgs):
             self.postprocess_scripts.append((script_path, func))
 
         self.strongly_typed = args_util.get(args, "strongly_typed")
-        
+
         self.mark_debug = args_util.get(args, "mark_debug")
 
     def add_to_script_impl(self, script):
         network_func_name = self.arg_groups[ModelArgs].extra_model_info
         if self.trt_network_func_name is not None:
-            mod.warn_deprecated("--trt-network-func-name", "the model argument", "0.50.0", always_show_warning=True)
+            mod.warn_deprecated(
+                "--trt-network-func-name",
+                "the model argument",
+                "0.50.0",
+                always_show_warning=True,
+            )
             network_func_name = self.trt_network_func_name
 
         model_file = self.arg_groups[ModelArgs].path
@@ -314,12 +352,21 @@ class TrtLoadNetworkArgs(BaseArgs):
         parser_flags, plugin_instancenorm = self.arg_groups[TrtOnnxFlagArgs].get_flags()
 
         if any(
-            arg is not None for arg in [self.layer_precisions, self.tensor_datatypes, self.tensor_formats, parser_flags, plugin_instancenorm]
+            arg is not None
+            for arg in [
+                self.layer_precisions,
+                self.tensor_datatypes,
+                self.tensor_formats,
+                parser_flags,
+                plugin_instancenorm,
+            ]
         ):
             script.add_import(imports="tensorrt", imp_as="trt")
 
         if model_type == "trt-network-script":
-            script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
+            script.add_import(
+                imports=["InvokeFromScript"], frm="polygraphy.backend.common"
+            )
             loader_str = make_invocable(
                 "InvokeFromScript",
                 model_file,
@@ -327,56 +374,82 @@ class TrtLoadNetworkArgs(BaseArgs):
             )
             loader_name = script.add_loader(loader_str, "load_network")
         elif self._allow_onnx_loading:
-            if self.arg_groups[OnnxLoadArgs].must_use_onnx_loader(disable_custom_outputs=True):
+            if self.arg_groups[OnnxLoadArgs].must_use_onnx_loader(
+                disable_custom_outputs=True
+            ):
                 # When loading from ONNX, we need to disable custom outputs since TRT requires dtypes on outputs,
                 # which our marking function doesn't guarantee.
-                script.add_import(imports=["NetworkFromOnnxBytes"], frm="polygraphy.backend.trt")
+                script.add_import(
+                    imports=["NetworkFromOnnxBytes"], frm="polygraphy.backend.trt"
+                )
                 onnx_loader = self.arg_groups[OnnxLoadArgs].add_to_script(
                     script, disable_custom_outputs=True, serialize_model=True
                 )
                 loader_str = make_invocable(
                     "NetworkFromOnnxBytes",
-                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, onnx_loader),
+                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(
+                        script, onnx_loader
+                    ),
                     flags=parser_flags,
                     plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
             else:
-                script.add_import(imports=["NetworkFromOnnxPath"], frm="polygraphy.backend.trt")
+                script.add_import(
+                    imports=["NetworkFromOnnxPath"], frm="polygraphy.backend.trt"
+                )
                 loader_str = make_invocable(
                     "NetworkFromOnnxPath",
-                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, model_file),
+                    self.arg_groups[TrtLoadPluginsArgs].add_to_script(
+                        script, model_file
+                    ),
                     flags=parser_flags,
                     plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:
-            G_LOGGER.internal_error("Loading from ONNX is not enabled and a network script was not provided!")
+            G_LOGGER.internal_error(
+                "Loading from ONNX is not enabled and a network script was not provided!"
+            )
 
         def add_loader_if_nondefault(loader, result_var_name, **kwargs):
-            loader_str = make_invocable_if_nondefault_kwargs(loader, loader_name, **kwargs)
+            loader_str = make_invocable_if_nondefault_kwargs(
+                loader, loader_name, **kwargs
+            )
             if loader_str is not None:
                 script.add_import(imports=[loader], frm="polygraphy.backend.trt")
                 return script.add_loader(loader_str, result_var_name)
             return loader_name
 
         for i, (script_path, func_name) in enumerate(self.postprocess_scripts):
-            script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
+            script.add_import(
+                imports=["InvokeFromScript"], frm="polygraphy.backend.common"
+            )
             pps = make_invocable("InvokeFromScript", script_path, name=func_name)
             loader_name = add_loader_if_nondefault(
-                "PostprocessNetwork", f"postprocess_step_{i}", func=pps, name=f"{script_path}:{func_name}"
+                "PostprocessNetwork",
+                f"postprocess_step_{i}",
+                func=pps,
+                name=f"{script_path}:{func_name}",
             )
 
         loader_name = add_loader_if_nondefault(
-            "ModifyNetworkOutputs", "set_network_outputs", outputs=outputs, exclude_outputs=self.exclude_outputs
+            "ModifyNetworkOutputs",
+            "set_network_outputs",
+            outputs=outputs,
+            exclude_outputs=self.exclude_outputs,
         )
         loader_name = add_loader_if_nondefault(
-            "SetLayerPrecisions", "set_layer_precisions", layer_precisions=self.layer_precisions
+            "SetLayerPrecisions",
+            "set_layer_precisions",
+            layer_precisions=self.layer_precisions,
         )
         loader_name = add_loader_if_nondefault(
-            "SetTensorDatatypes", "set_tensor_datatypes", tensor_datatypes=self.tensor_datatypes
+            "SetTensorDatatypes",
+            "set_tensor_datatypes",
+            tensor_datatypes=self.tensor_datatypes,
         )
         loader_name = add_loader_if_nondefault(
             "SetTensorFormats", "set_tensor_formats", tensor_formats=self.tensor_formats
@@ -425,8 +498,15 @@ class TrtSaveEngineBytesArgs(BaseArgs):
 
     def add_parser_args_impl(self):
         if self._output_opt:
-            params = ([self._output_short_opt] if self._output_short_opt else []) + [f"--{self._output_opt}"]
-            self.group.add_argument(*params, help="Path to save the TensorRT Engine", dest="save_engine", default=None)
+            params = ([self._output_short_opt] if self._output_short_opt else []) + [
+                f"--{self._output_opt}"
+            ]
+            self.group.add_argument(
+                *params,
+                help="Path to save the TensorRT Engine",
+                dest="save_engine",
+                default=None,
+            )
 
     def parse_impl(self, args):
         """
@@ -450,7 +530,10 @@ class TrtSaveEngineBytesArgs(BaseArgs):
             return loader_name
 
         script.add_import(imports=["SaveBytes"], frm="polygraphy.backend.common")
-        return script.add_loader(make_invocable("SaveBytes", loader_name, path=self.path), "save_engine_bytes")
+        return script.add_loader(
+            make_invocable("SaveBytes", loader_name, path=self.path),
+            "save_engine_bytes",
+        )
 
     def save_engine_bytes(self, engine_bytes, path=None):
         """
@@ -502,7 +585,10 @@ class TrtSaveEngineArgs(BaseArgs):
             return loader_name
 
         script.add_import(imports=["BytesFromEngine"], frm="polygraphy.backend.trt")
-        loader_name = script.add_loader(make_invocable("BytesFromEngine", loader_name, path=path), "bytes_from_engine")
+        loader_name = script.add_loader(
+            make_invocable("BytesFromEngine", loader_name, path=path),
+            "bytes_from_engine",
+        )
         return self.arg_groups[TrtSaveEngineArgs].add_to_script(script, loader_name)
 
     def save_engine(self, engine, path=None):
@@ -571,30 +657,43 @@ class TrtLoadEngineBytesArgs(BaseArgs):
             network_name (str): The name of a variable in the script pointing to a network loader.
         """
         if self.arg_groups[ModelArgs].model_type == "engine":
-            script.add_import(imports=["BytesFromPath"], frm="polygraphy.backend.common")
+            script.add_import(
+                imports=["BytesFromPath"], frm="polygraphy.backend.common"
+            )
 
             return script.add_loader(
-                make_invocable("BytesFromPath", self.arg_groups[ModelArgs].path), "load_engine_bytes"
+                make_invocable("BytesFromPath", self.arg_groups[ModelArgs].path),
+                "load_engine_bytes",
             )
 
         network_loader_name = network_name
         if network_loader_name is None:
-            network_loader_name = self.arg_groups[TrtLoadNetworkArgs].add_to_script(script)
+            network_loader_name = self.arg_groups[TrtLoadNetworkArgs].add_to_script(
+                script
+            )
 
-        script.add_import(imports=["EngineBytesFromNetwork"], frm="polygraphy.backend.trt")
+        script.add_import(
+            imports=["EngineBytesFromNetwork"], frm="polygraphy.backend.trt"
+        )
         config_loader_name = self.arg_groups[TrtConfigArgs].add_to_script(script)
 
-        script.add_import(imports=["EngineBytesFromNetwork"], frm="polygraphy.backend.trt")
+        script.add_import(
+            imports=["EngineBytesFromNetwork"], frm="polygraphy.backend.trt"
+        )
         loader_str = make_invocable(
             "EngineBytesFromNetwork",
-            self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, network_loader_name),
+            self.arg_groups[TrtLoadPluginsArgs].add_to_script(
+                script, network_loader_name
+            ),
             config=config_loader_name,
             save_timing_cache=self.save_timing_cache,
         )
         loader_name = script.add_loader(loader_str, "build_engine")
 
         if self._allow_saving:
-            loader_name = self.arg_groups[TrtSaveEngineBytesArgs].add_to_script(script, loader_name)
+            loader_name = self.arg_groups[TrtSaveEngineBytesArgs].add_to_script(
+                script, loader_name
+            )
         return loader_name
 
     def load_engine_bytes(self, network=None):
@@ -645,26 +744,34 @@ class TrtLoadEngineArgs(BaseArgs):
                     Path rom which to load a runtime that can be used to load a
                     version compatible engine that excludes the lean runtime.
         """
-        self.load_runtime = args_util.parse_path(args_util.get(args, "load_runtime"), "Runtime")
+        self.load_runtime = args_util.parse_path(
+            args_util.get(args, "load_runtime"), "Runtime"
+        )
 
     def add_to_script_impl(self, script, network_name=None):
         """
         Args:
             network_name (str): The name of a variable in the script pointing to a network loader.
         """
-        load_serialized_engine = self.arg_groups[TrtLoadEngineBytesArgs].add_to_script(script, network_name)
+        load_serialized_engine = self.arg_groups[TrtLoadEngineBytesArgs].add_to_script(
+            script, network_name
+        )
 
         script.add_import(imports=["EngineFromBytes"], frm="polygraphy.backend.trt")
 
         runtime_loader = None
         if self.load_runtime is not None:
             script.add_import(imports=["LoadRuntime"], frm="polygraphy.backend.trt")
-            runtime_loader = script.add_loader(make_invocable("LoadRuntime", self.load_runtime), "load_runtime")
+            runtime_loader = script.add_loader(
+                make_invocable("LoadRuntime", self.load_runtime), "load_runtime"
+            )
 
         return script.add_loader(
             make_invocable(
                 "EngineFromBytes",
-                self.arg_groups[TrtLoadPluginsArgs].add_to_script(script, load_serialized_engine),
+                self.arg_groups[TrtLoadPluginsArgs].add_to_script(
+                    script, load_serialized_engine
+                ),
                 runtime=runtime_loader,
             ),
             "deserialize_engine",

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,11 @@ from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import Script, make_invocable, make_invocable_if_nondefault_kwargs
+from polygraphy.tools.script import (
+    Script,
+    make_invocable,
+    make_invocable_if_nondefault_kwargs,
+)
 
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnxrt_backend = mod.lazy_import("polygraphy.backend.onnxrt")
@@ -153,7 +157,9 @@ class OnnxInferShapesArgs(BaseArgs):
             onnx.ModelProto: The model with shapes inferred.
         """
         force = util.default(force, False)
-        with util.TempAttrChange(self, {"do_shape_inference": True if force else self.do_shape_inference}):
+        with util.TempAttrChange(
+            self, {"do_shape_inference": True if force else self.do_shape_inference}
+        ):
             loader = args_util.run_script(self.add_to_script, model)
             return util.invoke_if_callable(loader)[0]
 
@@ -180,18 +186,26 @@ class OnnxInferShapesArgs(BaseArgs):
                     2. Metadata for every tensor in the model.
         """
         outputs = util.default(outputs, constants.MARK_ALL)
-        with G_LOGGER.verbosity(G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) + 10):
-            load_model = onnx_backend.ModifyOutputs(onnx_model, outputs=outputs, copy=True)
+        with G_LOGGER.verbosity(
+            G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) + 10
+        ):
+            load_model = onnx_backend.ModifyOutputs(
+                onnx_model, outputs=outputs, copy=True
+            )
             with onnxrt_backend.OnnxrtRunner(
                 onnxrt_backend.SessionFromOnnx(onnx_backend.BytesFromOnnx(load_model))
             ) as runner:
                 data_loader = self.arg_groups[DataLoaderArgs].get_data_loader()
                 loader_cache = DataLoaderCache(data_loader)
-                loader_cache.set_input_metadata(runner.get_input_metadata(use_numpy_dtypes=False))
+                loader_cache.set_input_metadata(
+                    runner.get_input_metadata(use_numpy_dtypes=False)
+                )
 
                 feed_dict = loader_cache[0]
 
-                with G_LOGGER.verbosity(G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) - 10):
+                with G_LOGGER.verbosity(
+                    G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) - 10
+                ):
                     G_LOGGER.info(
                         f"Running fallback shape inference using input metadata:\n{TensorMetadata.from_feed_dict(feed_dict)}"
                     )
@@ -262,7 +276,9 @@ class OnnxSaveArgs(BaseArgs):
 
     def add_parser_args_impl(self):
         if self._output_opt:
-            params = ([self._output_short_opt] if self._output_short_opt else []) + [f"--{self._output_opt}"]
+            params = ([self._output_short_opt] if self._output_short_opt else []) + [
+                f"--{self._output_opt}"
+            ]
             help_msg = "Path to save the ONNX model"
             if self._allow_multiple_models:
                 help_msg = "Path to a directory in which to save ONNX model(s)"
@@ -325,7 +341,9 @@ class OnnxSaveArgs(BaseArgs):
             external_data_path = external_data_path[0] or ""
         self.external_data_path = external_data_path
 
-        self.size_threshold = args_util.parse_num_bytes(args_util.get(args, "external_data_size_threshold"))
+        self.size_threshold = args_util.parse_num_bytes(
+            args_util.get(args, "external_data_size_threshold")
+        )
         self.all_tensors_to_one_file = args_util.get(args, "all_tensors_to_one_file")
 
     def add_to_script_impl(self, script, loader_name):
@@ -347,7 +365,9 @@ class OnnxSaveArgs(BaseArgs):
 
         # Need to run shape inference again after processing the graph since it may have changed.
         if self._allow_shape_inference:
-            loader_name = self.arg_groups[OnnxInferShapesArgs].add_to_script(script, loader_name)
+            loader_name = self.arg_groups[OnnxInferShapesArgs].add_to_script(
+                script, loader_name
+            )
 
         script.add_import(imports=["SaveOnnx"], frm="polygraphy.backend.onnx")
         loader_name = script.add_loader(
@@ -381,9 +401,9 @@ class OnnxSaveArgs(BaseArgs):
         attrs = {"path": path, "_disable_add_to_script_check": True}
         if self._allow_multiple_models:
             if self.external_data_path is not None:
-                attrs["external_data_path"] = os.path.basename(os.path.splitext(path)[0]) + (
-                    self.external_data_path or "_ext_data"
-                )
+                attrs["external_data_path"] = os.path.basename(
+                    os.path.splitext(path)[0]
+                ) + (self.external_data_path or "_ext_data")
 
         with util.TempAttrChange(self, attrs):
             loader = args_util.run_script(self.add_to_script, model)
@@ -435,7 +455,9 @@ class OnnxLoadArgs(BaseArgs):
         self._allow_shape_inference = util.default(allow_shape_inference, True)
         self._outputs_opt_prefix = util.default(outputs_opt_prefix, "onnx-")
         self._allow_from_tf = util.default(allow_from_tf, False)
-        self._allow_setting_upper_bounds = util.default(allow_setting_upper_bounds, False)
+        self._allow_setting_upper_bounds = util.default(
+            allow_setting_upper_bounds, False
+        )
 
     def add_parser_args_impl(self):
         self.group.add_argument(
@@ -456,7 +478,9 @@ class OnnxLoadArgs(BaseArgs):
             default=None,
         )
 
-        if self._outputs_opt_prefix is not False:  # Empty strings should not disable the option
+        if (
+            self._outputs_opt_prefix is not False
+        ):  # Empty strings should not disable the option
             self.group.add_argument(
                 f"--{self._outputs_opt_prefix}outputs",
                 help="Name(s) of ONNX tensor(s) to mark as output(s). "
@@ -500,7 +524,7 @@ class OnnxLoadArgs(BaseArgs):
                 """,
                 nargs="+",
                 default=None,
-                dest="upper_bounds"
+                dest="upper_bounds",
             )
 
     def parse_impl(self, args):
@@ -520,9 +544,13 @@ class OnnxLoadArgs(BaseArgs):
         self.external_data_dir = args_util.get(args, "external_data_dir")
         self.ignore_external_data = args_util.get(args, "ignore_external_data")
         self.convert_to_fp16 = args_util.get(args, "fp_to_fp16")
-        self.upper_bounds = args_util.parse_arglist_to_dict(args_util.get(args, "upper_bounds"))
+        self.upper_bounds = args_util.parse_arglist_to_dict(
+            args_util.get(args, "upper_bounds")
+        )
 
-    def _add_modify_onnx_outputs(self, script, loader_name, disable_custom_outputs: bool = None):
+    def _add_modify_onnx_outputs(
+        self, script, loader_name, disable_custom_outputs: bool = None
+    ):
         if disable_custom_outputs:
             outputs = None
             exclude_outputs = None
@@ -531,10 +559,17 @@ class OnnxLoadArgs(BaseArgs):
             exclude_outputs = self.exclude_outputs
 
         modify_outputs_loader = make_invocable_if_nondefault_kwargs(
-            "ModifyOnnxOutputs", loader_name, outputs=outputs, exclude_outputs=exclude_outputs
+            "ModifyOnnxOutputs",
+            loader_name,
+            outputs=outputs,
+            exclude_outputs=exclude_outputs,
         )
         if modify_outputs_loader is not None:
-            script.add_import(imports="ModifyOutputs", frm="polygraphy.backend.onnx", imp_as="ModifyOnnxOutputs")
+            script.add_import(
+                imports="ModifyOutputs",
+                frm="polygraphy.backend.onnx",
+                imp_as="ModifyOnnxOutputs",
+            )
             loader_name = script.add_loader(
                 modify_outputs_loader,
                 "modify_outputs",
@@ -542,7 +577,9 @@ class OnnxLoadArgs(BaseArgs):
 
         return loader_name
 
-    def add_to_script_impl(self, script, disable_custom_outputs: bool = None, serialize_model: bool = None):
+    def add_to_script_impl(
+        self, script, disable_custom_outputs: bool = None, serialize_model: bool = None
+    ):
         """
         Args:
             disable_custom_outputs (bool):
@@ -559,10 +596,16 @@ class OnnxLoadArgs(BaseArgs):
         if model_type.is_onnx():
             loader_name = self.arg_groups[ModelArgs].path
             if self._allow_shape_inference:
-                loader_name = self.arg_groups[OnnxInferShapesArgs].add_to_script(script, loader_name)
+                loader_name = self.arg_groups[OnnxInferShapesArgs].add_to_script(
+                    script, loader_name
+                )
 
-            if loader_name == self.arg_groups[ModelArgs].path:  # Shape inference loader isn't being used, have to load.
-                script.add_import(imports=["OnnxFromPath"], frm="polygraphy.backend.onnx")
+            if (
+                loader_name == self.arg_groups[ModelArgs].path
+            ):  # Shape inference loader isn't being used, have to load.
+                script.add_import(
+                    imports=["OnnxFromPath"], frm="polygraphy.backend.onnx"
+                )
                 loader_str = make_invocable(
                     "OnnxFromPath",
                     self.arg_groups[ModelArgs].path,
@@ -575,24 +618,39 @@ class OnnxLoadArgs(BaseArgs):
 
             loader_name = self.arg_groups[OnnxFromTfArgs].add_to_script(script)
         else:
-            G_LOGGER.critical(f"Model type: {model_type} could not be converted to an ONNX model.")
+            G_LOGGER.critical(
+                f"Model type: {model_type} could not be converted to an ONNX model."
+            )
 
-        loader_name = self._add_modify_onnx_outputs(script, loader_name, disable_custom_outputs=disable_custom_outputs)
+        loader_name = self._add_modify_onnx_outputs(
+            script, loader_name, disable_custom_outputs=disable_custom_outputs
+        )
 
         if self.convert_to_fp16:
             script.add_import(imports=["ConvertToFp16"], frm="polygraphy.backend.onnx")
-            loader_name = script.add_loader(make_invocable("ConvertToFp16", loader_name), "convert_to_fp16")
+            loader_name = script.add_loader(
+                make_invocable("ConvertToFp16", loader_name), "convert_to_fp16"
+            )
 
         if self._allow_saving:
-            loader_name = self.arg_groups[OnnxSaveArgs].add_to_script(script, loader_name)
+            loader_name = self.arg_groups[OnnxSaveArgs].add_to_script(
+                script, loader_name
+            )
 
         if serialize_model:
             script.add_import(imports=["BytesFromOnnx"], frm="polygraphy.backend.onnx")
-            loader_name = script.add_loader(make_invocable("BytesFromOnnx", loader_name), "serialize_onnx")
+            loader_name = script.add_loader(
+                make_invocable("BytesFromOnnx", loader_name), "serialize_onnx"
+            )
 
         if self._allow_setting_upper_bounds and self.upper_bounds is not None:
             script.add_import(imports=["SetUpperBound"], frm="polygraphy.backend.onnx")
-            loader_name = script.add_loader(make_invocable("SetUpperBound", loader_name, upper_bounds=self.upper_bounds), "set_upper_bound")
+            loader_name = script.add_loader(
+                make_invocable(
+                    "SetUpperBound", loader_name, upper_bounds=self.upper_bounds
+                ),
+                "set_upper_bound",
+            )
 
         return loader_name
 
@@ -610,11 +668,23 @@ class OnnxLoadArgs(BaseArgs):
         """
         tmp_script = Script()
         inp_loader = "check_needs_modify"
-        needs_modify = self._add_modify_onnx_outputs(tmp_script, inp_loader, disable_custom_outputs) != inp_loader
-        needs_shape_inference = self._allow_shape_inference and self.arg_groups[OnnxInferShapesArgs].do_shape_inference
-        needs_save = self._allow_saving and self.arg_groups[OnnxSaveArgs].path is not None
+        needs_modify = (
+            self._add_modify_onnx_outputs(
+                tmp_script, inp_loader, disable_custom_outputs
+            )
+            != inp_loader
+        )
+        needs_shape_inference = (
+            self._allow_shape_inference
+            and self.arg_groups[OnnxInferShapesArgs].do_shape_inference
+        )
+        needs_save = (
+            self._allow_saving and self.arg_groups[OnnxSaveArgs].path is not None
+        )
         needs_fp16_conversion = self.convert_to_fp16
-        needs_setting_upper_bounds = self._allow_setting_upper_bounds and self.upper_bounds is not None
+        needs_setting_upper_bounds = (
+            self._allow_setting_upper_bounds and self.upper_bounds is not None
+        )
         # Currently, other loaders do not support external data, so we must fall back to the ONNX loader if it's present.
         return (
             not self.arg_groups[ModelArgs].model_type.is_onnx()
@@ -648,7 +718,12 @@ class OnnxFromTfArgs(BaseArgs):
     """
 
     def add_parser_args_impl(self):
-        self.group.add_argument("--opset", help="Opset to use when converting to ONNX", default=None, type=int)
+        self.group.add_argument(
+            "--opset",
+            help="Opset to use when converting to ONNX",
+            default=None,
+            type=int,
+        )
 
     def parse_impl(self, args):
         """
@@ -670,7 +745,9 @@ class OnnxFromTfArgs(BaseArgs):
         script.add_import(imports=["OnnxFromTfGraph"], frm="polygraphy.backend.onnx")
         loader_str = make_invocable(
             "OnnxFromTfGraph",
-            self.arg_groups[TfLoadArgs].add_to_script(script, disable_custom_outputs=True),
+            self.arg_groups[TfLoadArgs].add_to_script(
+                script, disable_custom_outputs=True
+            ),
             opset=self.opset,
         )
         loader_name = script.add_loader(loader_str, "export_onnx_from_tf")

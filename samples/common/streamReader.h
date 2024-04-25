@@ -18,7 +18,7 @@
 #ifndef STREAM_READER_H
 #define STREAM_READER_H
 
-#include "NvInferRuntimeBase.h"
+#include "NvInferRuntime.h"
 #include "sampleUtils.h"
 #include <iostream>
 

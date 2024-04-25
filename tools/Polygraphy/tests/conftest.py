@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +34,9 @@ def sandboxed_install_run(virtualenv, script_runner):
     Packages from the test environment are still usable, but those in the virtual environment take precedence
     """
 
-    VENV_PYTHONPATH = glob.glob(os.path.join(virtualenv.virtualenv, "lib", "python*", "site-packages"))[0]
+    VENV_PYTHONPATH = glob.glob(
+        os.path.join(virtualenv.virtualenv, "lib", "python*", "site-packages")
+    )[0]
 
     class StatusWrapper:
         def __init__(self, stdout=None, stderr=None, success=None) -> None:
@@ -58,7 +60,9 @@ def sandboxed_install_run(virtualenv, script_runner):
             status.stdout = sr_status.stdout
             status.success = sr_status.success
         else:
-            sp_status = sp.run(command, cwd=cwd, env=env, stdout=sp.PIPE, stderr=sp.PIPE)
+            sp_status = sp.run(
+                command, cwd=cwd, env=env, stdout=sp.PIPE, stderr=sp.PIPE
+            )
 
             def try_decode(inp):
                 try:
@@ -124,7 +128,10 @@ def check_warnings_on_runner_impl_methods():
             metadata = runner.get_input_metadata_impl()
             runner.infer_impl(
                 {
-                    name: np.ones(shape, dtype=DataType.to_dtype(DataType.from_dtype(dtype), "numpy"))
+                    name: np.ones(
+                        shape,
+                        dtype=DataType.to_dtype(DataType.from_dtype(dtype), "numpy"),
+                    )
                     for name, (dtype, shape) in metadata.items()
                 }
             )
@@ -174,10 +181,15 @@ def check_warnings_on_loader_impl_methods():
 
 
 @pytest.fixture()
-@pytest.mark.skipif(sys.platform.startswith("win"), reason="Fixture has not been updated to work on Windows")
+@pytest.mark.skipif(
+    sys.platform.startswith("win"),
+    reason="Fixture has not been updated to work on Windows",
+)
 def nvinfer_lean_path():
     lean_library_name = ctypes.util.find_library("nvinfer_lean")
-    for dirname in os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep) + ["/usr/lib/x86_64-linux-gnu"]:
+    for dirname in os.environ.get("LD_LIBRARY_PATH", "").split(os.path.pathsep) + [
+        "/usr/lib/x86_64-linux-gnu"
+    ]:
         path = os.path.join(dirname, lean_library_name)
         if os.path.exists(path):
             return path

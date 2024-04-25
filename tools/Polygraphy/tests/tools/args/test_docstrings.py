@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,11 @@ args_mod = importlib.import_module("polygraphy.tools.args")
 
 from polygraphy.tools.args.base import BaseArgs
 
-ARG_CLASSES = [cls for cls in args_mod.__dict__.values() if inspect.isclass(cls) and issubclass(cls, BaseArgs)]
+ARG_CLASSES = [
+    cls
+    for cls in args_mod.__dict__.values()
+    if inspect.isclass(cls) and issubclass(cls, BaseArgs)
+]
 
 USES_DEP_PAT = re.compile(r"self.arg_groups\[(.*?)\]")
 MEMBER_PAT = re.compile(r"self.(.*?)[ ,.\[}]")
@@ -54,7 +58,9 @@ class TestDocStrings:
                     continue
                 documented_deps.add(line.lstrip("-").partition(":")[0].strip())
 
-        assert documented_deps == deps, "Documented dependencies do not match actual dependencies"
+        assert (
+            documented_deps == deps
+        ), "Documented dependencies do not match actual dependencies"
 
     # Checks that all members set by `parse` are documented.
     #
@@ -78,7 +84,11 @@ class TestDocStrings:
 
             return True
 
-        members = {member for member in MEMBER_PAT.findall(code) if should_include_member(member)}
+        members = {
+            member
+            for member in MEMBER_PAT.findall(code)
+            if should_include_member(member)
+        }
 
         docstring = arg_group_type.parse_impl.__doc__
         if docstring is None:
@@ -87,7 +97,9 @@ class TestDocStrings:
         doc_lines = [line.strip() for line in docstring.splitlines() if line.strip()]
 
         attributes_doc_start = doc_lines.index("Attributes:")
-        assert attributes_doc_start >= 0, "Expected parse_impl docstring to contain an `Attributes:` section."
+        assert (
+            attributes_doc_start >= 0
+        ), "Expected parse_impl docstring to contain an `Attributes:` section."
 
         doc_lines = doc_lines[attributes_doc_start + 1 :]
 

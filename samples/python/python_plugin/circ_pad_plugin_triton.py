@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,13 +36,26 @@ import torch
 
 from utils import volume, parseArgs
 
+
 @triton.jit
-def circ_pad(X,
-            all_pads_0, all_pads_2, all_pads_4, all_pads_6,
-            orig_dims_0, orig_dims_1, orig_dims_2, orig_dims_3,
-            Y,
-            Y_shape_1, Y_shape_2, Y_shape_3,
-            X_len, Y_len, BLOCK_SIZE: tl.constexpr,):
+def circ_pad(
+    X,
+    all_pads_0,
+    all_pads_2,
+    all_pads_4,
+    all_pads_6,
+    orig_dims_0,
+    orig_dims_1,
+    orig_dims_2,
+    orig_dims_3,
+    Y,
+    Y_shape_1,
+    Y_shape_2,
+    Y_shape_3,
+    X_len,
+    Y_len,
+    BLOCK_SIZE: tl.constexpr,
+):
     pid = tl.program_id(0)
     i = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
 
@@ -58,7 +71,12 @@ def circ_pad(X,
     j2 = (i2 - all_pads_4 + orig_dims_2) % orig_dims_2
     j3 = (i3 - all_pads_6 + orig_dims_3) % orig_dims_3
 
-    load_idx = orig_dims_3 * orig_dims_2 * orig_dims_1 * j0 + orig_dims_3 * orig_dims_2 * j1 + orig_dims_3 * j2 + j3
+    load_idx = (
+        orig_dims_3 * orig_dims_2 * orig_dims_1 * j0
+        + orig_dims_3 * orig_dims_2 * j1
+        + orig_dims_3 * j2
+        + j3
+    )
     mask_x = load_idx < X_len
 
     x = tl.load(X + load_idx, mask=mask_x)
@@ -143,8 +161,8 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         a_d = cp.ndarray((volume(input_desc[0].dims)), dtype=inp_dtype, memptr=a_ptr)
         c_d = cp.ndarray((volume(output_desc[0].dims)), dtype=inp_dtype, memptr=c_ptr)
 
-        a_t = torch.as_tensor(a_d, device='cuda')
-        c_t = torch.as_tensor(c_d, device='cuda')
+        a_t = torch.as_tensor(a_d, device="cuda")
+        c_t = torch.as_tensor(c_d, device="cuda")
 
         N = len(self.X_shape)
         all_pads = np.zeros((N * 2,), dtype=np.int32)
@@ -163,12 +181,23 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         blockSize = 256
         numBlocks = (int((np.prod(out_dims) + blockSize - 1) // blockSize),)
 
-        circ_pad[numBlocks](a_t,
-            all_pads[0], all_pads[2], all_pads[4], all_pads[6],
-            orig_dims[0], orig_dims[1], orig_dims[2], orig_dims[3],
+        circ_pad[numBlocks](
+            a_t,
+            all_pads[0],
+            all_pads[2],
+            all_pads[4],
+            all_pads[6],
+            orig_dims[0],
+            orig_dims[1],
+            orig_dims[2],
+            orig_dims[3],
             c_t,
-            out_dims[1], out_dims[2], out_dims[3],
-            int(np.prod(orig_dims)), int(np.prod(out_dims)), BLOCK_SIZE=256
+            out_dims[1],
+            out_dims[2],
+            out_dims[3],
+            int(np.prod(orig_dims)),
+            int(np.prod(out_dims)),
+            BLOCK_SIZE=256,
         )
 
         return 0
@@ -178,7 +207,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         cloned_plugin.__dict__.update(self.__dict__)
         return cloned_plugin
 
-    # 
+    #
     # The following defaults take effect since the respective methods are not overriden
     #
 
@@ -190,7 +219,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
     # def get_workspace_size(self, input_desc, output_desc):
     #     return 0
-    
+
     # def destroy(self):
     #     pass
 
@@ -216,6 +245,7 @@ class CircPadPluginCreator(trt.IPluginCreator):
         deserialized = CircPadPlugin()
         deserialized.__dict__.update(j)
         return deserialized
+
 
 if __name__ == "__main__":
 
@@ -248,12 +278,12 @@ if __name__ == "__main__":
 
     # build engine
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision==np.float16)
+        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision == np.float16)
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")
     # Run
-    with TrtRunner(build_engine, "trt_runner")as runner:
+    with TrtRunner(build_engine, "trt_runner") as runner:
         outputs = runner.infer({"X": X})
         Y = outputs["Y"]
 

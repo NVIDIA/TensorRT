@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,7 +43,12 @@ DEPENDENCY_PATHS = [
 ]
 for dep_path in DEPENDENCY_PATHS:
     try_load_libs_from_dir(
-        os.path.join(CURDIR, os.path.pardir, dep_path, "bin" if sys.platform.startswith("win") else "lib")
+        os.path.join(
+            CURDIR,
+            os.path.pardir,
+            dep_path,
+            "bin" if sys.platform.startswith("win") else "lib",
+        )
     )
 
 

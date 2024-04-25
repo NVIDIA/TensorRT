@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,20 +47,20 @@ class ArraySampler:
 
         self.data_loader_backend_module = data_loader_backend_module
 
-
         if self.data_loader_backend_module == "numpy":
             self.rng = np.random.RandomState(seed)
         elif self.data_loader_backend_module == "torch":
             self.rng = torch.Generator()
             self.rng.manual_seed(seed)
 
-
     def sample_integer(self, shape, dtype, low, high):
         """
         Samples an array containing integral values in the range [low, high], inclusive
         """
         dtype = (
-            DataType.to_dtype(DataType.from_dtype(dtype), self.data_loader_backend_module)
+            DataType.to_dtype(
+                DataType.from_dtype(dtype), self.data_loader_backend_module
+            )
             if dtype is not None
             else dtype
         )
@@ -87,7 +87,9 @@ class ArraySampler:
             scale = fmax
 
         dtype = (
-            DataType.to_dtype(DataType.from_dtype(dtype), self.data_loader_backend_module)
+            DataType.to_dtype(
+                DataType.from_dtype(dtype), self.data_loader_backend_module
+            )
             if dtype is not None
             else dtype
         )
@@ -100,7 +102,9 @@ class ArraySampler:
 
     def constant_array(self, shape, dtype):
         dtype = (
-            DataType.to_dtype(DataType.from_dtype(dtype), self.data_loader_backend_module)
+            DataType.to_dtype(
+                DataType.from_dtype(dtype), self.data_loader_backend_module
+            )
             if dtype is not None
             else dtype
         )

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,16 +27,21 @@ try:
 except NameError:
     FileNotFoundError = IOError
 
+
 def GiB(val):
     return val * 1 << 30
 
 
 def add_help(description):
-    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     args, _ = parser.parse_known_args()
 
 
-def find_sample_data(description="Runs a TensorRT Python sample", subfolder="", find_files=[], err_msg=""):
+def find_sample_data(
+    description="Runs a TensorRT Python sample", subfolder="", find_files=[], err_msg=""
+):
     """
     Parses sample arguments.
 
@@ -51,7 +56,9 @@ def find_sample_data(description="Runs a TensorRT Python sample", subfolder="", 
 
     # Standard command-line arguments for all samples.
     kDEFAULT_DATA_ROOT = os.path.join(os.sep, "usr", "src", "tensorrt", "data")
-    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=description, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "-d",
         "--datadir",
@@ -66,7 +73,13 @@ def find_sample_data(description="Runs a TensorRT Python sample", subfolder="", 
         data_path = os.path.join(data_dir, subfolder)
         if not os.path.exists(data_path):
             if data_dir != kDEFAULT_DATA_ROOT:
-                print("WARNING: " + data_path + " does not exist. Trying " + data_dir + " instead.")
+                print(
+                    "WARNING: "
+                    + data_path
+                    + " does not exist. Trying "
+                    + data_dir
+                    + " instead."
+                )
             data_path = data_dir
         # Make sure data directory exists.
         if not (os.path.exists(data_path)) and data_dir != kDEFAULT_DATA_ROOT:
@@ -109,9 +122,12 @@ def locate_files(data_paths, filenames, err_msg=""):
     for f, filename in zip(found_files, filenames):
         if not f or not os.path.exists(f):
             raise FileNotFoundError(
-                "Could not find {:}. Searched in data paths: {:}\n{:}".format(filename, data_paths, err_msg)
+                "Could not find {:}. Searched in data paths: {:}\n{:}".format(
+                    filename, data_paths, err_msg
+                )
             )
     return found_files
+
 
 # Sets up the builder to use the timing cache file, and creates it if it does not already exist
 def setup_timing_cache(config: trt.IBuilderConfig, timing_cache_path: os.PathLike):
@@ -122,8 +138,9 @@ def setup_timing_cache(config: trt.IBuilderConfig, timing_cache_path: os.PathLik
     timing_cache: trt.ITimingCache = config.create_timing_cache(buffer)
     config.set_timing_cache(timing_cache, True)
 
+
 # Saves the config's timing cache to file
 def save_timing_cache(config: trt.IBuilderConfig, timing_cache_path: os.PathLike):
     timing_cache: trt.ITimingCache = config.get_timing_cache()
-    with open(timing_cache_path, 'wb') as timing_cache_file:
+    with open(timing_cache_path, "wb") as timing_cache_file:
         timing_cache_file.write(memoryview(timing_cache.serialize()))

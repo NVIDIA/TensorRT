@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,8 +32,16 @@ class Sparsity(Tool):
 
     def get_subscriptions_impl(self):
         return [
-            ModelArgs(model_opt_required=True, input_shapes_opt_name=False, required_model_type="onnx"),
-            OnnxLoadArgs(allow_shape_inference=False, outputs_opt_prefix=False, allow_from_tf=False),
+            ModelArgs(
+                model_opt_required=True,
+                input_shapes_opt_name=False,
+                required_model_type="onnx",
+            ),
+            OnnxLoadArgs(
+                allow_shape_inference=False,
+                outputs_opt_prefix=False,
+                allow_from_tf=False,
+            ),
         ]
 
     def run_impl(self, args):

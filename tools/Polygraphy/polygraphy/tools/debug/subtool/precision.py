@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,14 +31,20 @@ class BaseMarker:
         self.max_layers = max_layers
         self.direction = direction
         self.num_layers_to_mark = num_layers_to_mark
-        self.good = max_layers + 1  # Pretend marking all the layers gives us good accuracy.
+        self.good = (
+            max_layers + 1
+        )  # Pretend marking all the layers gives us good accuracy.
 
     def select_layers(self):
         if self.direction == "forward":
-            G_LOGGER.info(f"Selecting first {self.num_layers_to_mark} layer(s) to run in higher precision")
+            G_LOGGER.info(
+                f"Selecting first {self.num_layers_to_mark} layer(s) to run in higher precision"
+            )
             return range(0, self.num_layers_to_mark)
         else:
-            G_LOGGER.info(f"Selecting last {self.num_layers_to_mark} layer(s) to run in higher precision")
+            G_LOGGER.info(
+                f"Selecting last {self.num_layers_to_mark} layer(s) to run in higher precision"
+            )
             return range(self.max_layers - self.num_layers_to_mark, self.max_layers)
 
     def success_message(self):
@@ -73,13 +79,17 @@ class BisectMarker(BaseMarker):
         # then we already have the information we need.
         if abs(self.good - self.bad) <= 1:
             if self.good >= self.max_layers:
-                G_LOGGER.error("Could not find a configuration that satisfied accuracy requirements.")
+                G_LOGGER.error(
+                    "Could not find a configuration that satisfied accuracy requirements."
+                )
             else:
                 self.success_message()
             return True
 
         if self.num_layers_to_mark > self.max_layers:
-            G_LOGGER.error("Could not find a configuration that satisfied accuracy requirements.")
+            G_LOGGER.error(
+                "Could not find a configuration that satisfied accuracy requirements."
+            )
             return True
 
         return False
@@ -102,7 +112,9 @@ class LinearMarker(BaseMarker):
             return True
 
         if self.num_layers_to_mark > self.max_layers:
-            G_LOGGER.error("Could not find a configuration that satisfied accuracy requirements.")
+            G_LOGGER.error(
+                "Could not find a configuration that satisfied accuracy requirements."
+            )
             return True
 
         return False
@@ -122,7 +134,11 @@ class Precision(BaseCheckerSubtool):
     """
 
     def __init__(self):
-        super().__init__("precision", precision_constraints_default="obey", allow_no_artifacts_warning=False)
+        super().__init__(
+            "precision",
+            precision_constraints_default="obey",
+            allow_no_artifacts_warning=False,
+        )
 
     def add_parser_args(self, parser):
         parser.add_argument(
@@ -151,7 +167,9 @@ class Precision(BaseCheckerSubtool):
         )
 
     def setup(self, args, network):
-        self.precision = {"float32": trt.float32, "float16": trt.float16}[args.precision]
+        self.precision = {"float32": trt.float32, "float16": trt.float16}[
+            args.precision
+        ]
 
         if self.precision == trt.float16 and not self.arg_groups[TrtConfigArgs].fp16:
             G_LOGGER.critical(
@@ -172,7 +190,9 @@ class Precision(BaseCheckerSubtool):
                 self.arg_groups[TrtConfigArgs].int8,
             ]
         ):
-            G_LOGGER.critical("Please enable at least one precision besides float32 (e.g. --int8, --fp16, --tf32)")
+            G_LOGGER.critical(
+                "Please enable at least one precision besides float32 (e.g. --int8, --fp16, --tf32)"
+            )
 
         if self.arg_groups[ModelArgs].model_type == "engine":
             G_LOGGER.critical(
@@ -194,7 +214,11 @@ class Precision(BaseCheckerSubtool):
 
     def mark_layers(self, network, indices):
         EXCLUDE_LAYER_NAMES = ["CONSTANT"]
-        EXCLUDE_LAYERS = [getattr(trt.LayerType, attr) for attr in EXCLUDE_LAYER_NAMES if hasattr(trt.LayerType, attr)]
+        EXCLUDE_LAYERS = [
+            getattr(trt.LayerType, attr)
+            for attr in EXCLUDE_LAYER_NAMES
+            if hasattr(trt.LayerType, attr)
+        ]
 
         # First, reset, since changes from the previous call will persist.
         for index, layer in enumerate(network):
@@ -209,20 +233,30 @@ class Precision(BaseCheckerSubtool):
 
             def should_exclude():
                 has_non_execution_output = any(
-                    not layer.get_output(i).is_execution_tensor for i in range(layer.num_outputs)
-                )
-                has_non_activation_output = any(
-                    layer.get_output(i).dtype not in [trt.float32, trt.float16, trt.int8]
+                    not layer.get_output(i).is_execution_tensor
                     for i in range(layer.num_outputs)
                 )
-                return layer.type in EXCLUDE_LAYERS or has_non_execution_output or has_non_activation_output
+                has_non_activation_output = any(
+                    layer.get_output(i).dtype
+                    not in [trt.float32, trt.float16, trt.int8]
+                    for i in range(layer.num_outputs)
+                )
+                return (
+                    layer.type in EXCLUDE_LAYERS
+                    or has_non_execution_output
+                    or has_non_activation_output
+                )
 
             if not should_exclude():
-                G_LOGGER.extra_verbose(f"Running layer in higher precision: {trt_util.str_from_layer(layer, index)}")
+                G_LOGGER.extra_verbose(
+                    f"Running layer in higher precision: {trt_util.str_from_layer(layer, index)}"
+                )
                 layer.precision = self.precision
                 marked_indices.add(index)
 
-        G_LOGGER.verbose(f"Marking layer(s): {marked_indices} to run in {self.precision} precision")
+        G_LOGGER.verbose(
+            f"Marking layer(s): {marked_indices} to run in {self.precision} precision"
+        )
 
     def process_network(self, network):
         indices = list(self.layer_marker.select_layers())

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +27,7 @@ import common
 
 from image_batcher import ImageBatcher
 from visualize import visualize_detections
+
 
 class TensorRTInfer:
     """
@@ -68,11 +69,11 @@ class TensorRTInfer:
                 size *= s
             allocation = common.cuda_call(cudart.cudaMalloc(size))
             binding = {
-                'index': i,
-                'name': name,
-                'dtype': np.dtype(trt.nptype(dtype)),
-                'shape': list(shape),
-                'allocation': allocation,
+                "index": i,
+                "name": name,
+                "dtype": np.dtype(trt.nptype(dtype)),
+                "shape": list(shape),
+                "allocation": allocation,
             }
             self.allocations.append(allocation)
             if is_input:
@@ -90,7 +91,7 @@ class TensorRTInfer:
         Get the specs for the input tensor of the network. Useful to prepare memory allocations.
         :return: Two items, the shape of the input tensor and its (numpy) datatype.
         """
-        return self.inputs[0]['shape'], self.inputs[0]['dtype']
+        return self.inputs[0]["shape"], self.inputs[0]["dtype"]
 
     def output_spec(self):
         """
@@ -99,7 +100,7 @@ class TensorRTInfer:
         """
         specs = []
         for o in self.outputs:
-            specs.append((o['shape'], o['dtype']))
+            specs.append((o["shape"], o["dtype"]))
         return specs
 
     def infer(self, batch, scales=None, nms_threshold=None):
@@ -117,10 +118,12 @@ class TensorRTInfer:
             outputs.append(np.zeros(shape, dtype))
 
         # Process I/O and execute the network
-        common.memcpy_host_to_device(self.inputs[0]['allocation'], np.ascontiguousarray(batch))
+        common.memcpy_host_to_device(
+            self.inputs[0]["allocation"], np.ascontiguousarray(batch)
+        )
         self.context.execute_v2(self.allocations)
         for o in range(len(outputs)):
-            common.memcpy_device_to_host(outputs[o], self.outputs[o]['allocation'])
+            common.memcpy_device_to_host(outputs[o], self.outputs[o]["allocation"])
 
         # Process the results
         nums = outputs[0]
@@ -131,14 +134,14 @@ class TensorRTInfer:
         if len(outputs) == 5:
             masks = outputs[4]
         detections = []
-        normalized = (np.max(boxes) < 2.0)
+        normalized = np.max(boxes) < 2.0
         for i in range(self.batch_size):
             detections.append([])
             for n in range(int(nums[i])):
                 # Depending on preprocessor, box scaling will be slightly different.
                 if self.preprocessor == "fixed_shape_resizer":
-                    scale_x = self.inputs[0]['shape'][1] if normalized else 1.0
-                    scale_y = self.inputs[0]['shape'][2] if normalized else 1.0
+                    scale_x = self.inputs[0]["shape"][1] if normalized else 1.0
+                    scale_y = self.inputs[0]["shape"][2] if normalized else 1.0
 
                     if scales and i < len(scales):
                         scale_x /= scales[i][0]
@@ -146,11 +149,11 @@ class TensorRTInfer:
                     if nms_threshold and scores[i][n] < nms_threshold:
                         continue
                     # Depending on detection type you need slightly different data.
-                    if self.detection_type == 'bbox':
+                    if self.detection_type == "bbox":
                         mask = None
                     # Segmentation is only supported with Mask R-CNN, which has
                     # fixed_shape_resizer as image_resizer (lookup pipeline.config)
-                    elif self.detection_type == 'segmentation':
+                    elif self.detection_type == "segmentation":
                         # Select a mask
                         mask = masks[i][n]
                         # Slight scaling, to get binary masks after float32 -> uint8
@@ -161,7 +164,7 @@ class TensorRTInfer:
                 elif self.preprocessor == "keep_aspect_ratio_resizer":
                     # No segmentation models with keep_aspect_ratio_resizer
                     mask = None
-                    scale = self.inputs[0]['shape'][2] if normalized else 1.0
+                    scale = self.inputs[0]["shape"][2] if normalized else 1.0
                     if scales and i < len(scales):
                         scale /= scales[i]
                         scale_y = scale
@@ -169,15 +172,17 @@ class TensorRTInfer:
                     if nms_threshold and scores[i][n] < nms_threshold:
                         continue
                 # Append to detections
-                detections[i].append({
-                    'ymin': boxes[i][n][0] * scale_y,
-                    'xmin': boxes[i][n][1] * scale_x,
-                    'ymax': boxes[i][n][2] * scale_y,
-                    'xmax': boxes[i][n][3] * scale_x,
-                    'score': scores[i][n],
-                    'class': int(classes[i][n]),
-                    'mask': mask,
-                })
+                detections[i].append(
+                    {
+                        "ymin": boxes[i][n][0] * scale_y,
+                        "xmin": boxes[i][n][1] * scale_x,
+                        "ymax": boxes[i][n][2] * scale_y,
+                        "xmax": boxes[i][n][3] * scale_x,
+                        "score": scores[i][n],
+                        "class": int(classes[i][n]),
+                        "mask": mask,
+                    }
+                )
         return detections
 
 
@@ -191,10 +196,17 @@ def main(args):
             for i, label in enumerate(f):
                 labels.append(label.strip())
 
-    trt_infer = TensorRTInfer(args.engine, args.preprocessor, args.detection_type, args.iou_threshold)
-    batcher = ImageBatcher(args.input, *trt_infer.input_spec(), preprocessor=args.preprocessor)
+    trt_infer = TensorRTInfer(
+        args.engine, args.preprocessor, args.detection_type, args.iou_threshold
+    )
+    batcher = ImageBatcher(
+        args.input, *trt_infer.input_spec(), preprocessor=args.preprocessor
+    )
     for batch, images, scales in batcher.get_batch():
-        print("Processing Image {} / {}".format(batcher.image_index, batcher.num_images), end="\r")
+        print(
+            "Processing Image {} / {}".format(batcher.image_index, batcher.num_images),
+            end="\r",
+        )
         detections = trt_infer.infer(batch, scales, args.nms_threshold)
         for i in range(len(images)):
             basename = os.path.splitext(os.path.basename(images[i]))[0]
@@ -204,7 +216,14 @@ def main(args):
             # Text Results
             output_results = ""
             for d in detections[i]:
-                line = [d['xmin'], d['ymin'], d['xmax'], d['ymax'], d['score'], d['class']]
+                line = [
+                    d["xmin"],
+                    d["ymin"],
+                    d["xmax"],
+                    d["ymax"],
+                    d["score"],
+                    d["class"],
+                ]
                 output_results += "\t".join([str(f) for f in line]) + "\n"
             with open(os.path.join(args.output, "{}.txt".format(basename)), "w") as f:
                 f.write(output_results)
@@ -214,22 +233,54 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-e", "--engine", default=None, help="The serialized TensorRT engine")
-    parser.add_argument("-i", "--input", default=None, help="Path to the image or directory to process")
-    parser.add_argument("-o", "--output", default=None, help="Directory where to save the visualization results")
-    parser.add_argument("-l", "--labels", default="./labels_coco.txt",
-                        help="File to use for reading the class labels from, default: ./labels_coco.txt")
-    parser.add_argument("-d", "--detection_type", default="bbox", choices=["bbox", "segmentation"],
-                        help="Detection type for COCO, either bbox or if you are using Mask R-CNN's instance segmentation - segmentation")
-    parser.add_argument("-t", "--nms_threshold", type=float,
-                        help="Override the score threshold for the NMS operation, if higher than the threshold in the engine.")
-    parser.add_argument("--iou_threshold", default=0.5, type=float,
-                        help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0")
-    parser.add_argument("--preprocessor", default="fixed_shape_resizer", choices=["fixed_shape_resizer", "keep_aspect_ratio_resizer"],
-                        help="Select the image preprocessor to use based on your pipeline.config, either 'fixed_shape_resizer' or 'keep_aspect_ratio_resizer', default: fixed_shape_resizer")
+    parser.add_argument(
+        "-e", "--engine", default=None, help="The serialized TensorRT engine"
+    )
+    parser.add_argument(
+        "-i", "--input", default=None, help="Path to the image or directory to process"
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Directory where to save the visualization results",
+    )
+    parser.add_argument(
+        "-l",
+        "--labels",
+        default="./labels_coco.txt",
+        help="File to use for reading the class labels from, default: ./labels_coco.txt",
+    )
+    parser.add_argument(
+        "-d",
+        "--detection_type",
+        default="bbox",
+        choices=["bbox", "segmentation"],
+        help="Detection type for COCO, either bbox or if you are using Mask R-CNN's instance segmentation - segmentation",
+    )
+    parser.add_argument(
+        "-t",
+        "--nms_threshold",
+        type=float,
+        help="Override the score threshold for the NMS operation, if higher than the threshold in the engine.",
+    )
+    parser.add_argument(
+        "--iou_threshold",
+        default=0.5,
+        type=float,
+        help="Select the IoU threshold for the mask segmentation. Range is 0 to 1. Pixel values more than threshold will become 1, less 0",
+    )
+    parser.add_argument(
+        "--preprocessor",
+        default="fixed_shape_resizer",
+        choices=["fixed_shape_resizer", "keep_aspect_ratio_resizer"],
+        help="Select the image preprocessor to use based on your pipeline.config, either 'fixed_shape_resizer' or 'keep_aspect_ratio_resizer', default: fixed_shape_resizer",
+    )
     args = parser.parse_args()
     if not all([args.engine, args.input, args.output, args.preprocessor]):
         parser.print_help()
-        print("\nThese arguments are required: --engine --input --output and --preprocessor")
+        print(
+            "\nThese arguments are required: --engine --input --output and --preprocessor"
+        )
         sys.exit(1)
     main(args)

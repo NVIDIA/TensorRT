@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -88,7 +88,7 @@ class Model(Tool):
             """,
             action="store_true",
             default=None,
-            dest="show_unbounded_dds"
+            dest="show_unbounded_dds",
         )
 
     def run_impl(self, args):
@@ -100,37 +100,52 @@ class Model(Tool):
                 with self.arg_groups[TrtLoadEngineArgs].load_engine() as engine:
                     context = engine.create_execution_context()
                     engine_str = trt_util.str_from_engine(
-                        engine, context, show_layers=show("layers"), show_attrs=show("attrs")
+                        engine,
+                        context,
+                        show_layers=show("layers"),
+                        show_attrs=show("attrs"),
                     )
                     G_LOGGER.info(f"==== TensorRT Engine ====\n{engine_str}")
             else:
-                builder, network, parser = util.unpack_args(self.arg_groups[TrtLoadNetworkArgs].load_network(), 3)
+                builder, network, parser = util.unpack_args(
+                    self.arg_groups[TrtLoadNetworkArgs].load_network(), 3
+                )
                 with contextlib.ExitStack() as stack:
                     stack.enter_context(builder)
                     stack.enter_context(network)
                     if parser:
                         stack.enter_context(parser)
                     network_str = trt_util.str_from_network(
-                        network, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
+                        network,
+                        show_layers=show("layers"),
+                        show_attrs=show("attrs"),
+                        show_weights=show("weights"),
                     ).strip()
                     G_LOGGER.info(f"==== TensorRT Network ====\n{network_str}")
 
         def inspect_onnx():
             onnx_model = self.arg_groups[OnnxLoadArgs].load_onnx()
             model_str = onnx_util.str_from_onnx(
-                onnx_model, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
+                onnx_model,
+                show_layers=show("layers"),
+                show_attrs=show("attrs"),
+                show_weights=show("weights"),
             ).strip()
             G_LOGGER.info(f"==== ONNX Model ====\n{model_str}")
             if args.show_unbounded_dds:
                 graph = onnx_backend.gs_from_onnx(onnx_model)
                 unbounded_dds_tensors = onnx_util.get_unbounded_dds_tensors(graph)
-                G_LOGGER.info(f"Found tensors with unbounded DDS: {unbounded_dds_tensors}")
-
+                G_LOGGER.info(
+                    f"Found tensors with unbounded DDS: {unbounded_dds_tensors}"
+                )
 
         def inspect_tf():
             tf_graph, _ = self.arg_groups[TfLoadArgs].load_graph()
             graph_str = tf_util.str_from_graph(
-                tf_graph, show_layers=show("layers"), show_attrs=show("attrs"), show_weights=show("weights")
+                tf_graph,
+                show_layers=show("layers"),
+                show_attrs=show("attrs"),
+                show_weights=show("weights"),
             ).strip()
             G_LOGGER.info(f"==== TensorFlow Graph ====\n{graph_str}")
 
@@ -142,5 +157,7 @@ class Model(Tool):
         if self.arg_groups[ModelArgs].model_type.is_trt() or args.display_as == "trt":
             func = inspect_trt
         if func is None:
-            G_LOGGER.critical("Could not determine how to display this model. Maybe you need to specify --display-as?")
+            G_LOGGER.critical(
+                "Could not determine how to display this model. Maybe you need to specify --display-as?"
+            )
         func()

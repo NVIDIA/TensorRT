@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -91,7 +91,7 @@ if (MSVC)
     find_path(PY_LIB_DIR ${PYTHON_LIB_NAME}.lib HINTS ${WIN_EXTERNALS}/${PYTHON} ${EXT_PATH}/${PYTHON} PATH_SUFFIXES lib)
     message(STATUS "PY_LIB_DIR: ${PY_LIB_DIR}")
 else()
-    find_path(PY_INCLUDE Python.h HINTS ${EXT_PATH}/${PYTHON} PATH_SUFFIXES include)
+    find_path(PY_INCLUDE Python.h HINTS ${EXT_PATH}/${PYTHON} /usr/include/${PYTHON} PATH_SUFFIXES include)
 endif()
 
 message(STATUS "PY_INCLUDE: ${PY_INCLUDE}")
@@ -133,16 +133,6 @@ else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GLIBCXX_USE_CXX11_ABI_FLAG} -fvisibility=hidden -std=c++${CPP_STANDARD} -Wno-deprecated-declarations")
 endif()
 
-# remove md
-# Add the flags to enable MD-TRT.
-if ("${ENABLE_MDTRT}" STREQUAL "1")
-    include_directories(${TENSORRT_ROOT}/optimizer)
-    include_directories(${TENSORRT_ROOT}/runtime)
-    include_directories(${TENSORRT_ROOT}/common)
-    include_directories(${TENSORRT_ROOT}/safety)
-    add_compile_definitions(ENABLE_MDTRT=1)
-endif()
-
 # Update linker
 if(${NV_TARGET_OS} MATCHES "wddm2")
     if(DEFINED W10_LINKER)
@@ -159,12 +149,26 @@ else()
     set(vfc_suffix "")
 endif()
 
+if (MSVC)
+    set(nvinfer_lib_name "nvinfer_${TENSORRT_MAJOR_VERSION}")
+    set(nvinfer_plugin_lib_name "nvinfer_plugin_${TENSORRT_MAJOR_VERSION}")
+    set(nvonnxparser_lib_name "nvonnxparser_${TENSORRT_MAJOR_VERSION}")
+    set(nvinfer_lean_lib_name "nvinfer_lean_${TENSORRT_MAJOR_VERSION}${vfc_suffix}")
+    set(nvinfer_dispatch_lib_name "nvinfer_dispatch_${TENSORRT_MAJOR_VERSION}${vfc_suffix}")
+else()
+    set(nvinfer_lib_name "nvinfer")
+    set(nvinfer_plugin_lib_name "nvinfer_plugin")
+    set(nvonnxparser_lib_name "nvonnxparser")
+    set(nvinfer_lean_lib_name "nvinfer_lean${vfc_suffix}")
+    set(nvinfer_dispatch_lib_name "nvinfer_dispatch${vfc_suffix}")
+endif()
+
 if (${TENSORRT_MODULE} STREQUAL "tensorrt")
-    set(TRT_LIBS nvinfer nvonnxparser nvinfer_plugin)
+    set(TRT_LIBS ${nvinfer_lib_name} ${nvonnxparser_lib_name} ${nvinfer_plugin_lib_name})
 elseif (${TENSORRT_MODULE} STREQUAL "tensorrt_lean")
-    set(TRT_LIBS "nvinfer_lean${vfc_suffix}")
+    set(TRT_LIBS ${nvinfer_lean_lib_name})
 elseif (${TENSORRT_MODULE} STREQUAL "tensorrt_dispatch")
-    set(TRT_LIBS "nvinfer_dispatch${vfc_suffix}")
+    set(TRT_LIBS ${nvinfer_dispatch_lib_name})
 else()
     message(FATAL_ERROR "Unknown TensorRT module " ${TENSORRT_MODULE})
 endif()

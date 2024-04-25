@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +16,10 @@
 #
 add_custom_target(plugin)
 
-set(TARGET_NAME nvinfer_plugin)
+set(TARGET_NAME ${nvinfer_plugin_lib_name})
 set(SHARED_TARGET ${TARGET_NAME})
 set(STATIC_TARGET ${TARGET_NAME}_static)
-set(VFC_TARGET_NAME nvinfer_vc_plugin)
+set(VFC_TARGET_NAME ${nvinfer_vc_plugin_lib_name})
 set(VFC_SHARED_TARGET ${VFC_TARGET_NAME})
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -143,10 +143,6 @@ else()
     set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,-Bsymbolic -Wl,--version-script=${PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
 endif()
 
-if (ADDITIONAL_PLATFORM_LIB_FLAGS)
-    set_target_properties(${SHARED_TARGET} PROPERTIES LINK_FLAGS ${ADDITIONAL_PLATFORM_LIB_FLAGS})
-endif()
-
 set_target_properties(${SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
 
 set_target_properties(${SHARED_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSION ${TRT_SOVERSION} )
@@ -155,7 +151,7 @@ set_property(TARGET ${SHARED_TARGET} PROPERTY CUDA_STANDARD 14)
 
 target_link_libraries(${SHARED_TARGET}
     ${CUDART_LIB}
-    ${nvinfer_LIB_PATH}
+    ${${nvinfer_lib_name}_LIB_PATH}
     ${CMAKE_DL_LIBS}
 )
 
@@ -188,10 +184,6 @@ set_target_properties(${STATIC_TARGET} PROPERTIES
 )
 
 set_target_properties(${STATIC_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL")
-
-if (ADDITIONAL_PLATFORM_LIB_FLAGS)
-    set_target_properties(${STATIC_TARGET} PROPERTIES LINK_FLAGS ${ADDITIONAL_PLATFORM_LIB_FLAGS})
-endif()
 
 set_target_properties(${STATIC_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
 
@@ -230,10 +222,6 @@ else()
     set_target_properties(${VFC_SHARED_TARGET} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL -Wl,-Bsymbolic -Wl,--version-script=${VFC_PLUGIN_EXPORT_MAP} -Wl,--no-undefined")
 endif()
 
-if (ADDITIONAL_PLATFORM_LIB_FLAGS)
-    set_target_properties(${VFC_SHARED_TARGET} PROPERTIES LINK_FLAGS ${ADDITIONAL_PLATFORM_LIB_FLAGS})
-endif()
-
 set_target_properties(${VFC_SHARED_TARGET} PROPERTIES DEBUG_POSTFIX ${TRT_DEBUG_POSTFIX})
 
 set_target_properties(${VFC_SHARED_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSION ${TRT_SOVERSION} )
@@ -242,7 +230,7 @@ set_property(TARGET ${VFC_SHARED_TARGET} PROPERTY CUDA_STANDARD 14)
 
 target_link_libraries(${VFC_SHARED_TARGET}
     ${CUDART_LIB}
-    ${nvinfer_LIB_PATH}
+    ${${nvinfer_lib_name}_LIB_PATH}
     ${CMAKE_DL_LIBS}
 )
 

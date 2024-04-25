@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,9 @@ For example, this includes things like custom fixtures.
 
 
 def test_sandboxed_install_run(sandboxed_install_run):
-    status = sandboxed_install_run(["python3", "-c", "import colored; print(colored.__path__)"])
+    status = sandboxed_install_run(
+        ["python3", "-c", "import colored; print(colored.__path__)"]
+    )
     assert status.success
     original_path = status.stdout
 
@@ -30,7 +32,9 @@ def test_sandboxed_install_run(sandboxed_install_run):
     status = sandboxed_install_run(["python3", "-m", "pip", "install", "colored"])
     assert status.success
 
-    status = sandboxed_install_run(["python3", "-c", "import colored; print(colored.__path__)"])
+    status = sandboxed_install_run(
+        ["python3", "-c", "import colored; print(colored.__path__)"]
+    )
     assert status.success
     venv_path = status.stdout
 

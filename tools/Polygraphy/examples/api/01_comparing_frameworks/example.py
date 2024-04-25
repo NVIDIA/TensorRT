@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +51,11 @@ def main():
     # TIP: The `compare_func` parameter can be used to control how outputs are compared (see API reference for details).
     #   The default comparison function is created by `CompareFunc.simple()`, but we can construct it
     #   explicitly if we want to change the default parameters, such as tolerance.
-    assert bool(Comparator.compare_accuracy(run_results, compare_func=CompareFunc.simple(atol=1e-8)))
+    assert bool(
+        Comparator.compare_accuracy(
+            run_results, compare_func=CompareFunc.simple(atol=1e-8)
+        )
+    )
 
     # We can use `RunResults.save()` method to save the inference results to a JSON file.
     # This can be useful if you want to generate and compare results separately.

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,7 +68,9 @@ def encode(iter_context):
 
 @Decoder.register(IterationContext)
 def decode(dct):
-    return IterationContext(state=dct["state"], iteration_info=dct["iteration_info"], success=dct["success"])
+    return IterationContext(
+        state=dct["state"], iteration_info=dct["iteration_info"], success=dct["success"]
+    )
 
 
 class CheckCmdArgs(BaseArgs):
@@ -157,7 +159,9 @@ class CheckCmdArgs(BaseArgs):
         self.check = args_util.get(args, "check")
 
         if self.check is None:
-            G_LOGGER.start("Starting interactive debugging session since no `--check` command was provided")
+            G_LOGGER.start(
+                "Starting interactive debugging session since no `--check` command was provided"
+            )
 
         self.fail_codes = args_util.get(args, "fail_codes")
         self.ignore_fail_codes = args_util.get(args, "ignore_fail_codes")
@@ -194,9 +198,7 @@ class CheckCmdArgs(BaseArgs):
                     return None
                 return res[0]
 
-            prompt = (
-                f"Did '{iter_artifact_path if iter_artifact_path is not None else 'this iteration'}' [p]ass or [f]ail?"
-            )
+            prompt = f"Did '{iter_artifact_path if iter_artifact_path is not None else 'this iteration'}' [p]ass or [f]ail?"
             response = prompt_user(prompt)
             while response not in ["p", "f"]:
                 response = prompt_user("Please choose either: 'p' or 'f':")
@@ -209,7 +211,9 @@ class CheckCmdArgs(BaseArgs):
             has_fail_regex = None
             if self.fail_regexes is not None:
                 output = status.stdout.decode() + status.stderr.decode()
-                has_fail_regex = any(regex.search(output) is not None for regex in self.fail_regexes)
+                has_fail_regex = any(
+                    regex.search(output) is not None for regex in self.fail_regexes
+                )
 
             if self.fail_codes is not None:
                 # If a fail-code is specified, then we should also check has_fail_regex if provided.
@@ -219,7 +223,9 @@ class CheckCmdArgs(BaseArgs):
             else:
                 # If a fail-code is not specified, we should trigger failures even on 0-status
                 # if the fail regex is found.
-                failed = status.returncode != 0 if has_fail_regex is None else has_fail_regex
+                failed = (
+                    status.returncode != 0 if has_fail_regex is None else has_fail_regex
+                )
             return not failed
 
         G_LOGGER.info(f"Running check command: {' '.join(self.check)}")
@@ -228,7 +234,9 @@ class CheckCmdArgs(BaseArgs):
 
         if self.show_output or (not success and not self.hide_fail_output):
             stderr_log_level = G_LOGGER.WARNING if success else G_LOGGER.ERROR
-            G_LOGGER.info(f"========== CAPTURED STDOUT ==========\n{status.stdout.decode()}")
+            G_LOGGER.info(
+                f"========== CAPTURED STDOUT ==========\n{status.stdout.decode()}"
+            )
             G_LOGGER.log(
                 f"========== CAPTURED STDERR ==========\n{status.stderr.decode()}",
                 severity=stderr_log_level,
@@ -249,7 +257,9 @@ class ArtifactSortArgs(BaseArgs):
                     Defaults to True.
         """
         super().__init__()
-        self._allow_no_artifacts_warning = util.default(allow_no_artifacts_warning, True)
+        self._allow_no_artifacts_warning = util.default(
+            allow_no_artifacts_warning, True
+        )
 
     def add_parser_args_impl(self):
         self.group.add_argument(
@@ -350,7 +360,11 @@ class IterativeDebugArgs(BaseArgs):
     """
 
     def __init__(
-        self, allow_iter_art_opt=None, iter_art_opt_default=None, allow_until_opt=None, allow_debug_replay=None
+        self,
+        allow_iter_art_opt=None,
+        iter_art_opt_default=None,
+        allow_until_opt=None,
+        allow_debug_replay=None,
     ):
         """
         Args:
@@ -372,7 +386,9 @@ class IterativeDebugArgs(BaseArgs):
         self._iter_art_opt_default = iter_art_opt_default
 
         if allow_iter_art_opt and not iter_art_opt_default:
-            G_LOGGER.internal_error("Must provide iter_art_opt_default if intermediate artifact is enabled")
+            G_LOGGER.internal_error(
+                "Must provide iter_art_opt_default if intermediate artifact is enabled"
+            )
 
         self._allow_until_opt = util.default(allow_until_opt, False)
         self._allow_debug_replay = util.default(allow_debug_replay, True)
@@ -481,7 +497,9 @@ class IterativeDebugArgs(BaseArgs):
             except:
                 until = until
                 if until not in ["good", "bad"]:
-                    G_LOGGER.critical(f"--until value must be an integer, 'good', or 'bad', but was: {until}")
+                    G_LOGGER.critical(
+                        f"--until value must be an integer, 'good', or 'bad', but was: {until}"
+                    )
 
         self.until = until
         self.load_debug_replay = args_util.get(args, "load_debug_replay")
@@ -603,7 +621,9 @@ class IterativeDebugArgs(BaseArgs):
         def handle_until(context: IterationContext):
             index, success = context.iteration_info["iteration"], context.success
             if isinstance(self.until, str):
-                if (self.until == "good" and success) or (self.until == "bad" and not success):
+                if (self.until == "good" and success) or (
+                    self.until == "bad" and not success
+                ):
                     self.arg_groups[IterativeDebugArgs].stop_iteration()
             elif index >= self.until:
                 self.arg_groups[IterativeDebugArgs].stop_iteration()
@@ -638,10 +658,14 @@ class IterativeDebugArgs(BaseArgs):
 
         for index in range(MAX_COUNT):
 
-            context = IterationContext(state={}, iteration_info={"iteration": index}, success=True)
+            context = IterationContext(
+                state={}, iteration_info={"iteration": index}, success=True
+            )
 
             with contextlib.ExitStack() as stack, G_LOGGER.indent():
-                remaining = get_remaining_func() if get_remaining_func is not None else None
+                remaining = (
+                    get_remaining_func() if get_remaining_func is not None else None
+                )
 
                 G_LOGGER.start(
                     f"RUNNING | Iteration {index + 1}{f' | Approximately {remaining} iteration(s) remaining' if remaining is not None else ''}"
@@ -653,9 +677,13 @@ class IterativeDebugArgs(BaseArgs):
                     duration_in_sec = time.time() - start_time
                     if iter_success:
                         num_passed += 1
-                        G_LOGGER.finish(f"PASSED | Iteration {index + 1} | Duration {duration_in_sec}s")
+                        G_LOGGER.finish(
+                            f"PASSED | Iteration {index + 1} | Duration {duration_in_sec}s"
+                        )
                     else:
-                        G_LOGGER.error(f"FAILED | Iteration {index + 1} | Duration {duration_in_sec}s")
+                        G_LOGGER.error(
+                            f"FAILED | Iteration {index + 1} | Duration {duration_in_sec}s"
+                        )
 
                 # We must include the suffix in the debug replay key to disambiguate
                 debug_replay_key = f"_N{index}" + (("_" + suffix) if suffix else "")
@@ -663,7 +691,9 @@ class IterativeDebugArgs(BaseArgs):
                 start_time = time.time()
                 if debug_replay_key in debug_replay:
                     context = debug_replay[debug_replay_key]
-                    G_LOGGER.info(f"Loading iteration information from debug replay: success={context.success}")
+                    G_LOGGER.info(
+                        f"Loading iteration information from debug replay: success={context.success}"
+                    )
                 else:
                     # Ensure that the intermediate artifact will be removed at the end of the iteration if requested.
                     if self.iter_artifact_path and self.remove_intermediate:
@@ -699,8 +729,12 @@ class IterativeDebugArgs(BaseArgs):
                     save_replay(debug_replay, suffix="_skip_current")
 
                     if do_check:
-                        context.success = self.arg_groups[CheckCmdArgs].run_check(self.iter_artifact_path)
-                        self.arg_groups[ArtifactSortArgs].sort_artifacts(context.success, suffix=debug_replay_key)
+                        context.success = self.arg_groups[CheckCmdArgs].run_check(
+                            self.iter_artifact_path
+                        )
+                        self.arg_groups[ArtifactSortArgs].sort_artifacts(
+                            context.success, suffix=debug_replay_key
+                        )
 
                     debug_replay[debug_replay_key] = context
                     save_replay(debug_replay, "debug replay")

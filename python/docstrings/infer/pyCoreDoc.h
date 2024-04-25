@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -407,7 +407,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with DETAILED verbosity will generally increase latency in enqueueV3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
     :ivar temporary_allocator: :class:`IGpuAllocator` The GPU allocator used for internal temporary storage.
     :ivar weight_streaming_budget: Set and get the current weight streaming budget for inference. The budget may be set to -1 disabling weight streaming at runtime, 0 (default) enabling TRT to choose to weight stream or not, or a positive value in the inclusive range [minimum_weight_streaming_budget, streamable_weights_size - 1].
-    :ivar minimum_weight_streaming_budget: Returns the minimum weight streaming budget in bytes required to run the network successfully. The engine must have been built with kWEIGHT_STREAMING. 
+    :ivar minimum_weight_streaming_budget: Returns the minimum weight streaming budget in bytes required to run the network successfully. The engine must have been built with kWEIGHT_STREAMING.
     :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
 )trtdoc";
 
@@ -731,15 +731,6 @@ constexpr char const* create_execution_context_without_device_memory = R"trtdoc(
     :returns: An :class:`IExecutionContext` without device memory allocated.
 )trtdoc";
 
-constexpr char const* get_profile_shape = R"trtdoc(
-    Get the minimum/optimum/maximum dimensions for a particular binding under an optimization profile.
-
-    :arg profile_index: The index of the profile.
-    :arg binding: The binding index or name.
-
-    :returns: A ``List[Dims]`` of length 3, containing the minimum, optimum, and maximum shapes, in that order.
-)trtdoc";
-
 constexpr char const* get_tensor_profile_values = R"trtdoc(
     Get minimum/optimum/maximum values for an input shape binding under an optimization profile. If the specified binding is not an input shape binding, an exception is raised.
 
@@ -882,7 +873,7 @@ To implement a custom output allocator, ensure that you explicitly instantiate t
 
         def reallocate_output_async(self, tensor_name, memory, size, alignment, stream):
             ... # Your implementation here
-                
+
         def notify_shape(self, tensor_name, shape):
             ... # Your implementation here
 
@@ -936,7 +927,7 @@ To implement a custom stream reader, ensure that you explicitly instantiate the 
         def __init__(self):
             trt.IStreamReader.__init__(self)
 
-        def read(self, memory, size):
+        def read(self, size: int) -> bytes:
             ... # Your implementation here
 
 )trtdoc";
@@ -1032,7 +1023,7 @@ constexpr char const* TACTIC_DRAM = R"trtdoc(
     cudaGetDeviceProperties.embedded is true, and 100% otherwise.
 )trtdoc";
 constexpr char const* TACTIC_SHARED_MEMORY = R"trtdoc(
-    TACTIC_SHARED_MEMORY defines the maximum shared memory size utilized for executing
+    TACTIC_SHARED_MEMORY defines the maximum shared memory size utilized for driver reserved and executing
     the backend CUDA kernel implementation. Adjust this value to restrict tactics that exceed
     the specified threshold en masse. The default value is device max capability. This value must
     be less than 1GiB.
@@ -1074,7 +1065,7 @@ constexpr char const* NONE = R"trtdoc(
     Do not require hardware compatibility with GPU architectures other than that of the GPU on which the engine was built.
 )trtdoc";
 constexpr char const* AMPERE_PLUS = R"trtdoc(
-    Require that the engine is compatible with Ampere and newer GPUs. This will limit the max shared memory usage to
+    Require that the engine is compatible with Ampere and newer GPUs. This will limit the combined usage of driver reserved and backend kernel max shared memory to
     48KiB, may reduce the number of available tactics for each layer, and may prevent some fusions from occurring.
     Thus this can decrease the performance, especially for tf32 models.
     This option will disable cuDNN, cuBLAS, and cuBLAS LT as tactic sources.
@@ -1624,7 +1615,7 @@ constexpr char const* deserialize_cuda_engine = R"trtdoc(
 constexpr char const* deserialize_cuda_engine_reader = R"trtdoc(
     Deserialize an :class:`ICudaEngine` from a stream reader.
 
-    :arg stream_reader: The :class:`PyStreamReader` that will read the serialized :class:`ICudaEngine`. This enables deserialization from a file directly.  
+    :arg stream_reader: The :class:`PyStreamReader` that will read the serialized :class:`ICudaEngine`. This enables deserialization from a file directly.
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";
@@ -1794,9 +1785,9 @@ constexpr char const* get_weights_prototype = R"trtdoc(
 
     The dtype and size of weights prototype is the same as weights used for engine building.
     The size of the weights prototype is -1 when the name of the weights is None or does not correspond to any refittable weights.
-   
+
     :arg weights_name: The name of the weights to be refitted.
-   
+
     :returns: weights prototype associated with the given name.
 )trtdoc";
 
@@ -2033,7 +2024,7 @@ Note that all methods below (allocate, reallocate, deallocate, allocate_async, r
 constexpr char const* allocate = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.0. Please use allocate_async instead.
     A callback implemented by the application to handle acquisition of GPU memory.
-    This is just a wrapper around a syncronous method allocate_async passing the default stream.    
+    This is just a wrapper around a synchronous method allocate_async passing the default stream.
 
     If an allocation request of size 0 is made, ``None`` should be returned.
 
@@ -2052,7 +2043,7 @@ constexpr char const* allocate = R"trtdoc(
 constexpr char const* deallocate = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.0. Please use deallocate_async instead.
     A callback implemented by the application to handle release of GPU memory.
-    This is just a wrapper around a syncronous method deallocate_async passing the default stream.    
+    This is just a wrapper around a synchronous method deallocate_async passing the default stream.
 
     TensorRT may pass a 0 to this function if it was previously returned by ``allocate()``.
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -65,7 +65,9 @@ class Convert(Tool):
         ]
 
     def add_parser_args_impl(self, parser):
-        parser.add_argument("-o", "--output", help="Path to save the converted model", required=True)
+        parser.add_argument(
+            "-o", "--output", help="Path to save the converted model", required=True
+        )
         parser.add_argument(
             "--convert-to",
             help="The format to attempt to convert the model to."
@@ -86,16 +88,24 @@ class Convert(Tool):
             convert_type = "onnx-like-trt-network"
         else:
             CONVERT_TO_MODEL_TYPE_MAPPING = {"onnx": "onnx", "trt": "engine"}
-            convert_type = ModelArgs.ModelType(CONVERT_TO_MODEL_TYPE_MAPPING[args.convert_to])
+            convert_type = ModelArgs.ModelType(
+                CONVERT_TO_MODEL_TYPE_MAPPING[args.convert_to]
+            )
 
         if convert_type == "onnx-like-trt-network":
-            onnx_like = trt_backend.onnx_like_from_network(self.arg_groups[TrtLoadNetworkArgs].load_network())
+            onnx_like = trt_backend.onnx_like_from_network(
+                self.arg_groups[TrtLoadNetworkArgs].load_network()
+            )
             onnx_backend.save_onnx(onnx_like, args.output)
         elif convert_type.is_onnx():
             model = self.arg_groups[OnnxLoadArgs].load_onnx()
             self.arg_groups[OnnxSaveArgs].save_onnx(model, args.output)
         elif convert_type.is_trt():
-            with self.arg_groups[TrtLoadEngineBytesArgs].load_engine_bytes() as serialized_engine:
-                self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(serialized_engine, args.output)
+            with self.arg_groups[
+                TrtLoadEngineBytesArgs
+            ].load_engine_bytes() as serialized_engine:
+                self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(
+                    serialized_engine, args.output
+                )
         else:
             G_LOGGER.critical(f"Cannot convert to model type: {convert_type}")

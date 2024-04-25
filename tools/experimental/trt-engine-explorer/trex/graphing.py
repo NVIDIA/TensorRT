@@ -735,6 +735,7 @@ class DotGraph(object):
         for layer_node in plan_graph.layer_nodes:
             layer = layer_node.layer
             latency = _get_latency(plan, layer, self.latency_type)
+
             if not layer.type == 'Constant' or plan_graph.include_constants:
                 dot_id = _get_dot_id(layer.name)
                 node_name_2_node_id[layer.name] = dot_id

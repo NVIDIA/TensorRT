@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,13 @@ This script demonstrates how to use PyTorch tensors with the TensorRT runner and
 
 import torch
 
-from polygraphy.backend.trt import Calibrator, CreateConfig, TrtRunner, engine_from_network, network_from_onnx_path
+from polygraphy.backend.trt import (
+    Calibrator,
+    CreateConfig,
+    TrtRunner,
+    engine_from_network,
+    network_from_onnx_path,
+)
 
 # If your PyTorch installation has GPU support, then we'll allocate the tensors
 # directly in GPU memory. This will mean that the calibrator and runner can skip the
@@ -38,7 +44,8 @@ def main():
     calibrator = Calibrator(data_loader=calib_data())
 
     engine = engine_from_network(
-        network_from_onnx_path("identity.onnx"), config=CreateConfig(int8=True, calibrator=calibrator)
+        network_from_onnx_path("identity.onnx"),
+        config=CreateConfig(int8=True, calibrator=calibrator),
     )
 
     with TrtRunner(engine) as runner:

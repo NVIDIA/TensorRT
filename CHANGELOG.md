@@ -1,6 +1,23 @@
 # TensorRT OSS Release Changelog
 
-## 10.0.0 EA - 2024-04-02
+## 10.0.1 GA - 2024-04-30
+
+Key Features and Updates:
+
+ - Parser changes
+   - Added support for building with `protobuf-lite`.
+   - Fixed issue when parsing and refitting models with nested `BatchNormalization` nodes.
+   - Added support for empty inputs in custom plugin nodes.
+ - Demo changes
+   - The following demos have been removed: Jasper, Tacotron2, HuggingFace Diffusers notebook
+ - Updated tooling
+   - Polygraphy v0.49.10
+   - ONNX-GraphSurgeon v0.5.2
+ - Build Containers
+   - Updated default cuda versions to `12.4.0`.
+   - Added Rocky Linux 8 and Rocky Linux 9 build containers
+
+## 10.0.0 EA - 2024-03-27
 
 Key Features and Updates:
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,10 @@ class TrtConfig(BaseTemplateTool):
         ]
 
     def run_impl(self, args):
-        script = Script(summary="Creates a TensorRT Builder Configuration.", always_create_runners=False)
+        script = Script(
+            summary="Creates a TensorRT Builder Configuration.",
+            always_create_runners=False,
+        )
         script.add_import(imports=["func"], frm="polygraphy")
         script.add_import(imports="tensorrt", imp_as="trt")
 

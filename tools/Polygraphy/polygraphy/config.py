@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,9 @@
 import os
 import sys
 
-INTERNAL_CORRECTNESS_CHECKS = bool(os.environ.get("POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS", "0") != "0")
+INTERNAL_CORRECTNESS_CHECKS = bool(
+    os.environ.get("POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS", "0") != "0"
+)
 """
 bool: Whether internal correctness checks are enabled.
 This can be configured by setting the 'POLYGRAPHY_INTERNAL_CORRECTNESS_CHECKS' environment variable.
@@ -36,7 +38,9 @@ Has no effect if AUTOINSTALL_DEPS is not enabled.
 This can be configured by setting the 'POLYGRAPHY_ASK_BEFORE_INSTALL' environment variable.
 """
 
-INSTALL_CMD = os.environ.get("POLYGRAPHY_INSTALL_CMD", f"{sys.executable} -m pip install").split()
+INSTALL_CMD = os.environ.get(
+    "POLYGRAPHY_INSTALL_CMD", f"{sys.executable} -m pip install"
+).split()
 """
 List[str]: The command to use to automatically install dependencies. Only relevant when
 AUTOINSTALL_DEPS is enabled. Defaults to ``["python", "-m", "pip", "install"]``.
@@ -44,7 +48,9 @@ This can be configured by setting the 'POLYGRAPHY_INSTALL_CMD' environment varia
 string containing the command; for example: ``python3 -m pip install``.
 """
 
-ARRAY_SWAP_THRESHOLD_MB = int(os.environ.get("POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB", "-1"))
+ARRAY_SWAP_THRESHOLD_MB = int(
+    os.environ.get("POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB", "-1")
+)
 """
 int: The threshold, in megabytes, above which Polygraphy will evict an array from memory and swap it to disk.
 A negative value disables swapping and a value of 0 causes all arrays to be saved to disk.
