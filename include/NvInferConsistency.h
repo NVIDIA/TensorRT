@@ -19,7 +19,9 @@
 #define NV_INFER_CONSISTENCY_H
 
 #include "NvInferConsistencyImpl.h"
+#define NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE 1
 #include "NvInferRuntimeBase.h"
+#undef NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE
 #include "NvInferRuntimePlugin.h"
 
 //!

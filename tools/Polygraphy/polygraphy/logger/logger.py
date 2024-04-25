@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -188,7 +188,9 @@ class Logger:
         CRITICAL: "light_red",
     }
 
-    def __init__(self, severity=INFO, colors=True, letter=True, timestamp=False, line_info=False):
+    def __init__(
+        self, severity=INFO, colors=True, letter=True, timestamp=False, line_info=False
+    ):
         """
         Args:
             severity (Union[int, Dict[str, int]]):
@@ -465,7 +467,9 @@ class Logger:
         )  # Info provides 1 stack frame
         limit = max(limit, 0)
         frame = sys._getframe(depth + 2)
-        self.log(" ".join(traceback.format_stack(f=frame, limit=limit)), severity=severity)
+        self.log(
+            " ".join(traceback.format_stack(f=frame, limit=limit)), severity=severity
+        )
 
     def ultra_verbose(self, message, mode=LogMode.EACH):
         """

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +29,9 @@ def check_inputs(feed_dict, input_metadata):
         input_metadata (TensorMetadata):
                 The expected input metadata.
     """
-    util.check_sequence_contains(feed_dict.keys(), input_metadata.keys(), name="input data", items_name="inputs")
+    util.check_sequence_contains(
+        feed_dict.keys(), input_metadata.keys(), name="input data", items_name="inputs"
+    )
 
     for name, inp in feed_dict.items():
         meta = input_metadata[name]

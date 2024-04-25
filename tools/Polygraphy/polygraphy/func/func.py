@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,14 +110,25 @@ def extend(extend_func):
 
             func_params = inspect.signature(func).parameters
             # Special case for when the extended function does not return anything
-            if len(func_params) == 0 and len(extend_func_ret_tuple) == 1 and extend_func_ret_tuple[0] is None:
+            if (
+                len(func_params) == 0
+                and len(extend_func_ret_tuple) == 1
+                and extend_func_ret_tuple[0] is None
+            ):
                 func_retval = func()
             elif len(extend_func_ret_tuple) == len(func_params):
                 func_retval = func(*extend_func_ret_tuple)
-            elif len(func_params) == len(extend_func_ret_tuple) + len(args) + len(kwargs):
+            elif len(func_params) == len(extend_func_ret_tuple) + len(args) + len(
+                kwargs
+            ):
                 # We need to turn `extend_func_ret_tuple` into keyword arguments so that it can
                 # be ordered after `**kwargs`.
-                ret_arg_names = [param.name for param in list(func_params.values())[-len(extend_func_ret_tuple) :]]
+                ret_arg_names = [
+                    param.name
+                    for param in list(func_params.values())[
+                        -len(extend_func_ret_tuple) :
+                    ]
+                ]
                 ret_kwargs = dict(zip(ret_arg_names, extend_func_ret_tuple))
                 func_retval = func(*args, **kwargs, **ret_kwargs)
             else:

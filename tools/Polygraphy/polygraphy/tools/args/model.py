@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -106,10 +106,16 @@ class ModelArgs(BaseArgs):
             "Model input(s) and their shape(s). "
             "Used to determine shapes to use while generating input data for inference",
         )
-        self._guess_model_type_from_runners = util.default(guess_model_type_from_runners, False)
+        self._guess_model_type_from_runners = util.default(
+            guess_model_type_from_runners, False
+        )
 
     def add_parser_args_impl(self):
-        self.group.add_argument("model_file", help="Path to the model", nargs=None if self._model_opt_required else "?")
+        self.group.add_argument(
+            "model_file",
+            help="Path to the model",
+            nargs=None if self._model_opt_required else "?",
+        )
 
         if self._required_model_type is None:
             self.group.add_argument(
@@ -189,16 +195,26 @@ class ModelArgs(BaseArgs):
 
         self.input_shapes = TensorMetadata()
         if args_util.get(args, "input_shapes"):
-            self.input_shapes = args_util.parse_meta(args_util.get(args, "input_shapes"), includes_dtype=False)
+            self.input_shapes = args_util.parse_meta(
+                args_util.get(args, "input_shapes"), includes_dtype=False
+            )
 
         self.path = None
         self.extra_model_info = None
 
-        self.path, self.extra_model_info = args_util.parse_script_and_func_name(args_util.get(args, "model_file"))
+        self.path, self.extra_model_info = args_util.parse_script_and_func_name(
+            args_util.get(args, "model_file")
+        )
         self.path = args_util.parse_path(self.path, "Model")
 
-        model_type_str = self._required_model_type if self._required_model_type else determine_model_type(self.path)
-        self.model_type = ModelArgs.ModelType(model_type_str) if model_type_str else None
+        model_type_str = (
+            self._required_model_type
+            if self._required_model_type
+            else determine_model_type(self.path)
+        )
+        self.model_type = (
+            ModelArgs.ModelType(model_type_str) if model_type_str else None
+        )
 
         # Set up extra_model_info defaults for each model type
         if self.model_type == "trt-network-script":

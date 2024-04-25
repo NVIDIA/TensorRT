@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,5 +64,7 @@ class SessionFromOnnx(BaseLoader):
                 )
             providers.append(matched_prov)
 
-        G_LOGGER.start(f"Creating ONNX-Runtime Inference Session with providers: {providers}")
+        G_LOGGER.start(
+            f"Creating ONNX-Runtime Inference Session with providers: {providers}"
+        )
         return onnxrt.InferenceSession(model_bytes, providers=providers)

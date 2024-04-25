@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,7 +56,10 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
         :param image_batcher: The ImageBatcher object
         """
         self.image_batcher = image_batcher
-        size = int(np.dtype(self.image_batcher.dtype).itemsize * np.prod(self.image_batcher.shape))
+        size = int(
+            np.dtype(self.image_batcher.dtype).itemsize
+            * np.prod(self.image_batcher.shape)
+        )
         self.batch_allocation = common.cuda_call(cudart.cudaMalloc(size))
         self.batch_generator = self.image_batcher.get_batch()
 
@@ -81,8 +84,14 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
             return None
         try:
             batch, _ = next(self.batch_generator)
-            log.info("Calibrating image {} / {}".format(self.image_batcher.image_index, self.image_batcher.num_images))
-            common.memcpy_host_to_device(self.batch_allocation, np.ascontiguousarray(batch))
+            log.info(
+                "Calibrating image {} / {}".format(
+                    self.image_batcher.image_index, self.image_batcher.num_images
+                )
+            )
+            common.memcpy_host_to_device(
+                self.batch_allocation, np.ascontiguousarray(batch)
+            )
             return [int(self.batch_allocation)]
         except StopIteration:
             log.info("Finished calibration batches")
@@ -127,7 +136,9 @@ class EngineBuilder:
 
         self.builder = trt.Builder(self.trt_logger)
         self.config = self.builder.create_builder_config()
-        self.config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 8 * (2 ** 30))  # 8 GB
+        self.config.set_memory_pool_limit(
+            trt.MemoryPoolType.WORKSPACE, 8 * (2**30)
+        )  # 8 GB
 
         self.batch_size = None
         self.network = None
@@ -156,9 +167,17 @@ class EngineBuilder:
         log.info("Network Description")
         for input in inputs:
             self.batch_size = input.shape[0]
-            log.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
+            log.info(
+                "Input '{}' with shape {} and dtype {}".format(
+                    input.name, input.shape, input.dtype
+                )
+            )
         for output in outputs:
-            log.info("Output '{}' with shape {} and dtype {}".format(output.name, output.shape, output.dtype))
+            log.info(
+                "Output '{}' with shape {} and dtype {}".format(
+                    output.name, output.shape, output.dtype
+                )
+            )
         assert self.batch_size > 0
 
     def create_engine(
@@ -254,8 +273,12 @@ if __name__ == "__main__":
         choices=["fp32", "fp16", "int8"],
         help="The precision mode to build in, either 'fp32', 'fp16' or 'int8', default: 'fp16'",
     )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable more verbose log output")
-    parser.add_argument("--calib_input", help="The directory holding images to use for calibration")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable more verbose log output"
+    )
+    parser.add_argument(
+        "--calib_input", help="The directory holding images to use for calibration"
+    )
     parser.add_argument(
         "--calib_cache",
         default="./calibration.cache",
@@ -268,7 +291,10 @@ if __name__ == "__main__":
         help="The maximum number of images to use for calibration, default: 25000",
     )
     parser.add_argument(
-        "--calib_batch_size", default=8, type=int, help="The batch size for the calibration process, default: 1"
+        "--calib_batch_size",
+        default=8,
+        type=int,
+        help="The batch size for the calibration process, default: 1",
     )
     parser.add_argument(
         "--calib_preprocessor",
@@ -288,6 +314,8 @@ if __name__ == "__main__":
         sys.exit(1)
     if args.precision == "int8" and not any([args.calib_input, args.calib_cache]):
         parser.print_help()
-        log.error("When building in int8 precision, either --calib_input or --calib_cache are required")
+        log.error(
+            "When building in int8 precision, either --calib_input or --calib_cache are required"
+        )
         sys.exit(1)
     main(args)

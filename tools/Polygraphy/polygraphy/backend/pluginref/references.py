@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,7 +53,9 @@ def register(op):
                     f"{op} reference implementation returned the wrong number of outputs.\nNote: Expected {len(node.outputs)} but recevied {len(outputs)}"
                 )
 
-            return {out_tensor.name: out for out_tensor, out in zip(node.outputs, outputs)}
+            return {
+                out_tensor.name: out for out_tensor, out in zip(node.outputs, outputs)
+            }
 
         OP_REGISTRY[op] = wrapped_func
         return wrapped_func

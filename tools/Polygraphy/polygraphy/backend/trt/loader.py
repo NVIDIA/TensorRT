@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,7 @@ import time
 
 from polygraphy import constants, mod, util
 from polygraphy.backend.base import BaseLoader
-from polygraphy.backend.trt import util as trt_util
+from polygraphy.backend.trt import util as trt_util, FileReader
 from polygraphy.backend.trt.config import CreateConfig
 from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
@@ -91,7 +91,10 @@ class CreateNetwork(BaseLoader):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
         """
-        self.explicit_batch = util.default(explicit_batch, True if mod.version(trt.__version__) < mod.version("10.0") else None)
+        self.explicit_batch = util.default(
+            explicit_batch,
+            True if mod.version(trt.__version__) < mod.version("10.0") else None,
+        )
         self.strongly_typed = util.default(strongly_typed, False)
 
     @util.check_called_by("__call__")
@@ -105,13 +108,17 @@ class CreateNetwork(BaseLoader):
 
         if self.explicit_batch:
             try:
-                network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+                network_flags |= 1 << int(
+                    trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH
+                )
             except AttributeError:
                 trt_util.fail_unavailable("explicit_batch")
 
         if self.strongly_typed:
             try:
-                network_flags |= 1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)
+                network_flags |= 1 << int(
+                    trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED
+                )
             except AttributeError:
                 trt_util.fail_unavailable("strongly_typed")
 
@@ -138,7 +145,7 @@ class BaseNetworkFromOnnx(BaseLoader):
                     Defaults to False.
         """
         self.flags = flags
-        self.plugin_instancenorm=util.default(plugin_instancenorm, False)
+        self.plugin_instancenorm = util.default(plugin_instancenorm, False)
         self.strongly_typed = util.default(strongly_typed, False)
 
     @util.check_called_by("__call__")
@@ -165,7 +172,9 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
     Functor that parses an ONNX model to create a trt.INetworkDefinition.
     """
 
-    def __init__(self, model_bytes, flags=None, plugin_instancenorm=None, strongly_typed=None):
+    def __init__(
+        self, model_bytes, flags=None, plugin_instancenorm=None, strongly_typed=None
+    ):
         """
         Parses an ONNX model.
 
@@ -185,7 +194,11 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
         """
-        super().__init__(flags=flags, plugin_instancenorm=plugin_instancenorm, strongly_typed=strongly_typed)
+        super().__init__(
+            flags=flags,
+            plugin_instancenorm=plugin_instancenorm,
+            strongly_typed=strongly_typed,
+        )
         self._model_bytes = model_bytes
 
     @util.check_called_by("__call__")
@@ -228,7 +241,11 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
         """
-        super().__init__(flags=flags, plugin_instancenorm=plugin_instancenorm, strongly_typed=strongly_typed)
+        super().__init__(
+            flags=flags,
+            plugin_instancenorm=plugin_instancenorm,
+            strongly_typed=strongly_typed,
+        )
         self.path = path
 
     @util.check_called_by("__call__")
@@ -272,7 +289,9 @@ class PostprocessNetwork(BaseLoader):
 
         # Sanity-check that the function passed in is callable
         if not callable(func):
-            G_LOGGER.critical(f"Object {func} (of type {type(func)}) is not a callable.")
+            G_LOGGER.critical(
+                f"Object {func} (of type {type(func)}) is not a callable."
+            )
 
         try:
             func_name = func.__name__
@@ -334,7 +353,9 @@ class ModifyNetworkOutputs(PostprocessNetwork):
                     Names of tensors to exclude as outputs. This can be useful in conjunction with
                     ``outputs=constants.MARK_ALL`` to omit outputs.
         """
-        func = lambda network: ModifyNetworkOutputs._apply(network, outputs, exclude_outputs)
+        func = lambda network: ModifyNetworkOutputs._apply(
+            network, outputs, exclude_outputs
+        )
         super().__init__(network, func, "ModifyNetworkOutputs")
 
 
@@ -536,12 +557,17 @@ class EngineBytesFromNetwork(BaseLoader):
                     network,
                     show_layers=True,
                     show_attrs=True,
-                    show_weights=G_LOGGER.module_severity.get(G_LOGGER.module_path(__file__)) <= G_LOGGER.ULTRA_VERBOSE,
+                    show_weights=G_LOGGER.module_severity.get(
+                        G_LOGGER.module_path(__file__)
+                    )
+                    <= G_LOGGER.ULTRA_VERBOSE,
                 )
             )
         )
 
-        G_LOGGER.start(f"Building engine with configuration:\n{trt_util.str_from_config(config)}")
+        G_LOGGER.start(
+            f"Building engine with configuration:\n{trt_util.str_from_config(config)}"
+        )
 
         start_time = time.time()
         try:
@@ -549,14 +575,20 @@ class EngineBytesFromNetwork(BaseLoader):
         except AttributeError:
             engine = builder.build_engine(network, config)
             if not engine:
-                G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
+                G_LOGGER.critical(
+                    "Invalid Engine. Please ensure the engine was built correctly"
+                )
             engine_bytes = engine.serialize()
         end_time = time.time()
 
         if not engine_bytes:
-            G_LOGGER.critical("Invalid Engine. Please ensure the engine was built correctly")
+            G_LOGGER.critical(
+                "Invalid Engine. Please ensure the engine was built correctly"
+            )
 
-        G_LOGGER.finish(f"Finished engine building in {end_time - start_time:.3f} seconds")
+        G_LOGGER.finish(
+            f"Finished engine building in {end_time - start_time:.3f} seconds"
+        )
 
         if self.timing_cache_path:
             try:
@@ -566,18 +598,28 @@ class EngineBytesFromNetwork(BaseLoader):
 
             with util.LockFile(self.timing_cache_path):
                 try:
-                    prev_cache = config.create_timing_cache(util.load_file(self.timing_cache_path))
+                    prev_cache = config.create_timing_cache(
+                        util.load_file(self.timing_cache_path)
+                    )
                 except:
                     prev_cache = None
 
                 if timing_cache:
                     if prev_cache is not None:
-                        combine_success = timing_cache.combine(prev_cache, ignore_mismatch=True)
+                        combine_success = timing_cache.combine(
+                            prev_cache, ignore_mismatch=True
+                        )
                         if not combine_success:
-                            G_LOGGER.warning("Could not combine old timing cache into current timing cache")
+                            G_LOGGER.warning(
+                                "Could not combine old timing cache into current timing cache"
+                            )
 
                     with timing_cache.serialize() as buffer:
-                        util.save_file(buffer, self.timing_cache_path, description="tactic timing cache")
+                        util.save_file(
+                            buffer,
+                            self.timing_cache_path,
+                            description="tactic timing cache",
+                        )
 
         return engine_bytes
 
@@ -642,7 +684,9 @@ class EngineFromBytes(BaseLoader):
                     If no runtime is provided, one will be created.
         """
         self._serialized_engine = serialized_engine
-        self._runtime = util.default(runtime, lambda: trt.Runtime(trt_util.get_trt_logger()))
+        self._runtime = util.default(
+            runtime, lambda: trt.Runtime(trt_util.get_trt_logger())
+        )
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -661,6 +705,51 @@ class EngineFromBytes(BaseLoader):
             pass
 
         engine = runtime.deserialize_cuda_engine(buffer)
+        if not engine:
+            G_LOGGER.critical("Could not deserialize engine. See log for details.")
+        return engine
+
+
+@mod.export(funcify=True)
+class EngineFromPath(BaseLoader):
+    """
+    Functor that deserializes an engine from a path.
+    """
+
+    def __init__(self, path: str, runtime=None):
+        """
+        Deserializes an engine from a path.
+
+        Args:
+            path (Union[str, Callable() -> str]):
+                    The file path to the serialized engine or a callable that returns it.
+            runtime (Union[trt.Runtime, Callable() -> trt.Runtime]):
+                    The runtime to use when deserializing the engine or a callable that returns one.
+                    If no runtime is provided, one will be created.
+        """
+        self._path = path
+        self._runtime = util.default(
+            runtime, lambda: trt.Runtime(trt_util.get_trt_logger())
+        )
+
+    @util.check_called_by("__call__")
+    def call_impl(self):
+        """
+        Returns:
+            trt.ICudaEngine: The deserialized engine.
+        """
+        path, _ = util.invoke_if_callable(self._path)
+        runtime, _ = util.invoke_if_callable(self._runtime)
+
+        trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
+        try:
+            # To deserialize version compatible engines, we must signal the runtime that host code is allowed
+            runtime.engine_host_code_allowed = True
+        except AttributeError:
+            pass
+
+        file_reader = FileReader(path)
+        engine = runtime.deserialize_cuda_engine(file_reader)
         if not engine:
             G_LOGGER.critical("Could not deserialize engine. See log for details.")
         return engine
@@ -719,7 +808,9 @@ class SaveEngine(BaseLoader):
         """
         engine, _ = util.invoke_if_callable(self._engine)
 
-        util.save_file(contents=bytes_from_engine(engine), dest=self.path, description="engine")
+        util.save_file(
+            contents=bytes_from_engine(engine), dest=self.path, description="engine"
+        )
         return engine
 
 
@@ -767,13 +858,19 @@ class OnnxLikeFromNetwork(BaseLoader):
             for name in names:
                 if name not in tensor_map:
                     dtype, shape = meta[name]
-                    tensor_map[name] = gs.Variable(name=name, dtype=DataType.to_dtype(dtype, "onnx"), shape=shape)
+                    tensor_map[name] = gs.Variable(
+                        name=name, dtype=DataType.to_dtype(dtype, "onnx"), shape=shape
+                    )
                 tensors.append(tensor_map[name])
             return tensors
 
         nodes = []
-        graph_inputs = tensors_from_names_meta(*trt_util.get_network_input_names_meta(network))
-        graph_outputs = tensors_from_names_meta(*trt_util.get_network_output_names_meta(network))
+        graph_inputs = tensors_from_names_meta(
+            *trt_util.get_network_input_names_meta(network)
+        )
+        graph_outputs = tensors_from_names_meta(
+            *trt_util.get_network_output_names_meta(network)
+        )
 
         LAYER_TYPE_CLASS_MAPPING = trt_util.get_layer_class_mapping()
 
@@ -782,8 +879,12 @@ class OnnxLikeFromNetwork(BaseLoader):
             if layer.type in LAYER_TYPE_CLASS_MAPPING:
                 layer.__class__ = LAYER_TYPE_CLASS_MAPPING[layer.type]
 
-            node_inputs = tensors_from_names_meta(*trt_util.get_layer_input_names_meta(layer))
-            node_outputs = tensors_from_names_meta(*trt_util.get_layer_output_names_meta(layer))
+            node_inputs = tensors_from_names_meta(
+                *trt_util.get_layer_input_names_meta(layer)
+            )
+            node_outputs = tensors_from_names_meta(
+                *trt_util.get_layer_output_names_meta(layer)
+            )
             attrs = {}
             attr_names = trt_util.get_layer_attribute_names(layer)
             for name in attr_names:
@@ -793,7 +894,9 @@ class OnnxLikeFromNetwork(BaseLoader):
                     except Exception as err:
                         attr = f"<Error: could not retrieve layer attribute: {name}. Note: Error was: {err}>"
 
-                if util.is_sequence(attr) or any(isinstance(attr, cls) for cls in [trt.Dims, trt.Permutation]):
+                if util.is_sequence(attr) or any(
+                    isinstance(attr, cls) for cls in [trt.Dims, trt.Permutation]
+                ):
                     try:
                         attr = list(attr)
                     except ValueError:  # Invalid dims
@@ -817,11 +920,22 @@ class OnnxLikeFromNetwork(BaseLoader):
 
                 attrs[name] = attr
 
-            nodes.append(gs.Node(name=layer.name, op=op_name, attrs=attrs, inputs=node_inputs, outputs=node_outputs))
+            nodes.append(
+                gs.Node(
+                    name=layer.name,
+                    op=op_name,
+                    attrs=attrs,
+                    inputs=node_inputs,
+                    outputs=node_outputs,
+                )
+            )
 
-        graph = gs.Graph(name=network.name, inputs=graph_inputs, outputs=graph_outputs, nodes=nodes)
+        graph = gs.Graph(
+            name=network.name, inputs=graph_inputs, outputs=graph_outputs, nodes=nodes
+        )
 
         return gs.export_onnx(graph)
+
 
 @mod.export(funcify=True)
 class MarkDebug(PostprocessNetwork):

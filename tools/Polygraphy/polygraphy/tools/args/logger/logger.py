@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,7 +64,9 @@ class LoggerArgs(BaseArgs):
             default=None,
         )
 
-        self.group.add_argument("--silent", help="Disable all output", action="store_true", default=None)
+        self.group.add_argument(
+            "--silent", help="Disable all output", action="store_true", default=None
+        )
         self.group.add_argument(
             "--log-format",
             help="Format for log messages: {{'timestamp': Include timestamp, 'line-info': Include file and line number, "
@@ -123,7 +125,9 @@ class LoggerArgs(BaseArgs):
         if verbosity is not None:
             self.verbosity = {}
             for path, sev in verbosity.items():
-                self.verbosity[path] = inline(safe("G_LOGGER.{:}", inline_identifier(sev.upper())))
+                self.verbosity[path] = inline(
+                    safe("G_LOGGER.{:}", inline_identifier(sev.upper()))
+                )
 
         # Enable logger settings immediately on parsing.
         self.get_logger()
@@ -138,7 +142,9 @@ class LoggerArgs(BaseArgs):
             logger_settings.append("G_LOGGER.module_severity = G_LOGGER.CRITICAL")
         elif self.verbosity is not None:
             # Need to escape braces of the dictionary so it's not treated as a format-string by `safe()`.
-            logger_settings.append(f"G_LOGGER.module_severity = {'{' + repr(self.verbosity) + '}'}")
+            logger_settings.append(
+                f"G_LOGGER.module_severity = {'{' + repr(self.verbosity) + '}'}"
+            )
 
         for fmt in self.log_format:
             if fmt == "no-colors":

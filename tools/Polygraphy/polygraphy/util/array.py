@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -528,9 +528,9 @@ def resize_or_reallocate():
     return {
         "numpy": numpy_impl,
         "torch": lambda obj, shape: obj.resize_(shape) if shape != obj.shape else obj,
-        "device_view": lambda obj, shape: obj.resize(shape)
-        if shape != obj.shape
-        else obj,
+        "device_view": lambda obj, shape: (
+            obj.resize(shape) if shape != obj.shape else obj
+        ),
     }
 
 

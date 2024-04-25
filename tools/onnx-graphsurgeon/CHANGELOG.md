@@ -2,6 +2,10 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.5.2 (2024-04-01)
+### Added
+- Added `export_dtype` field to `gs.Constant` to allow numpy-unsupported dtypes such as BFloat16.
+
 
 ## v0.5.1 (2024-02-23)
 ### Changed

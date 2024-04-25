@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,13 @@
 from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools import util as tools_util
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
+from polygraphy.tools.args import (
+    DataLoaderArgs,
+    ModelArgs,
+    OnnxInferShapesArgs,
+    OnnxLoadArgs,
+    OnnxSaveArgs,
+)
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.script import make_invocable
@@ -108,7 +114,9 @@ class ConstFoldArgs(BaseArgs):
         self.partitioning = args_util.get(args, "partitioning")
         self.fold_shapes = args_util.get(args, "fold_shapes")
         self.per_pass_shape_inference = args_util.get(args, "per_pass_shape_inference")
-        self.size_threshold = args_util.parse_num_bytes(args_util.get(args, "fold_size_threshold"))
+        self.size_threshold = args_util.parse_num_bytes(
+            args_util.get(args, "fold_size_threshold")
+        )
 
         if not self.fold_constants:
             for arg in [
@@ -135,13 +143,18 @@ class ConstFoldArgs(BaseArgs):
                 "FoldConstants",
                 loader_name,
                 num_passes=self.num_passes,
-                do_shape_inference=self.arg_groups[OnnxInferShapesArgs].do_shape_inference
-                if self.per_pass_shape_inference is not False  # since `None` indicates default value
-                else False,
+                do_shape_inference=(
+                    self.arg_groups[OnnxInferShapesArgs].do_shape_inference
+                    if self.per_pass_shape_inference
+                    is not False  # since `None` indicates default value
+                    else False
+                ),
                 fold_shapes=self.fold_shapes,
                 partitioning=self.partitioning,
                 size_threshold=self.size_threshold,
-                allow_onnxruntime_shape_inference=self.arg_groups[OnnxInferShapesArgs].allow_onnxruntime,
+                allow_onnxruntime_shape_inference=self.arg_groups[
+                    OnnxInferShapesArgs
+                ].allow_onnxruntime,
             ),
             "fold_constants",
         )
@@ -214,7 +227,9 @@ class Sanitize(BaseSurgeonSubtool):
                 rerun_shape_inference = True
 
             if self.arg_groups[OnnxInferShapesArgs].force_fallback:
-                _, layerwise_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(model)
+                _, layerwise_meta = self.arg_groups[
+                    OnnxInferShapesArgs
+                ].fallback_inference(model)
                 graph = get_graph()
                 onnx_util.set_shapes_from_layerwise_meta(graph, layerwise_meta)
 

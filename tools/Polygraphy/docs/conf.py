@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,15 @@ extensions = [
 ]
 
 # Want to be able to generate docs with no dependencies installed
-autodoc_mock_imports = ["tensorrt", "onnx", "numpy", "tensorflow", "onnx_graphsurgeon", "onnxruntime", "tf2onnx"]
+autodoc_mock_imports = [
+    "tensorrt",
+    "onnx",
+    "numpy",
+    "tensorflow",
+    "onnx_graphsurgeon",
+    "onnxruntime",
+    "tf2onnx",
+]
 
 
 autodoc_default_options = {
@@ -56,7 +64,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "Polygraphy"
-copyright = "2022, NVIDIA"
+copyright = "2024, NVIDIA"
 author = "NVIDIA"
 
 version = polygraphy.__version__
@@ -89,7 +97,10 @@ autoclass_content = "both"
 # Unlimited depth sidebar.
 html_theme_options = {"navigation_depth": -1}
 
-html_sidebars = {"**": ["globaltoc.html", "relations.html", "sourcelink.html", "searchbox.html"]}
+html_sidebars = {
+    "**": ["globaltoc.html", "relations.html", "sourcelink.html", "searchbox.html"]
+}
+
 
 # Allows us to override the default page width in the Sphinx theme.
 def setup(app):

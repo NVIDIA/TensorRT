@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,11 @@
 #
 
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
+from polygraphy.tools.debug.subtool.iterative_debug_args import (
+    ArtifactSortArgs,
+    CheckCmdArgs,
+    IterativeDebugArgs,
+)
 
 
 class Repeat(Tool):
@@ -29,7 +33,11 @@ class Repeat(Tool):
         super().__init__("repeat")
 
     def get_subscriptions_impl(self):
-        return [CheckCmdArgs(), ArtifactSortArgs(), IterativeDebugArgs(allow_iter_art_opt=False, allow_until_opt=True)]
+        return [
+            CheckCmdArgs(),
+            ArtifactSortArgs(),
+            IterativeDebugArgs(allow_iter_art_opt=False, allow_until_opt=True),
+        ]
 
     def show_start_end_logging_impl(self, args):
         return True

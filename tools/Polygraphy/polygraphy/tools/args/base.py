@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -121,7 +121,9 @@ class BaseArgs:
 
         num_prev_actions = len(parser._actions)
 
-        self.group = parser.add_argument_group(title.strip(), f"Options related to {desc.strip()}")
+        self.group = parser.add_argument_group(
+            title.strip(), f"Options related to {desc.strip()}"
+        )
 
         self.add_parser_args_impl()
         num_added_actions = len(parser._actions) - num_prev_actions

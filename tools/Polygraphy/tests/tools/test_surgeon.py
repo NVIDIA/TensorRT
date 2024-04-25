@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +35,7 @@ def onnx_model_sanity_check(poly_run):
 
     return onnx_model_sanity_check_impl
 
+
 def get_exclude_list(exclude_list):
     if not exclude_list:
         return set()
@@ -42,35 +43,41 @@ def get_exclude_list(exclude_list):
         lines = [line.rstrip() for line in fp]
         return set(lines)
 
+
 def pruned_initializer_sanity_check(opath, is_sparse=False, exclude_list=None):
     exclude_list = get_exclude_list(exclude_list)
     # we only prune the input data of QuantizeLinear and leave the scale and zero_point untouched
-    if 'qdq' in opath:
-        exclude_list.add('y_scale')
-        exclude_list.add('y_zero_point')
+    if "qdq" in opath:
+        exclude_list.add("y_scale")
+        exclude_list.add("y_zero_point")
 
     model = onnx.load(opath)
     for initializer in model.graph.initializer:
         # If initializer is to be left un-stripped
         if initializer.name in exclude_list:
             # ensure initializer is non-empty and doc_string doesn't contain the weightless flag
-            shape_match = list(numpy_helper.to_array(initializer).shape) == initializer.dims
+            shape_match = (
+                list(numpy_helper.to_array(initializer).shape) == initializer.dims
+            )
             if "TRT_WEIGHTLESS" in initializer.doc_string or not shape_match:
                 return False
             continue
 
         # ensure initializer is empty and doc_string is in required format
         init_empty = initializer.raw_data == b""
-        trt_weightless, sparsity = initializer.doc_string.split('/')
+        trt_weightless, sparsity = initializer.doc_string.split("/")
         trt_weightless_correctness = trt_weightless == "TRT_WEIGHTLESS"
         sparsity_correctness = False
-        if (not is_sparse and sparsity == "") or (is_sparse and sparsity == "SPARSE_2_4"):
+        if (not is_sparse and sparsity == "") or (
+            is_sparse and sparsity == "SPARSE_2_4"
+        ):
             sparsity_correctness = True
 
         if not (init_empty and trt_weightless_correctness and sparsity_correctness):
             return False
 
     return True
+
 
 def get_initializers_to_sparsify(ipath):
     model = onnx.load(ipath)
@@ -80,6 +87,7 @@ def get_initializers_to_sparsify(ipath):
             initializers_to_sparsify.add(initializer.name)
 
     return initializers_to_sparsify
+
 
 def reconstructed_initializer_sanity_check(opath, initializers_to_sparsify):
     model = onnx.load(opath)
@@ -92,13 +100,19 @@ def reconstructed_initializer_sanity_check(opath, initializers_to_sparsify):
             return False
 
         # ensure sparsity of initializers is retained
-        if initializer.name in initializers_to_sparsify and initializer.name not in sparse_tensors:
+        if (
+            initializer.name in initializers_to_sparsify
+            and initializer.name not in sparse_tensors
+        ):
             return False
 
     return True
 
+
 def was_shape_inference_run(status, model):
-    logging_correct = "Shape inference completed successfully" in (status.stdout + status.stderr)
+    logging_correct = "Shape inference completed successfully" in (
+        status.stdout + status.stderr
+    )
 
     has_shape = True
     model = onnx.load(model)
@@ -109,15 +123,25 @@ def was_shape_inference_run(status, model):
 
 
 class TestSurgeonExtract:
-    def test_no_shape_inference_if_has_metadata(self, poly_surgeon_extract, onnx_model_sanity_check):
+    def test_no_shape_inference_if_has_metadata(
+        self, poly_surgeon_extract, onnx_model_sanity_check
+    ):
         with util.NamedTemporaryFile() as outmodel:
             status = poly_surgeon_extract(
-                [ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--inputs", "X:auto:auto"]
+                [
+                    ONNX_MODELS["identity_identity"].path,
+                    "-o",
+                    outmodel.name,
+                    "--inputs",
+                    "X:auto:auto",
+                ]
             )
             onnx_model_sanity_check(outmodel.name)
             assert not was_shape_inference_run(status, outmodel.name)
 
-    def test_onnx_shape_inference_if_no_metadata(self, poly_surgeon_extract, onnx_model_sanity_check):
+    def test_onnx_shape_inference_if_no_metadata(
+        self, poly_surgeon_extract, onnx_model_sanity_check
+    ):
         with util.NamedTemporaryFile() as outmodel:
             status = poly_surgeon_extract(
                 [
@@ -131,7 +155,9 @@ class TestSurgeonExtract:
             onnx_model_sanity_check(outmodel.name)
             assert was_shape_inference_run(status, outmodel.name)
 
-    def test_fallback_shape_inference_no_onnx_shape_inference(self, poly_surgeon_extract, onnx_model_sanity_check):
+    def test_fallback_shape_inference_no_onnx_shape_inference(
+        self, poly_surgeon_extract, onnx_model_sanity_check
+    ):
         with util.NamedTemporaryFile() as outmodel:
             status = poly_surgeon_extract(
                 [
@@ -177,7 +203,13 @@ class TestSurgeonExtract:
 
 
 class TestSurgeonInsert:
-    def check_insert_model(self, path, expected_node_ops, expected_graph_input_names, expected_graph_output_names):
+    def check_insert_model(
+        self,
+        path,
+        expected_node_ops,
+        expected_graph_input_names,
+        expected_graph_output_names,
+    ):
         model = onnx.load(path)
         assert [node.op_type for node in model.graph.node] == expected_node_ops
 
@@ -203,7 +235,12 @@ class TestSurgeonInsert:
                     "--op=FakeOp",
                 ]
             )
-            self.check_insert_model(outmodel.name, ["Identity", "FakeOp", "Identity"], ["X"], ["identity_out_2"])
+            self.check_insert_model(
+                outmodel.name,
+                ["Identity", "FakeOp", "Identity"],
+                ["X"],
+                ["identity_out_2"],
+            )
 
     def test_graph_output(self, poly_surgeon):
         # FakeOp output tensor should be marked as a graph output. Name should be preserved - identity_out_2
@@ -219,7 +256,12 @@ class TestSurgeonInsert:
                     "--op=FakeOp",
                 ]
             )
-            self.check_insert_model(outmodel.name, ["Identity", "Identity", "FakeOp"], ["X"], ["identity_out_2"])
+            self.check_insert_model(
+                outmodel.name,
+                ["Identity", "Identity", "FakeOp"],
+                ["X"],
+                ["identity_out_2"],
+            )
 
     def test_at_graph_input(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
@@ -234,7 +276,12 @@ class TestSurgeonInsert:
                     "--op=FakeOp",
                 ]
             )
-            self.check_insert_model(outmodel.name, ["FakeOp", "Identity", "Identity"], ["X"], ["identity_out_2"])
+            self.check_insert_model(
+                outmodel.name,
+                ["FakeOp", "Identity", "Identity"],
+                ["X"],
+                ["identity_out_2"],
+            )
 
     # When a specified input tensor is used by multiple other nodes, it should not be
     # disconnected from other nodes.
@@ -309,7 +356,10 @@ class TestSurgeonInsert:
                 ]
             )
             model = self.check_insert_model(
-                outmodel.name, ["FakeOp", "Identity", "Identity"], ["X"], ["identity_out_2"]
+                outmodel.name,
+                ["FakeOp", "Identity", "Identity"],
+                ["X"],
+                ["identity_out_2"],
             )
             node = model.graph.node[0]
 
@@ -337,10 +387,14 @@ class TestSurgeonInsert:
 
 
 class TestSurgeonSanitize:
-    @pytest.mark.parametrize("no_per_pass_shape_inf", [None, "--no-per-pass-shape-inference"])
+    @pytest.mark.parametrize(
+        "no_per_pass_shape_inf", [None, "--no-per-pass-shape-inference"]
+    )
     @pytest.mark.parametrize("fold_shapes", [None, "--no-fold-shapes"])
     @pytest.mark.parametrize("partitioning", [None, "basic", "recursive"])
-    @pytest.mark.parametrize("no_onnxruntime_shape_inference", [None, "--no-onnxruntime-shape-inference"])
+    @pytest.mark.parametrize(
+        "no_onnxruntime_shape_inference", [None, "--no-onnxruntime-shape-inference"]
+    )
     def test_fold_constants(
         self,
         poly_surgeon,
@@ -351,7 +405,14 @@ class TestSurgeonSanitize:
         no_onnxruntime_shape_inference,
     ):
         with util.NamedTemporaryFile() as outmodel:
-            cmd = ["sanitize", ONNX_MODELS["const_foldable"].path, "-o", outmodel.name, "--fold-constants", "-v"]
+            cmd = [
+                "sanitize",
+                ONNX_MODELS["const_foldable"].path,
+                "-o",
+                outmodel.name,
+                "--fold-constants",
+                "-v",
+            ]
             if fold_shapes:
                 cmd += [fold_shapes]
             if partitioning:
@@ -362,9 +423,10 @@ class TestSurgeonSanitize:
                 cmd += [no_onnxruntime_shape_inference]
             status = poly_surgeon(cmd)
 
-            assert ("Inferred shapes in the model with `onnxruntime.tools.symbolic_shape_infer`" in status.stdout) == (
-                no_onnxruntime_shape_inference is None
-            )
+            assert (
+                "Inferred shapes in the model with `onnxruntime.tools.symbolic_shape_infer`"
+                in status.stdout
+            ) == (no_onnxruntime_shape_inference is None)
 
             onnx_model_sanity_check(outmodel.name)
             model = onnx.load(outmodel.name)
@@ -372,7 +434,13 @@ class TestSurgeonSanitize:
 
     @pytest.mark.parametrize("global_upper_bound", [None, "2000"])
     @pytest.mark.parametrize("specified_upper_bound", [None, "cast_out_6:4000"])
-    def test_set_upper_bound(self, poly_surgeon, global_upper_bound, specified_upper_bound, onnx_model_sanity_check):
+    def test_set_upper_bound(
+        self,
+        poly_surgeon,
+        global_upper_bound,
+        specified_upper_bound,
+        onnx_model_sanity_check,
+    ):
         with util.NamedTemporaryFile() as outmodel:
             cmd = [
                 "sanitize",
@@ -474,8 +542,12 @@ class TestSurgeonSanitize:
                 ]
             )
             model = onnx.load(outmodel.name)
-            assert model.graph.input[0].type.tensor_type.shape.dim[2].dim_param == "height"
-            assert model.graph.input[0].type.tensor_type.shape.dim[3].dim_param == "width"
+            assert (
+                model.graph.input[0].type.tensor_type.shape.dim[2].dim_param == "height"
+            )
+            assert (
+                model.graph.input[0].type.tensor_type.shape.dim[3].dim_param == "width"
+            )
 
     def test_override_shapes_no_reorder(self, poly_surgeon):
         with util.NamedTemporaryFile() as outmodel:
@@ -497,7 +569,15 @@ class TestSurgeonSanitize:
     def test_modify_onnx_outputs(self, poly_surgeon):
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
             poly_surgeon(
-                ["sanitize", ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--outputs", "mark", "all"]
+                [
+                    "sanitize",
+                    ONNX_MODELS["identity_identity"].path,
+                    "-o",
+                    outmodel.name,
+                    "--outputs",
+                    "mark",
+                    "all",
+                ]
             )
 
             model = onnx.load(outmodel.name)
@@ -561,7 +641,9 @@ class TestSurgeonSanitize:
             assert is_file_non_empty(os.path.join(outdir, outdata))
             assert poly_run([outmodel, "--onnxrt", "--external-data-dir", outdir])
 
-    def test_force_fallback_shape_inference_will_override_model_shapes(self, poly_surgeon, onnx_model_sanity_check):
+    def test_force_fallback_shape_inference_will_override_model_shapes(
+        self, poly_surgeon, onnx_model_sanity_check
+    ):
         with util.NamedTemporaryFile() as outmodel:
             status = poly_surgeon(
                 [
@@ -589,7 +671,9 @@ class TestSurgeonSanitize:
             ("9.99M", False),
         ],
     )
-    def test_size_threshold(self, poly_surgeon, size_threshold, expect_folding, onnx_model_sanity_check):
+    def test_size_threshold(
+        self, poly_surgeon, size_threshold, expect_folding, onnx_model_sanity_check
+    ):
         with util.NamedTemporaryFile() as outmodel:
             poly_surgeon(
                 [
@@ -614,7 +698,10 @@ class TestSurgeonSanitize:
 
 
 class TestSurgeonPrune:
-    @pytest.mark.parametrize("model_name", ["matmul", "matmul.fp16", "matmul.bf16", "matmul.bf16.i32data", "conv"])
+    @pytest.mark.parametrize(
+        "model_name",
+        ["matmul", "matmul.fp16", "matmul.bf16", "matmul.bf16.i32data", "conv"],
+    )
     def test_prune(self, poly_surgeon, onnx_model_sanity_check, model_name):
         with tempfile.TemporaryDirectory() as outdir:
             ipath = ONNX_MODELS[model_name].path
@@ -624,9 +711,21 @@ class TestSurgeonPrune:
             if "bf16" not in ipath:
                 onnx_model_sanity_check(opath)
 
+
 class TestSurgeonWeightStrip:
-    @pytest.mark.parametrize("model_name", ["matmul", "matmul.fp16", "matmul.bf16", "conv", "sparse.matmul", "sparse.conv",
-        "transpose_matmul", "qdq_conv"])
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "matmul",
+            "matmul.fp16",
+            "matmul.bf16",
+            "conv",
+            "sparse.matmul",
+            "sparse.conv",
+            "transpose_matmul",
+            "qdq_conv",
+        ],
+    )
     def test_weight_strip(self, poly_surgeon, model_name):
         with tempfile.TemporaryDirectory() as outdir:
             ipath = ONNX_MODELS[model_name].path
@@ -638,25 +737,45 @@ class TestSurgeonWeightStrip:
             assert pruned_initializer_sanity_check(opath, is_sparse=is_sparse)
 
     @pytest.mark.parametrize(
-        "model_name,     exclude_list", [
-        ["matmul",       "matmul.exclude_list.txt"],
-        ["sparse.conv",  "sparse.conv.exclude_list.txt"],
-        ["qdq_conv",     "qdq_conv.exclude_list.txt"]])
+        "model_name,     exclude_list",
+        [
+            ["matmul", "matmul.exclude_list.txt"],
+            ["sparse.conv", "sparse.conv.exclude_list.txt"],
+            ["qdq_conv", "qdq_conv.exclude_list.txt"],
+        ],
+    )
     def test_weight_strip_exclude_file(self, poly_surgeon, model_name, exclude_list):
         with tempfile.TemporaryDirectory() as outdir:
             ipath = ONNX_MODELS[model_name].path
             exclude_list = model_path(exclude_list)
             opath = os.path.join(outdir, "weightless_sparse." + os.path.basename(ipath))
-            status = poly_surgeon(["weight-strip", ipath, "-o", opath, "--exclude-list", exclude_list])
+            status = poly_surgeon(
+                ["weight-strip", ipath, "-o", opath, "--exclude-list", exclude_list]
+            )
             assert status
 
             is_sparse = "sparse" in ipath
-            assert pruned_initializer_sanity_check(opath, is_sparse=is_sparse, exclude_list=exclude_list)
+            assert pruned_initializer_sanity_check(
+                opath, is_sparse=is_sparse, exclude_list=exclude_list
+            )
+
 
 class TestSurgeonWeightReconstruct:
-    @pytest.mark.parametrize("model_name", ["weightless.matmul.fp16", "weightless.matmul.bf16", "weightless.conv", "weightless.sparse.matmul",
-        "weightless.sparse.conv", "weightless.transpose_matmul", "weightless.qdq_conv"])
-    def test_weight_reconstruct(self, poly_surgeon, onnx_model_sanity_check, model_name):
+    @pytest.mark.parametrize(
+        "model_name",
+        [
+            "weightless.matmul.fp16",
+            "weightless.matmul.bf16",
+            "weightless.conv",
+            "weightless.sparse.matmul",
+            "weightless.sparse.conv",
+            "weightless.transpose_matmul",
+            "weightless.qdq_conv",
+        ],
+    )
+    def test_weight_reconstruct(
+        self, poly_surgeon, onnx_model_sanity_check, model_name
+    ):
         with tempfile.TemporaryDirectory() as outdir:
             ipath = ONNX_MODELS[model_name].path
             opath = os.path.join(outdir, "reconstruct." + os.path.basename(ipath))
@@ -666,4 +785,6 @@ class TestSurgeonWeightReconstruct:
                 onnx_model_sanity_check(opath)
 
                 initializers_to_sparsify = get_initializers_to_sparsify(ipath)
-                assert reconstructed_initializer_sanity_check(opath, initializers_to_sparsify)
+                assert reconstructed_initializer_sanity_check(
+                    opath, initializers_to_sparsify
+                )

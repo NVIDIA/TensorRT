@@ -16,9 +16,13 @@
  */
 #ifndef SAMPLE_NONZERO_KERNEL_H
 #define SAMPLE_NONZERO_KERNEL_H
+
+#include <cuda_fp16.h>
+
 #include <cstdint>
 
-void nonZeroIndicesImpl(float const* X, int32_t* indices, int32_t* count, int32_t const* K, int32_t R, int32_t C,
-    bool rowMajor, cudaStream_t stream);
+template <typename T>
+void nonZeroIndicesImpl(T const* X, int32_t* indices, int32_t* count, int32_t const* K, int32_t R, int32_t C,
+    bool rowOrder, cudaStream_t stream);
 
 #endif // SAMPLE_NONZERO_KERNEL_H

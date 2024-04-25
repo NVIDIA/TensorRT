@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -129,7 +129,13 @@ class TensorMetadata(TypedDict(lambda: str, lambda: MetadataTuple)):
             The newly added entry.
         """
         self[name] = MetadataTuple(
-            dtype, BoundedShape(shape, min=min_shape, max=max_shape) if shape is not None else None, docstring
+            dtype,
+            (
+                BoundedShape(shape, min=min_shape, max=max_shape)
+                if shape is not None
+                else None
+            ),
+            docstring,
         )
         return self
 

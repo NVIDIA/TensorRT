@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -654,7 +654,15 @@ void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
     }
     if (build.tacticSharedMem >= 0)
     {
-        config.setMemoryPoolLimit(MemoryPoolType::kTACTIC_SHARED_MEMORY, roundToBytes(build.tacticSharedMem));
+        if (build.tacticSharedMem >= 0.046 && build.tacticSharedMem <= 0.047)
+        {
+            // 48KB is a common use case but user might not type the exact number 0.046875MB.
+            config.setMemoryPoolLimit(MemoryPoolType::kTACTIC_SHARED_MEMORY, 48 << 10);
+        }
+        else
+        {
+            config.setMemoryPoolLimit(MemoryPoolType::kTACTIC_SHARED_MEMORY, roundToBytes(build.tacticSharedMem));
+        }
     }
 }
 

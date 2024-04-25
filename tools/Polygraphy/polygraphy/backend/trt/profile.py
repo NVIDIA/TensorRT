@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -85,7 +85,9 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
                     corresponding to the input.
         """
         if key not in self:
-            G_LOGGER.critical(f"Binding: {key} does not have shapes set in this profile")
+            G_LOGGER.critical(
+                f"Binding: {key} does not have shapes set in this profile"
+            )
         return super().__getitem__(key)
 
     def fill_defaults(self, network, default_shape_value=None):
@@ -103,7 +105,9 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
         Returns:
             Profile: Self
         """
-        default_shape_value = util.default(default_shape_value, constants.DEFAULT_SHAPE_VALUE)
+        default_shape_value = util.default(
+            default_shape_value, constants.DEFAULT_SHAPE_VALUE
+        )
 
         for idx in range(network.num_inputs):
             inp = network.get_input(idx)
@@ -170,7 +174,9 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
             if is_shape_tensor:
                 if inp.name in self:
                     shapes = self[inp.name]
-                    trt_profile.set_shape_input(inp.name, shapes.min, shapes.opt, shapes.max)
+                    trt_profile.set_shape_input(
+                        inp.name, shapes.min, shapes.opt, shapes.max
+                    )
                     G_LOGGER.verbose(
                         f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | Setting input shape-tensor value range to: {shapes}"
                     )

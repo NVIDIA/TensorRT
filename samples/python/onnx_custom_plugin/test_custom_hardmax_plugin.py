@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,11 +29,13 @@ from load_plugin_lib import load_plugin_lib
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
+
 def hardmax_reference_impl(arr, axis):
     one_hot = np.zeros(arr.shape, dtype=arr.dtype)
     argmax = np.expand_dims(np.argmax(arr, axis), axis)
-    np.put_along_axis(one_hot,argmax,1,axis=axis)
+    np.put_along_axis(one_hot, argmax, 1, axis=axis)
     return one_hot
+
 
 def make_trt_network_and_engine(input_shape, axis):
     registry = trt.get_plugin_registry()
@@ -41,15 +43,21 @@ def make_trt_network_and_engine(input_shape, axis):
     axis_buffer = np.array([axis])
     axis_attr = trt.PluginField("axis", axis_buffer, type=trt.PluginFieldType.INT32)
     field_collection = trt.PluginFieldCollection([axis_attr])
-    plugin = plugin_creator.create_plugin(name="CustomHardmax", field_collection=field_collection)
+    plugin = plugin_creator.create_plugin(
+        name="CustomHardmax", field_collection=field_collection
+    )
 
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(0)
     config = builder.create_builder_config()
-    config.set_tactic_sources(config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS))
+    config.set_tactic_sources(
+        config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS)
+    )
     runtime = trt.Runtime(TRT_LOGGER)
 
-    input_layer = network.add_input(name="input_layer", dtype=trt.float32, shape=input_shape)
+    input_layer = network.add_input(
+        name="input_layer", dtype=trt.float32, shape=input_shape
+    )
     hardmax = network.add_plugin_v2(inputs=[input_layer], plugin=plugin)
     network.mark_output(hardmax.get_output(0))
 
@@ -58,14 +66,23 @@ def make_trt_network_and_engine(input_shape, axis):
 
     return engine
 
+
 def custom_plugin_impl(input_arr, engine):
     inputs, outputs, bindings, stream = common.allocate_buffers(engine)
     context = engine.create_execution_context()
     inputs[0].host = input_arr.astype(trt.nptype(trt.float32))
-    trt_outputs = common.do_inference(context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+    trt_outputs = common.do_inference(
+        context,
+        engine=engine,
+        bindings=bindings,
+        inputs=inputs,
+        outputs=outputs,
+        stream=stream,
+    )
     output = trt_outputs[0].copy()
     common.free_buffers(inputs, outputs, stream)
     return output
+
 
 def main():
     load_plugin_lib()
@@ -80,5 +97,6 @@ def main():
             assert np.all(res1 == res2), f"Test failed for shape={shape}, axis={axis}"
     print("Passed")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,7 +98,9 @@ class RunnerSelectArgs(BaseArgs):
             str: The name of the list of runners in the script.
         """
         if not self.runners:
-            G_LOGGER.warning("No runners have been selected. Inference will not be run!")
+            G_LOGGER.warning(
+                "No runners have been selected. Inference will not be run!"
+            )
 
         for opt in self.runners.keys():
             self._opt_to_group_map[opt].add_to_script(script)

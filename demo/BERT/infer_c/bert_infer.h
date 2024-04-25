@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -152,15 +152,12 @@ struct BertInference
         mDeviceBuffers.emplace_back(devBuf);
         mHostOutput.resize(numOutputItems);
 
-        mBindings.resize(mEngine->getNbIOTensors() * mEngine->getNbOptimizationProfiles());
     }
 
     void prepare(int profIdx, int batchSize)
     {
 
-        mContext->setOptimizationProfile(profIdx);
-        const int bindingIdxOffset = profIdx * mEngine->getNbIOTensors();
-        std::copy(mDeviceBuffers.begin(), mDeviceBuffers.end(), mBindings.begin() + bindingIdxOffset);
+        mContext->setOptimizationProfileAsync(profIdx, mStream);
 
         if (mEnableVariableLen)
         {
@@ -191,13 +188,13 @@ struct BertInference
             for (int32_t i = 0; i < mEngine->getNbIOTensors(); i++)
             {
                 auto const& name = mEngine->getIOTensorName(i);
-                context->setTensorAddress(name, mBindings[i + bindingIdxOffset]);
+                mContext->setTensorAddress(name, mDeviceBuffers[i]);
             }
 
             cudaGraph_t graph;
             cudaGraphExec_t exec;
             // warm up and let mContext do cublas initialization
-            bool status = mContext->enqueueV3(mStream, nullptr);
+            bool status = mContext->enqueueV3(mStream);
             if (!status)
             {
                 gLogError << "Enqueue failed\n";
@@ -206,7 +203,7 @@ struct BertInference
             gLogVerbose << "Capturing graph\n";
 
             gpuErrChk(cudaStreamBeginCapture(mStream, cudaStreamCaptureModeRelaxed));
-            status = mContext->enqueueV3(mStream, nullptr);
+            status = mContext->enqueueV3(mStream);
             if (!status)
             {
                 gLogError << "Enqueue failed\n";
@@ -240,7 +237,7 @@ struct BertInference
             }
             else
             {
-                bool status = mContext->enqueueV3(mStream, nullptr);
+                bool status = mContext->enqueueV3(mStream);
                 if (!status)
                 {
                     gLogError << "Enqueue failed\n";
@@ -265,7 +262,7 @@ struct BertInference
             }
             else
             {
-                bool status = mContext->enqueueV3(mStream, nullptr);
+                bool status = mContext->enqueueV3(mStream);
                 if (!status)
                 {
                     gLogError << "Enqueue failed\n";
@@ -347,7 +344,6 @@ struct BertInference
     TrtUniquePtr<IRuntime> mRuntime{nullptr};
     TrtUniquePtr<ICudaEngine> mEngine{nullptr};
     TrtUniquePtr<IExecutionContext> mContext{nullptr};
-    std::vector<void*> mBindings;
     bool mEnableVariableLen;
     std::vector<int> mCuSeqlens;
 

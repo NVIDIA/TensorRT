@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,9 +44,13 @@ class OnnxGs(BaseTemplateTool):
         script.add_import(imports="GsFromOnnx", frm="polygraphy.backend.onnx")
 
         loader_name = self.arg_groups[OnnxLoadArgs].add_to_script(script)
-        loader_name = script.add_loader(make_invocable("GsFromOnnx", loader_name), "load_gs")
+        loader_name = script.add_loader(
+            make_invocable("GsFromOnnx", loader_name), "load_gs"
+        )
 
-        new_model_path = util.add_file_suffix(self.arg_groups[ModelArgs].path, "_updated")
+        new_model_path = util.add_file_suffix(
+            self.arg_groups[ModelArgs].path, "_updated"
+        )
 
         content = safe(
             dedent(

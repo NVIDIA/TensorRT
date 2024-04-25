@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -63,7 +63,9 @@ class PytRunner(BaseRunner):
         with torch.no_grad():
             inputs = [
                 torch.from_numpy(val.astype(dtype)).cuda()
-                for (val, (dtype, _)) in zip(feed_dict.values(), self.input_metadata.values())
+                for (val, (dtype, _)) in zip(
+                    feed_dict.values(), self.input_metadata.values()
+                )
             ]
             start = time.time()
             outputs = self.model(*inputs)

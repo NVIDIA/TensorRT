@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,7 +49,10 @@ class TrtNetwork(BaseTemplateTool):
         ]
 
     def run_impl(self, args):
-        script = Script(summary="Creates a TensorRT Network using the Network API.", always_create_runners=False)
+        script = Script(
+            summary="Creates a TensorRT Network using the Network API.",
+            always_create_runners=False,
+        )
         script.add_import(imports=["func"], frm="polygraphy")
         script.add_import(imports="tensorrt", imp_as="trt")
 
@@ -64,7 +67,9 @@ class TrtNetwork(BaseTemplateTool):
         script.append_suffix(safe("@func.extend({:})", inline(loader_name)))
         script.append_suffix(safe("def load_network({:}):", inline(params)))
         script.append_suffix(
-            safe(f"{constants.TAB}pass # TODO: Set up the network here. This function should not return anything.")
+            safe(
+                f"{constants.TAB}pass # TODO: Set up the network here. This function should not return anything."
+            )
         )
 
         script.save(args.output)

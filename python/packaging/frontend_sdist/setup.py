@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,14 +104,20 @@ def parent_command_line():
         pass
     # fall back to shell
     try:
-        return subprocess.check_output(["ps", "-p", str(pid), "-o", "command", "--no-headers"]).decode()
+        return subprocess.check_output(
+            ["ps", "-p", str(pid), "-o", "command", "--no-headers"]
+        ).decode()
     except:
         return ""
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
 install_requires = []
-if disable_internal_pip or nvidia_pip_index_url in parent_command_line() or nvidia_pip_index_url in pip_config_list():
+if (
+    disable_internal_pip
+    or nvidia_pip_index_url in parent_command_line()
+    or nvidia_pip_index_url in pip_config_list()
+):
     install_requires.extend(tensorrt_submodules)
     cmdclass = {}
 else:

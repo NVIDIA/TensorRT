@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,9 +23,19 @@ from polygraphy.comparator import IterationResult
 from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.tools import util as tools_util
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
+from polygraphy.tools.args import (
+    DataLoaderArgs,
+    ModelArgs,
+    OnnxInferShapesArgs,
+    OnnxLoadArgs,
+    OnnxSaveArgs,
+)
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
+from polygraphy.tools.debug.subtool.iterative_debug_args import (
+    ArtifactSortArgs,
+    CheckCmdArgs,
+    IterativeDebugArgs,
+)
 
 gs = mod.lazy_import("onnx_graphsurgeon>=0.3.6")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
@@ -68,7 +78,9 @@ class MarkerBase:
         # Find the index of the node that has the highest number of nodes less than _least_bad_nodes, but still is successful.
         # Failing that, use the smallest possible subgraph (which will always be > _least_bad_nodes)
         def split_good(cond):
-            return {num: idx for num, idx in self._good_node_indices.items() if cond(num)}
+            return {
+                num: idx for num, idx in self._good_node_indices.items() if cond(num)
+            }
 
         max_smaller_graph = split_good(lambda num: num < self._least_bad_nodes)
         min_larger_graph = split_good(lambda num: num >= self._least_bad_nodes)
@@ -174,7 +186,11 @@ class Reduce(Tool):
             CheckCmdArgs(),
             ArtifactSortArgs(allow_no_artifacts_warning=False),
             IterativeDebugArgs(iter_art_opt_default="polygraphy_debug.onnx"),
-            ModelArgs(model_opt_required=True, input_shapes_opt_name="model-inputs", required_model_type="onnx"),
+            ModelArgs(
+                model_opt_required=True,
+                input_shapes_opt_name="model-inputs",
+                required_model_type="onnx",
+            ),
             OnnxSaveArgs(),
             OnnxInferShapesArgs(default=True, allow_force_fallback=True),
             OnnxLoadArgs(outputs_opt_prefix=False),
@@ -235,7 +251,9 @@ class Reduce(Tool):
         user_input_metadata = self.arg_groups[ModelArgs].input_shapes
         if user_input_metadata:
             model = gs.export_onnx(
-                tools_util.override_input_shapes(onnx_backend.gs_from_onnx(model), user_input_metadata)
+                tools_util.override_input_shapes(
+                    onnx_backend.gs_from_onnx(model), user_input_metadata
+                )
             )
             model = self.arg_groups[OnnxInferShapesArgs].infer_shapes(model)
 
@@ -252,7 +270,10 @@ class Reduce(Tool):
         def load_tensors_from_fallback(names):
             nonlocal fallback_outputs, fallback_metadata
 
-            if all((name in fallback_metadata and name in fallback_outputs) for name in names):
+            if all(
+                (name in fallback_metadata and name in fallback_outputs)
+                for name in names
+            ):
                 return
 
             G_LOGGER.info(
@@ -260,12 +281,16 @@ class Reduce(Tool):
                 "This will cause intermediate models to have static shapes."
             )
             with G_LOGGER.indent():
-                new_outputs, new_meta = self.arg_groups[OnnxInferShapesArgs].fallback_inference(model, outputs=names)
+                new_outputs, new_meta = self.arg_groups[
+                    OnnxInferShapesArgs
+                ].fallback_inference(model, outputs=names)
             fallback_outputs.update(new_outputs)
             fallback_metadata.update(new_meta)
 
         if self.arg_groups[OnnxInferShapesArgs].force_fallback:
-            G_LOGGER.info("Freezing shapes in the model according to values determined by fallback shape inference")
+            G_LOGGER.info(
+                "Freezing shapes in the model according to values determined by fallback shape inference"
+            )
             load_tensors_from_fallback(constants.MARK_ALL)
             onnx_util.set_shapes_from_layerwise_meta(GRAPH, fallback_metadata)
 
@@ -275,7 +300,10 @@ class Reduce(Tool):
                 "You may want to provide input shapes to `debug reduce` using the "
                 "`--model-input-shapes` option to prevent unexpected behavior.\n"
             )
-        elif any(tensor.shape is None or util.is_shape_dynamic(tensor.shape) for tensor in GRAPH.tensors().values()):
+        elif any(
+            tensor.shape is None or util.is_shape_dynamic(tensor.shape)
+            for tensor in GRAPH.tensors().values()
+        ):
             msg = ""
             if self.arg_groups[OnnxInferShapesArgs].do_shape_inference:
                 msg += "ONNX shape inference was unable to infer some shapes in this model.\n"
@@ -309,7 +337,11 @@ class Reduce(Tool):
             """
 
             def get_tensor_names_needing_fallback(tensors, fix_shape=True):
-                return [tensor.name for tensor in tensors if (not tensor.shape and fix_shape) or not tensor.dtype]
+                return [
+                    tensor.name
+                    for tensor in tensors
+                    if (not tensor.shape and fix_shape) or not tensor.dtype
+                ]
 
             load_tensors_from_fallback(
                 get_tensor_names_needing_fallback(graph.inputs)
@@ -320,9 +352,14 @@ class Reduce(Tool):
                 for tensor in tensors:
                     # If a tensor is not in `fallback_metadata`, it means it doesn't require metadata to be updated.
                     if tensor.name in fallback_metadata:
-                        tensor.shape = tensor.shape or fallback_metadata[tensor.name].shape
+                        tensor.shape = (
+                            tensor.shape or fallback_metadata[tensor.name].shape
+                        )
                         tensor.dtype = DataType.to_dtype(
-                            DataType.from_dtype(tensor.dtype or fallback_metadata[tensor.name].dtype), "onnx"
+                            DataType.from_dtype(
+                                tensor.dtype or fallback_metadata[tensor.name].dtype
+                            ),
+                            "onnx",
                         )
 
             fix_tensor_metadata(graph.inputs)
@@ -334,10 +371,17 @@ class Reduce(Tool):
             tensor_map = graph.tensors()
             tensors_to_freeze = []  # Names of tensors we need to freeze in the model.
             for name, tensor in tensor_map.items():
-                if isinstance(tensor, gs.Variable) and not tensor.inputs and tensor not in graph.inputs:
+                if (
+                    isinstance(tensor, gs.Variable)
+                    and not tensor.inputs
+                    and tensor not in graph.inputs
+                ):
                     tensors_to_freeze.append(name)
 
-            if tensors_to_freeze and self.arg_groups[DataLoaderArgs].is_using_random_data():
+            if (
+                tensors_to_freeze
+                and self.arg_groups[DataLoaderArgs].is_using_random_data()
+            ):
                 G_LOGGER.warning(
                     "This model includes multiple branches/paths. In order to continue reducing, one branch needs to be folded away.\n"
                     "Please ensure that you have provided a data loader argument directly to `debug reduce` (i.e. prior to `--check`) "
@@ -425,7 +469,9 @@ class Reduce(Tool):
             G_LOGGER.start(f"Reducing model {attr}")
 
             def make_iter_art(context):
-                iter_graph = graph.copy()  # This is a very light-weight copy of the entire graph.
+                iter_graph = (
+                    graph.copy()
+                )  # This is a very light-weight copy of the entire graph.
 
                 with G_LOGGER.indent():
                     io_list = list(getattr(iter_graph.nodes[marker.node_index], attr))
@@ -459,7 +505,11 @@ class Reduce(Tool):
                     return names_from_tensors(getattr(graph, attr))
                 return names_from_tensors(list(getattr(graph.nodes[index], attr)))
 
-            return get_io(marker.best_bad_node_index), get_io(marker.best_good_node_index), debug_replay
+            return (
+                get_io(marker.best_bad_node_index),
+                get_io(marker.best_good_node_index),
+                debug_replay,
+            )
 
         # We reduce the model in 2 phases:
         #   1. Find the earliest output nodes that cause a failure.
@@ -479,9 +529,15 @@ class Reduce(Tool):
         if args.reduce_outputs:
             out_marker = MarkerType(len(bad_graph.nodes))
             bad_outputs, good_outputs, debug_replay = bisect_io(
-                bad_graph, out_marker, attr="outputs", filter_const=False, debug_replay=debug_replay
+                bad_graph,
+                out_marker,
+                attr="outputs",
+                filter_const=False,
+                debug_replay=debug_replay,
             )
-            bad_graph = cleanup(mark_io(bad_graph, "outputs", lookup_tensors(bad_graph, bad_outputs)))
+            bad_graph = cleanup(
+                mark_io(bad_graph, "outputs", lookup_tensors(bad_graph, bad_outputs))
+            )
             if good_graph is not None:
                 good_graph = mark_io(
                     good_graph, "outputs", lookup_tensors(good_graph, good_outputs)
@@ -494,7 +550,9 @@ class Reduce(Tool):
             bad_inputs, good_inputs, debug_replay = bisect_io(
                 bad_graph, in_marker, attr="inputs", debug_replay=debug_replay
             )
-            bad_graph = cleanup(mark_io(bad_graph, "inputs", lookup_tensors(bad_graph, bad_inputs)))
+            bad_graph = cleanup(
+                mark_io(bad_graph, "inputs", lookup_tensors(bad_graph, bad_inputs))
+            )
             if good_graph is not None:
                 good_graph = mark_io(
                     good_graph, "inputs", lookup_tensors(good_graph, good_inputs)
@@ -516,7 +574,9 @@ class Reduce(Tool):
                     f"It looks like this model could potentially be reduced further.\nYou may want to reduce {self.arg_groups[OnnxSaveArgs].path} again using --mode=linear. "
                 )
 
-            G_LOGGER.info(f"Minimum Bad Model:\n{onnx_util.str_from_onnx(reduced_model)}\n\n")
+            G_LOGGER.info(
+                f"Minimum Bad Model:\n{onnx_util.str_from_onnx(reduced_model)}\n\n"
+            )
             self.arg_groups[OnnxSaveArgs].save_onnx(reduced_model)
 
         # == Write Good Model ==
@@ -528,5 +588,7 @@ class Reduce(Tool):
                     "Could not find a minimal model close in size to the reduced model that does not cause a failure."
                 )
             else:
-                G_LOGGER.info(f"Minimum Good Model:\n{onnx_util.str_from_onnx(min_good_model)}\n\n")
+                G_LOGGER.info(
+                    f"Minimum Good Model:\n{onnx_util.str_from_onnx(min_good_model)}\n\n"
+                )
                 self.arg_groups[OnnxSaveArgs].save_onnx(min_good_model, args.min_good)

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,10 @@ class Data(Tool):
         super().__init__("data")
 
     def add_parser_args(self, parser):
-        parser.add_argument("path", help="Path to a file containing input or output data from Polygraphy")
+        parser.add_argument(
+            "path",
+            help="Path to a file containing input or output data from Polygraphy",
+        )
         parser.add_argument(
             "-a",
             "--all",
@@ -45,9 +48,16 @@ class Data(Tool):
             action="store_true",
         )
         parser.add_argument(
-            "-s", "--show-values", help="Show values of the tensors instead of just metadata", action="store_true"
+            "-s",
+            "--show-values",
+            help="Show values of the tensors instead of just metadata",
+            action="store_true",
         )
-        parser.add_argument("--histogram", help="Show a histogram of the value distribution", action="store_true")
+        parser.add_argument(
+            "--histogram",
+            help="Show a histogram of the value distribution",
+            action="store_true",
+        )
         parser.add_argument(
             "-n",
             "--num-items",
@@ -88,7 +98,9 @@ class Data(Tool):
                 iter_meta = meta_from_iter_result(iter_result)
                 indent = 1
                 if len(iters) > 1 and args.all:
-                    out_str += util.indent_block(f"\n-- Iteration: {index}\n", indent - 1)
+                    out_str += util.indent_block(
+                        f"\n-- Iteration: {index}\n", indent - 1
+                    )
                     indent = 2
 
                 for name, arr in iter_result.items():

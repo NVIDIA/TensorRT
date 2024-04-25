@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,9 @@ from tests.models.meta import ONNX_MODELS
 
 @pytest.fixture(scope="session")
 def dynamic_identity_network():
-    builder, network, parser = network_from_onnx_bytes(ONNX_MODELS["dynamic_identity"].loader)
+    builder, network, parser = network_from_onnx_bytes(
+        ONNX_MODELS["dynamic_identity"].loader
+    )
     with builder, network, parser:
         yield builder, network, parser
 
@@ -55,8 +57,18 @@ class TestProfile:
         # Need to add some other operations so TensorRT treats `fill_shape` as a shape tensor.
         fill = network.add_fill(tuple(), trt.FillOperation.LINSPACE)
         fill.set_input(0, fill_shape)
-        fill.set_input(1, network.add_constant(shape=tuple(), weights=np.array(0).astype(np.int32)).get_output(0))
-        fill.set_input(2, network.add_constant(shape=tuple(), weights=np.array(1).astype(np.int32)).get_output(0))
+        fill.set_input(
+            1,
+            network.add_constant(
+                shape=tuple(), weights=np.array(0).astype(np.int32)
+            ).get_output(0),
+        )
+        fill.set_input(
+            2,
+            network.add_constant(
+                shape=tuple(), weights=np.array(1).astype(np.int32)
+            ).get_output(0),
+        )
 
         network.mark_output(fill.get_output(0))
 

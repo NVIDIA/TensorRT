@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +32,9 @@ try:
     from object_detection.utils import config_util
 except ImportError:
     print("Could not import TFOD modules. Maybe you did not install TFOD API")
-    print("Please install TensorFlow 2 Object Detection API, check https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2.md")
+    print(
+        "Please install TensorFlow 2 Object Detection API, check https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2.md"
+    )
     sys.exit(1)
 
 import onnx_utils
@@ -55,14 +57,19 @@ class TFODGraphSurgeon:
         assert os.path.exists(saved_model_path)
 
         # Use tf2onnx to convert saved model to an initial ONNX graph.
-        graph_def, inputs, outputs = tf_loader.from_saved_model(saved_model_path, None, None, "serve",
-                                                                ["serving_default"])
+        graph_def, inputs, outputs = tf_loader.from_saved_model(
+            saved_model_path, None, None, "serve", ["serving_default"]
+        )
         log.info("Loaded saved model from {}".format(saved_model_path))
         with tf.Graph().as_default() as tf_graph:
             tf.import_graph_def(graph_def, name="")
         with tf_loader.tf_session(graph=tf_graph):
-            onnx_graph = tfonnx.process_tf_graph(tf_graph, input_names=inputs, output_names=outputs, opset=11)
-        onnx_model = optimizer.optimize_graph(onnx_graph).make_model("Converted from {}".format(saved_model_path))
+            onnx_graph = tfonnx.process_tf_graph(
+                tf_graph, input_names=inputs, output_names=outputs, opset=11
+            )
+        onnx_model = optimizer.optimize_graph(onnx_graph).make_model(
+            "Converted from {}".format(saved_model_path)
+        )
         self.graph = gs.import_onnx(onnx_model)
         assert self.graph
         log.info("TF2ONNX graph created successfully")
@@ -71,61 +78,140 @@ class TFODGraphSurgeon:
         self.graph.fold_constants()
 
         # Pipeline config parsing.
-        pipeline_config = config_util.get_configs_from_pipeline_file(pipeline_config_path)
+        pipeline_config = config_util.get_configs_from_pipeline_file(
+            pipeline_config_path
+        )
         # Get input resolution.
-        self.height, self.width = config_util.get_spatial_image_size(config_util.get_image_resizer_config(pipeline_config["model"]))
+        self.height, self.width = config_util.get_spatial_image_size(
+            config_util.get_image_resizer_config(pipeline_config["model"])
+        )
 
         # If your model is SSD, get characteristics accordingly from pipeline.config file.
         if pipeline_config["model"].HasField("ssd"):
             # Getting model characteristics.
             self.model = str(pipeline_config["model"].ssd.feature_extractor.type)
-            self.first_stage_nms_score_threshold = float(pipeline_config["model"].ssd.post_processing.batch_non_max_suppression.score_threshold)
-            self.first_stage_nms_iou_threshold = float(pipeline_config["model"].ssd.post_processing.batch_non_max_suppression.iou_threshold)
-            self.first_stage_max_proposals = int(pipeline_config["model"].ssd.post_processing.batch_non_max_suppression.max_detections_per_class)
+            self.first_stage_nms_score_threshold = float(
+                pipeline_config[
+                    "model"
+                ].ssd.post_processing.batch_non_max_suppression.score_threshold
+            )
+            self.first_stage_nms_iou_threshold = float(
+                pipeline_config[
+                    "model"
+                ].ssd.post_processing.batch_non_max_suppression.iou_threshold
+            )
+            self.first_stage_max_proposals = int(
+                pipeline_config[
+                    "model"
+                ].ssd.post_processing.batch_non_max_suppression.max_detections_per_class
+            )
         # If your model is Faster R-CNN get it's characteristics from pipeline.config file.
         elif pipeline_config["model"].HasField("faster_rcnn"):
             # Getting model characteristics.
-            self.model = str(pipeline_config["model"].faster_rcnn.feature_extractor.type)
+            self.model = str(
+                pipeline_config["model"].faster_rcnn.feature_extractor.type
+            )
             self.num_classes = pipeline_config["model"].faster_rcnn.num_classes
-            self.first_stage_nms_score_threshold = float(pipeline_config["model"].faster_rcnn.first_stage_nms_score_threshold)
-            self.first_stage_nms_iou_threshold = float(pipeline_config["model"].faster_rcnn.first_stage_nms_iou_threshold)
-            self.first_stage_max_proposals = int(pipeline_config["model"].faster_rcnn.first_stage_max_proposals)
-            self.first_stage_crop_size = int(pipeline_config["model"].faster_rcnn.initial_crop_size)
-            self.second_stage_nms_score_threshold = float(pipeline_config["model"].faster_rcnn.second_stage_post_processing.batch_non_max_suppression.score_threshold)
-            self.second_stage_iou_threshold = float(pipeline_config["model"].faster_rcnn.second_stage_post_processing.batch_non_max_suppression.iou_threshold)
+            self.first_stage_nms_score_threshold = float(
+                pipeline_config["model"].faster_rcnn.first_stage_nms_score_threshold
+            )
+            self.first_stage_nms_iou_threshold = float(
+                pipeline_config["model"].faster_rcnn.first_stage_nms_iou_threshold
+            )
+            self.first_stage_max_proposals = int(
+                pipeline_config["model"].faster_rcnn.first_stage_max_proposals
+            )
+            self.first_stage_crop_size = int(
+                pipeline_config["model"].faster_rcnn.initial_crop_size
+            )
+            self.second_stage_nms_score_threshold = float(
+                pipeline_config[
+                    "model"
+                ].faster_rcnn.second_stage_post_processing.batch_non_max_suppression.score_threshold
+            )
+            self.second_stage_iou_threshold = float(
+                pipeline_config[
+                    "model"
+                ].faster_rcnn.second_stage_post_processing.batch_non_max_suppression.iou_threshold
+            )
             self.mask_height = None
             self.mask_width = None
             self.matmul_crop_and_resize = False
             # Check what kind of Crop and Resize operation is used
-            if pipeline_config["model"].faster_rcnn.HasField("use_matmul_crop_and_resize"):
-                self.matmul_crop_and_resize = pipeline_config["model"].faster_rcnn.use_matmul_crop_and_resize
+            if pipeline_config["model"].faster_rcnn.HasField(
+                "use_matmul_crop_and_resize"
+            ):
+                self.matmul_crop_and_resize = pipeline_config[
+                    "model"
+                ].faster_rcnn.use_matmul_crop_and_resize
             # If model is Mask R-CNN, get final instance segmentation masks resolution.
-            if pipeline_config["model"].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.HasField("mask_height") and pipeline_config["model"].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.HasField("mask_width"):
-                self.mask_height = int(pipeline_config["model"].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.mask_height)
-                self.mask_width = int(pipeline_config["model"].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.mask_width)
+            if pipeline_config[
+                "model"
+            ].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.HasField(
+                "mask_height"
+            ) and pipeline_config[
+                "model"
+            ].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.HasField(
+                "mask_width"
+            ):
+                self.mask_height = int(
+                    pipeline_config[
+                        "model"
+                    ].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.mask_height
+                )
+                self.mask_width = int(
+                    pipeline_config[
+                        "model"
+                    ].faster_rcnn.second_stage_box_predictor.mask_rcnn_box_predictor.mask_width
+                )
         else:
             log.info("Given Model type is not supported")
             sys.exit(1)
 
         # List of supported models.
-        supported_models = ["ssd_mobilenet_v2_keras", "ssd_mobilenet_v1_fpn_keras", "ssd_mobilenet_v2_fpn_keras", "ssd_resnet50_v1_fpn_keras",
-                            "ssd_resnet101_v1_fpn_keras", "ssd_resnet152_v1_fpn_keras", "faster_rcnn_resnet50_keras", "faster_rcnn_resnet101_keras",
-                            "faster_rcnn_resnet152_keras", "faster_rcnn_inception_resnet_v2_keras"]
+        supported_models = [
+            "ssd_mobilenet_v2_keras",
+            "ssd_mobilenet_v1_fpn_keras",
+            "ssd_mobilenet_v2_fpn_keras",
+            "ssd_resnet50_v1_fpn_keras",
+            "ssd_resnet101_v1_fpn_keras",
+            "ssd_resnet152_v1_fpn_keras",
+            "faster_rcnn_resnet50_keras",
+            "faster_rcnn_resnet101_keras",
+            "faster_rcnn_resnet152_keras",
+            "faster_rcnn_inception_resnet_v2_keras",
+        ]
         assert self.model in supported_models
 
         # Model characteristics.
         log.info("Model is {}".format(self.model))
         log.info("Height is {}".format(self.height))
         log.info("Width is {}".format(self.width))
-        log.info("First NMS score threshold is {}".format(self.first_stage_nms_score_threshold))
-        log.info("First NMS iou threshold is {}".format(self.first_stage_nms_iou_threshold))
+        log.info(
+            "First NMS score threshold is {}".format(
+                self.first_stage_nms_score_threshold
+            )
+        )
+        log.info(
+            "First NMS iou threshold is {}".format(self.first_stage_nms_iou_threshold)
+        )
         log.info("First NMS max proposals is {}".format(self.first_stage_max_proposals))
         if "faster_rcnn" in self.model:
             log.info("Number of classes is {}".format(self.num_classes))
-            log.info("Crop and Resize output size is {}".format(self.first_stage_crop_size))
-            log.info("Second NMS score threshold is {}".format(self.second_stage_nms_score_threshold))
-            log.info("Second NMS iou threshold is {}".format(self.second_stage_iou_threshold))
-            log.info("Using MatMul Crop and Resize: {}".format(self.matmul_crop_and_resize))
+            log.info(
+                "Crop and Resize output size is {}".format(self.first_stage_crop_size)
+            )
+            log.info(
+                "Second NMS score threshold is {}".format(
+                    self.second_stage_nms_score_threshold
+                )
+            )
+            log.info(
+                "Second NMS iou threshold is {}".format(self.second_stage_iou_threshold)
+            )
+            log.info(
+                "Using MatMul Crop and Resize: {}".format(self.matmul_crop_and_resize)
+            )
             if not (self.mask_height is None and self.mask_width is None):
                 log.info("Mask height is {}".format(self.mask_height))
                 log.info("Mask width is {}".format(self.mask_width))
@@ -155,12 +241,16 @@ class TFODGraphSurgeon:
                 model = shape_inference.infer_shapes(model)
                 self.graph = gs.import_onnx(model)
             except Exception as e:
-                log.info("Shape inference could not be performed at this time:\n{}".format(e))
+                log.info(
+                    "Shape inference could not be performed at this time:\n{}".format(e)
+                )
             try:
                 self.graph.fold_constants(fold_shapes=True)
             except TypeError as e:
-                log.error("This version of ONNX GraphSurgeon does not support folding shapes, please upgrade your "
-                          "onnx_graphsurgeon module. Error:\n{}".format(e))
+                log.error(
+                    "This version of ONNX GraphSurgeon does not support folding shapes, please upgrade your "
+                    "onnx_graphsurgeon module. Error:\n{}".format(e)
+                )
                 raise
 
             count_after = len(self.graph.nodes)
@@ -189,11 +279,22 @@ class TFODGraphSurgeon:
         for n, name in enumerate(debug):
             if name not in tensors:
                 log.warning("Could not find tensor '{}'".format(name))
-            debug_tensor = gs.Variable(name="debug:{}".format(n), dtype=tensors[name].dtype)
-            debug_node = gs.Node(op="Identity", name="debug_{}".format(n), inputs=[tensors[name]], outputs=[debug_tensor])
+            debug_tensor = gs.Variable(
+                name="debug:{}".format(n), dtype=tensors[name].dtype
+            )
+            debug_node = gs.Node(
+                op="Identity",
+                name="debug_{}".format(n),
+                inputs=[tensors[name]],
+                outputs=[debug_tensor],
+            )
             self.graph.nodes.append(debug_node)
             self.graph.outputs.append(debug_tensor)
-            log.info("Adding debug output '{}' for graph tensor '{}'".format(debug_tensor.name, name))
+            log.info(
+                "Adding debug output '{}' for graph tensor '{}'".format(
+                    debug_tensor.name, name
+                )
+            )
 
     def update_preprocessor(self, batch_size, input_format):
         """
@@ -208,46 +309,71 @@ class TFODGraphSurgeon:
         assert input_format in ["NCHW", "NHWC"]
         input_shape = [None] * 4
         if input_format == "NHWC":
-          input_shape = [self.batch_size, self.height, self.width, 3]
+            input_shape = [self.batch_size, self.height, self.width, 3]
         if input_format == "NCHW":
-          input_shape = [self.batch_size, 3, self.height, self.width]
+            input_shape = [self.batch_size, 3, self.height, self.width]
         self.graph.inputs[0].shape = input_shape
         self.graph.inputs[0].dtype = np.float32
         self.graph.inputs[0].name = "input_tensor"
 
         self.sanitize()
-        log.info("ONNX graph input shape: {} [NCHW format set]".format(self.graph.inputs[0].shape))
+        log.info(
+            "ONNX graph input shape: {} [NCHW format set]".format(
+                self.graph.inputs[0].shape
+            )
+        )
 
         # Find the initial nodes of the graph, whatever the input is first connected to, and disconnect them.
-        for node in [node for node in self.graph.nodes if self.graph.inputs[0] in node.inputs]:
+        for node in [
+            node for node in self.graph.nodes if self.graph.inputs[0] in node.inputs
+        ]:
             node.inputs.clear()
 
         # Get input tensor.
         # Convert to NCHW format if needed.
         input_tensor = self.graph.inputs[0]
         if input_format == "NHWC":
-            input_tensor = self.graph.transpose("preprocessor/transpose", input_tensor, [0, 3, 1, 2])
+            input_tensor = self.graph.transpose(
+                "preprocessor/transpose", input_tensor, [0, 3, 1, 2]
+            )
 
         # Mobilenets' and inception's backbones preprocessor.
-        if 'mobilenet' in self.model or 'inception_resnet' in self.model:
-            mul_const = np.expand_dims(np.asarray([2 / 255], dtype=np.float32), axis=(0, 2, 3))
-            sub_const = np.expand_dims(np.asarray([1], dtype=np.float32), axis=(0, 2, 3))
-            mul_out = self.graph.op_with_const("Mul", "preprocessor/scale", input_tensor, mul_const)
-            sub_out = self.graph.op_with_const("Sub", "preprocessor/mean", mul_out, sub_const)
+        if "mobilenet" in self.model or "inception_resnet" in self.model:
+            mul_const = np.expand_dims(
+                np.asarray([2 / 255], dtype=np.float32), axis=(0, 2, 3)
+            )
+            sub_const = np.expand_dims(
+                np.asarray([1], dtype=np.float32), axis=(0, 2, 3)
+            )
+            mul_out = self.graph.op_with_const(
+                "Mul", "preprocessor/scale", input_tensor, mul_const
+            )
+            sub_out = self.graph.op_with_const(
+                "Sub", "preprocessor/mean", mul_out, sub_const
+            )
 
         # Resnet backbones' preprocessor.
-        elif 'resnet' in self.model:
-            sub_const = np.expand_dims(np.asarray([255 * 0.485, 255 * 0.456, 255 * 0.406], dtype=np.float32), axis=(0, 2, 3))
-            sub_out = self.graph.op_with_const("Sub", "preprocessor/mean", input_tensor, sub_const)
+        elif "resnet" in self.model:
+            sub_const = np.expand_dims(
+                np.asarray([255 * 0.485, 255 * 0.456, 255 * 0.406], dtype=np.float32),
+                axis=(0, 2, 3),
+            )
+            sub_out = self.graph.op_with_const(
+                "Sub", "preprocessor/mean", input_tensor, sub_const
+            )
 
         # Backbone is not supported.
         else:
-            log.info("Given model's backbone is not supported, pre-processor algorithm can't be generated")
+            log.info(
+                "Given model's backbone is not supported, pre-processor algorithm can't be generated"
+            )
             sys.exit(1)
 
         # Find first Conv node and connect preprocessor directly to it.
         conv_node = self.graph.find_node_by_op("Conv")
-        log.info("Found {} node '{}' as stem entry".format(conv_node.op, conv_node.name))
+        log.info(
+            "Found {} node '{}' as stem entry".format(conv_node.op, conv_node.name)
+        )
         conv_node.inputs[0] = sub_out[0]
 
         # Disconnect the last node in one of the preprocessing branches with first TensorListStack parent node.
@@ -275,9 +401,17 @@ class TFODGraphSurgeon:
         # and the Box Net end node has the shape [batch_size, num_anchors, 4].
         # These end nodes can be be found by searching for all end_op's operation nodes and checking if the node two
         # steps above in the graph has a name that begins with one of head_names for Class Net and Box Net respectively.
-        for node in [node for node in self.graph.nodes if node.op == descendant and head_name in node.name]:
+        for node in [
+            node
+            for node in self.graph.nodes
+            if node.op == descendant and head_name in node.name
+        ]:
             target_node = self.graph.find_descendant_by_op(node, end_op)
-            log.info("Found {} node '{}' as the tip of {}".format(target_node.op, target_node.name, head_name))
+            log.info(
+                "Found {} node '{}' as the tip of {}".format(
+                    target_node.op, target_node.name, head_name
+                )
+            )
             return target_node
 
     def extract_anchors_tensor(self, split):
@@ -314,14 +448,27 @@ class TFODGraphSurgeon:
         anchors_h = get_anchor(2, "Mul")
         anchors_w = get_anchor(3, "Mul")
 
-        batched_anchors = np.concatenate([anchors_y, anchors_x, anchors_h, anchors_w], axis=2)
+        batched_anchors = np.concatenate(
+            [anchors_y, anchors_x, anchors_h, anchors_w], axis=2
+        )
         # Identify num of anchors without repetitions.
-        num_anchors = int(batched_anchors.shape[1]/self.batch_size)
+        num_anchors = int(batched_anchors.shape[1] / self.batch_size)
         # Trim total number of anchors in order to not have copies introduced by growing number of batch_size.
-        anchors = batched_anchors[0:num_anchors,0:num_anchors]
+        anchors = batched_anchors[0:num_anchors, 0:num_anchors]
         return gs.Constant(name="nms/anchors:0", values=anchors)
 
-    def NMS(self, box_net_tensor, class_net_tensor, anchors_tensor, background_class, score_activation, iou_threshold, nms_score_threshold, user_threshold, nms_name=None):
+    def NMS(
+        self,
+        box_net_tensor,
+        class_net_tensor,
+        anchors_tensor,
+        background_class,
+        score_activation,
+        iou_threshold,
+        nms_score_threshold,
+        user_threshold,
+        nms_name=None,
+    ):
         # Helper function to create the NMS Plugin node with the selected inputs.
         # EfficientNMS_TRT TensorRT Plugin is suitable for our use case.
         # :param box_net_tensor: The box predictions from the Box Net.
@@ -341,35 +488,53 @@ class TFODGraphSurgeon:
             nms_name = "_" + nms_name
 
         # Set score threshold.
-        score_threshold = nms_score_threshold if user_threshold is None else user_threshold
+        score_threshold = (
+            nms_score_threshold if user_threshold is None else user_threshold
+        )
 
         # NMS Outputs.
-        nms_output_num_detections = gs.Variable(name="num_detections"+nms_name, dtype=np.int32, shape=[self.batch_size, 1])
-        nms_output_boxes = gs.Variable(name="detection_boxes"+nms_name, dtype=np.float32,
-                                       shape=[self.batch_size, self.first_stage_max_proposals, 4])
-        nms_output_scores = gs.Variable(name="detection_scores"+nms_name, dtype=np.float32,
-                                        shape=[self.batch_size, self.first_stage_max_proposals])
-        nms_output_classes = gs.Variable(name="detection_classes"+nms_name, dtype=np.int32,
-                                         shape=[self.batch_size, self.first_stage_max_proposals])
+        nms_output_num_detections = gs.Variable(
+            name="num_detections" + nms_name, dtype=np.int32, shape=[self.batch_size, 1]
+        )
+        nms_output_boxes = gs.Variable(
+            name="detection_boxes" + nms_name,
+            dtype=np.float32,
+            shape=[self.batch_size, self.first_stage_max_proposals, 4],
+        )
+        nms_output_scores = gs.Variable(
+            name="detection_scores" + nms_name,
+            dtype=np.float32,
+            shape=[self.batch_size, self.first_stage_max_proposals],
+        )
+        nms_output_classes = gs.Variable(
+            name="detection_classes" + nms_name,
+            dtype=np.int32,
+            shape=[self.batch_size, self.first_stage_max_proposals],
+        )
 
-        nms_outputs = [nms_output_num_detections, nms_output_boxes, nms_output_scores, nms_output_classes]
+        nms_outputs = [
+            nms_output_num_detections,
+            nms_output_boxes,
+            nms_output_scores,
+            nms_output_classes,
+        ]
 
         # Plugin.
         self.graph.plugin(
             op="EfficientNMS_TRT",
-            name="nms/non_maximum_suppression"+nms_name,
+            name="nms/non_maximum_suppression" + nms_name,
             inputs=[box_net_tensor, class_net_tensor, anchors_tensor],
             outputs=nms_outputs,
             attrs={
-                'plugin_version': "1",
-                'background_class': background_class,
-                'max_output_boxes': self.first_stage_max_proposals,
-                'score_threshold': max(0.01, score_threshold),
-                'iou_threshold': iou_threshold,
-                'score_activation': score_activation,
-                'class_agnostic': False,
-                'box_coding': 1,
-            }
+                "plugin_version": "1",
+                "background_class": background_class,
+                "max_output_boxes": self.first_stage_max_proposals,
+                "score_threshold": max(0.01, score_threshold),
+                "iou_threshold": iou_threshold,
+                "score_activation": score_activation,
+                "class_agnostic": False,
+                "box_coding": 1,
+            },
         )
         log.info("Created 'nms/non_maximum_suppression{}' NMS plugin".format(nms_name))
 
@@ -384,15 +549,26 @@ class TFODGraphSurgeon:
 
         # CropAndResizePlugin requires 4th dimension of 1: [N, B, 4, 1], so
         # we need to add unsqeeze node to make tensor 4 dimensional.
-        unsqueeze_node = self.graph.unsqueeze("CNR/detection_boxes_unsqueeze_"+cnr_num, unsqeeze_input)
+        unsqueeze_node = self.graph.unsqueeze(
+            "CNR/detection_boxes_unsqueeze_" + cnr_num, unsqeeze_input
+        )
 
         # CropAndResizePlugin's inputs
         feature_maps = relu_node_outputs
         rois = unsqueeze_node[0]
 
         # CropAndResize Outputs.
-        cnr_pfmap = gs.Variable(name="cnr/pfmap_"+cnr_num, dtype=np.float32,
-                                shape=[self.batch_size, self.first_stage_max_proposals, feature_maps.shape[1], self.first_stage_crop_size, self.first_stage_crop_size])
+        cnr_pfmap = gs.Variable(
+            name="cnr/pfmap_" + cnr_num,
+            dtype=np.float32,
+            shape=[
+                self.batch_size,
+                self.first_stage_max_proposals,
+                feature_maps.shape[1],
+                self.first_stage_crop_size,
+                self.first_stage_crop_size,
+            ],
+        )
 
         # Create the CropandResize Plugin node with the selected inputs.
         # Two inputs are given to the CropAndResize TensorRT node:
@@ -400,19 +576,29 @@ class TFODGraphSurgeon:
         # - The rois (clipped and normalized detection boxes resulting from NMS): [batch_size, featuremap, 4, 1]
         self.graph.plugin(
             op="CropAndResize",
-            name="cnr/crop_and_resize_"+cnr_num,
+            name="cnr/crop_and_resize_" + cnr_num,
             inputs=[feature_maps, rois],
             outputs=[cnr_pfmap],
             attrs={
-                'crop_width': self.first_stage_crop_size,
-                'crop_height': self.first_stage_crop_size,
-            }
+                "crop_width": self.first_stage_crop_size,
+                "crop_height": self.first_stage_crop_size,
+            },
         )
         log.info("Created {} CropAndResize plugin".format(cnr_num))
 
         # Reshape node that is preparing CropAndResize's pfmap output shape for MaxPool node that comes next.
-        reshape_shape = np.asarray([self.first_stage_max_proposals*self.batch_size, feature_maps.shape[1], self.first_stage_crop_size, self.first_stage_crop_size], dtype=np.int64)
-        reshape_node = self.graph.op_with_const("Reshape", "cnr/reshape_"+cnr_num, cnr_pfmap, reshape_shape)
+        reshape_shape = np.asarray(
+            [
+                self.first_stage_max_proposals * self.batch_size,
+                feature_maps.shape[1],
+                self.first_stage_crop_size,
+                self.first_stage_crop_size,
+            ],
+            dtype=np.int64,
+        )
+        reshape_node = self.graph.op_with_const(
+            "Reshape", "cnr/reshape_" + cnr_num, cnr_pfmap, reshape_shape
+        )
 
         return reshape_node[0]
 
@@ -423,7 +609,10 @@ class TFODGraphSurgeon:
         :param first_nms_threshold: Override the 1st NMS score threshold value. If set to None, use the value in the graph.
         :param second_nms_threshold: Override the 2nd NMS score threshold value. If set to None, use the value in the graph.
         """
-        def first_nms(background_class, score_activation, first_nms_threshold, nms_name=None):
+
+        def first_nms(
+            background_class, score_activation, first_nms_threshold, nms_name=None
+        ):
             """
             Updates the graph to replace the 1st NMS op by EfficientNMS_TRT TensorRT plugin node.
             :param background_class: Set EfficientNMS_TRT's background_class atribute.
@@ -432,35 +621,67 @@ class TFODGraphSurgeon:
             :param nms_name: Set the NMS node name.
             """
             # Supported models
-            ssd_models = ['ssd_mobilenet_v1_fpn_keras', 'ssd_mobilenet_v2_fpn_keras', 'ssd_resnet50_v1_fpn_keras', 'ssd_resnet101_v1_fpn_keras', 'ssd_resnet152_v1_fpn_keras']
-            frcnn_models = ['faster_rcnn_resnet50_keras', 'faster_rcnn_resnet101_keras', 'faster_rcnn_resnet152_keras', 'faster_rcnn_inception_resnet_v2_keras']
+            ssd_models = [
+                "ssd_mobilenet_v1_fpn_keras",
+                "ssd_mobilenet_v2_fpn_keras",
+                "ssd_resnet50_v1_fpn_keras",
+                "ssd_resnet101_v1_fpn_keras",
+                "ssd_resnet152_v1_fpn_keras",
+            ]
+            frcnn_models = [
+                "faster_rcnn_resnet50_keras",
+                "faster_rcnn_resnet101_keras",
+                "faster_rcnn_resnet152_keras",
+                "faster_rcnn_inception_resnet_v2_keras",
+            ]
 
             # Getting SSD's Class and Box Nets final tensors.
             if "ssd" in self.model:
                 # Find the concat node at the end of the class net (multi-scale class predictor).
-                class_net_head_name = 'BoxPredictor/ConvolutionalClassHead_' if self.model == 'ssd_mobilenet_v2_keras' else 'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalClassHead'
-                class_net = self.find_head_end(class_net_head_name, "Transpose", "Concat")
+                class_net_head_name = (
+                    "BoxPredictor/ConvolutionalClassHead_"
+                    if self.model == "ssd_mobilenet_v2_keras"
+                    else "WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalClassHead"
+                )
+                class_net = self.find_head_end(
+                    class_net_head_name, "Transpose", "Concat"
+                )
                 # Final Class Net tensor
-                class_net_tensor = self.graph.slice(class_net_head_name+"/slicer", class_net.outputs[0], 1, 91, 2)[0]  # Remove background class
+                class_net_tensor = self.graph.slice(
+                    class_net_head_name + "/slicer", class_net.outputs[0], 1, 91, 2
+                )[
+                    0
+                ]  # Remove background class
 
                 # Find the concat or squeeze node at the end of the box net (multi-scale localization predictor).
-                if self.model == 'ssd_mobilenet_v2_keras':
-                    box_net_head_name = 'BoxPredictor/ConvolutionalBoxHead_'
-                    box_net = self.find_head_end(box_net_head_name, "Transpose", "Squeeze")
+                if self.model == "ssd_mobilenet_v2_keras":
+                    box_net_head_name = "BoxPredictor/ConvolutionalBoxHead_"
+                    box_net = self.find_head_end(
+                        box_net_head_name, "Transpose", "Squeeze"
+                    )
                 else:
-                    box_net_head_name = 'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalBoxHead'
-                    box_net = self.find_head_end(box_net_head_name, "Transpose", "Concat")
+                    box_net_head_name = "WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalBoxHead"
+                    box_net = self.find_head_end(
+                        box_net_head_name, "Transpose", "Concat"
+                    )
 
                 box_net_output = box_net.outputs[0]
                 # 0.1, 0.1, 0.2, 0.2 are localization head variance numbers, they scale box_net_output in order to get accurate coordinates.
-                variance_adj = np.expand_dims(np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1))
+                variance_adj = np.expand_dims(
+                    np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1)
+                )
                 # Final Box Net tensor.
-                box_net_tensor = self.graph.op_with_const("Mul", box_net_head_name+"/scale", box_net_output, variance_adj)[0]
+                box_net_tensor = self.graph.op_with_const(
+                    "Mul", box_net_head_name + "/scale", box_net_output, variance_adj
+                )[0]
 
             # Getting Faster R-CNN's 1st Class and Box Nets tensors.
             elif "faster_rcnn" in self.model:
                 # Identify Class Net and Box Net head names
-                head_names = ['FirstStageBoxPredictor/ConvolutionalClassHead_0/ClassPredictor','FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor']
+                head_names = [
+                    "FirstStageBoxPredictor/ConvolutionalClassHead_0/ClassPredictor",
+                    "FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor",
+                ]
 
                 # Find the softmax node at the end of the class net (multi-scale class predictor).
                 class_net = self.find_head_end(head_names[0], "Transpose", "Softmax")
@@ -472,12 +693,18 @@ class TFODGraphSurgeon:
                 # Final Box Net tensor.
                 box_net_output = box_net.outputs[0]
 
-                #Insert a squeeze node
-                squeeze_node = self.graph.squeeze(head_names[1]+"/squeeze", box_net_output)
+                # Insert a squeeze node
+                squeeze_node = self.graph.squeeze(
+                    head_names[1] + "/squeeze", box_net_output
+                )
                 # 0.1, 0.1, 0.2, 0.2 are localization head variance numbers, they scale box_net_output, in order to get accurate coordinates.
-                variance_adj = np.expand_dims(np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1))
+                variance_adj = np.expand_dims(
+                    np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1)
+                )
                 # Final Box Net tensor.
-                box_net_tensor = self.graph.op_with_const("Mul", head_names[1]+"/scale", squeeze_node, variance_adj)[0]
+                box_net_tensor = self.graph.op_with_const(
+                    "Mul", head_names[1] + "/scale", squeeze_node, variance_adj
+                )[0]
 
             # Find the split node that separates the box net coordinates and feeds them into the box decoder.
             box_net_split = self.graph.find_descendant_by_op(box_net, "Split")
@@ -487,7 +714,17 @@ class TFODGraphSurgeon:
             anchors_tensor = self.extract_anchors_tensor(box_net_split)
 
             # Create NMS node.
-            nms_outputs = self.NMS(box_net_tensor, class_net_tensor, anchors_tensor, background_class, score_activation, self.first_stage_nms_iou_threshold, self.first_stage_nms_score_threshold, first_nms_threshold, nms_name)
+            nms_outputs = self.NMS(
+                box_net_tensor,
+                class_net_tensor,
+                anchors_tensor,
+                background_class,
+                score_activation,
+                self.first_stage_nms_iou_threshold,
+                self.first_stage_nms_score_threshold,
+                first_nms_threshold,
+                nms_name,
+            )
 
             # Return NMS's outputs.
             return nms_outputs
@@ -501,26 +738,47 @@ class TFODGraphSurgeon:
             # Locate the last Relu node of the first backbone (pre 1st NMS). Relu node contains feature maps
             # necessary for CropAndResize plugin.
             relu_name = "StatefulPartitionedCall/model/"
-            relu_node = [node for node in self.graph.nodes if node.op == "Relu" and relu_name in node.name][-1]
+            relu_node = [
+                node
+                for node in self.graph.nodes
+                if node.op == "Relu" and relu_name in node.name
+            ][-1]
 
             # Before passing 1st NMS's detection boxes (rois) to CropAndResize, we need to clip and normalize them.
             # Clipping happens for coordinates that are less than 0 and more than self.height.
             # Normalization is just divison of every coordinate by self.height.
-            clip_out = self.graph.clip("FirstNMS/detection_boxes_clipper", input, 0, self.height)
-            div_const = np.expand_dims(np.asarray([self.height, self.width, self.height, self.width], dtype=np.float32), axis=(0, 1))
-            div_out = self.graph.op_with_const("Div", "FirstNMS/detection_boxes_normalizer", clip_out[0], div_const)
+            clip_out = self.graph.clip(
+                "FirstNMS/detection_boxes_clipper", input, 0, self.height
+            )
+            div_const = np.expand_dims(
+                np.asarray(
+                    [self.height, self.width, self.height, self.width], dtype=np.float32
+                ),
+                axis=(0, 1),
+            )
+            div_out = self.graph.op_with_const(
+                "Div", "FirstNMS/detection_boxes_normalizer", clip_out[0], div_const
+            )
 
             # Linear transformation to convert box coordinates from (TopLeft, BottomRight) Corner encoding
             # to CenterSize encoding. 1st NMS boxes are multiplied by transformation matrix in order to
             # encode it into CenterSize format.
-            matmul_const = np.matrix('0.5 0 -1 0; 0 0.5 0 -1; 0.5 0 1 0; 0 0.5 0 1', dtype=np.float32)
-            matmul_out = self.graph.matmul("FirstNMS/detection_boxes_conversion", div_out[0], matmul_const)
+            matmul_const = np.matrix(
+                "0.5 0 -1 0; 0 0.5 0 -1; 0.5 0 1 0; 0 0.5 0 1", dtype=np.float32
+            )
+            matmul_out = self.graph.matmul(
+                "FirstNMS/detection_boxes_conversion", div_out[0], matmul_const
+            )
 
             # Create Crop and Resize node.
             cnr_output = self.CropAndResize(div_out, relu_node.outputs[0], "first")
 
             # Find MaxPool node that summarizes CropAndResize structure.
-            maxpool_node = [node for node in self.graph.nodes if node.op == "MaxPool" and "MaxPool2D/MaxPool" in node.name][0]
+            maxpool_node = [
+                node
+                for node in self.graph.nodes
+                if node.op == "MaxPool" and "MaxPool2D/MaxPool" in node.name
+            ][0]
             maxpool_node.inputs[0] = cnr_output
 
             # Return linear transformation node, it will be located between 1st and 2nd NMS,
@@ -528,7 +786,13 @@ class TFODGraphSurgeon:
             # In case you are converting Mask R-CNN, feature maps are required for 2nd CropAndResize.
             return matmul_out[0], relu_node.outputs[0]
 
-        def second_nms(background_class, score_activation, encoded_boxes, second_nms_threshold, nms_name=None):
+        def second_nms(
+            background_class,
+            score_activation,
+            encoded_boxes,
+            second_nms_threshold,
+            nms_name=None,
+        ):
             """
             Updates the graph to replace the 2nd (or final) NMS op by EfficientNMS_TRT TensorRT plugin node.
             :param background_class: Set EfficientNMS_TRT's background_class atribute.
@@ -539,14 +803,20 @@ class TFODGraphSurgeon:
             """
 
             # Identify Class Net and Box Net head names.
-            second_head_names = ['StatefulPartitionedCall/mask_rcnn_keras_box_predictor/mask_rcnn_class_head/ClassPredictor_dense',
-                'StatefulPartitionedCall/mask_rcnn_keras_box_predictor/mask_rcnn_box_head/BoxEncodingPredictor_dense']
+            second_head_names = [
+                "StatefulPartitionedCall/mask_rcnn_keras_box_predictor/mask_rcnn_class_head/ClassPredictor_dense",
+                "StatefulPartitionedCall/mask_rcnn_keras_box_predictor/mask_rcnn_box_head/BoxEncodingPredictor_dense",
+            ]
 
             # Find the softmax node at the end of the 2nd class net (multi-scale class predictor).
-            second_class_net = self.find_head_end(second_head_names[0], "MatMul", "Softmax")
+            second_class_net = self.find_head_end(
+                second_head_names[0], "MatMul", "Softmax"
+            )
 
             # Faster R-CNN's slice operation to adjust third dimension of Class Net's last node tensor (adjusting class values).
-            slice_out = self.graph.slice(second_head_names[0]+"/slicer", second_class_net.outputs[0], 1, 91, 2)
+            slice_out = self.graph.slice(
+                second_head_names[0] + "/slicer", second_class_net.outputs[0], 1, 91, 2
+            )
 
             # Final Class Net tensor.
             second_class_net_tensor = slice_out[0]
@@ -561,19 +831,56 @@ class TFODGraphSurgeon:
             # If use_matmul_crop_and_resize in pipeline.config is set to True, expect: [batch_size, first_stage_max_proposals, 4].
             # Else use_matmul_crop_and_resize is either False or absent, expect: [batch_size, first_stage_max_proposals, num_classes, 4]
             if self.matmul_crop_and_resize:
-                reshape_shape_second = np.asarray([self.batch_size, self.first_stage_max_proposals, second_box_net.outputs[0].shape[1]], dtype=np.int64)
+                reshape_shape_second = np.asarray(
+                    [
+                        self.batch_size,
+                        self.first_stage_max_proposals,
+                        second_box_net.outputs[0].shape[1],
+                    ],
+                    dtype=np.int64,
+                )
             else:
-                reshape_shape_second = np.asarray([self.batch_size, self.first_stage_max_proposals, self.num_classes, second_box_net.outputs[0].shape[1]/self.num_classes], dtype=np.int64)
-            reshape_node_second = self.graph.op_with_const("Reshape", second_head_names[1]+"/reshape", second_box_net_output, reshape_shape_second)
+                reshape_shape_second = np.asarray(
+                    [
+                        self.batch_size,
+                        self.first_stage_max_proposals,
+                        self.num_classes,
+                        second_box_net.outputs[0].shape[1] / self.num_classes,
+                    ],
+                    dtype=np.int64,
+                )
+            reshape_node_second = self.graph.op_with_const(
+                "Reshape",
+                second_head_names[1] + "/reshape",
+                second_box_net_output,
+                reshape_shape_second,
+            )
             # 0.1, 0.1, 0.2, 0.2 are localization head variance numbers, they scale second_box_net_output, in order to get accurate coordinates.
-            second_scale_adj = np.expand_dims(np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1))
-            second_scale_out = self.graph.op_with_const("Mul", second_head_names[1]+"/scale_second", reshape_node_second[0], second_scale_adj)
+            second_scale_adj = np.expand_dims(
+                np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1)
+            )
+            second_scale_out = self.graph.op_with_const(
+                "Mul",
+                second_head_names[1] + "/scale_second",
+                reshape_node_second[0],
+                second_scale_adj,
+            )
 
             # Final Box Net tensor.
             second_box_net_tensor = second_scale_out[0]
 
             # Create NMS node.
-            nms_outputs = self.NMS(second_box_net_tensor, second_class_net_tensor, encoded_boxes, background_class, score_activation, self.second_stage_iou_threshold, self.second_stage_nms_score_threshold, second_nms_threshold, nms_name)
+            nms_outputs = self.NMS(
+                second_box_net_tensor,
+                second_class_net_tensor,
+                encoded_boxes,
+                background_class,
+                score_activation,
+                self.second_stage_iou_threshold,
+                self.second_stage_nms_score_threshold,
+                second_nms_threshold,
+                nms_name,
+            )
 
             return nms_outputs
 
@@ -585,24 +892,36 @@ class TFODGraphSurgeon:
 
             # Before passing 2nd NMS's detection boxes (rois) to second CropAndResize, we need to clip them.
             # Clipping happens for coordinates that are less than 0 and more than 1 (binary).
-            clip_out = self.graph.clip("SecondNMS/detection_boxes_clipper", second_nms_outputs[1], 0, 1)
+            clip_out = self.graph.clip(
+                "SecondNMS/detection_boxes_clipper", second_nms_outputs[1], 0, 1
+            )
 
             # Create Crop and Resize node.
             cnr_output = self.CropAndResize(clip_out, feature_maps, "second")
 
             # Find MaxPool node that summarizes CropAndResize structure
-            maxpool_node = [node for node in self.graph.nodes if node.op == "MaxPool" and "MaxPool2D/MaxPool_1" in node.name][0]
+            maxpool_node = [
+                node
+                for node in self.graph.nodes
+                if node.op == "MaxPool" and "MaxPool2D/MaxPool_1" in node.name
+            ][0]
             maxpool_node.inputs[0] = cnr_output
 
             # Reshape node that is preparing 2nd NMS class outputs for Add node that comes next.
             # [self.batch_size, self.first_stage_max_proposals] -> [self.first_stage_max_proposals*self.batch_size]
-            class_reshape_shape = np.asarray([self.first_stage_max_proposals*self.batch_size], dtype=np.int64)
-            class_reshape_node = self.graph.op_with_const("Reshape", "Reshape_Class", second_nms_outputs[3], class_reshape_shape)
+            class_reshape_shape = np.asarray(
+                [self.first_stage_max_proposals * self.batch_size], dtype=np.int64
+            )
+            class_reshape_node = self.graph.op_with_const(
+                "Reshape", "Reshape_Class", second_nms_outputs[3], class_reshape_shape
+            )
 
             # Find sigmoid node in the end of the network, applies sigmoid to get instance segmentation masks
-            last_sigmoid_node = self.graph.find_descendant_by_op(maxpool_node, "Sigmoid", 40)
+            last_sigmoid_node = self.graph.find_descendant_by_op(
+                maxpool_node, "Sigmoid", 40
+            )
 
-            if (self.num_classes > 1):
+            if self.num_classes > 1:
                 # Find first ancestor of Sigmoid of operation type Add. This Add node is one of the Gather node inputs,
                 # Gather node performs gather on 0th axis of data tensor and requires indices that set tesnors to be withing bounds,
                 # this Add node provides the bounds for Gather.
@@ -610,8 +929,21 @@ class TFODGraphSurgeon:
                 add_node.inputs[1] = class_reshape_node[0]
 
             # Final Reshape node, reshapes output of Sigmoid, important for various batch_size support.
-            final_reshape_shape = np.asarray([self.batch_size, self.first_stage_max_proposals, self.mask_height, self.mask_width], dtype=np.int64)
-            final_reshape_node = self.graph.op_with_const("Reshape", "Reshape_Final_Masks", last_sigmoid_node.outputs[0], final_reshape_shape)
+            final_reshape_shape = np.asarray(
+                [
+                    self.batch_size,
+                    self.first_stage_max_proposals,
+                    self.mask_height,
+                    self.mask_width,
+                ],
+                dtype=np.int64,
+            )
+            final_reshape_node = self.graph.op_with_const(
+                "Reshape",
+                "Reshape_Final_Masks",
+                last_sigmoid_node.outputs[0],
+                final_reshape_shape,
+            )
             final_reshape_node[0].dtype = np.float32
             final_reshape_node[0].name = "detection_masks"
 
@@ -623,17 +955,27 @@ class TFODGraphSurgeon:
             self.graph.outputs = first_nms(-1, True, first_nms_threshold)
             self.sanitize()
         # If your model is Faster R-CNN, you will need 2 NMS nodes with CropAndResize in between.
-        elif "faster_rcnn" in self.model and self.mask_height is None and self.mask_width is None:
+        elif (
+            "faster_rcnn" in self.model
+            and self.mask_height is None
+            and self.mask_width is None
+        ):
             first_nms_outputs = first_nms(0, False, first_nms_threshold, "rpn")
             first_cnr_output, feature_maps = first_cnr(first_nms_outputs[1])
             # Set graph outputs.
-            self.graph.outputs = second_nms(-1, False, first_cnr_output, second_nms_threshold)
+            self.graph.outputs = second_nms(
+                -1, False, first_cnr_output, second_nms_threshold
+            )
             self.sanitize()
         # Mask R-CNN
-        elif "faster_rcnn" in self.model and not (self.mask_height is None and self.mask_width is None):
+        elif "faster_rcnn" in self.model and not (
+            self.mask_height is None and self.mask_width is None
+        ):
             first_nms_outputs = first_nms(0, False, first_nms_threshold, "rpn")
             first_cnr_output, feature_maps = first_cnr(first_nms_outputs[1])
-            second_nms_outputs = second_nms(-1, False, first_cnr_output, second_nms_threshold)
+            second_nms_outputs = second_nms(
+                -1, False, first_cnr_output, second_nms_threshold
+            )
             second_cnr_output = second_cnr(feature_maps, second_nms_outputs)
             # Append segmentation head output.
             second_nms_outputs.append(second_cnr_output)
@@ -655,20 +997,57 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-p", "--pipeline_config", help="Pipeline configuration file to load", type=str)
-    parser.add_argument("-m", "--saved_model", help="The TensorFlow saved model directory to load", type=str)
-    parser.add_argument("-o", "--onnx", help="The output ONNX model file to write", type=str)
-    parser.add_argument("-b", "--batch_size", help="Batch size for the model", type=int, default=1)
-    parser.add_argument("-t1", "--first_nms_threshold", help="Override the score threshold for the 1st NMS operation", type=float)
-    parser.add_argument("-t2", "--second_nms_threshold", help="Override the score threshold for the 2nd NMS operation", type=float)
-    parser.add_argument("-d", "--debug", action='append', help="Add an extra output to debug a particular node")
-    parser.add_argument("-f", "--input_format", default="NHWC", choices=["NHWC", "NCHW"],
-                        help="Set the input shape of the graph, as comma-separated dimensions in NCHW or NHWC format, default: NHWC")
-    parser.add_argument("--tf2onnx", help="The path where to save the intermediate ONNX graph generated by tf2onnx, "
-                                          "useful for debugging purposes, default: not saved", type=str)
+    parser.add_argument(
+        "-p", "--pipeline_config", help="Pipeline configuration file to load", type=str
+    )
+    parser.add_argument(
+        "-m",
+        "--saved_model",
+        help="The TensorFlow saved model directory to load",
+        type=str,
+    )
+    parser.add_argument(
+        "-o", "--onnx", help="The output ONNX model file to write", type=str
+    )
+    parser.add_argument(
+        "-b", "--batch_size", help="Batch size for the model", type=int, default=1
+    )
+    parser.add_argument(
+        "-t1",
+        "--first_nms_threshold",
+        help="Override the score threshold for the 1st NMS operation",
+        type=float,
+    )
+    parser.add_argument(
+        "-t2",
+        "--second_nms_threshold",
+        help="Override the score threshold for the 2nd NMS operation",
+        type=float,
+    )
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="append",
+        help="Add an extra output to debug a particular node",
+    )
+    parser.add_argument(
+        "-f",
+        "--input_format",
+        default="NHWC",
+        choices=["NHWC", "NCHW"],
+        help="Set the input shape of the graph, as comma-separated dimensions in NCHW or NHWC format, default: NHWC",
+    )
+    parser.add_argument(
+        "--tf2onnx",
+        help="The path where to save the intermediate ONNX graph generated by tf2onnx, "
+        "useful for debugging purposes, default: not saved",
+        type=str,
+    )
     args = parser.parse_args()
     if not all([args.pipeline_config, args.saved_model, args.onnx]):
         parser.print_help()
-        print("\nThese arguments are required: --pipeline_config, --saved_model and --onnx")
+        print(
+            "\nThese arguments are required: --pipeline_config, --saved_model and --onnx"
+        )
         sys.exit(1)
     main(args)

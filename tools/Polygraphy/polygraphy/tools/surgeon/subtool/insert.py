@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,12 @@
 #
 from polygraphy import mod
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import ModelArgs, OnnxInferShapesArgs, OnnxLoadArgs, OnnxSaveArgs
+from polygraphy.tools.args import (
+    ModelArgs,
+    OnnxInferShapesArgs,
+    OnnxLoadArgs,
+    OnnxSaveArgs,
+)
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.surgeon.subtool.base import BaseSurgeonSubtool
@@ -46,8 +51,12 @@ class OnnxNodeArgs(BaseArgs):
             nargs="+",
             required=True,
         )
-        self.group.add_argument("--op", help="The ONNX op to use for the new node", required=True)
-        self.group.add_argument("--name", help="The name to use for the new node", default=None)
+        self.group.add_argument(
+            "--op", help="The ONNX op to use for the new node", required=True
+        )
+        self.group.add_argument(
+            "--name", help="The name to use for the new node", default=None
+        )
         self.group.add_argument(
             "--attrs",
             help="Attributes to set in the new node. "
@@ -64,7 +73,9 @@ class OnnxNodeArgs(BaseArgs):
         self.op = args_util.get(args, "op")
         self.name = args_util.get(args, "name")
 
-        self.attrs = args_util.parse_arglist_to_dict(args_util.get(args, "attrs"), sep="=")
+        self.attrs = args_util.parse_arglist_to_dict(
+            args_util.get(args, "attrs"), sep="="
+        )
         self.inputs = args_util.get(args, "inputs")
         self.outputs = args_util.get(args, "outputs")
 
@@ -81,7 +92,11 @@ class Insert(BaseSurgeonSubtool):
     def get_subscriptions_impl(self):
         return [
             OnnxNodeArgs(),
-            ModelArgs(model_opt_required=True, input_shapes_opt_name=False, required_model_type="onnx"),
+            ModelArgs(
+                model_opt_required=True,
+                input_shapes_opt_name=False,
+                required_model_type="onnx",
+            ),
             OnnxInferShapesArgs(),
             OnnxLoadArgs(outputs_opt_prefix=False),
             OnnxSaveArgs(allow_shape_inference=True, output_opt_required=True),
@@ -129,7 +144,9 @@ class Insert(BaseSurgeonSubtool):
             tensor.inputs.clear()
             output_tensors.append(tensor)
 
-        input_tensors = [get_tensor(name) for name in self.arg_groups[OnnxNodeArgs].inputs]
+        input_tensors = [
+            get_tensor(name) for name in self.arg_groups[OnnxNodeArgs].inputs
+        ]
 
         new_node = gs.Node(
             op=self.arg_groups[OnnxNodeArgs].op,
@@ -144,7 +161,9 @@ class Insert(BaseSurgeonSubtool):
         # after its last input node to maintain the sorting.
         with graph.node_ids():
             # Nodes with no inputs can be inserted at index 0
-            insert_index = max([node.id + 1 for inp in input_tensors for node in inp.inputs] + [0])
+            insert_index = max(
+                [node.id + 1 for inp in input_tensors for node in inp.inputs] + [0]
+            )
 
         graph.nodes.insert(insert_index, new_node)
 

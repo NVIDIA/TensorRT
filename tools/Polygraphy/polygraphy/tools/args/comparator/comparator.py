@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,10 @@ from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.backend.runner_select import RunnerSelectArgs
 from polygraphy.tools.args.base import BaseArgs
-from polygraphy.tools.args.comparator.compare import CompareFuncIndicesArgs, CompareFuncSimpleArgs
+from polygraphy.tools.args.comparator.compare import (
+    CompareFuncIndicesArgs,
+    CompareFuncSimpleArgs,
+)
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
 from polygraphy.tools.args.comparator.postprocess import ComparatorPostprocessArgs
 from polygraphy.tools.script import inline, make_invocable, safe
@@ -62,7 +65,8 @@ class ComparatorRunArgs(BaseArgs):
         self.group.add_argument(
             "--save-outputs",
             "--save-results",
-            help="Path to save results from runners. " "The results (RunResults) will be encoded as JSON and saved",
+            help="Path to save results from runners. "
+            "The results (RunResults) will be encoded as JSON and saved",
             default=None,
             dest="save_outputs_path",
         )
@@ -95,13 +99,23 @@ class ComparatorRunArgs(BaseArgs):
             use_subprocess=self.use_subprocess,
             save_inputs_path=self.save_inputs_path,
         )
-        script.append_suffix(safe("\n# Runner Execution\n{results} = {:}", comparator_run, results=RESULTS_VAR_NAME))
+        script.append_suffix(
+            safe(
+                "\n# Runner Execution\n{results} = {:}",
+                comparator_run,
+                results=RESULTS_VAR_NAME,
+            )
+        )
 
         if self.save_outputs_path:
             G_LOGGER.verbose(f"Will save runner results to: {self.save_outputs_path}")
             script.add_import(imports=["util"], frm="polygraphy")
             script.append_suffix(
-                safe("\n# Save results\n{results}.save({:})", self.save_outputs_path, results=RESULTS_VAR_NAME)
+                safe(
+                    "\n# Save results\n{results}.save({:})",
+                    self.save_outputs_path,
+                    results=RESULTS_VAR_NAME,
+                )
             )
 
         return RESULTS_VAR_NAME
@@ -136,9 +150,17 @@ class ComparatorCompareArgs(BaseArgs):
             "indices": self.arg_groups[CompareFuncIndicesArgs],
         }
 
-        self.group.add_argument("--validate", help="Check outputs for NaNs and Infs", action="store_true", default=None)
         self.group.add_argument(
-            "--fail-fast", help="Fail fast (stop comparing after the first failure)", action="store_true", default=None
+            "--validate",
+            help="Check outputs for NaNs and Infs",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
+            "--fail-fast",
+            help="Fail fast (stop comparing after the first failure)",
+            action="store_true",
+            default=None,
         )
 
         self.group.add_argument(
@@ -199,8 +221,11 @@ class ComparatorCompareArgs(BaseArgs):
                         f"The selected comparison function is: '{self.compare_func}', so this option will be ignored."
                     )
 
-        self.compare_func_script, self.compare_func_name = args_util.parse_script_and_func_name(
-            args_util.get(args, "compare_func_script"), default_func_name="compare_outputs"
+        self.compare_func_script, self.compare_func_name = (
+            args_util.parse_script_and_func_name(
+                args_util.get(args, "compare_func_script"),
+                default_func_name="compare_outputs",
+            )
         )
 
     def add_to_script_impl(self, script, results_name):
@@ -226,25 +251,47 @@ class ComparatorCompareArgs(BaseArgs):
             )
 
         if self._allow_postprocessing:
-            results_name = self.arg_groups[ComparatorPostprocessArgs].add_to_script(script, results_name)
+            results_name = self.arg_groups[ComparatorPostprocessArgs].add_to_script(
+                script, results_name
+            )
 
         SUCCESS_VAR_NAME = inline(safe("success"))
         script.append_suffix(safe("\n{success} = True", success=SUCCESS_VAR_NAME))
 
-        if len(self.arg_groups[RunnerSelectArgs].runners) > 1 or self.load_outputs_paths:
+        if (
+            len(self.arg_groups[RunnerSelectArgs].runners) > 1
+            or self.load_outputs_paths
+        ):
             # Only do comparisons if there's actually something to compare.
             script.append_suffix(safe("# Accuracy Comparison"))
 
             if self.compare_func_script is not None:
-                script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
-                compare_func = make_invocable("InvokeFromScript", self.compare_func_script, name=self.compare_func_name)
+                script.add_import(
+                    imports=["InvokeFromScript"], frm="polygraphy.backend.common"
+                )
+                compare_func = make_invocable(
+                    "InvokeFromScript",
+                    self.compare_func_script,
+                    name=self.compare_func_name,
+                )
             else:
-                compare_func = self._comparison_func_map[self.compare_func].add_to_script(script)
+                compare_func = self._comparison_func_map[
+                    self.compare_func
+                ].add_to_script(script)
 
             compare_accuracy = make_invocable(
-                "Comparator.compare_accuracy", results_name, compare_func=compare_func, fail_fast=self.fail_fast
+                "Comparator.compare_accuracy",
+                results_name,
+                compare_func=compare_func,
+                fail_fast=self.fail_fast,
             )
-            script.append_suffix(safe("{success} &= bool({:})\n", compare_accuracy, success=SUCCESS_VAR_NAME))
+            script.append_suffix(
+                safe(
+                    "{success} &= bool({:})\n",
+                    compare_accuracy,
+                    success=SUCCESS_VAR_NAME,
+                )
+            )
         if self.validate:
             script.append_suffix(
                 safe(

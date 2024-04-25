@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@ import argparse
 import onnx
 import numpy as np
 import torch
+
 
 # Pad layer subgraph structure in ONNX (specific to opset 11):
 #               Constant
@@ -65,7 +66,9 @@ def process_pad_nodes(graph):
 def fold_pad_inputs(node, graph):
     # Gather the amount of padding in each dimension from pytorch graph.
     if torch.__version__ < "1.5.0":
-        pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs["value"].values
+        pad_values_pyt = (
+            node.i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(0).attrs["value"].values
+        )
     elif torch.__version__ < "2.0.0":
         pad_values_pyt = node.i(1).i(0).i(0).i(0).i(0).i(0).inputs[0].values
     else:
@@ -80,7 +83,9 @@ def fold_pad_inputs(node, graph):
         j -= 1
 
     # Change the existing pad tensor to the new onnx_pad values tensor
-    pads_folded_tensor = gs.Constant(name=node.inputs[1].name, values=np.array(onnx_pad_values))
+    pads_folded_tensor = gs.Constant(
+        name=node.inputs[1].name, values=np.array(onnx_pad_values)
+    )
     node.inputs[1] = pads_folded_tensor
 
 
@@ -134,7 +139,9 @@ def fold_upsample_inputs(upsample, graph, opset=11):
 
     if opset == 9:
         # Gather the scale factor from mul op in the upsample input subgraph
-        scale_factor = upsample.i(1).i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(1).attrs["value"].values
+        scale_factor = (
+            upsample.i(1).i(1).i(0).i(0).i(0).i(0).i(0).i(0).i(1).attrs["value"].values
+        )
 
         # Create the new scales tensor
         scales = np.array([1.0, 1.0, scale_factor, scale_factor], dtype=np.float32)
@@ -148,7 +155,9 @@ def fold_upsample_inputs(upsample, graph, opset=11):
         sizes_tensor_name = upsample.inputs[3].name
 
         # Create the new scales tensor
-        scale_factor = upsample.i(3).i(1).i().i().i().i().i(0).i(1).attrs["value"].values
+        scale_factor = (
+            upsample.i(3).i(1).i().i().i().i().i(0).i(1).attrs["value"].values
+        )
         scales = np.array([1.0, 1.0, scale_factor, scale_factor], dtype=np.float32)
         scale_tensor = gs.Constant(name=sizes_tensor_name, values=scales)
 

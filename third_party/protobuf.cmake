@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,11 +48,12 @@ macro(configure_protobuf VERSION)
 
     set(Protobuf_BIN_DIR "${CMAKE_BINARY_DIR}/${Protobuf_TARGET}/bin")
     find_file (CENTOS_FOUND centos-release PATHS /etc)
-    if (CENTOS_FOUND)
+    find_file (ROCKY_FOUND rocky-release PATHS /etc)
+    if (CENTOS_FOUND OR ROCKY_FOUND)
         set(Protobuf_LIB_DIR "${CMAKE_BINARY_DIR}/${Protobuf_TARGET}/lib64")
-    else (CENTOS_FOUND)
+    else (CENTOS_FOUND OR ROCKY_FOUND)
         set(Protobuf_LIB_DIR "${CMAKE_BINARY_DIR}/${Protobuf_TARGET}/lib")
-    endif (CENTOS_FOUND)
+    endif (CENTOS_FOUND OR ROCKY_FOUND)
     set(Protobuf_INCLUDE_DIR "${CMAKE_BINARY_DIR}/${Protobuf_TARGET}/include")
     set(Protobuf_INCLUDE_DIRS "${CMAKE_BINARY_DIR}/${Protobuf_TARGET}/include")
     set(Protobuf_PROTOC_EXECUTABLE  "${Protobuf_BIN_DIR}/protoc")

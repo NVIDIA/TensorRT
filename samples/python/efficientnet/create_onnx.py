@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,12 +32,18 @@ def main(args):
     # Load saved model
     saved_model_path = os.path.realpath(args.saved_model)
     assert os.path.isdir(saved_model_path)
-    graph_def, inputs, outputs = tf_loader.from_saved_model(saved_model_path, None, None, "serve", ["serving_default"])
+    graph_def, inputs, outputs = tf_loader.from_saved_model(
+        saved_model_path, None, None, "serve", ["serving_default"]
+    )
     with tf.Graph().as_default() as tf_graph:
         tf.import_graph_def(graph_def, name="")
     with tf_loader.tf_session(graph=tf_graph):
-        onnx_graph = tfonnx.process_tf_graph(tf_graph, input_names=inputs, output_names=outputs, opset=11)
-    onnx_model = optimizer.optimize_graph(onnx_graph).make_model("Converted from {}".format(saved_model_path))
+        onnx_graph = tfonnx.process_tf_graph(
+            tf_graph, input_names=inputs, output_names=outputs, opset=11
+        )
+    onnx_model = optimizer.optimize_graph(onnx_graph).make_model(
+        "Converted from {}".format(saved_model_path)
+    )
     graph = gs.import_onnx(onnx_model)
     assert graph
     print()
@@ -55,11 +61,21 @@ def main(args):
             # Format NCHW
             graph.inputs[0].shape[2] = args.input_size
             graph.inputs[0].shape[3] = args.input_size
-    print("ONNX input named '{}' with shape {}".format(graph.inputs[0].name, graph.inputs[0].shape))
-    print("ONNX output named '{}' with shape {}".format(graph.outputs[0].name, graph.outputs[0].shape))
+    print(
+        "ONNX input named '{}' with shape {}".format(
+            graph.inputs[0].name, graph.inputs[0].shape
+        )
+    )
+    print(
+        "ONNX output named '{}' with shape {}".format(
+            graph.outputs[0].name, graph.outputs[0].shape
+        )
+    )
     for i in range(4):
         if type(graph.inputs[0].shape[i]) != int or graph.inputs[0].shape[i] <= 0:
-            print("The input shape of the graph is invalid, try overriding it by giving a fixed size with --input_size")
+            print(
+                "The input shape of the graph is invalid, try overriding it by giving a fixed size with --input_size"
+            )
             sys.exit(1)
 
     # Fix Clip Nodes (ReLU6)
@@ -85,9 +101,13 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--saved_model", help="The TensorFlow saved model directory to load")
+    parser.add_argument(
+        "-m", "--saved_model", help="The TensorFlow saved model directory to load"
+    )
     parser.add_argument("-o", "--onnx", help="The output ONNX model file to write")
-    parser.add_argument("-b", "--batch_size", type=int, default=1, help="Set the batch size, default: 1")
+    parser.add_argument(
+        "-b", "--batch_size", type=int, default=1, help="Set the batch size, default: 1"
+    )
     parser.add_argument(
         "-i",
         "--input_size",

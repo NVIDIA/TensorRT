@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,4 +35,8 @@ class OnnxrtRunnerArgs(BaseRunnerArgs):
 
     def add_to_script_impl(self, script):
         script.add_import(imports=["OnnxrtRunner"], frm="polygraphy.backend.onnxrt")
-        script.add_runner(make_invocable("OnnxrtRunner", self.arg_groups[OnnxrtSessionArgs].add_to_script(script)))
+        script.add_runner(
+            make_invocable(
+                "OnnxrtRunner", self.arg_groups[OnnxrtSessionArgs].add_to_script(script)
+            )
+        )

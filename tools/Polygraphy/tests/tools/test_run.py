@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -72,12 +72,23 @@ class TestTrt:
                 ONNX_MODELS["identity"].path,
                 "--trt",
                 "--plugins",
-                "nvinfer_plugin.dll" if sys.platform.startswith("win") else "libnvinfer_plugin.so",
+                (
+                    "nvinfer_plugin.dll"
+                    if sys.platform.startswith("win")
+                    else "libnvinfer_plugin.so"
+                ),
             ]
         )
 
     def test_custom_outputs(self, poly_run):
-        poly_run([ONNX_MODELS["identity_identity"].path, "--trt", "--trt-outputs", "identity_out_0"])
+        poly_run(
+            [
+                ONNX_MODELS["identity_identity"].path,
+                "--trt",
+                "--trt-outputs",
+                "identity_out_0",
+            ]
+        )
 
     def test_layerwise_outputs(self, poly_run):
         with util.NamedTemporaryFile() as outfile0:
@@ -125,10 +136,26 @@ class TestTrt:
         poly_run([ONNX_MODELS["identity"].path, "--trt", "--sparse-weights"])
 
     def test_input_shape(self, poly_run):
-        poly_run([ONNX_MODELS["dynamic_identity"].path, "--trt", "--onnxrt", "--input-shapes", "X:[1,2,4,4]"])
+        poly_run(
+            [
+                ONNX_MODELS["dynamic_identity"].path,
+                "--trt",
+                "--onnxrt",
+                "--input-shapes",
+                "X:[1,2,4,4]",
+            ]
+        )
 
     def test_dynamic_input_shape(self, poly_run):
-        poly_run([ONNX_MODELS["dynamic_identity"].path, "--trt", "--onnxrt", "--input-shapes", "X:[1,2,-1,4]"])
+        poly_run(
+            [
+                ONNX_MODELS["dynamic_identity"].path,
+                "--trt",
+                "--onnxrt",
+                "--input-shapes",
+                "X:[1,2,-1,4]",
+            ]
+        )
 
     def test_explicit_profile(self, poly_run):
         poly_run(
@@ -212,7 +239,9 @@ class TestTrt:
         mod.version(trt.__version__) < mod.version("10.0"),
         reason="Feature not present before 10.0",
     )
-    @pytest.mark.parametrize("allocation_strategy", [None, "static", "profile", "runtime"])
+    @pytest.mark.parametrize(
+        "allocation_strategy", [None, "static", "profile", "runtime"]
+    )
     def test_allocation_strategies(self, poly_run, allocation_strategy):
         cmd = [
             ONNX_MODELS["residual_block"].path,
@@ -245,14 +274,28 @@ class TestTrt:
 
     def test_int8_calibration_cache(self, poly_run):
         with util.NamedTemporaryFile() as outpath:
-            cmd = [ONNX_MODELS["identity"].path, "--trt", "--int8", "--calibration-cache", outpath.name]
+            cmd = [
+                ONNX_MODELS["identity"].path,
+                "--trt",
+                "--int8",
+                "--calibration-cache",
+                outpath.name,
+            ]
             cmd += ["--onnxrt"]
             poly_run(cmd)
             assert is_file_non_empty(outpath.name)
 
-    @pytest.mark.parametrize("base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"])
+    @pytest.mark.parametrize(
+        "base_class", ["IInt8LegacyCalibrator", "IInt8EntropyCalibrator2"]
+    )
     def test_int8_calibration_base_class(self, poly_run, base_class):
-        cmd = [ONNX_MODELS["identity"].path, "--trt", "--int8", "--calibration-base-class", base_class]
+        cmd = [
+            ONNX_MODELS["identity"].path,
+            "--trt",
+            "--int8",
+            "--calibration-base-class",
+            base_class,
+        ]
         cmd += ["--onnxrt"]
         poly_run()
 
@@ -262,39 +305,89 @@ class TestTrt:
             total_cache = os.path.join(dir, "total.cache")
             identity_cache = os.path.join(dir, "identity.cache")
 
-            poly_run([ONNX_MODELS["const_foldable"].path, "--trt", "--save-timing-cache", total_cache])
+            poly_run(
+                [
+                    ONNX_MODELS["const_foldable"].path,
+                    "--trt",
+                    "--save-timing-cache",
+                    total_cache,
+                ]
+            )
             assert is_file_non_empty(total_cache)
             const_foldable_cache_size = get_file_size(total_cache)
 
-            poly_run([ONNX_MODELS["identity"].path, "--trt", "--save-timing-cache", identity_cache])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--trt",
+                    "--save-timing-cache",
+                    identity_cache,
+                ]
+            )
             identity_cache_size = get_file_size(identity_cache)
 
-            poly_run([ONNX_MODELS["identity"].path, "--trt", "--save-timing-cache", total_cache])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--trt",
+                    "--save-timing-cache",
+                    total_cache,
+                ]
+            )
             total_cache_size = get_file_size(total_cache)
 
             # The total cache should be larger than either of the individual caches.
-            assert total_cache_size >= const_foldable_cache_size and total_cache_size >= identity_cache_size
+            assert (
+                total_cache_size >= const_foldable_cache_size
+                and total_cache_size >= identity_cache_size
+            )
             # The total cache should also be smaller than or equal to the sum of the individual caches since
             # header information should not be duplicated.
             assert total_cache_size <= (const_foldable_cache_size + identity_cache_size)
 
     def test_save_load_engine(self, poly_run):
         with util.NamedTemporaryFile() as outpath:
-            poly_run([ONNX_MODELS["identity"].path, "--trt", "--save-engine", outpath.name])
+            poly_run(
+                [ONNX_MODELS["identity"].path, "--trt", "--save-engine", outpath.name]
+            )
             assert is_file_non_empty(outpath.name)
             poly_run(["--trt", outpath.name, "--model-type=engine"])
 
     def test_tactic_replay(self, poly_run):
         with util.NamedTemporaryFile() as tactic_replay:
-            poly_run([ONNX_MODELS["identity"].path, "--trt", "--save-tactics", tactic_replay.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--trt",
+                    "--save-tactics",
+                    tactic_replay.name,
+                ]
+            )
             assert is_file_non_empty(tactic_replay.name)
-            poly_run([ONNX_MODELS["identity"].path, "--trt", "--load-tactics", tactic_replay.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--trt",
+                    "--load-tactics",
+                    tactic_replay.name,
+                ]
+            )
 
     def test_tactic_sources(self, poly_run):
-        poly_run([ONNX_MODELS["identity"].path, "--trt", "--tactic-sources", "CUBLAS", "CUBLAS_LT"])
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--trt",
+                "--tactic-sources",
+                "CUBLAS",
+                "CUBLAS_LT",
+            ]
+        )
 
     def test_pool_limits(self, poly_run):
-        poly_run([ONNX_MODELS["identity"].path, "--trt", "--pool-limit", "workspace:32M"])
+        poly_run(
+            [ONNX_MODELS["identity"].path, "--trt", "--pool-limit", "workspace:32M"]
+        )
 
     def test_data_loader_script_calibration(self, poly_run):
         with util.NamedTemporaryFile("w+", suffix=".py") as f:
@@ -312,7 +405,15 @@ class TestTrt:
             f.flush()
             os.fsync(f.fileno())
 
-            poly_run([ONNX_MODELS["identity"].path, "--trt", "--int8", "--data-loader-script", f.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--trt",
+                    "--int8",
+                    "--data-loader-script",
+                    f.name,
+                ]
+            )
 
 
 class TestTf:
@@ -323,13 +424,29 @@ class TestTf:
     def test_tf_save_pb(self, poly_run):
         pytest.importorskip("tensorflow")
         with util.NamedTemporaryFile() as outpath:
-            poly_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-pb", outpath.name])
+            poly_run(
+                [
+                    TF_MODELS["identity"].path,
+                    "--tf",
+                    "--gpu-memory-fraction=0.5",
+                    "--save-pb",
+                    outpath.name,
+                ]
+            )
             assert is_file_non_empty(outpath.name)
 
     def test_tf_save_tensorboard(self, poly_run):
         pytest.importorskip("tensorflow")
         with tempfile.TemporaryDirectory() as outdir:
-            poly_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-tensorboard", outdir])
+            poly_run(
+                [
+                    TF_MODELS["identity"].path,
+                    "--tf",
+                    "--gpu-memory-fraction=0.5",
+                    "--save-tensorboard",
+                    outdir,
+                ]
+            )
             files = glob.glob(f"{outdir}{os.path.sep}*")
             assert len(files) == 1
 
@@ -337,7 +454,15 @@ class TestTf:
     def test_tf_save_timeline(self, poly_run):
         pytest.importorskip("tensorflow")
         with util.NamedTemporaryFile() as outpath:
-            poly_run([TF_MODELS["identity"].path, "--tf", "--gpu-memory-fraction=0.5", "--save-timeline", outpath.name])
+            poly_run(
+                [
+                    TF_MODELS["identity"].path,
+                    "--tf",
+                    "--gpu-memory-fraction=0.5",
+                    "--save-timeline",
+                    outpath.name,
+                ]
+            )
             timelines = glob.glob(os.path.join(outpath.name, "*"))
             for timeline in timelines:
                 assert is_file_non_empty(timeline)
@@ -354,12 +479,21 @@ class TestOnnxrt:
 
     def test_onnx_rt_save_onnx(self, poly_run):
         with util.NamedTemporaryFile() as outpath:
-            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-onnx", outpath.name])
+            poly_run(
+                [ONNX_MODELS["identity"].path, "--onnxrt", "--save-onnx", outpath.name]
+            )
             assert is_file_non_empty(outpath.name)
             assert onnx.load(outpath.name)
 
     def test_onnx_rt_custom_outputs(self, poly_run):
-        poly_run([ONNX_MODELS["identity_identity"].path, "--onnxrt", "--onnx-outputs", "identity_out_0"])
+        poly_run(
+            [
+                ONNX_MODELS["identity_identity"].path,
+                "--onnxrt",
+                "--onnx-outputs",
+                "identity_out_0",
+            ]
+        )
 
     def test_onnx_rt_layerwise_outputs(self, poly_run):
         with util.NamedTemporaryFile() as outfile0:
@@ -417,11 +551,37 @@ class TestOther:
 
     def test_exit_status_on_fail_comparison(self, poly_run, tmp_path):
         OUTFILE0 = os.path.join(tmp_path, "outputs0.json")
-        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", OUTFILE0, "--seed=1"])
-        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-outputs", OUTFILE0, "--seed=2"], expect_error=True)
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--save-outputs",
+                OUTFILE0,
+                "--seed=1",
+            ]
+        )
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--load-outputs",
+                OUTFILE0,
+                "--seed=2",
+            ],
+            expect_error=True,
+        )
 
     def test_custom_tolerance(self, poly_run):
-        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--onnxrt", "--iterations=0", "--atol=1.0", "--rtol=1.0"])
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--iterations=0",
+                "--atol=1.0",
+                "--rtol=1.0",
+            ]
+        )
 
     def test_custom_per_output_tolerance(self, poly_run):
         poly_run(
@@ -444,14 +604,38 @@ class TestOther:
         )
 
     def test_custom_input_ranges(self, poly_run):
-        poly_run([ONNX_MODELS["identity_identity"].path, "--onnxrt", "--val-range", "X:[1.0,2.0]", "[0.5,1.5]"])
+        poly_run(
+            [
+                ONNX_MODELS["identity_identity"].path,
+                "--onnxrt",
+                "--val-range",
+                "X:[1.0,2.0]",
+                "[0.5,1.5]",
+            ]
+        )
 
     def test_index_comparison(self, poly_run):
-        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--postprocess", "top-1", "--compare-func=indices"])
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--postprocess",
+                "top-1",
+                "--compare-func=indices",
+            ]
+        )
 
     @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "quantile"])
     def test_check_error_stat(self, poly_run, check_error_stat):
-        poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--onnxrt", "--check-error-stat", check_error_stat])
+        poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--onnxrt",
+                "--check-error-stat",
+                check_error_stat,
+            ]
+        )
 
     def test_save_load_outputs(self, poly_run, tmp_path):
         OUTFILE0 = os.path.join(tmp_path, "outputs0.json")
@@ -459,7 +643,15 @@ class TestOther:
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", OUTFILE0])
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-outputs", OUTFILE1])
 
-        status = poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-outputs", OUTFILE0, OUTFILE1])
+        status = poly_run(
+            [
+                ONNX_MODELS["identity"].path,
+                "--onnxrt",
+                "--load-outputs",
+                OUTFILE0,
+                OUTFILE1,
+            ]
+        )
         assert (
             "Difference is within tolerance" in status.stdout + status.stderr
         )  # Make sure it actually compared stuff.
@@ -471,20 +663,31 @@ class TestOther:
         )  # Make sure it DIDN'T compare stuff.
 
         # Should work even with no runners specified
-        status = poly_run([ONNX_MODELS["identity"].path, "--load-outputs", OUTFILE0, OUTFILE1])
+        status = poly_run(
+            [ONNX_MODELS["identity"].path, "--load-outputs", OUTFILE0, OUTFILE1]
+        )
         assert (
             "Difference is within tolerance" in status.stdout + status.stderr
         )  # Make sure it actually compared stuff.
 
         # Should work even when comparing a single runner to itself.
-        status = poly_run([ONNX_MODELS["identity"].path, "--load-outputs", OUTFILE0, OUTFILE0])
+        status = poly_run(
+            [ONNX_MODELS["identity"].path, "--load-outputs", OUTFILE0, OUTFILE0]
+        )
         assert (
             "Difference is within tolerance" in status.stdout + status.stderr
         )  # Make sure it actually compared stuff.
 
     def test_save_load_inputs(self, poly_run):
         with util.NamedTemporaryFile() as infile0, util.NamedTemporaryFile() as infile1:
-            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--save-input-data", infile0.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--save-input-data",
+                    infile0.name,
+                ]
+            )
             poly_run(
                 [
                     ONNX_MODELS["identity"].path,
@@ -495,14 +698,30 @@ class TestOther:
                     infile1.name,
                 ]
             )  # Copy
-            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--load-input-data", infile0.name, infile1.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--load-input-data",
+                    infile0.name,
+                    infile1.name,
+                ]
+            )
 
     def test_load_torch_inputs(self, poly_run):
         with util.NamedTemporaryFile() as infile:
             inp = torch.ones((1, 1, 2, 2), dtype=torch.float32)
             feed_dict = [{"x": inp}]
             save_json(feed_dict, infile.name)
-            poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--onnxrt", "--load-inputs", infile.name])
+            poly_run(
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--onnxrt",
+                    "--load-inputs",
+                    infile.name,
+                ]
+            )
 
     def test_runner_coexistence(self, poly_run):
         poly_run([ONNX_MODELS["identity"].path, "--onnxrt", "--trt"])
@@ -514,7 +733,15 @@ class TestOther:
     def test_tf2onnx_save_onnx(self, poly_run):
         pytest.importorskip("tensorflow")
         with util.NamedTemporaryFile() as outpath:
-            poly_run([TF_MODELS["identity"].path, "--onnxrt", "--model-type=frozen", "--save-onnx", outpath.name])
+            poly_run(
+                [
+                    TF_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--model-type=frozen",
+                    "--save-onnx",
+                    outpath.name,
+                ]
+            )
             assert is_file_non_empty(outpath.name)
             assert onnx.load(outpath.name)
 

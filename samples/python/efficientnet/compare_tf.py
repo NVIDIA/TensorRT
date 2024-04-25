@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -91,7 +91,10 @@ def main(args):
     trt_infer = TensorRTInfer(args.engine)
 
     batcher = ImageBatcher(
-        args.input, *trt_infer.input_spec(), max_num_images=args.num_images, preprocessor=args.preprocessor
+        args.input,
+        *trt_infer.input_spec(),
+        max_num_images=args.num_images,
+        preprocessor=args.preprocessor
     )
 
     # Make sure both systems use the same input spec, so we can use the exact same image batches with both
@@ -101,14 +104,20 @@ def main(args):
         print("Input datatype does not match")
         print("TRT Engine Input Dtype: {} {}".format(trt_dtype))
         print("TF Saved Model Input Dtype: {} {}".format(tf_dtype))
-        print("Please use the same TensorFlow saved model that the TensorRT engine was built with")
+        print(
+            "Please use the same TensorFlow saved model that the TensorRT engine was built with"
+        )
         sys.exit(1)
 
-    if (tf_shape[1] and trt_shape[1] != tf_shape[1]) or (tf_shape[2] and trt_shape[2] != tf_shape[2]):
+    if (tf_shape[1] and trt_shape[1] != tf_shape[1]) or (
+        tf_shape[2] and trt_shape[2] != tf_shape[2]
+    ):
         print("Input shapes do not match")
         print("TRT Engine Input Shape: {} {}".format(trt_shape[1:]))
         print("TF Saved Model Input Shape: {} {}".format(tf_shape[1:]))
-        print("Please use the same TensorFlow saved model that the TensorRT engine was built with")
+        print(
+            "Please use the same TensorFlow saved model that the TensorRT engine was built with"
+        )
         sys.exit(1)
 
     match = 0
@@ -131,24 +140,40 @@ def main(args):
 
         print(
             "Processing {} / {} images: {:.2f}% match     ".format(
-                batcher.image_index, batcher.num_images, (100 * (match / batcher.image_index))
+                batcher.image_index,
+                batcher.num_images,
+                (100 * (match / batcher.image_index)),
             ),
             end="\r",
         )
 
     print()
     pc = 100 * (match / batcher.num_images)
-    print("Matching Top-1 class predictions for {} out of {} images: {:.2f}%".format(match, batcher.num_images, pc))
+    print(
+        "Matching Top-1 class predictions for {} out of {} images: {:.2f}%".format(
+            match, batcher.num_images, pc
+        )
+    )
     avgerror = np.sqrt(error / batcher.num_images)
-    print("RMSE between TensorFlow and TensorRT confidence scores: {:.3f}".format(avgerror))
+    print(
+        "RMSE between TensorFlow and TensorRT confidence scores: {:.3f}".format(
+            avgerror
+        )
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--engine", help="The TensorRT engine to infer with")
-    parser.add_argument("-m", "--saved_model", help="The TensorFlow saved model path to validate against")
     parser.add_argument(
-        "-i", "--input", help="The input to infer, either a single image path, or a directory of images"
+        "-m",
+        "--saved_model",
+        help="The TensorFlow saved model path to validate against",
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        help="The input to infer, either a single image path, or a directory of images",
     )
     parser.add_argument(
         "-n",

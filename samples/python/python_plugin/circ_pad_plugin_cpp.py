@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,13 +29,28 @@ from polygraphy.backend.trt import (
     TrtRunner,
 )
 
-def parseArgs():
-    parser = argparse.ArgumentParser(description="Options for Circular Padding plugin C++ example")
 
-    parser.add_argument('--precision', type=str, default="fp32", choices=["fp32", "fp16"], help="Precision to use for plugin")
-    parser.add_argument('--plugin-lib', type=str, help="Path to the Circular Padding plugin lib", required=True)
+def parseArgs():
+    parser = argparse.ArgumentParser(
+        description="Options for Circular Padding plugin C++ example"
+    )
+
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default="fp32",
+        choices=["fp32", "fp16"],
+        help="Precision to use for plugin",
+    )
+    parser.add_argument(
+        "--plugin-lib",
+        type=str,
+        help="Path to the Circular Padding plugin lib",
+        required=True,
+    )
 
     return parser.parse_args()
+
 
 if __name__ == "__main__":
 
@@ -67,15 +82,15 @@ if __name__ == "__main__":
 
     # build engine
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision==np.float16)
+        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision == np.float16)
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")
     # Run
-    with TrtRunner(build_engine, "trt_runner")as runner:
+    with TrtRunner(build_engine, "trt_runner") as runner:
         outputs = runner.infer({"X": X})
         Y = outputs["Y"]
-        
+
         if np.allclose(Y, Y_ref):
             print("Inference result correct!")
         else:

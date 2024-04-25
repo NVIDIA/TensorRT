@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -85,7 +85,12 @@ class TestOnnxrtRunner:
         model = ONNX_MODELS["identity"]
         with OnnxrtRunner(SessionFromOnnx(model.loader)) as runner:
             with pytest.raises(PolygraphyException, match=err):
-                runner.infer({name: np.ones(shape=(1, 1, 2, 2), dtype=np.float32) for name in names})
+                runner.infer(
+                    {
+                        name: np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
+                        for name in names
+                    }
+                )
 
     def test_error_on_wrong_dtype_feed_dict(self):
         model = ONNX_MODELS["identity"]

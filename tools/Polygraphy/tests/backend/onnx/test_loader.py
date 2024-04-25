@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,9 @@ class TestOnnxFromPath:
 
     @pytest.mark.serial
     def test_warn_if_impl_methods_called(self, check_warnings_on_loader_impl_methods):
-        check_warnings_on_loader_impl_methods(OnnxFromPath(ONNX_MODELS["identity"].path))
+        check_warnings_on_loader_impl_methods(
+            OnnxFromPath(ONNX_MODELS["identity"].path)
+        )
 
     def test_external_data(self):
         model = ONNX_MODELS["ext_weights"]
@@ -113,7 +115,9 @@ class TestModifyOnnx:
 
     @pytest.mark.parametrize("output", ["identity_out_0", "identity_out_2"])
     def test_custom_outputs(self, output):
-        loader = ModifyOutputs(OnnxFromPath(ONNX_MODELS["identity_identity"].path), outputs=[output])
+        loader = ModifyOutputs(
+            OnnxFromPath(ONNX_MODELS["identity_identity"].path), outputs=[output]
+        )
         model = loader()
         assert len(model.graph.output) == 1
         assert model.graph.output[0].name == output
@@ -148,7 +152,9 @@ class TestInferShapes:
         self.check_model(model)
 
     def test_path(self, allow_onnxruntime):
-        model = infer_shapes(ONNX_MODELS["identity_identity"].path, allow_onnxruntime=allow_onnxruntime)
+        model = infer_shapes(
+            ONNX_MODELS["identity_identity"].path, allow_onnxruntime=allow_onnxruntime
+        )
         self.check_model(model)
 
     @pytest.mark.parametrize("set_data_dir", [True, False])
@@ -163,7 +169,9 @@ class TestInferShapes:
 
     def test_save_to_disk_on_size_threshold(self, allow_onnxruntime):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        model = infer_shapes(model, save_to_disk_threshold_bytes=0, allow_onnxruntime=allow_onnxruntime)
+        model = infer_shapes(
+            model, save_to_disk_threshold_bytes=0, allow_onnxruntime=allow_onnxruntime
+        )
         self.check_model(model)
 
 
@@ -188,7 +196,9 @@ class TestFoldConstants:
     @pytest.mark.parametrize("partitioning", [None, "basic", "recursive"])
     @pytest.mark.parametrize("copy", [True, False])
     @pytest.mark.parametrize("allow_onnxruntime_shape_inference", [True, False])
-    def test_basic(self, partitioning, fold_shapes, copy, allow_onnxruntime_shape_inference):
+    def test_basic(
+        self, partitioning, fold_shapes, copy, allow_onnxruntime_shape_inference
+    ):
         original_model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
         loader = FoldConstants(
             original_model,
@@ -275,7 +285,9 @@ class TestSaveOnnx:
     def test_external_data(self):
         with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             model = OnnxFromPath(ONNX_MODELS["const_foldable"].path)
-            loader = SaveOnnx(model, path.name, external_data_path=data.name, size_threshold=0)
+            loader = SaveOnnx(
+                model, path.name, external_data_path=data.name, size_threshold=0
+            )
             loader()
             assert is_file_non_empty(path.name)
             assert is_file_non_empty(data.name)
@@ -284,8 +296,14 @@ class TestSaveOnnx:
 @pytest.fixture()
 def extract_model():
     input_metadata = TensorMetadata().add("X", dtype=np.float32, shape=(64, 64))
-    output_metadata = TensorMetadata().add("identity_out_0", dtype=np.float32, shape=None)
-    return onnx_from_path(ONNX_MODELS["identity_identity"].path), input_metadata, output_metadata
+    output_metadata = TensorMetadata().add(
+        "identity_out_0", dtype=np.float32, shape=None
+    )
+    return (
+        onnx_from_path(ONNX_MODELS["identity_identity"].path),
+        input_metadata,
+        output_metadata,
+    )
 
 
 class TestExtractSubgraph:

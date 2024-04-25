@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -360,10 +360,12 @@ def import_from_script(path, name):
 
         def reset_sys_path():
             del sys.path[0]
+            del sys.modules[modname]
 
         stack.callback(reset_sys_path)
 
         try:
+            importlib.invalidate_caches()
             mod = importlib.import_module(modname)
             return getattr(mod, name)
         except Exception as err:
@@ -372,5 +374,4 @@ def import_from_script(path, name):
             if ext != ".py":
                 err_msg += f"\nThis could be because the extension of the file is not '.py'. Note: The extension is: {ext}"
             err_msg += f"\nNote: Error was: {err}"
-            err_msg += f"\nNote: sys.path was: {sys.path}"
             G_LOGGER.critical(err_msg)

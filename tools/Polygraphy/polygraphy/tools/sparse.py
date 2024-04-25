@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,15 +75,21 @@ class SparsityPruner:
         if t in self.tname2producer:
             producer = self.tname2producer[t]
             if producer.op_type in axis_insensitive_op_type:
-                G_LOGGER.ultra_verbose(f"({t}) is produced by {producer.op_type}, looking back")
+                G_LOGGER.ultra_verbose(
+                    f"({t}) is produced by {producer.op_type}, looking back"
+                )
                 self.__tensor(producer.input[0], axis)
             elif producer.op_type == "Transpose":
-                G_LOGGER.ultra_verbose(f"({t}) is produced by {producer.op_type}, checking attributes")
+                G_LOGGER.ultra_verbose(
+                    f"({t}) is produced by {producer.op_type}, checking attributes"
+                )
                 for attr in producer.attribute:
                     if attr.name == "perm":
                         perm = list(attr.ints)
                         new_axis = perm.index(axis)
-                        G_LOGGER.ultra_verbose(f"attribute <perm> is {perm}, axis {axis} -> {new_axis}")
+                        G_LOGGER.ultra_verbose(
+                            f"attribute <perm> is {perm}, axis {axis} -> {new_axis}"
+                        )
                         self.__tensor(producer.input[0], new_axis)
                         return
                 G_LOGGER.warning(f"{producer.op_type} doesn't have <perm> attribute!")
@@ -92,7 +98,9 @@ class SparsityPruner:
                     f"({t}) produced by {producer.name} type {producer.op_type}. Stopping backward analysis."
                 )
             else:
-                G_LOGGER.warning(f"({t}) produced by {producer.name} type: {producer.op_type} is unsupported!")
+                G_LOGGER.warning(
+                    f"({t}) produced by {producer.name} type: {producer.op_type} is unsupported!"
+                )
 
     def __conv(self, node):
         assert node.op_type == "Conv"
@@ -133,7 +141,9 @@ class SparsityPruner:
         count = len(self.g.node)
         for i in range(count):
             n = self.g.node[i]
-            G_LOGGER.super_verbose(f"Processing node {i}/{count} ({n.op_type}): {n.name}")
+            G_LOGGER.super_verbose(
+                f"Processing node {i}/{count} ({n.op_type}): {n.name}"
+            )
             if n.op_type == "MatMul":
                 self.__matmul(n)
             elif n.op_type == "Gemm":
@@ -239,7 +249,10 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
                     zeros = 0
                     if is_raw_data:
                         for i in range(step):
-                            if data[short2long(i) * 2] == 0 and data[short2long(i) * 2 + 1] == 0:
+                            if (
+                                data[short2long(i) * 2] == 0
+                                and data[short2long(i) * 2 + 1] == 0
+                            ):
                                 zeros += 1
                     else:
                         i32_data_0 = data[short2long(0)]
@@ -251,7 +264,9 @@ def process_bf16_tensor(tensor, outer, pdim, pstride, check):
                             v1_zero = 1 if bf16_data_1 == 0 else 0
                             return v0_zero + v1_zero
 
-                        zeros = bf16_zeros_in_int32(i32_data_0) + bf16_zeros_in_int32(i32_data_0)
+                        zeros = bf16_zeros_in_int32(i32_data_0) + bf16_zeros_in_int32(
+                            i32_data_0
+                        )
                     if zeros < 2:
                         G_LOGGER.warning(f"Found non-sparse tensor: {tensor.name}")
                         return False
@@ -289,7 +304,9 @@ def process_tensor(pinfo, tensor, check):
         outer *= dims[i]
     for i in range(axis + 1, len(tensor.dims), 1):
         pstride *= dims[i]
-    G_LOGGER.ultra_verbose(f"axis {axis} of dims {dims} has stride {pstride} and outer {outer}")
+    G_LOGGER.ultra_verbose(
+        f"axis {axis} of dims {dims} has stride {pstride} and outer {outer}"
+    )
 
     # We need hacks since BF16 has not been fully enabled in Numpy or ONNX.
     if tensor.data_type is onnx.TensorProto.BFLOAT16:

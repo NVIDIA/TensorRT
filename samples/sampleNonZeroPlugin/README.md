@@ -16,7 +16,7 @@
 ## Description
 
 This sample, sampleNonZeroPlugin, implements a plugin for the NonZero operation, customizable to output the non-zero indices in
-either a row major (each set of indices in the same row) or column major format (each set of indices in the same column).
+either a row order (each set of indices in the same row) or column order format (each set of indices in the same column).
 
 NonZero is an operation where the non-zero indices of the input tensor is found. 
 
@@ -36,7 +36,7 @@ Until `IPluginV3` (and associated interfaces), TensorRT plugins could not have o
 on input shapes). `IPluginV3OneBuild` which exposes a build capability for `IPluginV3`, provides support for such data-dependent output shapes.
 
 `NonZeroPlugin` in this sample is written to handle 2-D input tensors of shape $R \times C$. Assume that the tensor contains $K$ non-zero elements and that the
-non-zero indices are required in a row-major order. Then the output shape would be $K \times 2$.
+non-zero indices are required in a row ordering (each set of indices in its own row). Then the output shape would be $K \times 2$.
 
 The output shapes are expressed to the TensorRT builder through the `IPluginV3OneBuild::getOutputShapes()` API. Expressing the second dimension of the output is
 straightforward:
@@ -70,7 +70,7 @@ and let's not forget to declare that the size tensor is a scalar (0-D):
 outputs[1].nbDims = 0;
 ```
 
-The `NonZeroPlugin` can also be configured to emit the non-zero indices in a column-major fashion through the `rowMajor` plugin attribute, by setting it to `0`.
+The `NonZeroPlugin` can also be configured to emit the non-zero indices in a column-order fashion through the `rowOrder` plugin attribute, by setting it to `0`.
 In this case, the first output of the plugin will have shape $2 \times K$, and the output shape specification must be adjusted accordingly.
 
 ### Creating network and building the engine
@@ -95,7 +95,7 @@ Download the sample data from the [TensorRT release tarball](https://developer.n
 
 2.  Run the sample to build and run the MNIST engine from the ONNX model.
 	```
-	./sample_non_zero_plugin [-h or --help] [-d or --datadir=<path to data directory>] [--columnMajor] [--fp16]
+	./sample_non_zero_plugin [-h or --help] [-d or --datadir=<path to data directory>] [--columnOrder] [--fp16]
 	```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

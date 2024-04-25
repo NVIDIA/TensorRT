@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +34,11 @@ the various modules under Polygraphy.
 
 
 def is_submodule(path):
-    file_mod = os.path.isfile(path) and path.endswith(".py") and os.path.basename(path) != "__init__.py"
+    file_mod = (
+        os.path.isfile(path)
+        and path.endswith(".py")
+        and os.path.basename(path) != "__init__.py"
+    )
     dir_mod = os.path.isdir(path) and os.path.isfile(os.path.join(path, "__init__.py"))
     return file_mod or dir_mod
 
@@ -148,7 +152,9 @@ class TestAutoinstallDeps:
             ("==1.4.2", "==1.4.2"),
         ],
     )
-    def test_can_automatically_install_requirements(self, poly_venv, new_ver, expected, preinstall):
+    def test_can_automatically_install_requirements(
+        self, poly_venv, new_ver, expected, preinstall
+    ):
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
 
         def get_colored_version():
@@ -211,7 +217,9 @@ class TestAutoinstallDeps:
             [
                 poly_venv.python,
                 "-c",
-                "from polygraphy import mod; " "colored = mod.lazy_import('colored'); " "mod.autoinstall(colored)",
+                "from polygraphy import mod; "
+                "colored = mod.lazy_import('colored'); "
+                "mod.autoinstall(colored)",
             ],
             env=poly_venv.env,
             stdin=sp.PIPE,

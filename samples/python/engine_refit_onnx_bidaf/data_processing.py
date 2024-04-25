@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,9 @@ def preprocess(text):
 def get_map_func(filepath):
     file = open(filepath)
     category_map = json.load(file)
-    category_mapper = dict(zip(category_map["cats_strings"], category_map["cats_int64s"]))
+    category_mapper = dict(
+        zip(category_map["cats_strings"], category_map["cats_int64s"])
+    )
     default_int64 = category_map["default_int64"]
     func = lambda s: category_mapper.get(s, default_int64)
     return np.vectorize(func)

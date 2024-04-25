@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,47 +30,51 @@ class TensorFlowInfer:
     """
 
     def __init__(self, saved_model_path):
-        gpus = tf.config.experimental.list_physical_devices('GPU')
+        gpus = tf.config.experimental.list_physical_devices("GPU")
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
 
         self.model = tf.saved_model.load(saved_model_path)
-        self.pred_fn = self.model.signatures['serving_default']
+        self.pred_fn = self.model.signatures["serving_default"]
 
         # Setup I/O bindings
         self.batch_size = 1
         self.inputs = []
         fn_inputs = self.pred_fn.structured_input_signature[1]
         for i, input in enumerate(list(fn_inputs.values())):
-            self.inputs.append({
-                'index': i,
-                'name': input.name,
-                'dtype': np.dtype(input.dtype.as_numpy_dtype()),
-                'shape': [1, 512, 512, 3],  # This can be overridden later
-            })
+            self.inputs.append(
+                {
+                    "index": i,
+                    "name": input.name,
+                    "dtype": np.dtype(input.dtype.as_numpy_dtype()),
+                    "shape": [1, 512, 512, 3],  # This can be overridden later
+                }
+            )
         self.outputs = []
         fn_outputs = self.pred_fn.structured_outputs
         for i, output in enumerate(list(fn_outputs.values())):
-            self.outputs.append({
-                'index': i,
-                'name': output.name,
-                'dtype': np.dtype(output.dtype.as_numpy_dtype()),
-                'shape': output.shape.as_list(),
-            })
+            self.outputs.append(
+                {
+                    "index": i,
+                    "name": output.name,
+                    "dtype": np.dtype(output.dtype.as_numpy_dtype()),
+                    "shape": output.shape.as_list(),
+                }
+            )
 
     def override_input_shape(self, input, shape):
-        self.inputs[input]['shape'] = shape
+        self.inputs[input]["shape"] = shape
         self.batch_size = shape[0]
 
     def input_spec(self):
-        return self.inputs[0]['shape'], self.inputs[0]['dtype']
+        return self.inputs[0]["shape"], self.inputs[0]["dtype"]
 
     def output_spec(self):
-        return self.outputs[0]['shape'], self.outputs[0]['dtype']
+        return self.outputs[0]["shape"], self.outputs[0]["dtype"]
 
     def infer(self, batch):
         # Process I/O and execute the network
-        input = {self.inputs[0]['name']: tf.convert_to_tensor(batch)}
+        input = {self.inputs[0]["name"]: tf.convert_to_tensor(batch)}
         output = self.pred_fn(**input)
         return output
 
@@ -84,38 +88,42 @@ class TensorFlowInfer:
         classes = None
         if len(self.outputs) == 1:
             # Detected as AutoML Saved Model
-            assert len(self.outputs[0]['shape']) == 3 and self.outputs[0]['shape'][2] == 7
-            results = output[self.outputs[0]['name']].numpy()
+            assert (
+                len(self.outputs[0]["shape"]) == 3 and self.outputs[0]["shape"][2] == 7
+            )
+            results = output[self.outputs[0]["name"]].numpy()
             boxes = results[:, :, 1:5]
             scores = results[:, :, 5]
             classes = results[:, :, 6].astype(np.int32)
         elif len(self.outputs) >= 4:
             # Detected as TFOD Saved Model
-            assert output['num_detections']
-            num = int(output['num_detections'].numpy().flatten()[0])
-            boxes = output['detection_boxes'].numpy()[:, 0:num, :]
-            scores = output['detection_scores'].numpy()[:, 0:num]
-            classes = output['detection_classes'].numpy()[:, 0:num]
+            assert output["num_detections"]
+            num = int(output["num_detections"].numpy().flatten()[0])
+            boxes = output["detection_boxes"].numpy()[:, 0:num, :]
+            scores = output["detection_scores"].numpy()[:, 0:num]
+            classes = output["detection_classes"].numpy()[:, 0:num]
 
         # Process the results
         detections = [[]]
-        normalized = (np.max(boxes) < 2.0)
+        normalized = np.max(boxes) < 2.0
         for n in range(scores.shape[1]):
             if scores[0][n] == 0.0:
                 break
-            scale = self.inputs[0]['shape'][2] if normalized else 1.0
+            scale = self.inputs[0]["shape"][2] if normalized else 1.0
             if scales:
                 scale /= scales[0]
             if nms_threshold and scores[0][n] < nms_threshold:
                 continue
-            detections[0].append({
-                'ymin': boxes[0][n][0] * scale,
-                'xmin': boxes[0][n][1] * scale,
-                'ymax': boxes[0][n][2] * scale,
-                'xmax': boxes[0][n][3] * scale,
-                'score': scores[0][n],
-                'class': int(classes[0][n]) - 1,
-            })
+            detections[0].append(
+                {
+                    "ymin": boxes[0][n][0] * scale,
+                    "xmin": boxes[0][n][1] * scale,
+                    "ymax": boxes[0][n][2] * scale,
+                    "xmax": boxes[0][n][3] * scale,
+                    "score": scores[0][n],
+                    "class": int(classes[0][n]) - 1,
+                }
+            )
         return detections
 
 
@@ -137,10 +145,10 @@ def main(args):
         times.append(time.time() - start)
         print("Iteration {} / {}".format(i + 1, iterations), end="\r")
     print("Benchmark results include TensorFlow host overhead")
-    print("Average Latency: {:.3f} ms".format(
-        1000 * np.average(times)))
-    print("Average Throughput: {:.1f} ips".format(
-        tf_infer.batch_size / np.average(times)))
+    print("Average Latency: {:.3f} ms".format(1000 * np.average(times)))
+    print(
+        "Average Throughput: {:.1f} ips".format(tf_infer.batch_size / np.average(times))
+    )
 
     print()
     print("Finished Processing")
@@ -148,11 +156,24 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--saved_model", required=True,
-                        help="The TensorFlow saved model path to validate against")
-    parser.add_argument("-i", "--input_size", default="512,512",
-                        help="The input size to run the model with, in HEIGHT,WIDTH format")
-    parser.add_argument("-b", "--batch_size", default=1, type=int,
-                        help="The batch size to run the model with")
+    parser.add_argument(
+        "-m",
+        "--saved_model",
+        required=True,
+        help="The TensorFlow saved model path to validate against",
+    )
+    parser.add_argument(
+        "-i",
+        "--input_size",
+        default="512,512",
+        help="The input size to run the model with, in HEIGHT,WIDTH format",
+    )
+    parser.add_argument(
+        "-b",
+        "--batch_size",
+        default=1,
+        type=int,
+        help="The batch size to run the model with",
+    )
     args = parser.parse_args()
     main(args)

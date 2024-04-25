@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,8 +37,12 @@ OUTPUT_NAME = "output"
 def create_network(builder, network):
     # This network will add 1 to the input tensor.
     inp = network.add_input(name=INPUT_NAME, shape=INPUT_SHAPE, dtype=trt.float32)
-    ones = network.add_constant(shape=INPUT_SHAPE, weights=np.ones(shape=INPUT_SHAPE, dtype=np.float32)).get_output(0)
-    add = network.add_elementwise(inp, ones, op=trt.ElementWiseOperation.SUM).get_output(0)
+    ones = network.add_constant(
+        shape=INPUT_SHAPE, weights=np.ones(shape=INPUT_SHAPE, dtype=np.float32)
+    ).get_output(0)
+    add = network.add_elementwise(
+        inp, ones, op=trt.ElementWiseOperation.SUM
+    ).get_output(0)
     add.name = OUTPUT_NAME
     network.mark_output(add)
 
@@ -53,7 +57,9 @@ def main():
     build_engine = EngineFromNetwork(create_network)
 
     with TrtRunner(build_engine) as runner:
-        feed_dict = {INPUT_NAME: np.random.random_sample(INPUT_SHAPE).astype(np.float32)}
+        feed_dict = {
+            INPUT_NAME: np.random.random_sample(INPUT_SHAPE).astype(np.float32)
+        }
 
         # NOTE: The runner owns the output buffers and is free to reuse them between `infer()` calls.
         # Thus, if you want to store results from multiple inferences, you should use `copy.deepcopy()`.

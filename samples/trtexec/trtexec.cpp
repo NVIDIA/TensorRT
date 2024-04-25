@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,11 +52,11 @@ using LibraryPtr = std::unique_ptr<DynamicLibrary>;
 
 #if !TRT_STATIC
 #if defined(_WIN32)
-std::string const kNVINFER_PLUGIN_LIBNAME{"nvinfer_plugin.dll"};
-std::string const kNVINFER_LIBNAME{"nvinfer.dll"};
-std::string const kNVONNXPARSER_LIBNAME{"nvonnxparser.dll"};
-std::string const kNVINFER_LEAN_LIBNAME{"nvinfer_lean.dll"};
-std::string const kNVINFER_DISPATCH_LIBNAME{"nvinfer_dispatch.dll"};
+std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"nvinfer_plugin_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVINFER_LIBNAME = std::string{"nvinfer_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVONNXPARSER_LIBNAME = std::string{"nvonnxparser_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVINFER_LEAN_LIBNAME = std::string{"nvinfer_lean_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVINFER_DISPATCH_LIBNAME = std::string{"nvinfer_dispatch_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
 #else
 std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"libnvinfer_plugin.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_LIBNAME = std::string{"libnvinfer.so."} + std::to_string(NV_TENSORRT_MAJOR);

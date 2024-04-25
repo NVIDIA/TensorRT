@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,11 @@
 #
 
 from polygraphy import util
-from polygraphy.datatype.datatype import DataType, register_dtype_importer, register_dtype_exporter
+from polygraphy.datatype.datatype import (
+    DataType,
+    register_dtype_importer,
+    register_dtype_exporter,
+)
 
 __DATATYPE_FROM_ONNXRT = {
     "tensor(double)": DataType.FLOAT64,

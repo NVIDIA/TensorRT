@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,13 @@ This script demonstrates how to use the Calibrator API provided by Polygraphy
 to calibrate a TensorRT engine to run in INT8 precision.
 """
 import numpy as np
-from polygraphy.backend.trt import Calibrator, CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
+from polygraphy.backend.trt import (
+    Calibrator,
+    CreateConfig,
+    EngineFromNetwork,
+    NetworkFromOnnxPath,
+    TrtRunner,
+)
 from polygraphy.logger import G_LOGGER
 
 
@@ -46,7 +52,8 @@ def main():
 
     # We must enable int8 mode in addition to providing the calibrator.
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath("identity.onnx"), config=CreateConfig(int8=True, calibrator=calibrator)
+        NetworkFromOnnxPath("identity.onnx"),
+        config=CreateConfig(int8=True, calibrator=calibrator),
     )
 
     # When we activate our runner, it will calibrate and build the engine. If we want to

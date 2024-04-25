@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,7 @@ class ModelData(object):
     # We can convert TensorRT data types to numpy types with trt.nptype().
     DTYPE = trt.float32
 
+
 # This is a simple ASCII-art progress monitor comparable to the C++ version in sample_progress_monitor.
 class SimpleProgressMonitor(trt.IProgressMonitor):
     def __init__(self):
@@ -46,10 +47,15 @@ class SimpleProgressMonitor(trt.IProgressMonitor):
     def phase_start(self, phase_name, parent_phase, num_steps):
         try:
             if parent_phase is not None:
-                nbIndents = 1 + self._active_phases[parent_phase]['nbIndents']
+                nbIndents = 1 + self._active_phases[parent_phase]["nbIndents"]
             else:
                 nbIndents = 0
-            self._active_phases[phase_name] = { 'title': phase_name, 'steps': 0, 'num_steps': num_steps, 'nbIndents': nbIndents }
+            self._active_phases[phase_name] = {
+                "title": phase_name,
+                "steps": 0,
+                "num_steps": num_steps,
+                "nbIndents": nbIndents,
+            }
             self._redraw()
         except KeyboardInterrupt:
             # The phase_start callback cannot directly cancel the build, so request the cancellation from within step_complete.
@@ -58,13 +64,13 @@ class SimpleProgressMonitor(trt.IProgressMonitor):
     def phase_finish(self, phase_name):
         try:
             del self._active_phases[phase_name]
-            self._redraw(blank_lines=1) # Clear the removed phase.
+            self._redraw(blank_lines=1)  # Clear the removed phase.
         except KeyboardInterrupt:
             _step_result = False
 
     def step_complete(self, phase_name, step):
         try:
-            self._active_phases[phase_name]['steps'] = step
+            self._active_phases[phase_name]["steps"] = step
             self._redraw()
             return self._step_result
         except KeyboardInterrupt:
@@ -75,32 +81,35 @@ class SimpleProgressMonitor(trt.IProgressMonitor):
         # The Python curses module is not widely available on Windows platforms.
         # Instead, this function uses raw terminal escape sequences. See the sample documentation for references.
         def clear_line():
-            print('\x1B[2K', end='')
+            print("\x1B[2K", end="")
+
         def move_to_start_of_line():
-            print('\x1B[0G', end='')
+            print("\x1B[0G", end="")
+
         def move_cursor_up(lines):
-            print('\x1B[{}A'.format(lines), end='')
+            print("\x1B[{}A".format(lines), end="")
 
         def progress_bar(steps, num_steps):
             INNER_WIDTH = 10
             completed_bar_chars = int(INNER_WIDTH * steps / float(num_steps))
-            return '[{}{}]'.format(
-                '=' * completed_bar_chars,
-                '-' * (INNER_WIDTH - completed_bar_chars))
+            return "[{}{}]".format(
+                "=" * completed_bar_chars, "-" * (INNER_WIDTH - completed_bar_chars)
+            )
 
         # Set max_cols to a default of 200 if not run in interactive mode.
         max_cols = os.get_terminal_size().columns if sys.stdout.isatty() else 200
 
         move_to_start_of_line()
         for phase in self._active_phases.values():
-            phase_prefix = '{indent}{bar} {title}'.format(
-                indent = ' ' * phase['nbIndents'],
-                bar = progress_bar(phase['steps'], phase['num_steps']),
-                title = phase['title'])
-            phase_suffix = '{steps}/{num_steps}'.format(**phase)
+            phase_prefix = "{indent}{bar} {title}".format(
+                indent=" " * phase["nbIndents"],
+                bar=progress_bar(phase["steps"], phase["num_steps"]),
+                title=phase["title"],
+            )
+            phase_suffix = "{steps}/{num_steps}".format(**phase)
             allowable_prefix_chars = max_cols - len(phase_suffix) - 2
             if allowable_prefix_chars < len(phase_prefix):
-                phase_prefix = phase_prefix[0:allowable_prefix_chars-3] + '...'
+                phase_prefix = phase_prefix[0 : allowable_prefix_chars - 3] + "..."
             clear_line()
             print(phase_prefix, phase_suffix)
         for line in range(blank_lines):
@@ -109,8 +118,10 @@ class SimpleProgressMonitor(trt.IProgressMonitor):
         move_cursor_up(len(self._active_phases) + blank_lines)
         sys.stdout.flush()
 
+
 # You can set the logger severity higher to suppress messages (or lower to display more messages).
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+
 
 # The Onnx path is used for Onnx models.
 def build_engine_onnx(model_file):
@@ -118,7 +129,9 @@ def build_engine_onnx(model_file):
     network = builder.create_network(0)
     config = builder.create_builder_config()
     if not sys.stdout.isatty():
-        print("Warning: This sample should be run from an interactive terminal in order to showcase the progress monitor correctly.")
+        print(
+            "Warning: This sample should be run from an interactive terminal in order to showcase the progress monitor correctly."
+        )
     config.progress_monitor = SimpleProgressMonitor()
     parser = trt.OnnxParser(network, TRT_LOGGER)
 
@@ -186,7 +199,14 @@ def main():
     test_case = load_normalized_test_case(test_image, inputs[0].host)
     # Run the engine. The output will be a 1D tensor of length 1000, where each value represents the
     # probability that the image corresponds to that label
-    trt_outputs = common.do_inference(context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+    trt_outputs = common.do_inference(
+        context,
+        engine=engine,
+        bindings=bindings,
+        inputs=inputs,
+        outputs=outputs,
+        stream=stream,
+    )
     # We use the highest probability as our prediction. Its index corresponds to the predicted label.
     pred = labels[np.argmax(trt_outputs[0])]
     common.free_buffers(inputs, outputs, stream)
@@ -194,6 +214,7 @@ def main():
         print("Correctly recognized " + test_case + " as " + pred)
     else:
         print("Incorrectly recognized " + test_case + " as " + pred)
+
 
 if __name__ == "__main__":
     main()

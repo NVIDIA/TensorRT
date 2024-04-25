@@ -64,9 +64,15 @@
 //!
 //! This file contains common definitions, data structures and interfaces shared between the standard and safe runtime.
 //!
-//! \warning Do not directly include this file. Instead include either NvInferRuntime.h (for the standard runtime) or
-//! NvInferSafeRuntime.h (for the safety runtime).
+//! \warning Do not directly include this file. Instead include one of:
+//! * NvInferRuntime.h (for the standard runtime)
+//! * NvInferSafeRuntime.h (for the safety runtime)
+//! * NvInferConsistency.h (for consistency checker)
+//! * NvInferPluginUtils.h (for plugin utilities)
 //!
+#if !defined(NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE) && !defined(TRT_VCAST_SAFE)
+static_assert(false, "Do not directly include this file. Include NvInferRuntime.h or NvInferSafeRuntime.h or NvInferConsistency.h or NvInferPluginUtils.h");
+#endif
 
 //! Forward declare some CUDA types to avoid an include dependency.
 
@@ -864,6 +870,8 @@ public:
 
     //!
     //! \brief The length limit for an error description in bytes, excluding the '\0' string terminator.
+    //!        Only applicable to safe runtime.
+    //!        General error recorder implementation can use any size appropriate for the use case.
     //!
     static constexpr size_t kMAX_DESC_LENGTH{127U};
 
@@ -982,10 +990,10 @@ public:
     //!
     //! \brief Report an error to the error recorder with the corresponding enum and description.
     //!
-    //! \param val The error code enum that is being reported.
-    //! \param desc The string description of the error, which will be a NULL-terminated string of kMAX_DESC_LENGTH
-    //!        bytes or less (excluding the NULL terminator). Descriptions that exceed this limit will be silently
-    //!        truncated.
+    //! \param val  The error code enum that is being reported.
+    //! \param desc The string description of the error, which will be a NULL-terminated string.
+    //!             For safety use cases its length is limited to kMAX_DESC_LENGTH bytes
+    //!             (excluding the NULL terminator) and descriptions that exceed this limit will be silently truncated.
     //!
     //! Report an error to the user that has a given value and human readable description. The function returns false
     //! if processing can continue, which implies that the reported error is not fatal. This does not guarantee that

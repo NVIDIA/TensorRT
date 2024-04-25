@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,9 @@ import onnx
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Makes Polygraphy think a node in a model is failing")
+    parser = argparse.ArgumentParser(
+        description="Makes Polygraphy think a node in a model is failing"
+    )
     parser.add_argument("model", help="The ONNX model")
     parser.add_argument(
         "--fail-node",
@@ -37,10 +39,16 @@ def main():
         nargs="+",
     )
     parser.add_argument(
-        "--default-return-code", help="The return code to use when there are no failures. ", default=0, type=int
+        "--default-return-code",
+        help="The return code to use when there are no failures. ",
+        default=0,
+        type=int,
     )
     parser.add_argument(
-        "--fail-return-code", help="The return code to use when there is a failure. ", default=1, type=int
+        "--fail-return-code",
+        help="The return code to use when there is a failure. ",
+        default=1,
+        type=int,
     )
 
     args = parser.parse_args()

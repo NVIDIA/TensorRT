@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +34,9 @@ try:
     from detectron2.structures import ImageList
 except ImportError:
     print("Could not import Detectron 2 modules. Maybe you did not install Detectron 2")
-    print("Please install Detectron 2, check https://github.com/facebookresearch/detectron2/blob/main/INSTALL.md")
+    print(
+        "Please install Detectron 2, check https://github.com/facebookresearch/detectron2/blob/main/INSTALL.md"
+    )
     sys.exit(1)
 
 import onnx_utils
@@ -81,14 +83,24 @@ class DET2GraphSurgeon:
         self.first_NMS_max_proposals = self.det2_cfg.MODEL.RPN.POST_NMS_TOPK_TEST
         self.first_NMS_iou_threshold = self.det2_cfg.MODEL.RPN.NMS_THRESH
         self.first_NMS_score_threshold = 0.01
-        self.first_ROIAlign_pooled_size = self.det2_cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
-        self.first_ROIAlign_sampling_ratio = self.det2_cfg.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
+        self.first_ROIAlign_pooled_size = (
+            self.det2_cfg.MODEL.ROI_BOX_HEAD.POOLER_RESOLUTION
+        )
+        self.first_ROIAlign_sampling_ratio = (
+            self.det2_cfg.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
+        )
         self.first_ROIAlign_type = self.det2_cfg.MODEL.ROI_BOX_HEAD.POOLER_TYPE
         self.second_NMS_max_proposals = self.det2_cfg.TEST.DETECTIONS_PER_IMAGE
         self.second_NMS_iou_threshold = self.det2_cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST
-        self.second_NMS_score_threshold = self.det2_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST
-        self.second_ROIAlign_pooled_size = self.det2_cfg.MODEL.ROI_MASK_HEAD.POOLER_RESOLUTION
-        self.second_ROIAlign_sampling_ratio = self.det2_cfg.MODEL.ROI_MASK_HEAD.POOLER_SAMPLING_RATIO
+        self.second_NMS_score_threshold = (
+            self.det2_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST
+        )
+        self.second_ROIAlign_pooled_size = (
+            self.det2_cfg.MODEL.ROI_MASK_HEAD.POOLER_RESOLUTION
+        )
+        self.second_ROIAlign_sampling_ratio = (
+            self.det2_cfg.MODEL.ROI_MASK_HEAD.POOLER_SAMPLING_RATIO
+        )
         self.second_ROIAlign_type = self.det2_cfg.MODEL.ROI_MASK_HEAD.POOLER_TYPE
         self.mask_out_res = 28
 
@@ -97,17 +109,37 @@ class DET2GraphSurgeon:
         log.info("Number of classes is {}".format(self.num_classes))
         log.info("First NMS max proposals is {}".format(self.first_NMS_max_proposals))
         log.info("First NMS iou threshold is {}".format(self.first_NMS_iou_threshold))
-        log.info("First NMS score threshold is {}".format(self.first_NMS_score_threshold))
+        log.info(
+            "First NMS score threshold is {}".format(self.first_NMS_score_threshold)
+        )
         log.info("First ROIAlign type is {}".format(self.first_ROIAlign_type))
-        log.info("First ROIAlign pooled size is {}".format(self.first_ROIAlign_pooled_size))
-        log.info("First ROIAlign sampling ratio is {}".format(self.first_ROIAlign_sampling_ratio))
+        log.info(
+            "First ROIAlign pooled size is {}".format(self.first_ROIAlign_pooled_size)
+        )
+        log.info(
+            "First ROIAlign sampling ratio is {}".format(
+                self.first_ROIAlign_sampling_ratio
+            )
+        )
         log.info("Second NMS max proposals is {}".format(self.second_NMS_max_proposals))
         log.info("Second NMS iou threshold is {}".format(self.second_NMS_iou_threshold))
-        log.info("Second NMS score threshold is {}".format(self.second_NMS_score_threshold))
+        log.info(
+            "Second NMS score threshold is {}".format(self.second_NMS_score_threshold)
+        )
         log.info("Second ROIAlign type is {}".format(self.second_ROIAlign_type))
-        log.info("Second ROIAlign pooled size is {}".format(self.second_ROIAlign_pooled_size))
-        log.info("Second ROIAlign sampling ratio is {}".format(self.second_ROIAlign_sampling_ratio))
-        log.info("Individual mask output resolution is {}x{}".format(self.mask_out_res, self.mask_out_res))
+        log.info(
+            "Second ROIAlign pooled size is {}".format(self.second_ROIAlign_pooled_size)
+        )
+        log.info(
+            "Second ROIAlign sampling ratio is {}".format(
+                self.second_ROIAlign_sampling_ratio
+            )
+        )
+        log.info(
+            "Individual mask output resolution is {}x{}".format(
+                self.mask_out_res, self.mask_out_res
+            )
+        )
 
         self.batch_size = None
 
@@ -128,12 +160,16 @@ class DET2GraphSurgeon:
                 model = shape_inference.infer_shapes(model)
                 self.graph = gs.import_onnx(model)
             except Exception as e:
-                log.info("Shape inference could not be performed at this time:\n{}".format(e))
+                log.info(
+                    "Shape inference could not be performed at this time:\n{}".format(e)
+                )
             try:
                 self.graph.fold_constants(fold_shapes=True)
             except TypeError as e:
-                log.error("This version of ONNX GraphSurgeon does not support folding shapes, please upgrade your "
-                          "onnx_graphsurgeon module. Error:\n{}".format(e))
+                log.error(
+                    "This version of ONNX GraphSurgeon does not support folding shapes, please upgrade your "
+                    "onnx_graphsurgeon module. Error:\n{}".format(e)
+                )
                 raise
 
             count_after = len(self.graph.nodes)
@@ -182,7 +218,9 @@ class DET2GraphSurgeon:
         p4_anchors = det2_anchors[2].tensor.detach().cpu().numpy()
         p5_anchors = det2_anchors[3].tensor.detach().cpu().numpy()
         p6_anchors = det2_anchors[4].tensor.detach().cpu().numpy()
-        final_anchors = np.concatenate((p2_anchors,p3_anchors,p4_anchors,p5_anchors,p6_anchors))
+        final_anchors = np.concatenate(
+            (p2_anchors, p3_anchors, p4_anchors, p5_anchors, p6_anchors)
+        )
 
         return final_anchors
 
@@ -214,18 +252,29 @@ class DET2GraphSurgeon:
         self.graph.inputs[0].name = "input_tensor"
 
         self.sanitize()
-        log.info("ONNX graph input shape: {} [NCHW format set]".format(self.graph.inputs[0].shape))
+        log.info(
+            "ONNX graph input shape: {} [NCHW format set]".format(
+                self.graph.inputs[0].shape
+            )
+        )
 
         # Find the initial nodes of the graph, whatever the input is first connected to, and disconnect them.
-        for node in [node for node in self.graph.nodes if self.graph.inputs[0] in node.inputs]:
+        for node in [
+            node for node in self.graph.nodes if self.graph.inputs[0] in node.inputs
+        ]:
             node.inputs.clear()
 
         # Get input tensor.
         input_tensor = self.graph.inputs[0]
 
         # Create preprocessing Sub node and connect input tensor to it.
-        sub_const = np.expand_dims(np.asarray([255 * 0.406, 255 * 0.456, 255 * 0.485], dtype=np.float32), axis=(1, 2))
-        sub_out = self.graph.op_with_const("Sub", "preprocessor/mean", input_tensor, sub_const)
+        sub_const = np.expand_dims(
+            np.asarray([255 * 0.406, 255 * 0.456, 255 * 0.485], dtype=np.float32),
+            axis=(1, 2),
+        )
+        sub_out = self.graph.op_with_const(
+            "Sub", "preprocessor/mean", input_tensor, sub_const
+        )
 
         # Find first Div node and connect to output of Sub node.
         div_node = self.graph.find_node_by_op("Div")
@@ -242,7 +291,19 @@ class DET2GraphSurgeon:
             if type(node.inputs[1]) == gs.Constant and node.inputs[1].values[0] == 1:
                 node.inputs[1].values[0] = self.batch_size
 
-    def NMS(self, boxes, scores, anchors, background_class, score_activation, max_proposals, iou_threshold, nms_score_threshold, user_threshold, nms_name=None):
+    def NMS(
+        self,
+        boxes,
+        scores,
+        anchors,
+        background_class,
+        score_activation,
+        max_proposals,
+        iou_threshold,
+        nms_score_threshold,
+        user_threshold,
+        nms_name=None,
+    ):
         # Helper function to create the NMS Plugin node with the selected inputs.
         # EfficientNMS_TRT TensorRT Plugin is suitable for our use case.
         # :param boxes: The box predictions from the Box Net.
@@ -263,41 +324,71 @@ class DET2GraphSurgeon:
             nms_name = "_" + nms_name
 
         # Set score threshold.
-        score_threshold = nms_score_threshold if user_threshold is None else user_threshold
+        score_threshold = (
+            nms_score_threshold if user_threshold is None else user_threshold
+        )
 
         # NMS Outputs.
-        nms_output_num_detections = gs.Variable(name="num_detections"+nms_name, dtype=np.int32, shape=[self.batch_size, 1])
-        nms_output_boxes = gs.Variable(name="detection_boxes"+nms_name, dtype=np.float32,
-                                       shape=[self.batch_size, max_proposals, 4])
-        nms_output_scores = gs.Variable(name="detection_scores"+nms_name, dtype=np.float32,
-                                        shape=[self.batch_size, max_proposals])
-        nms_output_classes = gs.Variable(name="detection_classes"+nms_name, dtype=np.int32,
-                                         shape=[self.batch_size, max_proposals])
+        nms_output_num_detections = gs.Variable(
+            name="num_detections" + nms_name, dtype=np.int32, shape=[self.batch_size, 1]
+        )
+        nms_output_boxes = gs.Variable(
+            name="detection_boxes" + nms_name,
+            dtype=np.float32,
+            shape=[self.batch_size, max_proposals, 4],
+        )
+        nms_output_scores = gs.Variable(
+            name="detection_scores" + nms_name,
+            dtype=np.float32,
+            shape=[self.batch_size, max_proposals],
+        )
+        nms_output_classes = gs.Variable(
+            name="detection_classes" + nms_name,
+            dtype=np.int32,
+            shape=[self.batch_size, max_proposals],
+        )
 
-        nms_outputs = [nms_output_num_detections, nms_output_boxes, nms_output_scores, nms_output_classes]
+        nms_outputs = [
+            nms_output_num_detections,
+            nms_output_boxes,
+            nms_output_scores,
+            nms_output_classes,
+        ]
 
         # Plugin.
         self.graph.plugin(
             op="EfficientNMS_TRT",
-            name="nms"+nms_name,
+            name="nms" + nms_name,
             inputs=[boxes, scores, anchors],
             outputs=nms_outputs,
             attrs={
-                'plugin_version': "1",
-                'background_class': background_class,
-                'max_output_boxes': max_proposals,
-                'score_threshold': max(0.01, score_threshold),
-                'iou_threshold': iou_threshold,
-                'score_activation': score_activation,
-                'class_agnostic': False,
-                'box_coding': 1,
-            }
+                "plugin_version": "1",
+                "background_class": background_class,
+                "max_output_boxes": max_proposals,
+                "score_threshold": max(0.01, score_threshold),
+                "iou_threshold": iou_threshold,
+                "score_activation": score_activation,
+                "class_agnostic": False,
+                "box_coding": 1,
+            },
         )
         log.info("Created nms{} with EfficientNMS_TRT plugin".format(nms_name))
 
         return nms_outputs
 
-    def ROIAlign(self, rois, p2, p3, p4, p5, pooled_size, sampling_ratio, roi_align_type, num_rois, ra_name):
+    def ROIAlign(
+        self,
+        rois,
+        p2,
+        p3,
+        p4,
+        p5,
+        pooled_size,
+        sampling_ratio,
+        roi_align_type,
+        num_rois,
+        ra_name,
+    ):
         # Helper function to create the ROIAlign Plugin node with the selected inputs.
         # PyramidROIAlign_TRT TensorRT Plugin is suitable for our use case.
         # :param rois: Regions of interest/detection boxes outputs from preceding NMS node.
@@ -318,31 +409,42 @@ class DET2GraphSurgeon:
             roi_coords_transform = 0
 
         # ROIAlign outputs.
-        roi_align_output = gs.Variable(name="roi_align/output_"+ra_name, dtype=np.float32,
-                                shape=[self.batch_size, num_rois, self.fpn_out_channels, pooled_size, pooled_size])
+        roi_align_output = gs.Variable(
+            name="roi_align/output_" + ra_name,
+            dtype=np.float32,
+            shape=[
+                self.batch_size,
+                num_rois,
+                self.fpn_out_channels,
+                pooled_size,
+                pooled_size,
+            ],
+        )
 
         # Plugin.
         self.graph.plugin(
             op="PyramidROIAlign_TRT",
-            name="roi_align_"+ra_name,
+            name="roi_align_" + ra_name,
             inputs=[rois, p2, p3, p4, p5],
             outputs=[roi_align_output],
             attrs={
-                'plugin_version': "1",
-                'fpn_scale': 224,
-                'pooled_size': pooled_size,
-                'image_size': [self.height, self.width],
-                'roi_coords_absolute': 0,
-                'roi_coords_swap': 0,
-                'roi_coords_transform': roi_coords_transform,
-                'sampling_ratio': sampling_ratio,
-            }
+                "plugin_version": "1",
+                "fpn_scale": 224,
+                "pooled_size": pooled_size,
+                "image_size": [self.height, self.width],
+                "roi_coords_absolute": 0,
+                "roi_coords_swap": 0,
+                "roi_coords_transform": roi_coords_transform,
+                "sampling_ratio": sampling_ratio,
+            },
         )
         log.info("Created {} with PyramidROIAlign_TRT plugin".format(ra_name))
 
         return roi_align_output
 
-    def process_graph(self, anchors, first_nms_threshold=None, second_nms_threshold=None):
+    def process_graph(
+        self, anchors, first_nms_threshold=None, second_nms_threshold=None
+    ):
         """
         Processes the graph to replace the GenerateProposals and BoxWithNMSLimit operations with EfficientNMS_TRT
         TensorRT plugin nodes and ROIAlign operations with PyramidROIAlign_TRT plugin nodes.
@@ -351,6 +453,7 @@ class DET2GraphSurgeon:
         :param first_nms_threshold: Override the 1st NMS score threshold value. If set to None, use the value in the graph.
         :param second_nms_threshold: Override the 2nd NMS score threshold value. If set to None, use the value in the graph.
         """
+
         def backbone():
             """
             Updates the graph to replace all ResizeNearest ops with ResizeNearest plugins in backbone.
@@ -360,7 +463,6 @@ class DET2GraphSurgeon:
             p3 = self.graph.find_node_by_op_name("Conv", "/backbone/fpn_output3/Conv")
             p4 = self.graph.find_node_by_op_name("Conv", "/backbone/fpn_output4/Conv")
             p5 = self.graph.find_node_by_op_name("Conv", "/backbone/fpn_output5/Conv")
-
 
             return p2.outputs[0], p3.outputs[0], p4.outputs[0], p5.outputs[0]
 
@@ -372,38 +474,101 @@ class DET2GraphSurgeon:
             :param first_nms_threshold: Override the 1st NMS score threshold value. If set to None, use the value in the graph.
             """
             # Get nodes containing final objectness logits.
-            p2_logits = self.graph.find_node_by_op_name("Flatten", "/proposal_generator/Flatten")
-            p3_logits = self.graph.find_node_by_op_name("Flatten", "/proposal_generator/Flatten_1")
-            p4_logits = self.graph.find_node_by_op_name("Flatten", "/proposal_generator/Flatten_2")
-            p5_logits = self.graph.find_node_by_op_name("Flatten", "/proposal_generator/Flatten_3")
-            p6_logits = self.graph.find_node_by_op_name("Flatten", "/proposal_generator/Flatten_4")
+            p2_logits = self.graph.find_node_by_op_name(
+                "Flatten", "/proposal_generator/Flatten"
+            )
+            p3_logits = self.graph.find_node_by_op_name(
+                "Flatten", "/proposal_generator/Flatten_1"
+            )
+            p4_logits = self.graph.find_node_by_op_name(
+                "Flatten", "/proposal_generator/Flatten_2"
+            )
+            p5_logits = self.graph.find_node_by_op_name(
+                "Flatten", "/proposal_generator/Flatten_3"
+            )
+            p6_logits = self.graph.find_node_by_op_name(
+                "Flatten", "/proposal_generator/Flatten_4"
+            )
 
             # Get nodes containing final anchor_deltas.
-            p2_anchors = self.graph.find_node_by_op_name("Reshape", "/proposal_generator/Reshape_1")
-            p3_anchors = self.graph.find_node_by_op_name("Reshape", "/proposal_generator/Reshape_3")
-            p4_anchors = self.graph.find_node_by_op_name("Reshape", "/proposal_generator/Reshape_5")
-            p5_anchors = self.graph.find_node_by_op_name("Reshape", "/proposal_generator/Reshape_7")
-            p6_anchors = self.graph.find_node_by_op_name("Reshape", "/proposal_generator/Reshape_9")
+            p2_anchors = self.graph.find_node_by_op_name(
+                "Reshape", "/proposal_generator/Reshape_1"
+            )
+            p3_anchors = self.graph.find_node_by_op_name(
+                "Reshape", "/proposal_generator/Reshape_3"
+            )
+            p4_anchors = self.graph.find_node_by_op_name(
+                "Reshape", "/proposal_generator/Reshape_5"
+            )
+            p5_anchors = self.graph.find_node_by_op_name(
+                "Reshape", "/proposal_generator/Reshape_7"
+            )
+            p6_anchors = self.graph.find_node_by_op_name(
+                "Reshape", "/proposal_generator/Reshape_9"
+            )
 
             # Concatenate all objectness logits/scores data.
-            scores_inputs = [p2_logits.outputs[0], p3_logits.outputs[0], p4_logits.outputs[0], p5_logits.outputs[0], p6_logits.outputs[0]]
-            scores_tensor = self.graph.layer(name="scores", op="Concat", inputs=scores_inputs, outputs=['scores'], attrs={'axis': 1})[0]
+            scores_inputs = [
+                p2_logits.outputs[0],
+                p3_logits.outputs[0],
+                p4_logits.outputs[0],
+                p5_logits.outputs[0],
+                p6_logits.outputs[0],
+            ]
+            scores_tensor = self.graph.layer(
+                name="scores",
+                op="Concat",
+                inputs=scores_inputs,
+                outputs=["scores"],
+                attrs={"axis": 1},
+            )[0]
             # Unsqueeze to add 3rd dimension of 1 to match tensor dimensions of boxes tensor.
             scores = self.graph.unsqueeze("scores_unsqueeze", scores_tensor, [2])[0]
 
             # Concatenate all boxes/anchor_delta data.
-            boxes_inputs = [p2_anchors.outputs[0], p3_anchors.outputs[0], p4_anchors.outputs[0], p5_anchors.outputs[0], p6_anchors.outputs[0]]
-            boxes = self.graph.layer(name="boxes", op="Concat", inputs=boxes_inputs, outputs=['anchors'], attrs={'axis': 1})[0]
+            boxes_inputs = [
+                p2_anchors.outputs[0],
+                p3_anchors.outputs[0],
+                p4_anchors.outputs[0],
+                p5_anchors.outputs[0],
+                p6_anchors.outputs[0],
+            ]
+            boxes = self.graph.layer(
+                name="boxes",
+                op="Concat",
+                inputs=boxes_inputs,
+                outputs=["anchors"],
+                attrs={"axis": 1},
+            )[0]
 
             # Convert the anchors from Corners to CenterSize encoding.
-            anchors = np.matmul(anchors, [[0.5, 0, -1, 0], [0, 0.5, 0, -1], [0.5, 0, 1, 0], [0, 0.5, 0, 1]])
-            anchors = anchors / [self.width, self.height, self.width, self.height] # Normalize anchors to [0-1] range
+            anchors = np.matmul(
+                anchors,
+                [[0.5, 0, -1, 0], [0, 0.5, 0, -1], [0.5, 0, 1, 0], [0, 0.5, 0, 1]],
+            )
+            anchors = anchors / [
+                self.width,
+                self.height,
+                self.width,
+                self.height,
+            ]  # Normalize anchors to [0-1] range
             anchors = np.expand_dims(anchors, axis=0)
             anchors = anchors.astype(np.float32)
             anchors = gs.Constant(name="default_anchors", values=anchors)
 
             # Create NMS node.
-            nms_outputs = self.NMS(boxes, scores, anchors, -1, False, self.first_NMS_max_proposals, self.first_NMS_iou_threshold, self.first_NMS_score_threshold, first_nms_threshold, 'rpn')
+            nms_outputs = self.NMS(
+                boxes,
+                scores,
+                anchors,
+                -1,
+                False,
+                self.first_NMS_max_proposals,
+                self.first_NMS_iou_threshold,
+                self.first_NMS_score_threshold,
+                first_nms_threshold,
+                "rpn",
+            )
 
             return nms_outputs
 
@@ -422,63 +587,149 @@ class DET2GraphSurgeon:
             :param second_nms_threshold: Override the 2nd NMS score threshold value. If set to None, use the value in the graph.
             """
             # Create ROIAlign node.
-            box_pooler_output = self.ROIAlign(rpn_outputs[1], p2, p3, p4, p5, self.first_ROIAlign_pooled_size, self.first_ROIAlign_sampling_ratio, self.first_ROIAlign_type, self.first_NMS_max_proposals, 'box_pooler')
+            box_pooler_output = self.ROIAlign(
+                rpn_outputs[1],
+                p2,
+                p3,
+                p4,
+                p5,
+                self.first_ROIAlign_pooled_size,
+                self.first_ROIAlign_sampling_ratio,
+                self.first_ROIAlign_type,
+                self.first_NMS_max_proposals,
+                "box_pooler",
+            )
 
             # Reshape node that prepares ROIAlign/box pooler output for Gemm node that comes next.
-            box_pooler_shape = np.asarray([-1, self.fpn_out_channels*self.first_ROIAlign_pooled_size*self.first_ROIAlign_pooled_size], dtype=np.int64)
-            box_pooler_reshape = self.graph.op_with_const("Reshape", "box_pooler/reshape", box_pooler_output, box_pooler_shape)
+            box_pooler_shape = np.asarray(
+                [
+                    -1,
+                    self.fpn_out_channels
+                    * self.first_ROIAlign_pooled_size
+                    * self.first_ROIAlign_pooled_size,
+                ],
+                dtype=np.int64,
+            )
+            box_pooler_reshape = self.graph.op_with_const(
+                "Reshape", "box_pooler/reshape", box_pooler_output, box_pooler_shape
+            )
 
             # Get first Gemm op of box head and connect box pooler to it.
-            first_box_head_gemm = self.graph.find_node_by_op_name("Gemm", "/roi_heads/box_head/fc1/Gemm")
+            first_box_head_gemm = self.graph.find_node_by_op_name(
+                "Gemm", "/roi_heads/box_head/fc1/Gemm"
+            )
             first_box_head_gemm.inputs[0] = box_pooler_reshape[0]
 
             # Get final two nodes of box predictor. Softmax op for cls_score, Gemm op for bbox_pred.
             cls_score = self.graph.find_node_by_op_name("Softmax", "/roi_heads/Softmax")
-            bbox_pred = self.graph.find_node_by_op_name("Gemm", "/roi_heads/box_predictor/bbox_pred/Gemm")
+            bbox_pred = self.graph.find_node_by_op_name(
+                "Gemm", "/roi_heads/box_predictor/bbox_pred/Gemm"
+            )
 
             # Linear transformation to convert box coordinates from (TopLeft, BottomRight) Corner encoding
             # to CenterSize encoding. 1st NMS boxes are multiplied by transformation matrix in order to
             # encode it into CenterSize format.
-            matmul_const = np.matrix('0.5 0 -1 0; 0 0.5 0 -1; 0.5 0 1 0; 0 0.5 0 1', dtype=np.float32)
-            matmul_out = self.graph.matmul("RPN_NMS/detection_boxes_conversion", rpn_outputs[1], matmul_const)
+            matmul_const = np.matrix(
+                "0.5 0 -1 0; 0 0.5 0 -1; 0.5 0 1 0; 0 0.5 0 1", dtype=np.float32
+            )
+            matmul_out = self.graph.matmul(
+                "RPN_NMS/detection_boxes_conversion", rpn_outputs[1], matmul_const
+            )
 
             # Reshape node that prepares bbox_pred for scaling and second NMS.
-            bbox_pred_shape = np.asarray([self.batch_size, self.first_NMS_max_proposals, self.num_classes, 4], dtype=np.int64)
-            bbox_pred_reshape = self.graph.op_with_const("Reshape", "bbox_pred/reshape", bbox_pred.outputs[0], bbox_pred_shape)
+            bbox_pred_shape = np.asarray(
+                [self.batch_size, self.first_NMS_max_proposals, self.num_classes, 4],
+                dtype=np.int64,
+            )
+            bbox_pred_reshape = self.graph.op_with_const(
+                "Reshape", "bbox_pred/reshape", bbox_pred.outputs[0], bbox_pred_shape
+            )
 
             # 0.1, 0.1, 0.2, 0.2 are localization head variance numbers, they scale bbox_pred_reshape, in order to get accurate coordinates.
-            scale_adj = np.expand_dims(np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1))
-            final_bbox_pred = self.graph.op_with_const("Mul", "bbox_pred/scale", bbox_pred_reshape[0], scale_adj)
+            scale_adj = np.expand_dims(
+                np.asarray([0.1, 0.1, 0.2, 0.2], dtype=np.float32), axis=(0, 1)
+            )
+            final_bbox_pred = self.graph.op_with_const(
+                "Mul", "bbox_pred/scale", bbox_pred_reshape[0], scale_adj
+            )
 
             # Reshape node that prepares cls_score for slicing and second NMS.
-            cls_score_shape = np.array([self.batch_size, self.first_NMS_max_proposals, self.num_classes+1], dtype=np.int64)
-            cls_score_reshape = self.graph.op_with_const("Reshape", "cls_score/reshape", cls_score.outputs[0], cls_score_shape)
+            cls_score_shape = np.array(
+                [self.batch_size, self.first_NMS_max_proposals, self.num_classes + 1],
+                dtype=np.int64,
+            )
+            cls_score_reshape = self.graph.op_with_const(
+                "Reshape", "cls_score/reshape", cls_score.outputs[0], cls_score_shape
+            )
 
             # Slice operation to adjust third dimension of cls_score tensor, deletion of background class (81 in Detectron 2).
-            final_cls_score = self.graph.slice("cls_score/slicer", cls_score_reshape[0], 0, self.num_classes, 2)
+            final_cls_score = self.graph.slice(
+                "cls_score/slicer", cls_score_reshape[0], 0, self.num_classes, 2
+            )
 
             # Create NMS node.
-            nms_outputs = self.NMS(final_bbox_pred[0], final_cls_score[0], matmul_out[0], -1, False, self.second_NMS_max_proposals, self.second_NMS_iou_threshold, self.second_NMS_score_threshold, second_nms_threshold, 'box_outputs')
+            nms_outputs = self.NMS(
+                final_bbox_pred[0],
+                final_cls_score[0],
+                matmul_out[0],
+                -1,
+                False,
+                self.second_NMS_max_proposals,
+                self.second_NMS_iou_threshold,
+                self.second_NMS_score_threshold,
+                second_nms_threshold,
+                "box_outputs",
+            )
 
             # Create ROIAlign node.
-            mask_pooler_output = self.ROIAlign(nms_outputs[1], p2, p3, p4, p5, self.second_ROIAlign_pooled_size, self.second_ROIAlign_sampling_ratio, self.second_ROIAlign_type, self.second_NMS_max_proposals, 'mask_pooler')
+            mask_pooler_output = self.ROIAlign(
+                nms_outputs[1],
+                p2,
+                p3,
+                p4,
+                p5,
+                self.second_ROIAlign_pooled_size,
+                self.second_ROIAlign_sampling_ratio,
+                self.second_ROIAlign_type,
+                self.second_NMS_max_proposals,
+                "mask_pooler",
+            )
 
             # Reshape mask pooler output.
-            mask_pooler_shape = np.asarray([self.second_NMS_max_proposals*self.batch_size, self.fpn_out_channels, self.second_ROIAlign_pooled_size, self.second_ROIAlign_pooled_size], dtype=np.int64)
-            mask_pooler_reshape_node = self.graph.op_with_const("Reshape", "mask_pooler/reshape", mask_pooler_output, mask_pooler_shape)
+            mask_pooler_shape = np.asarray(
+                [
+                    self.second_NMS_max_proposals * self.batch_size,
+                    self.fpn_out_channels,
+                    self.second_ROIAlign_pooled_size,
+                    self.second_ROIAlign_pooled_size,
+                ],
+                dtype=np.int64,
+            )
+            mask_pooler_reshape_node = self.graph.op_with_const(
+                "Reshape", "mask_pooler/reshape", mask_pooler_output, mask_pooler_shape
+            )
 
             # Get first Conv op in mask head and connect ROIAlign's squeezed output to it.
-            mask_head_conv = self.graph.find_node_by_op_name("Conv", "/roi_heads/mask_head/mask_fcn1/Conv")
+            mask_head_conv = self.graph.find_node_by_op_name(
+                "Conv", "/roi_heads/mask_head/mask_fcn1/Conv"
+            )
             mask_head_conv.inputs[0] = mask_pooler_reshape_node[0]
 
             # Reshape node that is preparing 2nd NMS class outputs for Add node that comes next.
-            classes_reshape_shape = np.asarray([self.second_NMS_max_proposals*self.batch_size], dtype=np.int64)
-            classes_reshape_node = self.graph.op_with_const("Reshape", "box_outputs/reshape_classes", nms_outputs[3], classes_reshape_shape)
+            classes_reshape_shape = np.asarray(
+                [self.second_NMS_max_proposals * self.batch_size], dtype=np.int64
+            )
+            classes_reshape_node = self.graph.op_with_const(
+                "Reshape",
+                "box_outputs/reshape_classes",
+                nms_outputs[3],
+                classes_reshape_shape,
+            )
 
             # This loop will generate an array used in Add node, which eventually will help Gather node to pick the single
             # class of interest per bounding box, instead of creating 80 masks for every single bounding box.
             add_array = []
-            for i in range(self.second_NMS_max_proposals*self.batch_size):
+            for i in range(self.second_NMS_max_proposals * self.batch_size):
                 if i == 0:
                     start_pos = 0
                 else:
@@ -488,23 +739,59 @@ class DET2GraphSurgeon:
             # This Add node is one of the Gather node inputs, Gather node performs gather on 0th axis of data tensor
             # and requires indices that set tensors to be withing bounds, this Add node provides the bounds for Gather.
             add_array = np.asarray(add_array, dtype=np.int32)
-            classes_add_node = self.graph.op_with_const("Add", "box_outputs/add", classes_reshape_node[0], add_array)
+            classes_add_node = self.graph.op_with_const(
+                "Add", "box_outputs/add", classes_reshape_node[0], add_array
+            )
 
             # Get the last Conv op in mask head and reshape it to correctly gather class of interest's masks.
-            last_conv = self.graph.find_node_by_op_name("Conv", "/roi_heads/mask_head/predictor/Conv")
-            last_conv_reshape_shape = np.asarray([self.second_NMS_max_proposals*self.num_classes*self.batch_size, self.mask_out_res, self.mask_out_res], dtype=np.int64)
-            last_conv_reshape_node = self.graph.op_with_const("Reshape", "mask_head/reshape_all_masks", last_conv.outputs[0], last_conv_reshape_shape)
+            last_conv = self.graph.find_node_by_op_name(
+                "Conv", "/roi_heads/mask_head/predictor/Conv"
+            )
+            last_conv_reshape_shape = np.asarray(
+                [
+                    self.second_NMS_max_proposals * self.num_classes * self.batch_size,
+                    self.mask_out_res,
+                    self.mask_out_res,
+                ],
+                dtype=np.int64,
+            )
+            last_conv_reshape_node = self.graph.op_with_const(
+                "Reshape",
+                "mask_head/reshape_all_masks",
+                last_conv.outputs[0],
+                last_conv_reshape_shape,
+            )
 
             # Gather node that selects only masks belonging to detected class, 79 other masks are discarded.
-            final_gather = self.graph.gather("mask_head/final_gather", last_conv_reshape_node[0], classes_add_node[0], 0)
+            final_gather = self.graph.gather(
+                "mask_head/final_gather",
+                last_conv_reshape_node[0],
+                classes_add_node[0],
+                0,
+            )
 
             # Get last Sigmoid node and connect Gather node to it.
-            mask_head_sigmoid = self.graph.find_node_by_op_name("Sigmoid", "/roi_heads/mask_head/Sigmoid")
+            mask_head_sigmoid = self.graph.find_node_by_op_name(
+                "Sigmoid", "/roi_heads/mask_head/Sigmoid"
+            )
             mask_head_sigmoid.inputs[0] = final_gather[0]
 
             # Final Reshape node, reshapes output of Sigmoid, important for various batch_size support (not tested yet).
-            final_graph_reshape_shape = np.asarray([self.batch_size, self.second_NMS_max_proposals, self.mask_out_res, self.mask_out_res], dtype=np.int64)
-            final_graph_reshape_node = self.graph.op_with_const("Reshape", "mask_head/final_reshape", mask_head_sigmoid.outputs[0], final_graph_reshape_shape)
+            final_graph_reshape_shape = np.asarray(
+                [
+                    self.batch_size,
+                    self.second_NMS_max_proposals,
+                    self.mask_out_res,
+                    self.mask_out_res,
+                ],
+                dtype=np.int64,
+            )
+            final_graph_reshape_node = self.graph.op_with_const(
+                "Reshape",
+                "mask_head/final_reshape",
+                mask_head_sigmoid.outputs[0],
+                final_graph_reshape_shape,
+            )
             final_graph_reshape_node[0].dtype = np.float32
             final_graph_reshape_node[0].name = "detection_masks"
 
@@ -513,7 +800,9 @@ class DET2GraphSurgeon:
         # Only Detectron 2's Mask-RCNN R50-FPN 3x is supported currently.
         p2, p3, p4, p5 = backbone()
         rpn_outputs = proposal_generator(anchors, first_nms_threshold)
-        box_head_outputs, mask_head_output = roi_heads(rpn_outputs, p2, p3, p4, p5, second_nms_threshold)
+        box_head_outputs, mask_head_output = roi_heads(
+            rpn_outputs, p2, p3, p4, p5, second_nms_threshold
+        )
         # Append segmentation head output.
         box_head_outputs.append(mask_head_output)
         # Set graph outputs, both bbox and segmentation heads.
@@ -531,17 +820,55 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--exported_onnx", help="The exported to ONNX Detectron 2 Mask R-CNN", type=str)
-    parser.add_argument("-o", "--onnx", help="The output ONNX model file to write", type=str)
-    parser.add_argument("-c", "--det2_config", help="The Detectron 2 config file (.yaml) for the model", type=str)
-    parser.add_argument("-w", "--det2_weights", help="The Detectron 2 model weights (.pkl)", type=str)
-    parser.add_argument("-s", "--sample_image", help="Sample image for anchors generation", type=str)
-    parser.add_argument("-b", "--batch_size", help="Batch size for the model", type=int, default=1)
-    parser.add_argument("-t1", "--first_nms_threshold", help="Override the score threshold for the 1st NMS operation", type=float)
-    parser.add_argument("-t2", "--second_nms_threshold", help="Override the score threshold for the 2nd NMS operation", type=float)
+    parser.add_argument(
+        "-i",
+        "--exported_onnx",
+        help="The exported to ONNX Detectron 2 Mask R-CNN",
+        type=str,
+    )
+    parser.add_argument(
+        "-o", "--onnx", help="The output ONNX model file to write", type=str
+    )
+    parser.add_argument(
+        "-c",
+        "--det2_config",
+        help="The Detectron 2 config file (.yaml) for the model",
+        type=str,
+    )
+    parser.add_argument(
+        "-w", "--det2_weights", help="The Detectron 2 model weights (.pkl)", type=str
+    )
+    parser.add_argument(
+        "-s", "--sample_image", help="Sample image for anchors generation", type=str
+    )
+    parser.add_argument(
+        "-b", "--batch_size", help="Batch size for the model", type=int, default=1
+    )
+    parser.add_argument(
+        "-t1",
+        "--first_nms_threshold",
+        help="Override the score threshold for the 1st NMS operation",
+        type=float,
+    )
+    parser.add_argument(
+        "-t2",
+        "--second_nms_threshold",
+        help="Override the score threshold for the 2nd NMS operation",
+        type=float,
+    )
     args = parser.parse_args()
-    if not all([args.exported_onnx, args.onnx, args.det2_config, args.det2_weights, args.sample_image]):
+    if not all(
+        [
+            args.exported_onnx,
+            args.onnx,
+            args.det2_config,
+            args.det2_weights,
+            args.sample_image,
+        ]
+    ):
         parser.print_help()
-        print("\nThese arguments are required: --exported_onnx --onnx --det2_config --det2_weights and --sample_image")
+        print(
+            "\nThese arguments are required: --exported_onnx --onnx --det2_config --det2_weights and --sample_image"
+        )
         sys.exit(1)
     main(args)

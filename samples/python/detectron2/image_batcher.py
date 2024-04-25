@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,15 +24,26 @@ try:
     from detectron2.config import get_cfg
 except ImportError:
     print("Could not import Detectron 2 modules. Maybe you did not install Detectron 2")
-    print("Please install Detectron 2, check https://github.com/facebookresearch/detectron2/blob/main/INSTALL.md")
+    print(
+        "Please install Detectron 2, check https://github.com/facebookresearch/detectron2/blob/main/INSTALL.md"
+    )
     sys.exit(1)
+
 
 class ImageBatcher:
     """
     Creates batches of pre-processed images.
     """
 
-    def __init__(self, input, shape, dtype, max_num_images=None, exact_batches=False, config_file=None):
+    def __init__(
+        self,
+        input,
+        shape,
+        dtype,
+        max_num_images=None,
+        exact_batches=False,
+        config_file=None,
+    ):
         """
         :param input: The input directory to read images from.
         :param shape: The tensor shape of the batch to prepare, either in NCHW or NHWC format.
@@ -68,10 +79,16 @@ class ImageBatcher:
         extensions = [".jpg", ".jpeg", ".png", ".bmp", ".ppm"]
 
         def is_image(path):
-            return os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            return (
+                os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            )
 
         if os.path.isdir(input):
-            self.images = [os.path.join(input, f) for f in os.listdir(input) if is_image(os.path.join(input, f))]
+            self.images = [
+                os.path.join(input, f)
+                for f in os.listdir(input)
+                if is_image(os.path.join(input, f))
+            ]
             self.images.sort()
         elif os.path.isfile(input):
             if is_image(input):
@@ -108,7 +125,7 @@ class ImageBatcher:
         if self.num_images < 1:
             print("Not enough images to create batches")
             sys.exit(1)
-        self.images = self.images[0:self.num_images]
+        self.images = self.images[0 : self.num_images]
 
         # Subdivide the list of images into batches.
         self.num_batches = 1 + int((self.num_images - 1) / self.batch_size)
@@ -121,7 +138,6 @@ class ImageBatcher:
         # Indices.
         self.image_index = 0
         self.batch_index = 0
-
 
     def preprocess_image(self, image_path):
         """
@@ -165,7 +181,7 @@ class ImageBatcher:
             newh = int(newh + 0.5)
 
             # Scaling factor for normalized box coordinates scaling in post-processing.
-            scaling = max(newh/height, neww/width)
+            scaling = max(newh / height, neww / width)
 
             # Padding.
             image = image.resize((neww, newh), resample=Image.BILINEAR)
@@ -176,7 +192,7 @@ class ImageBatcher:
 
         scale = None
         image = Image.open(image_path)
-        image = image.convert(mode='RGB')
+        image = image.convert(mode="RGB")
         # Pad with mean values of COCO dataset, since padding is applied before actual model's
         # preprocessor steps (Sub, Div ops), we need to pad with mean values in order to reverse
         # the effects of Sub and Div, so that padding after model's preprocessor will be with actual 0s.
@@ -185,7 +201,7 @@ class ImageBatcher:
         # Change HWC -> CHW.
         image = np.transpose(image, (2, 0, 1))
         # Change RGB -> BGR.
-        return image[[2,1,0]], scale
+        return image[[2, 1, 0]], scale
 
     def get_batch(self):
         """

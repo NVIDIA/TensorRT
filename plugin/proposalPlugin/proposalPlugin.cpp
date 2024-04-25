@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -514,7 +514,7 @@ void ProposalPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_VALIDATE(libNamespace == nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -527,7 +527,7 @@ void ProposalDynamicPlugin::setPluginNamespace(char const* libNamespace) noexcep
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
+        PLUGIN_VALIDATE(libNamespace == nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)

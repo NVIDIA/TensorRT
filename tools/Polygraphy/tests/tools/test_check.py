@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -76,18 +76,24 @@ class TestLint:
     def eval_per_entry(self, lint_entries, lambda_check):
         return list(map(lambda_check, lint_entries))
 
-    @pytest.mark.parametrize("case", TEST_LINT_CASES["test_summary"], ids=lambda case: case[0])
+    @pytest.mark.parametrize(
+        "case", TEST_LINT_CASES["test_summary"], ids=lambda case: case[0]
+    )
     @pytest.mark.script_launch_mode("subprocess")
     def test_summary(self, case, poly_check):
         """
         Basic test to check that nodes are correctly classified as passing or failing
         """
         model_name, expected_passing, expected_failing = case
-        output_json, status = self.run_lint_get_json(poly_check, ONNX_MODELS[model_name].path)
+        output_json, status = self.run_lint_get_json(
+            poly_check, ONNX_MODELS[model_name].path
+        )
         passing = sorted(output_json["summary"].get("passing", []))
         assert expected_passing == passing  # check that the valid nodes are as expected
         failing = sorted(output_json["summary"].get("failing", []))
-        assert expected_failing == failing  # check that the invalid nodes are as expected
+        assert (
+            expected_failing == failing
+        )  # check that the invalid nodes are as expected
 
     @pytest.mark.script_launch_mode("subprocess")
     def test_duplicate_node_names_caught(self, poly_check):
@@ -95,7 +101,9 @@ class TestLint:
         Test that duplicate node names are marked as exception
         """
         output_json, _ = self.run_lint_get_json(
-            poly_check, ONNX_MODELS["bad_graph_with_duplicate_node_names"].path, expect_error=True
+            poly_check,
+            ONNX_MODELS["bad_graph_with_duplicate_node_names"].path,
+            expect_error=True,
         )
 
         lint_entry = output_json["lint_entries"][0]
@@ -108,13 +116,17 @@ class TestLint:
         assert lint_entry == expected_entry
         assert "identical" in output_json["summary"]["failing"]
 
-    @pytest.mark.parametrize("model_name", TEST_LINT_CASES["test_onnx_spec_check"], ids=lambda m: m)
+    @pytest.mark.parametrize(
+        "model_name", TEST_LINT_CASES["test_onnx_spec_check"], ids=lambda m: m
+    )
     @pytest.mark.script_launch_mode("subprocess")
     def test_onnx_spec_check(self, model_name, poly_check):
         """
         Test that basic onnx specification errors are caught by the lint command from the ONNX Checker
         """
-        output_json, _ = self.run_lint_get_json(poly_check, ONNX_MODELS[model_name].path, expect_error=True)
+        output_json, _ = self.run_lint_get_json(
+            poly_check, ONNX_MODELS[model_name].path, expect_error=True
+        )
 
         assert any(  # Make sure that there is atleast 1 entry with level exception and source onnx_checker
             self.eval_per_entry(
@@ -152,7 +164,9 @@ class TestLint:
         }
 
         try:  # try to run the model using onnxrt, may fail.
-            status = poly_run([model_path, "--onnxrt", *extra_args_dict.get(model_name, [])])
+            status = poly_run(
+                [model_path, "--onnxrt", *extra_args_dict.get(model_name, [])]
+            )
             poly_run_exception = "FAILED" in status.stdout
         except Exception as e:
             poly_run_exception = True
@@ -219,7 +233,9 @@ class TestLint:
 
         # Check correct summary
         assert sorted(expected_valid_nodes) == sorted(output_json["summary"]["passing"])
-        assert sorted(expected_invalid_dict.keys()) == sorted(output_json["summary"]["failing"])
+        assert sorted(expected_invalid_dict.keys()) == sorted(
+            output_json["summary"]["failing"]
+        )
 
     @pytest.mark.parametrize(
         "input_bool",
@@ -270,8 +286,12 @@ class TestLint:
         }
 
         # Check that the output is as expected.
-        assert sorted(validation_dict[input_bool]["passing"]) == sorted(output_json["summary"]["passing"])
-        assert sorted(validation_dict[input_bool]["failing"]) == sorted(output_json["summary"].get("failing", []))
+        assert sorted(validation_dict[input_bool]["passing"]) == sorted(
+            output_json["summary"]["passing"]
+        )
+        assert sorted(validation_dict[input_bool]["failing"]) == sorted(
+            output_json["summary"].get("failing", [])
+        )
 
         if validation_dict[input_bool]["failing"]:  # when input_bool = False
             expected_entry = {
@@ -296,7 +316,12 @@ class TestLint:
             expect_error=False,
         )
         condition = (
-            lambda entry: any([substr in entry["message"] for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS])
+            lambda entry: any(
+                [
+                    substr in entry["message"]
+                    for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS
+                ]
+            )
             and entry["source"] == Lint.Source.ONNXRUNTIME.value
             and entry["level"] == Lint.Level.WARNING.value
         )
@@ -323,7 +348,8 @@ class TestLint:
 
         # condition for onnx checker entry
         condition_onnx_checker = (
-            lambda entry: "Field 'name' of 'graph' is required to be non-empty." in entry["message"]
+            lambda entry: "Field 'name' of 'graph' is required to be non-empty."
+            in entry["message"]
             and entry["source"] == Lint.Source.ONNX_CHECKER.value
             and entry["level"] == Lint.Level.EXCEPTION.value
         )
@@ -337,8 +363,12 @@ class TestLint:
 
         # checks
         assert len(lint_entries) >= 2  # there should be atleast two lint entries
-        assert any(self.eval_per_entry(lint_entries, condition_onnx_checker))  # condition for onnx checker entry
-        assert any(self.eval_per_entry(lint_entries, condition_onnxruntime))  # condition for onnxruntime entry
+        assert any(
+            self.eval_per_entry(lint_entries, condition_onnx_checker)
+        )  # condition for onnx checker entry
+        assert any(
+            self.eval_per_entry(lint_entries, condition_onnxruntime)
+        )  # condition for onnxruntime entry
 
     @pytest.mark.script_launch_mode("subprocess")
     def test_invalid_model_error(self, poly_check):
@@ -359,13 +389,16 @@ class TestLint:
 
         # condition for onnx_loader entry for invalid model
         condition = (
-            lambda entry: "Error parsing message with type 'onnx.ModelProto'" in entry["message"]
+            lambda entry: "Error parsing message with type 'onnx.ModelProto'"
+            in entry["message"]
             and entry["source"] == Lint.Source.ONNX_LOADER.value
             and entry["level"] == Lint.Level.EXCEPTION.value
         )
 
         assert len(lint_entries) == 1  # there should be only one lint entry
-        assert condition(lint_entries[0])  # condition for onnx_loader entry for invalid model
+        assert condition(
+            lint_entries[0]
+        )  # condition for onnx_loader entry for invalid model
 
     @pytest.mark.script_launch_mode("subprocess")
     def test_empty_model_warning(self, poly_check):
@@ -377,7 +410,9 @@ class TestLint:
         empty_model_name = "empty"
 
         # Test with empty model
-        output_json, _ = self.run_lint_get_json(poly_check, ONNX_MODELS[empty_model_name].path, expect_error=False)
+        output_json, _ = self.run_lint_get_json(
+            poly_check, ONNX_MODELS[empty_model_name].path, expect_error=False
+        )
         lint_entries = output_json["lint_entries"]
 
         # condition for onnx_loader entry for empty model
@@ -411,7 +446,8 @@ class TestLint:
             and entry["nodes"] == ["G"]
         )
         inp_check = (
-            lambda entry: "Input: 'e' does not affect outputs, can be removed" in entry["message"]
+            lambda entry: "Input: 'e' does not affect outputs, can be removed"
+            in entry["message"]
             and entry["source"] == Lint.Source.ONNX_GS.value
             and entry["level"] == Lint.Level.WARNING.value
         )
@@ -425,7 +461,9 @@ class TestLint:
         """
         Tests that empty nodes are *gauranteed* a unique name while renaming.
         """
-        output_json, _ = self.run_lint_get_json(poly_check, ONNX_MODELS["renamable"].path, expect_error=False)
+        output_json, _ = self.run_lint_get_json(
+            poly_check, ONNX_MODELS["renamable"].path, expect_error=False
+        )
         names = output_json["summary"]["passing"]
         expected_names = [
             "polygraphy_unnamed_node_0_0",

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,9 @@ class LazyArray:
         """
         self.arr = None
         self.tmpfile = None
-        if config.ARRAY_SWAP_THRESHOLD_MB >= 0 and util.array.nbytes(arr) > (config.ARRAY_SWAP_THRESHOLD_MB << 20):
+        if config.ARRAY_SWAP_THRESHOLD_MB >= 0 and util.array.nbytes(arr) > (
+            config.ARRAY_SWAP_THRESHOLD_MB << 20
+        ):
             self.tmpfile = util.NamedTemporaryFile(suffix=".json")
             G_LOGGER.extra_verbose(
                 f"Evicting large array ({util.array.nbytes(arr) / 1024.0 ** 2:.3f} MiB) from memory and saving to {self.tmpfile.name}"
@@ -57,7 +59,9 @@ class LazyArray:
             return self.arr
 
         if self.tmpfile is None:
-            G_LOGGER.internal_error(f"self.arr is None but self.tmpfile is also None; this should be impossible.")
+            G_LOGGER.internal_error(
+                f"self.arr is None but self.tmpfile is also None; this should be impossible."
+            )
         return load_json(self.tmpfile.name)
 
 
@@ -176,7 +180,9 @@ def encode(iter_result):
 
 @Decoder.register(IterationResult)
 def decode(dct):
-    return IterationResult(outputs=dct["outputs"], runtime=dct["runtime"], runner_name=dct["runner_name"])
+    return IterationResult(
+        outputs=dct["outputs"], runtime=dct["runtime"], runner_name=dct["runner_name"]
+    )
 
 
 @mod.export()
@@ -352,7 +358,14 @@ class AccuracyResult(TypedDict(lambda: tuple, lambda: list)):
         Returns:
             bool
         """
-        return all([bool(match) for outs in self.values() for out in outs for match in out.values()])
+        return all(
+            [
+                bool(match)
+                for outs in self.values()
+                for out in outs
+                for match in out.values()
+            ]
+        )
 
     def _get_runner_pair(self, runner_pair):
         return util.default(runner_pair, list(self.keys())[0])

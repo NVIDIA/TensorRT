@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,15 +56,18 @@ class OnnxrtSessionArgs(BaseArgs):
         self.providers = args_util.get(args, "providers")
 
     def add_to_script_impl(self, script, onnx_name=None):
-        if onnx_name is None: # default behavior according to self.arg_groups
+        if onnx_name is None:  # default behavior according to self.arg_groups
             if self.arg_groups[OnnxLoadArgs].must_use_onnx_loader():
-                onnx_name = self.arg_groups[OnnxLoadArgs].add_to_script(script, serialize_model=True)
+                onnx_name = self.arg_groups[OnnxLoadArgs].add_to_script(
+                    script, serialize_model=True
+                )
             else:
                 onnx_name = self.arg_groups[ModelArgs].path
 
         script.add_import(imports=["SessionFromOnnx"], frm="polygraphy.backend.onnxrt")
         loader_name = script.add_loader(
-            make_invocable("SessionFromOnnx", onnx_name, providers=self.providers), "build_onnxrt_session"
+            make_invocable("SessionFromOnnx", onnx_name, providers=self.providers),
+            "build_onnxrt_session",
         )
         return loader_name
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,7 +73,13 @@ def find_str_in_iterable(name, seq, index=None):
 
 @mod.export()
 def check_sequence_contains(
-    sequence, items, name=None, items_name=None, log_func=None, check_missing=None, check_extra=None
+    sequence,
+    items,
+    name=None,
+    items_name=None,
+    log_func=None,
+    check_missing=None,
+    check_extra=None,
 ):
     """
     Checks that a sequence contains the provided items and also
@@ -248,7 +254,10 @@ def default(value, default):
 @mod.export()
 def is_sequence(obj):
     return (
-        hasattr(obj, "__iter__") and not isinstance(obj, dict) and not isinstance(obj, set) and not isinstance(obj, str)
+        hasattr(obj, "__iter__")
+        and not isinstance(obj, dict)
+        and not isinstance(obj, set)
+        and not isinstance(obj, str)
     )
 
 
@@ -294,7 +303,9 @@ class NamedTemporaryFile:
         suffix = default(suffix, "")
 
         def rand_path():
-            return os.path.join(tempfile.gettempdir(), f"{prefix}{os.urandom(24).hex()}{suffix}")
+            return os.path.join(
+                tempfile.gettempdir(), f"{prefix}{os.urandom(24).hex()}{suffix}"
+            )
 
         # In the unlikely event the path exists, generate a new one. Only try 100 times so
         # we don't end up in an infinite loop.
@@ -304,7 +315,9 @@ class NamedTemporaryFile:
                 break
             path = rand_path()
         else:
-            G_LOGGER.critical(f"Could not create a temporary file under: {tempfile.gettempdir()}")
+            G_LOGGER.critical(
+                f"Could not create a temporary file under: {tempfile.gettempdir()}"
+            )
 
         self.name = path  # Use 'name' to be compatible with tempfile.NamedTemporaryFile
         open(self.name, "x").close()  # `touch` the file
@@ -363,7 +376,11 @@ class LockFile:
             locked = False
             while not locked:
                 try:
-                    msvcrt.locking(self._fhandle.fileno(), msvcrt.LK_RLCK, get_file_size(self._fhandle))
+                    msvcrt.locking(
+                        self._fhandle.fileno(),
+                        msvcrt.LK_RLCK,
+                        get_file_size(self._fhandle),
+                    )
                 except OSError:
                     locked = False
                 else:
@@ -379,7 +396,9 @@ class LockFile:
             return
 
         if sys.platform.startswith("win"):
-            msvcrt.locking(self._fhandle.fileno(), msvcrt.LK_UNLCK, get_file_size(self._fhandle))
+            msvcrt.locking(
+                self._fhandle.fileno(), msvcrt.LK_UNLCK, get_file_size(self._fhandle)
+            )
         else:
             fcntl.lockf(self._fhandle.fileno(), fcntl.LOCK_UN)
 
@@ -634,7 +653,9 @@ def try_send_on_queue(queue, obj):
     try:
         send_on_queue(queue, obj)
     except Exception as err:
-        G_LOGGER.warning(f"Could not send object on queue: {err}\nSending None instead.")
+        G_LOGGER.warning(
+            f"Could not send object on queue: {err}\nSending None instead."
+        )
         queue.put(None)
 
 
@@ -697,7 +718,9 @@ def check_called_by(expected_caller_name):
             # Skip checks if we're calling these functions internally
             module = inspect.getmodule(sys._getframe(1))
             called_from_polygraphy = (
-                module is not None and module.__name__ and module.__name__.split(".")[0] == "polygraphy"
+                module is not None
+                and module.__name__
+                and module.__name__.split(".")[0] == "polygraphy"
             )
 
             if not called_from_polygraphy:
@@ -736,14 +759,21 @@ def is_shape_dynamic(shape):
 @mod.export()
 def is_valid_shape_override(new_shape, original_shape):
     ranks_same = len(original_shape) == len(new_shape)
-    overrides_valid = all([odim == ndim or is_dimension_dynamic(odim) for odim, ndim in zip(original_shape, new_shape)])
+    overrides_valid = all(
+        [
+            odim == ndim or is_dimension_dynamic(odim)
+            for odim, ndim in zip(original_shape, new_shape)
+        ]
+    )
     return ranks_same and overrides_valid
 
 
 @mod.export()
 def override_dynamic_shape(shape, default_shape_value=None):
     default_shape_value = default(default_shape_value, constants.DEFAULT_SHAPE_VALUE)
-    return [default_shape_value if is_dimension_dynamic(elem) else elem for elem in shape]
+    return [
+        default_shape_value if is_dimension_dynamic(elem) else elem for elem in shape
+    ]
 
 
 @mod.export()
@@ -788,19 +818,25 @@ def try_match_shape(arr, shape):
             )
         else:
             if array_util.shape(arr) != original_shape:
-                G_LOGGER.info(f"Reshaped array from shape: {original_shape} to: {array_util.shape(arr)}")
+                G_LOGGER.info(
+                    f"Reshaped array from shape: {original_shape} to: {array_util.shape(arr)}"
+                )
         return arr
 
     def try_permute(arr, shape):
         original_shape = array_util.shape(arr)
 
         if sorted(array_util.shape(arr)) != sorted(shape):
-            G_LOGGER.extra_verbose(f"Array of shape: {array_util.shape(arr)} cannot be permuted to: {shape}")
+            G_LOGGER.extra_verbose(
+                f"Array of shape: {array_util.shape(arr)} cannot be permuted to: {shape}"
+            )
             return arr
 
         # We need to remove axes from the original shape as we use them to avoid
         # duplication in the permutation.
-        arr_shape_indices = {index: dimlen for index, dimlen in enumerate(array_util.shape(arr))}
+        arr_shape_indices = {
+            index: dimlen for index, dimlen in enumerate(array_util.shape(arr))
+        }
 
         # Find which axis in array_util.shape(arr) corresponds to the specified size. Never returns duplicates.
         def find_axis(dimlen):
@@ -830,7 +866,9 @@ def try_match_shape(arr, shape):
                 determined_dim = volume(array_util.shape(arr)) // volume(static_dims)
             except ZeroDivisionError:
                 determined_dim = 0
-            shape = [determined_dim if is_dimension_dynamic(elem) else elem for elem in shape]
+            shape = [
+                determined_dim if is_dimension_dynamic(elem) else elem for elem in shape
+            ]
         elif is_rank_same(arr, shape):
             shape = [
                 arr_shape_elem if is_dimension_dynamic(elem) else elem
@@ -860,7 +898,9 @@ def try_match_shape(arr, shape):
 
 
 @mod.export()
-def str_from_layer(prefix, index, name, op, input_names, input_meta, output_names, output_meta):
+def str_from_layer(
+    prefix, index, name, op, input_names, input_meta, output_names, output_meta
+):
     def tensor_names_to_string(tensor_names, meta):
         sep = ",\n "
         elems = [f"{name} {meta[name]}".strip() for name in tensor_names]
