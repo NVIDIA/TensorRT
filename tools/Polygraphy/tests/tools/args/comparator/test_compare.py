@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,17 +20,24 @@ import numpy as np
 import pytest
 from polygraphy.comparator import IterationResult
 from polygraphy.exception import PolygraphyException
-from polygraphy.tools.args import ComparatorCompareArgs, CompareFuncIndicesArgs, CompareFuncSimpleArgs
+from polygraphy.tools.args import (
+    ComparatorCompareArgs,
+    CompareFuncIndicesArgs,
+    CompareFuncSimpleArgs,
+)
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.script import Script
 from tests.tools.args.helper import ArgGroupTestHelper
 
 
 class TestCompareFuncSimple:
-    @pytest.mark.parametrize("check_error_stat", ["max", "median", "mean", "elemwise", "quantile"])
+    @pytest.mark.parametrize(
+        "check_error_stat", ["max", "median", "mean", "elemwise", "quantile"]
+    )
     def test_error_stat(self, check_error_stat):
         arg_group = ArgGroupTestHelper(
-            CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+            CompareFuncSimpleArgs(),
+            deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()],
         )
         arg_group.parse_args([f"--check-error-stat={check_error_stat}"])
 
@@ -39,13 +46,20 @@ class TestCompareFuncSimple:
     @pytest.mark.parametrize(
         "args, expected",
         [
-            (["mean", "output0:median", "output1:max"], {"": "mean", "output0": "median", "output1": "max"}),
-            (["output0:median", "output1:elemwise"], {"output0": "median", "output1": "elemwise"}),
+            (
+                ["mean", "output0:median", "output1:max"],
+                {"": "mean", "output0": "median", "output1": "max"},
+            ),
+            (
+                ["output0:median", "output1:elemwise"],
+                {"output0": "median", "output1": "elemwise"},
+            ),
         ],
     )
     def test_error_stat_per_output(self, args, expected):
         arg_group = ArgGroupTestHelper(
-            CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+            CompareFuncSimpleArgs(),
+            deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()],
         )
         arg_group.parse_args(["--check-error-stat"] + args)
 
@@ -61,14 +75,16 @@ class TestCompareFuncSimple:
     def test_invalid_error_stat(self, args):
         with pytest.raises(PolygraphyException, match="Invalid choice"):
             arg_group = ArgGroupTestHelper(
-                CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+                CompareFuncSimpleArgs(),
+                deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()],
             )
             arg_group.parse_args(["--check-error-stat"] + args)
 
     @pytest.mark.parametrize("val", (np.inf, -np.inf))
     def test_infinities_compare_equal(self, val):
         arg_group = ArgGroupTestHelper(
-            CompareFuncSimpleArgs(), deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()]
+            CompareFuncSimpleArgs(),
+            deps=[ComparatorCompareArgs(), CompareFuncIndicesArgs()],
         )
         arg_group.parse_args([f"--infinities-compare-equal"])
 
@@ -85,7 +101,8 @@ class TestCompareFuncIndices:
     def test_always_adds_to_script(self):
         # Indices is not the default comparison func, so it should always add itself to the script.
         arg_group = ArgGroupTestHelper(
-            CompareFuncIndicesArgs(), deps=[ComparatorCompareArgs(), CompareFuncSimpleArgs()]
+            CompareFuncIndicesArgs(),
+            deps=[ComparatorCompareArgs(), CompareFuncSimpleArgs()],
         )
         arg_group.parse_args([])
 
@@ -104,7 +121,8 @@ class TestDefaultNone:
         other_group_types = set(TestDefaultNone.ARG_GROUP_TYPES)
         other_group_types.remove(arg_group_type)
         arg_group = ArgGroupTestHelper(
-            arg_group_type(), deps=[ComparatorCompareArgs()] + [g() for g in other_group_types]
+            arg_group_type(),
+            deps=[ComparatorCompareArgs()] + [g() for g in other_group_types],
         )
         assert len(arg_group.arg_group.group._group_actions) > 0
         for action in arg_group.arg_group.group._group_actions:

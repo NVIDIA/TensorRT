@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -87,7 +87,9 @@ def generate_summary(model_file, runners, load_results):
         summary += join_list(runners) + "."
 
     if load_results:
-        summary += f"\nIt will check against outputs stored in {join_list(load_results)}\n"
+        summary += (
+            f"\nIt will check against outputs stored in {join_list(load_results)}\n"
+        )
 
     return summary
 
@@ -163,7 +165,9 @@ class Run(Tool):
                     get_arg_groups_func = plugin.load()
                     plugin_arg_groups = get_arg_groups_func()
                 except Exception as err:
-                    G_LOGGER.warning(f"Failed to load plugin: {plugin.name}.\nNote: Error was:\n{err}")
+                    G_LOGGER.warning(
+                        f"Failed to load plugin: {plugin.name}.\nNote: Error was:\n{err}"
+                    )
                 else:
                     deps.extend(plugin_arg_groups)
                     self.loaded_plugins.append(plugin.name)
@@ -187,7 +191,10 @@ class Run(Tool):
     def run_impl(self, args):
         G_LOGGER.verbose(f"Loaded extension modules: {self.loaded_plugins}")
 
-        if self.arg_groups[ModelArgs].path is None and self.arg_groups[RunnerSelectArgs].runners:
+        if (
+            self.arg_groups[ModelArgs].path is None
+            and self.arg_groups[RunnerSelectArgs].runners
+        ):
             G_LOGGER.critical(
                 "One or more runners was specified, but no model file was provided. Make sure you've specified the model path, "
                 "and also that it's not being consumed as an argument for another parameter"
@@ -206,7 +213,9 @@ class Run(Tool):
         self.arg_groups[RunnerSelectArgs].add_to_script(script)
 
         RESULTS_VAR_NAME = self.arg_groups[ComparatorRunArgs].add_to_script(script)
-        SUCCESS_VAR_NAME = self.arg_groups[ComparatorCompareArgs].add_to_script(script, results_name=RESULTS_VAR_NAME)
+        SUCCESS_VAR_NAME = self.arg_groups[ComparatorCompareArgs].add_to_script(
+            script, results_name=RESULTS_VAR_NAME
+        )
 
         script.add_import(imports=["PolygraphyException"], frm="polygraphy.exception")
         exit_status = safe(

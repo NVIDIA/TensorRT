@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,7 +53,9 @@ def trt_runner_args():
 class TestTrtRunnerArgs:
     @pytest.mark.parametrize("index", range(0, 3))
     def test_optimization_profile(self, trt_runner_args, index):
-        trt_runner_args.parse_args([ONNX_MODELS["identity"].path, f"--optimization-profile={index}"])
+        trt_runner_args.parse_args(
+            [ONNX_MODELS["identity"].path, f"--optimization-profile={index}"]
+        )
 
         assert trt_runner_args.optimization_profile == index
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,9 +61,13 @@ class PluginRefRunner(BaseRunner):
         intermediate_tensors = copy.copy(feed_dict)
         for node in self.graph.nodes:
             if node.op not in OP_REGISTRY:
-                G_LOGGER.critical(f"Op: {node.op} does not have a reference implementation registered!")
+                G_LOGGER.critical(
+                    f"Op: {node.op} does not have a reference implementation registered!"
+                )
 
-            intermediate_tensors.update(OP_REGISTRY[node.op](node, intermediate_tensors))
+            intermediate_tensors.update(
+                OP_REGISTRY[node.op](node, intermediate_tensors)
+            )
 
         outputs = OrderedDict()
         for out in self.graph.outputs:

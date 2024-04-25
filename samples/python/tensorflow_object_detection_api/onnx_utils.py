@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger("SSDHelper").setLevel(logging.INFO)
 log = logging.getLogger("SSDHelper")
 
+
 @gs.Graph.register()
 def op_with_const(self, op, name, input, value):
     """
@@ -35,7 +36,10 @@ def op_with_const(self, op, name, input, value):
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created {} node '{}': {}".format(op, name, value.squeeze()))
     const = gs.Constant(name="{}_value:0".format(name), values=value)
-    return self.layer(name=name, op=op, inputs=[input_tensor, const], outputs=[name + ":0"])
+    return self.layer(
+        name=name, op=op, inputs=[input_tensor, const], outputs=[name + ":0"]
+    )
+
 
 @gs.Graph.register()
 def matmul(self, name, input, value):
@@ -48,7 +52,10 @@ def matmul(self, name, input, value):
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created {} node '{}': {}".format("MatMul", name, value.squeeze()))
     const = gs.Constant(name="{}_value:0".format(name), values=value)
-    return self.layer(name=name, op="MatMul", inputs=[input_tensor, const], outputs=[name + ":0"])
+    return self.layer(
+        name=name, op="MatMul", inputs=[input_tensor, const], outputs=[name + ":0"]
+    )
+
 
 @gs.Graph.register()
 def clip(self, name, input, clip_min, clip_max):
@@ -61,9 +68,19 @@ def clip(self, name, input, clip_min, clip_max):
     """
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created {} node '{}".format("Clip", name))
-    const_min = gs.Constant(name="{}_value:0".format(name), values=np.asarray([clip_min], dtype=np.float32))
-    const_max = gs.Constant(name="{}_value:1".format(name), values=np.asarray([clip_max], dtype=np.float32))
-    return self.layer(name=name, op="Clip", inputs=[input_tensor, const_min, const_max], outputs=[name + ":0"])
+    const_min = gs.Constant(
+        name="{}_value:0".format(name), values=np.asarray([clip_min], dtype=np.float32)
+    )
+    const_max = gs.Constant(
+        name="{}_value:1".format(name), values=np.asarray([clip_max], dtype=np.float32)
+    )
+    return self.layer(
+        name=name,
+        op="Clip",
+        inputs=[input_tensor, const_min, const_max],
+        outputs=[name + ":0"],
+    )
+
 
 @gs.Graph.register()
 def slice(self, name, input, starts, ends, axes):
@@ -79,10 +96,22 @@ def slice(self, name, input, starts, ends, axes):
 
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created {} node '{}".format("Slice", name))
-    const_start = gs.Constant(name="{}_value:0".format(name), values=np.asarray([starts], dtype=np.int64))
-    const_end = gs.Constant(name="{}_value:1".format(name), values=np.asarray([ends], dtype=np.int64))
-    const_axes = gs.Constant(name="{}_value:2".format(name), values=np.asarray([axes], dtype=np.int64))
-    return self.layer(name=name, op="Slice", inputs=[input_tensor, const_start, const_end, const_axes], outputs=[name + ":0"])
+    const_start = gs.Constant(
+        name="{}_value:0".format(name), values=np.asarray([starts], dtype=np.int64)
+    )
+    const_end = gs.Constant(
+        name="{}_value:1".format(name), values=np.asarray([ends], dtype=np.int64)
+    )
+    const_axes = gs.Constant(
+        name="{}_value:2".format(name), values=np.asarray([axes], dtype=np.int64)
+    )
+    return self.layer(
+        name=name,
+        op="Slice",
+        inputs=[input_tensor, const_start, const_end, const_axes],
+        outputs=[name + ":0"],
+    )
+
 
 @gs.Graph.register()
 def unsqueeze(self, name, input, axes=[3]):
@@ -96,7 +125,14 @@ def unsqueeze(self, name, input, axes=[3]):
     """
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created Unsqueeze node '{}': {}".format(name, axes))
-    return self.layer(name=name, op="Unsqueeze", inputs=[input_tensor], outputs=[name + ":0"], attrs={'axes': axes})
+    return self.layer(
+        name=name,
+        op="Unsqueeze",
+        inputs=[input_tensor],
+        outputs=[name + ":0"],
+        attrs={"axes": axes},
+    )
+
 
 @gs.Graph.register()
 def squeeze(self, name, input, axes=[2]):
@@ -110,7 +146,14 @@ def squeeze(self, name, input, axes=[2]):
     """
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created Squeeze node '{}': {}".format(name, axes))
-    return self.layer(name=name, op="Squeeze", inputs=[input_tensor], outputs=[name + ":0"], attrs={'axes': axes})
+    return self.layer(
+        name=name,
+        op="Squeeze",
+        inputs=[input_tensor],
+        outputs=[name + ":0"],
+        attrs={"axes": axes},
+    )
+
 
 @gs.Graph.register()
 def transpose(self, name, input, perm):
@@ -124,7 +167,14 @@ def transpose(self, name, input, perm):
     """
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created Transpose node '{}': {}".format(name, perm))
-    return self.layer(name=name, op="Transpose", inputs=[input_tensor], outputs=[name + ":0"], attrs={'perm': perm})
+    return self.layer(
+        name=name,
+        op="Transpose",
+        inputs=[input_tensor],
+        outputs=[name + ":0"],
+        attrs={"perm": perm},
+    )
+
 
 @gs.Graph.register()
 def sigmoid(self, name, input):
@@ -137,7 +187,10 @@ def sigmoid(self, name, input):
     """
     input_tensor = input if type(input) is gs.Variable else input[0]
     log.debug("Created Sigmoid node '{}'".format(name))
-    return self.layer(name=name, op="Sigmoid", inputs=[input_tensor], outputs=[name + ":0"])
+    return self.layer(
+        name=name, op="Sigmoid", inputs=[input_tensor], outputs=[name + ":0"]
+    )
+
 
 @gs.Graph.register()
 def plugin(self, op, name, inputs, outputs, attrs):
@@ -154,7 +207,10 @@ def plugin(self, op, name, inputs, outputs, attrs):
     """
     input_tensors = inputs if type(inputs) is list else [inputs]
     log.debug("Created TRT Plugin node '{}': {}".format(name, attrs))
-    return self.layer(op=op, name=name, inputs=input_tensors, outputs=outputs, attrs=attrs)
+    return self.layer(
+        op=op, name=name, inputs=input_tensors, outputs=outputs, attrs=attrs
+    )
+
 
 @gs.Graph.register()
 def find_node_by_op(self, op):
@@ -168,6 +224,7 @@ def find_node_by_op(self, op):
         if node.op == op:
             return node
     return None
+
 
 @gs.Graph.register()
 def find_descendant_by_op(self, node, op, depth=10):

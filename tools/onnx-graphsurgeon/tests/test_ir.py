@@ -33,13 +33,16 @@ G_LOGGER.severity = G_LOGGER.ULTRA_VERBOSE
 
 class TensorBaseTests(object):
     def test_can_convert_in_place_to_constant(self):
-        tensor = self.tensor.to_constant(values=np.ones((1, 3, 5, 5), dtype=np.float64))
+        tensor = self.tensor.to_constant(
+            values=np.ones((1, 3, 5, 5), dtype=np.float64), export_dtype=onnx.TensorProto.BFLOAT16
+        )
         assert tensor is self.tensor
         assert isinstance(tensor, Constant)
         assert isinstance(self.input_node.outputs[0], Constant)
         assert isinstance(self.output_node.inputs[0], Constant)
         assert tensor.shape == (1, 3, 5, 5)
         assert tensor.dtype == np.float64
+        assert tensor.export_dtype == onnx.TensorProto.BFLOAT16
         assert np.all(self.input_node.outputs[0].values == tensor.values)
         assert np.all(self.output_node.inputs[0].values == tensor.values)
 
@@ -136,7 +139,7 @@ class TestVariable(TensorBaseTests):
 class TestConstant(TensorBaseTests):
     def setup_method(self):
         self.tensor = Constant(
-            name="test_tensor", values=np.ones((1, 3, 5, 5), dtype=np.float64)
+            name="test_tensor", values=np.ones((1, 3, 5, 5), dtype=np.float64), export_dtype=onnx.TensorProto.BFLOAT16
         )
         self.input_node = Node(
             op="Add", outputs=[self.tensor]
@@ -148,6 +151,9 @@ class TestConstant(TensorBaseTests):
 
     def test_can_get_dtype(self):
         assert self.tensor.dtype == np.float64
+
+    def test_can_get_export_dtype(self):
+        assert self.tensor.export_dtype == onnx.TensorProto.BFLOAT16
 
 
 @pytest.fixture

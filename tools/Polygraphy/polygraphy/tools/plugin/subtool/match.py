@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,7 @@ class Match(PluginBase):
     """
 
     def __init__(self):
-        super().__init__("match")
+        super().__init__(list_plugins=False, name="match")
 
     def add_parser_args_impl(self, parser):
         super().add_parser_args_impl(parser)
@@ -38,6 +38,3 @@ class Match(PluginBase):
             help="Full path where to save the intermediate file. Defaults to a file called config.yaml in the model directory.",
             required=False,
         )
-
-    def run_impl(self, args):
-        super().match_plugin(args=args, list_plugins=False)

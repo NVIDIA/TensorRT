@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@ from polygraphy import util
 from polygraphy.comparator import PostprocessFunc, IterationResult
 
 build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
+
 
 @pytest.mark.parametrize("array_type", [np.array, build_torch])
 class TestTopK:

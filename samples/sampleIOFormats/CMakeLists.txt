@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +16,11 @@
 #
 SET(SAMPLE_SOURCES
     sampleIOFormats.cpp
+    ../common/sampleDevice.cpp
+    ../common/sampleEngines.cpp
+    ../common/sampleOptions.cpp
+    ../common/sampleUtils.cpp
+    ../common/bfloat16.cpp
 )
 
 SET(SAMPLE_PARSERS "onnx")

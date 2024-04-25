@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,14 +55,14 @@ class TestMatch:
                     num_plugins += 1
                     assert plugin["name"] == "toyPlugin"
                     assert len(plugin["instances"]) == 1
-                    assert len(plugin["instances"][0]["inputs"]) == 2
+                    assert len(plugin["instances"][0]["inputs"]) == 1
                     assert len(plugin["instances"][0]["outputs"]) == 2
                     assert plugin["instances"][0]["attributes"]["ToyX"] == 2
 
                 assert num_plugins == 1
 
     @pytest.mark.script_launch_mode("subprocess")
-    def test_match_list_toy(self, poly_plugin_list_plugins):
+    def test_list_toy(self, poly_plugin_list_plugins):
         status = poly_plugin_list_plugins(
             [self.TOY_MODEL_PATH, "--plugin-dir", self.PLUGINS_PATH]
         )
@@ -103,6 +103,6 @@ class TestMatch:
 
             assert "n1" in node_names
             assert not node_names.intersection({"n2", "n3", "n4", "n5", "n6"})
-            assert model.graph.node[1].op_type == "toyPlugin"
+            assert model.graph.node[1].op_type == "CustomToyPlugin"
             assert model.graph.node[1].attribute[0].name == "ToyX"
             assert model.graph.node[1].attribute[0].i == 2

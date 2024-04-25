@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,7 +110,9 @@ class TensorRTInfer:
         output = np.zeros(*self.output_spec())
 
         # Process I/O and execute the network
-        common.memcpy_host_to_device(self.inputs[0]["allocation"], np.ascontiguousarray(batch))
+        common.memcpy_host_to_device(
+            self.inputs[0]["allocation"], np.ascontiguousarray(batch)
+        )
         self.context.execute_v2(self.allocations)
         common.memcpy_device_to_host(output, self.outputs[0]["allocation"])
 
@@ -126,7 +128,9 @@ class TensorRTInfer:
 
 def main(args):
     trt_infer = TensorRTInfer(args.engine)
-    batcher = ImageBatcher(args.input, *trt_infer.input_spec(), preprocessor=args.preprocessor)
+    batcher = ImageBatcher(
+        args.input, *trt_infer.input_spec(), preprocessor=args.preprocessor
+    )
     for batch, images in batcher.get_batch():
         classes, scores, top = trt_infer.infer(batch)
         for i in range(len(images)):
@@ -146,10 +150,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--engine", help="The TensorRT engine to infer with")
     parser.add_argument(
-        "-i", "--input", help="The input to infer, either a single image path, or a directory of images"
+        "-i",
+        "--input",
+        help="The input to infer, either a single image path, or a directory of images",
     )
     parser.add_argument(
-        "-t", "--top", default=1, type=int, help="The amount of top classes and scores to output per image, default: 1"
+        "-t",
+        "--top",
+        default=1,
+        type=int,
+        help="The amount of top classes and scores to output per image, default: 1",
     )
     parser.add_argument(
         "-s",

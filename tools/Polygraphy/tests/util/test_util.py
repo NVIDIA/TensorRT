@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,12 +49,23 @@ class FindStrInIterableCase:
 
 FIND_STR_IN_ITERABLE_CASES = [
     # Case insensitve, plus function should return element from sequence, not name.
-    FindStrInIterableCase("Softmax:0", seq=["Softmax:0"], index=None, expected="Softmax:0"),
-    FindStrInIterableCase("Softmax:0", seq=["softmax:0"], index=None, expected="softmax:0"),
+    FindStrInIterableCase(
+        "Softmax:0", seq=["Softmax:0"], index=None, expected="Softmax:0"
+    ),
+    FindStrInIterableCase(
+        "Softmax:0", seq=["softmax:0"], index=None, expected="softmax:0"
+    ),
     # Exact matches should take priority
-    FindStrInIterableCase("exact_name", seq=["exact_name_plus", "exact_name"], index=0, expected="exact_name"),
+    FindStrInIterableCase(
+        "exact_name",
+        seq=["exact_name_plus", "exact_name"],
+        index=0,
+        expected="exact_name",
+    ),
     # Index should come into play when no matches are found
-    FindStrInIterableCase("non-existent", seq=["test", "test2"], index=1, expected="test2"),
+    FindStrInIterableCase(
+        "non-existent", seq=["test", "test2"], index=1, expected="test2"
+    ),
 ]
 
 
@@ -72,7 +83,10 @@ SHAPE_OVERRIDE_CASES = [
 @pytest.mark.parametrize("case", SHAPE_OVERRIDE_CASES)
 def test_is_valid_shape_override(case):
     override, shape, expected = case
-    assert util.is_valid_shape_override(new_shape=override, original_shape=shape) == expected
+    assert (
+        util.is_valid_shape_override(new_shape=override, original_shape=shape)
+        == expected
+    )
 
 
 def arange(shape):
@@ -88,8 +102,16 @@ SHAPE_MATCHING_CASES = [
     ),  # Permutation should make no difference as other dimensions are 1s
     (arange((3, 3)), (1, 1, 3, 3), arange((1, 1, 3, 3))),  # Unsqueeze where needed
     (arange((3, 3)), (-1, 3), arange((3, 3))),  # Infer dynamic
-    (arange((3 * 2 * 2,)), (None, 3, 2, 2), arange((1, 3, 2, 2))),  # Reshape with inferred dimension
-    (arange((1, 3, 2, 2)), (None, 2, 2, 3), np.transpose(arange((1, 3, 2, 2)), [0, 2, 3, 1])),  # Permute
+    (
+        arange((3 * 2 * 2,)),
+        (None, 3, 2, 2),
+        arange((1, 3, 2, 2)),
+    ),  # Reshape with inferred dimension
+    (
+        arange((1, 3, 2, 2)),
+        (None, 2, 2, 3),
+        np.transpose(arange((1, 3, 2, 2)), [0, 2, 3, 1]),
+    ),  # Permute
 ]
 
 build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
@@ -132,7 +154,12 @@ def test_unique_list(case):
 
 def test_find_in_dirs():
     with tempfile.TemporaryDirectory() as topdir:
-        dirs = list(map(lambda x: os.path.join(topdir, x), ["test0", "test1", "test2", "test3", "test4"]))
+        dirs = list(
+            map(
+                lambda x: os.path.join(topdir, x),
+                ["test0", "test1", "test2", "test3", "test4"],
+            )
+        )
         for subdir in dirs:
             os.makedirs(subdir)
 
@@ -171,7 +198,10 @@ def test_atomic_open():
     outfile = util.NamedTemporaryFile()
 
     processes = [
-        Process(target=write_to_file, args=(outfile.name, f"{proc} - writing line\n" * NUM_LINES))
+        Process(
+            target=write_to_file,
+            args=(outfile.name, f"{proc} - writing line\n" * NUM_LINES),
+        )
         for proc in range(NUM_PROCESSES)
     ]
 
@@ -194,7 +224,10 @@ def test_atomic_open():
         for idx in range(NUM_PROCESSES):
             offset = idx * NUM_LINES
             expected_prefix = lines[offset].partition("-")[0].strip()
-            assert all(line.startswith(expected_prefix) for line in lines[offset : offset + NUM_LINES])
+            assert all(
+                line.startswith(expected_prefix)
+                for line in lines[offset : offset + NUM_LINES]
+            )
 
     # Make sure the lock file is written to the correct path and not removed automatically.
     assert os.path.exists(outfile.name + ".lock")
@@ -205,20 +238,32 @@ class TestMakeRepr:
         assert util.make_repr("Example", 1, x=2) == ("Example(1, x=2)", False, False)
 
     def test_default_args(self):
-        assert util.make_repr("Example", None, None, x=2) == ("Example(None, None, x=2)", True, False)
+        assert util.make_repr("Example", None, None, x=2) == (
+            "Example(None, None, x=2)",
+            True,
+            False,
+        )
 
     def test_empty_args_are_default(self):
         assert util.make_repr("Example", x=2) == ("Example(x=2)", True, False)
 
     def test_default_kwargs(self):
-        assert util.make_repr("Example", 1, 2, x=None, y=None) == ("Example(1, 2)", False, True)
+        assert util.make_repr("Example", 1, 2, x=None, y=None) == (
+            "Example(1, 2)",
+            False,
+            True,
+        )
 
     def test_empty_kwargs_are_default(self):
         assert util.make_repr("Example", 1, 2) == ("Example(1, 2)", False, True)
 
     def test_does_not_modify(self):
         obj = {"x": float("inf")}
-        assert util.make_repr("Example", obj) == ("Example({'x': float('inf')})", False, True)
+        assert util.make_repr("Example", obj) == (
+            "Example({'x': float('inf')})",
+            False,
+            True,
+        )
         assert obj == {"x": float("inf")}
 
     @pytest.mark.parametrize("obj", [float("nan"), float("inf"), float("-inf")])

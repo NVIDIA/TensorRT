@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -149,7 +149,12 @@ def datatype_from_str(dt_str):
 
 @mod.export()
 def parse_arglist_to_tuple_list(
-    arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+    arg_lst,
+    cast_to=None,
+    sep=None,
+    allow_empty_key=None,
+    treat_missing_sep_as_val=None,
+    treat_unspecified_as_none=None,
 ):
     """
     Generate a list of (key, value) pairs from a list of arguments of the form:
@@ -226,7 +231,12 @@ def parse_arglist_to_tuple_list(
 
 @mod.export()
 def parse_arg_to_tuple(
-    arg, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+    arg,
+    cast_to=None,
+    sep=None,
+    allow_empty_key=None,
+    treat_missing_sep_as_val=None,
+    treat_unspecified_as_none=None,
 ):
     """
     Similar to `parse_arglist_to_tuple_list` but operates on a single argument and returns a single tuple
@@ -244,7 +254,12 @@ def parse_arg_to_tuple(
         return None
 
     tuple_list = parse_arglist_to_tuple_list(
-        [arg], cast_to, sep, allow_empty_key, treat_missing_sep_as_val, treat_unspecified_as_none
+        [arg],
+        cast_to,
+        sep,
+        allow_empty_key,
+        treat_missing_sep_as_val,
+        treat_unspecified_as_none,
     )
     if tuple_list is None:
         return None
@@ -259,7 +274,12 @@ def parse_arg_to_tuple(
 
 @mod.export()
 def parse_arglist_to_dict(
-    arg_lst, cast_to=None, sep=None, allow_empty_key=None, treat_missing_sep_as_val=None, treat_unspecified_as_none=None
+    arg_lst,
+    cast_to=None,
+    sep=None,
+    allow_empty_key=None,
+    treat_missing_sep_as_val=None,
+    treat_unspecified_as_none=None,
 ):
     """
     Similar to `parse_arglist_to_tuple_list` but returns a dictionary instead of a list of tuples.
@@ -270,7 +290,12 @@ def parse_arglist_to_dict(
                 was not specified).
     """
     tuple_list = parse_arglist_to_tuple_list(
-        arg_lst, cast_to, sep, allow_empty_key, treat_missing_sep_as_val, treat_unspecified_as_none
+        arg_lst,
+        cast_to,
+        sep,
+        allow_empty_key,
+        treat_missing_sep_as_val,
+        treat_unspecified_as_none,
     )
     if tuple_list is None:
         return None
@@ -284,7 +309,9 @@ def parse_script_and_func_name(arg, default_func_name=None):
 
     # On Windows we need to split the drive letter (e.g. 'C:') so it's not confused with the script/function separator.
     drive_letter, arg = os.path.splitdrive(arg)
-    script_and_func_name = parse_arg_to_tuple(arg, treat_missing_sep_as_val=False, treat_unspecified_as_none=True)
+    script_and_func_name = parse_arg_to_tuple(
+        arg, treat_missing_sep_as_val=False, treat_unspecified_as_none=True
+    )
     if script_and_func_name is not None:
         script, func_name = script_and_func_name
         func_name = util.default(func_name, default_func_name)

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,10 +71,14 @@ class IdentityOnlyRunnerArgs(BaseRunnerArgs):
         loader_name = self.arg_groups[ReplaceReshapeArgs].add_to_script(script)
 
         # Next, we'll add an import for our runner.
-        script.add_import(imports=["IdentityOnlyRunner"], frm="polygraphy_reshape_destroyer.backend")
+        script.add_import(
+            imports=["IdentityOnlyRunner"], frm="polygraphy_reshape_destroyer.backend"
+        )
         # Lastly, we can add our runner using the `Script.add_runner()` API.
         # Like in the loader implementation, additional arguments can be provided directly to `make_invocable`.
-        script.add_runner(make_invocable("IdentityOnlyRunner", loader_name, speed=self.speed))
+        script.add_runner(
+            make_invocable("IdentityOnlyRunner", loader_name, speed=self.speed)
+        )
 
         # NOTE: Unlike the `add_to_script_impl` method of regular `BaseArgs`, that of `BaseRunnerArgs`
         #       is not expected to return anything.

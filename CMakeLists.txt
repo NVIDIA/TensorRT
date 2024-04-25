@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,7 +143,20 @@ if(BUILD_PARSERS)
     configure_protobuf(${PROTOBUF_VERSION})
 endif()
 
-find_library_create_target(nvinfer nvinfer SHARED ${TRT_LIB_DIR})
+# Windows library names have major version appended.
+if (MSVC)
+    set(nvinfer_lib_name "nvinfer_${TRT_SOVERSION}")
+    set(nvinfer_plugin_lib_name "nvinfer_plugin_${TRT_SOVERSION}")
+    set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin_${TRT_SOVERSION}")
+    set(nvonnxparser_lib_name "nvonnxparser_${TRT_SOVERSION}")
+else()
+    set(nvinfer_lib_name "nvinfer")
+    set(nvinfer_plugin_lib_name "nvinfer_plugin")
+    set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
+    set(nvonnxparser_lib_name "nvonnxparser")
+endif()
+
+find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED ${TRT_LIB_DIR})
 
 find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
 
@@ -165,7 +178,16 @@ else()
       75
     )
 
-  string(REGEX MATCH "aarch64" IS_ARM "${TRT_PLATFORM_ID}")
+  find_file(IS_L4T_NATIVE nv_tegra_release PATHS /env/)
+  set (IS_L4T_CROSS "False")
+  if (DEFINED ENV{IS_L4T_CROSS})
+    set(IS_L4T_CROSS $ENV{IS_L4T_CROSS})
+  endif()
+
+  if (IS_L4T_NATIVE OR ${IS_L4T_CROSS} STREQUAL "True")
+    # Only Orin (SM87) supported
+    list(APPEND GPU_ARCHS 87)
+  endif()
 
   if (CUDA_VERSION VERSION_GREATER_EQUAL 11.0)
     # Ampere GPU (SM80) support is only available in CUDA versions > 11.0
@@ -206,13 +228,13 @@ endif()
 if(BUILD_PLUGINS)
     add_subdirectory(plugin)
 else()
-    find_library_create_target(nvinfer_plugin nvinfer_plugin SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
+    find_library_create_target(nvinfer_plugin ${nvinfer_plugin_lib_name} SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
 endif()
 
 if(BUILD_PARSERS)
     add_subdirectory(parsers)
 else()
-    find_library_create_target(nvonnxparser nvonnxparser SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
+    find_library_create_target(nvonnxparser ${nvonnxparser_lib_name} SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
 endif()
 
 if(BUILD_SAMPLES)

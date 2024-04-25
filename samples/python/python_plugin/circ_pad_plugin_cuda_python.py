@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,14 +24,14 @@ from polygraphy.backend.trt import (
     CreateConfig,
     EngineFromNetwork,
     NetworkFromOnnxPath,
-    TrtRunner
+    TrtRunner,
 )
 from polygraphy.json import to_json, from_json
 
 from utils import checkCudaErrors, KernelHelper, parseArgs, CudaCtxManager
 from cuda import cuda
 
-circ_pad_half_kernel = r'''
+circ_pad_half_kernel = r"""
 #include <cuda_fp16.h>
 extern "C" __global__
 void circ_pad_half(half const* X, int const* all_pads, int const* orig_dims, half* Y, int const* Y_shape, int Y_len) {
@@ -58,9 +58,9 @@ void circ_pad_half(half const* X, int const* all_pads, int const* orig_dims, hal
         ];
     }
 }
-'''
+"""
 
-circ_pad_float_kernel = r'''
+circ_pad_float_kernel = r"""
 extern "C" __global__
 void circ_pad_float(float const* X, int const* all_pads, int const* orig_dims, float* Y, int const* Y_shape, int Y_len) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -86,7 +86,8 @@ void circ_pad_float(float const* X, int const* all_pads, int const* orig_dims, f
         ];
     }
 }
-'''
+"""
+
 
 class CircPadPlugin(trt.IPluginV2DynamicExt):
     def __init__(self, fc=None):
@@ -107,7 +108,9 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         self.cuDevice = None
 
         if fc is not None:
-            assert set([f.name for f in fc]) == set(["pads", "N"]), "Field collection invalid"
+            assert set([f.name for f in fc]) == set(
+                ["pads", "N"]
+            ), "Field collection invalid"
             for f in fc:
                 if f.name == "pads":
                     self.pads = f.data
@@ -116,11 +119,17 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
     def initialize(self):
         err, self.cuDevice = cuda.cuDeviceGet(0)
-        trt.get_plugin_registry().acquire_plugin_resource("cuda_ctx", CudaCtxManager(self.cuDevice))
-        self.all_pads_d = checkCudaErrors(cuda.cuMemAlloc(np.int32().itemsize * self.N * 2))
-        self.orig_dims_d = checkCudaErrors(cuda.cuMemAlloc(np.int32().itemsize * self.N))
+        trt.get_plugin_registry().acquire_plugin_resource(
+            "cuda_ctx", CudaCtxManager(self.cuDevice)
+        )
+        self.all_pads_d = checkCudaErrors(
+            cuda.cuMemAlloc(np.int32().itemsize * self.N * 2)
+        )
+        self.orig_dims_d = checkCudaErrors(
+            cuda.cuMemAlloc(np.int32().itemsize * self.N)
+        )
         self.Y_shape_d = checkCudaErrors(cuda.cuMemAlloc(np.int32().itemsize * self.N))
-        
+
     def get_output_datatype(self, index, input_types):
         return input_types[0]
 
@@ -157,11 +166,17 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
         # Copy vectors from host memory to device memory
         if self.all_pads_d:
-            checkCudaErrors(cuda.cuMemcpyHtoD(self.all_pads_d, all_pads, all_pads.nbytes))
+            checkCudaErrors(
+                cuda.cuMemcpyHtoD(self.all_pads_d, all_pads, all_pads.nbytes)
+            )
         if self.orig_dims_d:
-            checkCudaErrors(cuda.cuMemcpyHtoD(self.orig_dims_d, orig_dims, orig_dims.nbytes))
+            checkCudaErrors(
+                cuda.cuMemcpyHtoD(self.orig_dims_d, orig_dims, orig_dims.nbytes)
+            )
         if self.Y_shape_d:
-            checkCudaErrors(cuda.cuMemcpyHtoD(self.Y_shape_d, out_dims, out_dims.nbytes))
+            checkCudaErrors(
+                cuda.cuMemcpyHtoD(self.Y_shape_d, out_dims, out_dims.nbytes)
+            )
 
         self.Y_len_d = np.prod(out_dims)
 
@@ -205,25 +220,43 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
         if inp_dtype == np.float32:
             kernelHelper = KernelHelper(circ_pad_float_kernel, int(self.cuDevice))
-            _circ_pad_float_kernel = kernelHelper.getFunction(b'circ_pad_float')
-            checkCudaErrors(cuda.cuLaunchKernel(_circ_pad_float_kernel,
-                                        numBlocks, 1, 1,
-                                        blockSize, 1, 1,
-                                        0,
-                                        stream_ptr,
-                                        kernelArgs, 0))
+            _circ_pad_float_kernel = kernelHelper.getFunction(b"circ_pad_float")
+            checkCudaErrors(
+                cuda.cuLaunchKernel(
+                    _circ_pad_float_kernel,
+                    numBlocks,
+                    1,
+                    1,
+                    blockSize,
+                    1,
+                    1,
+                    0,
+                    stream_ptr,
+                    kernelArgs,
+                    0,
+                )
+            )
         elif inp_dtype == np.float16:
             kernelHelper = KernelHelper(circ_pad_half_kernel, int(self.cuDevice))
-            _circ_pad_half_kernel = kernelHelper.getFunction(b'circ_pad_half')
-            checkCudaErrors(cuda.cuLaunchKernel(_circ_pad_half_kernel,
-                                        numBlocks, 1, 1,
-                                        blockSize, 1, 1,
-                                        0,
-                                        stream_ptr,
-                                        kernelArgs, 0))
+            _circ_pad_half_kernel = kernelHelper.getFunction(b"circ_pad_half")
+            checkCudaErrors(
+                cuda.cuLaunchKernel(
+                    _circ_pad_half_kernel,
+                    numBlocks,
+                    1,
+                    1,
+                    blockSize,
+                    1,
+                    1,
+                    0,
+                    stream_ptr,
+                    kernelArgs,
+                    0,
+                )
+            )
         else:
             raise ValueError("inp_dtype not valid")
-        
+
     def clone(self):
         cloned_plugin = CircPadPlugin()
         cloned_plugin.__dict__.update(self.__dict__)
@@ -239,7 +272,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
         trt.get_plugin_registry().release_plugin_resource("cuda_ctx")
 
-    # 
+    #
     # The following defaults take effect since the respective methods are not overriden
     #
 
@@ -248,7 +281,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
     # def get_workspace_size(self, input_desc, output_desc):
     #     return 0
-    
+
     # def destroy(self):
     #     pass
 
@@ -259,10 +292,12 @@ class CircPadPluginCreator(trt.IPluginCreator):
         self.name = "CircPadPlugin"
         self.plugin_namespace = ""
         self.plugin_version = "1"
-        self.field_names = trt.PluginFieldCollection([
-            trt.PluginField("pads", np.array([]), trt.PluginFieldType.INT32),
-            trt.PluginField("N", np.array([]), trt.PluginFieldType.INT32)
-        ])
+        self.field_names = trt.PluginFieldCollection(
+            [
+                trt.PluginField("pads", np.array([]), trt.PluginFieldType.INT32),
+                trt.PluginField("N", np.array([]), trt.PluginFieldType.INT32),
+            ]
+        )
 
     def create_plugin(self, name, fc):
         return CircPadPlugin(fc)
@@ -273,12 +308,13 @@ class CircPadPluginCreator(trt.IPluginCreator):
         deserialized.__dict__.update(j)
         return deserialized
 
+
 if __name__ == "__main__":
 
     args = parseArgs()
 
     # Initialize CUDA Driver API
-    err, = cuda.cuInit(0)
+    (err,) = cuda.cuInit(0)
 
     # Retrieve handle for device 0
     err, cuDevice = cuda.cuDeviceGet(0)
@@ -319,12 +355,12 @@ if __name__ == "__main__":
 
     # build engine
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision==np.float16)
+        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision == np.float16)
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")
     # Run
-    with TrtRunner(build_engine, "trt_runner")as runner:
+    with TrtRunner(build_engine, "trt_runner") as runner:
         outputs = runner.infer({"X": X})
         Y = outputs["Y"]
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,7 @@ from polygraphy.backend.trt import (
 from polygraphy.json import to_json, from_json
 from utils import volume, parseArgs
 
+
 @cuda.jit
 def circ_pad(X, all_pads, orig_dims, Y, Y_shape, Y_len):
     index = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
@@ -57,6 +58,7 @@ def circ_pad(X, all_pads, orig_dims, Y, Y_shape, Y_len):
             )
         ]
 
+
 class CircPadPlugin(trt.IPluginV2DynamicExt):
     def __init__(self, fc=None):
         trt.IPluginV2DynamicExt.__init__(self)
@@ -76,7 +78,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         return input_types[0]
 
     def get_output_dimensions(self, output_index, inputs, exprBuilder):
-        
+
         output_dims = trt.DimsExprs(inputs[0])
 
         for i in range(np.size(self.pads) // 2):
@@ -163,8 +165,8 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         cloned_plugin = CircPadPlugin()
         cloned_plugin.__dict__.update(self.__dict__)
         return cloned_plugin
-    
-    # 
+
+    #
     # The following defaults take effect since the respective methods are not overriden
     #
 
@@ -176,7 +178,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
     # def get_workspace_size(self, input_desc, output_desc):
     #     return 0
-    
+
     # def destroy(self):
     #     pass
 
@@ -202,6 +204,7 @@ class CircPadPluginCreator(trt.IPluginCreator):
         deserialized = CircPadPlugin()
         deserialized.__dict__.update(j)
         return deserialized
+
 
 if __name__ == "__main__":
 
@@ -234,12 +237,12 @@ if __name__ == "__main__":
 
     # build engine
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision==np.float16)
+        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision == np.float16)
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")
     # Run
-    with TrtRunner(build_engine, "trt_runner")as runner:
+    with TrtRunner(build_engine, "trt_runner") as runner:
         outputs = runner.infer({"X": X})
         Y = outputs["Y"]
 

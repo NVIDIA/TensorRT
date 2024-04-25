@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,14 @@ class TestToInput:
     def test_merge_inputs_outputs(self, poly_run, poly_data):
         with util.NamedTemporaryFile() as inps, util.NamedTemporaryFile() as outs, util.NamedTemporaryFile() as merged:
             poly_run(
-                [ONNX_MODELS["identity"].path, "--onnxrt", "--save-inputs", inps.name, "--save-outputs", outs.name],
+                [
+                    ONNX_MODELS["identity"].path,
+                    "--onnxrt",
+                    "--save-inputs",
+                    inps.name,
+                    "--save-outputs",
+                    outs.name,
+                ],
             )
 
             poly_data(["to-input", inps.name, outs.name, "-o", merged.name])

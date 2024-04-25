@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,7 +56,10 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
         :param image_batcher: The ImageBatcher object
         """
         self.image_batcher = image_batcher
-        size = int(np.dtype(self.image_batcher.dtype).itemsize * np.prod(self.image_batcher.shape))
+        size = int(
+            np.dtype(self.image_batcher.dtype).itemsize
+            * np.prod(self.image_batcher.shape)
+        )
         self.batch_allocation = common.cuda_call(cudart.cudaMalloc(size))
         self.batch_generator = self.image_batcher.get_batch()
 
@@ -81,8 +84,14 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
             return None
         try:
             batch, _, _ = next(self.batch_generator)
-            log.info("Calibrating image {} / {}".format(self.image_batcher.image_index, self.image_batcher.num_images))
-            common.memcpy_host_to_device(self.batch_allocation, np.ascontiguousarray(batch))
+            log.info(
+                "Calibrating image {} / {}".format(
+                    self.image_batcher.image_index, self.image_batcher.num_images
+                )
+            )
+            common.memcpy_host_to_device(
+                self.batch_allocation, np.ascontiguousarray(batch)
+            )
             return [int(self.batch_allocation)]
         except StopIteration:
             log.info("Finished calibration batches")
@@ -128,7 +137,9 @@ class EngineBuilder:
 
         self.builder = trt.Builder(self.trt_logger)
         self.config = self.builder.create_builder_config()
-        self.config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace * (2 ** 30))
+        self.config.set_memory_pool_limit(
+            trt.MemoryPoolType.WORKSPACE, workspace * (2**30)
+        )
 
         self.batch_size = None
         self.network = None
@@ -157,9 +168,17 @@ class EngineBuilder:
         log.info("Network Description")
         for input in inputs:
             self.batch_size = input.shape[0]
-            log.info("Input '{}' with shape {} and dtype {}".format(input.name, input.shape, input.dtype))
+            log.info(
+                "Input '{}' with shape {} and dtype {}".format(
+                    input.name, input.shape, input.dtype
+                )
+            )
         for output in outputs:
-            log.info("Output '{}' with shape {} and dtype {}".format(output.name, output.shape, output.dtype))
+            log.info(
+                "Output '{}' with shape {} and dtype {}".format(
+                    output.name, output.shape, output.dtype
+                )
+            )
         assert self.batch_size > 0
 
         # TODO: These overrides are to improve fp16/int8 performance on FRCNN models
@@ -167,17 +186,25 @@ class EngineBuilder:
         # type on the two NMS plugins. To be determined.
         for i in range(self.network.num_layers):
             if self.network.get_layer(i).name in [
-                    "FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor/squeeze",
-                    "FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor/scale_value:0",
-                    "FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor/scale",
-                    "nms/anchors:0"]:
+                "FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor/squeeze",
+                "FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor/scale_value:0",
+                "FirstStageBoxPredictor/ConvolutionalBoxHead_0/BoxEncodingPredictor/scale",
+                "nms/anchors:0",
+            ]:
                 self.network.get_layer(i).precision = trt.DataType.FLOAT
-                self.network.get_layer(i-1).precision = trt.DataType.FLOAT
+                self.network.get_layer(i - 1).precision = trt.DataType.FLOAT
             if self.network.get_layer(i).name == "FirstNMS/detection_boxes_conversion":
                 self.network.get_layer(i).precision = trt.DataType.FLOAT
 
-    def create_engine(self, engine_path, precision, calib_input=None, calib_cache=None, calib_num_images=5000,
-                      calib_batch_size=8):
+    def create_engine(
+        self,
+        engine_path,
+        precision,
+        calib_input=None,
+        calib_cache=None,
+        calib_num_images=5000,
+        calib_batch_size=8,
+    ):
         """
         Build the TensorRT engine and serialize it to disk.
         :param engine_path: The path where to serialize the engine to.
@@ -218,8 +245,14 @@ class EngineBuilder:
                     calib_shape = [calib_batch_size] + list(inputs[0].shape[1:])
                     calib_dtype = trt.nptype(inputs[0].dtype)
                     self.config.int8_calibrator.set_image_batcher(
-                        ImageBatcher(calib_input, calib_shape, calib_dtype, max_num_images=calib_num_images,
-                                     exact_batches=True))
+                        ImageBatcher(
+                            calib_input,
+                            calib_shape,
+                            calib_dtype,
+                            max_num_images=calib_num_images,
+                            exact_batches=True,
+                        )
+                    )
 
         engine_bytes = self.builder.build_serialized_network(self.network, self.config)
         if engine_bytes is None:
@@ -234,33 +267,68 @@ class EngineBuilder:
 def main(args):
     builder = EngineBuilder(args.verbose, args.workspace)
     builder.create_network(args.onnx)
-    builder.create_engine(args.engine, args.precision, args.calib_input, args.calib_cache, args.calib_num_images,
-                          args.calib_batch_size)
+    builder.create_engine(
+        args.engine,
+        args.precision,
+        args.calib_input,
+        args.calib_cache,
+        args.calib_num_images,
+        args.calib_batch_size,
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--onnx", help="The input ONNX model file to load")
     parser.add_argument("-e", "--engine", help="The output path for the TRT engine")
-    parser.add_argument("-p", "--precision", default="fp16", choices=["fp32", "fp16", "int8"],
-                        help="The precision mode to build in, either 'fp32', 'fp16' or 'int8', default: 'fp16'")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable more verbose log output")
-    parser.add_argument("-w", "--workspace", default=1, type=int, help="The max memory workspace size to allow in Gb, "
-                                                                       "default: 1")
-    parser.add_argument("--calib_input", help="The directory holding images to use for calibration")
-    parser.add_argument("--calib_cache", default="./calibration.cache",
-                        help="The file path for INT8 calibration cache to use, default: ./calibration.cache")
-    parser.add_argument("--calib_num_images", default=5000, type=int,
-                        help="The maximum number of images to use for calibration, default: 5000")
-    parser.add_argument("--calib_batch_size", default=8, type=int,
-                        help="The batch size for the calibration process, default: 8")
+    parser.add_argument(
+        "-p",
+        "--precision",
+        default="fp16",
+        choices=["fp32", "fp16", "int8"],
+        help="The precision mode to build in, either 'fp32', 'fp16' or 'int8', default: 'fp16'",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable more verbose log output"
+    )
+    parser.add_argument(
+        "-w",
+        "--workspace",
+        default=1,
+        type=int,
+        help="The max memory workspace size to allow in Gb, " "default: 1",
+    )
+    parser.add_argument(
+        "--calib_input", help="The directory holding images to use for calibration"
+    )
+    parser.add_argument(
+        "--calib_cache",
+        default="./calibration.cache",
+        help="The file path for INT8 calibration cache to use, default: ./calibration.cache",
+    )
+    parser.add_argument(
+        "--calib_num_images",
+        default=5000,
+        type=int,
+        help="The maximum number of images to use for calibration, default: 5000",
+    )
+    parser.add_argument(
+        "--calib_batch_size",
+        default=8,
+        type=int,
+        help="The batch size for the calibration process, default: 8",
+    )
     args = parser.parse_args()
     if not all([args.onnx, args.engine]):
         parser.print_help()
         log.error("These arguments are required: --onnx and --engine")
         sys.exit(1)
-    if args.precision == "int8" and not (args.calib_input or os.path.exists(args.calib_cache)):
+    if args.precision == "int8" and not (
+        args.calib_input or os.path.exists(args.calib_cache)
+    ):
         parser.print_help()
-        log.error("When building in int8 precision, --calib_input or an existing --calib_cache file is required")
+        log.error(
+            "When building in int8 precision, --calib_input or an existing --calib_cache file is required"
+        )
         sys.exit(1)
     main(args)

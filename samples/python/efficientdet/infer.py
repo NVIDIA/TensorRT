@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,7 +62,7 @@ class TensorRTInfer:
             shape = self.context.get_tensor_shape(name)
             if is_input and shape[0] < 0:
                 assert self.engine.num_optimization_profiles > 0
-                profile_shape = self.engine.get_profile_shape(0, name)
+                profile_shape = self.engine.get_tensor_profile_shape(name, 0)
                 assert len(profile_shape) == 3  # min,opt,max
                 # Set the *max* profile as binding shape
                 self.context.set_input_shape(name, profile_shape[2])
@@ -87,9 +87,14 @@ class TensorRTInfer:
                 self.inputs.append(binding)
             else:
                 self.outputs.append(binding)
-            print("{} '{}' with shape {} and dtype {}".format(
-                "Input" if is_input else "Output",
-                binding['name'], binding['shape'], binding['dtype']))
+            print(
+                "{} '{}' with shape {} and dtype {}".format(
+                    "Input" if is_input else "Output",
+                    binding["name"],
+                    binding["shape"],
+                    binding["dtype"],
+                )
+            )
 
         assert self.batch_size > 0
         assert len(self.inputs) > 0
@@ -101,7 +106,7 @@ class TensorRTInfer:
         Get the specs for the input tensor of the network. Useful to prepare memory allocations.
         :return: Two items, the shape of the input tensor and its (numpy) datatype.
         """
-        return self.inputs[0]['shape'], self.inputs[0]['dtype']
+        return self.inputs[0]["shape"], self.inputs[0]["dtype"]
 
     def output_spec(self):
         """
@@ -110,7 +115,7 @@ class TensorRTInfer:
         """
         specs = []
         for o in self.outputs:
-            specs.append((o['shape'], o['dtype']))
+            specs.append((o["shape"], o["dtype"]))
         return specs
 
     def infer(self, batch):
@@ -120,11 +125,13 @@ class TensorRTInfer:
         :return A list of outputs as numpy arrays.
         """
         # Copy I/O and Execute
-        common.memcpy_host_to_device(self.inputs[0]['allocation'], batch)
+        common.memcpy_host_to_device(self.inputs[0]["allocation"], batch)
         self.context.execute_v2(self.allocations)
         for o in range(len(self.outputs)):
-            common.memcpy_device_to_host(self.outputs[o]['host_allocation'], self.outputs[o]['allocation'])
-        return [o['host_allocation'] for o in self.outputs]
+            common.memcpy_device_to_host(
+                self.outputs[o]["host_allocation"], self.outputs[o]["allocation"]
+            )
+        return [o["host_allocation"] for o in self.outputs]
 
     def process(self, batch, scales=None, nms_threshold=None):
         """
@@ -143,11 +150,11 @@ class TensorRTInfer:
         scores = outputs[2]
         classes = outputs[3]
         detections = []
-        normalized = (np.max(boxes) < 2.0)
+        normalized = np.max(boxes) < 2.0
         for i in range(self.batch_size):
             detections.append([])
             for n in range(int(nums[i])):
-                scale = self.inputs[0]['shape'][2] if normalized else 1.0
+                scale = self.inputs[0]["shape"][2] if normalized else 1.0
                 if scales and i < len(scales):
                     scale /= scales[i]
                 if nms_threshold and scores[i][n] < nms_threshold:
@@ -181,7 +188,12 @@ def main(args):
         print("Inferring data in {}".format(args.input))
         batcher = ImageBatcher(args.input, *trt_infer.input_spec())
         for batch, images, scales in batcher.get_batch():
-            print("Processing Image {} / {}".format(batcher.image_index, batcher.num_images), end="\r")
+            print(
+                "Processing Image {} / {}".format(
+                    batcher.image_index, batcher.num_images
+                ),
+                end="\r",
+            )
             detections = trt_infer.process(batch, scales, args.nms_threshold)
             if args.output:
                 for i in range(len(images)):
@@ -192,9 +204,18 @@ def main(args):
                     # Text Results
                     output_results = ""
                     for d in detections[i]:
-                        line = [d['xmin'], d['ymin'], d['xmax'], d['ymax'], d['score'], d['class']]
+                        line = [
+                            d["xmin"],
+                            d["ymin"],
+                            d["xmax"],
+                            d["ymax"],
+                            d["score"],
+                            d["class"],
+                        ]
                         output_results += "\t".join([str(f) for f in line]) + "\n"
-                    with open(os.path.join(output_dir, "{}.txt".format(basename)), "w") as f:
+                    with open(
+                        os.path.join(output_dir, "{}.txt".format(basename)), "w"
+                    ) as f:
                         f.write(output_results)
     else:
         print("No input provided, running in benchmark mode")
@@ -210,10 +231,12 @@ def main(args):
             times.append(time.time() - start)
             print("Iteration {} / {}".format(i + 1, iterations), end="\r")
         print("Benchmark results include time for H2D and D2H memory copies")
-        print("Average Latency: {:.3f} ms".format(
-            1000 * np.average(times)))
-        print("Average Throughput: {:.1f} ips".format(
-            trt_infer.batch_size / np.average(times)))
+        print("Average Latency: {:.3f} ms".format(1000 * np.average(times)))
+        print(
+            "Average Throughput: {:.1f} ips".format(
+                trt_infer.batch_size / np.average(times)
+            )
+        )
 
     print()
     print("Finished Processing")
@@ -221,15 +244,33 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-e", "--engine", default=None, required=True,
-                        help="The serialized TensorRT engine")
-    parser.add_argument("-i", "--input", default=None,
-                        help="Path to the image or directory to process")
-    parser.add_argument("-o", "--output", default=None,
-                        help="Directory where to save the visualization results")
-    parser.add_argument("-l", "--labels", default="./labels_coco.txt",
-                        help="File to use for reading the class labels from, default: ./labels_coco.txt")
-    parser.add_argument("-t", "--nms_threshold", type=float,
-                        help="Override the score threshold for the NMS operation, if higher than the built-in threshold")
+    parser.add_argument(
+        "-e",
+        "--engine",
+        default=None,
+        required=True,
+        help="The serialized TensorRT engine",
+    )
+    parser.add_argument(
+        "-i", "--input", default=None, help="Path to the image or directory to process"
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Directory where to save the visualization results",
+    )
+    parser.add_argument(
+        "-l",
+        "--labels",
+        default="./labels_coco.txt",
+        help="File to use for reading the class labels from, default: ./labels_coco.txt",
+    )
+    parser.add_argument(
+        "-t",
+        "--nms_threshold",
+        type=float,
+        help="Override the score threshold for the NMS operation, if higher than the built-in threshold",
+    )
     args = parser.parse_args()
     main(args)

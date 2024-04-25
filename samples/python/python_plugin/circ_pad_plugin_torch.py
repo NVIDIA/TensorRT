@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,12 +33,13 @@ import torch
 
 from utils import volume, parseArgs
 
+
 class CircPadPlugin(trt.IPluginV2DynamicExt):
     def __init__(self, fc=None):
         trt.IPluginV2DynamicExt.__init__(self)
         self.pads = []
         self.X_shape = []
-        
+
         self.num_outputs = 1
         self.plugin_namespace = ""
         self.plugin_type = "CircPadPlugin"
@@ -110,10 +111,10 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         a_d = cp.ndarray(tuple(input_desc[0].dims), dtype=inp_dtype, memptr=a_ptr)
         c_d = cp.ndarray((volume(output_desc[0].dims)), dtype=inp_dtype, memptr=c_ptr)
 
-        a_t = torch.as_tensor(a_d, device='cuda')
+        a_t = torch.as_tensor(a_d, device="cuda")
 
         # Use PyTorch functional op - no need to write kernel
-        out = torch.nn.functional.pad(a_t, self.pads.tolist(), mode='circular')
+        out = torch.nn.functional.pad(a_t, self.pads.tolist(), mode="circular")
         cp.copyto(c_d, cp.reshape(cp.asarray(out), (-1,)))
 
         return 0
@@ -123,7 +124,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         cloned_plugin.__dict__.update(self.__dict__)
         return cloned_plugin
 
-    # 
+    #
     # The following defaults take effect since the respective methods are not overriden
     #
 
@@ -135,7 +136,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
     # def get_workspace_size(self, input_desc, output_desc):
     #     return 0
-    
+
     # def destroy(self):
     #     pass
 
@@ -161,6 +162,7 @@ class CircPadPluginCreator(trt.IPluginCreator):
         deserialized = CircPadPlugin()
         deserialized.__dict__.update(j)
         return deserialized
+
 
 if __name__ == "__main__":
 
@@ -193,12 +195,12 @@ if __name__ == "__main__":
 
     # build engine
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision==np.float16)
+        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision == np.float16)
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")
     # Run
-    with TrtRunner(build_engine, "trt_runner")as runner:
+    with TrtRunner(build_engine, "trt_runner") as runner:
         outputs = runner.infer({"X": X})
         Y = outputs["Y"]
 

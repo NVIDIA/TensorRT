@@ -18,7 +18,9 @@
 #ifndef NV_INFER_RUNTIME_PLUGIN_H
 #define NV_INFER_RUNTIME_PLUGIN_H
 
+#define NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE 1
 #include "NvInferRuntimeBase.h"
+#undef NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE
 
 //!
 //! \file NvInferRuntimePlugin.h

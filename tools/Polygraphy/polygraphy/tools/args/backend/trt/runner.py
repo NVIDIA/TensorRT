@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,7 +61,7 @@ class TrtRunnerArgs(BaseRunnerArgs):
             "0 to 100%%: The percentage of weights TRT will stream. 100%% will stream the maximum number of weights. "
             ">0B: The exact amount of streamable weights that reside on the GPU (unit suffixes are supported).",
             type=str,
-            default=None
+            default=None,
         )
 
     def parse_impl(self, args):
@@ -78,18 +78,31 @@ class TrtRunnerArgs(BaseRunnerArgs):
         self.allocation_strategy = args_util.get(args, "allocation_strategy")
         self.weight_streaming_budget = None
         self.weight_streaming_percent = None
-        
+
         ws_arg = args_util.get(args, "weight_streaming_budget")
         if ws_arg and ws_arg.endswith("%"):
             percent = float(ws_arg[:-1])
-            assert 0 <= percent <= 100, "Invalid percentage for --weight-streaming-budget!"
+            assert (
+                0 <= percent <= 100
+            ), "Invalid percentage for --weight-streaming-budget!"
             self.weight_streaming_percent = percent
         elif ws_arg:
             budget = args_util.parse_num_bytes(ws_arg)
-            assert budget == -1 or budget >= 0, "Invalid amount for --weight-streaming-budget!"
+            assert (
+                budget == -1 or budget >= 0
+            ), "Invalid amount for --weight-streaming-budget!"
             self.weight_streaming_budget = budget
 
     def add_to_script_impl(self, script):
         script.add_import(imports=["TrtRunner"], frm="polygraphy.backend.trt")
         loader_name = self.arg_groups[TrtLoadEngineArgs].add_to_script(script)
-        script.add_runner(make_invocable("TrtRunner", loader_name, optimization_profile=self.optimization_profile, allocation_strategy=self.allocation_strategy, weight_streaming_budget=self.weight_streaming_budget, weight_streaming_percent=self.weight_streaming_percent))
+        script.add_runner(
+            make_invocable(
+                "TrtRunner",
+                loader_name,
+                optimization_profile=self.optimization_profile,
+                allocation_strategy=self.allocation_strategy,
+                weight_streaming_budget=self.weight_streaming_budget,
+                weight_streaming_percent=self.weight_streaming_percent,
+            )
+        )

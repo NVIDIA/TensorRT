@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +24,21 @@ from polygraphy import util, mod
 from polygraphy.backend.onnx import GsFromOnnx, OnnxFromBytes
 from polygraphy.backend.onnxrt import OnnxrtRunner, SessionFromOnnx
 from polygraphy.backend.pluginref import PluginRefRunner
-from polygraphy.backend.trt import EngineFromNetwork, NetworkFromOnnxBytes, TrtRunner, network_from_onnx_bytes
+from polygraphy.backend.trt import (
+    EngineFromNetwork,
+    NetworkFromOnnxBytes,
+    TrtRunner,
+    network_from_onnx_bytes,
+)
 from polygraphy.backend.trt.util import get_all_tensors
-from polygraphy.comparator import Comparator, CompareFunc, DataLoader, IterationResult, PostprocessFunc, RunResults
+from polygraphy.comparator import (
+    Comparator,
+    CompareFunc,
+    DataLoader,
+    IterationResult,
+    PostprocessFunc,
+    RunResults,
+)
 from polygraphy.exception import PolygraphyException
 from tests.models.meta import ONNX_MODELS
 
@@ -86,7 +98,9 @@ class TestComparator:
         onnx_loader = ONNX_MODELS["identity"].loader
         run_results = Comparator.run([OnnxrtRunner(SessionFromOnnx(onnx_loader))])
         # Output shape is (1, 1, 2, 2)
-        postprocessed = Comparator.postprocess(run_results, postprocess_func=PostprocessFunc.top_k(k=(1, -1)))
+        postprocessed = Comparator.postprocess(
+            run_results, postprocess_func=PostprocessFunc.top_k(k=(1, -1))
+        )
         for _, results in postprocessed.items():
             for result in results:
                 for _, output in result.items():
@@ -126,13 +140,17 @@ class TestComparator:
     @pytest.mark.parametrize("array_type", [np.array, build_torch])
     def test_validate_nan(self, array_type):
         run_results = RunResults()
-        run_results["fake-runner"] = [IterationResult(outputs={"x": array_type(np.nan)})]
+        run_results["fake-runner"] = [
+            IterationResult(outputs={"x": array_type(np.nan)})
+        ]
         assert not Comparator.validate(run_results)
 
     @pytest.mark.parametrize("array_type", [np.array, build_torch])
     def test_validate_inf(self, array_type):
         run_results = RunResults()
-        run_results["fake-runner"] = [IterationResult(outputs={"x": array_type(np.inf)})]
+        run_results["fake-runner"] = [
+            IterationResult(outputs={"x": array_type(np.inf)})
+        ]
         assert not Comparator.validate(run_results, check_inf=True)
 
     def test_dim_param_trt_onnxrt(self):
@@ -154,7 +172,7 @@ class TestComparator:
         mod.version(trt.__version__) < mod.version("10.0"),
         reason="Feature not present before 10.0",
     )
-    def test_debug_tensors(self):         
+    def test_debug_tensors(self):
         model = ONNX_MODELS["identity"]
         builder, network, parser = network_from_onnx_bytes(model.loader)
         tensor_map = get_all_tensors(network)
@@ -165,7 +183,14 @@ class TestComparator:
         run_results = Comparator.run(runners, data_loader=data)
         for iteration_list in run_results.values():
             # There should be 2 outputs, debug tensor "x" and output "y"
-            assert len(list(iteration_list[0].items())) == 2 
-        run_results["fake-runner"] = [IterationResult(outputs={"x": np.ones((1, 1, 2, 2), dtype=np.float32), "y": np.ones((1, 1, 2, 2), dtype=np.float32)})]
+            assert len(list(iteration_list[0].items())) == 2
+        run_results["fake-runner"] = [
+            IterationResult(
+                outputs={
+                    "x": np.ones((1, 1, 2, 2), dtype=np.float32),
+                    "y": np.ones((1, 1, 2, 2), dtype=np.float32),
+                }
+            )
+        ]
         compare_func = CompareFunc.simple(check_shapes=True)
         assert bool(Comparator.compare_accuracy(run_results, compare_func=compare_func))

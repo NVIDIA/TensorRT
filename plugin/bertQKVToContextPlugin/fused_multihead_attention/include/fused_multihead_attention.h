@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,236 @@
 
 namespace nvinfer1
 {
+
+namespace pluginInternal
+{
+template <typename TKernelMeta, typename TKernelParam>
+class TFusedMultiHeadAttentionXMMAKernel
+{
+public:
+    using KernelMeta = TKernelMeta;
+    using KernelParam = TKernelParam;
+    inline uint64_t hashID(uint32_t s, uint32_t d) const
+    {
+        return (uint64_t) s << 32 | d;
+    }
+    virtual uint64_t hashID(const KernelMeta& kernelMeta) const
+    {
+        return hashID(kernelMeta.mS, kernelMeta.mD);
+    }
+
+    TFusedMultiHeadAttentionXMMAKernel(
+        const TKernelMeta* pMetaStart, uint32_t nMetaCount, plugin::bert::Data_type type, uint32_t sm)
+        : mDataType(type)
+        , mKernelMeta(pMetaStart)
+        , mKernelMetaCount(nMetaCount)
+        , mSM(sm)
+    {
+        PLUGIN_ASSERT(mKernelMetaCount && "No kernels were loaded correctly.");
+    }
+
+    void loadXMMAKernels(uint32_t smVersion)
+    {
+        for (uint32_t i = 0; i < mKernelMetaCount; ++i)
+        {
+            const auto& kernelMeta = mKernelMeta[i];
+            const auto kernelKey = hashID(kernelMeta);
+            if (kernelMeta.mSM == smVersion && kernelMeta.mDataType == mDataType
+                && mFunctions.find(kernelKey) == mFunctions.end())
+            {
+                const uint32_t DEFAULT_SMEM_SIZE{48 * 1024};
+                if (kernelMeta.mSharedMemBytes >= DEFAULT_SMEM_SIZE)
+                {
+                    int32_t deviceID{0};
+                    cudaGetDevice(&deviceID);
+                    int32_t sharedMemPerMultiprocessor{0};
+                    if (cudaDeviceGetAttribute(
+                            &sharedMemPerMultiprocessor, cudaDevAttrMaxSharedMemoryPerBlockOptin, deviceID)
+                            != cudaSuccess
+                        || sharedMemPerMultiprocessor < static_cast<int32_t>(kernelMeta.mSharedMemBytes))
+                    {
+                        // skip load function because not enough shared memory to launch the kernel
+                        continue;
+                    }
+                }
+
+                CUmodule hmod{0};
+                auto findModuleIter = mModules.find(kernelMeta.mCubin);
+                if (findModuleIter != mModules.end())
+                {
+                    hmod = findModuleIter->second;
+                }
+                else
+                {
+                    cuErrCheck(mDriver.cuModuleLoadData(&hmod, kernelMeta.mCubin), mDriver);
+                    mModules.insert(std::make_pair(kernelMeta.mCubin, hmod));
+                }
+
+                FusedMultiHeadAttentionKernelInfo funcInfo;
+                funcInfo.mMetaInfoIndex = i;
+                cuErrCheck(mDriver.cuModuleGetFunction(&funcInfo.mDeviceFunction, hmod, kernelMeta.mFuncName), mDriver);
+                if (kernelMeta.mSharedMemBytes >= DEFAULT_SMEM_SIZE)
+                {
+                    if (mDriver.cuFuncSetAttribute(funcInfo.mDeviceFunction,
+                            CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, kernelMeta.mSharedMemBytes)
+                        != CUDA_SUCCESS)
+                    {
+                        // some chip may not have enough shared memory to launch the kernel
+                        continue;
+                    }
+                }
+                mFunctions.insert({kernelKey, funcInfo});
+                uint64_t const s = kernelMeta.mS;
+                uint64_t const headSize = kernelMeta.mD;
+                uint64_t key = (headSize << 32 | s);
+                if (mValidSequences.find(key) == mValidSequences.end())
+                {
+                    mValidSequences.insert(key);
+                }
+            }
+        }
+    }
+
+    void loadXMMAKernels()
+    {
+        if (!mFunctions.empty())
+        {
+            return;
+        }
+
+        loadXMMAKernels(mSM);
+
+        // sm_86 chips prefer sm_86 sass, but can also use sm_80 sass if sm_86 not exist.
+        // sm_87 cannot run sm_80 sass
+        if (mSM == kSM_86)
+        {
+            loadXMMAKernels(kSM_80);
+        }
+
+        // sm_89 will reuse sm_80 and sm_86 kernels
+        if (mSM == kSM_89)
+        {
+            loadXMMAKernels(kSM_86);
+            loadXMMAKernels(kSM_80);
+        }
+    }
+
+    bool isValid(int32_t headSize, int32_t s) const
+    {
+        uint64_t key = (static_cast<uint64_t>(headSize) << 32 | static_cast<uint64_t>(s));
+        return (mValidSequences.find(key) != mValidSequences.end());
+    }
+
+    virtual void run(TKernelParam& params, cudaStream_t ss) const
+    {
+        const auto findIter = mFunctions.find(hashID(params.s, params.d));
+        std::stringstream errMsg;
+        errMsg << "Could not find kernel for:\n"
+               << "\t s: " << params.s << "\n"
+               << "\t d: " << params.d << "\n"
+               << "Was the plugin compiled on a compatible CUDA and SM version?\n"
+               << "\t Compiled on CUDA " << CUDA_VERSION << "\n"
+               << "\t Current SM version: " << mSM << "\n"
+               << "\t SM versions enabled during compilation: "
+#if defined(ENABLE_SM72)
+               << "72 "
+#endif
+#if defined(ENABLE_SM75)
+               << "75 "
+#endif
+#if defined(ENABLE_SM80)
+               << "80 "
+#endif
+#if defined(ENABLE_SM86)
+               << "86 "
+#endif
+#if defined(ENABLE_SM87)
+               << "87 "
+#endif
+#if defined(ENABLE_SM89)
+               << "89 "
+#endif
+#if defined(ENABLE_SM90)
+               << "90 "
+#endif
+               << "\n";
+        PLUGIN_VALIDATE(findIter != mFunctions.end(), errMsg.str().c_str());
+
+        const auto& kernelMeta = mKernelMeta[findIter->second.mMetaInfoIndex];
+        const CUfunction func = findIter->second.mDeviceFunction;
+
+        void* kernelParams[] = {&params, nullptr};
+        cuErrCheck(mDriver.cuLaunchKernel(func, params.h, params.b, 1, kernelMeta.mThreadsPerCTA, 1, 1,
+                       kernelMeta.mSharedMemBytes, ss, kernelParams, nullptr),
+            mDriver);
+    }
+
+    virtual ~TFusedMultiHeadAttentionXMMAKernel() = default;
+
+protected:
+    nvinfer1::CUDADriverWrapper mDriver;
+
+    plugin::bert::Data_type mDataType;
+    const TKernelMeta* mKernelMeta;
+    uint32_t mKernelMetaCount;
+    uint32_t mSM;
+    std::unordered_map<const unsigned char*, CUmodule> mModules;
+    struct FusedMultiHeadAttentionKernelInfo
+    {
+        uint32_t mMetaInfoIndex;
+        CUfunction mDeviceFunction;
+    };
+    std::unordered_map<uint64_t, FusedMultiHeadAttentionKernelInfo> mFunctions;
+    // Set of valid sequence and head size combination. We use (headSize << 32 | sequence) as key here.
+    std::unordered_set<uint64_t> mValidSequences;
+};
+template <typename TFusedMHAKernelList>
+class TFusedMHAKernelFactory
+{
+public:
+    const TFusedMHAKernelList* getXMMAKernels(const typename TFusedMHAKernelList::KernelMeta* pKernelList,
+        uint32_t nbKernels, plugin::bert::Data_type type, uint32_t sm)
+    {
+        static std::mutex s_mutex;
+        std::lock_guard<std::mutex> lg(s_mutex);
+
+        const auto id = hashID(type, sm);
+        const auto findIter = mKernels.find(id);
+        if (findIter == mKernels.end())
+        {
+            TFusedMHAKernelList* newKernel = new TFusedMHAKernelList{pKernelList, nbKernels, type, sm};
+            newKernel->loadXMMAKernels();
+            mKernels.insert(std::make_pair(id, std::unique_ptr<TFusedMHAKernelList>(newKernel)));
+            return newKernel;
+        }
+        return findIter->second.get();
+    }
+
+    static TFusedMHAKernelFactory<TFusedMHAKernelList>& Get()
+    {
+        static TFusedMHAKernelFactory<TFusedMHAKernelList> s_factory;
+        return s_factory;
+    }
+
+private:
+    TFusedMHAKernelFactory() = default;
+
+    inline uint64_t hashID(plugin::bert::Data_type type, uint32_t sm) const
+    {
+        // use deviceID in hasID for multi GPU support before driver support context-less loading of cubin
+        int32_t deviceID{0};
+        CSC(cudaGetDevice(&deviceID), STATUS_FAILURE);
+
+        PLUGIN_ASSERT((deviceID & 0xFFFF) == deviceID);
+        PLUGIN_ASSERT((type & 0xFFFF) == type);
+        PLUGIN_ASSERT((sm & 0xFFFFFFFF) == sm);
+        return (uint64_t) type << 48 | (uint64_t) deviceID << 32 | sm;
+    }
+
+    std::unordered_map<uint64_t, const std::unique_ptr<TFusedMHAKernelList>> mKernels;
+};
+} // namespace pluginInternal
+
 namespace plugin
 {
 namespace bert
@@ -324,235 +554,10 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
 #endif // defined(ENABLE_SM90)
 };
 
-template <typename TKernelMeta, typename TKernelParam>
-class TFusedMultiHeadAttentionXMMAKernel
-{
-public:
-    using KernelMeta = TKernelMeta;
-    using KernelParam = TKernelParam;
-    inline uint64_t hashID(uint32_t s, uint32_t d) const
-    {
-        return (uint64_t) s << 32 | d;
-    }
-    virtual uint64_t hashID(const KernelMeta& kernelMeta) const
-    {
-        return hashID(kernelMeta.mS, kernelMeta.mD);
-    }
-
-    TFusedMultiHeadAttentionXMMAKernel(const TKernelMeta* pMetaStart, uint32_t nMetaCount, Data_type type, uint32_t sm)
-        : mDataType(type)
-        , mKernelMeta(pMetaStart)
-        , mKernelMetaCount(nMetaCount)
-        , mSM(sm)
-    {
-        PLUGIN_ASSERT(mKernelMetaCount && "No kernels were loaded correctly.");
-    }
-
-    void loadXMMAKernels(uint32_t smVersion)
-    {
-        for (uint32_t i = 0; i < mKernelMetaCount; ++i)
-        {
-            const auto& kernelMeta = mKernelMeta[i];
-            const auto kernelKey = hashID(kernelMeta);
-            if (kernelMeta.mSM == smVersion && kernelMeta.mDataType == mDataType
-                && mFunctions.find(kernelKey) == mFunctions.end())
-            {
-                const uint32_t DEFAULT_SMEM_SIZE{48 * 1024};
-                if (kernelMeta.mSharedMemBytes >= DEFAULT_SMEM_SIZE)
-                {
-                    int32_t deviceID{0};
-                    cudaGetDevice(&deviceID);
-                    int32_t sharedMemPerMultiprocessor{0};
-                    if (cudaDeviceGetAttribute(
-                            &sharedMemPerMultiprocessor, cudaDevAttrMaxSharedMemoryPerBlockOptin, deviceID)
-                            != cudaSuccess
-                        || sharedMemPerMultiprocessor < static_cast<int32_t>(kernelMeta.mSharedMemBytes))
-                    {
-                        // skip load function because not enough shared memory to launch the kernel
-                        continue;
-                    }
-                }
-
-                CUmodule hmod{0};
-                auto findModuleIter = mModules.find(kernelMeta.mCubin);
-                if (findModuleIter != mModules.end())
-                {
-                    hmod = findModuleIter->second;
-                }
-                else
-                {
-                    cuErrCheck(mDriver.cuModuleLoadData(&hmod, kernelMeta.mCubin), mDriver);
-                    mModules.insert(std::make_pair(kernelMeta.mCubin, hmod));
-                }
-
-                FusedMultiHeadAttentionKernelInfo funcInfo;
-                funcInfo.mMetaInfoIndex = i;
-                cuErrCheck(mDriver.cuModuleGetFunction(&funcInfo.mDeviceFunction, hmod, kernelMeta.mFuncName), mDriver);
-                if (kernelMeta.mSharedMemBytes >= DEFAULT_SMEM_SIZE)
-                {
-                    if (mDriver.cuFuncSetAttribute(funcInfo.mDeviceFunction,
-                            CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, kernelMeta.mSharedMemBytes)
-                        != CUDA_SUCCESS)
-                    {
-                        // some chip may not have enough shared memory to launch the kernel
-                        continue;
-                    }
-                }
-                mFunctions.insert({kernelKey, funcInfo});
-                uint64_t const s = kernelMeta.mS;
-                uint64_t const headSize = kernelMeta.mD;
-                uint64_t key = (headSize << 32 | s);
-                if (mValidSequences.find(key) == mValidSequences.end())
-                {
-                    mValidSequences.insert(key);
-                }
-            }
-        }
-    }
-
-    void loadXMMAKernels()
-    {
-        if (!mFunctions.empty())
-        {
-            return;
-        }
-
-        loadXMMAKernels(mSM);
-
-        // sm_86 chips prefer sm_86 sass, but can also use sm_80 sass if sm_86 not exist.
-        // sm_87 cannot run sm_80 sass
-        if (mSM == kSM_86)
-        {
-            loadXMMAKernels(kSM_80);
-        }
-
-        // sm_89 will reuse sm_80 and sm_86 kernels
-        if (mSM == kSM_89)
-        {
-            loadXMMAKernels(kSM_86);
-            loadXMMAKernels(kSM_80);
-        }
-    }
-
-    bool isValid(int32_t headSize, int32_t s) const
-    {
-        uint64_t key = (static_cast<uint64_t>(headSize) << 32 | static_cast<uint64_t>(s));
-        return (mValidSequences.find(key) != mValidSequences.end());
-    }
-
-    virtual void run(TKernelParam& params, cudaStream_t ss) const
-    {
-        const auto findIter = mFunctions.find(hashID(params.s, params.d));
-        std::stringstream errMsg;
-        errMsg << "Could not find kernel for:\n"
-               << "\t s: " << params.s << "\n"
-               << "\t d: " << params.d << "\n"
-               << "Was the plugin compiled on a compatible CUDA and SM version?\n"
-               << "\t Compiled on CUDA " << CUDA_VERSION << "\n"
-               << "\t Current SM version: " << mSM << "\n"
-               << "\t SM versions enabled during compilation: "
-#if defined(ENABLE_SM72)
-               << "72 "
-#endif
-#if defined(ENABLE_SM75)
-               << "75 "
-#endif
-#if defined(ENABLE_SM80)
-               << "80 "
-#endif
-#if defined(ENABLE_SM86)
-               << "86 "
-#endif
-#if defined(ENABLE_SM87)
-               << "87 "
-#endif
-#if defined(ENABLE_SM89)
-               << "89 "
-#endif
-#if defined(ENABLE_SM90)
-               << "90 "
-#endif
-               << "\n";
-        PLUGIN_VALIDATE(findIter != mFunctions.end(), errMsg.str().c_str());
-
-        const auto& kernelMeta = mKernelMeta[findIter->second.mMetaInfoIndex];
-        const CUfunction func = findIter->second.mDeviceFunction;
-
-        void* kernelParams[] = {&params, nullptr};
-        cuErrCheck(mDriver.cuLaunchKernel(func, params.h, params.b, 1, kernelMeta.mThreadsPerCTA, 1, 1,
-                       kernelMeta.mSharedMemBytes, ss, kernelParams, nullptr),
-            mDriver);
-    }
-
-    virtual ~TFusedMultiHeadAttentionXMMAKernel() = default;
-
-protected:
-    nvinfer1::CUDADriverWrapper mDriver;
-
-    Data_type mDataType;
-    const TKernelMeta* mKernelMeta;
-    uint32_t mKernelMetaCount;
-    uint32_t mSM;
-    std::unordered_map<const unsigned char*, CUmodule> mModules;
-    struct FusedMultiHeadAttentionKernelInfo
-    {
-        uint32_t mMetaInfoIndex;
-        CUfunction mDeviceFunction;
-    };
-    std::unordered_map<uint64_t, FusedMultiHeadAttentionKernelInfo> mFunctions;
-    // Set of valid sequence and head size combination. We use (headSize << 32 | sequence) as key here.
-    std::unordered_set<uint64_t> mValidSequences;
-};
-
-template <typename TFusedMHAKernelList>
-class TFusedMHAKernelFactory
-{
-public:
-    const TFusedMHAKernelList* getXMMAKernels(
-        const typename TFusedMHAKernelList::KernelMeta* pKernelList, uint32_t nbKernels, Data_type type, uint32_t sm)
-    {
-        static std::mutex s_mutex;
-        std::lock_guard<std::mutex> lg(s_mutex);
-
-        const auto id = hashID(type, sm);
-        const auto findIter = mKernels.find(id);
-        if (findIter == mKernels.end())
-        {
-            TFusedMHAKernelList* newKernel = new TFusedMHAKernelList{pKernelList, nbKernels, type, sm};
-            newKernel->loadXMMAKernels();
-            mKernels.insert(std::make_pair(id, std::unique_ptr<TFusedMHAKernelList>(newKernel)));
-            return newKernel;
-        }
-        return findIter->second.get();
-    }
-
-    static TFusedMHAKernelFactory<TFusedMHAKernelList>& Get()
-    {
-        static TFusedMHAKernelFactory<TFusedMHAKernelList> s_factory;
-        return s_factory;
-    }
-
-private:
-    TFusedMHAKernelFactory() = default;
-
-    inline uint64_t hashID(Data_type type, uint32_t sm) const
-    {
-        // use deviceID in hasID for multi GPU support before driver support context-less loading of cubin
-        int32_t deviceID{0};
-        CSC(cudaGetDevice(&deviceID), STATUS_FAILURE);
-
-        PLUGIN_ASSERT((deviceID & 0xFFFF) == deviceID);
-        PLUGIN_ASSERT((type & 0xFFFF) == type);
-        PLUGIN_ASSERT((sm & 0xFFFFFFFF) == sm);
-        return (uint64_t) type << 48 | (uint64_t) deviceID << 32 | sm;
-    }
-
-    std::unordered_map<uint64_t, const std::unique_ptr<TFusedMHAKernelList>> mKernels;
-};
-
 using FusedMultiHeadAttentionXMMAKernel
-    = TFusedMultiHeadAttentionXMMAKernel<FusedMultiHeadAttentionKernelMetaInfoV1, Fused_multihead_attention_params>;
-using FusedMHAKernelFactory = TFusedMHAKernelFactory<FusedMultiHeadAttentionXMMAKernel>;
+    = pluginInternal::TFusedMultiHeadAttentionXMMAKernel<FusedMultiHeadAttentionKernelMetaInfoV1,
+        Fused_multihead_attention_params>;
+using FusedMHAKernelFactory = pluginInternal::TFusedMHAKernelFactory<FusedMultiHeadAttentionXMMAKernel>;
 
 inline const FusedMultiHeadAttentionXMMAKernel* getXMMAKernels(Data_type type, uint32_t sm)
 {

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -105,7 +105,9 @@ def export(funcify=False, func_name=None):
             if method in vars(ancestor):
                 return vars(ancestor)[method]
 
-        assert False, f"Could not find method: {method} in the inheritance hierarcy of: {symbol}"
+        assert (
+            False
+        ), f"Could not find method: {method} in the inheritance hierarcy of: {symbol}"
 
     def export_impl(func_or_cls):
         _add_to_all(func_or_cls.__name__, module)
@@ -115,13 +117,19 @@ def export(funcify=False, func_name=None):
             # have no overlapping parameters.
             from polygraphy.backend.base import BaseLoader
 
-            assert inspect.isclass(func_or_cls), "Decorated type must be a loader to use funcify=True"
+            assert inspect.isclass(
+                func_or_cls
+            ), "Decorated type must be a loader to use funcify=True"
             assert BaseLoader in inspect.getmro(
                 func_or_cls
             ), "Decorated type must derive from BaseLoader to use funcify=True"
 
             def get_params(method):
-                return list(inspect.signature(find_method(func_or_cls, method)).parameters.values())[1:]
+                return list(
+                    inspect.signature(
+                        find_method(func_or_cls, method)
+                    ).parameters.values()
+                )[1:]
 
             def is_variadic(param):
                 return param.kind in [param.VAR_POSITIONAL, param.VAR_KEYWORD]
@@ -141,7 +149,9 @@ def export(funcify=False, func_name=None):
             init_params = get_params("__init__")
             call_impl_params = get_params("call_impl")
 
-            assert (set(param_names(call_impl_params)) - set(param_names(init_params))) == set(
+            assert (
+                set(param_names(call_impl_params)) - set(param_names(init_params))
+            ) == set(
                 param_names(call_impl_params)
             ), "Cannot funcify a type where call_impl and __init__ have the same argument names!"
 
@@ -152,14 +162,22 @@ def export(funcify=False, func_name=None):
 
             def build_arg_list(should_include):
                 def str_from_param(p):
-                    return get_param_name(p) + (f"={p.default}" if has_default(p) else "")
+                    return get_param_name(p) + (
+                        f"={p.default}" if has_default(p) else ""
+                    )
 
                 arg_list = [str_from_param(p) for p in init_params if should_include(p)]
-                arg_list += [str_from_param(p) for p in call_impl_params if should_include(p)]
+                arg_list += [
+                    str_from_param(p) for p in call_impl_params if should_include(p)
+                ]
                 return arg_list
 
-            non_default_args = build_arg_list(should_include=lambda p: not is_variadic(p) and not has_default(p))
-            default_args = build_arg_list(should_include=lambda p: not is_variadic(p) and has_default(p))
+            non_default_args = build_arg_list(
+                should_include=lambda p: not is_variadic(p) and not has_default(p)
+            )
+            default_args = build_arg_list(
+                should_include=lambda p: not is_variadic(p) and has_default(p)
+            )
             special_args = build_arg_list(should_include=is_variadic)
 
             signature = ", ".join(non_default_args + default_args + special_args)
@@ -168,7 +186,9 @@ def export(funcify=False, func_name=None):
             call_impl_args = ", ".join(param_names(call_impl_params))
 
             def pascal_to_snake(name):
-                return "".join(f"_{c.lower()}" if c.isupper() else c for c in name).lstrip("_")
+                return "".join(
+                    f"_{c.lower()}" if c.isupper() else c for c in name
+                ).lstrip("_")
 
             nonlocal func_name
             func_name = func_name or pascal_to_snake(loader.__name__)
@@ -209,13 +229,19 @@ def export(funcify=False, func_name=None):
     return export_impl
 
 
-def warn_deprecated(name, use_instead, remove_in, module_name=None, always_show_warning=False):
+def warn_deprecated(
+    name, use_instead, remove_in, module_name=None, always_show_warning=False
+):
 
     if version(polygraphy.__version__) >= version(remove_in):
-        G_LOGGER.internal_error(f"{name} should have been removed in version: {remove_in}")
+        G_LOGGER.internal_error(
+            f"{name} should have been removed in version: {remove_in}"
+        )
 
     full_obj_name = f"{module_name}.{name}" if module_name else name
-    msg = f"{full_obj_name} is deprecated and will be removed in Polygraphy {remove_in}."
+    msg = (
+        f"{full_obj_name} is deprecated and will be removed in Polygraphy {remove_in}."
+    )
     if use_instead is not None:
         msg += f" Use {use_instead} instead."
 
@@ -245,8 +271,12 @@ def deprecate(remove_in, use_instead, module_name=None, name=None):
     """
 
     def deprecate_impl(obj):
-        if config.INTERNAL_CORRECTNESS_CHECKS and version(polygraphy.__version__) >= version(remove_in):
-            G_LOGGER.internal_error(f"{obj} should have been removed in version: {remove_in}")
+        if config.INTERNAL_CORRECTNESS_CHECKS and version(
+            polygraphy.__version__
+        ) >= version(remove_in):
+            G_LOGGER.internal_error(
+                f"{obj} should have been removed in version: {remove_in}"
+            )
 
         nonlocal name
         name = name or obj.__name__
@@ -316,9 +346,12 @@ def export_deprecated_alias(name, remove_in, use_instead=None):
     module = inspect.getmodule(sys._getframe(1))
 
     def export_deprecated_alias_impl(obj):
-        new_obj = deprecate(remove_in, use_instead=use_instead or obj.__name__, module_name=module.__name__, name=name)(
-            obj
-        )
+        new_obj = deprecate(
+            remove_in,
+            use_instead=use_instead or obj.__name__,
+            module_name=module.__name__,
+            name=name,
+        )(obj)
         _define_in_module(name, new_obj, module)
         return obj
 

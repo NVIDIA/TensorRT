@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,11 @@
 #
 
 from polygraphy import mod, util
-from polygraphy.datatype.datatype import DataType, register_dtype_importer, register_dtype_exporter
+from polygraphy.datatype.datatype import (
+    DataType,
+    register_dtype_importer,
+    register_dtype_exporter,
+)
 
 onnx = mod.lazy_import("onnx")
 
@@ -46,7 +50,11 @@ def _get_mapping():
         del DATATYPE_FROM_ONNX[None]
 
     onnx_type_map = dict(onnx.TensorProto.DataType.items())
-    return {onnx_type_map[key]: val for key, val in DATATYPE_FROM_ONNX.items() if key in onnx_type_map}
+    return {
+        onnx_type_map[key]: val
+        for key, val in DATATYPE_FROM_ONNX.items()
+        if key in onnx_type_map
+    }
 
 
 @register_dtype_importer("onnx")

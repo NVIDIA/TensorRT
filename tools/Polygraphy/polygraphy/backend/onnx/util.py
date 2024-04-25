@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,7 +45,12 @@ def get_num_nodes(model):
 def all_tensor_names(model, include_inputs=None):
     include_inputs = util.default(include_inputs, False)
 
-    all_outputs = [output for node in model.graph.node if node.op_type != "Constant" for output in node.output]
+    all_outputs = [
+        output
+        for node in model.graph.node
+        if node.op_type != "Constant"
+        for output in node.output
+    ]
     if include_inputs:
         all_outputs += [inp.name for inp in model.graph.input]
     all_outputs = util.unique_list(all_outputs)
@@ -54,7 +59,9 @@ def all_tensor_names(model, include_inputs=None):
 
 def _check_has_tensors(model, outputs):
     all_outputs = all_tensor_names(model, include_inputs=True)
-    util.check_sequence_contains(all_outputs, outputs, name="the model", items_name="outputs", check_extra=False)
+    util.check_sequence_contains(
+        all_outputs, outputs, name="the model", items_name="outputs", check_extra=False
+    )
 
 
 def mark_outputs(model, outputs):
@@ -68,7 +75,9 @@ def mark_outputs(model, outputs):
     value_info_map = {t.name: t for t in model.graph.value_info}
     out_tensors = []
     for output in outputs:
-        value_info = value_info_map.get(output, onnx.helper.make_empty_tensor_value_info(output))
+        value_info = value_info_map.get(
+            output, onnx.helper.make_empty_tensor_value_info(output)
+        )
         out_tensors.append(value_info)
 
     G_LOGGER.ultra_verbose(f"Marked output tensors in ONNX model: {out_tensors}")
@@ -125,7 +134,9 @@ def get_values(tensor):
     try:
         return onnx_numpy_helper.to_array(tensor)
     except Exception as err:
-        G_LOGGER.error(f"Failed to load weights.\nNote: Error was: {err}", mode=LogMode.ONCE)
+        G_LOGGER.error(
+            f"Failed to load weights.\nNote: Error was: {err}", mode=LogMode.ONCE
+        )
     return "<error: failed to load weights>"
 
 
@@ -139,7 +150,9 @@ def get_tensor_metadata(tensors):
 def get_input_metadata(graph):
     # Some "inputs" are actually weights with initalizers, so we need to eliminate those.
     initializer_names = {tensor.name for tensor in graph.initializer}
-    input_tensors = [tensor for tensor in graph.input if tensor.name not in initializer_names]
+    input_tensors = [
+        tensor for tensor in graph.input if tensor.name not in initializer_names
+    ]
     return get_tensor_metadata(input_tensors)
 
 
@@ -182,12 +195,18 @@ def str_from_onnx(model, show_layers=None, show_attrs=None, show_weights=None):
     onnx_str += "\n\n"
 
     onnx_str += str_from_onnx_graph(
-        model.graph, tensors={}, show_layers=show_layers, show_attrs=show_attrs, show_weights=show_weights
+        model.graph,
+        tensors={},
+        show_layers=show_layers,
+        show_attrs=show_attrs,
+        show_weights=show_weights,
     )
     return onnx_str
 
 
-def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, indent_level=0):
+def str_from_onnx_graph(
+    graph, tensors, show_layers, show_attrs, show_weights, indent_level=0
+):
     input_metadata = get_input_metadata(graph)
     output_metadata = get_output_metadata(graph)
     initializer_metadata = get_tensor_metadata(graph.initializer)
@@ -205,7 +224,9 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
     if show_attrs and graph.doc_string:
         onnx_str += f"---- Docstring ----\n{graph.doc_string}\n\n"
 
-    onnx_str += f"---- {len(input_metadata)} {graph_type} Input(s) ----\n{input_metadata}\n\n"
+    onnx_str += (
+        f"---- {len(input_metadata)} {graph_type} Input(s) ----\n{input_metadata}\n\n"
+    )
     onnx_str += f"---- {len(output_metadata)} {graph_type} Output(s) ----\n{output_metadata}\n\n"
 
     onnx_str += f"---- {len(initializer_metadata)} Initializer(s) ----\n"
@@ -232,7 +253,12 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
         return names_lst, metadata
 
     # Maps values from the AttributeType enum to their string representations, e.g., {1: "FLOAT"}
-    ATTR_TYPE_MAPPING = dict(zip(onnx.AttributeProto.AttributeType.values(), onnx.AttributeProto.AttributeType.keys()))
+    ATTR_TYPE_MAPPING = dict(
+        zip(
+            onnx.AttributeProto.AttributeType.values(),
+            onnx.AttributeProto.AttributeType.keys(),
+        )
+    )
 
     # Maps an ONNX attribute to the corresponding Python property
     ONNX_PYTHON_ATTR_MAPPING = {
@@ -257,7 +283,9 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
                 elif attr_str == "TENSOR":
                     tensor_str = f"Tensor: [dtype={get_dtype(processed)}, shape={get_shape(processed)}]"
                     if show_weights:
-                        tensor_str += " | Values:\n" + util.indent_block(str(get_values(processed)))
+                        tensor_str += " | Values:\n" + util.indent_block(
+                            str(get_values(processed))
+                        )
                     processed = tensor_str
                 elif attr_str == "GRAPH":
                     processed = "\n" + str_from_onnx_graph(
@@ -280,7 +308,9 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
                 if attr_str in ONNX_PYTHON_ATTR_MAPPING:
                     attr_dict[attr.name] = process_attr(attr_str)
                 else:
-                    G_LOGGER.warning(f"Attribute of type {attr_str} is currently unsupported. Skipping attribute.")
+                    G_LOGGER.warning(
+                        f"Attribute of type {attr_str} is currently unsupported. Skipping attribute."
+                    )
             else:
                 G_LOGGER.warning(
                     f"Attribute type: {attr.type} was not recognized. Was the graph generated with a newer IR version than the installed `onnx` package? Skipping attribute."
@@ -294,7 +324,14 @@ def str_from_onnx_graph(graph, tensors, show_layers, show_attrs, show_weights, i
             output_names, output_meta = get_names_and_meta(node.output)
 
             onnx_str += util.str_from_layer(
-                "Node", index, node.name, node.op_type, input_names, input_meta, output_names, output_meta
+                "Node",
+                index,
+                node.name,
+                node.op_type,
+                input_names,
+                input_meta,
+                output_names,
+                output_meta,
             )
 
             if show_attrs:
@@ -333,7 +370,9 @@ def set_shapes_from_layerwise_meta(graph, layerwise_meta):
     for tensor in graph.tensors().values():
         if isinstance(tensor, gs.Variable) and tensor.name in layerwise_meta:
             tensor.shape = layerwise_meta[tensor.name].shape
-            tensor.dtype = DataType.to_dtype(DataType.from_dtype(layerwise_meta[tensor.name].dtype), "onnx")
+            tensor.dtype = DataType.to_dtype(
+                DataType.from_dtype(layerwise_meta[tensor.name].dtype), "onnx"
+            )
 
 
 def lower_constant_nodes(graph):
@@ -383,7 +422,11 @@ def get_unbounded_dds_tensors(graph):
 
     # Find all constant tensors.
     def get_const_tensors(graph):
-        return {tensor.name for tensor in graph.tensors().values() if isinstance(tensor, gs.Constant)}
+        return {
+            tensor.name
+            for tensor in graph.tensors().values()
+            if isinstance(tensor, gs.Constant)
+        }
 
     # Find all dynamic shape symbols, customers will set upper bounds for these symbols when building the model in TensorRT.
     def get_dynamic_shapes(graph):
@@ -426,7 +469,10 @@ def get_unbounded_dds_tensors(graph):
             if check_node:
                 target_tensor = check_op(node, const_tensor_set)
                 # Avoid duplication.
-                if target_tensor is not None and target_tensor.name not in target_tensor_names:
+                if (
+                    target_tensor is not None
+                    and target_tensor.name not in target_tensor_names
+                ):
                     target_tensor_names.add(target_tensor.name)
                     target_tensor_list.append(target_tensor)
         return target_tensor_list

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,13 +44,15 @@ def _make_debug_listener():
             cuda.wrapper().memcpy(
                 dst=util.array.data_ptr(buffer),
                 src=addr,
-                nbytes=size*datatype.itemsize,
+                nbytes=size * datatype.itemsize,
                 kind=cuda.MemcpyKind.DeviceToHost,
-                stream_ptr=stream)
+                stream_ptr=stream,
+            )
             cuda.wrapper().stream_synchronize(stream)
             self.debug_tensor_outputs[name] = util.array.resize_or_reallocate(buffer, shape)
 
     return DebugTensorWriter()
+
 
 def _make_output_allocator():
 
@@ -79,7 +81,7 @@ def _make_output_allocator():
 
         def set_use_torch(self, use_torch):
             self.use_torch = use_torch
-    
+
     return OutputAllocator()
 
 
@@ -138,7 +140,15 @@ class TrtRunner(BaseRunner):
     be used only for prototyping, testing, and debugging.
     """
 
-    def __init__(self, engine, name: str = None, optimization_profile: int = None, allocation_strategy: str = None, weight_streaming_budget: int = None, weight_streaming_percent: float = None):
+    def __init__(
+        self,
+        engine,
+        name: str = None,
+        optimization_profile: int = None,
+        allocation_strategy: str = None,
+        weight_streaming_budget: int = None,
+        weight_streaming_percent: float = None,
+    ):
         """
         Args:
             engine (Union[Union[trt.ICudaEngine, trt.IExecutionContext], Callable() -> Union[trt.ICudaEngine, trt.IExecutionContext]]):
@@ -173,7 +183,6 @@ class TrtRunner(BaseRunner):
         self.allocation_strategy = allocation_strategy
         self.weight_streaming_budget = weight_streaming_budget
         self.weight_streaming_percent = weight_streaming_percent
-        self.output_allocator = _make_output_allocator()
 
     @util.check_called_by("activate")
     def activate_impl(self):
@@ -193,7 +202,7 @@ class TrtRunner(BaseRunner):
             elif self.weight_streaming_percent is not None:
                 assert 0 <= self.weight_streaming_percent <= 100
                 if self.weight_streaming_percent == 0:
-                    budget_bytes = 0 # Disable weight streaming
+                    budget_bytes = 0  # Disable weight streaming
                 else:
                     min_budget = self.engine.minimum_weight_streaming_budget
                     max_budget = self.engine.streamable_weights_size
@@ -209,15 +218,15 @@ class TrtRunner(BaseRunner):
                     G_LOGGER.info(f"Weight streaming is enabled with TensorRT automatically determiing the budget.")
                 else:
                     G_LOGGER.info(f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes.")
-            
+
             allocation_strategy = util.default(self.allocation_strategy, "static")
-            if allocation_strategy == 'static':
+            if allocation_strategy == "static":
                 self.context = self.engine.create_execution_context()
-            elif allocation_strategy in ['profile', 'runtime']:
+            elif allocation_strategy in ["profile", "runtime"]:
                 # Device memory will be managed by polygraphy
                 self.context = self.engine.create_execution_context(trt.ExecutionContextAllocationStrategy.USER_MANAGED)
             else:
-                 G_LOGGER.critical("Invalid allocation strategy specified.")
+                G_LOGGER.critical("Invalid allocation strategy specified.")
             if not self.context:
                 G_LOGGER.critical("Invalid Context. See error log for details.")
         elif isinstance(engine_or_context, trt.IExecutionContext):
@@ -237,6 +246,7 @@ class TrtRunner(BaseRunner):
         self.host_output_buffers = OrderedDict()
         self.stream = cuda.Stream()
         self.context_memory_buffer = None
+        self.output_allocator = _make_output_allocator()
 
         if self.optimization_profile is not None:
             self.set_profile(self.optimization_profile)
@@ -342,8 +352,10 @@ class TrtRunner(BaseRunner):
         if self.allocation_strategy in ["profile", "runtime"]:
             if self.allocation_strategy == "profile":
                 # Perform per-profile allocation.
-                size_to_allocate = self.engine.get_device_memory_size_for_profile(self.context.active_optimization_profile)
-            elif self.allocation_strategy =="runtime":
+                size_to_allocate = self.engine.get_device_memory_size_for_profile(
+                    self.context.active_optimization_profile
+                )
+            elif self.allocation_strategy == "runtime":
                 # Perform runtime allocation.
                 size_to_allocate = self.context.update_device_memory_size_for_shapes()
 
@@ -378,7 +390,12 @@ class TrtRunner(BaseRunner):
 
             if copy_outputs_to_host:
                 raw_array = _get_array_on_cpu(
-                    raw_array, name, self.host_output_buffers, self.stream, nbytes, use_torch=use_torch
+                    raw_array,
+                    name,
+                    self.host_output_buffers,
+                    self.stream,
+                    nbytes,
+                    use_torch=use_torch,
                 )
 
             if using_vectorized_format:
@@ -448,4 +465,5 @@ class TrtRunner(BaseRunner):
             self.host_output_buffers,
             self.stream,
             self.context_memory_buffer,
+            self.output_allocator,
         )

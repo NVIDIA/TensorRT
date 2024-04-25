@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +15,14 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.surgeon.subtool import Extract, Insert, Sanitize, Prune, WeightStripper, WeightReconstructor
+from polygraphy.tools.surgeon.subtool import (
+    Extract,
+    Insert,
+    Sanitize,
+    Prune,
+    WeightStripper,
+    WeightReconstructor,
+)
 
 ################################# MAIN TOOL #################################
 

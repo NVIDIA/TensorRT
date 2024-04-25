@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,7 +75,16 @@ class TestBuild:
                 files = glob.glob(os.path.join(outdir, subdir, "*"))
                 assert len(files) == 1
                 basenames = list(map(os.path.basename, files))
-                assert len([f for f in basenames if f.startswith("replay") and f.endswith(".json")]) == 1
+                assert (
+                    len(
+                        [
+                            f
+                            for f in basenames
+                            if f.startswith("replay") and f.endswith(".json")
+                        ]
+                    )
+                    == 1
+                )
 
             check_outdir("good")
             check_outdir("bad")
@@ -105,7 +114,9 @@ class TestPrecision:
 
 
 class TestReduce:
-    FAKE_REDUCE_CHECKER = os.path.join(os.path.dirname(__file__), "fake_reduce_checker.py")
+    FAKE_REDUCE_CHECKER = os.path.join(
+        os.path.dirname(__file__), "fake_reduce_checker.py"
+    )
 
     # Test left branch, right branch, at the point of branching, and after the branch.
     @pytest.mark.parametrize(
@@ -315,7 +326,9 @@ class TestReduce:
             model = onnx_from_path(os.path.join(outdir, "reduced.onnx"))
             node_names = [node.name for node in model.graph.node]
             assert all(fail_node in node_names for fail_node in fail_nodes)
-            assert len(model.graph.node) <= 3  # The branch on the opposite side of the model should be removed.
+            assert (
+                len(model.graph.node) <= 3
+            )  # The branch on the opposite side of the model should be removed.
 
     @pytest.mark.parametrize("opts", [[], ["--force-fallback-shape-inference"]])
     def test_reduce_shape_inference(self, opts, poly_debug):
@@ -374,7 +387,12 @@ class TestReduce:
             model = ONNX_MODELS["reducable"].path
 
             inp_data_path = os.path.join(outdir, "custom_inputs.json")
-            inputs = [{"X0": np.array([3.14159265], dtype=np.float32), "Y0": np.array([2.7749389])}]
+            inputs = [
+                {
+                    "X0": np.array([3.14159265], dtype=np.float32),
+                    "Y0": np.array([2.7749389]),
+                }
+            ]
             save_json(inputs, inp_data_path)
 
             # Generate golden outputs
@@ -416,10 +434,13 @@ class TestReduce:
             # distinct from the input data we specified.
             # Otherwise, reduce should use the data loader we provided and hence pass
             assert ("FAILED" in status.stdout + status.stderr) == negative
-            assert ("Difference exceeds tolerance" in status.stdout + status.stderr) == negative
+            assert (
+                "Difference exceeds tolerance" in status.stdout + status.stderr
+            ) == negative
             # Reduce should issue a warning when it detects that the default data loader is in use.
             assert (
-                "Please ensure that you have provided a data loader argument directly" in status.stdout + status.stderr
+                "Please ensure that you have provided a data loader argument directly"
+                in status.stdout + status.stderr
             ) == negative
 
     @pytest.mark.script_launch_mode("subprocess")
@@ -524,7 +545,9 @@ class TestRepeat:
     )
     def test_until(self, until, check, expected_iters, poly_debug):
         with tempfile.TemporaryDirectory() as outdir:
-            status = poly_debug(["repeat", "--until", until, "--check", check], cwd=outdir)
+            status = poly_debug(
+                ["repeat", "--until", until, "--check", check], cwd=outdir
+            )
             assert f"Finished {expected_iters} iteration(s)" in status.stdout
 
     def test_iteration_info(self, poly_debug):
@@ -579,5 +602,7 @@ class TestRepeat:
     )
     def test_ignore_fail_code(self, poly_debug, opts, expected_output):
         with tempfile.TemporaryDirectory() as outdir:
-            status = poly_debug(["repeat", "--until=5"] + opts + ["--check", "false"], cwd=outdir)
+            status = poly_debug(
+                ["repeat", "--until=5"] + opts + ["--check", "false"], cwd=outdir
+            )
             assert expected_output in status.stdout

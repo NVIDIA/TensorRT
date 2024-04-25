@@ -31,6 +31,67 @@
 
 namespace nvinfer1
 {
+
+namespace pluginInternal
+{
+class SharedStream : public IPluginResource
+{
+public:
+    SharedStream(bool init = false)
+    {
+        if (init)
+        {
+            PLUGIN_CUASSERT(cudaStreamCreate(&mStream));
+        }
+    }
+
+    void free()
+    {
+        if (mStream != nullptr)
+        {
+            PLUGIN_CUASSERT(cudaStreamDestroy(mStream));
+            mStream = nullptr;
+        }
+    }
+
+    int32_t release() noexcept override
+    {
+        try
+        {
+            free();
+        }
+        catch (std::exception const& e)
+        {
+            return -1;
+        }
+        return 0;
+    }
+
+    IPluginResource* clone() noexcept override
+    {
+        std::unique_ptr<SharedStream> cloned{};
+        try
+        {
+            cloned = std::make_unique<SharedStream>(/* init */ true);
+        }
+        catch (std::exception const& e)
+        {
+            return nullptr;
+        }
+        return cloned.release();
+    }
+
+    ~SharedStream() override
+    {
+        if (mStream)
+        {
+            free();
+        }
+    }
+
+    cudaStream_t mStream{nullptr};
+};
+} // namespace pluginInternal
 namespace plugin
 {
 namespace bert
@@ -40,6 +101,8 @@ template <typename T>
 struct GemmTypes
 {
 };
+
+char const* const kFCPLUGIN_SHARED_STREAM_KEY{"fcPlugin_timing_key"};
 
 template <>
 struct GemmTypes<half>
@@ -174,11 +237,12 @@ void LtGemmSearch(nvinfer1::pluginInternal::cublasLtHandle_t ltHandle,
                   cudaDataType_t Atype,
                   cudaDataType_t Btype,
                   cudaDataType_t Ctype,
-                  std::vector<customMatmulPerf_t> &perfResults);
+                  std::vector<customMatmulPerf_t> &perfResults,
+                  cudaStream_t stream);
 // clang-format on
 template <typename T>
 void LtGemmSearch(nvinfer1::pluginInternal::cublasLtHandle_t ltHandle, Gemm<T> const& g, void* workSpace,
-    size_t workSpaceSize, std::vector<customMatmulPerf_t>& perfResults)
+    size_t workSpaceSize, std::vector<customMatmulPerf_t>& perfResults, cudaStream_t stream)
 {
     // clang-format off
     LtGemmSearch(
@@ -203,7 +267,8 @@ void LtGemmSearch(nvinfer1::pluginInternal::cublasLtHandle_t ltHandle, Gemm<T> c
         Gemm<T>::Types::cudaTypeI,
         Gemm<T>::Types::cudaTypeI,
         Gemm<T>::Types::cudaTypeO,
-        perfResults
+        perfResults,
+        stream
     );
     // clang-format on
 }
@@ -380,29 +445,30 @@ struct AlgoProps
 };
 
 template <typename T>
-nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
-    int32_t const m, int32_t const n, int32_t const k, size_t const workspaceSize, size_t& actualWorkspace)
+nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(int32_t const m, int32_t const n, int32_t const k,
+    size_t const workspaceSize, size_t& actualWorkspace, cudaStream_t& stream)
 {
     Gemm<T> g(m, n, k, false, false);
     std::vector<customMatmulPerf_t> perfResults(kNB_ALGO_COMBINATIONS);
 
-    PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.A), g.bytesA));
-    PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.B), g.bytesB));
-    PLUGIN_CUASSERT(cudaMalloc(reinterpret_cast<void**>(&g.C), g.bytesC));
+    PLUGIN_CUASSERT(cudaMallocAsync(reinterpret_cast<void**>(&g.A), g.bytesA, stream));
+    PLUGIN_CUASSERT(cudaMallocAsync(reinterpret_cast<void**>(&g.B), g.bytesB, stream));
+    PLUGIN_CUASSERT(cudaMallocAsync(reinterpret_cast<void**>(&g.C), g.bytesC, stream));
 
     void* workspace;
-    PLUGIN_CUASSERT(cudaMalloc(&workspace, workspaceSize));
+    PLUGIN_CUASSERT(cudaMallocAsync(&workspace, workspaceSize, stream));
     nvinfer1::pluginInternal::cublasLtHandle_t lt;
     nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
     PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtCreate(&lt));
-    LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
-    PLUGIN_CUASSERT(cudaDeviceSynchronize());
-    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
-    PLUGIN_CUASSERT(cudaFree(workspace));
 
-    PLUGIN_CUASSERT(cudaFree(g.A));
-    PLUGIN_CUASSERT(cudaFree(g.B));
-    PLUGIN_CUASSERT(cudaFree(g.C));
+    LtGemmSearch(lt, g, workspace, workspaceSize, perfResults, stream);
+    PLUGIN_CUASSERT(cudaStreamSynchronize(stream));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
+    PLUGIN_CUASSERT(cudaFreeAsync(workspace, stream));
+
+    PLUGIN_CUASSERT(cudaFreeAsync(g.A, stream));
+    PLUGIN_CUASSERT(cudaFreeAsync(g.B, stream));
+    PLUGIN_CUASSERT(cudaFreeAsync(g.C, stream));
 
     actualWorkspace = perfResults[0].workspaceSize;
     return perfResults[0].algo;
@@ -410,27 +476,28 @@ nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
 
 template <typename T>
 nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
-    Gemm<T>& g, size_t const workspaceSize, size_t& actualWorkspace)
+    Gemm<T>& g, size_t const workspaceSize, size_t& actualWorkspace, cudaStream_t& stream)
 {
     std::vector<customMatmulPerf_t> perfResults(kNB_ALGO_COMBINATIONS);
 
-    PLUGIN_CUASSERT(cudaMalloc(&g.A, g.bytesA));
-    PLUGIN_CUASSERT(cudaMalloc(&g.B, g.bytesB));
-    PLUGIN_CUASSERT(cudaMalloc(&g.C, g.bytesC));
+    PLUGIN_CUASSERT(cudaMallocAsync(&g.A, g.bytesA, stream));
+    PLUGIN_CUASSERT(cudaMallocAsync(&g.B, g.bytesB, stream));
+    PLUGIN_CUASSERT(cudaMallocAsync(&g.C, g.bytesC, stream));
 
     void* workspace;
-    PLUGIN_CUASSERT(cudaMalloc(&workspace, workspaceSize));
+    PLUGIN_CUASSERT(cudaMallocAsync(&workspace, workspaceSize, stream));
     nvinfer1::pluginInternal::cublasLtHandle_t lt;
     nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
     PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtCreate(&lt));
-    LtGemmSearch(lt, g, workspace, workspaceSize, perfResults);
-    PLUGIN_CUASSERT(cudaDeviceSynchronize());
-    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
-    PLUGIN_CUASSERT(cudaFree(workspace));
 
-    PLUGIN_CUASSERT(cudaFree(g.A));
-    PLUGIN_CUASSERT(cudaFree(g.B));
-    PLUGIN_CUASSERT(cudaFree(g.C));
+    LtGemmSearch(lt, g, workspace, workspaceSize, perfResults, stream);
+    PLUGIN_CUASSERT(cudaStreamSynchronize(stream));
+    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
+    PLUGIN_CUASSERT(cudaFreeAsync(workspace, stream));
+
+    PLUGIN_CUASSERT(cudaFreeAsync(g.A, stream));
+    PLUGIN_CUASSERT(cudaFreeAsync(g.B, stream));
+    PLUGIN_CUASSERT(cudaFreeAsync(g.C, stream));
 
     actualWorkspace = perfResults[0].workspaceSize;
     return perfResults[0].algo;
@@ -500,6 +567,7 @@ private:
     bert::cuda_unique_ptr<void> mWdev;
 
     LtContext mLtContext;
+    cudaStream_t mSharedStream{nullptr};
 };
 
 class FCPluginDynamicCreator : public nvinfer1::IPluginCreator
@@ -527,6 +595,7 @@ private:
     static std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
+
 } // namespace bert
 } // namespace plugin
 } // namespace nvinfer1

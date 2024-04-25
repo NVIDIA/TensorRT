@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,9 @@ def load_graph(path):
             graphdef.ParseFromString(util.load_file(path, description="GraphDef"))
         except google.protobuf.message.DecodeError:
             G_LOGGER.backtrace()
-            G_LOGGER.critical(f"Could not import TensorFlow GraphDef from: {path}. Is this a valid TensorFlow model?")
+            G_LOGGER.critical(
+                f"Could not import TensorFlow GraphDef from: {path}. Is this a valid TensorFlow model?"
+            )
     elif isinstance(path, tf.compat.v1.GraphDef):
         graphdef = path
 
@@ -79,7 +81,9 @@ def get_tensor_metadata(tensors):
     metadata = TensorMetadata()
     for tensor in tensors:
         try:
-            shape = [elem.value if hasattr(elem, "value") else elem for elem in tensor.shape]
+            shape = [
+                elem.value if hasattr(elem, "value") else elem for elem in tensor.shape
+            ]
         except ValueError:
             # Happens when rank is unknown
             shape = None
@@ -90,7 +94,9 @@ def get_tensor_metadata(tensors):
 def get_input_metadata(graph):
     input_tensors = []
     input_nodes = find_nodes_by_ops(graph.as_graph_def(), ["Placeholder", "FIFOQueue"])
-    G_LOGGER.verbose(f"Found input tensors: {[f'{n.name}: {n.op}' for n in input_nodes]}")
+    G_LOGGER.verbose(
+        f"Found input tensors: {[f'{n.name}: {n.op}' for n in input_nodes]}"
+    )
     for node in input_nodes:
         input_tensors.append(graph.get_tensor_by_name(node.name + ":0"))
 
@@ -128,7 +134,9 @@ def get_output_metadata(graph, layerwise=False):
         # Additionally, we sometimes need to exclude entire namespaces e.g. while loops.
         EXCLUDE_NAMESPACES = ["while", "Assert"]
 
-        if any([ex_op in node.op for ex_op in EXCLUDE_OPS]) or any([ns in node.name for ns in EXCLUDE_NAMESPACES]):
+        if any([ex_op in node.op for ex_op in EXCLUDE_OPS]) or any(
+            [ns in node.name for ns in EXCLUDE_NAMESPACES]
+        ):
             G_LOGGER.extra_verbose(
                 f"Excluding {node.name}, op {node.op} is not a valid output op or is part of an excluded namespace (Note: excluded namespaces: {EXCLUDE_NAMESPACES})"
             )
@@ -139,7 +147,9 @@ def get_output_metadata(graph, layerwise=False):
     # For layerwise mode, every layer becomes an output.
     if layerwise:
         output_nodes = list(graphdef.node)
-        G_LOGGER.verbose(f"Running in layerwise mode. Marking {len(output_nodes)} layers as potential outputs")
+        G_LOGGER.verbose(
+            f"Running in layerwise mode. Marking {len(output_nodes)} layers as potential outputs"
+        )
     else:
         output_nodes = [node for node in graphdef.node if is_output_node(node)]
     G_LOGGER.extra_verbose(f"Found likely output nodes: {output_nodes}")
@@ -157,7 +167,9 @@ def get_output_metadata(graph, layerwise=False):
             f"Excluded {len(output_nodes) - len(output_tensors)} ops that don't seem like outputs. Use -vv/--super-verbose, or set logging verbosity to EXTRA_VERBOSE to view them."
         )
 
-    G_LOGGER.extra_verbose(f"Found output op types in graph: {set(tensor.op.type for tensor in output_tensors)}")
+    G_LOGGER.extra_verbose(
+        f"Found output op types in graph: {set(tensor.op.type for tensor in output_tensors)}"
+    )
     G_LOGGER.verbose(f"Retrieved TensorFlow output_tensors: {output_tensors}")
     return get_tensor_metadata(output_tensors)
 
@@ -176,7 +188,9 @@ def str_from_graph(graph, show_layers=None, show_attrs=None, show_weights=None):
     output_metadata = get_output_metadata(graph)
 
     graph_str += f"---- {len(input_metadata)} Graph Inputs ----\n{input_metadata}\n\n"
-    graph_str += f"---- {len(output_metadata)} Graph Outputs ----\n{output_metadata}\n\n"
+    graph_str += (
+        f"---- {len(output_metadata)} Graph Outputs ----\n{output_metadata}\n\n"
+    )
     graph_str += f"---- {len(graph.as_graph_def().node)} Nodes ----\n"
     if show_layers:
         G_LOGGER.warning(

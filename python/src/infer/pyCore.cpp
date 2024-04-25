@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,16 +55,16 @@ static const auto opt_profile_get_shape
     return shapes;
 };
 
-static const auto opt_profile_set_shape_input
-    = [](IOptimizationProfile& self, std::string const& inputName, std::vector<int32_t> const& min,
-          std::vector<int32_t> const& opt, std::vector<int32_t> const& max) {
-          PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMIN, min.data(), min.size()),
-              "min input provided for shape tensor is inconsistent with other inputs.");
-          PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kOPT, opt.data(), opt.size()),
-              "opt input provided for shape tensor is inconsistent with other inputs.");
-          PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMAX, max.data(), max.size()),
-              "max input provided for shape tensor is inconsistent with other inputs.");
-      };
+static const auto opt_profile_set_shape_input = [](IOptimizationProfile& self, std::string const& inputName,
+                                                    std::vector<int32_t> const& min, std::vector<int32_t> const& opt,
+                                                    std::vector<int32_t> const& max) {
+    PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMIN, min.data(), min.size()),
+        "min input provided for shape tensor is inconsistent with other inputs.");
+    PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kOPT, opt.data(), opt.size()),
+        "opt input provided for shape tensor is inconsistent with other inputs.");
+    PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMAX, max.data(), max.size()),
+        "max input provided for shape tensor is inconsistent with other inputs.");
+};
 
 static const auto opt_profile_get_shape_input
     = [](IOptimizationProfile& self, std::string const& inputName) -> std::vector<std::vector<int32_t>> {
@@ -144,7 +144,8 @@ Dims castDimsFromPyIterable(PyIterable& in)
     int32_t const maxDims{static_cast<int32_t>(Dims::MAX_DIMS)};
     Dims dims{};
     dims.nbDims = py::len(in);
-    PY_ASSERT_RUNTIME_ERROR(dims.nbDims <= maxDims, "The number of input dims exceeds the maximum allowed number of dimensions");
+    PY_ASSERT_RUNTIME_ERROR(
+        dims.nbDims <= maxDims, "The number of input dims exceeds the maximum allowed number of dimensions");
     for (int32_t i = 0; i < dims.nbDims; ++i)
     {
         dims.d[i] = in[i].template cast<int32_t>();
@@ -180,21 +181,6 @@ std::vector<Dims> get_tensor_profile_shape(ICudaEngine& self, std::string const&
     shapes.emplace_back(self.getProfileShape(tensorName.c_str(), profileIndex, OptProfileSelector::kOPT));
     shapes.emplace_back(self.getProfileShape(tensorName.c_str(), profileIndex, OptProfileSelector::kMAX));
     return shapes;
-};
-
-std::vector<Dims> engine_get_profile_shape(ICudaEngine& self, int32_t profileIndex, int32_t bindingIndex)
-{
-    std::vector<Dims> shapes{};
-    auto const tensorName = self.getIOTensorName(bindingIndex);
-    shapes.emplace_back(self.getProfileShape(tensorName, profileIndex, OptProfileSelector::kMIN));
-    shapes.emplace_back(self.getProfileShape(tensorName, profileIndex, OptProfileSelector::kOPT));
-    shapes.emplace_back(self.getProfileShape(tensorName, profileIndex, OptProfileSelector::kMAX));
-    return shapes;
-};
-// Overload to allow using binding names instead of indices.
-std::vector<Dims> engine_get_profile_shape_str(ICudaEngine& self, int32_t profileIndex, std::string const& bindingName)
-{
-    return get_tensor_profile_shape(self, bindingName, profileIndex);
 };
 
 std::vector<std::vector<int32_t>> get_tensor_profile_values(
@@ -618,8 +604,11 @@ public:
                 return 0;
             }
 
-            py::object bytesRead = pyFunc(reinterpret_cast<size_t>(destination), size);
-            return bytesRead.cast<int64_t>();
+            py::buffer data = pyFunc(size);
+            py::buffer_info info = data.request();
+            int64_t bytesRead = info.size * info.itemsize;
+            std::memcpy(destination, info.ptr, std::min(bytesRead, size));
+            return bytesRead;
         }
         catch (std::exception const& e)
         {
@@ -1180,10 +1169,6 @@ void bindCore(py::module& m)
         .def_property_readonly("name", &ICudaEngine::getName)
         .def_property_readonly("num_optimization_profiles", &ICudaEngine::getNbOptimizationProfiles)
         .def_property_readonly("engine_capability", &ICudaEngine::getEngineCapability)
-        .def("get_profile_shape", utils::deprecate(lambdas::engine_get_profile_shape, "get_tensor_profile_shape"),
-            "profile_index"_a, "binding"_a, ICudaEngineDoc::get_profile_shape)
-        .def("get_profile_shape", utils::deprecate(lambdas::engine_get_profile_shape_str, "get_tensor_profile_shape"),
-            "profile_index"_a, "binding"_a, ICudaEngineDoc::get_profile_shape)
         // Start of enqueueV3 related APIs.
         .def_property_readonly("num_io_tensors", &ICudaEngine::getNbIOTensors)
         .def("get_tensor_name", &ICudaEngine::getIOTensorName, "index"_a, ICudaEngineDoc::get_tensor_name)
@@ -1278,7 +1263,7 @@ void bindCore(py::module& m)
         .def_property_readonly("minimum_weight_streaming_budget", &ICudaEngine::getMinimumWeightStreamingBudget)
         .def_property_readonly("streamable_weights_size", &ICudaEngine::getStreamableWeightsSize)
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
-                .def("__del__", &utils::doNothingDel<ICudaEngine>);
+               .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
         .value("RESIZABLE", AllocatorFlag::kRESIZABLE, AllocatorFlagDoc::RESIZABLE);

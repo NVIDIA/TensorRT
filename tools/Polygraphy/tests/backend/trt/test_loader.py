@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,7 @@ from polygraphy.backend.trt import (
     EngineBytesFromNetwork,
     EngineFromBytes,
     EngineFromNetwork,
+    EngineFromPath,
     LoadPlugins,
     LoadRuntime,
     ModifyNetworkOutputs,
@@ -126,9 +127,11 @@ class TestLoadPlugins:
 
         loader = LoadPlugins(
             plugins=[
-                "nvinfer_plugin.dll"
-                if sys.platform.startswith("win")
-                else "libnvinfer_plugin.so"
+                (
+                    "nvinfer_plugin.dll"
+                    if sys.platform.startswith("win")
+                    else "libnvinfer_plugin.so"
+                )
             ]
         )
         loader()
@@ -144,7 +147,7 @@ class TestSerializedEngineLoader:
             loader = EngineFromBytes(lambda: open(outpath.name, "rb").read())
             with loader() as engine:
                 assert isinstance(engine, trt.ICudaEngine)
-
+        
     def test_serialized_engine_loader_from_buffer(self, identity_engine):
         with identity_engine.serialize() as buffer:
             loader = EngineFromBytes(buffer)
@@ -154,6 +157,29 @@ class TestSerializedEngineLoader:
     def test_serialized_engine_loader_custom_runtime(self, identity_engine):
         with identity_engine.serialize() as buffer:
             loader = EngineFromBytes(buffer, runtime=trt.Runtime(get_trt_logger()))
+            with loader() as engine:
+                assert isinstance(engine, trt.ICudaEngine)
+
+
+@pytest.mark.skipif(
+    mod.version(trt.__version__) < mod.version("10.0"), reason="API was added in TRT 10.0"
+)
+class TestSerializedEngineLoaderFromDisk:
+    def test_serialized_engine_loader_from_lambda(self, identity_engine):
+        with util.NamedTemporaryFile() as outpath:
+            with open(outpath.name, "wb") as f, identity_engine.serialize() as buffer:
+                f.write(buffer)
+
+            loader = EngineFromPath(lambda: outpath.name)
+            with loader() as engine:
+                assert isinstance(engine, trt.ICudaEngine)
+
+    def test_serialized_engine_loader_custom_runtime(self, identity_engine):
+        with util.NamedTemporaryFile() as outpath:
+            with open(outpath.name, "wb") as f, identity_engine.serialize() as buffer:
+                f.write(buffer)
+            
+            loader = EngineFromPath(lambda: outpath.name, runtime=trt.Runtime(get_trt_logger()))
             with loader() as engine:
                 assert isinstance(engine, trt.ICudaEngine)
 
@@ -196,9 +222,16 @@ class TestNetworkFromOnnxBytes:
 
     @pytest.mark.parametrize(
         "kwargs, flag",
-        [({"strongly_typed": True}, trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)]
-        if mod.version(trt.__version__) >= mod.version("8.7")
-        else [],
+        (
+            [
+                (
+                    {"strongly_typed": True},
+                    trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED,
+                )
+            ]
+            if mod.version(trt.__version__) >= mod.version("8.7")
+            else []
+        ),
     )
     def test_network_flags(self, kwargs, flag):
         builder, network, parser = network_from_onnx_bytes(
@@ -214,9 +247,16 @@ class TestNetworkFromOnnxPath:
 
     @pytest.mark.parametrize(
         "kwargs, flag",
-        [({"strongly_typed": True}, trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)]
-        if mod.version(trt.__version__) >= mod.version("8.7")
-        else [],
+        (
+            [
+                (
+                    {"strongly_typed": True},
+                    trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED,
+                )
+            ]
+            if mod.version(trt.__version__) >= mod.version("8.7")
+            else []
+        ),
     )
     def test_network_flags(self, kwargs, flag):
         builder, network, parser = network_from_onnx_path(
@@ -538,6 +578,7 @@ class TestOnnxLikeFromNetwork:
         assert onnx_like_from_network(
             NetworkFromOnnxBytes(ONNX_MODELS[model_name].loader)
         )
+
 
 class TestDefaultPlugins:
     def test_default_plugins(self):

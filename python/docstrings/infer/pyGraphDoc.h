@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -1341,8 +1341,10 @@ constexpr const char* descr = R"trtdoc(
     Enumerates bounding box data formats used for the Boxes input tensor in the NMS layer.
 )trtdoc";
 
-constexpr const char* CORNER_PAIRS = R"trtdoc((x1, y1, x2, y2) where (x1, y1) and (x2, y2) are any pair of diagonal corners)trtdoc";
-constexpr const char* CENTER_SIZES = R"trtdoc((x_center, y_center, width, height) where (x_center, y_center) is the center point of the box)trtdoc";
+constexpr const char* CORNER_PAIRS
+    = R"trtdoc((x1, y1, x2, y2) where (x1, y1) and (x2, y2) are any pair of diagonal corners)trtdoc";
+constexpr const char* CENTER_SIZES
+    = R"trtdoc((x_center, y_center, width, height) where (x_center, y_center) is the center point of the box)trtdoc";
 
 } // namespace BoundingBoxFormatDoc
 
@@ -1421,7 +1423,6 @@ constexpr const char* set_input = R"trtdoc(
 )trtdoc";
 
 } // namespace INMSLayerDoc
-
 
 namespace FillOperationDoc
 {

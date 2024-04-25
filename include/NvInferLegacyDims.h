@@ -18,7 +18,9 @@
 #ifndef NV_INFER_LEGACY_DIMS_H
 #define NV_INFER_LEGACY_DIMS_H
 
-#include "NvInferRuntimeCommon.h"
+#define NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE 1
+#include "NvInferRuntimeBase.h"
+#undef NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE
 
 //!
 //! \file NvInferLegacyDims.h

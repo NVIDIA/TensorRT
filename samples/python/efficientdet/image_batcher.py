@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,16 @@ class ImageBatcher:
     Creates batches of pre-processed images.
     """
 
-    def __init__(self, input, shape, dtype, max_num_images=None, exact_batches=False, preprocessor="EfficientDet", shuffle_files=False):
+    def __init__(
+        self,
+        input,
+        shape,
+        dtype,
+        max_num_images=None,
+        exact_batches=False,
+        preprocessor="EfficientDet",
+        shuffle_files=False,
+    ):
         """
         :param input: The input directory to read images from.
         :param shape: The tensor shape of the batch to prepare, either in NCHW or NHWC format.
@@ -47,10 +56,16 @@ class ImageBatcher:
         extensions = [".jpg", ".jpeg", ".png", ".bmp"]
 
         def is_image(path):
-            return os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            return (
+                os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            )
 
         if os.path.isdir(input):
-            self.images = [os.path.join(input, f) for f in os.listdir(input) if is_image(os.path.join(input, f))]
+            self.images = [
+                os.path.join(input, f)
+                for f in os.listdir(input)
+                if is_image(os.path.join(input, f))
+            ]
             self.images.sort()
             if shuffle_files:
                 random.seed(47)
@@ -129,7 +144,9 @@ class ImageBatcher:
             width_scale = width / self.width
             height_scale = height / self.height
             scale = 1.0 / max(width_scale, height_scale)
-            image = image.resize((round(width * scale), round(height * scale)), resample=Image.BILINEAR)
+            image = image.resize(
+                (round(width * scale), round(height * scale)), resample=Image.BILINEAR
+            )
             pad = Image.new("RGB", (self.width, self.height))
             pad.paste(pad_color, [0, 0, self.width, self.height])
             pad.paste(image)

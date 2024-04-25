@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +54,9 @@ class DiffTactics(Tool):
 
     def run_impl(self, args):
         if args.dir is None and (args.good is None or args.bad is None):
-            G_LOGGER.critical("Either `--dir`, or both `--good` and `--bad` must be specified.")
+            G_LOGGER.critical(
+                "Either `--dir`, or both `--good` and `--bad` must be specified."
+            )
 
         def load_tactics(dirpath):
             """
@@ -77,12 +79,16 @@ class DiffTactics(Tool):
             tactics = defaultdict(set)
             replay_paths = []
             search_paths = (
-                glob.iglob(os.path.join(dirpath, "**"), recursive=True) if os.path.isdir(dirpath) else [dirpath]
+                glob.iglob(os.path.join(dirpath, "**"), recursive=True)
+                if os.path.isdir(dirpath)
+                else [dirpath]
             )
             for path in search_paths:
                 replay = try_load_replay(path)
                 if replay is None:
-                    G_LOGGER.verbose(f"{path} does not look like a tactic replay file, skipping.")
+                    G_LOGGER.verbose(
+                        f"{path} does not look like a tactic replay file, skipping."
+                    )
                     continue
 
                 replay_paths.append(path)
@@ -113,7 +119,9 @@ class DiffTactics(Tool):
             G_LOGGER.info("Found potentially bad tactics:")
             for name, algo_set in potential_bad_tactics.items():
                 algo_set_str = list(map(str, algo_set))
-                G_LOGGER.info(f"Layer: {name}\n{constants.TAB}Algorithms: {algo_set_str}")
+                G_LOGGER.info(
+                    f"Layer: {name}\n{constants.TAB}Algorithms: {algo_set_str}"
+                )
         else:
             G_LOGGER.info(
                 "Could not determine potentially bad tactics. Try providing more tactic replay files if possible."

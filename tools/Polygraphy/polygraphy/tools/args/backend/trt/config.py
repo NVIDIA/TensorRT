@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,13 @@ from polygraphy.tools.args.backend.trt.helper import make_trt_enum_val
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.comparator.data_loader import DataLoaderArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import inline, inline_identifier, make_invocable, make_invocable_if_nondefault, safe
+from polygraphy.tools.script import (
+    inline,
+    inline_identifier,
+    make_invocable,
+    make_invocable_if_nondefault,
+    safe,
+)
 
 
 def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
@@ -49,7 +55,10 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
             default_shapes.update(args_util.parse_meta(lst[idx], includes_dtype=False))
 
         # Don't care about dtype, and need to override dynamic dimensions
-        shapes = {name: util.override_dynamic_shape(shape) for name, (_, shape) in default_shapes.items()}
+        shapes = {
+            name: util.override_dynamic_shape(shape)
+            for name, (_, shape) in default_shapes.items()
+        }
 
         for name, shape in shapes.items():
             if tuple(default_shapes[name].shape) != tuple(shape):
@@ -80,7 +89,10 @@ def parse_profile_shapes(default_shapes, min_args, opt_args, max_args):
                 f"Mismatch in input names between optimum shapes ({list(opt_shapes.keys())}) and maximum shapes ({list(max_shapes.keys())})"
             )
 
-        profile = {name: (min_shapes[name], opt_shapes[name], max_shapes[name]) for name in min_shapes.keys()}
+        profile = {
+            name: (min_shapes[name], opt_shapes[name], max_shapes[name])
+            for name in min_shapes.keys()
+        }
         profiles.append(profile)
     return profiles
 
@@ -123,8 +135,12 @@ class TrtConfigArgs(BaseArgs):
                     Defaults to False.
         """
         super().__init__()
-        self._precision_constraints_default = util.default(precision_constraints_default, "none")
-        self._allow_random_data_calib_warning = util.default(allow_random_data_calib_warning, True)
+        self._precision_constraints_default = util.default(
+            precision_constraints_default, "none"
+        )
+        self._allow_random_data_calib_warning = util.default(
+            allow_random_data_calib_warning, True
+        )
         self._allow_custom_input_shapes = util.default(allow_custom_input_shapes, True)
         self._allow_engine_capability = util.default(allow_engine_capability, False)
         self._allow_tensor_formats = util.default(allow_tensor_formats, False)
@@ -158,10 +174,30 @@ class TrtConfigArgs(BaseArgs):
             default=[],
         )
 
-        self.group.add_argument("--tf32", help="Enable tf32 precision in TensorRT", action="store_true", default=None)
-        self.group.add_argument("--fp16", help="Enable fp16 precision in TensorRT", action="store_true", default=None)
-        self.group.add_argument("--bf16", help="Enable bf16 precision in TensorRT", action="store_true", default=None)
-        self.group.add_argument("--fp8", help="Enable fp8 precision in TensorRT", action="store_true", default=None)
+        self.group.add_argument(
+            "--tf32",
+            help="Enable tf32 precision in TensorRT",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
+            "--fp16",
+            help="Enable fp16 precision in TensorRT",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
+            "--bf16",
+            help="Enable bf16 precision in TensorRT",
+            action="store_true",
+            default=None,
+        )
+        self.group.add_argument(
+            "--fp8",
+            help="Enable fp8 precision in TensorRT",
+            action="store_true",
+            default=None,
+        )
         self.group.add_argument(
             "--int8",
             help="Enable int8 precision in TensorRT. "
@@ -413,7 +449,7 @@ class TrtConfigArgs(BaseArgs):
             "--weight-streaming",
             help="Build a weight streamable engine. Must be set with --strongly-typed. The weight streaming amount can be set with --weight-streaming-budget.",
             action="store_true",
-            default=None
+            default=None,
         )
 
         if self._allow_engine_capability:
@@ -485,10 +521,14 @@ class TrtConfigArgs(BaseArgs):
         default_shapes = TensorMetadata()
         if self._allow_custom_input_shapes:
             if not hasattr(self.arg_groups[ModelArgs], "input_shapes"):
-                G_LOGGER.internal_error("ModelArgs must be parsed before TrtConfigArgs!")
+                G_LOGGER.internal_error(
+                    "ModelArgs must be parsed before TrtConfigArgs!"
+                )
             default_shapes = self.arg_groups[ModelArgs].input_shapes
 
-        self.profile_dicts = parse_profile_shapes(default_shapes, trt_min_shapes, trt_opt_shapes, trt_max_shapes)
+        self.profile_dicts = parse_profile_shapes(
+            default_shapes, trt_min_shapes, trt_opt_shapes, trt_max_shapes
+        )
 
         self.tf32 = args_util.get(args, "tf32")
         self.fp16 = args_util.get(args, "fp16")
@@ -508,7 +548,9 @@ class TrtConfigArgs(BaseArgs):
         calib_base = args_util.get(args, "calibration_base_class")
         self.calibration_base_class = None
         if calib_base is not None:
-            self.calibration_base_class = inline(safe("trt.{:}", inline_identifier(calib_base)))
+            self.calibration_base_class = inline(
+                safe("trt.{:}", inline_identifier(calib_base))
+            )
 
         self._quantile = args_util.get(args, "quantile")
         self._regression_cutoff = args_util.get(args, "regression_cutoff")
@@ -523,22 +565,31 @@ class TrtConfigArgs(BaseArgs):
         tactic_sources = args_util.get(args, "tactic_sources")
         self.tactic_sources = None
         if tactic_sources is not None:
-            self.tactic_sources = [make_trt_enum_val("TacticSource", source) for source in tactic_sources]
+            self.tactic_sources = [
+                make_trt_enum_val("TacticSource", source) for source in tactic_sources
+            ]
 
-        self.trt_config_script, self.trt_config_func_name = args_util.parse_script_and_func_name(
-            args_util.get(args, "trt_config_script"), default_func_name="load_config"
+        self.trt_config_script, self.trt_config_func_name = (
+            args_util.parse_script_and_func_name(
+                args_util.get(args, "trt_config_script"),
+                default_func_name="load_config",
+            )
         )
         (
             self.trt_config_postprocess_script,
             self.trt_config_postprocess_func_name,
         ) = args_util.parse_script_and_func_name(
-            args_util.get(args, "trt_config_postprocess_script"), default_func_name="postprocess_config"
+            args_util.get(args, "trt_config_postprocess_script"),
+            default_func_name="postprocess_config",
         )
 
         func_name = args_util.get(args, "trt_config_func_name")
         if func_name is not None:
             mod.warn_deprecated(
-                "--trt-config-func-name", "the config script argument", "0.50.0", always_show_warning=True
+                "--trt-config-func-name",
+                "the config script argument",
+                "0.50.0",
+                always_show_warning=True,
             )
             self.trt_config_func_name = func_name
 
@@ -546,7 +597,9 @@ class TrtConfigArgs(BaseArgs):
         self.allow_gpu_fallback = args_util.get(args, "allow_gpu_fallback")
 
         memory_pool_limits = args_util.parse_arglist_to_dict(
-            args_util.get(args, "memory_pool_limit"), cast_to=args_util.parse_num_bytes, allow_empty_key=False
+            args_util.get(args, "memory_pool_limit"),
+            cast_to=args_util.parse_num_bytes,
+            allow_empty_key=False,
         )
         self.memory_pool_limits = None
         if memory_pool_limits is not None:
@@ -558,18 +611,27 @@ class TrtConfigArgs(BaseArgs):
         preview_features = args_util.get(args, "preview_features")
         self.preview_features = None
         if preview_features is not None:
-            self.preview_features = [make_trt_enum_val("PreviewFeature", feature) for feature in preview_features]
+            self.preview_features = [
+                make_trt_enum_val("PreviewFeature", feature)
+                for feature in preview_features
+            ]
 
         engine_capability = args_util.get(args, "engine_capability")
         self.engine_capability = None
         if engine_capability is not None:
-            self.engine_capability = make_trt_enum_val("EngineCapability", engine_capability)
+            self.engine_capability = make_trt_enum_val(
+                "EngineCapability", engine_capability
+            )
 
         self.direct_io = args_util.get(args, "direct_io")
-        self.builder_optimization_level = args_util.get(args, "builder_optimization_level")
+        self.builder_optimization_level = args_util.get(
+            args, "builder_optimization_level"
+        )
 
         self.hardware_compatibility_level = None
-        hardware_compatibility_level = args_util.get(args, "hardware_compatibility_level")
+        hardware_compatibility_level = args_util.get(
+            args, "hardware_compatibility_level"
+        )
         if hardware_compatibility_level is not None:
             self.hardware_compatibility_level = make_trt_enum_val(
                 "HardwareCompatibilityLevel", hardware_compatibility_level
@@ -589,14 +651,23 @@ class TrtConfigArgs(BaseArgs):
         quantization_flags = args_util.get(args, "quantization_flags")
         self.quantization_flags = None
         if quantization_flags is not None:
-            self.quantization_flags = [make_trt_enum_val("QuantizationFlag", flag) for flag in quantization_flags]
+            self.quantization_flags = [
+                make_trt_enum_val("QuantizationFlag", flag)
+                for flag in quantization_flags
+            ]
 
         if self.exclude_lean_runtime and not self.version_compatible:
-            G_LOGGER.critical(f"`--exclude-lean-runtime` requires `--version-compatible` to be enabled.")
+            G_LOGGER.critical(
+                f"`--exclude-lean-runtime` requires `--version-compatible` to be enabled."
+            )
 
-        self.error_on_timing_cache_miss = args_util.get(args, "error_on_timing_cache_miss")
+        self.error_on_timing_cache_miss = args_util.get(
+            args, "error_on_timing_cache_miss"
+        )
 
-        self.disable_compilation_cache = args_util.get(args, "disable_compilation_cache")
+        self.disable_compilation_cache = args_util.get(
+            args, "disable_compilation_cache"
+        )
 
         self.weight_streaming = args_util.get(args, "weight_streaming")
 
@@ -605,19 +676,29 @@ class TrtConfigArgs(BaseArgs):
         for profile_dict in self.profile_dicts:
             profile_str = "Profile()"
             for name in profile_dict.keys():
-                profile_str += safe(".add({:}, min={:}, opt={:}, max={:})", name, *profile_dict[name]).unwrap()
+                profile_str += safe(
+                    ".add({:}, min={:}, opt={:}, max={:})", name, *profile_dict[name]
+                ).unwrap()
             profiles.append(profile_str)
         if profiles:
             script.add_import(imports=["Profile"], frm="polygraphy.backend.trt")
             profiles = safe(
-                "[\n{tab}{:}\n]", inline(safe(f",\n{constants.TAB}".join(profiles))), tab=inline(safe(constants.TAB))
+                "[\n{tab}{:}\n]",
+                inline(safe(f",\n{constants.TAB}".join(profiles))),
+                tab=inline(safe(constants.TAB)),
             )
             profile_name = script.add_loader(profiles, "profiles")
         else:
             profile_name = None
 
         calibrator = None
-        if any(arg is not None for arg in [self.calibration_cache, self.calibration_base_class]) and not self.int8:
+        if (
+            any(
+                arg is not None
+                for arg in [self.calibration_cache, self.calibration_base_class]
+            )
+            and not self.int8
+        ):
             G_LOGGER.warning(
                 "Some int8 calibrator options were set, but int8 precision is not enabled. "
                 "Calibration options will be ignored. Please set --int8 to enable calibration. "
@@ -632,7 +713,10 @@ class TrtConfigArgs(BaseArgs):
 
             if (
                 self.arg_groups[DataLoaderArgs].is_using_random_data()
-                and (not self.calibration_cache or not os.path.exists(self.calibration_cache))
+                and (
+                    not self.calibration_cache
+                    or not os.path.exists(self.calibration_cache)
+                )
                 and self._allow_random_data_calib_warning
             ):
                 G_LOGGER.warning(
@@ -644,7 +728,11 @@ class TrtConfigArgs(BaseArgs):
 
             calibrator = make_invocable(
                 "Calibrator",
-                data_loader=data_loader_name if data_loader_name else inline(safe("DataLoader()")),
+                data_loader=(
+                    data_loader_name
+                    if data_loader_name
+                    else inline(safe("DataLoader()"))
+                ),
                 cache=self.calibration_cache,
                 BaseClass=self.calibration_base_class,
                 quantile=self._quantile,
@@ -675,9 +763,13 @@ class TrtConfigArgs(BaseArgs):
             script.add_import(imports="tensorrt", imp_as="trt")
 
         if self.trt_config_script is not None:
-            script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
+            script.add_import(
+                imports=["InvokeFromScript"], frm="polygraphy.backend.common"
+            )
             config_loader_str = make_invocable(
-                "InvokeFromScript", self.trt_config_script, name=self.trt_config_func_name
+                "InvokeFromScript",
+                self.trt_config_script,
+                name=self.trt_config_func_name,
             )
         else:
             config_loader_str = make_invocable_if_nondefault(
@@ -715,28 +807,47 @@ class TrtConfigArgs(BaseArgs):
                 weight_streaming=self.weight_streaming,
             )
             if config_loader_str is not None:
-                script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")
+                script.add_import(
+                    imports="CreateConfig",
+                    frm="polygraphy.backend.trt",
+                    imp_as="CreateTrtConfig",
+                )
 
         if config_loader_str is not None:
-            config_loader_name = script.add_loader(config_loader_str, "create_trt_config")
+            config_loader_name = script.add_loader(
+                config_loader_str, "create_trt_config"
+            )
         else:
             config_loader_name = None
 
         if self.trt_config_postprocess_script is not None:
             # Need to set up a default config if there isn't one since `PostprocessConfig` will require a config.
             if config_loader_name is None:
-                script.add_import(imports="CreateConfig", frm="polygraphy.backend.trt", imp_as="CreateTrtConfig")
-                config_loader_name = script.add_loader(make_invocable("CreateTrtConfig"), "create_trt_config")
+                script.add_import(
+                    imports="CreateConfig",
+                    frm="polygraphy.backend.trt",
+                    imp_as="CreateTrtConfig",
+                )
+                config_loader_name = script.add_loader(
+                    make_invocable("CreateTrtConfig"), "create_trt_config"
+                )
 
-            script.add_import(imports=["InvokeFromScript"], frm="polygraphy.backend.common")
             script.add_import(
-                imports=["PostprocessConfig"], frm="polygraphy.backend.trt", imp_as="PostprocessTrtConfig"
+                imports=["InvokeFromScript"], frm="polygraphy.backend.common"
+            )
+            script.add_import(
+                imports=["PostprocessConfig"],
+                frm="polygraphy.backend.trt",
+                imp_as="PostprocessTrtConfig",
             )
             func = make_invocable(
-                "InvokeFromScript", self.trt_config_postprocess_script, name=self.trt_config_postprocess_func_name
+                "InvokeFromScript",
+                self.trt_config_postprocess_script,
+                name=self.trt_config_postprocess_func_name,
             )
             config_loader_name = script.add_loader(
-                make_invocable("PostprocessTrtConfig", config_loader_name, func=func), "postprocess_trt_config"
+                make_invocable("PostprocessTrtConfig", config_loader_name, func=func),
+                "postprocess_trt_config",
             )
 
         return config_loader_name

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,10 +31,13 @@ from polygraphy.json import save_json
 
 INPUT_SHAPE = (1, 2, 28, 28)
 
+
 # Option 1: Define a function that will yield feed_dicts (i.e. Dict[str, np.ndarray])
 def load_data():
     for _ in range(5):
-        yield {"x": np.ones(shape=INPUT_SHAPE, dtype=np.float32)}  # Still totally real data
+        yield {
+            "x": np.ones(shape=INPUT_SHAPE, dtype=np.float32)
+        }  # Still totally real data
 
 
 # Option 2: Create a JSON file containing the input data using the `save_json()` helper.

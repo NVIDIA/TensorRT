@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,7 +56,11 @@ class TestLoggerArgs:
             (["--verbosity", "info"], {None: G_LOGGER.INFO, "backend/": G_LOGGER.INFO}),
             (
                 ["--verbosity", "INFO", "backend:VERBOSE"],
-                {None: G_LOGGER.INFO, "backend": G_LOGGER.VERBOSE, os.path.join("backend", "trt"): G_LOGGER.VERBOSE},
+                {
+                    None: G_LOGGER.INFO,
+                    "backend": G_LOGGER.VERBOSE,
+                    os.path.join("backend", "trt"): G_LOGGER.VERBOSE,
+                },
             ),
             (
                 ["--verbosity", "ULTRA_VERBOSE", "backend:VERBOSE"],
@@ -68,7 +72,11 @@ class TestLoggerArgs:
             ),
             (
                 ["--verbosity", "backend/trt:VERBOSE"],
-                {None: G_LOGGER.INFO, "backend/": G_LOGGER.INFO, os.path.join("backend", "trt"): G_LOGGER.VERBOSE},
+                {
+                    None: G_LOGGER.INFO,
+                    "backend/": G_LOGGER.INFO,
+                    os.path.join("backend", "trt"): G_LOGGER.VERBOSE,
+                },
             ),
         ],
     )

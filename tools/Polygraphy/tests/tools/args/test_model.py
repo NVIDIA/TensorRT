@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,15 @@ class TestModelArgs:
         assert group.model_type.is_onnx()
 
     def test_input_shapes(self, group):
-        group.parse_args(["--input-shapes", "test0:[1,1]", "test1:[10]", "test:2:[25,301]", "test3:[]"])
+        group.parse_args(
+            [
+                "--input-shapes",
+                "test0:[1,1]",
+                "test1:[10]",
+                "test:2:[25,301]",
+                "test3:[]",
+            ]
+        )
 
         assert group.input_shapes["test0"].shape == [1, 1]
         assert group.input_shapes["test1"].shape == [10]
@@ -55,17 +63,21 @@ class TestModelArgs:
 
     @pytest.mark.parametrize(
         "arg, expected_model, expected_extra_info",
-        [
-            ("model.onnx", "model.onnx", None),
-            ("model.onnx:func", "model.onnx", "func"),
-        ]
-        if not "win" in sys.platform
-        else [
-            ("C:\\Users\\model.onnx", "C:\\Users\\model.onnx", None),
-            ("C:\\Users\\model.onnx:func", "C:\\Users\\model.onnx", "func"),
-        ],
+        (
+            [
+                ("model.onnx", "model.onnx", None),
+                ("model.onnx:func", "model.onnx", "func"),
+            ]
+            if not "win" in sys.platform
+            else [
+                ("C:\\Users\\model.onnx", "C:\\Users\\model.onnx", None),
+                ("C:\\Users\\model.onnx:func", "C:\\Users\\model.onnx", "func"),
+            ]
+        ),
     )
-    def test_model_with_extra_info(self, group, arg, expected_model, expected_extra_info):
+    def test_model_with_extra_info(
+        self, group, arg, expected_model, expected_extra_info
+    ):
         group.parse_args([arg])
 
         assert group.path == expected_model

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -239,10 +239,16 @@ class TestArrayMathFuncs:
     @pytest.mark.parametrize(
         "func, np_func, types",
         [
-            (util.array.where, np.where, tuple(map(DataType.from_dtype, (np.bool8, np.float32, np.float32)))),
+            (
+                util.array.where,
+                np.where,
+                tuple(map(DataType.from_dtype, (np.bool8, np.float32, np.float32))),
+            ),
         ],
     )
     def test_ternary_funcs(self, obj, np_arr, func, np_func, types):
-        build_inputs = lambda input: map(lambda pair: util.array.cast(input + pair[0], pair[1]), enumerate(types))
+        build_inputs = lambda input: map(
+            lambda pair: util.array.cast(input + pair[0], pair[1]), enumerate(types)
+        )
         obj = func(*build_inputs(obj))
         assert util.array.equal(obj, np.array(np_func(*build_inputs(np_arr))))

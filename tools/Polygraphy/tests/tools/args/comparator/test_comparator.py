@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,12 +41,15 @@ class TestComparatorCompareArgs:
             ("indices", ["--atol=1"], ["--atol", "--abs-tol"], "simple"),
         ],
     )
-    def test_compare_func_warnings_for_unused_options(self, compare_func, options, option_names, valid_for):
+    def test_compare_func_warnings_for_unused_options(
+        self, compare_func, options, option_names, valid_for
+    ):
         outfile = io.StringIO()
         with contextlib.redirect_stdout(outfile), contextlib.redirect_stderr(outfile):
             # Keep logger arguments first they're parsed first so we actually write to the log file.
             arg_group = ArgGroupTestHelper(
-                ComparatorCompareArgs(), deps=[LoggerArgs(), CompareFuncIndicesArgs(), CompareFuncSimpleArgs()]
+                ComparatorCompareArgs(),
+                deps=[LoggerArgs(), CompareFuncIndicesArgs(), CompareFuncSimpleArgs()],
             )
             arg_group.parse_args([f"--compare-func={compare_func}"] + options)
 
@@ -54,7 +57,8 @@ class TestComparatorCompareArgs:
             logging_out = outfile.read()
             assert (
                 f"[W] Option: {'/'.join(option_names)} is only valid for comparison function: '{valid_for}'. "
-                f"The selected comparison function is: '{compare_func}', so this option will be ignored." in logging_out
+                f"The selected comparison function is: '{compare_func}', so this option will be ignored."
+                in logging_out
             )
 
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,9 @@ class Tool:
 
     def __init__(self, name=None):
         self.name = name
-        self.arg_groups = ArgGroups()  # Populated by setup_parser based on get_subscriptions()
+        self.arg_groups = (
+            ArgGroups()
+        )  # Populated by setup_parser based on get_subscriptions()
 
     def setup_parser(self, subparsers=None):
         """
@@ -57,7 +59,9 @@ class Tool:
             m_type = type(arg_group)
             self.arg_groups[m_type] = arg_group
 
-        allow_abbrev = all(arg_group.allows_abbreviation() for arg_group in self.arg_groups.values())
+        allow_abbrev = all(
+            arg_group.allows_abbreviation() for arg_group in self.arg_groups.values()
+        )
 
         description = dedent(self.__doc__)
         if subparsers is not None:
@@ -78,7 +82,9 @@ class Tool:
             )
             parser.set_defaults(subcommand=self)
         else:
-            parser = argparse.ArgumentParser(add_help=True, description=description, allow_abbrev=allow_abbrev)
+            parser = argparse.ArgumentParser(
+                add_help=True, description=description, allow_abbrev=allow_abbrev
+            )
 
         for arg_group in self.arg_groups.values():
             arg_group.register(self.arg_groups)
@@ -89,7 +95,9 @@ class Tool:
         try:
             self.add_parser_args(parser)
         except Exception as err:
-            G_LOGGER.internal_error(f"Could not register tool argument parser for: {self.name}\nNote: Error was: {err}")
+            G_LOGGER.internal_error(
+                f"Could not register tool argument parser for: {self.name}\nNote: Error was: {err}"
+            )
         return parser
 
     # Implementation for `get_subscriptions`. This should be implemented by child classes instead of `get_subscriptions`

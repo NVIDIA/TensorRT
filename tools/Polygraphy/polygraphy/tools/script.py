@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,9 +68,13 @@ def ensure_safe(inp):
     Ensures that the input is marked as a safe string (i.e. Script.String(safe=True)).
     """
     if not isinstance(inp, Script.String):
-        G_LOGGER.internal_error(f"Input to ensure_safe must be of type Script.String, but was: {inp}")
+        G_LOGGER.internal_error(
+            f"Input to ensure_safe must be of type Script.String, but was: {inp}"
+        )
     elif not inp.safe:
-        G_LOGGER.internal_error(f"Input string: {inp} was not checked for safety. This is a potential security risk!")
+        G_LOGGER.internal_error(
+            f"Input string: {inp} was not checked for safety. This is a potential security risk!"
+        )
     return inp
 
 
@@ -117,8 +121,14 @@ def make_invocable_impl(type_str, *args, **kwargs):
     """
     # We don't need to check obj_str for safety since we know that any inline
     # args/kwargs are already safe - other types need no checks
-    obj_str, all_args_default, all_kwargs_default = util.make_repr(type_str, *args, **kwargs)
-    return Script.String(obj_str, safe=True, inline=True), all_args_default, all_kwargs_default
+    obj_str, all_args_default, all_kwargs_default = util.make_repr(
+        type_str, *args, **kwargs
+    )
+    return (
+        Script.String(obj_str, safe=True, inline=True),
+        all_args_default,
+        all_kwargs_default,
+    )
 
 
 @mod.export()
@@ -162,7 +172,9 @@ def make_invocable_if_nondefault(type_str, *args, **kwargs):
         >>> make_invocable_if_nondefault("my_func", None, None, last=None)
         None
     """
-    obj_str, all_args_default, all_kwargs_default = make_invocable_impl(type_str, *args, **kwargs)
+    obj_str, all_args_default, all_kwargs_default = make_invocable_impl(
+        type_str, *args, **kwargs
+    )
     if all_args_default and all_kwargs_default:
         return None
     return obj_str
@@ -221,9 +233,13 @@ class Script:
 
         def __iadd__(self, other):
             if not isinstance(other, Script.String):
-                G_LOGGER.internal_error(f"Cannot concatenate str and Script.String. Note: str was: {other}")
+                G_LOGGER.internal_error(
+                    f"Cannot concatenate str and Script.String. Note: str was: {other}"
+                )
             elif self.safe != other.safe:
-                G_LOGGER.internal_error(f"Cannot concatenate unsafe string ({other}) to safe string ({self.s})!")
+                G_LOGGER.internal_error(
+                    f"Cannot concatenate unsafe string ({other}) to safe string ({self.s})!"
+                )
             self.s += other.s
             return self
 
@@ -258,8 +274,12 @@ class Script:
                     Whether to create the list of runners even if it would be empty.
         """
         self.imports = {}  # Dict[str, Set[str, str]]: Maps from: {(import, as), ...}
-        self.loaders = OrderedDict()  # Dict[str, str] Maps a string constructing a loader to a name.
-        self.loader_count = defaultdict(int)  # Dict[str, int] Maps loader_id to the number of loaders sharing that ID
+        self.loaders = (
+            OrderedDict()
+        )  # Dict[str, str] Maps a string constructing a loader to a name.
+        self.loader_count = defaultdict(
+            int
+        )  # Dict[str, int] Maps loader_id to the number of loaders sharing that ID
         self.runners = []  # List[str]
         self.preimport = []  # List[str]
         self.suffix = []  # List[str]
@@ -287,7 +307,9 @@ class Script:
             imports = {imports}
 
         if imp_as and len(imports) > 1:
-            G_LOGGER.internal_error("When `imp_as` is specified, `imports` must be a string and not a list")
+            G_LOGGER.internal_error(
+                "When `imp_as` is specified, `imports` must be a string and not a list"
+            )
 
         if frm not in self.imports:
             self.imports[frm] = set()
@@ -383,7 +405,11 @@ class Script:
         script += f"# Generation Command: {' '.join(sys.argv)}\n"
         if self.summary:
             script += "# " + "\n# ".join(self.summary.splitlines()) + "\n"
-        script += ("\n" if self.preimport else "") + "\n".join(self.preimport) + ("\n\n" if self.preimport else "")
+        script += (
+            ("\n" if self.preimport else "")
+            + "\n".join(self.preimport)
+            + ("\n\n" if self.preimport else "")
+        )
 
         has_external_import = False
         imports = []
@@ -392,7 +418,10 @@ class Script:
             is_external_import = False
             if frm is not None:
                 # NOTE: We do not currently translate 'from' imports to `lazy_import`.
-                imps = [f"{imp}" if imp_as is None else f"{imp} as {imp_as}" for imp, imp_as in imps]
+                imps = [
+                    f"{imp}" if imp_as is None else f"{imp} as {imp_as}"
+                    for imp, imp_as in imps
+                ]
                 imports.append(f"from {frm} import {', '.join(imps)}")
             else:
                 # When `frm` is None, we want to treat each import separately.
@@ -403,7 +432,9 @@ class Script:
                         imp_as = imp_as or imp
                         imports.append(f"{imp_as} = mod.lazy_import({repr(imp)})")
                     else:
-                        imports.append(f"import {imp}{'' if imp_as is None else f' as {imp_as}'}")
+                        imports.append(
+                            f"import {imp}{'' if imp_as is None else f' as {imp_as}'}"
+                        )
             has_external_import |= is_external_import
 
         if has_external_import:

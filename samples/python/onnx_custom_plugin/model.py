@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,18 +24,21 @@ import onnx_graphsurgeon as gs
 
 MODEL_URL = "https://github.com/onnx/models/raw/e77240a62df68ed13e3138a5812553a552b857bb/text/machine_comprehension/bidirectional_attention_flow/model/bidaf-9.onnx"
 
-WORKING_DIR = os.environ.get("TRT_WORKING_DIR") or os.path.dirname(os.path.realpath(__file__))
-MODEL_DIR  = os.path.join(WORKING_DIR, "models")
+WORKING_DIR = os.environ.get("TRT_WORKING_DIR") or os.path.dirname(
+    os.path.realpath(__file__)
+)
+MODEL_DIR = os.path.join(WORKING_DIR, "models")
 RAW_MODEL_PATH = os.path.join(MODEL_DIR, "bidaf-9.onnx")
 TRT_MODEL_PATH = os.path.join(MODEL_DIR, "bidaf-9-trt.onnx")
+
 
 def _do_graph_surgery(raw_model_path, trt_model_path):
     graph = gs.import_onnx(onnx.load(raw_model_path))
 
     # Replace unsupported Hardmax with our CustomHardmax op
     for node in graph.nodes:
-        if node.op == 'Hardmax':
-            node.op = 'CustomHardmax'
+        if node.op == "Hardmax":
+            node.op = "CustomHardmax"
             hardmax_node = node
 
     # The original onnx model also uses another unsupported op called "Compress".
@@ -47,16 +50,16 @@ def _do_graph_surgery(raw_model_path, trt_model_path):
     #
     # So, we will replace the subgraph Compress(Transpose_29, Cast(Reshape(Hardmax)))
     # with the subgraph Einsum(Transpose_29, Hardmax) where the equation in Einsum takes the dot product.
-    node_by_name = {node.name : node for node in graph.nodes}
-    transpose_node = node_by_name['Transpose_29']
-    compress_node  = node_by_name['Compress_31']
+    node_by_name = {node.name: node for node in graph.nodes}
+    transpose_node = node_by_name["Transpose_29"]
+    compress_node = node_by_name["Compress_31"]
 
     einsum_node = gs.Node(
-        'Einsum',
-        'Dot_of_Hardmax_and_Transpose',
-        attrs={'equation': 'ij,ij->i'}, # "Dot product" of 2d tensors
+        "Einsum",
+        "Dot_of_Hardmax_and_Transpose",
+        attrs={"equation": "ij,ij->i"},  # "Dot product" of 2d tensors
         inputs=[hardmax_node.outputs[0], transpose_node.outputs[0]],
-        outputs=[compress_node.outputs[0]]
+        outputs=[compress_node.outputs[0]],
     )
     graph.nodes.append(einsum_node)
 
@@ -80,7 +83,9 @@ def _do_graph_surgery(raw_model_path, trt_model_path):
     #
     # Later we will feed the model the integer tokens directly.
     # Note: list conversion is necessary because we modify graph.nodes in the for loop.
-    category_mapper_nodes = [node for node in graph.nodes if node.op == 'CategoryMapper']
+    category_mapper_nodes = [
+        node for node in graph.nodes if node.op == "CategoryMapper"
+    ]
     for node in category_mapper_nodes:
         # Remove CategoryMapper node from onnx graph
         graph.nodes.remove(node)

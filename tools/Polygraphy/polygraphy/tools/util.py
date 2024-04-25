@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,9 @@ def override_input_shapes(graph, user_input_metadata):
     input_metadata.update(user_input_metadata)
     graph = onnx_backend.extract_subgraph(graph, input_metadata)
 
-    G_LOGGER.info(f"Overriding input shapes to:\n{onnx_util.meta_from_gs_tensors(graph.inputs)}")
+    G_LOGGER.info(
+        f"Overriding input shapes to:\n{onnx_util.meta_from_gs_tensors(graph.inputs)}"
+    )
 
     # Have to unset intermediate shapes as they may cause problems.
     tensors = graph.tensors()

@@ -1,7 +1,8 @@
 from polygraphy import mod
+from typing import List,Dict
 gs = mod.lazy_import("onnx_graphsurgeon>=0.5.0")
 
-def get_plugin_pattern() -> gs.GraphPattern:
+def get_plugin_pattern():
     """
     Toy plugin pattern:
         A     B
@@ -23,9 +24,25 @@ def get_plugin_pattern() -> gs.GraphPattern:
 
     return pattern
 
-def get_plugin_attributes(sg) -> dict:
-    """
-    example plugin attribute mapping, where the plugin has attribute ToyX, which gets its value from C.x * 2
-    """
-    return {"ToyX": int(sg.get("Cnode").attrs["x"]) * 2}
+def get_matching_subgraphs(graph) -> List[Dict[str,str]]:
+    gp = get_plugin_pattern()
+    matches = gp.match_all(graph)
+    ans = []
+    for m in matches:
+        # save the input and output tensor names of the matching subgraph(s)
+        input_tensors = list(set([ip_tensor.name for ip_tensor in m.inputs]))
+        output_tensors = list(set([op_tensor.name for op_tensor in m.outputs]))
 
+        attrs = {"ToyX": int(m.get("Cnode").attrs["x"]) * 2}
+        ioa = {
+            'inputs':input_tensors,
+            'outputs':output_tensors,
+            'attributes':attrs
+        }
+        ans.append(ioa)
+    return ans
+
+def get_plugin_metadata() -> Dict[str,str]:
+    return {'name':'toyPlugin',
+            'op':'CustomToyPlugin',
+            }

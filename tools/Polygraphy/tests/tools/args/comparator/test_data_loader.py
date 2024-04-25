@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,9 +40,18 @@ class TestDataLoaderArgs:
             (["--seed=123"], ["seed"], [123]),
             (["--int-min=23", "--int-max=94"], ["_int_range"], [(23, 94)]),
             (["--float-min=2.3", "--float-max=9.4"], ["_float_range"], [(2.3, 9.4)]),
-            ([], ["val_range"], [None], [(0.0, 1.0)]),  # When not specified, this should default to None.
+            (
+                [],
+                ["val_range"],
+                [None],
+                [(0.0, 1.0)],
+            ),  # When not specified, this should default to None.
             (["--val-range", "[0.0,2.3]"], ["val_range"], [{"": (0.0, 2.3)}]),
-            (["--val-range", "[1,5]"], ["val_range"], [{"": (1, 5)}]),  # Should work for integral quantities
+            (
+                ["--val-range", "[1,5]"],
+                ["val_range"],
+                [{"": (1, 5)}],
+            ),  # Should work for integral quantities
             (
                 ["--val-range", "inp0:[0.0,2.3]", "inp1:[4.5,9.6]"],
                 ["val_range"],
@@ -57,9 +66,21 @@ class TestDataLoaderArgs:
             (["--val-range", "'\"':[0.0,2.3]"], ["val_range"], [{"'\"'": (0.0, 2.3)}]),
             (["--iterations=12"], ["iterations"], [12]),
             (["--val-range", "[0.0,inf]"], ["val_range"], [{"": (0.0, float("inf"))}]),
-            (["--val-range", "[-inf,0.0]"], ["val_range"], [{"": (float("-inf"), 0.0)}]),
-            (["--data-loader-backend-module", "torch"], ["data_loader_backend_module"], ["torch"]),
-            (["--data-loader-backend-module", "numpy"], ["data_loader_backend_module"], ["numpy"]),
+            (
+                ["--val-range", "[-inf,0.0]"],
+                ["val_range"],
+                [{"": (float("-inf"), 0.0)}],
+            ),
+            (
+                ["--data-loader-backend-module", "torch"],
+                ["data_loader_backend_module"],
+                ["torch"],
+            ),
+            (
+                ["--data-loader-backend-module", "numpy"],
+                ["data_loader_backend_module"],
+                ["numpy"],
+            ),
         ],
         ids=lambda c: c[1][0],
     )
@@ -82,7 +103,9 @@ class TestDataLoaderArgs:
         assert util.is_nan(val_range[0])
 
     def test_input_metadata(self, data_loader_args):
-        data_loader_args.parse_args(["--input-shapes", "test0:[1,1,1]", "test1:[2,32,2]"])
+        data_loader_args.parse_args(
+            ["--input-shapes", "test0:[1,1,1]", "test1:[2,32,2]"]
+        )
         data_loader = data_loader_args.get_data_loader()
 
         for feed_dict in data_loader:
@@ -92,7 +115,9 @@ class TestDataLoaderArgs:
     def test_override_input_metadata(self, data_loader_args):
         data_loader_args.parse_args([])
         data_loader = data_loader_args.get_data_loader(
-            user_input_metadata=TensorMetadata().add("test0", dtype=np.float32, shape=(4, 4))
+            user_input_metadata=TensorMetadata().add(
+                "test0", dtype=np.float32, shape=(4, 4)
+            )
         )
 
         for feed_dict in data_loader:
@@ -118,7 +143,9 @@ class TestDataLoaderArgs:
             f.flush()
             os.fsync(f.fileno())
 
-            data_loader_args.parse_args(["--data-loader-script", f"{f.name}:my_load_data"])
+            data_loader_args.parse_args(
+                ["--data-loader-script", f"{f.name}:my_load_data"]
+            )
 
             assert data_loader_args.data_loader_script == f.name
             assert data_loader_args.data_loader_func_name == "my_load_data"
@@ -126,13 +153,19 @@ class TestDataLoaderArgs:
             data_loader = data_loader_args.get_data_loader()
             data = list(data_loader)
             assert len(data) == 5
-            assert all(np.all(d["inp"] == np.ones((3, 5), dtype=np.float32) * 6.4341) for d in data)
+            assert all(
+                np.all(d["inp"] == np.ones((3, 5), dtype=np.float32) * 6.4341)
+                for d in data
+            )
 
     @pytest.mark.parametrize(
         "opts,expected_err",
         [
             (["--val-range", "x:[y,2]"], "could not be parsed as a number"),
-            (["--val-range", "x:[1,2,3]"], "expected to receive exactly 2 values, but received 3"),
+            (
+                ["--val-range", "x:[1,2,3]"],
+                "expected to receive exactly 2 values, but received 3",
+            ),
         ],
     )
     def test_val_range_errors(self, data_loader_args, opts, expected_err):
@@ -141,4 +174,6 @@ class TestDataLoaderArgs:
 
     def test_cannot_provide_two_custom_data_loader_methods(self, data_loader_args):
         with pytest.raises(SystemExit):
-            data_loader_args.parse_args(["--data-loader-script", "my_script.py", "--load-inputs", "inputs.json"])
+            data_loader_args.parse_args(
+                ["--data-loader-script", "my_script.py", "--load-inputs", "inputs.json"]
+            )

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -74,7 +74,10 @@ class TfRunner(BaseRunner):
         G_LOGGER.extra_verbose(f"Received feed_dict: {feed_dict}")
         start = time.time()
         inference_outputs = self.sess.run(
-            self.output_names, feed_dict=feed_dict, options=self.run_options, run_metadata=self.run_metadata
+            self.output_names,
+            feed_dict=feed_dict,
+            options=self.run_options,
+            run_metadata=self.run_metadata,
         )
         end = time.time()
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,8 @@ set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
 set(TRT_PLATFORM_ID "aarch64")
+set(CMAKE_FIND_LIBRARY_PREFIXES "lib")
+set(CMAKE_FIND_LIBRARY_SUFFIXES .so)
 
 if("$ENV{ARMSERVER}" AND "${CUDA_VERSION}" VERSION_GREATER_EQUAL 11.0)
     set(CUDA_PLATFORM_ID "sbsa-linux")
@@ -46,10 +48,18 @@ set(BUILD_LIBRARY_ONLY 1)
 set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_ROOT})
 set(CUDA_INCLUDE_DIRS ${CUDA_ROOT}/include)
 
+set(CMAKE_THREAD_LIBS_INIT "-lpthread")
+set(CMAKE_HAVE_THREADS_LIBRARY 1)
+set(CMAKE_USE_WIN32_THREADS_INIT 0)
+set(CMAKE_USE_PTHREADS_INIT 1)
+
 find_library(RT_LIB rt PATHS /usr/aarch64-linux-gnu/lib /usr/lib/aarch64-linux-gnu)
 
 if(NOT RT_LIB)
-    message(WARNING "librt.so not found in default paths")
+    find_file(RT_LIB librt.so PATHS /usr/aarch64-linux-gnu/lib /usr/lib/aarch64-linux-gnu)
+    if(NOT RT_LIB)
+        message(WARNING "librt.so not found in default paths")
+    endif()
 endif()
 
 message("RT_LIB: ${RT_LIB}")

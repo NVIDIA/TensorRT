@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,9 @@ class MnistModel(object):
                 "/tmp/mnist/data",
                 train=True,
                 download=True,
-                transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]),
+                transform=transforms.Compose(
+                    [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+                ),
             ),
             batch_size=self.batch_size,
             shuffle=True,
@@ -70,7 +72,9 @@ class MnistModel(object):
             datasets.MNIST(
                 "/tmp/mnist/data",
                 train=False,
-                transform=transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]),
+                transform=transforms.Compose(
+                    [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+                ),
             ),
             batch_size=self.test_batch_size,
             shuffle=True,
@@ -86,7 +90,11 @@ class MnistModel(object):
         # Train the network for a single epoch
         def train(epoch):
             self.network.train()
-            optimizer = optim.SGD(self.network.parameters(), lr=self.learning_rate, momentum=self.sgd_momentum)
+            optimizer = optim.SGD(
+                self.network.parameters(),
+                lr=self.learning_rate,
+                momentum=self.sgd_momentum,
+            )
             for batch, (data, target) in enumerate(self.train_loader):
                 if torch.cuda.is_available():
                     data = data.to("cuda")
@@ -126,7 +134,10 @@ class MnistModel(object):
             test_loss /= len(self.test_loader)
             print(
                 "\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
-                    test_loss, correct, len(self.test_loader.dataset), 100.0 * correct / len(self.test_loader.dataset)
+                    test_loss,
+                    correct,
+                    len(self.test_loader.dataset),
+                    100.0 * correct / len(self.test_loader.dataset),
                 )
             )
 

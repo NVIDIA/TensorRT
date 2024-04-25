@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -620,8 +620,10 @@ public:
         try
         {
             bool const result = mContext.enqueueV3(stream.get());
-            // Collecting layer timing info from current profile index of execution context
-            if (mContext.getProfiler() && !mContext.getEnqueueEmitsProfile() && !mContext.reportToProfiler())
+            // Collecting layer timing info from current profile index of execution context, except under capturing
+            // mode.
+            if (!isStreamCapturing(stream) && mContext.getProfiler() && !mContext.getEnqueueEmitsProfile()
+                && !mContext.reportToProfiler())
             {
                 gLogWarning << "Failed to collect layer timing info from previous enqueueV3()" << std::endl;
             }
@@ -635,6 +637,14 @@ public:
     }
 
 private:
+    // Helper function to check if a stream is in capturing mode.
+    bool isStreamCapturing(TrtCudaStream& stream) const
+    {
+        cudaStreamCaptureStatus status{cudaStreamCaptureStatusNone};
+        cudaCheck(cudaStreamIsCapturing(stream.get(), &status));
+        return status != cudaStreamCaptureStatusNone;
+    }
+
     Bindings const& mBindings;
 };
 
@@ -931,6 +941,8 @@ private:
         mEnqueue = EnqueueFunction(EnqueueExplicit(context, mBindings));
         if (inference.graph)
         {
+            sample::gLogInfo << "Capturing CUDA graph for the current execution context" << std::endl;
+
             TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
             // Avoid capturing initialization calls by executing the enqueue function at least
             // once before starting CUDA graph capture.
@@ -948,6 +960,7 @@ private:
             {
                 mGraph.endCapture(stream);
                 mEnqueue = EnqueueFunction(EnqueueGraph(context, mGraph));
+                sample::gLogInfo << "Successfully captured CUDA graph for the current execution context" << std::endl;
             }
             else
             {

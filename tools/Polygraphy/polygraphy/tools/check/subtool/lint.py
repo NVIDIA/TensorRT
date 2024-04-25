@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,12 @@ from polygraphy.exception import PolygraphyException
 from polygraphy.json import save_json
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools import util as tools_util
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoadArgs, OnnxrtSessionArgs
+from polygraphy.tools.args import (
+    DataLoaderArgs,
+    ModelArgs,
+    OnnxLoadArgs,
+    OnnxrtSessionArgs,
+)
 from polygraphy.tools.base import Tool
 
 onnx = mod.lazy_import("onnx")
@@ -83,7 +88,10 @@ class Lint(Tool):
     6. Large models (>2GB) require external data to be in same directory as the model file, custom paths to external data are not supported.
     """
 
-    CUSTOM_OP_EXCEPTION_SUBSTRS = ["No opset import for domain", "is not a registered function/op"]
+    CUSTOM_OP_EXCEPTION_SUBSTRS = [
+        "No opset import for domain",
+        "is not a registered function/op",
+    ]
     ONNX_CHECKER_IGNORE_SUBSTR = "Bad node spec for node"
     INVALID_ONNX_EXCEPTION_SUBSTR = "Error parsing message with type 'onnx.ModelProto'"
     MAXIMUM_PROTOBUF = 2e9  # 2GB
@@ -158,9 +166,13 @@ class Lint(Tool):
             """
             node = self.cur_node
 
-            inp_names = {inp.name for inp in node.inputs if isinstance(inp, gs.Variable)}
+            inp_names = {
+                inp.name for inp in node.inputs if isinstance(inp, gs.Variable)
+            }
 
-            if not all([inp in self.cache for inp in inp_names]):  # Need all inputs to be available in the cache
+            if not all(
+                [inp in self.cache for inp in inp_names]
+            ):  # Need all inputs to be available in the cache
                 return None
 
             singleton = self.graph.copy()
@@ -198,7 +210,9 @@ class Lint(Tool):
                     # means that something went wrong with its ancestor nodes.
                     continue
                 self.num_consumers[inp.name] -= 1
-                if self.num_consumers[inp.name] == 0:  # All consuming nodes of this tensor have been visited
+                if (
+                    self.num_consumers[inp.name] == 0
+                ):  # All consuming nodes of this tensor have been visited
                     G_LOGGER.super_verbose(f"removing tensor: `{inp.name}` from cache")
                     del self.cache[inp.name]  # Can delete the tensor from the cache
 
@@ -214,9 +228,13 @@ class Lint(Tool):
                 elif isinstance(
                     out, gs.Constant
                 ):  # This theoretically should never happen, as constants are not outputs of nodes
-                    G_LOGGER.critical(f"tensor: `{out.name}` is a constant, but is part of the output!")
+                    G_LOGGER.critical(
+                        f"tensor: `{out.name}` is a constant, but is part of the output!"
+                    )
                 else:
-                    G_LOGGER.critical(f"tensor: `{out.name}` is neither a variable nor a constant")
+                    G_LOGGER.critical(
+                        f"tensor: `{out.name}` is neither a variable nor a constant"
+                    )
 
         def set_graph_inputs(self, feed_dict: dict):
             """
@@ -237,7 +255,9 @@ class Lint(Tool):
                             f"tensor: {inp.name} missing in input cache! are you sure current node {self.cur_node.name} is valid?"
                         )  # This should never happen
                     elif isinstance(inp, gs.Constant):
-                        G_LOGGER.super_verbose(f"tensor: `{inp.name}` is a constant, not tracked in cache. ")
+                        G_LOGGER.super_verbose(
+                            f"tensor: `{inp.name}` is a constant, not tracked in cache. "
+                        )
                         continue
 
                 _feed_dict[inp.name] = self.cache[inp.name]
@@ -339,7 +359,9 @@ class Lint(Tool):
                     scope = ""
                     if node_name and op:
                         scope = f"Name: {node_name}, Op: {op} | "
-                    G_LOGGER.log(f"LINT | {scope}{message}", severity=severity_from_level[level])
+                    G_LOGGER.log(
+                        f"LINT | {scope}{message}", severity=severity_from_level[level]
+                    )
                 lint_entry = {
                     "level": level.value,
                     "source": source.value,
@@ -359,7 +381,9 @@ class Lint(Tool):
 
                 self.lint_entries.append(lint_entry)
 
-                self.is_model_valid = (level != Lint.Level.EXCEPTION) and self.is_model_valid
+                self.is_model_valid = (
+                    level != Lint.Level.EXCEPTION
+                ) and self.is_model_valid
 
             elif node_name not in self.summary["failing"]:
                 self.summary["passing"].update([node_name])
@@ -401,7 +425,11 @@ class Lint(Tool):
                     # The ORT message format is not as expected, so just return the message pruning the prefix
                     return message.split("[ONNXRuntimeError] : ")[1]
                 message = "".join(parts[3:]).replace('"', "`")
-                for substr in ORT_SUBSTRS_TO_PRUNE:  # remove substrings that are not useful in the error message
+                for (
+                    substr
+                ) in (
+                    ORT_SUBSTRS_TO_PRUNE
+                ):  # remove substrings that are not useful in the error message
                     message = message.replace(substr, "")
                 return message
 
@@ -411,6 +439,9 @@ class Lint(Tool):
                     "SystemError: " + x.split(" : ")[1]
                 ),  # If starts with "SystemError", it is likely due to improper installation of ONNX Runtime.
                 r"\[ONNXRuntimeError\] : .*": _prune_ONNXRuntimeError_formatting,  # [ONNXRuntimeError] : {code} : {StatusCodeToString(code)} : {msg}
+                r"\x1b(?:\[(?:\d+;){0,2}\d+m)(.*)\x1b\[m": lambda msg: re.sub(
+                    r"\x1b(?:\[(?:\d+;){0,2}\d+m)(.*)\x1b\[m", "\\1", msg
+                ),  # Remove log coloration characters from https://github.com/microsoft/onnxruntime/blob/b33216be4c02adfbbdeac2fd30ddc55f673eda3d/onnxruntime/core/common/logging/sinks/ostream_sink.cc#L24
                 r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ \[.*?\]\ ": lambda msg: re.sub(
                     r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ \[.*?\]\ ", "", msg
                 ),  # (e.g: https://github.com/microsoft/onnxruntime/blob/24566058b3e5bb9e511513977cee6e7c553fd5c2/onnxruntime/core/graph/graph.cc#L3545-L3546)
@@ -518,7 +549,9 @@ class Lint(Tool):
                     while name in names:  # guarantee unique name
                         name = f"polygraphy_unnamed_node_{node_id}_{uid}"
                         uid += 1
-                    G_LOGGER.verbose(f"Node with topological id: {node_id} has empty name. Renaming to: {name}")
+                    G_LOGGER.verbose(
+                        f"Node with topological id: {node_id} has empty name. Renaming to: {name}"
+                    )
                     return name
 
                 for node in graph.nodes:
@@ -648,21 +681,27 @@ class Lint(Tool):
                 captured_stderr = io.BytesIO()
                 captured_exception = None
                 result = None
-                with contextlib.redirect_stdout(captured_stdout), stderr_redirector(captured_stderr):
+                with contextlib.redirect_stdout(captured_stdout), stderr_redirector(
+                    captured_stderr
+                ):
                     try:
                         # Execute the function
                         result = func(*args, **kwargs)
                     except Exception as err:  # pylint: disable=broad-except
                         captured_exception = err
                 UTF_TYPE = "utf-16-le" if os.name == "nt" else "utf-8"
-                stderr_msg = captured_stderr.getvalue().decode(UTF_TYPE)  # platform-dependent
+                stderr_msg = captured_stderr.getvalue().decode(
+                    UTF_TYPE
+                )  # platform-dependent
                 stdout_msg = captured_stdout.getvalue()
                 return (result, captured_exception, stderr_msg, stdout_msg)
 
             return wrapper
 
         @capture
-        def _ort_inference_check(model_bytes: Union[bytes, str], feed_dict: OrderedDict) -> Optional[OrderedDict]:
+        def _ort_inference_check(
+            model_bytes: Union[bytes, str], feed_dict: OrderedDict
+        ) -> Optional[OrderedDict]:
             """
             Runs inference using ONNX-Runtime.
 
@@ -704,7 +743,10 @@ class Lint(Tool):
             cleaned_input_tensor_names = {inp.name for inp in graph.inputs}
             cleaned_node_info = {(node.name, node.op) for node in graph.nodes}
 
-            return (orig_node_info - cleaned_node_info, orig_input_tensor_names - cleaned_input_tensor_names)
+            return (
+                orig_node_info - cleaned_node_info,
+                orig_input_tensor_names - cleaned_input_tensor_names,
+            )
 
         def _report_unused_info(graph: "gs.Graph"):
             """
@@ -721,12 +763,18 @@ class Lint(Tool):
                 - All nodes in the graph are expected to have non-empty names.
             """
 
-            (unused_node_info, unused_input_tensor_names), exception, _, _ = _unused_info_helper(graph)
+            (unused_node_info, unused_input_tensor_names), exception, _, _ = (
+                _unused_info_helper(graph)
+            )
 
             if exception:
                 # something went wrong here.
-                G_LOGGER.internal_error(f"Failed to report unused nodes. Error: {exception}")
-                G_LOGGER.warning(f"Failed to report unused nodes. Error: {exception}. Continuing...")
+                G_LOGGER.internal_error(
+                    f"Failed to report unused nodes. Error: {exception}"
+                )
+                G_LOGGER.warning(
+                    f"Failed to report unused nodes. Error: {exception}. Continuing..."
+                )
 
             # report unused tensors that are also inputs (intermediate tensors are not reported)
             for inp_name in sorted(list(unused_input_tensor_names)):
@@ -804,7 +852,7 @@ class Lint(Tool):
                 # NOTE: This is only done if early-exiting, as otherwise these warnings tend to be repeats
                 # of node level warnings/exceptions.
                 if warn_str:
-                    warnings = warn_str.split('\n')
+                    warnings = warn_str.split("\n")
                     for warning in warnings:
                         if len(warning) > 0:
                             self.report.add(
@@ -818,7 +866,9 @@ class Lint(Tool):
 
                 self.report.summary["passing"] = {node.name for node in graph.nodes}
                 self.report.export(args.output)
-                G_LOGGER.verbose("ORT inference check passed. Model is valid. Early exiting.")
+                G_LOGGER.verbose(
+                    "ORT inference check passed. Model is valid. Early exiting."
+                )
                 return 0
             if isinstance(exception, PolygraphyException):
                 # PolygraphyException is raised when the provided input is not compatible with polygraphy
@@ -830,18 +880,29 @@ class Lint(Tool):
 
         # start Node-level linting
         with Lint.ContextManager(graph) as lcm:
-            lcm.set_graph_inputs(feed_dict)  # load the cache with initial feed_dict values for iterative inference.
+            lcm.set_graph_inputs(
+                feed_dict
+            )  # load the cache with initial feed_dict values for iterative inference.
 
             for _ in lcm.nodes():
                 g = lcm.make_singleton_graph()
                 inference_output = None
 
                 if g:  # has valid ancestors. Can perform inference.
-                    model_bytes = onnx_backend.BytesFromOnnx(gs.export_onnx(g, do_type_check=False))
-                    inference_output, exception, _, _ = _ort_inference_check(model_bytes, lcm.feed_dict())
+                    model_bytes = onnx_backend.BytesFromOnnx(
+                        gs.export_onnx(g, do_type_check=False)
+                    )
+                    inference_output, exception, _, _ = _ort_inference_check(
+                        model_bytes, lcm.feed_dict()
+                    )
                     # NOTE: we ignore stdout and stderr as it contains info from polygraphy not relevant to linting.
                     err_str = str(exception) if exception else ""
-                    if any([substr in err_str for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS]):
+                    if any(
+                        [
+                            substr in err_str
+                            for substr in Lint.CUSTOM_OP_EXCEPTION_SUBSTRS
+                        ]
+                    ):
                         self.report.add(
                             level=Lint.Level.WARNING,
                             source=Lint.Source.ONNXRUNTIME,

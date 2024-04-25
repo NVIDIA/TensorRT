@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,9 @@ class ToInput(Tool):
             "Otherwise, the outputs from one runner may be overwritten by those of a subsequent runner. ",
             nargs="+",
         )
-        parser.add_argument("-o", "--output", help="Path to the file to generate", required=True)
+        parser.add_argument(
+            "-o", "--output", help="Path to the file to generate", required=True
+        )
 
     def run_impl(self, args):
         inputs = []
@@ -73,4 +75,8 @@ class ToInput(Tool):
                     data = [data]
                 update_inputs(data, path)
 
-        save_json(inputs, args.output, description=f"input file containing {len(inputs)} iteration(s)")
+        save_json(
+            inputs,
+            args.output,
+            description=f"input file containing {len(inputs)} iteration(s)",
+        )

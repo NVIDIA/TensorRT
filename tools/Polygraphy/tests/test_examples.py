@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -354,7 +354,8 @@ CLI_EXAMPLES = [
     ),
     # Plugin
     Example(
-        ["cli", "plugin", "01_match_and_replace_plugin"], artifact_names=["config.yaml", "replaced.onnx"]
+        ["cli", "plugin", "01_match_and_replace_plugin"],
+        artifact_names=["config.yaml", "replaced.onnx"]
     ),
 ]
 
