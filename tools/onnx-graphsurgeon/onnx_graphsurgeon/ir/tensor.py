@@ -61,7 +61,12 @@ class Tensor(object):
         """
         return self.name == ""
 
-    def to_constant(self, values: np.ndarray, data_location: int = None):
+    def to_constant(
+        self,
+        values: np.ndarray,
+        data_location: int = None,
+        export_dtype: Union[np.dtype, "onnx.TensorProto.DataType"] = None,
+    ):
         """
         Modifies this tensor in-place to convert it to a Constant. This means that all consumers/producers of the tensor will see the update.
 
@@ -72,12 +77,15 @@ class Tensor(object):
                     An enum value indicating the location where the tensor data is stored.
                     Generally, this will come from onnx.TensorProto.DataLocation.
 
+            dtype (Union[numpy.dtype, onnx.TensorProto.DataType]): The data type of the tensor.
         Returns:
             self
         """
         self.__class__ = Constant
         self._values = values
         self.data_location = data_location
+        self.export_dtype = export_dtype
+
         return self
 
     def to_variable(
@@ -95,9 +103,13 @@ class Tensor(object):
         Returns:
             self
         """
+
+        variable_dtype = dtype if dtype is not None else self.export_dtype
+
         self.__class__ = Variable
-        self.dtype = dtype
         self.shape = shape
+        self.dtype = variable_dtype
+
         return self
 
     def i(self, tensor_idx=0, producer_idx=0):
@@ -184,10 +196,11 @@ class Variable(Tensor):
         self.shape = misc.default_value(shape, None)
         self.type = type
 
-    def to_constant(self, values: np.ndarray):
+    def to_constant(self, values: np.ndarray, export_dtype: Union[np.dtype, "onnx.TensorProto.DataType"] = None):
         del self.dtype
         del self.shape
-        return super().to_constant(values)
+
+        return super().to_constant(values, export_dtype=export_dtype)
 
     def copy(self):
         """
@@ -315,6 +328,7 @@ class Constant(Tensor):
         name: str,
         values: Union[np.ndarray, LazyValues],
         data_location: int = None,
+        export_dtype: Union[np.dtype, "onnx.TensorProto.DataType"] = None,
     ):
         """
         Represents a Tensor whose value is known.
@@ -326,6 +340,11 @@ class Constant(Tensor):
             data_location (int):
                     An enum value indicating the location where the tensor data is stored.
                     Generally, this will come from onnx.TensorProto.DataLocation.
+
+
+            export_dtype (Union[np.dtype, onnx.TensorProto.DataType]):
+                    The data type of the tensor when exported to onnx. If not specified, then
+                    the data type of values will be used.
         """
         self.name = name
         self.inputs = misc.SynchronizedList(self, field_name="outputs", initial=[])
@@ -344,12 +363,18 @@ class Constant(Tensor):
             )
         self._values = values
         self.data_location = data_location
+        self._export_dtype = export_dtype
 
-    def to_variable(
-        self, dtype: np.dtype = None, shape: Sequence[Union[int, str]] = []
-    ):
+    def to_variable(self, dtype: np.dtype = None, shape: Sequence[Union[int, str]] = []):
+        var_dtype = self.export_dtype
+
+        del self._export_dtype
         del self._values
-        return super().to_variable(dtype, shape)
+
+        if dtype is not None:
+            return super().to_variable(dtype, shape)
+
+        return super().to_variable(var_dtype, shape)
 
     def copy(self):
         """
@@ -357,7 +382,7 @@ class Constant(Tensor):
 
         Note: Generally, you should only ever make a copy of a Graph.
         """
-        return Constant(self.name, self._values)
+        return Constant(self.name, self._values, export_dtype=self.export_dtype)
 
     @property
     def values(self):
@@ -377,6 +402,17 @@ class Constant(Tensor):
     @property
     def dtype(self):
         return self._values.dtype
+
+    @property
+    def export_dtype(self):
+        if self._export_dtype is not None:
+            return self._export_dtype
+
+        return self.dtype
+
+    @export_dtype.setter
+    def export_dtype(self, export_dtype):
+        self._export_dtype = export_dtype
 
     def __repr__(self):  # Hack to make logging output pretty.
         ret = self.__str__()

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -71,5 +71,7 @@ class TestImporter:
             f.flush()
             os.fsync(f.fileno())
 
-            with pytest.raises(PolygraphyException, match="Could not import symbol: non_existent from"):
+            with pytest.raises(
+                PolygraphyException, match="Could not import symbol: non_existent from"
+            ):
                 invoke_from_script(f.name, "non_existent")

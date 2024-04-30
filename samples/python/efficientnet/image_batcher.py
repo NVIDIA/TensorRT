@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,15 @@ class ImageBatcher:
     Creates batches of pre-processed images.
     """
 
-    def __init__(self, input, shape, dtype, max_num_images=None, exact_batches=False, preprocessor="V2"):
+    def __init__(
+        self,
+        input,
+        shape,
+        dtype,
+        max_num_images=None,
+        exact_batches=False,
+        preprocessor="V2",
+    ):
         """
         :param input: The input directory to read images from.
         :param shape: The tensor shape of the batch to prepare, either in NCHW or NHWC format.
@@ -45,10 +53,16 @@ class ImageBatcher:
         extensions = [".jpg", ".jpeg", ".png", ".bmp"]
 
         def is_image(path):
-            return os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            return (
+                os.path.isfile(path) and os.path.splitext(path)[1].lower() in extensions
+            )
 
         if os.path.isdir(input):
-            self.images = [os.path.join(input, f) for f in os.listdir(input) if is_image(os.path.join(input, f))]
+            self.images = [
+                os.path.join(input, f)
+                for f in os.listdir(input)
+                if is_image(os.path.join(input, f))
+            ]
             self.images.sort()
         elif os.path.isfile(input):
             if is_image(input):

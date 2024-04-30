@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,8 +109,7 @@ __global__ void circPadKernel(
         int32_t j2 = (i2 - allPads[4] + origDims[2]) % origDims[2];
         int32_t j3 = (i3 - allPads[6] + origDims[3]) % origDims[3];
 
-        y[i] = x[origDims[3] * origDims[2] * origDims[1] * j0 + origDims[3] * origDims[2] * j1 + origDims[3] * j2
-            + j3];
+        y[i] = x[origDims[3] * origDims[2] * origDims[1] * j0 + origDims[3] * origDims[2] * j1 + origDims[3] * j2 + j3];
     }
 }
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -82,7 +82,9 @@ def save_weights_for_refitting(graph):
 
 
 def main():
-    org_model_file_path = getFilePath("samples/python/engine_refit_onnx_bidaf/bidaf-original.onnx")
+    org_model_file_path = getFilePath(
+        "samples/python/engine_refit_onnx_bidaf/bidaf-original.onnx"
+    )
 
     print("Modifying the ONNX model ...")
     original_model = onnx.load(org_model_file_path)

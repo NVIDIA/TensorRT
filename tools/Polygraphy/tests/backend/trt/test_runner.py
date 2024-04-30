@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -79,7 +79,9 @@ class TestTrtRunner:
         assert not runner.is_active
 
     @pytest.mark.serial
-    def test_warn_if_impl_methods_called(self, check_warnings_on_runner_impl_methods, identity_engine):
+    def test_warn_if_impl_methods_called(
+        self, check_warnings_on_runner_impl_methods, identity_engine
+    ):
         runner = TrtRunner(identity_engine)
         check_warnings_on_runner_impl_methods(runner)
 
@@ -96,23 +98,34 @@ class TestTrtRunner:
             outputs = runner.infer(
                 {
                     "input": np.array(
-                        inp, dtype=np.int32 if mod.version(trt.__version__) < mod.version("9.0") else np.int64
+                        inp,
+                        dtype=(
+                            np.int32
+                            if mod.version(trt.__version__) < mod.version("9.0")
+                            else np.int64
+                        ),
                     )
                 }
             )
-            assert np.array_equal(outputs["nonzero_out_0"], np.array(expected, dtype=np.int32))
+            assert np.array_equal(
+                outputs["nonzero_out_0"], np.array(expected, dtype=np.int32)
+            )
 
     @pytest.mark.parametrize("copy_outputs_to_host", [True, False])
     @pytest.mark.parametrize("device", ["cpu", "cuda"])
     def test_torch_tensors(self, copy_outputs_to_host, identity_engine, device):
         with TrtRunner(identity_engine) as runner:
             arr = torch.ones([1, 1, 2, 2], dtype=torch.float32, device=device)
-            outputs = runner.infer({"x": arr}, copy_outputs_to_host=copy_outputs_to_host)
+            outputs = runner.infer(
+                {"x": arr}, copy_outputs_to_host=copy_outputs_to_host
+            )
             assert all(isinstance(t, torch.Tensor) for t in outputs.values())
 
             assert torch.equal(outputs["y"].to("cpu"), arr.to("cpu"))
 
-            assert outputs["y"].device.type == ("cpu" if copy_outputs_to_host else "cuda")
+            assert outputs["y"].device.type == (
+                "cpu" if copy_outputs_to_host else "cuda"
+            )
 
     def test_context(self, identity_engine):
         with TrtRunner(identity_engine.create_execution_context) as runner:
@@ -131,9 +144,15 @@ class TestTrtRunner:
             model.check_runner(runner)
 
     def test_multithreaded_runners_from_engine(self, identity_engine):
-        with TrtRunner(identity_engine) as runner0, TrtRunner(identity_engine) as runner1:
-            t1 = threading.Thread(target=ONNX_MODELS["identity"].check_runner, args=(runner0,))
-            t2 = threading.Thread(target=ONNX_MODELS["identity"].check_runner, args=(runner1,))
+        with TrtRunner(identity_engine) as runner0, TrtRunner(
+            identity_engine
+        ) as runner1:
+            t1 = threading.Thread(
+                target=ONNX_MODELS["identity"].check_runner, args=(runner0,)
+            )
+            t2 = threading.Thread(
+                target=ONNX_MODELS["identity"].check_runner, args=(runner1,)
+            )
             t1.start()
             t2.start()
             t1.join()
@@ -141,12 +160,17 @@ class TestTrtRunner:
 
     @pytest.mark.parametrize("use_optimization_profile", [True, False])
     @pytest.mark.skipif(
-        mod.version(trt.__version__) >= mod.version("8.6") and mod.version(trt.__version__) < mod.version("8.7"),
+        mod.version(trt.__version__) >= mod.version("8.6")
+        and mod.version(trt.__version__) < mod.version("8.7"),
         reason="Bug in TRT 8.6",
     )
     def test_multiple_profiles(self, use_optimization_profile):
         model = ONNX_MODELS["dynamic_identity"]
-        profile0_shapes = [(1, 2, 1, 1), (1, 2, 1, 1), (1, 2, 1, 1)]  # Use min==opt==max to fix shapes in the engine.
+        profile0_shapes = [
+            (1, 2, 1, 1),
+            (1, 2, 1, 1),
+            (1, 2, 1, 1),
+        ]  # Use min==opt==max to fix shapes in the engine.
         profile1_shapes = [(1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)]
         profile2_shapes = [(1, 2, 4, 4), (1, 2, 8, 8), (1, 2, 16, 16)]
         network_loader = NetworkFromOnnxBytes(model.loader)
@@ -159,7 +183,9 @@ class TestTrtRunner:
         engine = engine_from_network(network_loader, config_loader)
         context = engine.create_execution_context()
 
-        for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
+        for index, shapes in enumerate(
+            [profile0_shapes, profile1_shapes, profile2_shapes]
+        ):
             with TrtRunner(
                 context,
                 optimization_profile=index if use_optimization_profile else None,
@@ -171,12 +197,13 @@ class TestTrtRunner:
                 for shape in shapes:
                     model.check_runner(runner, {"X": shape})
 
-
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("10.0"),
         reason="Feature not present before 10.0",
     )
-    @pytest.mark.parametrize("allocation_strategy", [None, "static", "profile", "runtime"])
+    @pytest.mark.parametrize(
+        "allocation_strategy", [None, "static", "profile", "runtime"]
+    )
     def test_allocation_strategies(self, allocation_strategy):
         model = ONNX_MODELS["residual_block"]
         profile0_shapes = [(1, 3, 224, 224), (1, 3, 224, 224), (1, 3, 224, 224)]
@@ -191,7 +218,9 @@ class TestTrtRunner:
         config_loader = CreateConfig(profiles=profiles)
         engine = engine_from_network(network_loader, config_loader)
 
-        for index, shapes in enumerate([profile0_shapes, profile1_shapes, profile2_shapes]):
+        for index, shapes in enumerate(
+            [profile0_shapes, profile1_shapes, profile2_shapes]
+        ):
             with TrtRunner(
                 engine,
                 optimization_profile=index,
@@ -199,7 +228,6 @@ class TestTrtRunner:
             ) as runner:
                 for shape in shapes:
                     model.check_runner(runner, {"gpu_0/data_0": shape})
-
 
     def test_empty_tensor_with_dynamic_input_shape_tensor(self):
         model = ONNX_MODELS["empty_tensor_expand"]
@@ -224,7 +252,12 @@ class TestTrtRunner:
     def test_error_on_wrong_name_feed_dict(self, names, err, identity_engine, module):
         with TrtRunner(identity_engine) as runner:
             with pytest.raises(PolygraphyException, match=err):
-                runner.infer({name: module.ones((1, 1, 2, 2), dtype=module.float32) for name in names})
+                runner.infer(
+                    {
+                        name: module.ones((1, 1, 2, 2), dtype=module.float32)
+                        for name in names
+                    }
+                )
 
     @pytest.mark.parametrize("module", [torch, np])
     def test_error_on_wrong_dtype_feed_dict(self, identity_engine, module):
@@ -238,9 +271,13 @@ class TestTrtRunner:
             with pytest.raises(PolygraphyException, match="incompatible shape."):
                 runner.infer({"x": module.ones((1, 1, 3, 2), dtype=module.float32)})
 
-    @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
+    @pytest.mark.parametrize(
+        "use_view", [True, False]
+    )  # We should be able to use DeviceArray in place of DeviceView
     def test_device_views(self, use_view, reducable_engine):
-        with TrtRunner(reducable_engine) as runner, cuda.DeviceArray((1,), dtype=np.float32) as x:
+        with TrtRunner(reducable_engine) as runner, cuda.DeviceArray(
+            (1,), dtype=np.float32
+        ) as x:
             x.copy_from(np.ones((1,), dtype=np.float32))
             outputs = runner.infer(
                 {
@@ -266,36 +303,71 @@ class TestTrtRunner:
                 assert np.all(outputs["y"] == inp)
 
             check(runner.infer({"x": inp}))
-            check(runner.infer({"x": cuda.DeviceArray(shape=inp.shape, dtype=inp.dtype).copy_from(inp)}))
+            check(
+                runner.infer(
+                    {
+                        "x": cuda.DeviceArray(
+                            shape=inp.shape, dtype=inp.dtype
+                        ).copy_from(inp)
+                    }
+                )
+            )
 
             torch_outputs = runner.infer({"x": torch.from_numpy(inp)})
             check({name: out.numpy() for name, out in torch_outputs.items()})
             check(runner.infer({"x": inp}))
 
-    @pytest.mark.parametrize("use_view", [True, False])  # We should be able to use DeviceArray in place of DeviceView
+    @pytest.mark.parametrize(
+        "use_view", [True, False]
+    )  # We should be able to use DeviceArray in place of DeviceView
     def test_device_view_dynamic_shapes(self, use_view):
         model = ONNX_MODELS["dynamic_identity"]
         profiles = [
             Profile().add("X", (1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4)),
         ]
-        runner = TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader), CreateConfig(profiles=profiles)))
+        runner = TrtRunner(
+            EngineFromNetwork(
+                NetworkFromOnnxBytes(model.loader), CreateConfig(profiles=profiles)
+            )
+        )
         with runner, cuda.DeviceArray(shape=(1, 2, 3, 3), dtype=np.float32) as arr:
             inp = np.random.random_sample(size=(1, 2, 3, 3)).astype(np.float32)
             arr.copy_from(inp)
-            outputs = runner.infer({"X": cuda.DeviceView(arr.ptr, arr.shape, arr.dtype) if use_view else arr})
+            outputs = runner.infer(
+                {
+                    "X": (
+                        cuda.DeviceView(arr.ptr, arr.shape, arr.dtype)
+                        if use_view
+                        else arr
+                    )
+                }
+            )
             assert np.all(outputs["Y"] == inp)
             assert outputs["Y"].shape == (1, 2, 3, 3)
 
     def test_cannot_use_device_view_shape_tensor(self):
         model = ONNX_MODELS["empty_tensor_expand"]
-        with TrtRunner(EngineFromNetwork(NetworkFromOnnxBytes(model.loader))) as runner, cuda.DeviceArray(
-            shape=(5,), dtype=np.int32 if mod.version(trt.__version__) < mod.version("9.0") else np.int64
+        with TrtRunner(
+            EngineFromNetwork(NetworkFromOnnxBytes(model.loader))
+        ) as runner, cuda.DeviceArray(
+            shape=(5,),
+            dtype=(
+                np.int32
+                if mod.version(trt.__version__) < mod.version("9.0")
+                else np.int64
+            ),
         ) as arr:
-            with pytest.raises(PolygraphyException, match="it must reside in host memory"):
-                runner.infer({"data": np.ones((2, 0, 3, 0), dtype=np.float32), "new_shape": arr})
+            with pytest.raises(
+                PolygraphyException, match="it must reside in host memory"
+            ):
+                runner.infer(
+                    {"data": np.ones((2, 0, 3, 0), dtype=np.float32), "new_shape": arr}
+                )
 
     @pytest.mark.parametrize("hwc_input", [True, False], ids=["hwc_input", "chw_input"])
-    @pytest.mark.parametrize("hwc_output", [True, False], ids=["hwc_output", "chw_output"])
+    @pytest.mark.parametrize(
+        "hwc_output", [True, False], ids=["hwc_output", "chw_output"]
+    )
     def test_infer_chw_format(self, hwc_input, hwc_output):
         model = ONNX_MODELS["identity_multi_ch"]
         inp_shape = model.input_metadata["x"].shape
@@ -317,7 +389,9 @@ class TestTrtRunner:
             outputs = runner.infer({"x": inp})
             if hwc_input == hwc_output:  # output in CHW/HWC format and similarly shaped
                 assert np.allclose(outputs["y"], inp)
-            elif not hwc_input and hwc_output:  # output in HWC format and shaped (N, H, W, C)
+            elif (
+                not hwc_input and hwc_output
+            ):  # output in HWC format and shaped (N, H, W, C)
                 assert np.allclose(outputs["y"].transpose(0, 3, 1, 2), inp)
             else:  # hwc_input and not hwc_output: output in CHW format and shaped (N, C, H, W)
                 assert np.allclose(outputs["y"].transpose(0, 2, 3, 1), inp)
@@ -328,7 +402,9 @@ class TestTrtRunner:
         with cuda.DeviceArray.raw(shape) as arr:
             host_buffers = {}
             stream = cuda.Stream()
-            host_arr = _get_array_on_cpu(arr, "test", host_buffers, stream, arr.nbytes, use_torch)
+            host_arr = _get_array_on_cpu(
+                arr, "test", host_buffers, stream, arr.nbytes, use_torch
+            )
 
             if use_torch:
                 assert isinstance(host_arr, torch.Tensor)
@@ -345,24 +421,17 @@ class TestTrtRunner:
         network_loader = NetworkFromOnnxBytes(model.loader, strongly_typed=True)
         config_loader = CreateConfig(weight_streaming=True)
         engine = engine_from_network(network_loader, config_loader)
-        
+
         if budget == np.inf:
             # set to max size - 1
             budget = engine.streamable_weights_size - 1
 
-        kwargs = {
-            "weight_streaming_budget": None,
-            "weight_streaming_percent": None
-        }
+        kwargs = {"weight_streaming_budget": None, "weight_streaming_percent": None}
         if budget is not None:
             if 0 < budget <= 1:
                 kwargs["weight_streaming_percent"] = budget * 100
             else:
                 kwargs["weight_streaming_budget"] = int(budget)
 
-        with TrtRunner(
-            engine,
-            optimization_profile=0,
-            **kwargs
-        ) as runner:
+        with TrtRunner(engine, optimization_profile=0, **kwargs) as runner:
             model.check_runner(runner)

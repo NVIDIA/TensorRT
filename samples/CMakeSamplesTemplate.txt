@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,11 +62,11 @@ add_executable(${TARGET_NAME}
 set(DEPS_LIST "")
 
 if(BUILD_PLUGINS)
-    list(APPEND DEPS_LIST nvinfer_plugin)
+    list(APPEND DEPS_LIST ${nvinfer_plugin_lib_name})
 endif()
 
 if(BUILD_PARSERS)
-    list(APPEND DEPS_LIST nvonnxparser)
+    list(APPEND DEPS_LIST ${nvonnxparser_lib_name})
 endif()
 
 if(BUILD_PLUGINS OR BUILD_PARSERS)
@@ -93,7 +93,7 @@ target_compile_options(${TARGET_NAME} PUBLIC
 
 set(SAMPLE_DEP_LIBS
     ${CUDART_LIB}
-    ${nvinfer_LIB_PATH}
+    ${${nvinfer_lib_name}_LIB_PATH}
     ${RT_LIB}
     ${CMAKE_DL_LIBS}
     ${CMAKE_THREAD_LIBS_INIT}
@@ -104,17 +104,17 @@ if (NOT MSVC)
 endif()
 
 if(${PLUGINS_NEEDED})
-    list(APPEND SAMPLE_DEP_LIBS nvinfer_plugin)
+    list(APPEND SAMPLE_DEP_LIBS ${nvinfer_plugin_lib_name})
 endif()
 
 if("onnx" IN_LIST SAMPLE_PARSERS)
-    list(APPEND SAMPLE_DEP_LIBS nvonnxparser)
+    list(APPEND SAMPLE_DEP_LIBS ${nvonnxparser_lib_name})
 endif()
 
-# Necessary to link nvinfer_plugin library.
+# Necessary to link nvinfer_plugin library. Add unresolved symbols flag for non-Windows platforms.
 target_link_libraries(${TARGET_NAME}
     ${SAMPLE_DEP_LIBS}
-    -Wl,--unresolved-symbols=ignore-in-shared-libs
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wl,--unresolved-symbols=ignore-in-shared-libs>
 )
 
 set_target_properties(${TARGET_NAME} PROPERTIES LINK_FLAGS "-Wl,--exclude-libs,ALL")

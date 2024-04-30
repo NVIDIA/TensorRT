@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,9 @@
 import os
 import ctypes
 
-WORKING_DIR = os.environ.get("TRT_WORKING_DIR") or os.path.dirname(os.path.realpath(__file__))
+WORKING_DIR = os.environ.get("TRT_WORKING_DIR") or os.path.dirname(
+    os.path.realpath(__file__)
+)
 IS_WINDOWS = os.name == "nt"
 if IS_WINDOWS:
     HARDMAX_PLUGIN_LIBRARY_NAME = "customHardmaxPlugin.dll"
@@ -28,7 +30,10 @@ if IS_WINDOWS:
     ]
 else:
     HARDMAX_PLUGIN_LIBRARY_NAME = "libcustomHardmaxPlugin.so"
-    HARDMAX_PLUGIN_LIBRARY = [os.path.join(WORKING_DIR, "build", HARDMAX_PLUGIN_LIBRARY_NAME)]
+    HARDMAX_PLUGIN_LIBRARY = [
+        os.path.join(WORKING_DIR, "build", HARDMAX_PLUGIN_LIBRARY_NAME)
+    ]
+
 
 def load_plugin_lib():
     for plugin_lib in HARDMAX_PLUGIN_LIBRARY:

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,13 +31,21 @@ class TestConvertToOnnx:
         pytest.importorskip("tensorflow")
 
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
-            poly_convert([TF_MODELS["identity"].path, "--model-type=frozen", "-o", outmodel.name])
+            poly_convert(
+                [TF_MODELS["identity"].path, "--model-type=frozen", "-o", outmodel.name]
+            )
             assert onnx.load(outmodel.name)
 
     def test_fp_to_fp16(self, poly_convert):
         with util.NamedTemporaryFile() as outmodel:
             poly_convert(
-                [ONNX_MODELS["identity_identity"].path, "--convert-to=onnx", "--fp-to-fp16", "-o", outmodel.name]
+                [
+                    ONNX_MODELS["identity_identity"].path,
+                    "--convert-to=onnx",
+                    "--fp-to-fp16",
+                    "-o",
+                    outmodel.name,
+                ]
             )
             # I/O types should be unchanged
             model = onnx.load(outmodel.name)
@@ -57,14 +65,24 @@ class TestConvertToTrt:
 
     def test_onnx_to_trt(self, poly_convert):
         with util.NamedTemporaryFile(suffix=".engine") as outmodel:
-            poly_convert([ONNX_MODELS["identity"].path, "--model-type=onnx", "-o", outmodel.name])
+            poly_convert(
+                [ONNX_MODELS["identity"].path, "--model-type=onnx", "-o", outmodel.name]
+            )
             self.check_engine(outmodel.name)
 
     def test_tf_to_onnx_to_trt(self, poly_convert):
         pytest.importorskip("tensorflow")
 
         with util.NamedTemporaryFile() as outmodel:
-            poly_convert([TF_MODELS["identity"].path, "--model-type=frozen", "--convert-to=trt", "-o", outmodel.name])
+            poly_convert(
+                [
+                    TF_MODELS["identity"].path,
+                    "--model-type=frozen",
+                    "--convert-to=trt",
+                    "-o",
+                    outmodel.name,
+                ]
+            )
             self.check_engine(outmodel.name)
 
     def test_trt_network_config_script_to_engine(self, poly_convert):
@@ -86,7 +104,9 @@ class TestConvertToTrt:
         """
         )
 
-        with util.NamedTemporaryFile("w+", suffix=".py") as f, util.NamedTemporaryFile() as outmodel:
+        with util.NamedTemporaryFile(
+            "w+", suffix=".py"
+        ) as f, util.NamedTemporaryFile() as outmodel:
             f.write(script)
             f.flush()
             os.fsync(f.fileno())
@@ -106,7 +126,16 @@ class TestConvertToTrt:
 
     def test_modify_onnx_outputs(self, poly_convert):
         with util.NamedTemporaryFile(suffix=".onnx") as outmodel:
-            poly_convert([ONNX_MODELS["identity_identity"].path, "-o", outmodel.name, "--onnx-outputs", "mark", "all"])
+            poly_convert(
+                [
+                    ONNX_MODELS["identity_identity"].path,
+                    "-o",
+                    outmodel.name,
+                    "--onnx-outputs",
+                    "mark",
+                    "all",
+                ]
+            )
 
             model = onnx.load(outmodel.name)
             assert len(model.graph.output) == 2
@@ -114,8 +143,24 @@ class TestConvertToTrt:
 
 class TestConvertToOnnxLikeTrt:
     @pytest.mark.parametrize(
-        "model_name", ["identity", "empty_tensor_expand", "const_foldable", "and", "scan", "dim_param", "tensor_attr"]
+        "model_name",
+        [
+            "identity",
+            "empty_tensor_expand",
+            "const_foldable",
+            "and",
+            "scan",
+            "dim_param",
+            "tensor_attr",
+        ],
     )
     def test_onnx_to_trt_to_onnx_like(self, poly_convert, model_name):
         with util.NamedTemporaryFile() as outmodel:
-            poly_convert([ONNX_MODELS[model_name].path, "--convert-to=onnx-like-trt-network", "-o", outmodel.name])
+            poly_convert(
+                [
+                    ONNX_MODELS[model_name].path,
+                    "--convert-to=onnx-like-trt-network",
+                    "-o",
+                    outmodel.name,
+                ]
+            )

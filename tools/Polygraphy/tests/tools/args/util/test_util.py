@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -76,7 +76,9 @@ class TestRunScript:
     def test_default_args(self):
         def script_add(script, arg0=0, arg1=0):
             result_name = safe("result")
-            script.append_suffix(safe("{:} = {:} + {:}", inline(result_name), arg0, arg1))
+            script.append_suffix(
+                safe("{:} = {:} + {:}", inline(result_name), arg0, arg1)
+            )
             return result_name
 
         assert args_util.run_script(script_add) == 0

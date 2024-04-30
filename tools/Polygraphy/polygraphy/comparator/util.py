@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -167,11 +167,14 @@ def log_output_stats(output, info_hist=False, runner_name=None, hist_range=None)
                 severity=G_LOGGER.INFO if info_hist else G_LOGGER.VERBOSE,
             )
         G_LOGGER.log(
-            lambda: str_histogram(output, hist_range), severity=G_LOGGER.INFO if info_hist else G_LOGGER.VERBOSE
+            lambda: str_histogram(output, hist_range),
+            severity=G_LOGGER.INFO if info_hist else G_LOGGER.VERBOSE,
         )
 
 
-def build_heatmaps(arr, min_val, max_val, prefix, save_dir=None, show=None, use_lognorm=None):
+def build_heatmaps(
+    arr, min_val, max_val, prefix, save_dir=None, show=None, use_lognorm=None
+):
     """
     Display an array as an image or set of images. The last two dimensions are interpreted as
     the height and width and the leading dimensions are flattened and treated as the number
@@ -196,10 +199,18 @@ def build_heatmaps(arr, min_val, max_val, prefix, save_dir=None, show=None, use_
 
         shape = util.array.shape(arr)
         if len(shape) < 3:
-            arr = util.array.view(arr, dtype=util.array.dtype(arr), shape=([1] * (3 - len(shape))) + list(shape))
+            arr = util.array.view(
+                arr,
+                dtype=util.array.dtype(arr),
+                shape=([1] * (3 - len(shape))) + list(shape),
+            )
 
         original_shape = util.array.shape(arr)
-        arr = util.array.view(arr, dtype=util.array.dtype(arr), shape=(-1, original_shape[-2], original_shape[-1]))
+        arr = util.array.view(
+            arr,
+            dtype=util.array.dtype(arr),
+            shape=(-1, original_shape[-2], original_shape[-1]),
+        )
 
         shape = util.array.shape(arr)
         num_images = shape[0]
@@ -226,7 +237,9 @@ def build_heatmaps(arr, min_val, max_val, prefix, save_dir=None, show=None, use_
 
         # Populate each image in each figure.
         for fig_idx in range(num_figures):
-            fig, axs = plt.subplots(num_rows, num_cols, squeeze=False, dpi=200, constrained_layout=True)
+            fig, axs = plt.subplots(
+                num_rows, num_cols, squeeze=False, dpi=200, constrained_layout=True
+            )
             base_img_idx = fig_idx * num_images_per_figure
 
             try:
@@ -258,7 +271,11 @@ def build_heatmaps(arr, min_val, max_val, prefix, save_dir=None, show=None, use_
                             title = "Out Of Bounds"
                         ax.set_title(title, fontsize=FONT_SIZE)
 
-                        images.append(ax.imshow(img, cmap="plasma", filternorm=False, resample=False))
+                        images.append(
+                            ax.imshow(
+                                img, cmap="plasma", filternorm=False, resample=False
+                            )
+                        )
 
                 for im in images:
                     im.set_norm(norm)
@@ -306,7 +323,9 @@ def scatter_plot_error_magnitude(
         save_dir (Optional[str]): Path to a directory in which to save images of the plots.
         show (Optional[bool]): Whether to display the error metrics plot.
     """
-    G_LOGGER.start(f"Building error metrics plot for {out0_name}. This may take a while...")
+    G_LOGGER.start(
+        f"Building error metrics plot for {out0_name}. This may take a while..."
+    )
     with G_LOGGER.indent():
         title = f"Error metrics between output0 and output1\noutput0: {runner0_name:35} | {out0_name}\noutput1: {runner1_name:35} | {out1_name}"
         fname = f"error_metrics_{out0_name}.png"
@@ -359,7 +378,9 @@ def scatter_plot_error_magnitude(
                 label_suffix = " (log scale)"
             else:
                 set_linear_ax(axs[1])
-            axs[1].set(xlabel="output1 magnitude", ylabel=f"Relative error{label_suffix}")
+            axs[1].set(
+                xlabel="output1 magnitude", ylabel=f"Relative error{label_suffix}"
+            )
 
             if save_dir is not None:
                 path = os.path.join(save_dir, fname)

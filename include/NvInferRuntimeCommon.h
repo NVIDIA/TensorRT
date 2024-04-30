@@ -28,7 +28,9 @@
 //!
 //! \warning Do not directly include this file. Instead include NvInferRuntime.h
 //!
+#define NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE 1
 #include "NvInferRuntimeBase.h"
+#undef NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE
 #include "NvInferRuntimePlugin.h"
 
 namespace nvinfer1

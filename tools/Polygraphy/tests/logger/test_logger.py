@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,10 @@ class TestLogger:
 
             logger.info("Hello")
             log_file.seek(0)
-            assert f"[I] [tests/logger/test_logger.py:{inspect.currentframe().f_lineno - 2}] Hello\n" == log_file.read()
+            assert (
+                f"[I] [tests/logger/test_logger.py:{inspect.currentframe().f_lineno - 5}] Hello\n"
+                == log_file.read()
+            )
 
     def test_severity_trie_with_no_default(self):
         logger = Logger(severity={"backend/trt": 10})
@@ -91,5 +94,12 @@ class TestSeverityTrie:
     )
     def test_get(self, path, sev):
         # Duplicate slashes should be handled
-        trie = SeverityTrie({"": 30, "backend/trt": 20, "backend/trt/loader.py": 50, "backend///////onnx": 28})
+        trie = SeverityTrie(
+            {
+                "": 30,
+                "backend/trt": 20,
+                "backend/trt/loader.py": 50,
+                "backend///////onnx": 28,
+            }
+        )
         assert trie.get(path) == sev

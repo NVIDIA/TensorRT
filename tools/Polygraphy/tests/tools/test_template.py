@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,9 @@ class TestTrtNetwork:
 
     def test_with_model_file(self, poly_template):
         with util.NamedTemporaryFile("w+", suffix=".py") as template:
-            poly_template(["trt-network", ONNX_MODELS["identity"].path, "-o", template.name])
+            poly_template(
+                ["trt-network", ONNX_MODELS["identity"].path, "-o", template.name]
+            )
 
             load_network = InvokeFromScript(template.name, "load_network")
             builder, network, parser = load_network()

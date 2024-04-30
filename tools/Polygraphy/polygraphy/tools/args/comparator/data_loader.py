@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,13 @@ from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.base import BaseArgs
 from polygraphy.tools.args.model import ModelArgs
-from polygraphy.tools.script import Script, inline, make_invocable, make_invocable_if_nondefault, safe
+from polygraphy.tools.script import (
+    Script,
+    inline,
+    make_invocable,
+    make_invocable_if_nondefault,
+    safe,
+)
 
 
 @mod.export()
@@ -46,7 +52,13 @@ class DataLoaderArgs(BaseArgs):
         self._allow_custom_input_shapes = util.default(allow_custom_input_shapes, True)
 
     def add_parser_args_impl(self):
-        self.group.add_argument("--seed", metavar="SEED", help="Seed to use for random inputs", type=int, default=None)
+        self.group.add_argument(
+            "--seed",
+            metavar="SEED",
+            help="Seed to use for random inputs",
+            type=int,
+            default=None,
+        )
         self.group.add_argument(
             "--val-range",
             help="Range of values to generate in the data loader. "
@@ -147,8 +159,12 @@ class DataLoaderArgs(BaseArgs):
 
         self.seed = args_util.get(args, "seed")
 
-        self._int_range = omit_none_tuple(tup=(args_util.get(args, "int_min"), args_util.get(args, "int_max")))
-        self._float_range = omit_none_tuple(tup=(args_util.get(args, "float_min"), args_util.get(args, "float_max")))
+        self._int_range = omit_none_tuple(
+            tup=(args_util.get(args, "int_min"), args_util.get(args, "int_max"))
+        )
+        self._float_range = omit_none_tuple(
+            tup=(args_util.get(args, "float_min"), args_util.get(args, "float_max"))
+        )
         if self._int_range or self._float_range:
             mod.warn_deprecated(
                 "--int-min/--int-max and --float-min/--float-max",
@@ -178,18 +194,35 @@ class DataLoaderArgs(BaseArgs):
 
         self.load_inputs_paths = args_util.get(args, "load_inputs_paths")
 
-        self.data_loader_backend_module = args_util.get(args, "data_loader_backend_module")
+        self.data_loader_backend_module = args_util.get(
+            args, "data_loader_backend_module"
+        )
 
-        self.data_loader_script, self.data_loader_func_name = args_util.parse_script_and_func_name(
-            args_util.get(args, "data_loader_script"), default_func_name="load_data"
+        self.data_loader_script, self.data_loader_func_name = (
+            args_util.parse_script_and_func_name(
+                args_util.get(args, "data_loader_script"), default_func_name="load_data"
+            )
         )
         func_name = args_util.get(args, "data_loader_func_name")
         if func_name is not None:
-            mod.warn_deprecated("--data-loader-func-name", "--data-loader-script", "0.50.0", always_show_warning=True)
+            mod.warn_deprecated(
+                "--data-loader-func-name",
+                "--data-loader-script",
+                "0.50.0",
+                always_show_warning=True,
+            )
             self.data_loader_func_name = func_name
 
         if self.load_inputs_paths or self.data_loader_script:
-            for arg in ["seed", "int_min", "int_max", "float_min", "float_max", "val_range", "iterations"]:
+            for arg in [
+                "seed",
+                "int_min",
+                "int_max",
+                "float_min",
+                "float_max",
+                "val_range",
+                "iterations",
+            ]:
                 val = args_util.get(args, arg)
                 if val is not None:
                     G_LOGGER.warning(
@@ -204,7 +237,9 @@ class DataLoaderArgs(BaseArgs):
         if self.data_loader_script:
             script.add_import(imports=["mod"], frm="polygraphy")
             data_loader = make_invocable(
-                "mod.import_from_script", self.data_loader_script, name=self.data_loader_func_name
+                "mod.import_from_script",
+                self.data_loader_script,
+                name=self.data_loader_func_name,
             )
             needs_invoke = True
         elif self.load_inputs_paths:
@@ -258,7 +293,9 @@ class DataLoaderArgs(BaseArgs):
             str: The data loader, as a string. This may either be the variable name,
                 or an invocation of the data loader function.
         """
-        data_loader, needs_invoke = self._add_to_script_helper(script, user_input_metadata_str)
+        data_loader, needs_invoke = self._add_to_script_helper(
+            script, user_input_metadata_str
+        )
         if needs_invoke:
             data_loader = make_invocable(data_loader)
         return data_loader
@@ -281,7 +318,10 @@ class DataLoaderArgs(BaseArgs):
             name, needs_invoke = self._add_to_script_helper(script, *args, **kwargs)
             return name
 
-        data_loader = util.default(args_util.run_script(add_to_script_wrapper, user_input_metadata), DataLoader())
+        data_loader = util.default(
+            args_util.run_script(add_to_script_wrapper, user_input_metadata),
+            DataLoader(),
+        )
         if needs_invoke:
             data_loader = data_loader()
         return data_loader

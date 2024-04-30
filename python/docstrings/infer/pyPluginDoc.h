@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -183,7 +183,6 @@ constexpr const char* detach_from_context = R"trtdoc(
 )trtdoc";
 } // namespace IPluginV2ExtDoc
 
-
 namespace IPluginV2DynamicExtDoc
 {
 constexpr const char* descr = R"trtdoc(
@@ -194,7 +193,7 @@ constexpr const char* descr = R"trtdoc(
     Similar to `IPluginV2Ext` (including capability to support different output data types), but with support for dynamic shapes.
 
     This class is made available for the purpose of implementing `IPluginV2DynamicExt` plugins with Python. Inherited
-    Python->C++ bindings from `IPluginV2` and `IPluginV2Ext` will continue to work on C++-based `IPluginV2DynamicExt` plugins. 
+    Python->C++ bindings from `IPluginV2` and `IPluginV2Ext` will continue to work on C++-based `IPluginV2DynamicExt` plugins.
 
     .. note::
         Every attribute except `tensorrt_version` must be explicitly initialized on Python-based plugins. Except `plugin_namespace`,
@@ -212,22 +211,22 @@ constexpr const char* initialize = R"trtdoc(
     Initialize the plugin for execution. This is called when the engine is created.
 
     .. note::
-        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `pass`. 
+        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `pass`.
 
     .. warning::
         In contrast to the C++ API for `initialize()`, this method must not return an error code. The expected behavior is to throw an appropriate exception
-        if an error occurs. 
+        if an error occurs.
 
     .. warning::
         This `initialize()` method is not available to be called from Python on C++-based plugins.
-        
+
 )trtdoc";
 
 constexpr const char* terminate = R"trtdoc(
     Release resources acquired during plugin layer initialization. This is called when the engine is destroyed.
 
     .. note::
-        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `pass`. 
+        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `pass`.
 
 )trtdoc";
 
@@ -238,7 +237,7 @@ constexpr const char* get_output_dimensions = R"trtdoc(
     This function is called by the implementations of `IBuilder` during analysis of the network.
 
     .. warning::
-        This `get_output_dimensions()` method is not available to be called from Python on C++-based plugins 
+        This `get_output_dimensions()` method is not available to be called from Python on C++-based plugins
 
     :arg output_index:	The index of the output tensor
     :arg inputs:	Expressions for dimensions of the input tensors
@@ -269,7 +268,7 @@ constexpr const char* configure_plugin = R"trtdoc(
     Execution phase: `configure_plugin()` is called when a plugin is being prepared for executing the plugin for specific dimensions. This provides an opportunity for the plugin to change algorithmic choices based on the explicit input dimensions stored in `desc.dims` field.
 
     .. warning::
-        This `configure_plugin()` method is not available to be called from Python on C++-based plugins 
+        This `configure_plugin()` method is not available to be called from Python on C++-based plugins
 
     :arg in: The input tensors attributes that are used for configuration.
     :arg out: The output tensors attributes that are used for configuration.
@@ -299,10 +298,10 @@ constexpr const char* get_workspace_size = R"trtdoc(
     This function is called after the plugin is configured, and possibly during execution. The result should be a sufficient workspace size to deal with inputs and outputs of the given size or any smaller problem.
 
     .. note::
-        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `return 0`. 
+        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `return 0`.
 
     .. warning::
-        This `get_workspace_size()` method is not available to be called from Python on C++-based plugins 
+        This `get_workspace_size()` method is not available to be called from Python on C++-based plugins
 
     :arg input_desc: How to interpret the memory for the input tensors.
     :arg output_desc: How to interpret the memory for the output tensors.
@@ -314,7 +313,7 @@ constexpr const char* destroy = R"trtdoc(
     Destroy the plugin object. This will be called when the :class:`INetworkDefinition` , :class:`Builder` or :class:`ICudaEngine` is destroyed.
 
     .. note::
-        When implementing a Python-based plugin, implementing this method is optional. The default behavior is a `pass`. 
+        When implementing a Python-based plugin, implementing this method is optional. The default behavior is a `pass`.
 
 )trtdoc";
 
@@ -322,13 +321,13 @@ constexpr const char* enqueue = R"trtdoc(
     Execute the layer.
 
     `inputs` and `outputs` contains pointers to the corresponding input and output device buffers as their `intptr_t` casts. `stream` also represents an `intptr_t` cast of the CUDA stream in which enqueue should be executed.
-    
+
     .. warning::
         Since input, output, and workspace buffers are created and owned by TRT, care must be taken when writing to them from the Python side.
 
     .. warning::
         In contrast to the C++ API for `enqueue()`, this method must not return an error code. The expected behavior is to throw an appropriate exception.
-        if an error occurs. 
+        if an error occurs.
 
     .. warning::
         This `enqueue()` method is not available to be called from Python on C++-based plugins.
@@ -345,7 +344,7 @@ constexpr const char* enqueue = R"trtdoc(
 constexpr const char* clone = R"trtdoc(
     Clone the plugin object. This copies over internal plugin parameters as well and returns a new plugin object with these parameters.
 
-    If the source plugin is pre-configured with `configure_plugin()`, the returned object should also be pre-configured. 
+    If the source plugin is pre-configured with `configure_plugin()`, the returned object should also be pre-configured.
     Cloned plugin objects can share the same per-engine immutable resource (e.g. weights) with the source object to avoid duplication.
 )trtdoc";
 
@@ -353,7 +352,7 @@ constexpr const char* get_serialization_size = R"trtdoc(
     Return the serialization size (in bytes) required by the plugin.
 
     .. note::
-        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `return len(serialize())`. 
+        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `return len(serialize())`.
 
 )trtdoc";
 
@@ -392,7 +391,7 @@ constexpr const char* ipluginv3_descr = R"trtdoc(
 
 constexpr const char* iplugincapability_descr = R"trtdoc(
     Base class for plugin capability interfaces
-    
+
     IPluginCapability represents a split in TensorRT V3 plugins to sub-objects that expose different types of capabilites a plugin may have,
     as opposed to a single interface which defines all capabilities and behaviors of a plugin.
 )trtdoc";
@@ -411,7 +410,7 @@ constexpr const char* ipluginv3onecore_descr = R"trtdoc(
 
 constexpr const char* ipluginv3onebuild_descr = R"trtdoc(
     A plugin capability interface that enables the build capability (PluginCapabilityType.BUILD).
-    
+
     Exposes methods that allow the expression of the build time properties and behavior of a plugin.
 
     .. note::
@@ -423,7 +422,7 @@ constexpr const char* ipluginv3onebuild_descr = R"trtdoc(
 
 constexpr const char* ipluginv3oneruntime_descr = R"trtdoc(
     A plugin capability interface that enables the runtime capability (PluginCapabilityType.RUNTIME).
-    
+
     Exposes methods that allow the expression of the runtime properties and behavior of a plugin.
 )trtdoc";
 
@@ -434,7 +433,7 @@ constexpr const char* get_output_shapes = R"trtdoc(
     This function is called by the implementations of `IBuilder` during analysis of the network.
 
     .. warning::
-        This `get_output_shapes()` method is not available to be called from Python on C++-based plugins 
+        This get_output_shapes() method is not available to be called from Python on C++-based plugins
 
     :arg inputs:	Expressions for shapes of the input tensors
     :arg shape_inputs:	Expressions for shapes of the shape inputs
@@ -445,9 +444,9 @@ constexpr const char* get_output_shapes = R"trtdoc(
 
 constexpr const char* get_output_data_types = R"trtdoc(
 
-    Return `DataType`s of the plugin outputs.
+    Return `DataType` s of the plugin outputs.
 
-    Provide `DataType.FLOAT`s if the layer has no inputs. The data type for any size tensor outputs must be
+    Provide `DataType.FLOAT` s if the layer has no inputs. The data type for any size tensor outputs must be
     `DataType.INT32`. The returned data types must each have a format that is supported by the plugin.
 
     :arg input_types: Data types of the inputs.
@@ -458,7 +457,7 @@ constexpr const char* get_output_data_types = R"trtdoc(
 constexpr const char* configure_plugin = R"trtdoc(
     Configure the plugin.
 
-    This function can be called multiple times in the build phase during creation of an engine by IBuilder. 
+    This function can be called multiple times in the build phase during creation of an engine by IBuilder.
 
     Build phase: `configure_plugin()` is called when a plugin is being prepared for profiling but not for any specific input size. This provides an opportunity for the plugin to make algorithmic choices on the basis of input and output formats, along with the bound of possible dimensions. The min, opt and max value of the
     `DynamicPluginTensorDesc` correspond to the `MIN`, `OPT` and `MAX` value of the current profile that the plugin is
@@ -467,31 +466,28 @@ constexpr const char* configure_plugin = R"trtdoc(
 
     .. warning::
         In contrast to the C++ API for `configurePlugin()`, this method must not return an error code. The expected behavior is to throw an appropriate exception
-        if an error occurs. 
+        if an error occurs.
 
     .. warning::
-        This `configure_plugin()` method is not available to be called from Python on C++-based plugins 
+        This `configure_plugin()` method is not available to be called from Python on C++-based plugins
 
     :arg in: The input tensors attributes that are used for configuration.
     :arg out: The output tensors attributes that are used for configuration.
 )trtdoc";
 
 constexpr const char* on_shape_change = R"trtdoc(
-    Called when a plugin is being prepared for execution for specific dimensions. This could happen multiple times in the execution phase, both during creation of an engine by IBuilder and execution of an 
-    engine by IExecutionContext. 
+    Called when a plugin is being prepared for execution for specific dimensions. This could happen multiple times in the execution phase, both during creation of an engine by IBuilder and execution of an
+    engine by IExecutionContext.
 
-   * IBuilder will call this function once per profile, with `in` resolved to the values specified by the
-    kOPT field of the current profile.
-   * IExecutionContext will call this during the next subsequent instance of enqueue_v2() or execute_v3() if:
-     - The optimization profile is changed.
-     - An input binding is changed.
+     * IBuilder will call this function once per profile, with `in` resolved to the values specified by the kOPT field of the current profile.
+     * IExecutionContext will call this during the next subsequent instance of enqueue_v2() or execute_v3() if: (1) The optimization profile is changed (2). An input binding is changed.
 
     .. warning::
         In contrast to the C++ API for `onShapeChange()`, this method must not return an error code. The expected behavior is to throw an appropriate exception
-        if an error occurs. 
+        if an error occurs.
 
     .. warning::
-        This `on_shape_change()` method is not available to be called from Python on C++-based plugins 
+        This `on_shape_change()` method is not available to be called from Python on C++-based plugins
 
     :arg in: The input tensors attributes that are used for configuration.
     :arg out: The output tensors attributes that are used for configuration.
@@ -521,10 +517,10 @@ constexpr const char* get_workspace_size = R"trtdoc(
     This function is called after the plugin is configured, and possibly during execution. The result should be a sufficient workspace size to deal with inputs and outputs of the given size or any smaller problem.
 
     .. note::
-        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `return 0`. 
+        When implementing a Python-based plugin, implementing this method is optional. The default behavior is equivalent to `return 0`.
 
     .. warning::
-        This `get_workspace_size()` method is not available to be called from Python on C++-based plugins 
+        This `get_workspace_size()` method is not available to be called from Python on C++-based plugins
 
     :arg input_desc: How to interpret the memory for the input tensors.
     :arg output_desc: How to interpret the memory for the output tensors.
@@ -539,7 +535,7 @@ constexpr const char* destroy = R"trtdoc(
         There is no direct equivalent to this method in the C++ API.
 
     .. note::
-        Implementing this method is optional. The default behavior is a `pass`. 
+        Implementing this method is optional. The default behavior is a `pass`.
 
 )trtdoc";
 
@@ -547,13 +543,13 @@ constexpr const char* enqueue = R"trtdoc(
     Execute the layer.
 
     `inputs` and `outputs` contains pointers to the corresponding input and output device buffers as their `intptr_t` casts. `stream` also represents an `intptr_t` cast of the CUDA stream in which enqueue should be executed.
-    
+
     .. warning::
         Since input, output, and workspace buffers are created and owned by TRT, care must be taken when writing to them from the Python side.
 
     .. warning::
         In contrast to the C++ API for `enqueue()`, this method must not return an error code. The expected behavior is to throw an appropriate exception.
-        if an error occurs. 
+        if an error occurs.
 
     .. warning::
         This `enqueue()` method is not available to be called from Python on C++-based plugins.
@@ -580,7 +576,7 @@ constexpr const char* get_capability_interface = R"trtdoc(
 constexpr const char* clone = R"trtdoc(
     Clone the plugin object. This copies over internal plugin parameters as well and returns a new plugin object with these parameters.
 
-    If the source plugin is pre-configured with `configure_plugin()`, the returned object should also be pre-configured. 
+    If the source plugin is pre-configured with `configure_plugin()`, the returned object should also be pre-configured.
     Cloned plugin objects can share the same per-engine immutable resource (e.g. weights) with the source object to avoid duplication.
 )trtdoc";
 
@@ -602,7 +598,7 @@ constexpr const char* set_tactic = R"trtdoc(
 
     .. warning::
         In contrast to the C++ API for `setTactic()`, this method must not return an error code. The expected behavior is to throw an appropriate exception
-        if an error occurs. 
+        if an error occurs.
 
     .. warning::
         This `set_tactic()` method is not available to be called from Python on C++-based plugins.
@@ -611,7 +607,7 @@ constexpr const char* set_tactic = R"trtdoc(
 
 constexpr const char* get_valid_tactics = R"trtdoc(
     Return any custom tactics that the plugin intends to use.
-    
+
     .. note::
         The provided tactic values must be unique and positive
 
@@ -626,9 +622,9 @@ constexpr const char* attach_to_context = R"trtdoc(
     This function is called automatically for each plugin when a new execution context is created.
 
     The plugin may use resources provided by the resource_context until the plugin is deleted by TensorRT.
-    
+
     :arg resource_context: A resource context that exposes methods to get access to execution context specific resources. A different resource context is guaranteed for each different execution context to which the plugin is attached.
-    
+
     .. note::
         This method should clone the entire IPluginV3 object, not just the runtime interface
 
@@ -660,7 +656,7 @@ constexpr const char* release = R"trtdoc(
 constexpr const char* clone = R"trtdoc(
     Resource initialization (if any) may be skipped for non-cloned objects since only clones will be
     registered by TensorRT.
-    
+
 )trtdoc";
 
 } // namespace IPluginResourceDoc
@@ -703,7 +699,7 @@ namespace IDimensionExprDoc
 {
 constexpr const char* descr = R"trtdoc(
     An `IDimensionExpr` represents an integer expression constructed from constants, input dimensions, and binary operations.
-    
+
     These expressions are can be used in overrides of `IPluginV2DynamicExt::get_output_dimensions()` to define output dimensions in terms of input dimensions.
 )trtdoc";
 
@@ -787,7 +783,7 @@ namespace IPluginResourceContextDoc
 {
 constexpr const char* descr = R"trtdoc(
     Interface for plugins to access per context resources provided by TensorRT
-    
+
     There is no public way to construct an IPluginResourceContext. It appears as an argument to trt.IPluginV3OneRuntime.attach_to_context().
 )trtdoc";
 } // namespace IPluginResourceContextDoc
@@ -953,7 +949,7 @@ constexpr const char* get_plugin_creator = R"trtdoc(
     Return plugin creator based on type, version and namespace
 
     .. warning::
-        Returns None if a plugin creator with matching name, version, and namespace is found, but is not a 
+        Returns None if a plugin creator with matching name, version, and namespace is found, but is not a
         descendent of IPluginCreator
 
     :arg type: The type of the plugin.
@@ -998,12 +994,12 @@ constexpr const char* deregister_library = R"trtdoc(
 constexpr const char* acquire_plugin_resource = R"trtdoc(
     Get a handle to a plugin resource registered against the provided key.
 
-    :arg: key: Key for identifying the resource. 
+    :arg: key: Key for identifying the resource.
     :arg: resource: A plugin resource object. The object will only need to be valid until this method returns, as only a clone of this object will be registered by TRT. Cannot be null.
 )trtdoc";
 
 constexpr const char* release_plugin_resource = R"trtdoc(
-    Decrement reference count for the resource with this key. If reference count goes to zero after decrement, release() will be invoked on the resource, 
+    Decrement reference count for the resource with this key. If reference count goes to zero after decrement, release() will be invoked on the resource,
     and the key will be deregistered.
 
     :arg: key: Key that was used to register the resource.

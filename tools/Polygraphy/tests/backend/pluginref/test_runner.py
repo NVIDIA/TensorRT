@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,8 +57,16 @@ class TestPluginRefRunner:
     def test_fail_on_unsupported_node(self):
         model = ONNX_MODELS["and"]
         with PluginRefRunner(GsFromOnnx(OnnxFromPath(model.path))) as runner:
-            with pytest.raises(PolygraphyException, match="does not have a reference implementation registered!"):
-                runner.infer({"x": np.ones(shape=(3, 4), dtype=bool), "y": np.ones(shape=(3, 4), dtype=bool)})
+            with pytest.raises(
+                PolygraphyException,
+                match="does not have a reference implementation registered!",
+            ):
+                runner.infer(
+                    {
+                        "x": np.ones(shape=(3, 4), dtype=bool),
+                        "y": np.ones(shape=(3, 4), dtype=bool),
+                    }
+                )
 
     @pytest.mark.parametrize(
         "names, err",
@@ -72,7 +80,12 @@ class TestPluginRefRunner:
         model = ONNX_MODELS["identity"]
         with PluginRefRunner(GsFromOnnx(OnnxFromPath(model.path))) as runner:
             with pytest.raises(PolygraphyException, match=err):
-                runner.infer({name: np.ones(shape=(1, 1, 2, 2), dtype=np.float32) for name in names})
+                runner.infer(
+                    {
+                        name: np.ones(shape=(1, 1, 2, 2), dtype=np.float32)
+                        for name in names
+                    }
+                )
 
     def test_error_on_wrong_dtype_feed_dict(self):
         model = ONNX_MODELS["identity"]

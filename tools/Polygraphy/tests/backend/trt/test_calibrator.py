@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,7 @@ from polygraphy.backend.trt import (
     network_from_onnx_bytes,
 )
 from polygraphy.common import TensorMetadata
+from polygraphy.comparator import DataLoader
 from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from tests.helper import get_file_size, is_file_non_empty
@@ -287,6 +288,19 @@ class TestCalibrator:
         with calibrator:
             assert (calibrator.get_batch(list(expected_meta.keys())) is not None) == should_pass
         self.check_calibrator_cleanup(calibrator)
+
+    def test_calibrator_forces_float32_data(self):
+        data_loader = DataLoader()
+
+        calibrator = Calibrator(data_loader)
+
+        meta = TensorMetadata().add("input", dtype=DataType.FLOAT16, shape=(1, 2, 3))
+        calibrator.set_input_metadata(meta)
+
+        data = data_loader[0]["input"]
+        # TRT requires all calibration inputs to be provided in FP32 regardless of the data type
+        # in the original model.
+        assert util.array.dtype(data) == DataType.FLOAT32
 
     # TensorRT does not support changing input shapes during calibration
     @pytest.mark.xfail

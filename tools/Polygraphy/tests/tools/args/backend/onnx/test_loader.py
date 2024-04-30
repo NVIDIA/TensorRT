@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,13 @@ import pytest
 import onnx_graphsurgeon as gs
 from polygraphy import util
 from polygraphy.backend.onnx import onnx_from_path
-from polygraphy.tools.args import DataLoaderArgs, ModelArgs, OnnxLoadArgs, OnnxSaveArgs, OnnxInferShapesArgs
+from polygraphy.tools.args import (
+    DataLoaderArgs,
+    ModelArgs,
+    OnnxLoadArgs,
+    OnnxSaveArgs,
+    OnnxInferShapesArgs,
+)
 from polygraphy.tools.script import Script
 from tests.helper import is_file_empty, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
@@ -38,8 +44,12 @@ def _check_ext_weights_model(model):
 
 class TestOnnxLoaderArgs:
     def test_basic(self):
-        arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
-        arg_group.parse_args([ONNX_MODELS["identity_identity"].path, "--onnx-outputs=identity_out_0"])
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()]
+        )
+        arg_group.parse_args(
+            [ONNX_MODELS["identity_identity"].path, "--onnx-outputs=identity_out_0"]
+        )
         model = arg_group.load_onnx()
 
         assert len(model.graph.output) == 1
@@ -48,7 +58,10 @@ class TestOnnxLoaderArgs:
     @pytest.mark.parametrize("global_upper_bound", [None, "2000"])
     @pytest.mark.parametrize("specified_upper_bound", [None, "cast_out_6:4000"])
     def test_setting_upper_bounds(self, global_upper_bound, specified_upper_bound):
-        arg_group = ArgGroupTestHelper(OnnxLoadArgs(allow_setting_upper_bounds = True), deps=[ModelArgs(), OnnxInferShapesArgs()])
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(allow_setting_upper_bounds=True),
+            deps=[ModelArgs(), OnnxInferShapesArgs()],
+        )
 
         cmd = [ONNX_MODELS["unbounded_dds"].path, "--set-unbounded-dds-upper-bound"]
         upper_bound = "1000"
@@ -67,7 +80,7 @@ class TestOnnxLoaderArgs:
         # Check if there is a Min operator in the modified model
         find_min = False
         for node in graph.nodes:
-            if node.op == 'Min':
+            if node.op == "Min":
                 find_min = True
                 # Check if the Min operator's second input is a constant tensor
                 assert isinstance(node.inputs[1], gs.Constant)
@@ -75,17 +88,21 @@ class TestOnnxLoaderArgs:
                 val = node.inputs[1].values
                 # Check if the constant value equals the target upper bound
                 assert str(val) == upper_bound
-        assert (find_min)
+        assert find_min
 
     def test_external_data(self):
-        arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()]
+        )
         model = ONNX_MODELS["ext_weights"]
         arg_group.parse_args([model.path, "--external-data-dir", model.ext_data])
         model = arg_group.load_onnx()
         _check_ext_weights_model(model)
 
     def test_ignore_external_data(self):
-        arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()]
+        )
         model = ONNX_MODELS["ext_weights"]
         arg_group.parse_args([model.path, "--ignore-external-data"])
         model = arg_group.load_onnx()
@@ -94,10 +111,13 @@ class TestOnnxLoaderArgs:
     @pytest.mark.parametrize("allow_onnxruntime", [True, False])
     def test_shape_inference(self, allow_onnxruntime):
         # When using shape inference, we should load directly from the path
-        arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()]
+        )
         model = ONNX_MODELS["identity"]
         arg_group.parse_args(
-            [model.path, "--shape-inference"] + (["--no-onnxruntime-shape-inference"] if not allow_onnxruntime else [])
+            [model.path, "--shape-inference"]
+            + (["--no-onnxruntime-shape-inference"] if not allow_onnxruntime else [])
         )
 
         assert arg_group.must_use_onnx_loader()
@@ -114,7 +134,9 @@ class TestOnnxLoaderArgs:
 
     @pytest.mark.parametrize("allow_onnxruntime", [True, False])
     def test_shape_inference_ext_data(self, allow_onnxruntime):
-        arg_group = ArgGroupTestHelper(OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()])
+        arg_group = ArgGroupTestHelper(
+            OnnxLoadArgs(), deps=[ModelArgs(), OnnxInferShapesArgs()]
+        )
         model = ONNX_MODELS["ext_weights"]
         arg_group.parse_args(
             [model.path, "--external-data-dir", model.ext_data, "--shape-inference"]
@@ -139,16 +161,28 @@ class TestOnnxLoaderArgs:
 
 class TestOnnxSaveArgs:
     def test_defaults(self):
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
+        arg_group = ArgGroupTestHelper(
+            OnnxSaveArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
+        )
         arg_group.parse_args([])
         assert arg_group.size_threshold is None
 
     def test_external_data(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
+        arg_group = ArgGroupTestHelper(
+            OnnxSaveArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
+        )
         with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             arg_group.parse_args(
-                ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=0"]
+                [
+                    "-o",
+                    path.name,
+                    "--save-external-data",
+                    data.name,
+                    "--external-data-size-threshold=0",
+                ]
             )
             arg_group.save_onnx(model)
 
@@ -157,10 +191,19 @@ class TestOnnxSaveArgs:
 
     def test_size_threshold(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
+        arg_group = ArgGroupTestHelper(
+            OnnxSaveArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
+        )
         with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
             arg_group.parse_args(
-                ["-o", path.name, "--save-external-data", data.name, "--external-data-size-threshold=1024"]
+                [
+                    "-o",
+                    path.name,
+                    "--save-external-data",
+                    data.name,
+                    "--external-data-size-threshold=1024",
+                ]
             )
             arg_group.save_onnx(model)
 
@@ -169,7 +212,10 @@ class TestOnnxSaveArgs:
 
     def test_no_all_tensors_to_one_file(self):
         model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
+        arg_group = ArgGroupTestHelper(
+            OnnxSaveArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
+        )
         with tempfile.TemporaryDirectory() as outdir:
             path = os.path.join(outdir, "model.onnx")
             arg_group.parse_args(
@@ -196,7 +242,10 @@ class TestOnnxSaveArgs:
         ],
     )
     def test_size_threshold_parsing(self, arg, expected):
-        arg_group = ArgGroupTestHelper(OnnxSaveArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)])
+        arg_group = ArgGroupTestHelper(
+            OnnxSaveArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
+        )
         arg_group.parse_args(["--external-data-size-threshold", arg])
         assert arg_group.size_threshold == expected
 
@@ -204,7 +253,8 @@ class TestOnnxSaveArgs:
 class TestOnnxShapeInferenceArgs:
     def test_shape_inference_disabled_on_fallback(self):
         arg_group = ArgGroupTestHelper(
-            OnnxInferShapesArgs(default=True, allow_force_fallback=True), deps=[DataLoaderArgs()]
+            OnnxInferShapesArgs(default=True, allow_force_fallback=True),
+            deps=[DataLoaderArgs()],
         )
         arg_group.parse_args([])
         assert arg_group.do_shape_inference
@@ -215,7 +265,10 @@ class TestOnnxShapeInferenceArgs:
     @pytest.mark.parametrize("allow_onnxruntime", [True, False])
     def test_no_onnxruntime_shape_inference(self, allow_onnxruntime):
         arg_group = ArgGroupTestHelper(
-            OnnxInferShapesArgs(default=True, allow_force_fallback=True), deps=[DataLoaderArgs()]
+            OnnxInferShapesArgs(default=True, allow_force_fallback=True),
+            deps=[DataLoaderArgs()],
         )
-        arg_group.parse_args([] if allow_onnxruntime else ["--no-onnxruntime-shape-inference"])
+        arg_group.parse_args(
+            [] if allow_onnxruntime else ["--no-onnxruntime-shape-inference"]
+        )
         assert arg_group.allow_onnxruntime == (None if allow_onnxruntime else False)

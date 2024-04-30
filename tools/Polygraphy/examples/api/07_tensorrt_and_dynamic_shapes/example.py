@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,13 +50,16 @@ def main():
         # The dynamic batching case. We use `4` for the opt batch size since that's our most common case.
         Profile().add("X", min=(1, 3, 28, 28), opt=(4, 3, 28, 28), max=(32, 3, 28, 28)),
         # The offline case. For best performance, min == opt == max.
-        Profile().add("X", min=(128, 3, 28, 28), opt=(128, 3, 28, 28), max=(128, 3, 28, 28)),
+        Profile().add(
+            "X", min=(128, 3, 28, 28), opt=(128, 3, 28, 28), max=(128, 3, 28, 28)
+        ),
     ]
 
     # See examples/api/06_immediate_eval_api for details on immediately evaluated functional loaders like `engine_from_network`.
     # Note that we can freely mix lazy and immediately-evaluated loaders.
     engine = engine_from_network(
-        network_from_onnx_path("dynamic_identity.onnx"), config=CreateConfig(profiles=profiles)
+        network_from_onnx_path("dynamic_identity.onnx"),
+        config=CreateConfig(profiles=profiles),
     )
 
     # We'll save the engine so that we can inspect it with `inspect model`.
@@ -134,9 +137,13 @@ def main():
         #
         # Alternatively, we could have used the `optimization_profile` parameter (see above).
         #
-        offline.set_profile(2)  # Use the third profile, which is intended for the offline case.
+        offline.set_profile(
+            2
+        )  # Use the third profile, which is intended for the offline case.
 
-        large_offline_batch = np.repeat(input_img, 128, axis=0)  # Shape: (128, 3, 28, 28)
+        large_offline_batch = np.repeat(
+            input_img, 128, axis=0
+        )  # Shape: (128, 3, 28, 28)
         outputs = offline.infer({"X": large_offline_batch})
         assert np.array_equal(outputs["Y"], large_offline_batch)
 

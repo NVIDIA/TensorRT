@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +24,12 @@ to print the network name and enable FP16 mode.
 import numpy as np
 import tensorrt as trt
 from polygraphy import func
-from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromOnnxPath, TrtRunner
+from polygraphy.backend.trt import (
+    CreateConfig,
+    EngineFromNetwork,
+    NetworkFromOnnxPath,
+    TrtRunner,
+)
 
 
 # TIP: The immediately evaluated functional API makes it very easy to interoperate
@@ -32,6 +37,7 @@ from polygraphy.backend.trt import CreateConfig, EngineFromNetwork, NetworkFromO
 
 # We can use the `extend` decorator to easily extend lazy loaders provided by Polygraphy
 # The parameters our decorated function takes should match the return values of the loader we are extending.
+
 
 # For `NetworkFromOnnxPath`, we can see from the API documentation that it returns a TensorRT
 # builder, network and parser. That is what our function will receive.

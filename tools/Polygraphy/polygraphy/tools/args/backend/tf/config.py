@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,10 +35,16 @@ class TfConfigArgs(BaseArgs):
             default=None,
         )
         self.group.add_argument(
-            "--allow-growth", help="Allow GPU memory allocated by TensorFlow to grow", action="store_true", default=None
+            "--allow-growth",
+            help="Allow GPU memory allocated by TensorFlow to grow",
+            action="store_true",
+            default=None,
         )
         self.group.add_argument(
-            "--xla", help="[EXPERIMENTAL] Attempt to run graph with xla", action="store_true", default=None
+            "--xla",
+            help="[EXPERIMENTAL] Attempt to run graph with xla",
+            action="store_true",
+            default=None,
         )
 
     def parse_impl(self, args):
@@ -63,7 +69,9 @@ class TfConfigArgs(BaseArgs):
         )
         if config_loader_str is not None:
             script.add_import(imports=["CreateConfig"], frm="polygraphy.backend.tf")
-            config_loader_name = script.add_loader(config_loader_str, "create_tf_config")
+            config_loader_name = script.add_loader(
+                config_loader_str, "create_tf_config"
+            )
         else:
             config_loader_name = None
         return config_loader_name

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,14 +27,15 @@ from polygraphy.backend.trt import (
     CreateConfig,
     EngineFromNetwork,
     NetworkFromOnnxPath,
-    TrtRunner
+    TrtRunner,
 )
 
 from polygraphy.json import to_json, from_json
 
 from utils import volume, parseArgs
 
-circ_pad_half_kernel = cp.RawKernel(r'''
+circ_pad_half_kernel = cp.RawKernel(
+    r"""
 #include <cuda_fp16.h>
 extern "C" __global__
 void circ_pad_half(half const* X, int const* all_pads, int const* orig_dims, half* Y, int const* Y_shape, int const* Y_len) {
@@ -61,9 +62,12 @@ void circ_pad_half(half const* X, int const* all_pads, int const* orig_dims, hal
         ];
     }
 }
-''', 'circ_pad_half')
+""",
+    "circ_pad_half",
+)
 
-circ_pad_float_kernel = cp.RawKernel(r'''
+circ_pad_float_kernel = cp.RawKernel(
+    r"""
 extern "C" __global__
 void circ_pad_float(float const* X, int const* all_pads, int const* orig_dims, float* Y, int const* Y_shape, int const* Y_len) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -89,14 +93,17 @@ void circ_pad_float(float const* X, int const* all_pads, int const* orig_dims, f
         ];
     }
 }
-''', 'circ_pad_float')
+""",
+    "circ_pad_float",
+)
+
 
 class CircPadPlugin(trt.IPluginV2DynamicExt):
     def __init__(self, fc=None):
         trt.IPluginV2DynamicExt.__init__(self)
         self.pads = []
         self.X_shape = []
-        
+
         self.num_outputs = 1
         self.plugin_namespace = ""
         self.plugin_type = "CircPadPlugin"
@@ -190,9 +197,31 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
         with cuda_stream:
             if inp_dtype == np.float32:
-                circ_pad_float_kernel((numBlocks,), (blockSize,), (a, self.all_pads_d, self.orig_dims_d, c, self.Y_shape_d, self.Y_len_d))
+                circ_pad_float_kernel(
+                    (numBlocks,),
+                    (blockSize,),
+                    (
+                        a,
+                        self.all_pads_d,
+                        self.orig_dims_d,
+                        c,
+                        self.Y_shape_d,
+                        self.Y_len_d,
+                    ),
+                )
             elif inp_dtype == np.float16:
-                circ_pad_half_kernel((numBlocks,), (blockSize,), (a, self.all_pads_d, self.orig_dims_d, c, self.Y_shape_d, self.Y_len_d))
+                circ_pad_half_kernel(
+                    (numBlocks,),
+                    (blockSize,),
+                    (
+                        a,
+                        self.all_pads_d,
+                        self.orig_dims_d,
+                        c,
+                        self.Y_shape_d,
+                        self.Y_len_d,
+                    ),
+                )
             else:
                 raise ValueError("inp_dtype not valid")
 
@@ -201,7 +230,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         cloned_plugin.__dict__.update(self.__dict__)
         return cloned_plugin
 
-    # 
+    #
     # The following defaults take effect since the respective methods are not overriden
     #
 
@@ -213,17 +242,18 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
     # def get_workspace_size(self, input_desc, output_desc):
     #     return 0
-    
+
     # def destroy(self):
     #     pass
 
     # def terminate(self):
     #     pass
 
+
 class CircPadPluginCreator(trt.IPluginCreator):
     def __init__(self):
         trt.IPluginCreator.__init__(self)
-        
+
         self.name = "CircPadPlugin"
         self.plugin_namespace = ""
         self.plugin_version = "1"
@@ -233,12 +263,13 @@ class CircPadPluginCreator(trt.IPluginCreator):
 
     def create_plugin(self, name, fc):
         return CircPadPlugin(fc)
-    
+
     def deserialize_plugin(self, name, data):
         j = dict(from_json(data.decode("utf-8")))
         deserialized = CircPadPlugin()
         deserialized.__dict__.update(j)
         return deserialized
+
 
 if __name__ == "__main__":
 
@@ -275,12 +306,12 @@ if __name__ == "__main__":
 
     # build engine
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision==np.float16)
+        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision == np.float16)
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")
     # Run
-    with TrtRunner(build_engine, "trt_runner")as runner:
+    with TrtRunner(build_engine, "trt_runner") as runner:
         outputs = runner.infer({"X": X})
         Y = outputs["Y"]
 

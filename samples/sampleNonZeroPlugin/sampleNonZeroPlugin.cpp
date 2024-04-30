@@ -46,13 +46,34 @@ using samplesCommon::SampleUniquePtr;
 
 std::string const kSAMPLE_NAME = "TensorRT.sample_non_zero_plugin";
 
+using half = __half;
+
+void nonZeroIndicesHelper(nvinfer1::DataType type, void const* X, void* indices, void* count, void const* K, int32_t R,
+    int32_t C, bool rowOrder, cudaStream_t stream)
+{
+    if (type == nvinfer1::DataType::kFLOAT)
+    {
+        nonZeroIndicesImpl<float>(static_cast<float const*>(X), static_cast<int32_t*>(indices),
+            static_cast<int32_t*>(count), static_cast<int32_t const*>(K), R, C, rowOrder, stream);
+    }
+    else if (type == nvinfer1::DataType::kHALF)
+    {
+        nonZeroIndicesImpl<half>(static_cast<half const*>(X), static_cast<int32_t*>(indices),
+            static_cast<int32_t*>(count), static_cast<int32_t const*>(K), R, C, rowOrder, stream);
+    }
+    else
+    {
+        ASSERT(false && "Unsupported data type");
+    }
+}
+
 class NonZeroPlugin : public IPluginV3, public IPluginV3OneCore, public IPluginV3OneBuild, public IPluginV3OneRuntime
 {
 public:
     NonZeroPlugin(NonZeroPlugin const& p) = default;
 
-    NonZeroPlugin(bool rowMajor)
-        : mRowMajor(rowMajor)
+    NonZeroPlugin(bool rowOrder)
+        : mRowOrder(rowOrder)
     {
         initFieldsToSerialize();
     }
@@ -60,7 +81,7 @@ public:
     void initFieldsToSerialize()
     {
         mDataToSerialize.clear();
-        mDataToSerialize.emplace_back(PluginField("rowMajor", &mRowMajor, PluginFieldType::kINT32, 1));
+        mDataToSerialize.emplace_back(PluginField("rowOrder", &mRowOrder, PluginFieldType::kINT32, 1));
         mFCToSerialize.nbFields = mDataToSerialize.size();
         mFCToSerialize.fields = mDataToSerialize.data();
     }
@@ -170,7 +191,7 @@ public:
         auto optValue = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *upperBound, *exprBuilder.constant(2));
         auto numNonZeroSizeTensor = exprBuilder.declareSizeTensor(1, *optValue, *upperBound);
 
-        if (!mRowMajor)
+        if (!mRowOrder)
         {
             outputs[0].d[0] = exprBuilder.constant(2);
             outputs[0].d[1] = numNonZeroSizeTensor;
@@ -195,25 +216,29 @@ public:
         int32_t const R = inputDesc[0].dims.d[0];
         int32_t const C = inputDesc[0].dims.d[1];
 
+        auto type = inputDesc[0].type;
+
+        if (!(type == nvinfer1::DataType::kHALF || type == nvinfer1::DataType::kFLOAT))
+        {
+            sample::gLogError << "Unsupported: Sample only supports DataType::kHALF and DataType::FLOAT" << std::endl;
+            return -1;
+        }
+
         cudaMemsetAsync(outputs[1], 0, sizeof(int32_t), stream);
 
-        if (!mRowMajor)
+        if (!mRowOrder)
         {
             // When constructing a column major output, the kernel needs to be aware of the total number of non-zero
             // elements so as to write the non-zero indices at the correct places. Therefore, we will launch the kernel
             // twice: first, only to calculate the total non-zero count, which will be stored in workspace; and
             // then to actually write the non-zero indices to the outputs[0] buffer.
             cudaMemsetAsync(workspace, 0, sizeof(int32_t), stream);
-            nonZeroIndicesImpl(static_cast<float const*>(inputs[0]), nullptr, static_cast<int32_t*>(workspace), 0, R, C,
-                mRowMajor, stream);
-
-            nonZeroIndicesImpl(static_cast<float const*>(inputs[0]), static_cast<int32_t*>(outputs[0]),
-                static_cast<int32_t*>(outputs[1]), static_cast<int32_t*>(workspace), R, C, mRowMajor, stream);
+            nonZeroIndicesHelper(type, inputs[0], nullptr, workspace, 0, R, C, mRowOrder, stream);
+            nonZeroIndicesHelper(type, inputs[0], outputs[0], outputs[1], workspace, R, C, mRowOrder, stream);
         }
         else
         {
-            nonZeroIndicesImpl(static_cast<float const*>(inputs[0]), static_cast<int32_t*>(outputs[0]),
-                static_cast<int32_t*>(outputs[1]), 0, R, C, mRowMajor, stream);
+            nonZeroIndicesHelper(type, inputs[0], outputs[0], outputs[1], 0, R, C, mRowOrder, stream);
         }
 
         return 0;
@@ -242,7 +267,7 @@ public:
     }
 
 private:
-    bool mRowMajor{true};
+    bool mRowOrder{true};
     std::vector<nvinfer1::PluginField> mDataToSerialize;
     nvinfer1::PluginFieldCollection mFCToSerialize;
 };
@@ -253,7 +278,7 @@ public:
     NonZeroPluginCreator()
     {
         mPluginAttributes.clear();
-        mPluginAttributes.emplace_back(PluginField("rowMajor", nullptr, PluginFieldType::kINT32, 1));
+        mPluginAttributes.emplace_back(PluginField("rowOrder", nullptr, PluginFieldType::kINT32, 1));
         mFC.nbFields = mPluginAttributes.size();
         mFC.fields = mPluginAttributes.data();
     }
@@ -277,16 +302,16 @@ public:
     {
         try
         {
-            bool rowMajor{true};
+            bool rowOrder{true};
             for (int32_t i = 0; i < fc->nbFields; ++i)
             {
                 auto const fieldName(fc->fields[i].name);
-                if (std::strcmp(fieldName, "rowMajor") == 0)
+                if (std::strcmp(fieldName, "rowOrder") == 0)
                 {
-                    rowMajor = *static_cast<bool const*>(fc->fields[i].data);
+                    rowOrder = *static_cast<bool const*>(fc->fields[i].data);
                 }
             }
-            return new NonZeroPlugin(rowMajor);
+            return new NonZeroPlugin(rowOrder);
         }
         catch (std::exception const& e)
         {
@@ -309,7 +334,7 @@ namespace
 {
 struct NonZeroParams : public samplesCommon::SampleParams
 {
-    bool rowMajor{true};
+    bool rowOrder{true};
 };
 } // namespace
 
@@ -465,7 +490,7 @@ bool SampleNonZeroPlugin::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& 
     auto* in = network->addInput("Input", DataType::kFLOAT, {2, {R, C}});
     ASSERT(in != nullptr);
 
-    std::vector<PluginField> const vecPF{{"rowMajor", &mParams.rowMajor, PluginFieldType::kINT32, 1}};
+    std::vector<PluginField> const vecPF{{"rowOrder", &mParams.rowOrder, PluginFieldType::kINT32, 1}};
     PluginFieldCollection pfc{static_cast<int32_t>(vecPF.size()), vecPF.data()};
 
     auto pluginCreator = static_cast<IPluginCreatorV3One*>(getPluginRegistry()->getCreator("NonZeroPlugin", "0", ""));
@@ -579,7 +604,7 @@ bool SampleNonZeroPlugin::processInput(samplesCommon::BufferManager const& buffe
     {
         for (int32_t j = 0; j < inputW; ++j)
         {
-            sample::gLogInfo << hostDataBuffer[i + inputH * j];
+            sample::gLogInfo << hostDataBuffer[i * inputW + j];
             if (j < inputW - 1)
             {
                 sample::gLogInfo << ", ";
@@ -606,7 +631,7 @@ bool SampleNonZeroPlugin::verifyOutput(samplesCommon::BufferManager const& buffe
     std::vector<bool> covered(mInputDims.d[0] * mInputDims.d[1], false);
 
     sample::gLogInfo << "Output:" << std::endl;
-    if (mParams.rowMajor)
+    if (mParams.rowOrder)
     {
         for (int32_t i = 0; i < count; ++i)
         {
@@ -629,11 +654,11 @@ bool SampleNonZeroPlugin::verifyOutput(samplesCommon::BufferManager const& buffe
         }
     }
 
-    if (!mParams.rowMajor)
+    if (!mParams.rowOrder)
     {
         for (int32_t i = 0; i < count; ++i)
         {
-            auto const idx = output[i] + mInputDims.d[0] * output[i + count];
+            auto const idx = output[i] * mInputDims.d[1] + output[i + count];
             covered[idx] = true;
             if (input[idx] == 0.F)
             {
@@ -645,7 +670,7 @@ bool SampleNonZeroPlugin::verifyOutput(samplesCommon::BufferManager const& buffe
     {
         for (int32_t i = 0; i < count; ++i)
         {
-            auto const idx = output[2 * i] + mInputDims.d[0] * output[2 * i + 1];
+            auto const idx = output[2 * i] * mInputDims.d[1] + output[2 * i + 1];
             covered[idx] = true;
             if (input[idx] == 0.F)
             {
@@ -688,7 +713,7 @@ NonZeroParams initializeSampleParams(samplesCommon::Args const& args)
     params.outputTensorNames.push_back("Output0");
     params.outputTensorNames.push_back("Output1");
     params.fp16 = args.runInFp16;
-    params.rowMajor = args.rowMajor;
+    params.rowOrder = args.rowOrder;
 
     return params;
 }
@@ -706,7 +731,7 @@ void printHelpInfo()
                  "(data/samples/mnist/, data/mnist/)"
               << std::endl;
     std::cout << "--fp16          Run in FP16 mode." << std::endl;
-    std::cout << "--columnMajor   Run plugin in column major output mode." << std::endl;
+    std::cout << "--columnOrder   Run plugin in column major output mode." << std::endl;
 }
 
 int main(int argc, char** argv)

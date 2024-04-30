@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +30,9 @@ class TestWheel:
             virtualenv.run(["python3", "-c", "import polygraphy"])
 
         # Newer versions of setuptools break pytest-virtualenv
-        virtualenv.run([virtualenv.python, "-m", "pip", "install", "setuptools==59.6.0"])
+        virtualenv.run(
+            [virtualenv.python, "-m", "pip", "install", "setuptools==59.6.0"]
+        )
 
         virtualenv.run(["make", "install"], cwd=ROOT_DIR)
 
@@ -44,8 +46,12 @@ class TestWheel:
         assert not os.path.exists(os.path.join(poly_pkg.source_path, "tests"))
 
         EXCLUDE_FILES = ["__pycache__"]
-        all_poly_files = glob.glob(os.path.join(poly_pkg.source_path, "polygraphy", "*"))
-        all_poly_files = [f for f in map(os.path.basename, all_poly_files) if f not in EXCLUDE_FILES]
+        all_poly_files = glob.glob(
+            os.path.join(poly_pkg.source_path, "polygraphy", "*")
+        )
+        all_poly_files = [
+            f for f in map(os.path.basename, all_poly_files) if f not in EXCLUDE_FILES
+        ]
 
         # NOTE: This should be updated when new files are added to the top-level package.
         EXPECTED_FILES = set(

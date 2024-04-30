@@ -140,7 +140,7 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
     void const* A, int32_t const& lda, void const* B, int32_t const& ldb, void const* beta, // host pointer
     void* C, int32_t const& ldc, void* workSpace, size_t workSpaceSize, cublasComputeType_t computeType,
     cudaDataType_t scaleType, cudaDataType_t Atype, cudaDataType_t Btype, cudaDataType_t Ctype,
-    std::vector<customMatmulPerf_t>& perfResults)
+    std::vector<customMatmulPerf_t>& perfResults, cudaStream_t stream)
 {
 
     cublasStatus_t status = CUBLAS_STATUS_SUCCESS;
@@ -153,7 +153,6 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
 
     cudaEvent_t startEvent = nullptr;
     cudaEvent_t stopEvent = nullptr;
-    cudaStream_t stream = nullptr;
 
     CublasLtWrapper& cublasLtWrapper = getCublasLtWrapper();
 
@@ -520,13 +519,20 @@ void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int
         if (mAlgo.data[0] == 0 && memcmp(mAlgo.data, mAlgo.data + 1, sizeof(mAlgo.data) - sizeof(mAlgo.data[0])) == 0)
         {
             gLogVerbose << "FCPluginDynamic gemmSearch\n";
+            if (mSharedStream == nullptr)
+            {
+                SharedStream ss{};
+                mSharedStream = static_cast<SharedStream*>(
+                    getPluginRegistry()->acquirePluginResource(kFCPLUGIN_SHARED_STREAM_KEY, &ss))
+                                    ->mStream;
+            }
             if (mType == DataType::kFLOAT)
             {
-                mAlgo = gemmSearch<float>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace);
+                mAlgo = gemmSearch<float>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace, mSharedStream);
             }
             else if (mType == DataType::kHALF)
             {
-                mAlgo = gemmSearch<half>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace);
+                mAlgo = gemmSearch<half>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace, mSharedStream);
             }
         }
 
@@ -656,6 +662,11 @@ int32_t FCPluginDynamic::initialize() noexcept
 void FCPluginDynamic::terminate() noexcept
 {
     gLogVerbose << "FCPluginDynamic terminate\n";
+    if (mSharedStream)
+    {
+        TRT_UNUSED(getPluginRegistry()->releasePluginResource(kFCPLUGIN_SHARED_STREAM_KEY));
+        mSharedStream = nullptr;
+    }
 }
 
 size_t FCPluginDynamic::getSerializationSize() const noexcept

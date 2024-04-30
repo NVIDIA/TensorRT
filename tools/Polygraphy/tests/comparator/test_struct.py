@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -106,7 +106,9 @@ class TestRunResults:
 
         iter_results = results["custom"]
         assert len(iter_results) == 1
-        assert all(isinstance(iter_result, IterationResult) for iter_result in iter_results)
+        assert all(
+            isinstance(iter_result, IterationResult) for iter_result in iter_results
+        )
 
     def test_add_new_default_name(self):
         results = RunResults()
@@ -115,7 +117,9 @@ class TestRunResults:
         name = results[0][0]
         iter_results = results[name]
         assert len(iter_results) == 1
-        assert all(isinstance(iter_result, IterationResult) for iter_result in iter_results)
+        assert all(
+            isinstance(iter_result, IterationResult) for iter_result in iter_results
+        )
 
 
 @pytest.mark.parametrize("module", [torch, np])

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +24,12 @@ from tests.tools.args.helper import ArgGroupTestHelper
 class TestOnnxrtSessionArgs:
     def test_execution_providers(self):
         arg_group = ArgGroupTestHelper(
-            OnnxrtSessionArgs(), deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)]
+            OnnxrtSessionArgs(),
+            deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
         )
-        arg_group.parse_args([ONNX_MODELS["identity_identity"].path, "--providers", "cpu"])
+        arg_group.parse_args(
+            [ONNX_MODELS["identity_identity"].path, "--providers", "cpu"]
+        )
         sess = arg_group.load_onnxrt_session()
 
         assert sess

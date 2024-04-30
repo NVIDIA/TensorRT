@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -101,7 +101,12 @@ class TfLoadArgs(BaseArgs):
         - TrtSaveEngineBytesArgs: if allow_tftrt == True
     """
 
-    def __init__(self, allow_artifacts: bool = None, allow_custom_outputs: bool = None, allow_tftrt: bool = None):
+    def __init__(
+        self,
+        allow_artifacts: bool = None,
+        allow_custom_outputs: bool = None,
+        allow_tftrt: bool = None,
+    ):
         """
         Args:
             allow_artifacts (bool):
@@ -151,7 +156,10 @@ class TfLoadArgs(BaseArgs):
             )
 
         self.group.add_argument(
-            "--freeze-graph", help="[EXPERIMENTAL] Attempt to freeze the graph", action="store_true", default=None
+            "--freeze-graph",
+            help="[EXPERIMENTAL] Attempt to freeze the graph",
+            action="store_true",
+            default=None,
         )
 
     def parse_impl(self, args):
@@ -203,13 +211,17 @@ class TfLoadArgs(BaseArgs):
             loader_id = "load_frozen"
             loader_str = make_invocable("GraphFromFrozen", model_file)
         else:
-            G_LOGGER.critical(f"Model type: {model_type} cannot be imported with TensorFlow.")
+            G_LOGGER.critical(
+                f"Model type: {model_type} cannot be imported with TensorFlow."
+            )
 
         loader_name = script.add_loader(loader_str, loader_id)
 
         if self.freeze_graph:
             script.add_import(imports=["OptimizeGraph"], frm="polygraphy.backend.tf")
-            loader_name = script.add_loader(make_invocable("OptimizeGraph", loader_name), "optimize_graph")
+            loader_name = script.add_loader(
+                make_invocable("OptimizeGraph", loader_name), "optimize_graph"
+            )
 
         engine_dir = None
         if self._allow_tftrt:
@@ -219,7 +231,11 @@ class TfLoadArgs(BaseArgs):
             engine_dir = self.arg_groups[TrtSaveEngineBytesArgs].path
 
         MODIFY_TF = "ModifyGraphOutputs"
-        outputs = None if disable_custom_outputs else args_util.get_outputs_for_script(script, self.outputs)
+        outputs = (
+            None
+            if disable_custom_outputs
+            else args_util.get_outputs_for_script(script, self.outputs)
+        )
         modify_tf_str = make_invocable(MODIFY_TF, loader_name, outputs=outputs)
         if modify_tf_str != make_invocable(MODIFY_TF, loader_name):
             script.add_import(imports=[MODIFY_TF], frm="polygraphy.backend.tf")

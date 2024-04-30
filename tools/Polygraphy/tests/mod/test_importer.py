@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +21,13 @@ import sys
 from textwrap import dedent
 
 import pytest
+import tempfile
 import tensorrt as trt
 from polygraphy import mod, util
 from polygraphy.exception import PolygraphyException
 from polygraphy.mod.importer import _version_ok
 
+common_backend = mod.lazy_import("polygraphy.backend.common")
 
 class TestImporter:
     def test_import_from_script(self):
@@ -58,6 +60,41 @@ class TestImporter:
                 assert network.num_layers == 1
                 assert network.get_layer(0).type == trt.LayerType.IDENTITY
             assert sys.path == orig_sys_path
+
+    def test_import_from_script_same_method_different_modules(self):
+        module1_script = dedent(
+            """
+            def print_message():
+                print(f"msg1::print_message")
+                return "msg1"
+            """
+        )
+
+        module2_script = dedent(
+            """
+            def print_message():
+                print(f"msg2::print_message")
+                return "msg2"
+            """
+        )
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            os.mkdir(os.path.join(tempdir, "msg1"))
+            with open(os.path.join(tempdir, "msg1", "msg.py"), "w+") as msg1_msg:
+                msg1_msg.write(module1_script)
+                msg1_msg.flush()
+                os.fsync(msg1_msg.fileno())
+
+                os.mkdir(os.path.join(tempdir, "msg2"))
+                with open(os.path.join(tempdir, "msg2", "msg.py"), "w+") as msg2_msg:
+                    msg2_msg.write(module2_script)
+                    msg2_msg.flush()
+                    os.fsync(msg2_msg.fileno())
+                    
+                    for msg_module in ['msg1', 'msg2']:
+                        msg_loc = os.path.join(tempdir,msg_module,'msg.py')
+                        msg = common_backend.invoke_from_script(msg_loc, "print_message")
+                        assert msg==msg_module
 
     def test_import_non_existent(self):
         script = dedent(

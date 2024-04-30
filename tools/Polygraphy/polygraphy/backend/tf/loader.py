@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,11 @@ class OptimizeGraph(BaseLoader):
         self._graph = graph
 
     def constfold(self, graphdef, output_names):
-        from tensorflow.core.protobuf import config_pb2, meta_graph_pb2, rewriter_config_pb2
+        from tensorflow.core.protobuf import (
+            config_pb2,
+            meta_graph_pb2,
+            rewriter_config_pb2,
+        )
         from tensorflow.python.framework import importer, ops
         from tensorflow.python.grappler import tf_optimizer
         from tensorflow.python.training import saver
@@ -55,12 +59,16 @@ class OptimizeGraph(BaseLoader):
                 output_list.append(output.encode("utf-8"))
 
             importer.import_graph_def(graphdef, name="")
-            metagraph = saver.export_meta_graph(graph_def=graph.as_graph_def(add_shapes=True), graph=graph)
+            metagraph = saver.export_meta_graph(
+                graph_def=graph.as_graph_def(add_shapes=True), graph=graph
+            )
             metagraph.collection_def["train_op"].CopyFrom(output_collection)
 
         rewriter_config = rewriter_config_pb2.RewriterConfig()
         rewriter_config.optimizers.extend(["constfold"])
-        rewriter_config.meta_optimizer_iterations = rewriter_config_pb2.RewriterConfig.ONE
+        rewriter_config.meta_optimizer_iterations = (
+            rewriter_config_pb2.RewriterConfig.ONE
+        )
 
         session_config = config_pb2.ConfigProto()
         session_config.graph_options.resave_options.CopyFrom(rewriter_config)
@@ -109,7 +117,9 @@ class OptimizeGraph(BaseLoader):
 
             # Strip port information from outputs
             output_names = [name.split(":")[0] for name in output_names]
-            output_graph_def = tf.graph_util.convert_variables_to_constants(sess, graphdef, output_names)
+            output_graph_def = tf.graph_util.convert_variables_to_constants(
+                sess, graphdef, output_names
+            )
             output_graph_def = self.constfold(output_graph_def, output_names)
             return graph_from_frozen(output_graph_def)
 
@@ -205,10 +215,14 @@ class GraphFromCkpt(BaseLoader):
         #
         # where "model" is the checkpoint name
         if not os.path.isdir(self.dir):
-            G_LOGGER.warning(f"Specified checkpoint directory: {self.dir} does not look like a directory.")
+            G_LOGGER.warning(
+                f"Specified checkpoint directory: {self.dir} does not look like a directory."
+            )
 
         if self.name is None:
-            G_LOGGER.verbose("Checkpoint name was not explicitly provided, searching for `checkpoint` file")
+            G_LOGGER.verbose(
+                "Checkpoint name was not explicitly provided, searching for `checkpoint` file"
+            )
             checkpoint = tf.train.get_checkpoint_state(self.dir)
             if checkpoint is None:
                 ckpt_file_contents = '\nmodel_checkpoint_path: "model"\nall_model_checkpoint_paths: "model"\n'
@@ -220,7 +234,9 @@ class GraphFromCkpt(BaseLoader):
             input_checkpoint = os.path.join(self.dir, self.name)
 
         meta_file = input_checkpoint + ".meta"
-        with tf.Graph().as_default() as graph, tf.compat.v1.Session(graph=graph).as_default() as sess:
+        with tf.Graph().as_default() as graph, tf.compat.v1.Session(
+            graph=graph
+        ).as_default() as sess:
             saver = tf.compat.v1.train.import_meta_graph(meta_file, clear_devices=True)
             saver.restore(sess, input_checkpoint)
             return graph, tf_util.get_graph_output_names(graph)
@@ -386,7 +402,12 @@ class SaveGraph(BaseLoader):
                 if node.op == "TRTEngineOp":
                     engine = node.attr["serialized_segment"].s
                     if self.engine_dir is not None:
-                        util.save_file(contents=engine, dest=os.path.join(self.engine_dir, f"segment-{segment_number}"))
+                        util.save_file(
+                            contents=engine,
+                            dest=os.path.join(
+                                self.engine_dir, f"segment-{segment_number}"
+                            ),
+                        )
                     segment_number += 1
 
         return graph, outputs
@@ -422,12 +443,17 @@ class CreateConfig(BaseLoader):
 
         # Session configuration
         gpu_options = tf.compat.v1.GPUOptions(
-            per_process_gpu_memory_fraction=self.gpu_memory_fraction, allow_growth=self.allow_growth
+            per_process_gpu_memory_fraction=self.gpu_memory_fraction,
+            allow_growth=self.allow_growth,
         )
         config = tf.compat.v1.ConfigProto(gpu_options=gpu_options)
         if self.use_xla:
-            config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
-        G_LOGGER.verbose(f"Using gpu memory fraction: {self.gpu_memory_fraction}, XLA: {self.use_xla}")
+            config.graph_options.optimizer_options.global_jit_level = (
+                tf.OptimizerOptions.ON_1
+            )
+        G_LOGGER.verbose(
+            f"Using gpu memory fraction: {self.gpu_memory_fraction}, XLA: {self.use_xla}"
+        )
         return config
 
 
@@ -461,7 +487,9 @@ class SessionFromGraph(BaseLoader):
         config, _ = util.invoke_if_callable(self.config)
         (graph, output_names), _ = util.invoke_if_callable(self.graph)
 
-        with graph.as_default() as graph, tf.compat.v1.Session(graph=graph, config=config).as_default() as sess:
+        with graph.as_default() as graph, tf.compat.v1.Session(
+            graph=graph, config=config
+        ).as_default() as sess:
             G_LOGGER.verbose(f"Using TensorFlow outputs: {output_names}")
             G_LOGGER.extra_verbose("Initializing variables in TensorFlow Graph")
             sess.run(tf.compat.v1.initializers.global_variables())

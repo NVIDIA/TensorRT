@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,11 @@ from polygraphy.tools.args import (
     TrtSaveEngineBytesArgs,
 )
 from polygraphy.tools.base import Tool
-from polygraphy.tools.debug.subtool.iterative_debug_args import ArtifactSortArgs, CheckCmdArgs, IterativeDebugArgs
+from polygraphy.tools.debug.subtool.iterative_debug_args import (
+    ArtifactSortArgs,
+    CheckCmdArgs,
+    IterativeDebugArgs,
+)
 
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
 trt = mod.lazy_import("tensorrt>=8.5")
@@ -55,7 +59,9 @@ class BaseCheckerSubtool(Tool):
     def get_subscriptions_impl(self):
         return [
             CheckCmdArgs(),
-            ArtifactSortArgs(allow_no_artifacts_warning=self._allow_no_artifacts_warning),
+            ArtifactSortArgs(
+                allow_no_artifacts_warning=self._allow_no_artifacts_warning
+            ),
             IterativeDebugArgs(
                 iter_art_opt_default="polygraphy_debug.engine",
                 allow_until_opt=self._allow_until_opt,
@@ -65,7 +71,9 @@ class BaseCheckerSubtool(Tool):
             OnnxInferShapesArgs(),
             OnnxLoadArgs(outputs_opt_prefix=False),
             DataLoaderArgs(),  # For int8 calibration
-            TrtConfigArgs(precision_constraints_default=self._precision_constraints_default),
+            TrtConfigArgs(
+                precision_constraints_default=self._precision_constraints_default
+            ),
             TrtLoadPluginsArgs(),
             TrtOnnxFlagArgs(),
             TrtLoadNetworkArgs(),
@@ -110,7 +118,9 @@ class BaseCheckerSubtool(Tool):
         pass
 
     def run_impl(self, args):
-        builder, network, _ = util.unpack_args(self.arg_groups[TrtLoadNetworkArgs].load_network(), 3)
+        builder, network, _ = util.unpack_args(
+            self.arg_groups[TrtLoadNetworkArgs].load_network(), 3
+        )
 
         self.setup(args, network)
 
@@ -118,18 +128,23 @@ class BaseCheckerSubtool(Tool):
             self.process_network(network)
 
             try:
-                serialized_engine = self.arg_groups[TrtLoadEngineBytesArgs].load_engine_bytes((builder, network))
+                serialized_engine = self.arg_groups[
+                    TrtLoadEngineBytesArgs
+                ].load_engine_bytes((builder, network))
             except Exception as err:
                 G_LOGGER.warning(
                     f"Failed to create network or engine, continuing to the next iteration.\nNote: Error was: {err}"
                 )
-                G_LOGGER.internal_error("Failed to create network or engine. See warning above for details.")
+                G_LOGGER.internal_error(
+                    "Failed to create network or engine. See warning above for details."
+                )
                 self.arg_groups[IterativeDebugArgs].skip_iteration(success=False)
             else:
                 # Don't need to keep the engine around in memory - just serialize to disk and free it.
                 with serialized_engine:
                     self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(
-                        serialized_engine, self.arg_groups[IterativeDebugArgs].iter_artifact_path
+                        serialized_engine,
+                        self.arg_groups[IterativeDebugArgs].iter_artifact_path,
                     )
 
         def advance(context):

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,13 @@ import glob
 from polygraphy import mod
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools import Tool
-from polygraphy.tools.args import DataLoaderArgs, OnnxLoadArgs, ModelArgs, OnnxInferShapesArgs
+from polygraphy.tools.args import util as args_util
+from polygraphy.tools.args import (
+    DataLoaderArgs,
+    OnnxLoadArgs,
+    ModelArgs,
+    OnnxInferShapesArgs,
+)
 import os
 
 # Your tool should lazily import any external dependencies. By doing so,
@@ -36,15 +42,17 @@ np = mod.lazy_import("numpy")
 onnx = mod.lazy_import("onnx")
 yaml = mod.lazy_import("yaml", pkg_name="pyyaml")
 
+
 class PluginBase(Tool):
     """
     Analyze an onnx model for potential plugin substitutions.
     """
-    GRAPH_PATTERN_FILE_NAME="pattern.py"
 
-    def __init__(self, name=None):
+    GRAPH_PATTERN_FILE_NAME = "pattern.py"
+
+    def __init__(self, list_plugins:bool, name=None):
         super().__init__(name)
-        self.plugin_dir = None
+        self.list_plugins = list_plugins
 
     def get_subscriptions_impl(self):
         return [
@@ -57,26 +65,51 @@ class PluginBase(Tool):
     def add_parser_args_impl(self, parser):
         parser.add_argument("--plugin-dir", help="Plugin directory.", required=True)
         include_exclude = parser.add_mutually_exclusive_group()
-        include_exclude.add_argument("--include", help="Names of plugins to include. Format: `--include <plugin_name0> <plugin_name1> ...`", required=False, nargs="+", type=str, default=[])
-        include_exclude.add_argument("--exclude", help="Names of plugins to exclude. Format: `--exclude <plugin_name0> <plugin_name1> ...`", required=False, nargs="+", type=str, default=[])
+        include_exclude.add_argument(
+            "--include",
+            help="Names of plugins to include. Format: `--include <plugin_name0> <plugin_name1> ...`",
+            required=False,
+            nargs="+",
+            type=str,
+            default=[],
+        )
+        include_exclude.add_argument(
+            "--exclude",
+            help="Names of plugins to exclude. Format: `--exclude <plugin_name0> <plugin_name1> ...`",
+            required=False,
+            nargs="+",
+            type=str,
+            default=[],
+        )
 
     def run_impl(self, args):
-        raise NotImplementedError("run_impl() must be implemented by child classes")
+        self.match_plugin(
+            model_file=args.model_file,
+            plugin_dir=args.plugin_dir,
+            output_file=args_util.get(args,"output"),
+            include_list=args.include,
+            exclude_list=args.exclude,
+            list_plugins=self.list_plugins
+        )
 
-    def match_plugin(self, args, list_plugins=False):
+    def match_plugin(self, model_file, plugin_dir, output_file=None, include_list=None, exclude_list=None, list_plugins=False):
+        """
+        find matching subgraphs based on plugin pattern
+        """
 
-        self.plugin_dir = os.path.abspath(args.plugin_dir)
-        full_pattern = os.path.join(self.plugin_dir, "*", self.GRAPH_PATTERN_FILE_NAME)
+        plugin_dir = os.path.abspath(plugin_dir)
+        full_pattern = os.path.join(plugin_dir, "*", self.GRAPH_PATTERN_FILE_NAME)
 
-        plugin_set = {os.path.basename(os.path.dirname(x)) for x in glob.glob(pathname=full_pattern, recursive=False)}
+        plugin_set = {
+            os.path.basename(os.path.dirname(x))
+            for x in glob.glob(pathname=full_pattern, recursive=False)
+        }
 
-        if args.include:
-            plugin_set.intersection_update(set(args.include))
+        if include_list:
+            plugin_set.intersection_update(set(include_list))
 
-        if args.exclude:
-            plugin_set.difference_update(set(args.exclude))
-
-        graph = gs.import_onnx(self.arg_groups[OnnxLoadArgs].load_onnx())
+        if exclude_list:
+            plugin_set.difference_update(set(exclude_list))
 
         # list of plugin substitution instances (conent of config.yaml)
         out_yaml = []
@@ -87,45 +120,29 @@ class PluginBase(Tool):
             G_LOGGER.info(f"checking {plugin} in model")
             plugin_yaml = {}
 
-            #build pattern from plugin
-            plugin_pattern_loc = os.path.join(self.plugin_dir, plugin, self.GRAPH_PATTERN_FILE_NAME)
-            graph_pattern = common_backend.invoke_from_script(plugin_pattern_loc, "get_plugin_pattern")
+            plugin_pattern_loc = os.path.join(plugin_dir, plugin, self.GRAPH_PATTERN_FILE_NAME)
+            # create a new graph in every iteration, in case the pattern matching modifies the graph
+            graph = gs.import_onnx(self.arg_groups[OnnxLoadArgs].load_onnx()) if self.arg_groups else gs.import_onnx(onnx.load(model_file))
 
-            matched_subgraphs = graph_pattern.match_all(graph)
-            if matched_subgraphs:
-                plugin_frequency[plugin] += len(matched_subgraphs)
+            #get inputs, outputs, attributes from plugin
+            G_LOGGER.ultra_verbose(f"calling get_matching_subgraphs from {plugin_pattern_loc}")
+            ioattrs = common_backend.invoke_from_script(plugin_pattern_loc, "get_matching_subgraphs", graph)
 
-            plugin_yaml["name"] = plugin
-            plugin_yaml["instances"] = []
+            if ioattrs:
+                G_LOGGER.ultra_verbose("match found")
+                plugin_yaml["name"] = common_backend.invoke_from_script(plugin_pattern_loc, "get_plugin_metadata")['name']
+                plugin_yaml["op"] = common_backend.invoke_from_script(plugin_pattern_loc, "get_plugin_metadata")['op']
+                plugin_yaml["instances"] = ioattrs
+                out_yaml.append(plugin_yaml)
+                plugin_frequency[plugin] += len(ioattrs)
 
-            for sg in matched_subgraphs:
-                def get_names(tensors):
-                    return [tensor.name for tensor in tensors]
-
-                inputs = get_names(sg.inputs)
-                outputs = get_names(sg.outputs)
-                attributes = common_backend.invoke_from_script(plugin_pattern_loc, "get_plugin_attributes", sg)
-                plugin_yaml["instances"].append({
-                    "inputs": inputs,
-                    "outputs": outputs,
-                    "attributes": attributes
-                })
-
-            out_yaml.append(plugin_yaml)
-
+        G_LOGGER.info("the following plugins matched:")
+        G_LOGGER.info(plugin_frequency)
         if list_plugins:
-            G_LOGGER.info("the following plugins would be used:")
-            G_LOGGER.info(plugin_frequency)
             return
 
-        config_yaml = os.path.join(os.path.dirname(args.model_file),"config.yaml")
-        if args.output:
-            config_yaml = args.output
+        config_yaml = output_file or os.path.abspath(os.path.join(os.path.dirname(model_file),"config.yaml"))
 
         with open(config_yaml, "w") as stream:
-            yaml.dump_all(
-                out_yaml,
-                stream,
-                default_flow_style=False,
-                sort_keys=False
-            )
+            yaml.dump_all(out_yaml, stream, default_flow_style=False, sort_keys=False)
+        G_LOGGER.info(f"Matching subgraphs saved to {config_yaml}")

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,6 @@ from io import BytesIO
 import numpy as np
 import onnx
 from onnx import numpy_helper
-import onnx_graphsurgeon as gs
 import os
 from PIL import Image
 from polygraphy.backend.common import bytes_from_path
@@ -40,9 +39,7 @@ from polygraphy.backend.trt import (
 )
 from polygraphy.logger import G_LOGGER
 import random
-import re
 import requests
-from scipy import integrate
 import tensorrt as trt
 import torch
 import types
@@ -406,63 +403,6 @@ def load_calib_prompts(batch_size, calib_data_path):
         lst = [line.rstrip("\n") for line in file]
     return [lst[i : i + batch_size] for i in range(0, len(lst), batch_size)]
 
-def filter_func(name):
-    pattern = re.compile(
-        r".*(time_emb_proj|time_embedding|conv_in|conv_out|conv_shortcut|add_embedding).*"
-    )
-    return pattern.match(name) is not None
-
-def quantize_lvl(unet, quant_level=2.5):
-    """
-    We should disable the unwanted quantizer when exporting the onnx
-    Because in the current ammo setting, it will load the quantizer amax for all the layers even
-    if we didn't add that unwanted layer into the config during the calibration
-    """
-    for name, module in unet.named_modules():
-        if isinstance(module, torch.nn.Conv2d):
-            module.input_quantizer.enable()
-            module.weight_quantizer.enable()
-        elif isinstance(module, torch.nn.Linear):
-            if (
-                (quant_level >= 2 and "ff.net" in name)
-                or (quant_level >= 2.5 and ("to_q" in name or "to_k" in name or "to_v" in name))
-                or quant_level == 3
-            ):
-                module.input_quantizer.enable()
-                module.weight_quantizer.enable()
-            else:
-                module.input_quantizer.disable()
-                module.weight_quantizer.disable()
-
-def get_smoothquant_config(model, quant_level=3):
-    quant_config = {
-        "quant_cfg": {},
-        "algorithm": "smoothquant",
-    }
-    for name, module in model.named_modules():
-        w_name = f"{name}*weight_quantizer"
-        i_name = f"{name}*input_quantizer"
-
-        if (
-            w_name in quant_config["quant_cfg"].keys()  # type: ignore
-            or i_name in quant_config["quant_cfg"].keys()  # type: ignore
-        ):
-            continue
-        if filter_func(name):
-            continue
-        if isinstance(module, torch.nn.Linear):
-            if (
-                (quant_level >= 2 and "ff.net" in name)
-                or (quant_level >= 2.5 and ("to_q" in name or "to_k" in name or "to_v" in name))
-                or quant_level == 3
-            ):
-                quant_config["quant_cfg"][w_name] = {"num_bits": 8, "axis": 0}  # type: ignore
-                quant_config["quant_cfg"][i_name] = {"num_bits": 8, "axis": -1}  # type: ignore
-        elif isinstance(module, torch.nn.Conv2d):
-            quant_config["quant_cfg"][w_name] = {"num_bits": 8, "axis": 0}  # type: ignore
-            quant_config["quant_cfg"][i_name] = {"num_bits": 8, "axis": None}  # type: ignore
-    return quant_config
-
 class PercentileAmaxes:
     def __init__(self, total_step, percentile) -> None:
         self.data = {}
@@ -503,7 +443,7 @@ def add_arguments(parser):
     # TensorRT engine build
     parser.add_argument('--engine-dir', default='engine', help="Output directory for TensorRT engines")
     parser.add_argument('--int8', action='store_true', help="Apply int8 quantization.")
-    parser.add_argument('--quantization-level', type=float, default=3.0, choices=range(1,4), help="int8/fp8 quantization level, 1: CNN, 2: CNN+FFN, 2.5: CNN+FFN+QKV, 3: CNN+FC")
+    parser.add_argument('--quantization-level', type=float, default=2.5, choices=[1.0, 2.0, 2.5, 3.0], help="int8/fp8 quantization level, 1: CNN, 2: CNN+FFN, 2.5: CNN+FFN+QKV, 3: CNN+FC")
     parser.add_argument('--build-static-batch', action='store_true', help="Build TensorRT engines with fixed batch size.")
     parser.add_argument('--build-dynamic-shape', action='store_true', help="Build TensorRT engines with dynamic image shapes.")
     parser.add_argument('--build-enable-refit', action='store_true', help="Enable Refit option in TensorRT engines during build.")

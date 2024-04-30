@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -832,14 +832,14 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
 };
 
 class FusedMultiHeadAttentionXMMAKernelV2
-    : public TFusedMultiHeadAttentionXMMAKernel<FusedMultiHeadAttentionKernelMetaInfoV2,
+    : public pluginInternal::TFusedMultiHeadAttentionXMMAKernel<FusedMultiHeadAttentionKernelMetaInfoV2,
           Fused_multihead_attention_params_v2>
 {
 public:
     FusedMultiHeadAttentionXMMAKernelV2(
         const FusedMultiHeadAttentionKernelMetaInfoV2* pMetaStart, uint32_t nMetaCount, Data_type type, uint32_t sm)
-        : TFusedMultiHeadAttentionXMMAKernel<FusedMultiHeadAttentionKernelMetaInfoV2,
-              Fused_multihead_attention_params_v2>(pMetaStart, nMetaCount, type, sm)
+        : pluginInternal::TFusedMultiHeadAttentionXMMAKernel<FusedMultiHeadAttentionKernelMetaInfoV2,
+            Fused_multihead_attention_params_v2>(pMetaStart, nMetaCount, type, sm)
     {
     }
 
@@ -988,7 +988,7 @@ public:
     }
 };
 
-using FusedMHAKernelFactoryV2 = TFusedMHAKernelFactory<FusedMultiHeadAttentionXMMAKernelV2>;
+using FusedMHAKernelFactoryV2 = pluginInternal::TFusedMHAKernelFactory<FusedMultiHeadAttentionXMMAKernelV2>;
 
 inline const FusedMultiHeadAttentionXMMAKernelV2* getXMMAKernelsV2(Data_type type, uint32_t sm)
 {

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,7 +61,10 @@ class TfRunnerArgs(BaseRunnerArgs):
 
         script.add_import(imports=["SessionFromGraph"], frm="polygraphy.backend.tf")
         loader_name = script.add_loader(
-            make_invocable("SessionFromGraph", graph_name, config=config_name), "build_tf_session"
+            make_invocable("SessionFromGraph", graph_name, config=config_name),
+            "build_tf_session",
         )
 
-        script.add_runner(make_invocable("TfRunner", loader_name, timeline_path=self.timeline_path))
+        script.add_runner(
+            make_invocable("TfRunner", loader_name, timeline_path=self.timeline_path)
+        )

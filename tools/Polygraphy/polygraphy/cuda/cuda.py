@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,12 +73,16 @@ class Cuda:
             lib_pat = "libcudart.so*"
             fallback_lib = "libcudart.so"
 
-        cuda_paths = list(filter(lambda x: x, cuda_paths))  # Filter out empty paths (i.e. "")
+        cuda_paths = list(
+            filter(lambda x: x, cuda_paths)
+        )  # Filter out empty paths (i.e. "")
 
         candidates = util.find_in_dirs(lib_pat, cuda_paths)
         if not candidates:
             log_func = G_LOGGER.critical if fallback_lib is None else G_LOGGER.warning
-            log_func(f"Could not find the CUDA runtime library.\nNote: Paths searched were:\n{cuda_paths}")
+            log_func(
+                f"Could not find the CUDA runtime library.\nNote: Paths searched were:\n{cuda_paths}"
+            )
 
             lib = fallback_lib
             G_LOGGER.warning(f"Attempting to load: '{lib}' using default loader paths")
@@ -89,7 +93,9 @@ class Cuda:
         self.handle = ctypes.CDLL(lib)
 
         if not self.handle:
-            G_LOGGER.critical("Could not load the CUDA runtime library. Is it on your loader path?")
+            G_LOGGER.critical(
+                "Could not load the CUDA runtime library. Is it on your loader path?"
+            )
 
     @func.constantmethod
     def check(self, status):
@@ -170,9 +176,15 @@ class Cuda:
         """
         nbytes = ctypes.c_size_t(nbytes)  # Required to prevent overflow
         if stream_ptr is not None:
-            self.check(self.handle.cudaMemcpyAsync(void_ptr(dst), void_ptr(src), nbytes, kind, void_ptr(stream_ptr)))
+            self.check(
+                self.handle.cudaMemcpyAsync(
+                    void_ptr(dst), void_ptr(src), nbytes, kind, void_ptr(stream_ptr)
+                )
+            )
         else:
-            self.check(self.handle.cudaMemcpy(void_ptr(dst), void_ptr(src), nbytes, kind))
+            self.check(
+                self.handle.cudaMemcpy(void_ptr(dst), void_ptr(src), nbytes, kind)
+            )
 
 
 G_CUDA = None
@@ -294,7 +306,9 @@ class DeviceView:
         try:
             # For backwards compatibility
             mod.warn_deprecated(
-                "Using NumPy data types in DeviceView/DeviceArray", use_instead=None, remove_in="0.50.0"
+                "Using NumPy data types in DeviceView/DeviceArray",
+                use_instead=None,
+                remove_in="0.50.0",
             )
             G_LOGGER.warning(
                 f"In the future, you will need to use `DataType.from_dtype(device_view.dtype).numpy()` to retrieve the NumPy data type"
@@ -360,7 +374,9 @@ class DeviceView:
         return f"DeviceView[(dtype={self._dtype.name}, shape={self.shape}), ptr={hex(self.ptr)}]"
 
     def __repr__(self):
-        return util.make_repr("DeviceView", ptr=self.ptr, shape=self.shape, dtype=self._dtype)[0]
+        return util.make_repr(
+            "DeviceView", ptr=self.ptr, shape=self.shape, dtype=self._dtype
+        )[0]
 
 
 @mod.export()
@@ -375,7 +391,11 @@ class DeviceArray(DeviceView):
             shape (Tuple[int]): The initial shape of the buffer.
             dtype (DataType): The data type of the buffer.
         """
-        super().__init__(ptr=0, shape=util.default(shape, tuple()), dtype=util.default(dtype, DataType.FLOAT32))
+        super().__init__(
+            ptr=0,
+            shape=util.default(shape, tuple()),
+            dtype=util.default(dtype, DataType.FLOAT32),
+        )
         self.allocated_nbytes = 0
         self.resize(self.shape)
 

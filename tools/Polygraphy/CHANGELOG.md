@@ -3,6 +3,15 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.49.10 (2024-04-19)
+### Added
+- Added an `EngineFromPath` loader to deserialize an engine directly from disk. This will save CPU memory when weight streaming is enabled.
+
+### Fixed
+- Fixed a memory leak in `TrtRunner` caused by creating a new output allocator per inference.
+- Fixed a bug where the `Calibrator` would not force non-index inputs to FP32; this is required by TensorRT.
+
+
 ## v0.49.9 (2024-03-19)
 ### Added
 - Added `run_opts` argument to `tools.main` to allow calling polygraphy tools from within other Python scripts.

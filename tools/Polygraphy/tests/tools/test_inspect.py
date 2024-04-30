@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -613,19 +613,21 @@ class TestInspectData:
 TACTIC_REPLAY_CASES = [
     [
         "pow_scalar",
-        r"""
+        (
+            r"""
         [I] Layer: (Unnamed Layer* 0) [Shuffle]
                 Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
             Layer: node_of_z
                 Algorithm: (Implementation: 2147483651, Tactic: 1) | Inputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1), TensorInfo(DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
         """
-        if mod.version(trt.__version__) < mod.version("8.7")
-        else r"""
+            if mod.version(trt.__version__) < mod.version("8.7")
+            else r"""
         [I] Layer: ONNXTRT_Broadcast
                 Algorithm: (Implementation: 2147483661, Tactic: 0) | Inputs: (TensorInfo(DataType.FLOAT, (), -1, 1),) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
             Layer: PWN(node_of_z)
                 Algorithm: (Implementation: 2147483688, Tactic: 1) | Inputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1), TensorInfo(DataType.FLOAT, (1,), -1, 1)) | Outputs: (TensorInfo(DataType.FLOAT, (1,), -1, 1),)
-        """,
+        """
+        ),
     ],
 ]
 
@@ -668,22 +670,24 @@ TEST_CAPABILITY_CASES = [
             "unsupported_subgraph-nodes-2-2.onnx",
             "unsupported_subgraph-nodes-4-4.onnx",
         ],
-        """
+        (
+            """
         [I] ===== Summary =====
             Operator | Count   | Reason                                                                                                                                                            | Nodes
             -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
             FAKE!    |       2 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[0, 1], [2, 3]]
             FAKER!   |       1 | In node 0 (importFallbackPluginImporter): UNSUPPORTED_NODE: Assertion failed: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[4, 5]]
         """
-        if mod.version(trt.__version__) < mod.version("10.0")
-        else """
+            if mod.version(trt.__version__) < mod.version("10.0")
+            else """
         [I] ===== Summary =====
             Operator | Count   | Reason                                                                                                                                                                           | Nodes
             --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
             FAKE!    |       1 | In node 0 with name: Fake1 and operator: FAKE! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"  | [[0, 1]]
             FAKE!    |       1 | In node 0 with name: Fake2 and operator: FAKE! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"  | [[2, 3]]
             FAKER!   |       1 | In node 0 with name: Fake3 and operator: FAKER! (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?" | [[4, 5]]
-        """,
+        """
+        ),
     ),
     (
         "identity_identity",

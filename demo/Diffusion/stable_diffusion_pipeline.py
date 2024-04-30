@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
+import ammo.torch.opt as ato
 import ammo.torch.quantization as atq
-import calibration
 from cuda import cudart
 from diffusers import (
     DDIMScheduler,
@@ -44,7 +44,6 @@ from models import (
 import numpy as np
 import nvtx
 import json
-import onnx
 import os
 import pathlib
 import tensorrt as trt
@@ -55,16 +54,17 @@ from utilities import (
     PIPELINE_TYPE,
     TRT_LOGGER,
     Engine,
-    filter_func,
-    get_smoothquant_config,
     get_refit_weights,
     load_calib_prompts,
     merge_loras,
     prepare_mask_and_masked_image,
-    quantize_lvl,
-    replace_lora_layers,
     save_image,
     unload_model
+)
+from utils_ammo import (
+    filter_func,
+    quantize_lvl,
+    get_int8_config,
 )
 
 class StableDiffusionPipeline:
@@ -76,7 +76,7 @@ class StableDiffusionPipeline:
         version='1.5',
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
         max_batch_size=16,
-        denoising_steps=50,
+        denoising_steps=30,
         scheduler=None,
         guidance_scale=7.5,
         device='cuda',
@@ -216,6 +216,11 @@ class StableDiffusionPipeline:
         if self.pipeline_type.is_sd_xl():
             self.config['clip_hidden_states'] = True
         self.torch_inference = torch_inference
+        if self.torch_inference:
+            torch._inductor.config.conv_1x1_as_mm = True
+            torch._inductor.config.coordinate_descent_tuning = True
+            torch._inductor.config.epilogue_fusion = False
+            torch._inductor.config.coordinate_descent_check_all_directions = True
         self.use_cuda_graph = use_cuda_graph
 
         # initialized in loadEngines()
@@ -315,10 +320,11 @@ class StableDiffusionPipeline:
         timing_cache=None,
         int8=False,
         quantization_level=2.5,
-        quantization_percentile=0.4,
-        quantization_alpha=0.6,
-        calibration_steps=384,
-        denoising_steps=50,
+        quantization_percentile=1.0,
+        quantization_alpha=0.8,
+        calibration_size=32,
+        calib_batch_size=2,
+        denoising_steps=30,
     ):
         """
         Build and load engines for TensorRT accelerated inference.
@@ -349,6 +355,24 @@ class StableDiffusionPipeline:
                 Enable all tactic sources during TensorRT engine builds.
             timing_cache (str):
                 Path to the timing cache to speed up TensorRT build.
+            int8 (bool):
+                Whether to quantize to int8 format or not (SDXL only).
+            quantization_level (float):
+                Controls which layers to quantize. 1: CNN, 2: CNN+FFN, 2.5: CNN+FFN+QKV, 3: CNN+FC
+            quantization_percentile (float):
+                Control quantization scaling factors (amax) collecting range, where the minimum amax in 
+                range(n_steps * percentile) will be collected. Recommendation: 1.0
+            quantization_alpha (float):
+                The alpha parameter for SmoothQuant quantization used for linear layers.
+                Recommendation: 0.8 for SDXL
+            calibration_size (int):
+                The number of steps to use for calibrating the model for quantization.
+                Recommendation: 32, 64, 128 for SDXL
+            calib_batch_size (int):
+                The batch size to use for calibration. Defaults to 2.
+            denoising_steps (int):
+                The number of denoising steps.
+                More denoising steps usually lead to a higher quality image at the expense of slower inference.
         """
         # Create directories if missing
         for directory in [engine_dir, onnx_dir]:
@@ -411,7 +435,7 @@ class StableDiffusionPipeline:
         if int8:
             assert self.pipeline_type.is_sd_xl(), "int8 quantization only supported for SDXL pipeline"
             use_int8['unetxl'] = True
-            model_suffix['unetxl'] += f"-int8.l{quantization_level}.bs2.s{denoising_steps}.c{calibration_steps}.p{quantization_percentile}.a{quantization_alpha}"
+            model_suffix['unetxl'] += f"-int8.l{quantization_level}.bs2.s{denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False, suffix=model_suffix[model_name]) for model_name in model_names]))
         onnx_opt_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, suffix=model_suffix[model_name]) for model_name in model_names]))
         engine_path = dict(zip(model_names, [self.getEnginePath(model_name, engine_dir, do_engine_refit[model_name], suffix=model_suffix[model_name]) for model_name in model_names]))
@@ -433,22 +457,16 @@ class StableDiffusionPipeline:
                         print(f"[I] Calibrated weights not found, generating {state_dict_path}")
                         pipeline = obj.get_pipeline()
                         model = pipeline.unet
-                        replace_lora_layers(model)
                         calibration_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'calibration-prompts.txt')
-                        # Use batch_size = 2 for UNet calibration
-                        calibration_prompts = load_calib_prompts(2, calibration_file)
-                        # TODO check size > calibration_steps
-                        quant_config = get_smoothquant_config(model, quantization_level)
-                        if quantization_percentile is not None:
-                            quant_config["percentile"] = quantization_percentile
-                            quant_config["base-step"] = int(denoising_steps)
-
-                        atq.replace_quant_module(model)
-                        atq.set_quantizer_by_cfg(model, quant_config["quant_cfg"])
-                        if quantization_percentile is not None:
-                            calibration.precentile_calib_mode(base_unet=model, quant_config=quant_config)
-                        if quantization_alpha is not None:
-                            calibration.reg_alpha_qkv(base_unet=model, alpha=quantization_alpha)
+                        calibration_prompts = load_calib_prompts(calib_batch_size, calibration_file)
+                        # TODO check size > calibration_size
+                        quant_config = get_int8_config(
+                            model, 
+                            quantization_level,
+                            quantization_alpha,
+                            quantization_percentile,
+                            denoising_steps
+                        )
 
                         def do_calibrate(base, calibration_prompts, **kwargs):
                             for i_th, prompts in enumerate(calibration_prompts):
@@ -462,34 +480,35 @@ class StableDiffusionPipeline:
                                     ]
                                     * len(prompts),
                                 ).images
-
-                        def calibration_loop():
+                        
+                        def calibration_loop(unet):
+                            pipeline.model = unet
                             do_calibrate(
                                 base=pipeline,
                                 calibration_prompts=calibration_prompts,
-                                calib_size=calibration_steps,
+                                calib_size=calibration_size // calib_batch_size,
                                 n_steps=denoising_steps,
                             )
 
-                        print(f"[I] Performing int8 calibration for {calibration_steps} steps. This can take a long time.")
-                        calibration.calibrate(model, quant_config["algorithm"], forward_loop=calibration_loop)
-                        torch.save(model.state_dict(), state_dict_path)
+                        print(f"[I] Performing int8 calibration for {calibration_size} steps.")
+                        atq.quantize(model, quant_config, forward_loop=calibration_loop)
+                        ato.save(model, state_dict_path)
 
-                    print(f"[I] Generaing quantized ONNX model: {onnx_opt_path[model_name]}")
+                    print(f"[I] Generating quantized ONNX model: {onnx_opt_path[model_name]}")
                     if not os.path.exists(onnx_path[model_name]):
                         model = obj.get_model()
-                        replace_lora_layers(model)
-                        atq.replace_quant_module(model)
-                        quant_config = atq.INT8_DEFAULT_CFG
-                        atq.set_quantizer_by_cfg(model, quant_config["quant_cfg"])
-                        model.load_state_dict(torch.load(state_dict_path), strict=True)
-                        quantize_lvl(model, quantization_level)
+                        ato.restore(model, state_dict_path)
+                        quantize_lvl(model, quantization_level) 
                         atq.disable_quantizer(model, filter_func)
-                        model.to(torch.float32) # QDQ needs to be in FP32
+                        model.to(torch.float32).to("cpu") # QDQ needs to be in FP32
+                        # WAR to enable ONNX export of quantized UNet
+                        obj.device="cpu"
+                        obj.fp16=False
                     else:
                         model = None
                     obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, custom_model=model)
-
+                    obj.fp16=True # Part of WAR, UNET obj.fp16 defaults to True so it is safe to reset this way
+            
             # FIXME do_export_weights_map needs ONNX graph
             if do_export_weights_map:
                 print(f"[I] Saving weights map: {weights_map_path[model_name]}")

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@ This file defines the entry point that will be exported by our extension module.
 """
 
 from polygraphy_reshape_destroyer.args import ReplaceReshapeArgs, IdentityOnlyRunnerArgs
+
 
 # The entry point is expected to take no arguments and return a list of argument group instances.
 #

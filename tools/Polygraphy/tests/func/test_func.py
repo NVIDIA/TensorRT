@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -130,7 +130,8 @@ class TestExtend:
             return 1, 2
 
         with pytest.raises(
-            PolygraphyException, match=r"Function: y accepts 1 parameter\(s\), but needs to accept 2 parameter\(s\)"
+            PolygraphyException,
+            match=r"Function: y accepts 1 parameter\(s\), but needs to accept 2 parameter\(s\)",
         ):
 
             @func.extend(x)
@@ -168,7 +169,9 @@ class TestConstantMethod:
                 self.x = 2
 
         d = Dummy()
-        with pytest.raises(PolygraphyInternalException, match="was mutated in a constant method"):
+        with pytest.raises(
+            PolygraphyInternalException, match="was mutated in a constant method"
+        ):
             d.modify_x()
 
     def test_cannot_add_attrs(self):
@@ -178,5 +181,7 @@ class TestConstantMethod:
                 self.x = 2
 
         d = Dummy()
-        with pytest.raises(PolygraphyInternalException, match="was mutated in a constant method"):
+        with pytest.raises(
+            PolygraphyInternalException, match="was mutated in a constant method"
+        ):
             d.modify_x()

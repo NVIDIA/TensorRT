@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,12 @@
 
 import pytest
 from polygraphy.exception import PolygraphyInternalException
-from polygraphy.tools.script import Script, inline, make_invocable, make_invocable_if_nondefault
+from polygraphy.tools.script import (
+    Script,
+    inline,
+    make_invocable,
+    make_invocable_if_nondefault,
+)
 
 
 def make_test_string():
@@ -38,7 +43,9 @@ class TestScript:
     )
     def test_add_funcs_fail_on_unsafe(self, func):
         script = Script()
-        with pytest.raises(PolygraphyInternalException, match="was not checked for safety"):
+        with pytest.raises(
+            PolygraphyInternalException, match="was not checked for safety"
+        ):
             func(script)
 
     @pytest.mark.parametrize(

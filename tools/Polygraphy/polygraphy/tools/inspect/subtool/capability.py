@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +20,12 @@ from collections import OrderedDict
 from polygraphy import mod
 from polygraphy.common.interface import TypedDict
 from polygraphy.logger import G_LOGGER
-from polygraphy.tools.args import OnnxInferShapesArgs, OnnxLoadArgs, ModelArgs, OnnxSaveArgs
+from polygraphy.tools.args import (
+    OnnxInferShapesArgs,
+    OnnxLoadArgs,
+    ModelArgs,
+    OnnxSaveArgs,
+)
 from polygraphy.tools.base import Tool
 
 common_backend = mod.lazy_import("polygraphy.backend.common")
@@ -85,7 +90,9 @@ def supports_model(path):
     except AttributeError:
         trt_util.fail_unavailable("supports_model in tensorrt.OnnxParser")
 
-    supported, nodelists = parser.supports_model(common_backend.bytes_from_path(path), path)
+    supported, nodelists = parser.supports_model(
+        common_backend.bytes_from_path(path), path
+    )
     return supported, nodelists, parser
 
 
@@ -133,16 +140,24 @@ def save_subgraph(onnx_save_args, graph, start, end, prefix="", use_tmp_file=Fal
     in_dict = {inp.name: inp for node in subgraph_nodes for inp in node.inputs}
 
     # Guess graph inputs/outputs by checking all output tensor names against all input tensor names, and vice-versa.
-    subgraph_inputs = onnx_util.meta_from_gs_tensors([in_dict[k] for k in in_dict if k not in out_dict])
-    subgraph_outputs = onnx_util.meta_from_gs_tensors([out_dict[k] for k in out_dict if k not in in_dict])
+    subgraph_inputs = onnx_util.meta_from_gs_tensors(
+        [in_dict[k] for k in in_dict if k not in out_dict]
+    )
+    subgraph_outputs = onnx_util.meta_from_gs_tensors(
+        [out_dict[k] for k in out_dict if k not in in_dict]
+    )
 
-    subgraph = gs.export_onnx(onnx_backend.extract_subgraph(graph, subgraph_inputs, subgraph_outputs))
+    subgraph = gs.export_onnx(
+        onnx_backend.extract_subgraph(graph, subgraph_inputs, subgraph_outputs)
+    )
 
     if use_tmp_file:
         path = util.NamedTemporaryFile(prefix=prefix, suffix=".onnx").name
     else:
         # end is exclusive, so subtract one to make the model names friendlier.
-        path = os.path.join(onnx_save_args.path, f"{prefix}_subgraph-nodes-{start}-{end - 1}.onnx")
+        path = os.path.join(
+            onnx_save_args.path, f"{prefix}_subgraph-nodes-{start}-{end - 1}.onnx"
+        )
     onnx_save_args.save_onnx(subgraph, path)
     return path
 
@@ -159,11 +174,17 @@ def gen_results_summary(final_unsupported):
         str: A summary of all the unsupported ops in model, along with reasons and node index ranges.
     """
     op_width = max(map(len, list(final_unsupported.keys()) + ["Operator "]))
-    reason_width = max(len(reason) for node_index_map in final_unsupported.values() for reason in node_index_map.keys())
+    reason_width = max(
+        len(reason)
+        for node_index_map in final_unsupported.values()
+        for reason in node_index_map.keys()
+    )
 
     summary = "===== Summary =====\n"
 
-    header = f"{'Operator':{op_width}}| {'Count':7} | {'Reason':{reason_width}} | Nodes\n"
+    header = (
+        f"{'Operator':{op_width}}| {'Count':7} | {'Reason':{reason_width}} | Nodes\n"
+    )
     summary += header + "-" * len(header) + "\n"
 
     for op, node_index_map in final_unsupported.items():
@@ -183,10 +204,30 @@ def gen_results_summary_no_partitioning(stack_trace_to_errors):
     Returns:
         str: A summary of all the unsupported ops in model, along with reasons and stack traces.
     """
-    stack_trace_width = max(map(len, list(stack_trace_to_errors.keys()) + ["Stack trace "]))
-    op_width = max(max(len(op) for errors_per_stack in stack_trace_to_errors.values() for op, _, _ in errors_per_stack), len("Operator "))
-    node_width = max(max(len(node) for errors_per_stack in stack_trace_to_errors.values() for _, node, _ in errors_per_stack), len("Node "))
-    reason_width = max(len(reason) for errors_per_stack in stack_trace_to_errors.values() for _, _, reason in errors_per_stack)
+    stack_trace_width = max(
+        map(len, list(stack_trace_to_errors.keys()) + ["Stack trace "])
+    )
+    op_width = max(
+        max(
+            len(op)
+            for errors_per_stack in stack_trace_to_errors.values()
+            for op, _, _ in errors_per_stack
+        ),
+        len("Operator "),
+    )
+    node_width = max(
+        max(
+            len(node)
+            for errors_per_stack in stack_trace_to_errors.values()
+            for _, node, _ in errors_per_stack
+        ),
+        len("Node "),
+    )
+    reason_width = max(
+        len(reason)
+        for errors_per_stack in stack_trace_to_errors.values()
+        for _, _, reason in errors_per_stack
+    )
 
     summary = "===== Summary =====\n"
 
@@ -210,12 +251,19 @@ class Capability(Tool):
 
     def get_subscriptions_impl(self):
         return [
-            ModelArgs(model_opt_required=True, input_shapes_opt_name=False, required_model_type="onnx"),
+            ModelArgs(
+                model_opt_required=True,
+                input_shapes_opt_name=False,
+                required_model_type="onnx",
+            ),
             OnnxInferShapesArgs(),
             OnnxLoadArgs(outputs_opt_prefix=False),
-            OnnxSaveArgs(output_default_path="polygraphy_capability_dumps", allow_multiple_models=True),
+            OnnxSaveArgs(
+                output_default_path="polygraphy_capability_dumps",
+                allow_multiple_models=True,
+            ),
         ]
-    
+
     def add_parser_args_impl(self, parser):
         parser.add_argument(
             "--with-partitioning",
@@ -232,9 +280,11 @@ class Capability(Tool):
     def no_partitioning_variant(self):
         supported, parser = parse(self.arg_groups[ModelArgs].path)
         if supported:
-            G_LOGGER.info("Graph is fully supported by TensorRT; Will not report errors.")
+            G_LOGGER.info(
+                "Graph is fully supported by TensorRT; Will not report errors."
+            )
             return
-        
+
         stack_trace_to_errors = OrderedDict()
         for err_idx in range(parser.num_errors):
             parser_error = parser.get_error(err_idx)
@@ -244,29 +294,38 @@ class Capability(Tool):
                     stack_trace += parser_error.local_function_stack()[function_idx]
                     if function_idx != parser_error.local_function_stack_size() - 1:
                         stack_trace += " -> "
-                
+
             if stack_trace not in stack_trace_to_errors:
                 stack_trace_to_errors[stack_trace] = []
 
             node_operator = parser_error.node_operator()
             node_name = parser_error.node_name()
             parser_error_desc = str(parser_error)
-            stack_trace_to_errors[stack_trace].append(tuple((node_operator, node_name, parser_error_desc)))
-        
+            stack_trace_to_errors[stack_trace].append(
+                tuple((node_operator, node_name, parser_error_desc))
+            )
+
         summary = gen_results_summary_no_partitioning(stack_trace_to_errors)
 
         G_LOGGER.info(summary)
         util.save_file(
-            summary, os.path.join(self.arg_groups[OnnxSaveArgs].path, "results.txt"), "w", description="results"
+            summary,
+            os.path.join(self.arg_groups[OnnxSaveArgs].path, "results.txt"),
+            "w",
+            description="results",
         )
 
     def supports_model_variant(self):
         supported, nodelists, _ = supports_model(self.arg_groups[ModelArgs].path)
         if supported:
-            G_LOGGER.info("Graph is fully supported by TensorRT; Will not generate subgraphs.")
+            G_LOGGER.info(
+                "Graph is fully supported by TensorRT; Will not generate subgraphs."
+            )
             return
 
-        parent_graph = onnx_backend.gs_from_onnx(self.arg_groups[OnnxLoadArgs].load_onnx())
+        parent_graph = onnx_backend.gs_from_onnx(
+            self.arg_groups[OnnxLoadArgs].load_onnx()
+        )
 
         def partition(nodelists, offset):
             """
@@ -284,7 +343,9 @@ class Capability(Tool):
             supported_subgraphs = []
             for node_indices, supported in nodelists:
                 if supported:
-                    supported_subgraphs.append([index + offset for index in node_indices])
+                    supported_subgraphs.append(
+                        [index + offset for index in node_indices]
+                    )
                     continue
 
                 start = node_indices[0] + offset
@@ -315,13 +376,23 @@ class Capability(Tool):
                 start (int): The (inclusive) index of the start node.
                 end (int): The (exclusive) index of the end node.
             """
-            subgraph_path = save_subgraph(self.arg_groups[OnnxSaveArgs], parent_graph, start, end, "unsupported")
+            subgraph_path = save_subgraph(
+                self.arg_groups[OnnxSaveArgs], parent_graph, start, end, "unsupported"
+            )
             _, _, parser = supports_model(subgraph_path)
 
             err_string = (
-                " | ".join([str(parser.get_error(err_idx)) for err_idx in range(parser.num_errors)]) or "UNKNOWN ERROR"
+                " | ".join(
+                    [
+                        str(parser.get_error(err_idx))
+                        for err_idx in range(parser.num_errors)
+                    ]
+                )
+                or "UNKNOWN ERROR"
             )
-            unsupported_node_dict.add(parent_graph.nodes[start].op, err_string, [start, end])
+            unsupported_node_dict.add(
+                parent_graph.nodes[start].op, err_string, [start, end]
+            )
 
         # Log errors for all the unsupported graphs between supported subgraphs.
         for index, subg_node_idxs in enumerate(supported_subgraphs):
@@ -336,7 +407,10 @@ class Capability(Tool):
             if index == 0 and subg_node_idxs[0] != 0:
                 save_unsupported_graph(0, subg_node_idxs[0])
 
-            if index == len(supported_subgraphs) - 1 and supported_subgraphs[-1][-1] != len(parent_graph.nodes) - 1:
+            if (
+                index == len(supported_subgraphs) - 1
+                and supported_subgraphs[-1][-1] != len(parent_graph.nodes) - 1
+            ):
                 save_unsupported_graph(subg_node_idxs[-1] + 1, len(parent_graph.nodes))
 
             if index < len(supported_subgraphs) - 1:
@@ -347,5 +421,8 @@ class Capability(Tool):
 
         G_LOGGER.info(summary)
         util.save_file(
-            summary, os.path.join(self.arg_groups[OnnxSaveArgs].path, "results.txt"), "w", description="results"
+            summary,
+            os.path.join(self.arg_groups[OnnxSaveArgs].path, "results.txt"),
+            "w",
+            description="results",
         )

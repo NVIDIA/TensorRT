@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,7 @@ TRT_LOGGER = trt.Logger(trt.Logger.INFO)
 trt_version = [n for n in trt.__version__.split('.')]
 
 # Import necessary plugins for demoBERT
-plugin_lib_name = "nvinfer_plugin.dll" if sys.platform == "win32" else "libnvinfer_plugin.so"
+plugin_lib_name = "nvinfer_plugin_10.dll" if sys.platform == "win32" else "libnvinfer_plugin.so"
 env_name_to_add_path = "PATH" if sys.platform == "win32" else "LD_LIBRARY_PATH"
 handle = ctypes.CDLL(plugin_lib_name, mode=ctypes.RTLD_GLOBAL)
 if not handle:

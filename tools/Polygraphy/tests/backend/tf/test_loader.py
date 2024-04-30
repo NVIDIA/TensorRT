@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,12 @@ import tempfile
 
 import pytest
 from polygraphy import constants, util
-from polygraphy.backend.tf import GraphFromFrozen, ModifyGraphOutputs, SaveGraph, graph_from_frozen
+from polygraphy.backend.tf import (
+    GraphFromFrozen,
+    ModifyGraphOutputs,
+    SaveGraph,
+    graph_from_frozen,
+)
 from polygraphy.logger import G_LOGGER
 from tests.helper import is_file_non_empty
 from tests.models.meta import TF_MODELS
@@ -61,12 +66,16 @@ class TestModifyGraph:
 class TestSaveGraph:
     def test_save_pb(self):
         with util.NamedTemporaryFile() as outpath:
-            tf_loader = SaveGraph(GraphFromFrozen(TF_MODELS["identity"].path), path=outpath.name)
+            tf_loader = SaveGraph(
+                GraphFromFrozen(TF_MODELS["identity"].path), path=outpath.name
+            )
             tf_loader()
             assert is_file_non_empty(outpath.name)
 
     def test_save_tensorboard(self):
         with tempfile.TemporaryDirectory() as outdir:
-            tf_loader = SaveGraph(GraphFromFrozen(TF_MODELS["identity"].path), tensorboard_dir=outdir)
+            tf_loader = SaveGraph(
+                GraphFromFrozen(TF_MODELS["identity"].path), tensorboard_dir=outdir
+            )
             tf_loader()
             assert os.path.exists(tf_loader.tensorboard_dir)

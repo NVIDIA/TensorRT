@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +54,9 @@ class ComparatorPostprocessArgs(BaseArgs):
 
                         {"top_k": {"output1": 5, "output2": 6}}
         """
-        self.postprocess = args_util.parse_arglist_to_dict(args_util.get(args, "postprocess"))
+        self.postprocess = args_util.parse_arglist_to_dict(
+            args_util.get(args, "postprocess")
+        )
 
         postprocess = {}
         topk_key = inline(safe("top_k"))
@@ -62,7 +64,9 @@ class ComparatorPostprocessArgs(BaseArgs):
             postprocess[topk_key] = {}
             for key, val in self.postprocess.items():
                 if not val.startswith("top-"):
-                    G_LOGGER.critical(f"Invalid post-processing function: {val}. Note: Valid choices are: ['top-<K>'].")
+                    G_LOGGER.critical(
+                        f"Invalid post-processing function: {val}. Note: Valid choices are: ['top-<K>']."
+                    )
                 k, _, axis = val.partition(",")
                 k = int(k.lstrip("top-"))
                 if axis:
