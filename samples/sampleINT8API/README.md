@@ -47,7 +47,7 @@ Specifically, this sample performs the following steps:
 	`if (!builder->platformHasFastInt8()) return false;`
 
 2.  Enable INT8 mode by setting the builder flag:
-	`builder->setInt8Mode(true);`
+	`builder->setFlag(BuilderFlag::kINT8);`
 
 	You can choose not to provide the INT8 calibrator.
 	`builder->setInt8Calibrator(nullptr);`
