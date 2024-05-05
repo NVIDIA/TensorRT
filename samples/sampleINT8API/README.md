@@ -75,7 +75,8 @@ Specifically, this sample performs the following steps:
 
 3.  Set the dynamic range for per layer tensors:
 	```
-	string tensor_name = network->getLayer(i)->getOutput(j)->getName(); network->getLayer(i)->getOutput(j)->setDynamicRange(-tensorMap.at(name), tensorMap.at(name));
+	string tensor_name = network->getLayer(i)->getOutput(j)->getName(); 
+	network->getLayer(i)->getOutput(j)->setDynamicRange(-tensorMap.at(tensor_name), tensorMap.at(tensor_name));
 	```
 
 4.  Optional: This sample also showcases using layer precision APIs. Using these APIs, you can selectively choose to run the layer with user configurable precision and type constraints. It may not result in optimal inference performance, but can be helpful while debugging mixed precision inference.
