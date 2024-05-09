@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#ifndef TRT_EFFICIENT_NMS_PARAMETERS_H
-#define TRT_EFFICIENT_NMS_PARAMETERS_H
+#ifndef TRT_YOLO_NMS_PARAMETERS_H
+#define TRT_YOLO_NMS_PARAMETERS_H
 
 #include "common/plugin.h"
 
@@ -25,7 +25,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-struct EfficientNMSParameters
+struct YoloNMSParameters
 {
     // Related to NMS Options
     float iouThreshold = 0.5F;

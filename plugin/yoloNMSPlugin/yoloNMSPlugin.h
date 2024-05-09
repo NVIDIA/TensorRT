@@ -14,25 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef TRT_EFFICIENT_NMS_PLUGIN_H
-#define TRT_EFFICIENT_NMS_PLUGIN_H
+#ifndef TRT_YOLO_NMS_PLUGIN_H
+#define TRT_YOLO_NMS_PLUGIN_H
 
 #include <vector>
 
 #include "common/plugin.h"
-#include "efficientNMSPlugin/efficientNMSParameters.h"
+#include "yoloNMSPlugin/yoloNMSParameters.h"
+
+using namespace nvinfer1::plugin;
 
 namespace nvinfer1
 {
 namespace plugin
 {
 
-class EfficientNMSPlugin : public IPluginV2DynamicExt
+class YoloNMSPlugin : public IPluginV2DynamicExt
 {
 public:
-    explicit EfficientNMSPlugin(EfficientNMSParameters param);
-    EfficientNMSPlugin(void const* data, size_t length);
-    ~EfficientNMSPlugin() override = default;
+    explicit YoloNMSPlugin(YoloNMSParameters param);
+    YoloNMSPlugin(void const* data, size_t length);
+    ~YoloNMSPlugin() override = default;
 
     // IPluginV2 methods
     char const* getPluginType() const noexcept override;
@@ -64,7 +66,7 @@ public:
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
 protected:
-    EfficientNMSParameters mParam{};
+    YoloNMSParameters mParam{};
     bool initialized{false};
     std::string mNamespace;
 
@@ -73,11 +75,11 @@ private:
 };
 
 // Standard NMS Plugin Operation
-class EfficientNMSPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class YoloNMSPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
-    EfficientNMSPluginCreator();
-    ~EfficientNMSPluginCreator() override = default;
+    YoloNMSPluginCreator();
+    ~YoloNMSPluginCreator() override = default;
 
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
@@ -89,17 +91,17 @@ public:
 
 protected:
     PluginFieldCollection mFC;
-    EfficientNMSParameters mParam;
+    YoloNMSParameters mParam;
     std::vector<PluginField> mPluginAttributes;
     std::string mPluginName;
 };
 
 // ONNX NonMaxSuppression Op Compatibility
-class EfficientNMSONNXPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class YoloNMSONNXPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
-    EfficientNMSONNXPluginCreator();
-    ~EfficientNMSONNXPluginCreator() override = default;
+    YoloNMSONNXPluginCreator();
+    ~YoloNMSONNXPluginCreator() override = default;
 
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
@@ -111,7 +113,7 @@ public:
 
 protected:
     PluginFieldCollection mFC;
-    EfficientNMSParameters mParam;
+    YoloNMSParameters mParam;
     std::vector<PluginField> mPluginAttributes;
     std::string mPluginName;
 };
@@ -119,4 +121,4 @@ protected:
 } // namespace plugin
 } // namespace nvinfer1
 
-#endif // TRT_EFFICIENT_NMS_PLUGIN_H
+#endif // TRT_YOLO_NMS_PLUGIN_H

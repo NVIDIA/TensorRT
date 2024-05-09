@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#ifndef TRT_EFFICIENT_NMS_INFERENCE_CUH
-#define TRT_EFFICIENT_NMS_INFERENCE_CUH
+#ifndef TRT_YOLO_NMS_INFERENCE_CUH
+#define TRT_YOLO_NMS_INFERENCE_CUH
 
 #include <cuda_fp16.h>
 

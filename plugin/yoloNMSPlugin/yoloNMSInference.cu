@@ -19,8 +19,8 @@
 #include "cub/cub.cuh"
 #include "cuda_runtime_api.h"
 
-#include "efficientNMSInference.cuh"
-#include "efficientNMSInference.h"
+#include "yoloNMSInference.cuh"
+#include "yoloNMSInference.h"
 
 #define NMS_TILES 5
 
@@ -28,7 +28,7 @@ using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 
 template <typename T>
-__device__ float IOU(EfficientNMSParameters param, BoxCorner<T> box1, BoxCorner<T> box2)
+__device__ float IOU(YoloNMSParameters param, BoxCorner<T> box1, BoxCorner<T> box2)
 {
     // Regardless of the selected box coding, IOU is always performed in BoxCorner coding.
     // The boxes are copied so that they can be reordered without affecting the originals.
@@ -50,7 +50,7 @@ __device__ float IOU(EfficientNMSParameters param, BoxCorner<T> box1, BoxCorner<
 }
 
 template <typename T, typename Tb>
-__device__ BoxCorner<T> DecodeBoxes(EfficientNMSParameters param, int boxIdx, int anchorIdx,
+__device__ BoxCorner<T> DecodeBoxes(YoloNMSParameters param, int boxIdx, int anchorIdx,
     const Tb* __restrict__ boxesInput, const Tb* __restrict__ anchorsInput)
 {
     // The inputs will be in the selected coding format, as well as the decoding function. But the decoded box
@@ -67,7 +67,7 @@ __device__ BoxCorner<T> DecodeBoxes(EfficientNMSParameters param, int boxIdx, in
 }
 
 template <typename T, typename Tb>
-__device__ void MapNMSData(EfficientNMSParameters param, int idx, int imageIdx, const Tb* __restrict__ boxesInput,
+__device__ void MapNMSData(YoloNMSParameters param, int idx, int imageIdx, const Tb* __restrict__ boxesInput,
     const Tb* __restrict__ anchorsInput, const int* __restrict__ topClassData, const int* __restrict__ topAnchorsData,
     const int* __restrict__ topNumData, const T* __restrict__ sortedScoresData, const int* __restrict__ sortedIndexData,
     T& scoreMap, int& classMap, BoxCorner<T>& boxMap, int& boxIdxMap)
@@ -116,9 +116,10 @@ __device__ void MapNMSData(EfficientNMSParameters param, int idx, int imageIdx, 
 }
 
 template <typename T>
-__device__ void WriteNMSResult(EfficientNMSParameters param, int* __restrict__ numDetectionsOutput,
+__device__ void WriteNMSResult(YoloNMSParameters param, int* __restrict__ numDetectionsOutput,
     T* __restrict__ nmsScoresOutput, int* __restrict__ nmsClassesOutput, BoxCorner<T>* __restrict__ nmsBoxesOutput,
-    T threadScore, int threadClass, BoxCorner<T> threadBox, int imageIdx, unsigned int resultsCounter)
+    int* __restrict__ nmsIndicesOutput, T threadScore, int threadClass, BoxCorner<T> threadBox, int imageIdx, 
+    unsigned int resultsCounter, int boxIdxMap)
 {
     int outputIdx = imageIdx * param.numOutputBoxes + resultsCounter - 1;
     if (param.scoreSigmoid)
@@ -143,9 +144,13 @@ __device__ void WriteNMSResult(EfficientNMSParameters param, int* __restrict__ n
         nmsBoxesOutput[outputIdx] = threadBox;
     }
     numDetectionsOutput[imageIdx] = resultsCounter;
+
+    int index = boxIdxMap % param.numAnchors;
+
+    nmsIndicesOutput[outputIdx] = index;
 }
 
-__device__ void WriteONNXResult(EfficientNMSParameters param, int* outputIndexData, int* __restrict__ nmsIndicesOutput,
+__device__ void WriteONNXResult(YoloNMSParameters param, int* outputIndexData, int* __restrict__ nmsIndicesOutput,
     int imageIdx, int threadClass, int boxIdxMap)
 {
     int index = boxIdxMap % param.numAnchors;
@@ -155,7 +160,7 @@ __device__ void WriteONNXResult(EfficientNMSParameters param, int* outputIndexDa
     nmsIndicesOutput[idx * 3 + 2] = index;
 }
 
-__global__ void PadONNXResult(EfficientNMSParameters param, int* outputIndexData, int* __restrict__ nmsIndicesOutput)
+__global__ void PadONNXResult(YoloNMSParameters param, int* outputIndexData, int* __restrict__ nmsIndicesOutput)
 {
     if (threadIdx.x > 0)
     {
@@ -175,7 +180,7 @@ __global__ void PadONNXResult(EfficientNMSParameters param, int* outputIndexData
 }
 
 template <typename T, typename Tb>
-__global__ void EfficientNMS(EfficientNMSParameters param, const int* topNumData, int* outputIndexData,
+__global__ void YoloNMS(YoloNMSParameters param, const int* topNumData, int* outputIndexData,
     int* outputClassData, const int* sortedIndexData, const T* __restrict__ sortedScoresData,
     const int* __restrict__ topClassData, const int* __restrict__ topAnchorsData, const Tb* __restrict__ boxesInput,
     const Tb* __restrict__ anchorsInput, int* __restrict__ numDetectionsOutput, T* __restrict__ nmsScoresOutput,
@@ -275,8 +280,8 @@ __global__ void EfficientNMS(EfficientNMSParameters param, const int* topNumData
                         else
                         {
                             WriteNMSResult<T>(param, numDetectionsOutput, nmsScoresOutput, nmsClassesOutput,
-                                nmsBoxesOutput, threadScore[tile], threadClass[tile], threadBox[tile], imageIdx,
-                                resultsCounter);
+                                nmsBoxesOutput, nmsIndicesOutput, threadScore[tile], threadClass[tile], threadBox[tile], imageIdx,
+                                resultsCounter, boxIdxMap[tile]);
                         }
                     }
                 }
@@ -337,7 +342,7 @@ __global__ void EfficientNMS(EfficientNMSParameters param, const int* topNumData
 }
 
 template <typename T>
-cudaError_t EfficientNMSLauncher(EfficientNMSParameters& param, int* topNumData, int* outputIndexData,
+cudaError_t YoloNMSLauncher(YoloNMSParameters& param, int* topNumData, int* outputIndexData,
     int* outputClassData, int* sortedIndexData, T* sortedScoresData, int* topClassData, int* topAnchorsData,
     const void* boxesInput, const void* anchorsInput, int* numDetectionsOutput, T* nmsScoresOutput,
     int* nmsClassesOutput, int* nmsIndicesOutput, void* nmsBoxesOutput, cudaStream_t stream)
@@ -357,7 +362,7 @@ cudaError_t EfficientNMSLauncher(EfficientNMSParameters& param, int* topNumData,
 
     if (param.boxCoding == 0)
     {
-        EfficientNMS<T, BoxCorner<T>><<<gridSize, blockSize, 0, stream>>>(param, topNumData, outputIndexData,
+        YoloNMS<T, BoxCorner<T>><<<gridSize, blockSize, 0, stream>>>(param, topNumData, outputIndexData,
             outputClassData, sortedIndexData, sortedScoresData, topClassData, topAnchorsData,
             (BoxCorner<T>*) boxesInput, (BoxCorner<T>*) anchorsInput, numDetectionsOutput, nmsScoresOutput,
             nmsClassesOutput, nmsIndicesOutput, (BoxCorner<T>*) nmsBoxesOutput);
@@ -365,7 +370,7 @@ cudaError_t EfficientNMSLauncher(EfficientNMSParameters& param, int* topNumData,
     else if (param.boxCoding == 1)
     {
         // Note that nmsBoxesOutput is always coded as BoxCorner<T>, regardless of the input coding type.
-        EfficientNMS<T, BoxCenterSize<T>><<<gridSize, blockSize, 0, stream>>>(param, topNumData, outputIndexData,
+        YoloNMS<T, BoxCenterSize<T>><<<gridSize, blockSize, 0, stream>>>(param, topNumData, outputIndexData,
             outputClassData, sortedIndexData, sortedScoresData, topClassData, topAnchorsData,
             (BoxCenterSize<T>*) boxesInput, (BoxCenterSize<T>*) anchorsInput, numDetectionsOutput, nmsScoresOutput,
             nmsClassesOutput, nmsIndicesOutput, (BoxCorner<T>*) nmsBoxesOutput);
@@ -379,7 +384,7 @@ cudaError_t EfficientNMSLauncher(EfficientNMSParameters& param, int* topNumData,
     return cudaGetLastError();
 }
 
-__global__ void EfficientNMSFilterSegments(EfficientNMSParameters param, const int* __restrict__ topNumData,
+__global__ void YoloNMSFilterSegments(YoloNMSParameters param, const int* __restrict__ topNumData,
     int* __restrict__ topOffsetsStartData, int* __restrict__ topOffsetsEndData)
 {
     int imageIdx = threadIdx.x;
@@ -392,7 +397,7 @@ __global__ void EfficientNMSFilterSegments(EfficientNMSParameters param, const i
 }
 
 template <typename T>
-__global__ void EfficientNMSFilter(EfficientNMSParameters param, const T* __restrict__ scoresInput,
+__global__ void YoloNMSFilter(YoloNMSParameters param, const T* __restrict__ scoresInput,
     int* __restrict__ topNumData, int* __restrict__ topIndexData, int* __restrict__ topAnchorsData,
     T* __restrict__ topScoresData, int* __restrict__ topClassData)
 {
@@ -456,7 +461,7 @@ __global__ void EfficientNMSFilter(EfficientNMSParameters param, const T* __rest
 }
 
 template <typename T>
-__global__ void EfficientNMSDenseIndex(EfficientNMSParameters param, int* __restrict__ topNumData,
+__global__ void YoloNMSDenseIndex(YoloNMSParameters param, int* __restrict__ topNumData,
     int* __restrict__ topIndexData, int* __restrict__ topAnchorsData, int* __restrict__ topOffsetsStartData,
     int* __restrict__ topOffsetsEndData, T* __restrict__ topScoresData, int* __restrict__ topClassData)
 {
@@ -520,7 +525,7 @@ __global__ void EfficientNMSDenseIndex(EfficientNMSParameters param, int* __rest
 }
 
 template <typename T>
-cudaError_t EfficientNMSFilterLauncher(EfficientNMSParameters& param, const T* scoresInput, int* topNumData,
+cudaError_t YoloNMSFilterLauncher(YoloNMSParameters& param, const T* scoresInput, int* topNumData,
     int* topIndexData, int* topAnchorsData, int* topOffsetsStartData, int* topOffsetsEndData, T* topScoresData,
     int* topClassData, cudaStream_t stream)
 {
@@ -554,15 +559,15 @@ cudaError_t EfficientNMSFilterLauncher(EfficientNMSParameters& param, const T* s
         PLUGIN_CHECK_CUDA(cudaMemcpyAsync(topScoresData, scoresInput,
             param.batchSize * param.numScoreElements * sizeof(T), cudaMemcpyDeviceToDevice, stream));
 
-        EfficientNMSDenseIndex<T><<<gridSize, blockSize, 0, stream>>>(param, topNumData, topIndexData, topAnchorsData,
+        YoloNMSDenseIndex<T><<<gridSize, blockSize, 0, stream>>>(param, topNumData, topIndexData, topAnchorsData,
             topOffsetsStartData, topOffsetsEndData, topScoresData, topClassData);
     }
     else
     {
-        EfficientNMSFilter<T><<<gridSize, blockSize, 0, stream>>>(
+        YoloNMSFilter<T><<<gridSize, blockSize, 0, stream>>>(
             param, scoresInput, topNumData, topIndexData, topAnchorsData, topScoresData, topClassData);
 
-        EfficientNMSFilterSegments<<<1, param.batchSize, 0, stream>>>(
+        YoloNMSFilterSegments<<<1, param.batchSize, 0, stream>>>(
             param, topNumData, topOffsetsStartData, topOffsetsEndData);
     }
 
@@ -570,7 +575,7 @@ cudaError_t EfficientNMSFilterLauncher(EfficientNMSParameters& param, const T* s
 }
 
 template <typename T>
-size_t EfficientNMSSortWorkspaceSize(int batchSize, int numScoreElements)
+size_t YoloNMSSortWorkspaceSize(int batchSize, int numScoreElements)
 {
     size_t sortedWorkspaceSize = 0;
     cub::DoubleBuffer<T> keysDB(nullptr, nullptr);
@@ -580,7 +585,7 @@ size_t EfficientNMSSortWorkspaceSize(int batchSize, int numScoreElements)
     return sortedWorkspaceSize;
 }
 
-size_t EfficientNMSWorkspaceSize(int batchSize, int numScoreElements, int numClasses, DataType datatype)
+size_t YoloNMSWorkspaceSize(int batchSize, int numScoreElements, int numClasses, DataType datatype)
 {
     size_t total = 0;
     const size_t align = 256;
@@ -605,12 +610,12 @@ size_t EfficientNMSWorkspaceSize(int batchSize, int numScoreElements, int numCla
     // Sort Workspace
     if (datatype == DataType::kHALF)
     {
-        size = EfficientNMSSortWorkspaceSize<__half>(batchSize, numScoreElements);
+        size = YoloNMSSortWorkspaceSize<__half>(batchSize, numScoreElements);
         total += size + (size % align ? align - (size % align) : 0);
     }
     else if (datatype == DataType::kFLOAT)
     {
-        size = EfficientNMSSortWorkspaceSize<float>(batchSize, numScoreElements);
+        size = YoloNMSSortWorkspaceSize<float>(batchSize, numScoreElements);
         total += size + (size % align ? align - (size % align) : 0);
     }
 
@@ -618,7 +623,7 @@ size_t EfficientNMSWorkspaceSize(int batchSize, int numScoreElements, int numCla
 }
 
 template <typename T>
-T* EfficientNMSWorkspace(void* workspace, size_t& offset, size_t elements)
+T* YoloNMSWorkspace(void* workspace, size_t& offset, size_t elements)
 {
     T* buffer = (T*) ((size_t) workspace + offset);
     size_t align = 256;
@@ -629,7 +634,7 @@ T* EfficientNMSWorkspace(void* workspace, size_t& offset, size_t elements)
 }
 
 template <typename T>
-pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* boxesInput, const void* scoresInput,
+pluginStatus_t YoloNMSDispatch(YoloNMSParameters param, const void* boxesInput, const void* scoresInput,
     const void* anchorsInput, void* numDetectionsOutput, void* nmsBoxesOutput, void* nmsScoresOutput,
     void* nmsClassesOutput, void* nmsIndicesOutput, void* workspace, cudaStream_t stream)
 {
@@ -644,6 +649,7 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
         CSC(cudaMemsetAsync(nmsScoresOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(T), stream), STATUS_FAILURE);
         CSC(cudaMemsetAsync(nmsBoxesOutput, 0x00, param.batchSize * param.numOutputBoxes * 4 * sizeof(T), stream), STATUS_FAILURE);
         CSC(cudaMemsetAsync(nmsClassesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream), STATUS_FAILURE);
+        CSC(cudaMemsetAsync(nmsIndicesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream), STATUS_FAILURE);
     }
 
     // Empty Inputs
@@ -655,7 +661,7 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     // Counters Workspace
     size_t workspaceOffset = 0;
     int countersTotalSize = (3 + 1 + param.numClasses) * param.batchSize;
-    int* topNumData = EfficientNMSWorkspace<int>(workspace, workspaceOffset, countersTotalSize);
+    int* topNumData = YoloNMSWorkspace<int>(workspace, workspaceOffset, countersTotalSize);
     int* topOffsetsStartData = topNumData + param.batchSize;
     int* topOffsetsEndData = topNumData + 2 * param.batchSize;
     int* outputIndexData = topNumData + 3 * param.batchSize;
@@ -666,23 +672,23 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
 
     // Other Buffers Workspace
     int* topIndexData
-        = EfficientNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
+        = YoloNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
     int* topClassData
-        = EfficientNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
+        = YoloNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
     int* topAnchorsData
-        = EfficientNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
+        = YoloNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
     int* sortedIndexData
-        = EfficientNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
-    T* topScoresData = EfficientNMSWorkspace<T>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
+        = YoloNMSWorkspace<int>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
+    T* topScoresData = YoloNMSWorkspace<T>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
     T* sortedScoresData
-        = EfficientNMSWorkspace<T>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
-    size_t sortedWorkspaceSize = EfficientNMSSortWorkspaceSize<T>(param.batchSize, param.numScoreElements);
-    char* sortedWorkspaceData = EfficientNMSWorkspace<char>(workspace, workspaceOffset, sortedWorkspaceSize);
+        = YoloNMSWorkspace<T>(workspace, workspaceOffset, param.batchSize * param.numScoreElements);
+    size_t sortedWorkspaceSize = YoloNMSSortWorkspaceSize<T>(param.batchSize, param.numScoreElements);
+    char* sortedWorkspaceData = YoloNMSWorkspace<char>(workspace, workspaceOffset, sortedWorkspaceSize);
     cub::DoubleBuffer<T> scoresDB(topScoresData, sortedScoresData);
     cub::DoubleBuffer<int> indexDB(topIndexData, sortedIndexData);
 
     // Kernels
-    status = EfficientNMSFilterLauncher<T>(param, (T*) scoresInput, topNumData, topIndexData, topAnchorsData,
+    status = YoloNMSFilterLauncher<T>(param, (T*) scoresInput, topNumData, topIndexData, topAnchorsData,
         topOffsetsStartData, topOffsetsEndData, topScoresData, topClassData, stream);
     CSC(status, STATUS_FAILURE);
 
@@ -691,7 +697,7 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
         param.scoreBits > 0 ? (10 - param.scoreBits) : 0, param.scoreBits > 0 ? 10 : sizeof(T) * 8, stream);
     CSC(status, STATUS_FAILURE);
 
-    status = EfficientNMSLauncher<T>(param, topNumData, outputIndexData, outputClassData, indexDB.Current(),
+    status = YoloNMSLauncher<T>(param, topNumData, outputIndexData, outputClassData, indexDB.Current(),
         scoresDB.Current(), topClassData, topAnchorsData, boxesInput, anchorsInput, (int*) numDetectionsOutput,
         (T*) nmsScoresOutput, (int*) nmsClassesOutput, (int*) nmsIndicesOutput, nmsBoxesOutput, stream);
     CSC(status, STATUS_FAILURE);
@@ -699,14 +705,14 @@ pluginStatus_t EfficientNMSDispatch(EfficientNMSParameters param, const void* bo
     return STATUS_SUCCESS;
 }
 
-pluginStatus_t EfficientNMSInference(EfficientNMSParameters param, const void* boxesInput, const void* scoresInput,
+pluginStatus_t YoloNMSInference(YoloNMSParameters param, const void* boxesInput, const void* scoresInput,
     const void* anchorsInput, void* numDetectionsOutput, void* nmsBoxesOutput, void* nmsScoresOutput,
     void* nmsClassesOutput, void* nmsIndicesOutput, void* workspace, cudaStream_t stream)
 {
     if (param.datatype == DataType::kFLOAT)
     {
         param.scoreBits = -1;
-        return EfficientNMSDispatch<float>(param, boxesInput, scoresInput, anchorsInput, numDetectionsOutput,
+        return YoloNMSDispatch<float>(param, boxesInput, scoresInput, anchorsInput, numDetectionsOutput,
             nmsBoxesOutput, nmsScoresOutput, nmsClassesOutput, nmsIndicesOutput, workspace, stream);
     }
     else if (param.datatype == DataType::kHALF)
@@ -715,7 +721,7 @@ pluginStatus_t EfficientNMSInference(EfficientNMSParameters param, const void* b
         {
             param.scoreBits = -1;
         }
-        return EfficientNMSDispatch<__half>(param, boxesInput, scoresInput, anchorsInput, numDetectionsOutput,
+        return YoloNMSDispatch<__half>(param, boxesInput, scoresInput, anchorsInput, numDetectionsOutput,
             nmsBoxesOutput, nmsScoresOutput, nmsClassesOutput, nmsIndicesOutput, workspace, stream);
     }
     else

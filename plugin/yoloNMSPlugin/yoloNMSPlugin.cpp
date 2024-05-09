@@ -15,51 +15,51 @@
  * limitations under the License.
  */
 
-#include "efficientNMSPlugin.h"
-#include "efficientNMSInference.h"
+#include "yoloNMSPlugin.h"
+#include "yoloNMSInference.h"
 
 using namespace nvinfer1;
-using nvinfer1::plugin::EfficientNMSPlugin;
-using nvinfer1::plugin::EfficientNMSParameters;
-using nvinfer1::plugin::EfficientNMSPluginCreator;
-using nvinfer1::plugin::EfficientNMSONNXPluginCreator;
+using nvinfer1::plugin::YoloNMSPlugin;
+using nvinfer1::plugin::YoloNMSParameters;
+using nvinfer1::plugin::YoloNMSPluginCreator;
+using nvinfer1::plugin::YoloNMSONNXPluginCreator;
 
 namespace
 {
-char const* const kEFFICIENT_NMS_PLUGIN_VERSION{"1"};
-char const* const kEFFICIENT_NMS_PLUGIN_NAME{"EfficientNMS_TRT"};
-char const* const kEFFICIENT_NMS_ONNX_PLUGIN_VERSION{"1"};
-char const* const kEFFICIENT_NMS_ONNX_PLUGIN_NAME{"EfficientNMS_ONNX_TRT"};
+char const* const kYOLO_NMS_PLUGIN_VERSION{"1"};
+char const* const kYOLO_NMS_PLUGIN_NAME{"YOLO_NMS_TRT"};
+char const* const kYOLO_NMS_ONNX_PLUGIN_VERSION{"1"};
+char const* const kYOLO_NMS_ONNX_PLUGIN_NAME{"YOLO_NMS_ONNX_TRT"};
 } // namespace
 
-EfficientNMSPlugin::EfficientNMSPlugin(EfficientNMSParameters param)
+YoloNMSPlugin::YoloNMSPlugin(YoloNMSParameters param)
     : mParam(std::move(param))
 {
 }
 
-EfficientNMSPlugin::EfficientNMSPlugin(void const* data, size_t length)
+YoloNMSPlugin::YoloNMSPlugin(void const* data, size_t length)
 {
     deserialize(static_cast<int8_t const*>(data), length);
 }
 
-void EfficientNMSPlugin::deserialize(int8_t const* data, size_t length)
+void YoloNMSPlugin::deserialize(int8_t const* data, size_t length)
 {
     auto const* d{data};
-    mParam = read<EfficientNMSParameters>(d);
+    mParam = read<YoloNMSParameters>(d);
     PLUGIN_VALIDATE(d == data + length);
 }
 
-char const* EfficientNMSPlugin::getPluginType() const noexcept
+char const* YoloNMSPlugin::getPluginType() const noexcept
 {
-    return kEFFICIENT_NMS_PLUGIN_NAME;
+    return kYOLO_NMS_PLUGIN_NAME;
 }
 
-char const* EfficientNMSPlugin::getPluginVersion() const noexcept
+char const* YoloNMSPlugin::getPluginVersion() const noexcept
 {
-    return kEFFICIENT_NMS_PLUGIN_VERSION;
+    return kYOLO_NMS_PLUGIN_VERSION;
 }
 
-int32_t EfficientNMSPlugin::getNbOutputs() const noexcept
+int32_t YoloNMSPlugin::getNbOutputs() const noexcept
 {
     if (mParam.outputONNXIndices)
     {
@@ -68,10 +68,10 @@ int32_t EfficientNMSPlugin::getNbOutputs() const noexcept
     }
 
     // Standard Plugin Implementation
-    return 4;
+    return 5;
 }
 
-int32_t EfficientNMSPlugin::initialize() noexcept
+int32_t YoloNMSPlugin::initialize() noexcept
 {
     if (!initialized)
     {
@@ -94,26 +94,26 @@ int32_t EfficientNMSPlugin::initialize() noexcept
     return STATUS_SUCCESS;
 }
 
-void EfficientNMSPlugin::terminate() noexcept {}
+void YoloNMSPlugin::terminate() noexcept {}
 
-size_t EfficientNMSPlugin::getSerializationSize() const noexcept
+size_t YoloNMSPlugin::getSerializationSize() const noexcept
 {
-    return sizeof(EfficientNMSParameters);
+    return sizeof(YoloNMSParameters);
 }
 
-void EfficientNMSPlugin::serialize(void* buffer) const noexcept
+void YoloNMSPlugin::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
     write(d, mParam);
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void EfficientNMSPlugin::destroy() noexcept
+void YoloNMSPlugin::destroy() noexcept
 {
     delete this;
 }
 
-void EfficientNMSPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
+void YoloNMSPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     try
     {
@@ -125,12 +125,12 @@ void EfficientNMSPlugin::setPluginNamespace(char const* pluginNamespace) noexcep
     }
 }
 
-char const* EfficientNMSPlugin::getPluginNamespace() const noexcept
+char const* YoloNMSPlugin::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
 
-nvinfer1::DataType EfficientNMSPlugin::getOutputDataType(
+nvinfer1::DataType YoloNMSPlugin::getOutputDataType(
     int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     if (mParam.outputONNXIndices)
@@ -140,7 +140,7 @@ nvinfer1::DataType EfficientNMSPlugin::getOutputDataType(
     }
 
     // On standard NMS, num_detections and detection_classes use integer outputs
-    if (index == 0 || index == 3)
+    if (index == 0 || index == 3 || index == 4)
     {
         return nvinfer1::DataType::kINT32;
     }
@@ -148,11 +148,11 @@ nvinfer1::DataType EfficientNMSPlugin::getOutputDataType(
     return inputTypes[0];
 }
 
-IPluginV2DynamicExt* EfficientNMSPlugin::clone() const noexcept
+IPluginV2DynamicExt* YoloNMSPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new EfficientNMSPlugin(mParam);
+        auto* plugin = new YoloNMSPlugin(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
@@ -163,7 +163,7 @@ IPluginV2DynamicExt* EfficientNMSPlugin::clone() const noexcept
     return nullptr;
 }
 
-DimsExprs EfficientNMSPlugin::getOutputDimensions(
+DimsExprs YoloNMSPlugin::getOutputDimensions(
     int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
 {
     try
@@ -197,7 +197,7 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
         else
         {
             // Standard NMS
-            PLUGIN_ASSERT(outputIndex >= 0 && outputIndex <= 3);
+            PLUGIN_ASSERT(outputIndex >= 0 && outputIndex <= 4);
 
             // num_detections
             if (outputIndex == 0)
@@ -216,7 +216,8 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
             }
             // detection_scores: outputIndex == 2
             // detection_classes: outputIndex == 3
-            else if (outputIndex == 2 || outputIndex == 3)
+            // detection_indices: outputIndex == 4
+            else if (outputIndex == 2 || outputIndex == 3 || outputIndex == 4)
             {
                 out_dim.nbDims = 2;
                 out_dim.d[0] = inputs[0].d[0];
@@ -233,7 +234,7 @@ DimsExprs EfficientNMSPlugin::getOutputDimensions(
     return DimsExprs{};
 }
 
-bool EfficientNMSPlugin::supportsFormatCombination(
+bool YoloNMSPlugin::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     if (inOut[pos].format != PluginFormat::kLINEAR)
@@ -258,19 +259,19 @@ bool EfficientNMSPlugin::supportsFormatCombination(
     }
 
     PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
-    PLUGIN_ASSERT(nbOutputs == 4);
+    PLUGIN_ASSERT(nbOutputs == 5);
     if (nbInputs == 2)
     {
-        PLUGIN_ASSERT(0 <= pos && pos <= 5);
+        PLUGIN_ASSERT(0 <= pos && pos <= 6);
     }
     if (nbInputs == 3)
     {
-        PLUGIN_ASSERT(0 <= pos && pos <= 6);
+        PLUGIN_ASSERT(0 <= pos && pos <= 7);
     }
 
     // num_detections and detection_classes output: int32_t
     int32_t const posOut = pos - nbInputs;
-    if (posOut == 0 || posOut == 3)
+    if (posOut == 0 || posOut == 3 || posOut == 4)
     {
         return inOut[pos].type == DataType::kINT32 && inOut[pos].format == PluginFormat::kLINEAR;
     }
@@ -280,7 +281,7 @@ bool EfficientNMSPlugin::supportsFormatCombination(
         && (inOut[0].type == inOut[pos].type);
 }
 
-void EfficientNMSPlugin::configurePlugin(
+void YoloNMSPlugin::configurePlugin(
     DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
     try
@@ -298,7 +299,7 @@ void EfficientNMSPlugin::configurePlugin(
             // If two inputs: [0] boxes, [1] scores
             // If three inputs: [0] boxes, [1] scores, [2] anchors
             PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
-            PLUGIN_ASSERT(nbOutputs == 4);
+            PLUGIN_ASSERT(nbOutputs == 5);
         }
         mParam.datatype = in[0].desc.type;
 
@@ -358,16 +359,16 @@ void EfficientNMSPlugin::configurePlugin(
     }
 }
 
-size_t EfficientNMSPlugin::getWorkspaceSize(
+size_t YoloNMSPlugin::getWorkspaceSize(
     PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
     int32_t batchSize = inputs[1].dims.d[0];
     int32_t numScoreElements = inputs[1].dims.d[1] * inputs[1].dims.d[2];
     int32_t numClasses = inputs[1].dims.d[2];
-    return EfficientNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
+    return YoloNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
 }
 
-int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+int32_t YoloNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
     void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
     try
@@ -382,7 +383,7 @@ int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTen
 
             void* nmsIndicesOutput = outputs[0];
 
-            return EfficientNMSInference(mParam, boxesInput, scoresInput, nullptr, nullptr, nullptr, nullptr, nullptr,
+            return YoloNMSInference(mParam, boxesInput, scoresInput, nullptr, nullptr, nullptr, nullptr, nullptr,
                 nmsIndicesOutput, workspace, stream);
         }
 
@@ -395,9 +396,10 @@ int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTen
         void* nmsBoxesOutput = outputs[1];
         void* nmsScoresOutput = outputs[2];
         void* nmsClassesOutput = outputs[3];
+        void* nmsIndicesOutput = outputs[4];
 
-        return EfficientNMSInference(mParam, boxesInput, scoresInput, anchorsInput, numDetectionsOutput, nmsBoxesOutput,
-            nmsScoresOutput, nmsClassesOutput, nullptr, workspace, stream);
+        return YoloNMSInference(mParam, boxesInput, scoresInput, anchorsInput, numDetectionsOutput, nmsBoxesOutput,
+            nmsScoresOutput, nmsClassesOutput, nmsIndicesOutput, workspace, stream);
     }
     catch (std::exception const& e)
     {
@@ -408,7 +410,7 @@ int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTen
 
 // Standard NMS Plugin Operation
 
-EfficientNMSPluginCreator::EfficientNMSPluginCreator()
+YoloNMSPluginCreator::YoloNMSPluginCreator()
     : mParam{}
 {
     mPluginAttributes.clear();
@@ -423,22 +425,22 @@ EfficientNMSPluginCreator::EfficientNMSPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-char const* EfficientNMSPluginCreator::getPluginName() const noexcept
+char const* YoloNMSPluginCreator::getPluginName() const noexcept
 {
-    return kEFFICIENT_NMS_PLUGIN_NAME;
+    return kYOLO_NMS_PLUGIN_NAME;
 }
 
-char const* EfficientNMSPluginCreator::getPluginVersion() const noexcept
+char const* YoloNMSPluginCreator::getPluginVersion() const noexcept
 {
-    return kEFFICIENT_NMS_PLUGIN_VERSION;
+    return kYOLO_NMS_PLUGIN_VERSION;
 }
 
-PluginFieldCollection const* EfficientNMSPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* YoloNMSPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2DynamicExt* YoloNMSPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -498,7 +500,7 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(char const* name, P
             }
         }
 
-        auto* plugin = new EfficientNMSPlugin(mParam);
+        auto* plugin = new YoloNMSPlugin(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
@@ -509,14 +511,14 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(char const* name, P
     return nullptr;
 }
 
-IPluginV2DynamicExt* EfficientNMSPluginCreator::deserializePlugin(
+IPluginV2DynamicExt* YoloNMSPluginCreator::deserializePlugin(
     char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
         // This object will be deleted when the network is destroyed, which will
-        // call EfficientNMSPlugin::destroy()
-        auto* plugin = new EfficientNMSPlugin(serialData, serialLength);
+        // call YoloNMSPlugin::destroy()
+        auto* plugin = new YoloNMSPlugin(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
@@ -529,7 +531,7 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::deserializePlugin(
 
 // ONNX NonMaxSuppression Op Compatibility
 
-EfficientNMSONNXPluginCreator::EfficientNMSONNXPluginCreator()
+YoloNMSONNXPluginCreator::YoloNMSONNXPluginCreator()
     : mParam{}
 {
     mPluginAttributes.clear();
@@ -541,22 +543,22 @@ EfficientNMSONNXPluginCreator::EfficientNMSONNXPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-char const* EfficientNMSONNXPluginCreator::getPluginName() const noexcept
+char const* YoloNMSONNXPluginCreator::getPluginName() const noexcept
 {
-    return kEFFICIENT_NMS_ONNX_PLUGIN_NAME;
+    return kYOLO_NMS_ONNX_PLUGIN_NAME;
 }
 
-char const* EfficientNMSONNXPluginCreator::getPluginVersion() const noexcept
+char const* YoloNMSONNXPluginCreator::getPluginVersion() const noexcept
 {
-    return kEFFICIENT_NMS_ONNX_PLUGIN_VERSION;
+    return kYOLO_NMS_ONNX_PLUGIN_VERSION;
 }
 
-PluginFieldCollection const* EfficientNMSONNXPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* YoloNMSONNXPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
+IPluginV2DynamicExt* YoloNMSONNXPluginCreator::createPlugin(
     char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
@@ -591,7 +593,7 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
         mParam.outputONNXIndices = true;
         mParam.numOutputBoxes = mParam.numOutputBoxesPerClass;
 
-        auto* plugin = new EfficientNMSPlugin(mParam);
+        auto* plugin = new YoloNMSPlugin(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
@@ -602,14 +604,14 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
     return nullptr;
 }
 
-IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::deserializePlugin(
+IPluginV2DynamicExt* YoloNMSONNXPluginCreator::deserializePlugin(
     char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
         // This object will be deleted when the network is destroyed, which will
-        // call EfficientNMSPlugin::destroy()
-        auto* plugin = new EfficientNMSPlugin(serialData, serialLength);
+        // call YoloNMSPlugin::destroy()
+        auto* plugin = new YoloNMSPlugin(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }

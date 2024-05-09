@@ -1,5 +1,5 @@
 ---
-name: EfficientNMS_TRT
+name: YoloNMS_TRT
 interface: "IPluginV2DynamicExt"
 versions:
   "1":
@@ -12,6 +12,7 @@ versions:
       - detection_boxes
       - detection_scores
       - detection_classes
+      - detection_index
     attributes:
       - score_threshold
       - iou_threshold
@@ -65,7 +66,7 @@ versions:
       - background_class
       - score_activation
       - box_coding
-    golden_io_path: "plugin/efficientNMSPlugin/EfficientNMSPlugin_PluginGoldenIO.json"
+    golden_io_path: "plugin/yoloNMSPlugin/YoloNMSPlugin_PluginGoldenIO.json"
     abs_tol: 1e-5
     rel_tol: 1e-5
     configs:
