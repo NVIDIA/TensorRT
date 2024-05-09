@@ -1,4 +1,4 @@
-# Efficient NMS Plugin
+# Yolo NMS Plugin
 
 #### Table of Contents
 - [Description](#description)
@@ -89,6 +89,10 @@ The following four output tensors are generated:
 - **detection_classes:**
   This is a `[batch_size, max_output_boxes]` tensor of data type `int32`, containing the classes for the boxes.
 
+- **detection_indices:**
+  This is a `[batch_size, max_output_boxes]` tensor of data type `int32`, containing the classes for the boxes.
+
+
 ### Parameters
 
 | Type     | Parameter                | Description
@@ -105,9 +109,9 @@ Parameters marked with a `*` have a non-negligible effect on runtime latency. Se
 
 ## Limitations
 
-The `EfficientNMS_ONNX_TRT` plugin's output may not always be sufficiently sized to capture all NMS-ed boxes. This is because it ignores the number of classes in the calculation of the output size (it produces an output of size `(batch_size * max_output_boxes_per_class, 3)` when in general, a tensor of size `(batch_size * max_output_boxes_per_class * num_classes, 3)`) would be required. This was a compromise made to keep the output size from growing uncontrollably since it lacks an attribute similar to `max_output_boxes` to control the number of output boxes globally.
+The `YOLO_NMS_ONNX_TRT` plugin's output may not always be sufficiently sized to capture all NMS-ed boxes. This is because it ignores the number of classes in the calculation of the output size (it produces an output of size `(batch_size * max_output_boxes_per_class, 3)` when in general, a tensor of size `(batch_size * max_output_boxes_per_class * num_classes, 3)`) would be required. This was a compromise made to keep the output size from growing uncontrollably since it lacks an attribute similar to `max_output_boxes` to control the number of output boxes globally.
 
-Due to this reason, please use TensorRT's inbuilt `INMSLayer` instead of the `EfficientNMS_ONNX_TRT` plugin wherever possible.
+Due to this reason, please use TensorRT's inbuilt `INMSLayer` instead of the `YOLO_NMS_ONNX_TRT` plugin wherever possible.
 
 ## Algorithm
 
@@ -115,17 +119,17 @@ Due to this reason, please use TensorRT's inbuilt `INMSLayer` instead of the `Ef
 
 The NMS algorithm in this plugin first filters the scores below the given `scoreThreshold`. This subset of scores is then sorted, and their corresponding boxes are then further filtered out by removing boxes that overlap each other with an IOU above the given `iouThreshold`.
 
-The algorithm launcher and its relevant CUDA kernels are all defined in the `efficientNMSInference.cu` file.
+The algorithm launcher and its relevant CUDA kernels are all defined in the `yoloNMSInference.cu` file.
 
 Specifically, the NMS algorithm does the following:
 
-- The scores are filtered with the `score_threshold` parameter to reject any scores below the score threshold, while maintaining indexing to cross-reference these scores to their corresponding box coordinates. This is done with the `EfficientNMSFilter` CUDA kernel.
+- The scores are filtered with the `score_threshold` parameter to reject any scores below the score threshold, while maintaining indexing to cross-reference these scores to their corresponding box coordinates. This is done with the `YoloNMSFilter` CUDA kernel.
 
-- If too many elements are kept, due to a very low (or zero) score threshold, the filter operation can become a bottleneck due to the atomic operations involved. To mitigate this, a fallback kernel `EfficientNMSDenseIndex` is used instead which passes all the score elements densely packed and indexed. This method is heuristically selected only if the score threshold is less than 0.007.
+- If too many elements are kept, due to a very low (or zero) score threshold, the filter operation can become a bottleneck due to the atomic operations involved. To mitigate this, a fallback kernel `YoloNMSDenseIndex` is used instead which passes all the score elements densely packed and indexed. This method is heuristically selected only if the score threshold is less than 0.007.
 
 - The selected scores that remain after filtering are sorted in descending order. The indexing is carefully handled to still maintain score to box relationships after sorting.
 
-- After sorting, the highest 4096 scores are processed by the `EfficientNMS` CUDA kernel. This algorithm uses the index data maintained throughout the previous steps to find the boxes corresponding to the remaining scores. If the fused box decoder is being used, decoding will happen until this stage, where only the top scoring boxes need to be decoded.
+- After sorting, the highest 4096 scores are processed by the `YoloNMS` CUDA kernel. This algorithm uses the index data maintained throughout the previous steps to find the boxes corresponding to the remaining scores. If the fused box decoder is being used, decoding will happen until this stage, where only the top scoring boxes need to be decoded.
 
 - The NMS kernel uses an efficient filtering algorithm that largely reduces the number of IOU overlap cross-checks between box pairs. The boxes that survive the IOU filtering finally pass through to the output results. At this stage, the sigmoid activation is applied to only the final remaining scores, if `score_activation` is enabled, thereby greatly reducing the amount of sigmoid calculations required otherwise.
 
