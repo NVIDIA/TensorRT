@@ -1,4 +1,4 @@
-# Yolo NMS Plugin
+# YoloNMS Plugin
 
 #### Table of Contents
 - [Description](#description)
