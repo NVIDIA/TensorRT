@@ -220,7 +220,6 @@ extern "C"
         initializePlugin<nvinfer1::plugin::SplitPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::VoxelGeneratorPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::YoloNMSPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::YoloNMSONNXPluginCreator>(logger, libNamespace);
         return true;
     }
 } // extern "C"

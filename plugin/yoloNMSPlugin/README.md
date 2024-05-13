@@ -18,7 +18,7 @@
 
 This TensorRT plugin implements an efficient algorithm to perform Non Maximum Suppression for object detection networks.
 
-This plugin is primarily intended for using with EfficientDet on TensorRT, as this network is particularly sensitive to the latencies introduced by slower NMS implementations. However, the plugin is generic enough that it will work correctly for other detections architectures, such as SSD or FasterRCNN.
+This plugin is a version of EfficientNMS but it returns the indices of the detections.
 
 ## Structure
 
@@ -106,12 +106,6 @@ The following four output tensors are generated:
 |`int`     |`box_coding`              |Coding type used for boxes (and anchors if applicable), 0 = BoxCorner, 1 = BoxCenterSize.
 
 Parameters marked with a `*` have a non-negligible effect on runtime latency. See the [Performance Tuning](#performance-tuning) section below for more details on how to set them optimally.
-
-## Limitations
-
-The `YOLO_NMS_ONNX_TRT` plugin's output may not always be sufficiently sized to capture all NMS-ed boxes. This is because it ignores the number of classes in the calculation of the output size (it produces an output of size `(batch_size * max_output_boxes_per_class, 3)` when in general, a tensor of size `(batch_size * max_output_boxes_per_class * num_classes, 3)`) would be required. This was a compromise made to keep the output size from growing uncontrollably since it lacks an attribute similar to `max_output_boxes` to control the number of output boxes globally.
-
-Due to this reason, please use TensorRT's inbuilt `INMSLayer` instead of the `YOLO_NMS_ONNX_TRT` plugin wherever possible.
 
 ## Algorithm
 

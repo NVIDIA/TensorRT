@@ -150,35 +150,6 @@ __device__ void WriteNMSResult(YoloNMSParameters param, int* __restrict__ numDet
     nmsIndicesOutput[outputIdx] = index;
 }
 
-__device__ void WriteONNXResult(YoloNMSParameters param, int* outputIndexData, int* __restrict__ nmsIndicesOutput,
-    int imageIdx, int threadClass, int boxIdxMap)
-{
-    int index = boxIdxMap % param.numAnchors;
-    int idx = atomicAdd((unsigned int*) &outputIndexData[0], 1);
-    nmsIndicesOutput[idx * 3 + 0] = imageIdx;
-    nmsIndicesOutput[idx * 3 + 1] = threadClass;
-    nmsIndicesOutput[idx * 3 + 2] = index;
-}
-
-__global__ void PadONNXResult(YoloNMSParameters param, int* outputIndexData, int* __restrict__ nmsIndicesOutput)
-{
-    if (threadIdx.x > 0)
-    {
-        return;
-    }
-    int pidx = outputIndexData[0] - 1;
-    if (pidx < 0)
-    {
-        return;
-    }
-    for (int idx = pidx + 1; idx < param.batchSize * param.numOutputBoxes; idx++)
-    {
-        nmsIndicesOutput[idx * 3 + 0] = nmsIndicesOutput[pidx * 3 + 0];
-        nmsIndicesOutput[idx * 3 + 1] = nmsIndicesOutput[pidx * 3 + 1];
-        nmsIndicesOutput[idx * 3 + 2] = nmsIndicesOutput[pidx * 3 + 2];
-    }
-}
-
 template <typename T, typename Tb>
 __global__ void YoloNMS(YoloNMSParameters param, const int* topNumData, int* outputIndexData,
     int* outputClassData, const int* sortedIndexData, const T* __restrict__ sortedScoresData,
@@ -272,17 +243,11 @@ __global__ void YoloNMS(YoloNMSParameters param, const int* topNumData, int* out
                     {
                         // This branch is visited by one thread per iteration, so it's safe to do non-atomic increments.
                         resultsCounter++;
-                        if (param.outputONNXIndices)
-                        {
-                            WriteONNXResult(
-                                param, outputIndexData, nmsIndicesOutput, imageIdx, threadClass[tile], boxIdxMap[tile]);
-                        }
-                        else
-                        {
-                            WriteNMSResult<T>(param, numDetectionsOutput, nmsScoresOutput, nmsClassesOutput,
-                                nmsBoxesOutput, nmsIndicesOutput, threadScore[tile], threadClass[tile], threadBox[tile], imageIdx,
-                                resultsCounter, boxIdxMap[tile]);
-                        }
+                        
+                        WriteNMSResult<T>(param, numDetectionsOutput, nmsScoresOutput, nmsClassesOutput,
+                            nmsBoxesOutput, nmsIndicesOutput, threadScore[tile], threadClass[tile], threadBox[tile], imageIdx,
+                            resultsCounter, boxIdxMap[tile]);
+                        
                     }
                 }
             }
@@ -374,11 +339,6 @@ cudaError_t YoloNMSLauncher(YoloNMSParameters& param, int* topNumData, int* outp
             outputClassData, sortedIndexData, sortedScoresData, topClassData, topAnchorsData,
             (BoxCenterSize<T>*) boxesInput, (BoxCenterSize<T>*) anchorsInput, numDetectionsOutput, nmsScoresOutput,
             nmsClassesOutput, nmsIndicesOutput, (BoxCorner<T>*) nmsBoxesOutput);
-    }
-
-    if (param.outputONNXIndices)
-    {
-        PadONNXResult<<<1, 1, 0, stream>>>(param, outputIndexData, nmsIndicesOutput);
     }
 
     return cudaGetLastError();
@@ -639,18 +599,11 @@ pluginStatus_t YoloNMSDispatch(YoloNMSParameters param, const void* boxesInput, 
     void* nmsClassesOutput, void* nmsIndicesOutput, void* workspace, cudaStream_t stream)
 {
     // Clear Outputs (not all elements will get overwritten by the kernels, so safer to clear everything out)
-    if (param.outputONNXIndices)
-    {
-        CSC(cudaMemsetAsync(nmsIndicesOutput, 0xFF, param.batchSize * param.numOutputBoxes * 3 * sizeof(int), stream), STATUS_FAILURE);
-    }
-    else
-    {
-        CSC(cudaMemsetAsync(numDetectionsOutput, 0x00, param.batchSize * sizeof(int), stream), STATUS_FAILURE);
-        CSC(cudaMemsetAsync(nmsScoresOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(T), stream), STATUS_FAILURE);
-        CSC(cudaMemsetAsync(nmsBoxesOutput, 0x00, param.batchSize * param.numOutputBoxes * 4 * sizeof(T), stream), STATUS_FAILURE);
-        CSC(cudaMemsetAsync(nmsClassesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream), STATUS_FAILURE);
-        CSC(cudaMemsetAsync(nmsIndicesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream), STATUS_FAILURE);
-    }
+    CSC(cudaMemsetAsync(numDetectionsOutput, 0x00, param.batchSize * sizeof(int), stream), STATUS_FAILURE);
+    CSC(cudaMemsetAsync(nmsScoresOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(T), stream), STATUS_FAILURE);
+    CSC(cudaMemsetAsync(nmsBoxesOutput, 0x00, param.batchSize * param.numOutputBoxes * 4 * sizeof(T), stream), STATUS_FAILURE);
+    CSC(cudaMemsetAsync(nmsClassesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream), STATUS_FAILURE);
+    CSC(cudaMemsetAsync(nmsIndicesOutput, 0x00, param.batchSize * param.numOutputBoxes * sizeof(int), stream), STATUS_FAILURE);
 
     // Empty Inputs
     if (param.numScoreElements < 1)

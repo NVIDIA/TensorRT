@@ -22,14 +22,11 @@ using namespace nvinfer1;
 using nvinfer1::plugin::YoloNMSPlugin;
 using nvinfer1::plugin::YoloNMSParameters;
 using nvinfer1::plugin::YoloNMSPluginCreator;
-using nvinfer1::plugin::YoloNMSONNXPluginCreator;
 
 namespace
 {
 char const* const kYOLO_NMS_PLUGIN_VERSION{"1"};
 char const* const kYOLO_NMS_PLUGIN_NAME{"YOLO_NMS_TRT"};
-char const* const kYOLO_NMS_ONNX_PLUGIN_VERSION{"1"};
-char const* const kYOLO_NMS_ONNX_PLUGIN_NAME{"YOLO_NMS_ONNX_TRT"};
 } // namespace
 
 YoloNMSPlugin::YoloNMSPlugin(YoloNMSParameters param)
@@ -61,12 +58,6 @@ char const* YoloNMSPlugin::getPluginVersion() const noexcept
 
 int32_t YoloNMSPlugin::getNbOutputs() const noexcept
 {
-    if (mParam.outputONNXIndices)
-    {
-        // ONNX NonMaxSuppression Compatibility
-        return 1;
-    }
-
     // Standard Plugin Implementation
     return 5;
 }
@@ -133,12 +124,6 @@ char const* YoloNMSPlugin::getPluginNamespace() const noexcept
 nvinfer1::DataType YoloNMSPlugin::getOutputDataType(
     int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    if (mParam.outputONNXIndices)
-    {
-        // ONNX NMS uses an integer output
-        return nvinfer1::DataType::kINT32;
-    }
-
     // On standard NMS, num_detections and detection_classes use integer outputs
     if (index == 0 || index == 3 || index == 4)
     {
@@ -184,46 +169,36 @@ DimsExprs YoloNMSPlugin::getOutputDimensions(
                 *exprBuilder.operation(DimensionOperation::kPROD, *numOutputBoxesPerClass, *numClasses));
         }
 
-        if (mParam.outputONNXIndices)
-        {
-            // ONNX NMS
-            PLUGIN_ASSERT(outputIndex == 0);
 
-            // detection_indices
+    
+        // Standard NMS
+        PLUGIN_ASSERT(outputIndex >= 0 && outputIndex <= 4);
+
+        // num_detections
+        if (outputIndex == 0)
+        {
             out_dim.nbDims = 2;
-            out_dim.d[0] = exprBuilder.operation(DimensionOperation::kPROD, *inputs[0].d[0], *numOutputBoxes);
-            out_dim.d[1] = exprBuilder.constant(3);
+            out_dim.d[0] = inputs[0].d[0];
+            out_dim.d[1] = exprBuilder.constant(1);
         }
-        else
+        // detection_boxes
+        else if (outputIndex == 1)
         {
-            // Standard NMS
-            PLUGIN_ASSERT(outputIndex >= 0 && outputIndex <= 4);
-
-            // num_detections
-            if (outputIndex == 0)
-            {
-                out_dim.nbDims = 2;
-                out_dim.d[0] = inputs[0].d[0];
-                out_dim.d[1] = exprBuilder.constant(1);
-            }
-            // detection_boxes
-            else if (outputIndex == 1)
-            {
-                out_dim.nbDims = 3;
-                out_dim.d[0] = inputs[0].d[0];
-                out_dim.d[1] = numOutputBoxes;
-                out_dim.d[2] = exprBuilder.constant(4);
-            }
-            // detection_scores: outputIndex == 2
-            // detection_classes: outputIndex == 3
-            // detection_indices: outputIndex == 4
-            else if (outputIndex == 2 || outputIndex == 3 || outputIndex == 4)
-            {
-                out_dim.nbDims = 2;
-                out_dim.d[0] = inputs[0].d[0];
-                out_dim.d[1] = numOutputBoxes;
-            }
+            out_dim.nbDims = 3;
+            out_dim.d[0] = inputs[0].d[0];
+            out_dim.d[1] = numOutputBoxes;
+            out_dim.d[2] = exprBuilder.constant(4);
         }
+        // detection_scores: outputIndex == 2
+        // detection_classes: outputIndex == 3
+        // detection_indices: outputIndex == 4
+        else if (outputIndex == 2 || outputIndex == 3 || outputIndex == 4)
+        {
+            out_dim.nbDims = 2;
+            out_dim.d[0] = inputs[0].d[0];
+            out_dim.d[1] = numOutputBoxes;
+        }
+        
 
         return out_dim;
     }
@@ -240,22 +215,6 @@ bool YoloNMSPlugin::supportsFormatCombination(
     if (inOut[pos].format != PluginFormat::kLINEAR)
     {
         return false;
-    }
-
-    if (mParam.outputONNXIndices)
-    {
-        PLUGIN_ASSERT(nbInputs == 2);
-        PLUGIN_ASSERT(nbOutputs == 1);
-
-        // detection_indices output: int32_t
-        if (pos == 2)
-        {
-            return inOut[pos].type == DataType::kINT32;
-        }
-
-        // boxes and scores input: fp32 or fp16
-        return (inOut[pos].type == DataType::kHALF || inOut[pos].type == DataType::kFLOAT)
-            && (inOut[0].type == inOut[pos].type);
     }
 
     PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
@@ -286,21 +245,12 @@ void YoloNMSPlugin::configurePlugin(
 {
     try
     {
-        if (mParam.outputONNXIndices)
-        {
-            // Accepts two inputs
-            // [0] boxes, [1] scores
-            PLUGIN_ASSERT(nbInputs == 2);
-            PLUGIN_ASSERT(nbOutputs == 1);
-        }
-        else
-        {
-            // Accepts two or three inputs
-            // If two inputs: [0] boxes, [1] scores
-            // If three inputs: [0] boxes, [1] scores, [2] anchors
-            PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
-            PLUGIN_ASSERT(nbOutputs == 5);
-        }
+        // Accepts two or three inputs
+        // If two inputs: [0] boxes, [1] scores
+        // If three inputs: [0] boxes, [1] scores, [2] anchors
+        PLUGIN_ASSERT(nbInputs == 2 || nbInputs == 3);
+        PLUGIN_ASSERT(nbOutputs == 5);
+        
         mParam.datatype = in[0].desc.type;
 
         // Shape of scores input should be
@@ -374,18 +324,6 @@ int32_t YoloNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDe
     try
     {
         mParam.batchSize = inputDesc[0].dims.d[0];
-
-        if (mParam.outputONNXIndices)
-        {
-            // ONNX NonMaxSuppression Op Support
-            void const* const boxesInput = inputs[0];
-            void const* const scoresInput = inputs[1];
-
-            void* nmsIndicesOutput = outputs[0];
-
-            return YoloNMSInference(mParam, boxesInput, scoresInput, nullptr, nullptr, nullptr, nullptr, nullptr,
-                nmsIndicesOutput, workspace, stream);
-        }
 
         // Standard NMS Operation
         void const* const boxesInput = inputs[0];
@@ -512,99 +450,6 @@ IPluginV2DynamicExt* YoloNMSPluginCreator::createPlugin(char const* name, Plugin
 }
 
 IPluginV2DynamicExt* YoloNMSPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
-{
-    try
-    {
-        // This object will be deleted when the network is destroyed, which will
-        // call YoloNMSPlugin::destroy()
-        auto* plugin = new YoloNMSPlugin(serialData, serialLength);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-// ONNX NonMaxSuppression Op Compatibility
-
-YoloNMSONNXPluginCreator::YoloNMSONNXPluginCreator()
-    : mParam{}
-{
-    mPluginAttributes.clear();
-    mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
-    mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
-    mPluginAttributes.emplace_back(PluginField("max_output_boxes_per_class", nullptr, PluginFieldType::kINT32, 1));
-    mPluginAttributes.emplace_back(PluginField("center_point_box", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
-    mFC.fields = mPluginAttributes.data();
-}
-
-char const* YoloNMSONNXPluginCreator::getPluginName() const noexcept
-{
-    return kYOLO_NMS_ONNX_PLUGIN_NAME;
-}
-
-char const* YoloNMSONNXPluginCreator::getPluginVersion() const noexcept
-{
-    return kYOLO_NMS_ONNX_PLUGIN_VERSION;
-}
-
-PluginFieldCollection const* YoloNMSONNXPluginCreator::getFieldNames() noexcept
-{
-    return &mFC;
-}
-
-IPluginV2DynamicExt* YoloNMSONNXPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
-{
-    try
-    {
-        PluginField const* fields = fc->fields;
-        for (int32_t i = 0; i < fc->nbFields; ++i)
-        {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "score_threshold"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.scoreThreshold = *(static_cast<float const*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "iou_threshold"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.iouThreshold = *(static_cast<float const*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "max_output_boxes_per_class"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<int32_t const*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "center_point_box"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mParam.boxCoding = *(static_cast<int32_t const*>(fields[i].data));
-            }
-        }
-
-        // This enables ONNX compatibility mode
-        mParam.outputONNXIndices = true;
-        mParam.numOutputBoxes = mParam.numOutputBoxesPerClass;
-
-        auto* plugin = new YoloNMSPlugin(mParam);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-IPluginV2DynamicExt* YoloNMSONNXPluginCreator::deserializePlugin(
     char const* name, void const* serialData, size_t serialLength) noexcept
 {
     try

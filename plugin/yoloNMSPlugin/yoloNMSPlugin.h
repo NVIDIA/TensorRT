@@ -96,28 +96,6 @@ protected:
     std::string mPluginName;
 };
 
-// ONNX NonMaxSuppression Op Compatibility
-class YoloNMSONNXPluginCreator : public nvinfer1::pluginInternal::BaseCreator
-{
-public:
-    YoloNMSONNXPluginCreator();
-    ~YoloNMSONNXPluginCreator() override = default;
-
-    char const* getPluginName() const noexcept override;
-    char const* getPluginVersion() const noexcept override;
-    PluginFieldCollection const* getFieldNames() noexcept override;
-
-    IPluginV2DynamicExt* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
-    IPluginV2DynamicExt* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-protected:
-    PluginFieldCollection mFC;
-    YoloNMSParameters mParam;
-    std::vector<PluginField> mPluginAttributes;
-    std::string mPluginName;
-};
-
 } // namespace plugin
 } // namespace nvinfer1
 
