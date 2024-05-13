@@ -47,6 +47,7 @@
 | [specialSlicePlugin](specialSlicePlugin) | SpecialSlice_TRT | 1 |
 | [splitPlugin](splitPlugin) | Split | 1 |
 | [voxelGeneratorPlugin](voxelGeneratorPlugin) | VoxelGeneratorPlugin | 1 |
+| [yoloNMSPlugin](yoloNMSPlugin) | yoloNMSPlugin | 1 |
 
 ## Known Limitations
 
