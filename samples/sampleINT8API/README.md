@@ -58,8 +58,7 @@ Specifically, this sample performs the following steps:
 
 	`builder->setStrictTypeConstraints(true);`
 
-	Setting `setStrictTypeConstraints(true)` together with the builder flag `setFlag(BuilderFlag::kINT8)` ensures that only the conformant layer implementation (with `kINT8` input and output types), are chosen even if a high performance non-conformat implementation is available. If no conformant layer exists, TensorRT will choose a non-conformant layer if available regardless of the setting for this flag.
-
+	Setting `setStrictTypeConstraints(true)` together with the builder flag `setFlag(BuilderFlag::kINT8)` ensures that only the conformant layer implementation (with `kINT8` input and output types) is chosen even if a high performance non-conformant implementation is available. If no conformant layer exists, TensorRT will choose a non-conformant layer if available regardless of the setting for this flag.
 
 ### Configuring the network to use custom dynamic ranges and set per-layer precision
 
