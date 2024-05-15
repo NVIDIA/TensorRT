@@ -47,7 +47,7 @@ Specifically, this sample performs the following steps:
 	`if (!builder->platformHasFastInt8()) return false;`
 
 2.  Enable INT8 mode by setting the builder flag:
-	`builder->setInt8Mode(true);`
+	`builder->setFlag(BuilderFlag::kINT8);`
 
 	You can choose not to provide the INT8 calibrator.
 	`builder->setInt8Calibrator(nullptr);`
@@ -56,9 +56,9 @@ Specifically, this sample performs the following steps:
 
 3.  Optionally and for debugging purposes, the following flag configures the builder to choose type conforming layer implementation, if one exists.
 
-	For example, in the case of `DataType::kINT8`, types are requested by `setInt8Mode(true)`. Setting this flag ensures that only the conformant layer implementation (with `kINT8` input and output types), are chosen even if a high performance non-conformat implementation is available. If no conformant layer exists, TensorRT will choose a non-conformant layer if available regardless of the setting for this flag.
-
 	`builder->setStrictTypeConstraints(true);`
+
+	Setting `setStrictTypeConstraints(true)` together with the builder flag `setFlag(BuilderFlag::kINT8)` ensures that only the conformant layer implementation (with `kINT8` input and output types) is chosen even if a high performance non-conformant implementation is available. If no conformant layer exists, TensorRT will choose a non-conformant layer if available regardless of the setting for this flag.
 
 ### Configuring the network to use custom dynamic ranges and set per-layer precision
 
@@ -75,7 +75,8 @@ Specifically, this sample performs the following steps:
 
 3.  Set the dynamic range for per layer tensors:
 	```
-	string tensor_name = network->getLayer(i)->getOutput(j)->getName(); network->getLayer(i)->getOutput(j)->setDynamicRange(-tensorMap.at(name), tensorMap.at(name));
+	string tensor_name = network->getLayer(i)->getOutput(j)->getName(); 
+	network->getLayer(i)->getOutput(j)->setDynamicRange(-tensorMap.at(tensor_name), tensorMap.at(tensor_name));
 	```
 
 4.  Optional: This sample also showcases using layer precision APIs. Using these APIs, you can selectively choose to run the layer with user configurable precision and type constraints. It may not result in optimal inference performance, but can be helpful while debugging mixed precision inference.
