@@ -75,7 +75,8 @@ To build the TensorRT-OSS components, you will first need the following software
     Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
       - [TensorRT 10.0.1.6 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.0.1/tars/TensorRT-10.0.1.6.Linux.x86_64-gnu.cuda-11.8.tar.gz)
       - [TensorRT 10.0.1.6 for CUDA 12.4, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.0.1/tars/TensorRT-10.0.1.6.Linux.x86_64-gnu.cuda-12.4.tar.gz)
-
+      - [TensorRT 10.0.1.6 for CUDA 11.8, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.0.1/zip/TensorRT-10.0.1.6.Windows10.win10.cuda-11.8.zip)
+      - [TensorRT 10.0.1.6 for CUDA 12.4, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.0.1/zip/TensorRT-10.0.1.6.Windows10.win10.cuda-12.4.zip)
 
     **Example: Ubuntu 20.04 on x86-64 with cuda-12.4**
 
@@ -83,6 +84,13 @@ To build the TensorRT-OSS components, you will first need the following software
     cd ~/Downloads
     tar -xvzf TensorRT-10.0.1.6.Linux.x86_64-gnu.cuda-12.4.tar.gz
     export TRT_LIBPATH=`pwd`/TensorRT-10.0.1.6
+    ```
+
+    **Example: Windows on x86-64 with cuda-12.4**
+
+    ```powershell
+    Expand-Archive -Path TensorRT-10.0.1.6.Windows10.win10.cuda-12.4.zip
+    $env:TRT_LIBPATH="$pwd\TensorRT-10.0.1.6\lib"
     ```
 
 ## Setting Up The Build Environment
@@ -154,8 +162,17 @@ For Linux platforms, we recommend that you generate a docker container for build
 	make -j$(nproc)
 	```
 
+      **Example: Native builds on Windows (x86) with cuda-12.4**
+	```powershell
+	cd $TRT_OSSPATH
+	mkdir -p build
+	cd -p build
+	cmake .. -DTRT_LIB_DIR="$env:TRT_LIBPATH" -DCUDNN_ROOT_DIR="$env:CUDNN_PATH" -DTRT_OUT_DIR="$pwd\\out"
+	msbuild TensorRT.sln /property:Configuration=Release -m:$env:NUMBER_OF_PROCESSORS
+	```
+
 	> NOTE:
-	<br> 1. The default CUDA version used by CMake is 12.2.0. To override this, for example to 11.8, append `-DCUDA_VERSION=11.8` to the cmake command.
+	<br> 1. The default CUDA version used by CMake is 12.4.0. To override this, for example to 11.8, append `-DCUDA_VERSION=11.8` to the cmake command.
 * Required CMake build arguments are:
 	- `TRT_LIB_DIR`: Path to the TensorRT installation directory containing libraries.
 	- `TRT_OUT_DIR`: Output directory where generated build artifacts will be copied.
