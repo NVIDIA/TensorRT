@@ -1282,15 +1282,20 @@ class Graph(object):
                     # No need to fold tensors that are already constant.
                     continue
 
-                if size_threshold is not None and values.nbytes > size_threshold:
+                if isinstance(values, list):
+                    nbytes = sum([v.nbytes for v in values])
+                else:
+                    nbytes = values.nbytes
+
+                if size_threshold is not None and nbytes > size_threshold:
                     G_LOGGER.debug(
                         "Will not fold: '{:}' since its size in bytes ({:}) exceeds the size threshold ({:})".format(
-                            name, values.nbytes, size_threshold
+                            name, nbytes, size_threshold
                         )
                     )
                     continue
-                elif size_threshold is None and values.nbytes > (1 << 20):
-                    large_tensors[name] = values.nbytes
+                elif size_threshold is None and nbytes > (1 << 20):
+                    large_tensors[name] = nbytes
 
                 tensor.to_constant(values)
                 tensor.inputs.clear()  # Constants do not need inputs
