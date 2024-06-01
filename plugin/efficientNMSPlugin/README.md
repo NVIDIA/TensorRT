@@ -22,6 +22,8 @@ This TensorRT plugin implements an efficient algorithm to perform Non Maximum Su
 
 This plugin is primarily intended for using with EfficientDet on TensorRT, as this network is particularly sensitive to the latencies introduced by slower NMS implementations. However, the plugin is generic enough that it will work correctly for other detections architectures, such as SSD or FasterRCNN.
 
+The `efficientNMSXPlugin` includes all the functionalities of the `efficientNMSPlugin` but with an additional output layer that returns the indices of the detections `detection_indices`.
+
 ## Structure
 
 ### Inputs
@@ -90,7 +92,9 @@ The following four output tensors are generated:
 
 - **detection_classes:**
   This is a `[batch_size, max_output_boxes]` tensor of data type `int32`, containing the classes for the boxes.
-
+- **detection_indices:** 
+  This is a `[batch_size, max_output_boxes]` tensor of data type `int32`, containing the indices for the boxes. **Available only in the plugin `efficientNMSXPlugin`**
+  
 ### Parameters
 
 | Type     | Parameter                | Description

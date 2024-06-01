@@ -16,6 +16,7 @@
 | [detectionLayerPlugin](detectionLayerPlugin) | DetectionLayer_TRT | 1 |
 | [disentangledAttentionPlugin](disentangledAttentionPlugin) | DisentangledAttention_TRT | 1 |
 | [efficientNMSPlugin](efficientNMSPlugin) | EfficientNMS_TRT | 1 |
+| [efficientNMSXPlugin](efficientNMSPlugin) | EfficientNMSX_TRT | 1 |
 | [efficientNMSONNXPlugin](efficientNMSPlugin) [DEPRECATED] | EfficientNMS_ONNX_TRT | 1 |
 | [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 1, 2 |
 | [fcPlugin](fcPlugin) | CustomFCPluginDynamic | 1 |
@@ -51,6 +52,7 @@
 | [specialSlicePlugin](specialSlicePlugin) [DEPRECATED] | SpecialSlice_TRT | 1 |
 | [splitPlugin](splitPlugin) [DEPRECATED] | Split | 1 |
 | [voxelGeneratorPlugin](voxelGeneratorPlugin) | VoxelGeneratorPlugin | 1 |
+| [yoloNMSPlugin](yoloNMSPlugin) | yoloNMSPlugin | 1 |
 
 ## Known Limitations
 

@@ -94,6 +94,31 @@ protected:
     std::string mPluginName;
 };
 
+//  NMS Plugin Operation with 5 layers (added det_indices)
+class EfficientNMSXPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+{
+public:
+    EfficientNMSXPluginCreator();
+    ~EfficientNMSXPluginCreator() override = default;
+
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
+
+    IPluginV2DynamicExt* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
+    IPluginV2DynamicExt* deserializePlugin(
+        char const* name, void const* serialData, size_t serialLength) noexcept override;
+
+protected:
+    PluginFieldCollection mFC;
+    EfficientNMSParameters mParam;
+    std::vector<PluginField> mPluginAttributes;
+    std::string mPluginName;
+};
+
+
+
+
 // ONNX NonMaxSuppression Op Compatibility
 class EfficientNMSONNXPluginCreator : public nvinfer1::pluginInternal::BaseCreator
 {
