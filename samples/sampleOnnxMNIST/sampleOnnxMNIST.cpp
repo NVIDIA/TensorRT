@@ -85,7 +85,7 @@ private:
     //!
     bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
         SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-        SampleUniquePtr<nvonnxparser::IParser>& parser);
+        SampleUniquePtr<nvonnxparser::IParser>& parser, SampleUniquePtr<nvinfer1::ITimingCache>& timingCache);
 
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
@@ -133,7 +133,9 @@ bool SampleOnnxMNIST::build()
         return false;
     }
 
-    auto constructed = constructNetwork(builder, network, config, parser);
+    auto timingCache = SampleUniquePtr<nvinfer1::ITimingCache>();
+
+    auto constructed = constructNetwork(builder, network, config, parser, timingCache);
     if (!constructed)
     {
         return false;
@@ -151,6 +153,12 @@ bool SampleOnnxMNIST::build()
     if (!plan)
     {
         return false;
+    }
+
+    if (timingCache != nullptr && !mParams.timingCacheFile.empty())
+    {
+        samplesCommon::updateTimingCacheFile(
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
     }
 
     mRuntime = std::shared_ptr<nvinfer1::IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
@@ -187,7 +195,7 @@ bool SampleOnnxMNIST::build()
 //!
 bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-    SampleUniquePtr<nvonnxparser::IParser>& parser)
+    SampleUniquePtr<nvonnxparser::IParser>& parser, SampleUniquePtr<nvinfer1::ITimingCache>& timingCache)
 {
     auto parsed = parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
         static_cast<int>(sample::gLogger.getReportableSeverity()));
@@ -208,6 +216,11 @@ bool SampleOnnxMNIST::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     {
         config->setFlag(BuilderFlag::kINT8);
         samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
+    }
+    if (mParams.timingCacheFile.size())
+    {
+        timingCache = samplesCommon::buildTimingCacheFromFile(
+            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
@@ -359,6 +372,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
     params.bf16 = args.runInBf16;
+    params.timingCacheFile = args.timingCacheFile;
 
     return params;
 }
@@ -370,18 +384,20 @@ void printHelpInfo()
 {
     std::cout
         << "Usage: ./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]"
-        << std::endl;
-    std::cout << "--help          Display help information" << std::endl;
-    std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
+        << "[-t or --timingCacheFile=<path to timing cache file]" << std::endl;
+    std::cout << "--help             Display help information" << std::endl;
+    std::cout << "--datadir          Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "(data/samples/mnist/, data/mnist/)"
               << std::endl;
-    std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
+    std::cout << "--useDLACore=N     Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
               << std::endl;
-    std::cout << "--int8          Run in Int8 mode." << std::endl;
-    std::cout << "--fp16          Run in FP16 mode." << std::endl;
-    std::cout << "--bf16          Run in BF16 mode." << std::endl;
+    std::cout << "--int8             Run in Int8 mode." << std::endl;
+    std::cout << "--fp16             Run in FP16 mode." << std::endl;
+    std::cout << "--bf16             Run in BF16 mode." << std::endl;
+    std::cout << "--timingCacheFile  Specify path to a timing cache file. If it does not already exist, it will be "
+              << "created." << std::endl;
 }
 
 int main(int argc, char** argv)

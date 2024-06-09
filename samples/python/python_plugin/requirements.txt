@@ -12,4 +12,4 @@ onnx-graphsurgeon
 pywin32; platform_system == "Windows"
 pyyaml==6.0.1
 requests==2.31.0
-tqdm==4.66.1
+tqdm==4.66.4

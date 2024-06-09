@@ -49,6 +49,7 @@
 #include "reorgPlugin/reorgPlugin.h"
 #include "resizeNearestPlugin/resizeNearestPlugin.h"
 #include "roiAlignPlugin/roiAlignPlugin.h"
+#include "roiAlignPlugin/roiAlignPluginLegacy.h"
 #include "scatterElementsPlugin/scatterElementsPlugin.h"
 #include "scatterPlugin/scatterPlugin.h"
 #include "specialSlicePlugin/specialSlicePlugin.h"
@@ -157,7 +158,7 @@ private:
     PluginCreatorRegistry() {}
 
     std::mutex mRegistryLock;
-    std::stack<std::unique_ptr<IPluginCreator>> mRegistry;
+    std::stack<std::unique_ptr<IPluginCreatorInterface>> mRegistry;
     std::unordered_set<std::string> mRegistryList;
 
 public:
@@ -216,6 +217,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::ReorgStaticPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ResizeNearestPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ROIAlignPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ROIAlignV3PluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::RPROIPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterElementsPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterNDPluginCreator>(logger, libNamespace);

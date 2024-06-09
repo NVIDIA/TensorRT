@@ -566,6 +566,30 @@ class TestTrtConfigArgs:
             ) as config:
                 assert config.hardware_compatibility_level == expected
 
+    if mod.version(trt.__version__) >= mod.version("10.2"):
+
+        @pytest.mark.parametrize(
+            "platform, expected",
+            [
+                ("same_as_build", trt.RuntimePlatform.SAME_AS_BUILD),
+                ("windows_amd64", trt.RuntimePlatform.WINDOWS_AMD64),
+                ("Windows_AMD64", trt.RuntimePlatform.WINDOWS_AMD64),
+            ],
+        )
+        def test_runtime_platform(self, trt_config_args, platform, expected):
+            trt_config_args.parse_args(["--runtime-platform", str(platform)])
+            assert (
+                str(trt_config_args.runtime_platform)
+                == f"trt.RuntimePlatform.{expected.name}"
+            )
+
+            builder, network = create_network()
+
+            with builder, network, trt_config_args.create_config(
+                builder, network=network
+            ) as config:
+                assert config.runtime_platform == expected
+
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.6"),
         reason="Unsupported for TRT versions prior to 8.6",

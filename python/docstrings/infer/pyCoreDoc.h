@@ -397,7 +397,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar profiler: :class:`IProfiler` The profiler in use by this :class:`IExecutionContext` .
     :ivar engine: :class:`ICudaEngine` The associated :class:`ICudaEngine` .
     :ivar name: :class:`str` The name of the :class:`IExecutionContext` .
-    :ivar device_memory: :class:`capsule` The device memory for use by this execution context. The memory must be aligned on a 256-byte boundary, and its size must be at least :attr:`engine.device_memory_size`. If using :func:`execute_v2()`, it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
+    :ivar device_memory: :class:`capsule` The device memory for use by this execution context. The memory must be aligned with cuda memory alignment property (using :func:`cuda.cudart.cudaGetDeviceProperties()`), and its size must be large enough for performing inference with the given network inputs. :func:`engine.device_memory_size` and :func:`engine.get_device_memory_size_for_profile` report upper bounds of the size. Setting memory to nullptr is acceptable if the reported size is 0. If using :func:`execute_async_v3()` to run the network, the memory is in use from the invocation of :func:`execute_async_v3()` until network execution is complete. If using :func:`execute_v2()`, it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other purposes, including using it in another execution context running in parallel, during this time will result in undefined behavior.
     :ivar active_optimization_profile: :class:`int` The active optimization profile for the context. The selected profile will be used in subsequent calls to :func:`execute_v2()`. Profile 0 is selected by default. This is a readonly property and active optimization profile can be changed with :func:`set_optimization_profile_async()`. Changing this value will invalidate all dynamic bindings for the current execution context, so that they have to be set again using :func:`set_input_shape` before calling either :func:`execute_v2()`.
     :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_input_shape` . Trivially true if network has no dynamically shaped input tensors. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
     :ivar all_shape_inputs_specified: :class:`bool` Whether values for all input shape tensors have been specified by calling :func:`set_shape_input` . Trivially true if network has no input shape bindings. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
@@ -406,9 +406,6 @@ constexpr char const* descr = R"trtdoc(
     :ivar persistent_cache_limit: The maximum size of persistent L2 cache that this execution context may use for activation caching. Activation caching is not supported on all architectures - see "How TensorRT uses Memory" in the developer guide for details. The default is 0 Bytes.
     :ivar nvtx_verbosity: The NVTX verbosity of the execution context. Building with DETAILED verbosity will generally increase latency in enqueueV3(). Call this method to select NVTX verbosity in this execution context at runtime. The default is the verbosity with which the engine was built, and the verbosity may not be raised above that level. This function does not affect how IEngineInspector interacts with the engine.
     :ivar temporary_allocator: :class:`IGpuAllocator` The GPU allocator used for internal temporary storage.
-    :ivar weight_streaming_budget: Set and get the current weight streaming budget for inference. The budget may be set to -1 disabling weight streaming at runtime, 0 (default) enabling TRT to choose to weight stream or not, or a positive value in the inclusive range [minimum_weight_streaming_budget, streamable_weights_size - 1].
-    :ivar minimum_weight_streaming_budget: Returns the minimum weight streaming budget in bytes required to run the network successfully. The engine must have been built with kWEIGHT_STREAMING.
-    :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
 )trtdoc";
 
 constexpr char const* execute_v2 = R"trtdoc(
@@ -421,13 +418,14 @@ constexpr char const* execute_v2 = R"trtdoc(
 )trtdoc";
 
 // TODO: Check if this makes sense to have.
-constexpr char const* device_memory = R"trtdoc(
+constexpr char const* set_device_memory = R"trtdoc(
     The device memory for use by this :class:`IExecutionContext` .
 
-    The memory must be aligned on a 256-byte boundary, and its size must be at least that
-    returned by getDeviceMemorySize(). If using :func:`execute_v2()`,
-    it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other
-    purposes during this time will result in undefined behavior.
+    :arg memory: 256-byte aligned device memory.
+    :arg size: Size of the provided memory. This must be at least as large as CudaEngine.get_device_memory_size_v2
+
+    If using :func:`enqueue_v3()`, it is in use until :func:`enqueue_v3()` returns. Releasing or otherwise using the memory for other
+    purposes during this time will result in undefined behavior. This includes using the same memory for a parallel execution context.
 )trtdoc";
 
 constexpr char const* set_optimization_profile_async = R"trtdoc(
@@ -700,6 +698,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar num_layers: :class:`int` The number of layers in the network. The number of layers in the network is not necessarily the number in the original :class:`INetworkDefinition`, as layers may be combined or eliminated as the :class:`ICudaEngine` is optimized. This value can be useful when building per-layer tables, such as when aggregating profiling data over a number of executions.
     :ivar max_workspace_size: :class:`int` The amount of workspace the :class:`ICudaEngine` uses. The workspace size will be no greater than the value provided to the :class:`Builder` when the :class:`ICudaEngine` was built, and will typically be smaller. Workspace will be allocated for each :class:`IExecutionContext` .
     :ivar device_memory_size: :class:`int` The amount of device memory required by an :class:`IExecutionContext` .
+    :ivar device_memory_size_v2: :class:`int` The amount of device memory required by an :class:`IExecutionContext`. The return value depends on the weight streaming budget if enabled.
     :ivar refittable: :class:`bool` Whether the engine can be refit.
     :ivar name: :class:`str` The name of the network associated with the engine. The name is set during network creation and is retrieved after building or deserialization.
     :ivar num_optimization_profiles: :class:`int` The number of optimization profiles defined for this engine. This is always at least 1.
@@ -708,7 +707,13 @@ constexpr char const* descr = R"trtdoc(
     :ivar tactic_sources: :class:`int` The tactic sources required by this engine.
     :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
     :ivar hardware_compatibility_level: The hardware compatibility level of the engine.
-    :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.)trtdoc"
+    :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.
+    :ivar weight_streaming_budget: [DEPRECATED] Deprecated in TensorRT 10.1, superceded by weight_streaming_budget_v2. Set and get the current weight streaming budget for inference. The budget may be set to -1 disabling weight streaming at runtime, 0 (default) enabling TRT to choose to weight stream or not, or a positive value in the inclusive range [minimum_weight_streaming_budget, streamable_weights_size - 1].
+    :ivar minimum_weight_streaming_budget: [DEPRECATED] Deprecated in TensorRT 10.1, superceded by weight_streaming_budget_v2. Returns the minimum weight streaming budget in bytes required to run the network successfully. The engine must have been built with kWEIGHT_STREAMING.
+    :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
+    :ivar weight_streaming_budget_v2: Set and get the current weight streaming budget for inference. The budget may be set any non-negative value. A value of 0 streams the most weights. Values equal to streamable_weights_size (default) or larger will disable weight streaming.
+    :ivar weight_streaming_scratch_memory_size: The amount of scratch memory required by a TensorRT ExecutionContext to perform inference. This value may change based on the current weight streaming budget. Please use the V2 memory APIs, engine.device_memory_size_v2 and ExecutionContext.set_device_memory() to provide memory which includes the current weight streaming scratch memory. Not specifying these APIs or using the V1 APIs will not include this memory, so TensorRT will resort to allocating itself.
+    )trtdoc"
            ;
 
 // Documentation bug with parameters on these three functions because they are overloaded.
@@ -841,12 +846,26 @@ constexpr char const* get_device_memory_size_for_profile = R"trtdoc(
     :arg profile_index: The index of the profile.
 )trtdoc";
 
+constexpr char const* get_device_memory_size_for_profile_v2 = R"trtdoc(
+    Return the device memory size required for a certain profile.
+
+    The return value will change depending on the following API calls
+    1. setWeightStreamingBudgetV2
+
+    :arg profile_index: The index of the profile.
+)trtdoc";
+
 constexpr char const* create_serialization_config = R"trtdoc(
     Create a serialization configuration object.
 )trtdoc";
 
 constexpr char const* serialize_with_config = R"trtdoc(
     Serialize the network to a stream.
+)trtdoc";
+
+constexpr char const* get_weight_streaming_automatic_budget = R"trtdoc(
+    Get an automatic weight streaming budget based on available device memory. This value may change between TensorRT major and minor versions.
+    Please use CudaEngine.weight_streaming_budget_v2 to set the returned budget.
 )trtdoc";
 
 constexpr char const* is_debug_tensor = R"trtdoc(
@@ -975,7 +994,7 @@ constexpr char const* REJECT_EMPTY_ALGORITHMS
 constexpr char const* VERSION_COMPATIBLE
     = R"trtdoc(Restrict to lean runtime operators to provide version forward compatibility for the plan files.)trtdoc";
 constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
-constexpr char const* FP8 = R"trtdoc(Enable FP8 layer selection)trtdoc";
+constexpr char const* FP8 = R"trtdoc(Enable plugins with FP8 input/output)trtdoc";
 constexpr char const* ERROR_ON_TIMING_CACHE_MISS
     = R"trtdoc(Emit error when a tactic being timed is not present in the timing cache.)trtdoc";
 constexpr char const* DISABLE_COMPILATION_CACHE
@@ -989,6 +1008,7 @@ constexpr char const* REFIT_IDENTICAL
     = R"trtdoc(Create a refittable engine using identical weights. Different weights during refits yield unpredictable behavior.)trtdoc";
 constexpr char const* WEIGHT_STREAMING
     = R"trtdoc(Enable building with the ability to stream varying amounts of weights during Runtime. This decreases GPU memory of TRT at the expense of performance.)trtdoc";
+constexpr char const* INT4 = R"trtdoc(Enable plugins with INT4 input/output)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1153,7 +1173,7 @@ constexpr char const* CUBLAS = R"trtdoc(
         **NOTE:** Disabling CUBLAS tactic source will cause the cuBLAS handle passed to plugins in attachToContext to be null.
     )trtdoc";
 constexpr char const* CUBLAS_LT = R"trtdoc(
-        Enables CUBLAS_LT tactics. Disabled by default.
+        Enables cuBLAS LT tactics. Disabled by default.
         [DEPRECATED] Deprecated in TensorRT 9.0.
     )trtdoc";
 constexpr char const* CUDNN = R"trtdoc(
@@ -1240,7 +1260,7 @@ namespace IBuilderConfigDoc
 constexpr char const* descr = R"trtdoc(
 
         :ivar avg_timing_iterations: :class:`int` The number of averaging iterations used when timing layers. When timing layers, the builder minimizes over a set of average times for layer execution. This parameter controls the number of iterations used in averaging. By default the number of averaging iterations is 1.
-        :ivar int8_calibrator: :class:`IInt8Calibrator` Int8 Calibration interface. The calibrator is to minimize the information loss during the INT8 quantization process.
+        :ivar int8_calibrator: :class:`IInt8Calibrator` [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization. Int8 Calibration interface. The calibrator is to minimize the information loss during the INT8 quantization process.
         :ivar flags: :class:`int` The build mode flags to turn on builder options for this network. The flags are listed in the BuilderFlags enum. The flags set configuration options to build the network. This should be in integer consisting of one or more :class:`BuilderFlag` s, combined via binary OR. For example, ``1 << BuilderFlag.FP16 | 1 << BuilderFlag.DEBUG``.
         :ivar profile_stream: :class:`int` The handle for the CUDA stream that is used to profile this network.
         :ivar num_optimization_profiles: :class:`int` The number of optimization profiles.
@@ -1353,6 +1373,8 @@ constexpr char const* add_optimization_profile = R"trtdoc(
 )trtdoc";
 
 constexpr char const* set_calibration_profile = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Set a calibration profile.
 
     Calibration optimization profile must be set if int8 calibration is used to set scales for a network with runtime dimensions.
@@ -1363,6 +1385,8 @@ constexpr char const* set_calibration_profile = R"trtdoc(
 )trtdoc";
 
 constexpr char const* get_calibration_profile = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Get the current calibration profile.
 
     :returns: The current calibration profile or None if calibrartion profile is unset.
@@ -1866,6 +1890,8 @@ constexpr char const* get_all_weights = R"trtdoc(
 )trtdoc";
 
 constexpr char const* get_dynamic_range = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Gets the dynamic range of a tensor. If the dynamic range was never set, returns the range computed during calibration.
 
     :arg tensor_name: The name of the tensor whose dynamic range to retrieve.
@@ -1874,6 +1900,8 @@ constexpr char const* get_dynamic_range = R"trtdoc(
 )trtdoc";
 
 constexpr char const* set_dynamic_range = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Update dynamic range for a tensor.
 
     :arg tensor_name: The name of the tensor whose dynamic range to update.
@@ -1885,6 +1913,8 @@ constexpr char const* set_dynamic_range = R"trtdoc(
 )trtdoc";
 
 constexpr char const* get_tensors_with_dynamic_range = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Get names of all tensors that have refittable dynamic ranges.
 
     :returns: The names of tensors with refittable dynamic ranges.

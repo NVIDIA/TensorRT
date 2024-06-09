@@ -17,8 +17,21 @@
 
 #include <algorithm>
 #include <cuda_fp16.h>
+#include <thrust/device_vector.h>
 
 #include "split.h"
+
+namespace nvinfer1
+{
+namespace plugin
+{
+struct SplitPluginDeviceVectors
+{
+    thrust::device_vector<int32_t> _d_segment_offsets;
+    thrust::device_vector<float*> _d_output_ptrs;
+};
+} // namespace plugin
+} // namespace nvinfer1
 
 using namespace nvinfer1;
 using nvinfer1::plugin::SplitPlugin;
@@ -101,12 +114,13 @@ void SplitPlugin::terminate() noexcept
 void SplitPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, int nbInputs,
                                   const nvinfer1::DynamicPluginTensorDesc* out, int nbOutputs) noexcept
 {
+  deviceVectors.reset(new SplitPluginDeviceVectors);
   std::vector<int> segment_offsets(1, 0);
   for( int i = 0; i < nbOutputs; ++i )
   {
     segment_offsets.push_back(segment_offsets.back() + _output_lengths[i]);
   }
-  _d_segment_offsets = segment_offsets;
+  deviceVectors->_d_segment_offsets = segment_offsets;
 
   for (int i = 0; i < nbInputs; i++)
   {
@@ -129,7 +143,7 @@ void SplitPlugin::configurePlugin(const nvinfer1::DynamicPluginTensorDesc* in, i
   {
     _nz *= dims.d[i];
   }
-  _d_output_ptrs.resize(nbOutputs, nullptr);
+  deviceVectors->_d_output_ptrs.resize(nbOutputs, nullptr);
 }
 
 int SplitPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvinfer1::PluginTensorDesc* /* outputDesc */,
@@ -138,13 +152,13 @@ int SplitPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvin
   PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
   int const* d_segment_offsets_ptr =
-    thrust::raw_pointer_cast(&_d_segment_offsets[0]);
+    thrust::raw_pointer_cast(&(deviceVectors->_d_segment_offsets)[0]);
   float  const* idata    = reinterpret_cast<float  const*>(inputs[0]);
   float* const* h_odatas = reinterpret_cast<float* const*>(outputs);
-  float** odatas = thrust::raw_pointer_cast(&_d_output_ptrs[0]);
+  float** odatas = thrust::raw_pointer_cast(&(deviceVectors->_d_output_ptrs)[0]);
   cudaError_t cuda_status =
     cudaMemcpyAsync(odatas, h_odatas,
-                    _d_output_ptrs.size() * sizeof(float*),
+                    (deviceVectors->_d_output_ptrs).size() * sizeof(float*),
                     cudaMemcpyHostToDevice, stream);
   if( cuda_status != cudaSuccess )
   {
@@ -158,13 +172,13 @@ int SplitPlugin::enqueue(const nvinfer1::PluginTensorDesc* inputDesc, const nvin
   if (inputDesc[0].type==nvinfer1::DataType::kFLOAT)
   {
     split_kernel<<<grid, block, 0, stream>>>
-      (_d_segment_offsets.size(), d_segment_offsets_ptr, idata, odatas,
+      ((deviceVectors->_d_segment_offsets).size(), d_segment_offsets_ptr, idata, odatas,
        _nx, _ny, nz);
   }
   else
   {
     split_kernel<<<grid, block, 0, stream>>>
-      (_d_segment_offsets.size(), d_segment_offsets_ptr, (__half const*)idata, (__half**)odatas,
+      ((deviceVectors->_d_segment_offsets).size(), d_segment_offsets_ptr, (__half const*)idata, (__half**)odatas,
        _nx, _ny, nz);
   }
   return cudaGetLastError() != cudaSuccess;

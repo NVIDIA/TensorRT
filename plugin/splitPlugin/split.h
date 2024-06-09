@@ -23,8 +23,8 @@
 #include "common/serialize.hpp"
 
 #include <iostream>
+#include <memory>
 #include <string>
-#include <thrust/device_vector.h>
 
 namespace
 {
@@ -36,14 +36,15 @@ namespace nvinfer1
 {
 namespace plugin
 {
+struct SplitPluginDeviceVectors;
+
 class TRT_DEPRECATED SplitPlugin final : public nvinfer1::IPluginV2DynamicExt
 {
     int32_t _axis;
     std::vector<int32_t> _output_lengths;
     int32_t _nx, _ny, _nz;
     int32_t _x_stride, _y_stride, _z_stride;
-    thrust::device_vector<int32_t> _d_segment_offsets;
-    thrust::device_vector<float*> _d_output_ptrs;
+    std::shared_ptr<SplitPluginDeviceVectors> deviceVectors;
 
     using IPluginV2::getOutputDimensions;
     using IPluginV2::getWorkspaceSize;

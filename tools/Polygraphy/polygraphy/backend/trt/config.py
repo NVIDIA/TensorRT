@@ -66,6 +66,7 @@ class CreateConfig(BaseLoader):
         disable_compilation_cache=None,
         progress_monitor=None,
         weight_streaming=None,
+        runtime_platform=None,
     ):
         """
         Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
@@ -194,6 +195,10 @@ class CreateConfig(BaseLoader):
                     A progress monitor. Allow users to view engine building progress through CLI.
             weight_streaming (bool):
                     TWhether to enable weight streaming for the TensorRT Engine.
+            runtime_platform (trt.RuntimePlatform):
+                    Describes the intended runtime platform (operating system and CPU architecture) for the execution of the TensorRT engine. 
+                    TensorRT provides support for cross-platform engine compatibility when the target runtime platform is different from the build platform.
+                    Defaults to TensorRT's default runtime platform.
         """
         self.tf32 = util.default(tf32, False)
         self.fp16 = util.default(fp16, False)
@@ -229,6 +234,7 @@ class CreateConfig(BaseLoader):
         self.disable_compilation_cache = util.default(disable_compilation_cache, False)
         self.progress_monitor = progress_monitor
         self.weight_streaming = weight_streaming
+        self.runtime_platform = runtime_platform
 
         if self.calibrator is not None and not self.int8:
             G_LOGGER.warning(
@@ -505,6 +511,13 @@ class CreateConfig(BaseLoader):
 
         if self.weight_streaming:
             try_set_flag("WEIGHT_STREAMING")
+        
+        if self.runtime_platform is not None:
+
+            def set_runtime_platform():
+                config.runtime_platform = self.runtime_platform
+
+            try_run(set_runtime_platform, "runtime_platform")
 
         return config
 

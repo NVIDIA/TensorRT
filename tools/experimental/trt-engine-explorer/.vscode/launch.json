@@ -1,0 +1,31 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: current file",
+            "type": "python",
+            "request": "launch",
+            "justMyCode":false,
+            "program": "${file}",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "Python: tests/test.py",
+            "type": "python",
+            "request": "launch",
+            "program": "tests/test.py",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "draw_engine",
+            "type": "python",
+            "request": "launch",
+            "program": "utils/draw_engine.py",
+            "console": "integratedTerminal",
+            "args": ["tests/inputs/mobilenet.qat.onnx.engine"],
+        }
+    ]
+}

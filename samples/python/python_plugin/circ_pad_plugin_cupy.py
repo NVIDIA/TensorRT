@@ -21,6 +21,8 @@ import onnx
 import cupy as cp
 import time
 import pickle
+import sys
+import os
 
 import tensorrt as trt
 from polygraphy.backend.trt import (
@@ -32,7 +34,8 @@ from polygraphy.backend.trt import (
 
 from polygraphy.json import to_json, from_json
 
-from utils import volume, parseArgs
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+from plugin_utils import volume, parseArgs
 
 circ_pad_half_kernel = cp.RawKernel(
     r"""
@@ -291,7 +294,7 @@ if __name__ == "__main__":
     plg_registry.register_creator(my_plugin_creator, "")
 
     # create ONNX model
-    onnx_path = "test_CircPadPlugin.onnx"
+    onnx_path = f"test_CircPadPlugin_cupy_{args.precision}.onnx"
     inputA = gs.Variable(name="X", shape=inp_shape, dtype=precision)
     Y = gs.Variable(name="Y", dtype=precision)
     myPluginNode = gs.Node(

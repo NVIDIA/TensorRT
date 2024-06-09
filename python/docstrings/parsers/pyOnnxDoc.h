@@ -59,6 +59,8 @@ constexpr const char* parse_from_file = R"trtdoc(
 )trtdoc";
 
 constexpr const char* supports_model = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. See supports_model_v2.
+
     Check whether TensorRT supports a particular ONNX model.
 
     :arg model: The serialized ONNX model.
@@ -67,6 +69,38 @@ constexpr const char* supports_model = R"trtdoc(
     :returns: Tuple[bool, List[Tuple[NodeIndices, bool]]]
         The first element of the tuple indicates whether the model is supported.
         The second indicates subgraphs (by node index) in the model and whether they are supported.
+)trtdoc";
+
+constexpr const char* supports_model_v2 = R"trtdoc(
+    Check whether TensorRT supports a particular ONNX model.
+    Query each subgraph with num_subgraphs, is_subgraph_supported, get_subgraph_nodes.
+
+    :arg model: The serialized ONNX model.
+    :arg path: The path to the model file. Only required if the model has externally stored weights.
+    :returns: true if the model is supported
+)trtdoc";
+
+constexpr const char* num_subgraphs = R"trtdoc(
+    Get the number of subgraphs. Calling before \p supportsModelV2 is an undefined behavior. Will return 0 by default.
+
+    :returns: Number of subgraphs
+)trtdoc";
+
+constexpr const char* is_subgraph_supported = R"trtdoc(
+    Returns whether the subgraph is supported. Calling before \p supportsModelV2 is an undefined behavior.
+    Will return false by default.
+
+    :arg index: Index of the subgraph to be checked.
+    :returns: true if subgraph is supported
+)trtdoc";
+
+constexpr const char* get_subgraph_nodes = R"trtdoc(
+    Get the nodes of the specified subgraph. Calling before \p supportsModelV2 is an undefined behavior.
+    Will return an empty list by default.
+
+    :arg index: Index of the subgraph.
+    :returns: List[int]
+        A list of node indices in the subgraph.
 )trtdoc";
 
 constexpr const char* supports_operator = R"trtdoc(

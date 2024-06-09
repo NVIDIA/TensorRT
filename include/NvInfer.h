@@ -281,7 +281,9 @@ public:
     //!
     //! Requires that min and max be finite, and min <= max.
     //!
-    bool setDynamicRange(float min, float max) noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED bool setDynamicRange(float min, float max) noexcept
     {
         return mImpl->setDynamicRange(min, max);
     }
@@ -369,6 +371,8 @@ public:
     //!
     //! \return True if dynamic range is set, false otherwise.
     //!
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
     bool dynamicRangeIsSet() const noexcept
     {
         return mImpl->dynamicRangeIsSet();
@@ -403,13 +407,15 @@ public:
     }
 
     //!
-    //! \brief Set allowed formats for this tensor. By default all formats are allowed.
+    //! \brief Set allowed formats for an input or output tensor. By default all formats are allowed.
     //!        Shape tensors (for which isShapeTensor() returns true) may only have row-major linear format.
     //!
     //! When running network on DLA and the build option kGPU_FALLBACK is not specified, if DLA format(kCHW4 with Int8,
-    //! kCHW4 with FP16, kCHW16 with FP16, kCHW32 with Int8) is set, the input format is treated as native DLA format with
-    //! line stride requirement. Input/output binding with these format should have correct layout during
+    //! kCHW4 with FP16, kCHW16 with FP16, kCHW32 with Int8) is set, the input format is treated as native DLA format
+    //! with line stride requirement. Input/output binding with these format should have correct layout during
     //! inference.
+    //!
+    //! Tensor formats are determined at build time by TensorRT for tensors not marked as input or output.
     //!
     //! \param formats A bitmask of TensorFormat values that are supported for this tensor.
     //!
@@ -653,8 +659,7 @@ public:
     //! otherwise it must be either the input or output type.
     //!
     //! Strongly-typed networks reject calls to method setPrecision. In strongly-typed networks, the computation
-    //! precision is typically controlled by casting the input tensors to the desired type. The exception is
-    //! INormalizationLayer, which has a method setComputePrecision().
+    //! precision is typically controlled by casting the input tensors to the desired type.
     //!
     //! \param dataType the computational precision.
     //!
@@ -2775,6 +2780,7 @@ enum class UnaryOperation : int32_t
     kSIGN = 21,  //!< Sign, If input > 0, output 1; if input < 0, output -1; if input == 0, output 0.
     kROUND = 22, //!< Round to nearest even for floating-point data type.
     kISINF = 23, //!< Return true if input value equals +/- infinity for floating-point data type.
+    kISNAN = 24, //!< Return true if input value is a NaN for floating-point data type.
 };
 
 //!
@@ -2785,7 +2791,7 @@ enum class UnaryOperation : int32_t
 template <>
 constexpr inline int32_t EnumMax<UnaryOperation>() noexcept
 {
-    return 24;
+    return 25;
 }
 
 //!
@@ -3031,7 +3037,7 @@ struct Permutation
 //! This layer shuffles data by applying in sequence: a transpose operation, a reshape operation
 //! and a second transpose operation. The dimension types of the output are those of the reshape dimension.
 //!
-//! The layer has an optional second input.  If present, it must be a 1D Int32 shape tensor,
+//! The layer has an optional second input. If present, it must be a 1D Int32 shape tensor,
 //! and the reshape dimensions are taken from it.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
@@ -3080,6 +3086,9 @@ public:
     //! Value -1 infers that particular dimension by looking at input and rest
     //! of the reshape dimensions. Note that only a maximum of one dimension is
     //! permitted to be specified as -1.
+    //! Avoid using -1 if the input can have zero volume and any of the other
+    //! reshape dimensions can be zero (after resolving special treatment of 0),
+    //! because the solution for the -1 becomes indeterminate and TensorRT will report an error.
     //!
     //! The product of the new dimensions must be equal to the product of the old.
     //!
@@ -4572,7 +4581,7 @@ protected:
 //! The second input tensor, if present, must be defined outside the loop.
 //!
 //! If getLoopOutput() is kLAST_VALUE, a single input must be provided,
-//! and that input must from a IRecurrenceLayer in the same loop.
+//! and that input must be from an IRecurrenceLayer in the same loop.
 //!
 //! If getLoopOutput() is kCONCATENATE or kREVERSE, a second input must be provided.
 //! The second input must be a 0D shape tensor, defined before the loop commences,
@@ -6157,9 +6166,9 @@ public:
     //!
     //! \param type The datatype used for the compute precision of this layer.
     //!
-    //! By default, to avoid overflow errors, TensorRT will run the normalization computation in DataType::kFLOAT32
-    //! even in mixed precision mode regardless of builder flags. To override this default, use this method
-    //! to set the desired compute precision.
+    //! The method is used to avoid overflow errors by controlling the normalization computation in
+    //! mixed precision mode. The compute precision defaults to DataType::kFLOAT32.
+    //! To override this default, use this method to set the desired compute precision.
     //!
     //! For a weakly typed network:
     //!
@@ -6168,7 +6177,8 @@ public:
     //! * Method setPrecision() can still be called. The input data is cast to that precision before
     //!   being cast to the compute precision.
     //!
-    //! Neither of these two methods are allowed for a strongly typed network.
+    //! Strongly typed network rejects calls to this method since the compute precision is typically
+    //! controlled by casting the input tensors to the desired type.
     //!
     //! Only DataType::kFLOAT32 and DataType::kHALF are valid types for \p type.
     //!
@@ -7538,6 +7548,8 @@ protected:
 //!
 //! \brief Version of calibration algorithm to use.
 //!
+//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+//!
 enum class CalibrationAlgoType : int32_t
 {
     kLEGACY_CALIBRATION = 0,    //!< Legacy calibration
@@ -7568,7 +7580,9 @@ constexpr inline int32_t EnumMax<CalibrationAlgoType>() noexcept
 //! the distribution of activations. It may optionally implement a method for caching the calibration result for reuse
 //! on subsequent runs.
 //!
-class IInt8Calibrator : public IVersionedInterface
+//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+//!
+class TRT_DEPRECATED IInt8Calibrator : public IVersionedInterface
 {
 public:
     //!
@@ -7634,7 +7648,7 @@ public:
 
 namespace v_1_0
 {
-class IInt8EntropyCalibrator : public IInt8Calibrator
+class TRT_DEPRECATED IInt8EntropyCalibrator : public IInt8Calibrator
 {
 public:
     //!
@@ -7668,11 +7682,13 @@ public:
 //! \note To ensure compatibility of source code with future versions of TensorRT, use IEntropyCalibrator, not
 //!       v_1_0::IEntropyCalibrator
 //!
+//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+//!
 using IInt8EntropyCalibrator = v_1_0::IInt8EntropyCalibrator;
 
 namespace v_1_0
 {
-class IInt8EntropyCalibrator2 : public IInt8Calibrator
+class TRT_DEPRECATED IInt8EntropyCalibrator2 : public IInt8Calibrator
 {
 public:
     //!
@@ -7706,11 +7722,13 @@ public:
 //! \note To ensure compatibility of source code with future versions of TensorRT, use IEntropyCalibrator2, not
 //!        v_1_0::IEntropyCalibrator2
 //!
+//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+//!
 using IInt8EntropyCalibrator2 = v_1_0::IInt8EntropyCalibrator2;
 
 namespace v_1_0
 {
-class IInt8MinMaxCalibrator : public IInt8Calibrator
+class TRT_DEPRECATED IInt8MinMaxCalibrator : public IInt8Calibrator
 {
 public:
     //!
@@ -7743,11 +7761,13 @@ public:
 //! \note To ensure compatibility of source code with future versions of TensorRT, use IMinMaxCalibrator>, not
 //!       v_1_0::IMinMaxCalibrator
 //!
+//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+//!
 using IInt8MinMaxCalibrator = v_1_0::IInt8MinMaxCalibrator;
 
 namespace v_1_0
 {
-class IInt8LegacyCalibrator : public IInt8Calibrator
+class TRT_DEPRECATED IInt8LegacyCalibrator : public IInt8Calibrator
 {
 public:
     //!
@@ -7820,6 +7840,8 @@ public:
 //!
 //! \note To ensure compatibility of source code with future versions of TensorRT, use ILegacyCalibrator, not
 //!       v_1_0::ILegacyCalibrator
+//!
+//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
 //!
 using IInt8LegacyCalibrator = v_1_0::IInt8LegacyCalibrator;
 
@@ -8102,6 +8124,8 @@ using QuantizationFlags = uint32_t;
 //!
 //! \see IBuilderConfig::setQuantizationFlag(), IBuilderConfig::getQuantizationFlag()
 //!
+//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+//!
 enum class QuantizationFlag : int32_t
 {
     //! Run int8 calibration pass before layer fusion. Only valid for IInt8LegacyCalibrator and
@@ -8200,7 +8224,7 @@ enum class BuilderFlag : int32_t
     //! If BuilderFlag::kVERSION_COMPATIBLE is not set then the value of this flag will be ignored.
     kEXCLUDE_LEAN_RUNTIME = 14,
 
-    //! Enable FP8 layer selection, with FP32 fallback.
+    //! Enable plugins with FP8 input/output.
     //!
     //! This flag is not supported with hardware-compatibility mode.
     //!
@@ -8261,6 +8285,10 @@ enum class BuilderFlag : int32_t
     //!      ICudaEngine::setWeightStreamingBudget
     //!
     kWEIGHT_STREAMING = 21,
+
+    //! Enable plugins with INT4 input/output.
+    kINT4 = 22,
+
 };
 
 //!
@@ -8271,7 +8299,7 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 22;
+    return 23;
 }
 
 //!
@@ -8280,7 +8308,10 @@ constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 //! \brief Class to handle tactic timing info collected from builder.
 //!
 //! The timing cache is created or initialized by IBuilderConfig. It can be shared across builder instances
-//! to accelerate the builder wallclock time.
+//! to reduce the builder wallclock time.
+//!
+//! \warning It is a known issue that the same timing cache doesn't guarantee stable engine build reproducibility
+//!          at optimization level 4 and higher. This issue will be fixed by 2024.
 //!
 //! \see IBuilderConfig
 //!
@@ -8643,7 +8674,9 @@ public:
     //!
     //! The calibrator is to minimize the information loss during the INT8 quantization process.
     //!
-    void setInt8Calibrator(IInt8Calibrator* calibrator) noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED void setInt8Calibrator(IInt8Calibrator* calibrator) noexcept
     {
         mImpl->setInt8Calibrator(calibrator);
     }
@@ -8651,7 +8684,9 @@ public:
     //!
     //! \brief Get Int8 Calibration interface.
     //!
-    IInt8Calibrator* getInt8Calibrator() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED IInt8Calibrator* getInt8Calibrator() const noexcept
     {
         return mImpl->getInt8Calibrator();
     }
@@ -8944,7 +8979,9 @@ public:
     //!
     //! \return True if the calibration profile was set correctly.
     //!
-    bool setCalibrationProfile(IOptimizationProfile const* profile) noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED bool setCalibrationProfile(IOptimizationProfile const* profile) noexcept
     {
         return mImpl->setCalibrationProfile(profile);
     }
@@ -8954,7 +8991,9 @@ public:
     //!
     //! \return A pointer to the current calibration profile or nullptr if calibration profile is unset.
     //!
-    IOptimizationProfile const* getCalibrationProfile() noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED IOptimizationProfile const* getCalibrationProfile() noexcept
     {
         return mImpl->getCalibrationProfile();
     }

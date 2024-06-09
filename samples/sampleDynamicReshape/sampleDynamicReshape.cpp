@@ -214,16 +214,31 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
         preprocessorConfig->setInt8Calibrator(calibrator.get());
     }
 
-    SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan = makeUnique(
-        builder->buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
+    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+
+    // Load timing cache
+    if (!mParams.timingCacheFile.empty())
+    {
+        timingCache = samplesCommon::buildTimingCacheFromFile(
+            sample::gLogger.getTRTLogger(), *preprocessorConfig, mParams.timingCacheFile, sample::gLogError);
+    }
+
+    SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan
+        = makeUnique(builder->buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
     if (!preprocessorPlan)
     {
         sample::gLogError << "Preprocessor serialized engine build failed." << std::endl;
         return false;
     }
 
-    mPreprocessorEngine = makeUnique(
-        runtime->deserializeCudaEngine(preprocessorPlan->data(), preprocessorPlan->size()));
+    if (timingCache != nullptr && !mParams.timingCacheFile.empty())
+    {
+        samplesCommon::updateTimingCacheFile(
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
+    }
+
+    mPreprocessorEngine
+        = makeUnique(runtime->deserializeCudaEngine(preprocessorPlan->data(), preprocessorPlan->size()));
     if (!mPreprocessorEngine)
     {
         sample::gLogError << "Preprocessor engine deserialization failed." << std::endl;
@@ -322,15 +337,31 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
         config->setInt8Calibrator(calibrator.get());
     }
     // Build the prediciton engine.
-    SampleUniquePtr<nvinfer1::IHostMemory> predictionPlan = makeUnique(builder->buildSerializedNetwork(*network, *config));
+    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+
+    // Load timing cache
+    if (!mParams.timingCacheFile.empty())
+    {
+        timingCache = samplesCommon::buildTimingCacheFromFile(
+            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+    }
+
+    // Build the prediction engine.
+    SampleUniquePtr<nvinfer1::IHostMemory> predictionPlan
+        = makeUnique(builder->buildSerializedNetwork(*network, *config));
     if (!predictionPlan)
     {
         sample::gLogError << "Prediction serialized engine build failed." << std::endl;
         return false;
     }
 
-    mPredictionEngine = makeUnique(
-        runtime->deserializeCudaEngine(predictionPlan->data(), predictionPlan->size()));
+    if (timingCache != nullptr && !mParams.timingCacheFile.empty())
+    {
+        samplesCommon::updateTimingCacheFile(
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
+    }
+
+    mPredictionEngine = makeUnique(runtime->deserializeCudaEngine(predictionPlan->data(), predictionPlan->size()));
     if (!mPredictionEngine)
     {
         sample::gLogError << "Prediction engine deserialization failed." << std::endl;
@@ -504,6 +535,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.int8 = args.runInInt8;
     params.fp16 = args.runInFp16;
     params.bf16 = args.runInBf16;
+    params.timingCacheFile = args.timingCacheFile;
     return params;
 }
 
@@ -512,16 +544,19 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
 //!
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>]"
+    std::cout << "Usage: ./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] "
+                 "[--timingCacheFile=<path to timing cache file>]"
               << std::endl;
-    std::cout << "--help, -h      Display help information" << std::endl;
-    std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
+    std::cout << "--help, -h         Display help information" << std::endl;
+    std::cout << "--datadir          Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "(data/samples/mnist/, data/mnist/)"
               << std::endl;
-    std::cout << "--int8          Run in Int8 mode." << std::endl;
-    std::cout << "--fp16          Run in FP16 mode." << std::endl;
-    std::cout << "--bf16          Run in BF16 mode." << std::endl;
+    std::cout << "--timingCacheFile  Specify path to a timing cache file. If it does not already exist, it will be "
+              << "created." << std::endl;
+    std::cout << "--int8             Run in Int8 mode." << std::endl;
+    std::cout << "--fp16             Run in FP16 mode." << std::endl;
+    std::cout << "--bf16             Run in BF16 mode." << std::endl;
 }
 
 int main(int argc, char** argv)

@@ -72,6 +72,7 @@ struct SampleINT8APIParams
     std::string imageFileName;
     std::string referenceFileName;
     std::string networkTensorsFileName;
+    std::string timingCacheFile;
 };
 
 //!
@@ -84,7 +85,7 @@ class SampleINT8API
 {
 private:
     template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
+    using SampleUniquePtr = std::unique_ptr<T>;
 
 public:
     SampleINT8API(const SampleINT8APIParams& params)
@@ -386,10 +387,11 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
                     case DataType::kHALF: val = static_cast<const half_float::half*>(wts.values)[wb]; break;
                     case DataType::kINT32: val = static_cast<const int32_t*>(wts.values)[wb]; break;
                     case DataType::kUINT8: val = static_cast<uint8_t const*>(wts.values)[wb]; break;
-                    case DataType::kFP8: ASSERT(!"FP8 is not supported"); break;
+                    case DataType::kFP8:
                     case DataType::kBF16:
                     case DataType::kINT4:
-                    case DataType::kINT64: ASSERT(false && "Unsupported data type");
+                    case DataType::kINT64:
+                        ASSERT(false && "Unsupported data type");
                     }
                     max = std::max(max, std::abs(val));
                 }
@@ -578,11 +580,24 @@ sample::Logger::TestResult SampleINT8API::build()
     }
     config->setProfileStream(*profileStream);
 
+    SampleUniquePtr<nvinfer1::ITimingCache> timingCache;
+    if (!mParams.timingCacheFile.empty())
+    {
+        timingCache = samplesCommon::buildTimingCacheFromFile(
+            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+    }
+
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         sample::gLogError << "Unable to build serialized plan." << std::endl;
         return sample::Logger::TestResult::kFAILED;
+    }
+
+    if (timingCache != nullptr && !mParams.timingCacheFile.empty())
+    {
+        samplesCommon::updateTimingCacheFile(
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
     }
 
     if (!mRuntime)
@@ -745,6 +760,10 @@ bool parseSampleINT8APIArgs(SampleINT8APIArgs& args, int argc, char* argv[])
             }
             args.dataDirs.push_back(dirPath);
         }
+        else if (!strncmp(argv[i], "--timingCacheFile=", 18))
+        {
+            args.timingCacheFile = (argv[i] + 18);
+        }
         else if (!strncmp(argv[i], "--verbose", 9) || !strncmp(argv[i], "-v", 2))
         {
             args.verbose = true;
@@ -807,6 +826,7 @@ SampleINT8APIParams initializeSampleParams(SampleINT8APIArgs args)
     params.dlaCore = args.useDLACore;
     params.writeNetworkTensors = args.writeNetworkTensors;
     params.networkTensorsFileName = args.networkTensorsFileName;
+    params.timingCacheFile = args.timingCacheFile;
     validateInputParams(params);
     return params;
 }
@@ -818,7 +838,8 @@ void printHelpInfo()
 {
     std::cout << "Usage: ./sample_int8_api [-h or --help] [--model=model_file] "
                  "[--ranges=per_tensor_dynamic_range_file] [--image=image_file] [--reference=reference_file] "
-                 "[--data=/path/to/data/dir] [--useDLACore=<int>] [-v or --verbose]\n";
+                 "[--data=/path/to/data/dir] [--useDLACore=<int>] [-v or --verbose] "
+                 "[--timingCacheFile=timing_cache_file]\n";
     std::cout << "-h or --help. Display This help information" << std::endl;
     std::cout << "--model=model_file.onnx or /absolute/path/to/model_file.onnx. Generate model file using README.md in "
                  "case it does not exists. Default to resnet50.onnx"
@@ -845,6 +866,9 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--useDLACore=N. Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
+              << std::endl;
+    std::cout << "--timingCacheFile=functional.cache or /absolute/path/to/functional.cache. Specify path for timing "
+                 "cache file. If it does not already exist, it will be created. Defaults to not using a timing cache."
               << std::endl;
     std::cout << "--verbose. Outputs per-tensor dynamic range and layer precision info for the network" << std::endl;
 }

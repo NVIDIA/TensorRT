@@ -235,10 +235,10 @@ bool allocateContextMemory(InferenceEnvironment& iEnv, InferenceOptions const& i
                 sample::gLogError << "Unrecognizable memory allocation strategy." << std::endl;
                 return false;
             }
-            iEnv.deviceMemory.at(i) = std::move(TrtDeviceBuffer(sizeToAlloc));
-            ec->setDeviceMemory(iEnv.deviceMemory.at(i).get());
+            iEnv.deviceMemory.at(i) = TrtDeviceBuffer(sizeToAlloc);
+            ec->setDeviceMemoryV2(iEnv.deviceMemory.at(i).get(), iEnv.deviceMemory.at(i).getSize());
             sample::gLogInfo << "Maximum device memory size across all profiles: "
-                             << (engine->getDeviceMemorySize() / 1.0_MiB) << " MiB" << std::endl;
+                             << (engine->getDeviceMemorySizeV2() / 1.0_MiB) << " MiB" << std::endl;
             sample::gLogInfo << "Only allocated device memory enough for " << allocReason << ": "
                              << (sizeToAlloc / 1.0_MiB) << " MiB" << std::endl;
         }
@@ -249,14 +249,19 @@ bool allocateContextMemory(InferenceEnvironment& iEnv, InferenceOptions const& i
 
 bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
+#if TRT_WINML
+    int32_t const isIntegrated{};
+#else
     int32_t device{};
     cudaCheck(cudaGetDevice(&device));
 
     cudaDeviceProp properties;
     cudaCheck(cudaGetDeviceProperties(&properties, device));
+    int32_t const isIntegrated{properties.integrated};
+#endif
     // Use managed memory on integrated devices when transfers are skipped
     // and when it is explicitly requested on the commandline.
-    bool useManagedMemory{(inference.skipTransfers && properties.integrated) || inference.useManaged};
+    bool useManagedMemory{(inference.skipTransfers && isIntegrated) || inference.useManaged};
     using FillSafeBindings = FillBindingClosure<nvinfer1::safe::ICudaEngine, nvinfer1::safe::IExecutionContext>;
     if (iEnv.safe)
     {
@@ -302,15 +307,24 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     {
         auto const& budget = inference.weightStreamingBudget;
         int64_t wsBudget = budget.bytes;
-        if (budget.percent != WeightStreamingBudget::kDISABLE)
+        if (budget.percent != 100.0)
         {
             double const percent = budget.percent;
-            ASSERT(percent > 0.0);
-            auto const min = engine->getMinimumWeightStreamingBudget();
+            ASSERT(percent < 100.0);
             auto const max = engine->getStreamableWeightsSize();
-            wsBudget = (max >= min) ? (1 - percent / 100) * (max - min) + min : WeightStreamingBudget::kDISABLE;
+            wsBudget = (max >= 0) ? (percent / 100) * (max) : WeightStreamingBudget::kDISABLE;
         }
-        bool success = engine->setWeightStreamingBudget(wsBudget);
+
+        if (wsBudget == WeightStreamingBudget::kDISABLE)
+        {
+            wsBudget = engine->getStreamableWeightsSize();
+        }
+        else if (wsBudget == WeightStreamingBudget::kAUTOMATIC)
+        {
+            wsBudget = engine->getWeightStreamingAutomaticBudget();
+        }
+        ASSERT(wsBudget >= 0);
+        bool success = engine->setWeightStreamingBudgetV2(wsBudget);
         SMP_RETVAL_IF_FALSE(success, "Failed to set weight streaming limit!", false, sample::gLogError);
         switch (wsBudget)
         {
@@ -1277,10 +1291,12 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
             auto& reader = iEnv.engine.getFileReader();
             reader.reset();
             ASSERT(reader.isOpen());
+#if !TRT_WINML
             for (auto const& pluginPath : sys.dynamicPlugins)
             {
                 rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
             }
+#endif
             engine.reset(rt->deserializeCudaEngine(reader));
             deserializeOK = (engine != nullptr);
         }

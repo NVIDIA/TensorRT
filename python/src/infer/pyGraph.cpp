@@ -327,10 +327,11 @@ namespace tensorrt
             .def_property_readonly("is_network_output", &ITensor::isNetworkOutput)
             .def_property_readonly("is_shape_tensor", &ITensor::isShapeTensor)
             .def_property_readonly("is_execution_tensor", &ITensor::isExecutionTensor)
-            .def_property("dynamic_range", lambdas::get_dynamic_range, lambdas::set_dynamic_range)
+            // Using a plus sign converts the lambda function into a function pointer.
+            .def_property("dynamic_range", utils::deprecate(+lambdas::get_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), utils::deprecate(+lambdas::set_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."))
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
-            .def("set_dynamic_range", &ITensor::setDynamicRange, "min"_a, "max"_a, ITensorDoc::set_dynamic_range)
-            .def("reset_dynamic_range", &ITensor::resetDynamicRange, ITensorDoc::reset_dynamic_range)
+            .def("set_dynamic_range", utils::deprecateMember(&ITensor::setDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), "min"_a, "max"_a, ITensorDoc::set_dynamic_range)
+            .def("reset_dynamic_range", utils::deprecateMember(&ITensor::resetDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), ITensorDoc::reset_dynamic_range)
             .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
         ;
@@ -549,6 +550,7 @@ namespace tensorrt
             .value("SIGN", UnaryOperation::kSIGN, UnaryOperationDoc::SIGN)
             .value("ROUND", UnaryOperation::kROUND, UnaryOperationDoc::ROUND)
             .value("ISINF", UnaryOperation::kISINF, UnaryOperationDoc::ISINF)
+            .value("ISNAN", UnaryOperation::kISNAN, UnaryOperationDoc::ISNAN)
         ;
 
         py::class_<IUnaryLayer, ILayer, std::unique_ptr<IUnaryLayer, py::nodelete>>(m, "IUnaryLayer", IUnaryLayerDoc::descr, py::module_local())

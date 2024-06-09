@@ -54,6 +54,8 @@ documentation.
 
 ## Changelog
 
+April 2024: Implements `ROIAlignV3` which uses the `IPluginV3` interface.
+
 June 2022: This is the first release of this `README.md` file.
 
 ## Known issues

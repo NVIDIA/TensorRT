@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-import ammo.torch.opt as ato
-import ammo.torch.quantization as atq
+import modelopt.torch.opt as mto
+import modelopt.torch.quantization as mtq
 from cuda import cudart
 from diffusers import (
     DDIMScheduler,
@@ -61,7 +61,7 @@ from utilities import (
     save_image,
     unload_model
 )
-from utils_ammo import (
+from utils_modelopt import (
     filter_func,
     quantize_lvl,
     get_int8_config,
@@ -433,7 +433,7 @@ class StableDiffusionPipeline:
         model_suffix = dict(zip(model_names, [lora_suffix if do_lora_merge[model_name] else '' for model_name in model_names]))
         use_int8 = dict.fromkeys(model_names, False)
         if int8:
-            assert self.pipeline_type.is_sd_xl(), "int8 quantization only supported for SDXL pipeline"
+            assert self.pipeline_type.is_sd_xl_base(), "int8 quantization only supported for SDXL pipeline"
             use_int8['unetxl'] = True
             model_suffix['unetxl'] += f"-int8.l{quantization_level}.bs2.s{denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False, suffix=model_suffix[model_name]) for model_name in model_names]))
@@ -491,15 +491,15 @@ class StableDiffusionPipeline:
                             )
 
                         print(f"[I] Performing int8 calibration for {calibration_size} steps.")
-                        atq.quantize(model, quant_config, forward_loop=calibration_loop)
-                        ato.save(model, state_dict_path)
+                        mtq.quantize(model, quant_config, forward_loop=calibration_loop)
+                        mto.save(model, state_dict_path)
 
                     print(f"[I] Generating quantized ONNX model: {onnx_opt_path[model_name]}")
                     if not os.path.exists(onnx_path[model_name]):
                         model = obj.get_model()
-                        ato.restore(model, state_dict_path)
+                        mto.restore(model, state_dict_path)
                         quantize_lvl(model, quantization_level) 
-                        atq.disable_quantizer(model, filter_func)
+                        mtq.disable_quantizer(model, filter_func)
                         model.to(torch.float32).to("cpu") # QDQ needs to be in FP32
                         # WAR to enable ONNX export of quantized UNet
                         obj.device="cpu"

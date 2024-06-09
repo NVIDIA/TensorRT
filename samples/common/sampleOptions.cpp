@@ -44,6 +44,12 @@ static const std::map<char, std::pair<int64_t, std::string>> kUNIT_MULTIPLIERS{
     {'G', {1 << 30, "Gibibytes"}},
 };
 
+std::string addDefaultUnitSuffixIfNotSpecified(std::string const& option, char defaultUnit)
+{
+    char lastChar = option.at(option.size() - 1);
+    return std::isdigit(lastChar) ? option + defaultUnit : option;
+}
+
 // Returns "B (Bytes), K (Kilobytes), ..."
 std::string getAvailableUnitSuffixes()
 {
@@ -141,7 +147,7 @@ nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
         {"fp16", nvinfer1::DataType::kHALF}, {"bf16", nvinfer1::DataType::kBF16}, {"int8", nvinfer1::DataType::kINT8},
         {"fp8", nvinfer1::DataType::kFP8}, {"int32", nvinfer1::DataType::kINT32}, {"int64", nvinfer1::DataType::kINT64},
-        {"bool", nvinfer1::DataType::kBOOL}, {"uint8", nvinfer1::DataType::kUINT8}};
+        {"bool", nvinfer1::DataType::kBOOL}, {"uint8", nvinfer1::DataType::kUINT8}, {"int4", nvinfer1::DataType::kINT4}};
     const auto& dt = strToDT.find(option);
     if (dt == strToDT.end())
     {
@@ -245,11 +251,11 @@ WeightStreamingBudget stringToValue<WeightStreamingBudget>(std::string const& op
     else
     {
         double bytes = stringToValue<double>(option);
-        if (!(bytes == WeightStreamingBudget::kAUTOMATIC || bytes >= WeightStreamingBudget::kDISABLE))
+        if (!(bytes == WeightStreamingBudget::kAUTOMATIC || bytes == WeightStreamingBudget::kDISABLE || bytes >= 0))
         {
             std::ostringstream err;
-            err << "The weight streaming budget must be " << WeightStreamingBudget::kAUTOMATIC << " or at least "
-                << WeightStreamingBudget::kDISABLE << ".";
+            err << "The weight streaming budget must be " << WeightStreamingBudget::kDISABLE << ", "
+                << WeightStreamingBudget::kAUTOMATIC << ", or at least 0.";
             throw std::invalid_argument(err.str());
         }
         budget.bytes = static_cast<int64_t>(bytes);
@@ -803,6 +809,10 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
     {
         os << "+FP8";
     }
+    if (options.int4)
+    {
+        os << "+INT4";
+    }
     if (options.stronglyTyped)
     {
         os << " (Strongly Typed)";
@@ -857,10 +867,10 @@ std::ostream& printSparsity(std::ostream& os, BuildOptions const& options)
 
 std::ostream& printMemoryPools(std::ostream& os, BuildOptions const& options)
 {
-    auto const printValueOrDefault = [&os](double const val) {
+    auto const printValueOrDefault = [&os](double const val, char const* unit = "MiB") {
         if (val >= 0)
         {
-            os << val << " MiB";
+            os << val << " " << unit;
         }
         else
         {
@@ -880,7 +890,7 @@ std::ostream& printMemoryPools(std::ostream& os, BuildOptions const& options)
     printValueOrDefault(options.dlaGlobalDRAM);
     os << ", ";
     os << "tacticSharedMem: ";
-    printValueOrDefault(options.tacticSharedMem);
+    printValueOrDefault(options.tacticSharedMem, "KiB");
     return os;
 }
 
@@ -1117,7 +1127,9 @@ void BuildOptions::parse(Arguments& arguments)
         double memPoolSize;
         try
         {
-            std::tie(memPoolName, memPoolSize) = splitNameAndValue<double>(memPoolSpec);
+            std::string strPoolSize;
+            std::tie(memPoolName, strPoolSize) = splitNameAndValue<std::string>(memPoolSpec);
+            memPoolSize = stringToValue<double>(addDefaultUnitSuffixIfNotSpecified(strPoolSize, 'M'));
         }
         catch (std::invalid_argument const& arg)
         {
@@ -1132,23 +1144,28 @@ void BuildOptions::parse(Arguments& arguments)
         }
         if (memPoolName == "workspace")
         {
-            workspace = memPoolSize;
+            // use unit in MB.
+            workspace = memPoolSize / 1.0_MiB;
         }
         else if (memPoolName == "dlaSRAM")
         {
-            dlaSRAM = memPoolSize;
+            // use unit in MB.
+            dlaSRAM = memPoolSize / 1.0_MiB;
         }
         else if (memPoolName == "dlaLocalDRAM")
         {
-            dlaLocalDRAM = memPoolSize;
+            // use unit in MB.
+            dlaLocalDRAM = memPoolSize / 1.0_MiB;
         }
         else if (memPoolName == "dlaGlobalDRAM")
         {
-            dlaGlobalDRAM = memPoolSize;
+            // use unit in MB.
+            dlaGlobalDRAM = memPoolSize / 1.0_MiB;
         }
         else if (memPoolName == "tacticSharedMem")
         {
-            tacticSharedMem = memPoolSize;
+            // use unit in KB.
+            tacticSharedMem = memPoolSize / 1.0_KiB;
         }
         else if (!memPoolName.empty())
         {
@@ -1177,6 +1194,14 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--weightless", stripWeights);
     getAndDelOption(arguments, "--stripWeights", stripWeights);
 
+    bool stripAllWeights{};
+    getAndDelOption(arguments, "--stripAllWeights", stripAllWeights);
+    if (stripAllWeights)
+    {
+        refittable = true;
+        stripWeights = true;
+    }
+
     // --vc and --versionCompatible are synonyms
     getAndDelOption(arguments, "--vc", versionCompatible);
     if (!versionCompatible)
@@ -1184,12 +1209,14 @@ void BuildOptions::parse(Arguments& arguments)
         getAndDelOption(arguments, "--versionCompatible", versionCompatible);
     }
 
+#if !TRT_WINML
     // --pi and --pluginInstanceNorm are synonyms
     getAndDelOption(arguments, "--pi", pluginInstanceNorm);
     if (!pluginInstanceNorm)
     {
         getAndDelOption(arguments, "--pluginInstanceNorm", pluginInstanceNorm);
     }
+#endif
 
     getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
     getAndDelOption(arguments, "--noCompilationCache", disableCompilationCache);
@@ -1198,6 +1225,7 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--bf16", bf16);
     getAndDelOption(arguments, "--int8", int8);
     getAndDelOption(arguments, "--fp8", fp8);
+    getAndDelOption(arguments, "--int4", int4);
     getAndDelOption(arguments, "--stronglyTyped", stronglyTyped);
     if (stronglyTyped)
     {
@@ -1214,6 +1242,7 @@ void BuildOptions::parse(Arguments& arguments)
         disableAndLog(int8, "int8", "kINT8");
         disableAndLog(bf16, "bf16", "kBF16");
         disableAndLog(fp8, "fp8", "kFP8");
+        disableAndLog(int4, "int4", "kINT4");
     }
 
     if (fp8 && int8)
@@ -1515,6 +1544,7 @@ void SystemOptions::parse(Arguments& arguments)
 {
     getAndDelOption(arguments, "--device", device);
     getAndDelOption(arguments, "--useDLACore", DLACore);
+#if !TRT_WINML
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
     {
@@ -1534,6 +1564,7 @@ void SystemOptions::parse(Arguments& arguments)
         dynamicPlugins.emplace_back(pluginName);
     }
     getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
+#endif
 }
 
 constexpr int64_t WeightStreamingBudget::kDISABLE;
@@ -1784,6 +1815,7 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--calib", calibFile);
     getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--std", standard);
+#if !TRT_WINML
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
     {
@@ -1794,6 +1826,7 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     {
         plugins.emplace_back(pluginName);
     }
+#endif
     bool noBuilderCache{false};
     getAndDelOption(arguments, "--noBuilderCache", noBuilderCache);
     getAndDelOption(arguments, "--timingCacheFile", timingCacheFile);
@@ -2078,7 +2111,9 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
           "Strip weights: "     << boolToEnabled(options.stripWeights)                                                  << std::endl <<
           "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
+#if !TRT_WINML
           "ONNX Plugin InstanceNorm: " << boolToEnabled(options.pluginInstanceNorm)                                     << std::endl <<
+#endif
           "TensorRT runtime: " << options.useRuntime                                                                    << std::endl <<
           "Lean DLL Path: " << options.leanDLLPath                                                                      << std::endl <<
           "Tempfile Controls: "; printTempfileControls(os, options.tempfileControls)                                    << std::endl <<
@@ -2138,6 +2173,7 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
 
           "Device: "  << options.device                                                           << std::endl <<
           "DLACore: " << (options.DLACore != -1 ? std::to_string(options.DLACore) : "")           << std::endl;
+#if !TRT_WINML
     os << "Plugins:";
 
     for (const auto& p : options.plugins)
@@ -2164,7 +2200,7 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
 
     os << "ignoreParsedPluginLibs: " << options.ignoreParsedPluginLibs << std::endl;
     os << std::endl;
-
+#endif
     return os;
     // clang-format on
 }
@@ -2286,19 +2322,23 @@ std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
     {
         os << " + FP8";
     }
+    if (options.int4)
+    {
+        os << " + INT4";
+    }
     os << std::endl;
     os << "Calibration file: " << options.calibFile << std::endl;
     os << "Serialized Network: " << options.serialized << std::endl;
 
     printIOFormats(os, "Input(s)", options.inputFormats);
     printIOFormats(os, "Output(s)", options.outputFormats);
-
+#if !TRT_WINML
     os << "Plugins:";
     for (const auto& p : options.plugins)
     {
         os << " " << p;
     }
-
+#endif
     os << "timingCacheMode: ";
     printTimingCache(os, options.timingCacheMode) << std::endl;
     os << "timingCacheFile: " << options.timingCacheFile << std::endl;
@@ -2356,11 +2396,13 @@ void BuildOptions::help(std::ostream& os)
           R"(                                               type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int64"|"int8"|"uint8"|"bool")"                  "\n"
           R"(                                               fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
           R"(                                                          "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                            "\n"
-          "  --memPoolSize=poolspec             Specify the size constraints of the designated memory pool(s) in MiB."                              "\n"
-          "                                     Note: Also accepts decimal sizes, e.g. 0.25MiB. Will be rounded down to the nearest integer bytes." "\n"
+          "  --memPoolSize=poolspec             Specify the size constraints of the designated memory pool(s)"                                      "\n"
+          "                                     Supports the following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                      "\n"
+          "                                     If none of suffixes is appended, the defualt unit is in MiB."                                       "\n"
+          "                                     Note: Also accepts decimal sizes, e.g. 0.25M. Will be rounded down to the nearest integer bytes."   "\n"
           "                                     In particular, for dlaSRAM the bytes will be rounded down to the nearest power of 2."               "\n"
           R"(                                   Pool constraint: poolspec ::= poolfmt[","poolspec])"                                                "\n"
-          "                                                      poolfmt ::= pool:sizeInMiB"                                                        "\n"
+          "                                                      poolfmt ::= pool:size"                                                             "\n"
           R"(                                                    pool ::= "workspace"|"dlaSRAM"|"dlaLocalDRAM"|"dlaGlobalDRAM"|"tacticSharedMem")"  "\n"
           "  --profilingVerbosity=mode          Specify profiling verbosity. mode ::= layer_names_only|detailed|none (default = layer_names_only)." "\n"
           "                                     Please only assign once."                                                                           "\n"
@@ -2371,11 +2413,16 @@ void BuildOptions::help(std::ostream& os)
           "  --stripWeights                     Strip weights from plan. This flag works with either refit or refit with identical weights. Default""\n"
           "                                     to latter, but you can switch to the former by enabling both --stripWeights and --refit at the same""\n"
           "                                     time."                                                                                              "\n"
+          "  --stripAllWeights                  Alias for combining the --refit and --stripWeights options. It marks all weights as refittable,"    "\n"
+          "                                     disregarding any performance impact. Additionally, it strips all refittable weights after the "     "\n"
+          "                                     engine is built."                                                                                   "\n"
           "  --weightless                       [Deprecated] this knob has been deprecated. Please use --stripWeights"                              "\n"
           "  --versionCompatible, --vc          Mark the engine as version compatible. This allows the engine to be used with newer versions"       "\n"
           "                                     of TensorRT on the same host OS, as well as TensorRT's dispatch and lean runtimes."                 "\n"
+#if !TRT_WINML
           "  --pluginInstanceNorm, --pi         Set `kNATIVE_INSTANCENORM` to false in the ONNX parser. This will cause the ONNX parser to use"     "\n"
           "                                     a plugin InstanceNorm implementation over the native implementation when parsing."                  "\n"
+#endif
           R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"      "\n"
           "                                     not support building an engine."                                                                    "\n"
           R"(                                           runtime::= "full"|"lean"|"dispatch")"                                                       "\n"
@@ -2383,7 +2430,6 @@ void BuildOptions::help(std::ostream& os)
           "  --excludeLeanRuntime               When --versionCompatible is enabled, this flag indicates that the generated engine should"          "\n"
           "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
           "                                     valid lean runtime to use when loading the engine."     "\n"
-          "                                     Only supported with weights within the engine."         "\n"
           "  --sparsity=spec                    Control sparsity (default = disabled). "                                                            "\n"
           R"(                                   Sparsity: spec ::= "disable", "enable", "force")"                                                   "\n"
           "                                     Note: Description about each of these options is as below"                                          "\n"
@@ -2399,6 +2445,7 @@ void BuildOptions::help(std::ostream& os)
           "  --bf16                             Enable bf16 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --int8                             Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --fp8                              Enable fp8 precision, in addition to fp32 (default = disabled)"                                     "\n"
+          "  --int4                             Enable int4 precision, in addition to fp32 (default = disabled)"                                     "\n"
           "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
           "  --stronglyTyped                    Create a strongly typed network. (default = disabled)"                                              "\n"
           "  --directIO                         Avoid reformatting at network boundaries. (default = disabled)"                                     "\n"
@@ -2499,12 +2546,16 @@ void SystemOptions::help(std::ostream& os)
     os << "=== System Options ==="                                                                         << std::endl <<
           "  --device=N                  Select cuda device N (default = "         << defaultDevice << ")" << std::endl <<
           "  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)"   << std::endl <<
+#if TRT_WINML
+          std::endl;
+#else
           "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl <<
           "  --dynamicPlugins            Plugin library (.so) to load dynamically and may be serialized with the engine if they are included in --setPluginsToSerialize (can be specified multiple times)" << std::endl <<
           "  --setPluginsToSerialize     Plugin library (.so) to be serialized with the engine (can be specified multiple times)" << std::endl <<
           "  --ignoreParsedPluginLibs    By default, when building a version-compatible engine, plugin libraries specified by the ONNX parser " << std::endl <<
           "                              are implicitly serialized with the engine (unless --excludeLeanRuntime is specified) and loaded dynamically. " << std::endl <<
           "                              Enable this flag to ignore these plugin libraries instead." << std::endl;
+#endif
     // clang-format on
 }
 
@@ -2569,12 +2620,12 @@ void InferenceOptions::help(std::ostream& os)
           R"(                                         Ival ::= name":"file)"                                                         << std::endl <<
           "  --weightStreamingBudget     Set the maximum amount of GPU memory TensorRT is allowed to use for weights."               << std::endl <<
           "                              It can take on the following values:"                                                       << std::endl <<
+          "                                -2: (default) Disable weight streaming at runtime."                                       << std::endl <<
           "                                -1: TensorRT will automatically decide the budget."                                       << std::endl <<
-          "                                 0: (default) Disable weight streaming at runtime."                                       << std::endl <<
-          "                                 0-100%: Percentage of streamable weights that should be streamed."                       << std::endl <<
-          "                                         100% saves the most memory but will have the worst performance."                 << std::endl <<
+          "                                 0-100%: Percentage of streamable weights that reside on the GPU."                        << std::endl <<
+          "                                         0% saves the most memory but will have the worst performance."                   << std::endl <<
           "                                         Requires the % character."                                                       << std::endl <<
-          "                                >0B: The exact amount of streambale weights that reside on the GPU. Supports the "        << std::endl <<
+          "                                >=0B: The exact amount of streamable weights that reside on the GPU. Supports the "       << std::endl <<
           "                                     following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                    << std::endl;
     // clang-format on
 }
@@ -2672,7 +2723,9 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
           "  --serialized=<file>         Save the serialized network"                                                                        << std::endl <<
+#if !TRT_WINML
           "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)"                          << std::endl <<
+#endif
           "  --verbose or -v             Use verbose logging (default = false)"                                                              << std::endl <<
           "  --help or -h                Print this message"                                                                                 << std::endl <<
           "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                                << std::endl <<

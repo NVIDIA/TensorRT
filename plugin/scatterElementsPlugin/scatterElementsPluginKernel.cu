@@ -66,7 +66,7 @@ bool hasBfloat16AtomicAdd()
   cudaGetDeviceProperties(&deviceProp, deviceId);
   return deviceProp.major >= 8;
 }
-  
+
 inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
 {
     switch (t)
@@ -79,8 +79,9 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
     case nvinfer1::DataType::kINT8:
-    case nvinfer1::DataType::kINT4:
     case nvinfer1::DataType::kFP8: return 1;
+    case nvinfer1::DataType::kINT4:
+        PLUGIN_FAIL("Unsupported data type");
     }
     return 0;
 }

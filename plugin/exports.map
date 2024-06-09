@@ -18,15 +18,6 @@
 /* Hides all symbols except those specified in the global section */
 {
   global:
-    getInferLibVersion;
-    getPluginRegistry;
     initLibNvInferPlugins;
-    extern "C++" {
-      nvinfer1::IPluginCreator::*;
-      nvinfer1::IPluginV2Ext::*;
-      nvinfer1::IPluginV2IOExt::*;
-      nvinfer1::PluginRegistrar*;
-      nvinfer1::plugin::*;
-    };
   local: *;
 };

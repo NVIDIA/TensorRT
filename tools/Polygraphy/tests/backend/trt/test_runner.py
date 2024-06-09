@@ -415,7 +415,7 @@ class TestTrtRunner:
         mod.version(trt.__version__) < mod.version("10.0"),
         reason="Feature not present before 10.0",
     )
-    @pytest.mark.parametrize("budget", [None, 0, 0.5, 0.99, 1000, np.inf])
+    @pytest.mark.parametrize("budget", [None, -2, -1, 0, 0.5, 0.99, 1.0, 1000, np.inf])
     def test_weight_streaming(self, budget):
         model = ONNX_MODELS["matmul_2layer"]
         network_loader = NetworkFromOnnxBytes(model.loader, strongly_typed=True)

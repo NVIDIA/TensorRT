@@ -20,6 +20,7 @@ import os
 import sys
 import warnings
 
+ENABLE_LONG_TERM = bool(int(os.environ.get("NV_INTERNAL_ENABLE_LONG_TERM", "0")))
 
 # For standalone wheels, attempt to import the wheel containing the libraries.
 _libs_wheel_imported = False
@@ -196,6 +197,10 @@ def _itemsize(trt_type):
         fp8: 1,
         int4: 0.5,
     }
+    # $nv-internal-release begin
+    if ENABLE_LONG_TERM:
+        mapping[fp4] = 0.5
+    # $nv-internal-release end
     if trt_type in mapping:
         return mapping[trt_type]
 

@@ -114,8 +114,9 @@ When multiple options are available to compute the same op, and it's not possibl
 it is useful to ask TensorRT to time all available options during the build stage. In V2 plugins, TensorRT would only time different type/format combinations supported by the plugin, but
 V3 plugins allow users to specify any number of custom tactics to time also (in addition to type/format combinations).
 
-In this example, we specify two custom tactics: PyTorch's [torch.nn.functional.pad](https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.html) and a custom kernel written
-using OpenAI triton.
+In this example, we specify two custom tactics: PyTorch's [torch.nn.functional.pad](https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.html) and a custom kernel written using OpenAI Triton.
+
+It is possible to advertise tactics specific to a format combination. e.g. In this sample, we can support both tactics for FP32 I/O, and only support the OpenAI Triton tactic for FP16 I/O. To achieve this, return in `get_valid_tactics()` the set of tactics `T(f)` supported by the plugin for the format combination `f` indicated by the immediately preceding call to `configure_plugin()`. To enable this behavior in this sample, pass the flag `--per-format-tactics`. 
 
 ### Multiple plugins instances
 

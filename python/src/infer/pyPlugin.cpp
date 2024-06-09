@@ -975,6 +975,8 @@ public:
                 py::function pyGetValidTactics
                     = py::get_override(static_cast<IPluginV3OneBuild const*>(this), "get_valid_tactics");
 
+                mIsTacticsInitialized = true;
+
                 if (!pyGetValidTactics)
                 {
                     // if no implementation is provided for get_valid_tactics(), communicate that no custom tactics are
@@ -983,8 +985,8 @@ public:
                 }
 
                 py::object pyResult = pyGetValidTactics();
-                auto result = pyResult.cast<std::vector<int32_t>>();
-                return static_cast<int32_t>(result.size());
+                mTactics = pyResult.cast<std::vector<int32_t>>();
+                return static_cast<int32_t>(mTactics.size());
             }
             PLUGIN_API_CATCH_CAST("get_valid_tactics", "std::vector<int32_t>")
             catch (py::error_already_set& e)
@@ -1004,19 +1006,28 @@ public:
 
             try
             {
-                py::function pyGetValidTactics
-                    = py::get_override(static_cast<IPluginV3OneBuild const*>(this), "get_valid_tactics");
-
-                if (!pyGetValidTactics)
+                // getValidTactics() must immediately follow getNbTactics()
+                // because it is impossible to call getValidTactics() without knowing the
+                // correct number of tactics. So check that mIsTacticsInitialized is true.
+                // Otherwise, something has gone wrong.
+                if (mIsTacticsInitialized)
                 {
-                    // if no implementation is provided for get_valid_tactics() nothing further to do
+                    // Unset to catch any subsequent violations
+                    mIsTacticsInitialized = false;
+                    if (nbTactics != static_cast<int32_t>(mTactics.size()))
+                    {
+                        utils::throwPyError(
+                            PyExc_RuntimeError, "number of tactics does not match cached number of tactics");
+                    }
+                    std::copy(mTactics.begin(), mTactics.end(), tactics);
                     return 0;
                 }
-
-                py::object pyResult = pyGetValidTactics();
-                auto result = pyResult.cast<std::vector<int32_t>>();
-                std::copy(result.begin(), result.end(), tactics);
-                return 0;
+                else
+                {
+                    utils::throwPyError(
+                        PyExc_RuntimeError, "Internal error. getValidTactics() called before getNbTactics().");
+                }
+                return -1;
             }
             PLUGIN_API_CATCH_CAST("get_valid_tactics", "std::vector<int32_t>")
             catch (py::error_already_set& e)
@@ -1313,11 +1324,13 @@ private:
     int32_t mFormatCombinationLimit{};
     std::string mTimingCachedId{};
     std::string mMetadataString{};
+    std::vector<int32_t> mTactics;
 
     bool mIsNbOutputsInitialized{false};
     bool mIsTimingCachedIdInitialized{false};
     bool mIsFormatCombinationLimitInitialized{false};
     bool mIsMetadataStringInitialized{false};
+    bool mIsTacticsInitialized{false};
 };
 
 class PyIPluginV3OneRuntimeImpl : public IPluginV3OneRuntime
@@ -2322,7 +2335,9 @@ void bindPlugin(py::module& m)
         .value("UNKNOWN", PluginFieldType::kUNKNOWN)
         .value("BF16", PluginFieldType::kBF16)
         .value("INT64", PluginFieldType::kINT64)
-        .value("FP8", PluginFieldType::kFP8);
+        .value("FP8", PluginFieldType::kFP8)
+        .value("INT4", PluginFieldType::kINT4)
+        ;
 
     py::class_<PluginField>(m, "PluginField", PluginFieldDoc::descr, py::module_local())
         .def(py::init(lambdas::plugin_field_default_constructor), "name"_a = "", py::keep_alive<1, 2>{})
@@ -2337,27 +2352,23 @@ void bindPlugin(py::module& m)
             [](PluginField& self) {
                 switch (self.type)
                 {
-                case PluginFieldType::kINT32:
-                    return py::array(self.length, static_cast<int32_t const*>(self.data));
-                    break;
-                case PluginFieldType::kINT8:
-                    return py::array(self.length, static_cast<int8_t const*>(self.data));
-                    break;
-                case PluginFieldType::kINT16:
-                    return py::array(self.length, static_cast<int16_t const*>(self.data));
-                    break;
+                case PluginFieldType::kINT32: return py::array(self.length, static_cast<int32_t const*>(self.data));
+                case PluginFieldType::kUNKNOWN:
+                case PluginFieldType::kINT8: return py::array(self.length, static_cast<int8_t const*>(self.data));
+                case PluginFieldType::kINT16: return py::array(self.length, static_cast<int16_t const*>(self.data));
+                case PluginFieldType::kFLOAT32: return py::array(self.length, static_cast<float const*>(self.data));
+                case PluginFieldType::kFLOAT64: return py::array(self.length, static_cast<double const*>(self.data));
+                case PluginFieldType::kINT64: return py::array(self.length, static_cast<int64_t const*>(self.data));
+                case PluginFieldType::kCHAR: return py::array(self.length, static_cast<char const*>(self.data));
+                case PluginFieldType::kINT4:
                 case PluginFieldType::kFLOAT16:
-                    // TODO: Figure out how to handle float16 correctly here
-                    return py::array(self.length, static_cast<float const*>(self.data));
+                case PluginFieldType::kBF16:
+                case PluginFieldType::kDIMS:
+                case PluginFieldType::kFP8:
+                    utils::throwPyError(
+                        PyExc_AttributeError, "No known conversion for returning data from PluginField");
                     break;
-                case PluginFieldType::kFLOAT32:
-                    return py::array(self.length, static_cast<float const*>(self.data));
-                    break;
-                case PluginFieldType::kFLOAT64:
-                    return py::array(self.length, static_cast<double const*>(self.data));
-                    break;
-                case PluginFieldType::kCHAR: return py::array(self.length, static_cast<char const*>(self.data)); break;
-                default: assert(false && "No known conversion for returning data from PluginField"); break;
+                default: return py::array();
                 }
                 // should not reach this line
                 return py::array();

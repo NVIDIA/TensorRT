@@ -22,12 +22,7 @@
 #include <iostream>
 #include <numeric>
 
-#include "NvInfer.h"
-
-#include "sampleDevice.h"
-#include "sampleInference.h"
 #include "sampleOptions.h"
-#include "sampleUtils.h"
 
 namespace sample
 {

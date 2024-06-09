@@ -3,6 +3,20 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.49.12 (2024-05-28)
+### Added
+- Added `runtime_platform` to `CreateConfig` for TensorRT and corresponding `--runtime-platform` command-line option.
+
+
+## v0.49.11 (2024-05-09)
+### Added
+- Added TensorRT 10.1 weight streaming V2 APIs.
+- Added TensorRT 10.1 runtime device memory V2 APIs.
+
+### Changed
+- Changed the meaning of the `TrtRunner`'s weight streaming budget argument.
+
+
 ## v0.49.10 (2024-04-19)
 ### Added
 - Added an `EngineFromPath` loader to deserialize an engine directly from disk. This will save CPU memory when weight streaming is enabled.

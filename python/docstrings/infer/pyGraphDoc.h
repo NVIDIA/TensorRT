@@ -195,12 +195,13 @@ constexpr const char* descr = R"trtdoc(
     :ivar location: :class:`TensorLocation` The storage location of a tensor.
     :ivar is_network_input: :class:`bool` Whether the tensor is a network input.
     :ivar is_network_output: :class:`bool` Whether the tensor is a network output.
-    :ivar dynamic_range: :class:`Tuple[float, float]` A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
+    :ivar dynamic_range: :class:`Tuple[float, float]` [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization. A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc"
         ;
 constexpr const char* set_dynamic_range = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     Set dynamic range for the tensor.
     NOTE: It is suggested to use ``tensor.dynamic_range = (min, max)`` instead.
 
@@ -210,6 +211,7 @@ constexpr const char* set_dynamic_range = R"trtdoc(
 )trtdoc";
 
 constexpr const char* get_dynamic_range = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     Get dynamic range for the tensor.
     NOTE: It is suggested to use ``tensor.dynamic_range`` instead, which is a tuple including both the minimum and maximum of the dynamic range.
 
@@ -217,6 +219,7 @@ constexpr const char* get_dynamic_range = R"trtdoc(
 )trtdoc";
 
 constexpr const char* reset_dynamic_range = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     Undo the effect of setting the dynamic range.
 )trtdoc";
 
@@ -663,6 +666,8 @@ constexpr const char* SIGN
 constexpr const char* ROUND = R"trtdoc(Round to nearest even for floating-point data type.)trtdoc";
 constexpr const char* ISINF
     = R"trtdoc(Return true if the input value equals +/- infinity for floating-point data type.)trtdoc";
+constexpr const char* ISNAN
+    = R"trtdoc(Return true if the input value equals NaN for floating-point data type.)trtdoc";
 } // namespace UnaryOperationDoc
 
 namespace IUnaryLayerDoc
@@ -848,7 +853,7 @@ constexpr const char* descr = R"trtdoc(
     This class sets the output to a one-dimensional tensor with the dimensions of the input tensor.
 
     For example, if the input is a four-dimensional tensor (of any type) with
-    dimensions [2,3,5,7], the output tensor is a one-dimensional :class:`int32` tensor
+    dimensions [2,3,5,7], the output tensor is a one-dimensional :class:`int64` tensor
     of length 4 containing the sequence 2, 3, 5, 7.
 )trtdoc";
 

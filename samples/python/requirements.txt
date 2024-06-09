@@ -1,4 +1,4 @@
 pyyaml==6.0.1
 requests==2.31.0
-tqdm==4.66.1
+tqdm==4.66.4
 numpy==1.24.4

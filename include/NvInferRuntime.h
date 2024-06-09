@@ -922,8 +922,24 @@ public:
     //!
     //! \brief Query for any custom tactics that the plugin intends to use
     //!
-    //! For each format combination supported by the plugin (up to a maximum indicated by getFormatCombinationLimit()),
-    //! the plugin will be timed for each tactic advertised through this method.
+    //! This method queries for the set of tactics T(f) supported by the plugin for the format combination f indicated
+    //! by the immediately preceding call to configurePlugin(). It is guaranteed to be called after configurePlugin().
+    //!
+    //! For each format combination provided through configurePlugin(), up to a maximum of getFormatCombinationLimit(),
+    //! the plugin will be timed for each tactic advertised through this method for that format combination. i.e. The
+    //! plugin will be timed \f$N = sum_{i=0}^{i<getFormatCombinationLimit()} (T(f[i]))\f$ times. If \f$N = 1\f$, the
+    //! plugin may not be timed. In peudocode, the timing protocol appears as the following:
+    //!
+    //! counter = 0
+    //! for each supported format combination
+    //!     ++counter
+    //!     if counter > getFormatCombinationLimit()
+    //!         goto done
+    //!     configurePlugin(...)
+    //!     for each tactic in getValidTactics(...)
+    //!         time tactic
+    //! done:
+    //!
     //!
     //! \param tactics Pre-allocated buffer to which the tactic values should be written
     //! \param nbTactics The number of tactics advertised through getNbTactics()
@@ -1699,7 +1715,9 @@ public:
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    bool setDynamicRange(char const* tensorName, float min, float max) noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED bool setDynamicRange(char const* tensorName, float min, float max) noexcept
     {
         return mImpl->setDynamicRange(tensorName, min, max);
     }
@@ -1713,7 +1731,9 @@ public:
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    float getDynamicRangeMin(char const* tensorName) const noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED float getDynamicRangeMin(char const* tensorName) const noexcept
     {
         return mImpl->getDynamicRangeMin(tensorName);
     }
@@ -1727,7 +1747,9 @@ public:
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    float getDynamicRangeMax(char const* tensorName) const noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED float getDynamicRangeMax(char const* tensorName) const noexcept
     {
         return mImpl->getDynamicRangeMax(tensorName);
     }
@@ -1743,7 +1765,9 @@ public:
     //! If tensorNames!=nullptr, each written pointer points to a string owned by
     //! the engine being refit, and becomes invalid when the engine is destroyed.
     //!
-    int32_t getTensorsWithDynamicRange(int32_t size, char const** tensorNames) const noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED int32_t getTensorsWithDynamicRange(int32_t size, char const** tensorNames) const noexcept
     {
         return mImpl->getTensorsWithDynamicRange(size, tensorNames);
     }
@@ -2263,7 +2287,7 @@ enum class TacticSource : int32_t
     //! \deprecated Deprecated in TensorRT 10.0.
     kCUBLAS TRT_DEPRECATED_ENUM = 0,
 
-    //! cuBLAS LT tactics. Enabled by default.
+    //! cuBLAS LT tactics. Disabled by default.
     //! \deprecated Deprecated in TensorRT 9.0.
     kCUBLAS_LT TRT_DEPRECATED_ENUM = 1,
 
@@ -2610,9 +2634,11 @@ public:
     //!
     //! \brief Return the maximum device memory required by the context over all profiles.
     //!
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by getDeviceMemorySizeV2().
+    //!
     //! \see IExecutionContext::setDeviceMemory()
     //!
-    size_t getDeviceMemorySize() const noexcept
+    TRT_DEPRECATED size_t getDeviceMemorySize() const noexcept
     {
         return mImpl->getDeviceMemorySize();
     }
@@ -2620,11 +2646,45 @@ public:
     //!
     //! \brief Return the maximum device memory required by the context for a profile.
     //!
-    //! \see IExecutionContext::setDeviceMemory()
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by getDeviceMemorySizeForProfileV2(int32_t).
     //!
-    size_t getDeviceMemorySizeForProfile(int32_t profileIndex) const noexcept
+    //! \see IExecutionContext::setDeviceMemoryV2()
+    //!
+    TRT_DEPRECATED size_t getDeviceMemorySizeForProfile(int32_t profileIndex) const noexcept
     {
         return mImpl->getDeviceMemorySizeForProfile(profileIndex);
+    }
+
+    //!
+    //! \brief Return the maximum device memory required by the context over all profiles.
+    //!
+    //! This API is stateful, so its call returns different values based on the following calls:
+    //! * setWeightStreamingBudget()
+    //! * setWeightStreamingBudgetV2()
+    //!
+    //! \see IExecutionContext::setDeviceMemoryV2()
+    //! \see setWeightStreamingBudget()
+    //! \see setWeightStreamingBudgetV2()
+    //!
+    int64_t getDeviceMemorySizeV2() const noexcept
+    {
+        return mImpl->getDeviceMemorySizeV2();
+    }
+
+    //!
+    //! \brief Return the maximum device memory required by the context for a profile.
+    //!
+    //! This API is stateful, so its call returns different values based on the following calls:
+    //! * setWeightStreamingBudget()
+    //! * setWeightStreamingBudgetV2()
+    //!
+    //! \see IExecutionContext::setDeviceMemoryV2()
+    //! \see setWeightStreamingBudget()
+    //! \see setWeightStreamingBudgetV2()
+    //!
+    int64_t getDeviceMemorySizeForProfileV2(int32_t profileIndex) const noexcept
+    {
+        return mImpl->getDeviceMemorySizeForProfileV2(profileIndex);
     }
 
     //!
@@ -2638,10 +2698,10 @@ public:
     }
 
     //!
-    //! \brief Return the number of bytes per component of an element, or -1 if the provided name does not map to an
-    //! input or output tensor.
+    //! \brief Return the number of bytes per component of an element, or -1 if the
+    //! tensor is not vectorized or provided name does not map to an input or output tensor.
     //!
-    //! The vector component size is returned if getTensorVectorizedDim() != -1.
+    //! The vector component size is returned if getTensorVectorizedDim(tensorName) != -1.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
@@ -2659,8 +2719,8 @@ public:
     }
 
     //!
-    //! \brief Return the number of bytes per component of an element of given profile, or -1 if the provided name does
-    //! not map to an input or output tensor.
+    //! \brief Return the number of bytes per component of an element given of given profile, or -1 if the tensor is not
+    //! vectorized or provided name does not map to an input or output tensor.
     //!
     //! The vector component size is returned if getTensorVectorizedDim(tensorName, profileIndex) != -1.
     //!
@@ -2677,10 +2737,10 @@ public:
     }
 
     //!
-    //! \brief Return the number of components included in one element, or -1 if the provided name does not map to an
-    //! input or output tensor.
+    //! \brief Return the number of components included in one element, or -1 if tensor is
+    //! not vectorized or if the provided name does not map to an input or output tensor.
     //!
-    //! The number of elements in the vectors is returned if getTensorVectorizedDim() != -1.
+    //! The number of elements in the vectors is returned if getTensorVectorizedDim(tensorName) != -1.
     //!
     //! \param tensorName The name of an input or output tensor.
     //!
@@ -2698,8 +2758,8 @@ public:
     }
 
     //!
-    //! \brief Return the number of components included in one element of given profile, or -1 if the provided name does
-    //! not map to an input or output tensor.
+    //! \brief Return the number of components included in one element of given profile, or -1 if tensor is not
+    //! vectorized or the provided name does not map to an input or output tensor.
     //!
     //! The number of elements in the vectors is returned if getTensorVectorizedDim(tensorName, profileIndex) != -1.
     //!
@@ -2881,8 +2941,9 @@ public:
     //!
     //! \param select Whether to query the minimum, optimum, or maximum values for this input tensor.
     //!
-    //! \return The minimum / optimum / maximum values for an input tensor in this profile.
-    //!        If the profileIndex is invalid or the provided name does not map to an input tensor, return nullptr.
+    //! \return The minimum / optimum / maximum values for an input tensor in this profile. If the profileIndex is
+    //! invalid or the provided name does not map to an input tensor, or the tensor is not a shape binding, return
+    //! nullptr.
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
@@ -3062,6 +3123,8 @@ public:
     //! \return An IHostMemory object that contains the serialized engine.
     //!
     //! The network may be deserialized with IRuntime::deserializeCudaEngine().
+    //! Serializing plan file with SerializationFlag::kEXCLUDE_WEIGHTS requires building the engine with kREFIT or
+    //! kREFIT_IDENTICAL.
     //!
     //! \see IRuntime::deserializeCudaEngine()
     //!
@@ -3076,16 +3139,17 @@ public:
     //!
     //! \param gpuMemoryBudget  This parameter may take on 3 types of values:
     //!  -1: Allows TensorRT to choose the budget according to the streamable weights size.
-    //!      Free CUDA memory will be queried at ::createExecutionContext and accordingly:
+    //!      Free CUDA memory will be queried at createExecutionContext() and accordingly:
     //!       * If streamable weights all fit: weight streaming is not required and disabled.
     //!       * Otherwise: Budget is set to getMinimumWeightStreamingBudget
     //!   0: (default) Disables weight streaming. The execution may fail if the network is too large for GPU memory.
     //!  >0: The maximum bytes of GPU memory that weights can occupy. It must be bounded by
-    //!      [getMinimumWeightStreamingBudget, min(getStreamableWeightsSize - 1, free GPU memory)].
+    //!      [getMinimumWeightStreamingBudget, free GPU memory)].
     //!
     //! By setting a weight limit, users can expect a GPU memory usage reduction
-    //! of |network weights| - gpuMemoryBudget bytes. Maximum memory savings occur
-    //! when gpuMemoryBudget is set to getMinimumWeightStreamingBudget.
+    //! of (total bytes for network weights) - gpuMemoryBudget bytes. Maximum memory savings occur
+    //! when gpuMemoryBudget is set to getMinimumWeightStreamingBudget(). Creating additional
+    //! IExecutionContexts will increase memory usage by O(getMinimumStreamingBudget()).
     //!
     //! Streaming larger amounts of memory will likely result in lower performance
     //! except in some boundary cases where streaming weights allows the user to
@@ -3093,22 +3157,23 @@ public:
     //! latency in these cases. Tuning the value of the memory limit is
     //! recommended for best performance.
     //!
-    //! \warning If weight streaming is active, then multiple concurrent IExecutionContexts will forced to run serially.
-    //!
-    //! \warning GPU memory for the weights is allocated upon the first IExecutionContext's creation
-    //!          and deallocated upon the last one's destruction.
+    //! \warning GPU memory for the weights is allocated in this call and will be deallocated by enabling weight
+    //!          streaming or destroying the ICudaEngine.
     //!
     //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
     //!
-    //! \return true if the memory limit is valid and the call was successful
-    //!         otherwise false.
+    //! \warning The weights streaming budget cannot be modified while there are active IExecutionContexts.
     //!
-    //! \see BuilderFlag::kWEIGHT_STREAMING,
-    //!      ICudaEngine::getWeightStreamingBudget
-    //!      ICudaEngine::getMinimumWeightStreamingBudget,
-    //!      ICudaEngine::getStreamableWeightsSize
+    //! \return true if the memory limit is valid and the call was successful, false otherwise.
     //!
-    bool setWeightStreamingBudget(int64_t gpuMemoryBudget) noexcept
+    //! \deprecated Deprecated in TensorRT 10.1. Superceded by setWeightStreamingBudgetV2().
+    //!
+    //! \see BuilderFlag::kWEIGHT_STREAMING
+    //! \see getWeightStreamingBudget()
+    //! \see getMinimumWeightStreamingBudget()
+    //! \see getStreamableWeightsSize()
+    //!
+    TRT_DEPRECATED bool setWeightStreamingBudget(int64_t gpuMemoryBudget) noexcept
     {
         return mImpl->setWeightStreamingBudget(gpuMemoryBudget);
     }
@@ -3118,15 +3183,17 @@ public:
     //!
     //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
     //!
-    //! \returns The weight streaming budget in bytes. Please see ::setWeightStreamingBudget for the possible
+    //! \returns The weight streaming budget in bytes. Please see setWeightStreamingBudget() for the possible
     //!          values.
     //!
-    //! \see BuilderFlag::kWEIGHT_STREAMING,
-    //!      ICudaEngine::setWeightStreamingBudget,
-    //!      ICudaEngine::getMinimumWeightStreamingBudget,
-    //!      ICudaEngine::getStreamableWeightsSize
+    //! \deprecated Deprecated in TensorRT 10.1. Superceded by getWeightStreamingBudgetV2().
     //!
-    int64_t getWeightStreamingBudget() const noexcept
+    //! \see BuilderFlag::kWEIGHT_STREAMING,
+    //! \see setWeightStreamingBudget()
+    //! \see getMinimumWeightStreamingBudget()
+    //! \see getStreamableWeightsSize()
+    //!
+    TRT_DEPRECATED int64_t getWeightStreamingBudget() const noexcept
     {
         return mImpl->getWeightStreamingBudget();
     }
@@ -3143,12 +3210,13 @@ public:
     //!
     //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
     //!
-    //!
     //! \returns The minimum number of bytes of GPU memory required for streaming.
     //!
-    //! \see ICudaEngine::setWeightStreamingBudget
+    //! \deprecated Deprecated in TensorRT 10.1. The minimum budget is 0 in the V2 APIs.
     //!
-    int64_t getMinimumWeightStreamingBudget() const noexcept
+    //! \see setWeightStreamingBudget()
+    //!
+    TRT_DEPRECATED int64_t getMinimumWeightStreamingBudget() const noexcept
     {
         return mImpl->getMinimumWeightStreamingBudget();
     }
@@ -3159,16 +3227,122 @@ public:
     //! The set of streamable weights is a subset of all network weights. The
     //! total size may exceed free GPU memory.
     //!
-    //! Returns 0 if BuilderFlag::kWEIGHT_STREAMING is unset during engine building.
-    //!
-    //!
     //! \returns The total size in bytes of all streamable weights.
+    //!          Returns 0 if BuilderFlag::kWEIGHT_STREAMING is unset during engine building.
     //!
-    //! \see ICudaEngine::setWeightStreamingBudget
+    //! \see setWeightStreamingBudget()
     //!
     int64_t getStreamableWeightsSize() const noexcept
     {
         return mImpl->getStreamableWeightsSize();
+    }
+
+    //!
+    //! \brief Limit the maximum amount of GPU memory usable for network weights in bytes.
+    //!
+    //! \param gpuMemoryBudget This parameter must be a non-negative value.
+    //!   0: Only small amounts of scratch memory will required to run the model.
+    //!  >= getStreamableWeightsSize (default): Disables weight streaming.
+    //!       The execution may fail if the network is too large for GPU memory.
+    //!
+    //! By setting a weight limit, users can expect a GPU memory usage reduction on the order
+    //! of (total bytes for network weights) - gpuMemoryBudget bytes. Maximum memory savings occur
+    //! when gpuMemoryBudget is set to 0. Each IExecutionContext will require getWeightStreamingScratchMemorySize()
+    //! bytes of additional device memory if the engine is streaming its weights (budget < getStreamableWeightsSize()).
+    //!
+    //! Streaming larger amounts of memory will likely result in lower performance
+    //! except in some boundary cases where streaming weights allows the user to
+    //! run larger batch sizes. The higher throughput offsets the increased
+    //! latency in these cases. Tuning the value of the memory limit is
+    //! recommended for best performance.
+    //!
+    //! \warning GPU memory for the weights is allocated in this call and will be deallocated by enabling weight
+    //! streaming or destroying the ICudaEngine.
+    //!
+    //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
+    //!
+    //! \warning The weights streaming budget cannot be modified while there are active IExecutionContexts.
+    //!
+    //! \warning Using the V2 weight streaming APIs with V1 APIs (setWeightStreamingBudget(),
+    //!          getWeightStreamingBudget(), getWeightStreamingMinimumBudget()) leads to undefined behavior.
+    //!
+    //! \return true if the memory limit is valid and the call was successful, false otherwise.
+    //!
+    //! \see BuilderFlag::kWEIGHT_STREAMING
+    //! \see getWeightStreamingBudgetV2()
+    //! \see getWeightStreamingScratchMemorySize()
+    //! \see getWeightStreamingAutomaticBudget()
+    //! \see getStreamableWeightsSize()
+    //!
+    bool setWeightStreamingBudgetV2(int64_t gpuMemoryBudget) noexcept
+    {
+        return mImpl->setWeightStreamingBudgetV2(gpuMemoryBudget);
+    }
+
+    //!
+    //! \brief Returns the current weight streaming device memory budget in bytes.
+    //!
+    //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
+    //!
+    //! \returns The weight streaming budget in bytes. Please see setWeightStreamingBudgetV2() for the possible
+    //!          return values. Returns getStreamableWeightsSize() if weight streaming is disabled.
+    //!
+    //! \see BuilderFlag::kWEIGHT_STREAMING
+    //! \see setWeightStreamingBudget()
+    //! \see getMinimumWeightStreamingBudget()
+    //! \see getStreamableWeightsSize()
+    //!
+    int64_t getWeightStreamingBudgetV2() const noexcept
+    {
+        return mImpl->getWeightStreamingBudgetV2();
+    }
+
+    //!
+    //! \brief TensorRT automatically determines an ideal budget for the model to run.
+    //!
+    //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
+    //!
+    //! \warning The return value may change between TensorRT minor versions.
+    //!
+    //! \warning Setting the returned budget with V1 APIs (setWeightStreamingBudget()) will lead to undefined behavior.
+    //! Please use V2 APIs.
+    //!
+    //! \returns The weight streaming budget in bytes. Please set with setWeightStreamingBudgetV2().
+    //!
+    //! \see BuilderFlag::kWEIGHT_STREAMING
+    //! \see setWeightStreamingBudgetV2()
+    //!
+    int64_t getWeightStreamingAutomaticBudget() const noexcept
+    {
+        return mImpl->getWeightStreamingAutomaticBudget();
+    }
+
+    //!
+    //! \brief Returns the size of the scratch memory required by the current weight streaming budget.
+    //!
+    //! Weight streaming requires small amounts of scratch memory on the GPU to stage CPU weights right before
+    //! execution. This value is typically much smaller than the total streamable weights size. Each IExecutionContext
+    //! will then allocate this additional memory or the user can provide the additional memory through
+    //! getDeviceMemorySizeV2() and IExecutionContext::setDeviceMemoryV2().
+    //!
+    //! The return value of this call depends on
+    //!    1. setWeightStreamingBudget()
+    //!    2. setWeightStreamingBudgetV2()
+    //!
+    //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
+    //!
+    //! \returns The weight streaming scratch memory in bytes. Returns 0 if weight streaming is disabled.
+    //!
+    //! \see BuilderFlag::kWEIGHT_STREAMING
+    //! \see setWeightStreamingBudgetV2()
+    //! \see getStreamableWeightsSize()
+    //! \see getDeviceMemorySizeV2()
+    //! \see getDeviceMemorySizeForProfileV2()
+    //! \see IExecutionContext::setDeviceMemoryV2()
+    //!
+    int64_t getWeightStreamingScratchMemorySize() const noexcept
+    {
+        return mImpl->getWeightStreamingScratchMemorySize();
     }
 
     //!
@@ -3213,6 +3387,7 @@ public:
     //! \param alignment required alignment of the allocation.
     //!
     //! \return A pointer to memory to use for the output tensor or nullptr.
+    //!
     //!
     //! To preallocate memory and have the engine fail if the preallocation is not big enough,
     //! use IExecutionContext::setTensorAddress to set a pointer to the preallocated memory,
@@ -3416,7 +3591,13 @@ public:
     //! getDeviceMemorySizeForProfile() report upper bounds of the size. Setting memory to nullptr is acceptable if the
     //! reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
     //! enqueueV3() until network execution is complete. If using executeV2(), it is in use until executeV2() returns.
-    //! Releasing or otherwise using the memory for other purposes during this time will result in undefined behavior.
+    //! Releasing or otherwise using the memory for other purposes, including using it in another execution context
+    //! running in parallel, during this time will result in undefined behavior.
+    //!
+    //! \deprecated Deprecated in TensorRT 10.1. Superceded by setDeviceMemoryV2().
+    //!
+    //! \warning Weight streaming related scratch memory will be allocated by TensorRT if the memory is set by this API.
+    //!          Please use setDeviceMemoryV2() instead.
     //!
     //! \see ICudaEngine::getDeviceMemorySize()
     //! \see ICudaEngine::getDeviceMemorySizeForProfile()
@@ -3427,6 +3608,28 @@ public:
     void setDeviceMemory(void* memory) noexcept
     {
         mImpl->setDeviceMemory(memory);
+    }
+
+    //!
+    //! \brief Set the device memory and its corresponding size for use by this execution context.
+    //!
+    //! The memory must be aligned with cuda memory alignment property (using cudaGetDeviceProperties()), and its size
+    //! must be large enough for performing inference with the given network inputs. getDeviceMemorySize() and
+    //! getDeviceMemorySizeForProfile() report upper bounds of the size. Setting memory to nullptr is acceptable if the
+    //! reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
+    //! enqueueV3() until network execution is complete. If using executeV2(), it is in use until executeV2() returns.
+    //! Releasing or otherwise using the memory for other purposes, including using it in another execution context
+    //! running in parallel, during this time will result in undefined behavior.
+    //!
+    //! \see ICudaEngine::getDeviceMemorySizeV2()
+    //! \see ICudaEngine::getDeviceMemorySizeForProfileV2()
+    //! \see ExecutionContextAllocationStrategy
+    //! \see ICudaEngine::createExecutionContext()
+    //! \see ICudaEngine::createExecutionContextWithoutDeviceMemory()
+    //!
+    void setDeviceMemoryV2(void* memory, int64_t size) noexcept
+    {
+        return mImpl->setDeviceMemoryV2(memory, size);
     }
 
     //!

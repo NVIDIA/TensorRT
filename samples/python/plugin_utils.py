@@ -22,6 +22,7 @@ import argparse
 import threading
 
 import tensorrt as trt
+import cupy as cp
 
 
 def parseArgs():
@@ -149,3 +150,9 @@ class CudaCtxManager(trt.IPluginResource):
 
     def release(self):
         checkCudaErrors(cuda.cuCtxDestroy(self.cuda_ctx))
+
+class UnownedMemory:
+    def __init__(self, ptr, shape, dtype):
+        mem = cp.cuda.UnownedMemory(ptr, volume(shape) * cp.dtype(dtype).itemsize, self)
+        cupy_ptr = cp.cuda.MemoryPointer(mem, 0)
+        self.d = cp.ndarray(shape, dtype=dtype, memptr=cupy_ptr)

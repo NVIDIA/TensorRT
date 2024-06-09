@@ -7,7 +7,7 @@ Support for [TensorFlow Object Detection (TFOD) API](https://github.com/tensorfl
 
 ### TensorFlow and TensorRT Environment
 
-In order for scripts to work we suggest an environment with TensorRT >= 8.0.1 and TensorFlow 2.12.0.
+In order for scripts to work we suggest an environment with TensorRT >= 8.0.1 and TensorFlow 2.13.1.
 
 Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.
 
@@ -316,6 +316,9 @@ If you run this on COCO val2017 images, you may also add the parameter `--annota
 ![mrcnn_compare_tf](https://drive.google.com/uc?export=view&id=1kNnfJ2H5OY85Z2e6KNxZgiYk3Lo-sB9r)
 
 # Changelog
+
+May 2024:
+  - Update TensorFlow version support to 2.13.1.
 
 August 2023: 
   - Removed support for Python versions < 3.8.

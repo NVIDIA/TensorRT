@@ -18,6 +18,7 @@
 #ifndef TRT_SAMPLE_INFERENCE_H
 #define TRT_SAMPLE_INFERENCE_H
 
+#include "sampleDevice.h"
 #include "sampleEngines.h"
 #include "sampleReporting.h"
 #include "sampleUtils.h"
@@ -29,7 +30,6 @@
 #include <string>
 #include <vector>
 
-#include "NvInfer.h"
 #include "NvInferSafeRuntime.h"
 
 namespace sample

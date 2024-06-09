@@ -19,6 +19,8 @@ import onnx_graphsurgeon as gs
 import numpy as np
 import onnx
 import cupy as cp
+import sys
+import os
 
 import tensorrt as trt
 from polygraphy.backend.trt import (
@@ -31,7 +33,9 @@ from polygraphy.backend.trt import (
 from polygraphy.json import to_json, from_json
 import torch
 
-from utils import volume, parseArgs
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+from plugin_utils import volume, parseArgs
+
 
 
 class CircPadPlugin(trt.IPluginV2DynamicExt):
@@ -180,7 +184,7 @@ if __name__ == "__main__":
     plg_registry.register_creator(my_plugin_creator, "")
 
     # create ONNX model
-    onnx_path = "test_CircPadPlugin.onnx"
+    onnx_path = f"test_CircPadPlugin_torch_{args.precision}.onnx"
     inputA = gs.Variable(name="X", shape=inp_shape, dtype=precision)
     Y = gs.Variable(name="Y", dtype=precision)
     myPluginNode = gs.Node(

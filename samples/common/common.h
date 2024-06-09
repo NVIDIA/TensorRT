@@ -18,7 +18,9 @@
 #ifndef TENSORRT_COMMON_H
 #define TENSORRT_COMMON_H
 #include "NvInfer.h"
+#if !TRT_WINML
 #include "NvInferPlugin.h"
+#endif
 #include "logger.h"
 #include "safeCommon.h"
 #include "utils/timingCache.h"
@@ -201,6 +203,7 @@ private:
 namespace samplesCommon
 {
 using nvinfer1::utils::loadTimingCacheFile;
+using nvinfer1::utils::buildTimingCacheFromFile;
 using nvinfer1::utils::saveTimingCacheFile;
 using nvinfer1::utils::updateTimingCacheFile;
 // Swaps endianness of an integral type.
@@ -295,7 +298,7 @@ struct InferDeleter
 };
 
 template <typename T>
-using SampleUniquePtr = std::unique_ptr<T, InferDeleter>;
+using SampleUniquePtr = std::unique_ptr<T>;
 
 static auto StreamDeleter = [](cudaStream_t* pStream) {
     if (pStream)
@@ -547,7 +550,8 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
     case nvinfer1::DataType::kUINT8:
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kFP8: return 1;
-    case nvinfer1::DataType::kINT4: ASSERT(false && "Element size is not implemented for sub-byte data-types (INT4)");
+    case nvinfer1::DataType::kINT4:
+        ASSERT(false && "Element size is not implemented for sub-byte data-types");
     }
     return 0;
 }
@@ -894,11 +898,9 @@ inline int32_t getMaxPersistentCacheSize()
     int32_t deviceIndex{};
     CHECK(cudaGetDevice(&deviceIndex));
 
-    int32_t maxPersistentL2CacheSize;
-#if CUDART_VERSION >= 11030
+    int32_t maxPersistentL2CacheSize{};
+#if CUDART_VERSION >= 11030 && !TRT_WINML
     CHECK(cudaDeviceGetAttribute(&maxPersistentL2CacheSize, cudaDevAttrMaxPersistingL2CacheSize, deviceIndex));
-#else
-    maxPersistentL2CacheSize = 0;
 #endif
 
     return maxPersistentL2CacheSize;

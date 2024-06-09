@@ -358,6 +358,14 @@ public:
     virtual int64_t getStreamableWeightsSize() const noexcept = 0;
 
     virtual bool isDebugTensor(char const* name) const noexcept = 0;
+
+    // Added in TensorRT 10.1
+    virtual bool setWeightStreamingBudgetV2(int64_t gpuMemoryBudget) noexcept = 0;
+    virtual int64_t getWeightStreamingBudgetV2() const noexcept = 0;
+    virtual int64_t getWeightStreamingAutomaticBudget() const noexcept = 0;
+    virtual int64_t getWeightStreamingScratchMemorySize() const noexcept = 0;
+    virtual int64_t getDeviceMemorySizeV2() const noexcept = 0;
+    virtual int64_t getDeviceMemorySizeForProfileV2(int32_t profileIndex) const noexcept = 0;
 };
 
 class VExecutionContext : public VRoot
@@ -410,6 +418,9 @@ public:
     virtual bool getDebugState(char const* name) const noexcept = 0;
     virtual bool setAllTensorsDebugState(bool flag) noexcept = 0;
     virtual size_t updateDeviceMemorySizeForShapes() noexcept = 0;
+
+    // Added in TensorRT 10.1
+    virtual void setDeviceMemoryV2(void* memory, int64_t size) noexcept = 0;
 };
 
 class VEngineInspector : public VRoot

@@ -27,6 +27,7 @@
 | [onnx_packnet](python/onnx_packnet) | Python | ONNX | TensorRT Inference Of ONNX Models With Custom Layers |
 | [simpleProgressMonitor](python/simple_progress_monitor) | Python | ONNX | Progress Monitor API usage |
 | [python_plugin](python/python_plugin) | Python | INetwork/ONNX | Python-based TRT plugins |
+| [non_zero_plugin](python/non_zero_plugin) | Python | INetwork/ONNX | Python-based TRT plugin for NonZero op |
 
 ### 3. Application Samples
 | Sample | Language | Format | Description |

@@ -235,16 +235,18 @@ public:
 
     TrtCudaBuffer(TrtCudaBuffer&& rhs)
     {
-        reset(rhs.mPtr);
+        reset(rhs.mPtr, rhs.mSize);
         rhs.mPtr = nullptr;
+        rhs.mSize = 0;
     }
 
     TrtCudaBuffer& operator=(TrtCudaBuffer&& rhs)
     {
         if (this != &rhs)
         {
-            reset(rhs.mPtr);
+            reset(rhs.mPtr, rhs.mSize);
             rhs.mPtr = nullptr;
+            rhs.mSize = 0;
         }
         return *this;
     }
@@ -257,21 +259,24 @@ public:
     TrtCudaBuffer(size_t size)
     {
         A()(&mPtr, size);
+        mSize = size;
     }
 
     void allocate(size_t size)
     {
         reset();
         A()(&mPtr, size);
+        mSize = size;
     }
 
-    void reset(void* ptr = nullptr)
+    void reset(void* ptr = nullptr, size_t size = 0)
     {
         if (mPtr)
         {
             D()(mPtr);
         }
         mPtr = ptr;
+        mSize = size;
     }
 
     void* get() const
@@ -279,8 +284,14 @@ public:
         return mPtr;
     }
 
+    size_t getSize() const
+    {
+        return mSize;
+    }
+
 private:
     void* mPtr{nullptr};
+    size_t mSize{0};
 };
 
 struct DeviceAllocator
