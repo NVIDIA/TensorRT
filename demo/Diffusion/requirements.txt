@@ -13,3 +13,4 @@ transformers==4.33.1
 nvidia-ammo==0.9.4
 onnx-graphsurgeon
 polygraphy==0.49.9
+sentencepiece
