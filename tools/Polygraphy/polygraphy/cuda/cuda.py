@@ -284,8 +284,8 @@ class DeviceView:
                 "Hint: Use `util.make_contiguous()` or `np.ascontiguousarray()` to make the array contiguous in memory."
             )
 
-        # If the host buffer is an input, the device buffer should be large enough to accomodate it.
-        # Otherwise, the host buffer needs to be large enough to accomodate the device buffer.
+        # If the host buffer is an input, the device buffer should be large enough to accommodate it.
+        # Otherwise, the host buffer needs to be large enough to accommodate the device buffer.
         if copying_from:
             if util.array.nbytes(host_buffer) > self.nbytes:
                 G_LOGGER.critical(
@@ -338,7 +338,7 @@ class DeviceView:
             host_buffer (Union[numpy.ndarray, torch.Tensor]):
                     The host buffer to copy into. The buffer must be contiguous in
                     memory (see np.ascontiguousarray or torch.Tensor.contiguous) and
-                    large enough to accomodate the device buffer.
+                    large enough to accommodate the device buffer.
             stream (Stream):
                     A Stream instance. Performs a synchronous copy if no stream is provided.
 
