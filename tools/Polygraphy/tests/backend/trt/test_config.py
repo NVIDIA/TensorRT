@@ -51,6 +51,11 @@ class TestCreateConfig:
                     config.hardware_compatibility_level
                     == trt.HardwareCompatibilityLevel.NONE
                 )
+            if mod.version(trt.__version__) >= mod.version("10.2"):
+                assert (
+                    config.runtime_platform
+                    == trt.RuntimePlatform.SAME_AS_BUILD
+                )
             assert config.num_optimization_profiles == 1
             assert config.int8_calibrator is None
             with contextlib.suppress(AttributeError):
@@ -398,6 +403,21 @@ class TestCreateConfig:
             loader = CreateConfig(hardware_compatibility_level=level)
             with loader(builder, network) as config:
                 assert config.hardware_compatibility_level == level
+
+    if mod.version(trt.__version__) >= mod.version("10.2"):
+
+        @pytest.mark.parametrize(
+            "platform",
+            [
+                trt.RuntimePlatform.SAME_AS_BUILD,
+                trt.RuntimePlatform.WINDOWS_AMD64,
+            ],
+        )
+        def test_runtime_platform(self, identity_builder_network, platform):
+            builder, network = identity_builder_network
+            loader = CreateConfig(runtime_platform=platform)
+            with loader(builder, network) as config:
+                assert config.runtime_platform == platform
 
     @pytest.mark.skipif(
         mod.version(trt.__version__) < mod.version("8.6"),

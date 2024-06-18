@@ -119,10 +119,12 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
             mRuntime->setDLACore(mDLACore);
         }
         mRuntime->setErrorRecorder(&gRecorder);
+#if !TRT_WINML
         for (auto const& pluginPath : mDynamicPlugins)
         {
             mRuntime->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
+#endif
 
         if (getFileReader().isOpen())
         {
@@ -241,17 +243,20 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         using namespace nvonnxparser;
         parser.onnxParser.reset(createONNXParser(network));
         ASSERT(parser.onnxParser != nullptr);
+#if !TRT_WINML
         // kNATIVE_INSTANCENORM is ON by default in the parser and must be cleared to use the plugin implementation.
         if (build.pluginInstanceNorm)
         {
             parser.onnxParser->clearFlag(OnnxParserFlag::kNATIVE_INSTANCENORM);
         }
+#endif
         if (!parser.onnxParser->parseFromFile(
                 model.baseModel.model.c_str(), static_cast<int>(sample::gLogger.getReportableSeverity())))
         {
             err << "Failed to parse onnx file" << std::endl;
             parser.onnxParser.reset();
         }
+#if !TRT_WINML
         if (vcPluginLibrariesUsed && parser.onnxParser.get())
         {
             int64_t nbPluginLibs;
@@ -271,6 +276,7 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
                                     << std::endl;
             }
         }
+#endif
         break;
     }
     case ModelFormat::kANY: break;
@@ -621,7 +627,9 @@ void markDebugTensors(INetworkDefinition& network, StringSet const& debugTensors
 
 void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
 {
-    auto const roundToBytes = [](double const sizeInMB) { return static_cast<size_t>(sizeInMB * (1 << 20)); };
+    auto const roundToBytes = [](double const size, bool fromMB = true) {
+        return static_cast<size_t>(size * (fromMB ? 1.0_MiB : 1.0_KiB));
+    };
     if (build.workspace >= 0)
     {
         config.setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, roundToBytes(build.workspace));
@@ -654,15 +662,7 @@ void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
     }
     if (build.tacticSharedMem >= 0)
     {
-        if (build.tacticSharedMem >= 0.046 && build.tacticSharedMem <= 0.047)
-        {
-            // 48KB is a common use case but user might not type the exact number 0.046875MB.
-            config.setMemoryPoolLimit(MemoryPoolType::kTACTIC_SHARED_MEMORY, 48 << 10);
-        }
-        else
-        {
-            config.setMemoryPoolLimit(MemoryPoolType::kTACTIC_SHARED_MEMORY, roundToBytes(build.tacticSharedMem));
-        }
+        config.setMemoryPoolLimit(MemoryPoolType::kTACTIC_SHARED_MEMORY, roundToBytes(build.tacticSharedMem, false));
     }
 }
 
@@ -729,28 +729,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             int32_t inputFormatIndex = broadcastInputFormats ? 0 : i;
             input->setType(build.inputFormats[inputFormatIndex].first);
             input->setAllowedFormats(build.inputFormats[inputFormatIndex].second);
-        }
-        else
-        {
-            switch (input->getType())
-            {
-            case DataType::kINT32:
-            case DataType::kINT64:
-            case DataType::kBOOL:
-            case DataType::kHALF:
-            case DataType::kUINT8:
-            case DataType::kBF16:
-                // Leave these as is.
-                break;
-            case DataType::kFLOAT:
-            case DataType::kINT8:
-                // User did not specify a floating-point format.  Default to kFLOAT.
-                input->setType(DataType::kFLOAT);
-                break;
-            case DataType::kFP8: ASSERT(false && "FP8 is not supported");
-            case DataType::kINT4: ASSERT(false && "INT4 is not supported");
-            }
-            input->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
         }
 
         auto const dims = input->getDimensions();
@@ -889,10 +867,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             output->setType(build.outputFormats[outputFormatIndex].first);
             output->setAllowedFormats(build.outputFormats[outputFormatIndex].second);
         }
-        else
-        {
-            output->setAllowedFormats(1U << static_cast<int>(TensorFormat::kLINEAR));
-        }
     }
 
     setMemoryPoolLimits(config, build);
@@ -939,7 +913,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     {
         config.setFlag(BuilderFlag::kVERSION_COMPATIBLE);
     }
-
+#if !TRT_WINML
     std::vector<char const*> pluginPaths;
     for (auto const& pluginPath : sys.setPluginsToSerialize)
     {
@@ -950,7 +924,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     {
         config.setPluginsToSerialize(pluginPaths.data(), pluginPaths.size());
     }
-
+#endif
     if (build.excludeLeanRuntime)
     {
         config.setFlag(BuilderFlag::kEXCLUDE_LEAN_RUNTIME);
@@ -986,6 +960,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     if (build.fp8)
     {
         config.setFlag(BuilderFlag::kFP8);
+    }
+
+    if (build.int4)
+    {
+        config.setFlag(BuilderFlag::kINT4);
     }
 
     if (build.int8 && !build.fp16)
@@ -1213,14 +1192,12 @@ bool networkToSerializedEngine(
         setupNetworkAndConfig(build, sys, builder, *env.network, *config, calibrator, err, sparseWeights),
         "Network And Config setup failed", false, err);
 
-    std::unique_ptr<ITimingCache> timingCache{nullptr};
+    std::unique_ptr<ITimingCache> timingCache{};
     // Try to load cache from file. Create a fresh cache if the file doesn't exist
     if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
     {
-        std::vector<char> loadedCache = samplesCommon::loadTimingCacheFile(gLogger, build.timingCacheFile);
-        timingCache.reset(config->createTimingCache(static_cast<const void*>(loadedCache.data()), loadedCache.size()));
-        SMP_RETVAL_IF_FALSE(timingCache != nullptr, "TimingCache creation failed", false, err);
-        config->setTimingCache(*timingCache, false);
+        timingCache
+            = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), *config, build.timingCacheFile, err);
     }
 
     // CUDA stream used for profiling by the builder.
@@ -1250,7 +1227,7 @@ bool networkToSerializedEngine(
     if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
     {
         auto timingCache = config->getTimingCache();
-        samplesCommon::updateTimingCacheFile(gLogger, build.timingCacheFile, timingCache, builder);
+        samplesCommon::updateTimingCacheFile(gLogger.getTRTLogger(), build.timingCacheFile, timingCache, builder);
     }
 
     return true;
@@ -1268,10 +1245,12 @@ bool modelToBuildEnv(
     auto networkFlags = (build.stronglyTyped)
         ? 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)
         : 0U;
+#if !TRT_WINML
     for (auto const& pluginPath : sys.dynamicPlugins)
     {
         env.builder->getPluginRegistry().loadLibrary(pluginPath.c_str());
     }
+#endif
     env.network.reset(env.builder->createNetworkV2(networkFlags));
 
     std::vector<std::string> vcPluginLibrariesUsed;
@@ -1280,6 +1259,7 @@ bool modelToBuildEnv(
         = modelToNetwork(model, build, *env.network, err, build.versionCompatible ? &vcPluginLibrariesUsed : nullptr);
     SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
 
+#if !TRT_WINML
     if (build.versionCompatible && !sys.ignoreParsedPluginLibs && !vcPluginLibrariesUsed.empty())
     {
         sample::gLogInfo << "The following plugin libraries were identified by the parser as required for a "
@@ -1308,6 +1288,7 @@ bool modelToBuildEnv(
 
         sample::gLogInfo << "Use --ignoreParsedPluginLibs to disable this behavior." << std::endl;
     }
+#endif
 
     SMP_RETVAL_IF_FALSE(
         networkToSerializedEngine(build, sys, *env.builder, env, err), "Building engine failed", false, err);

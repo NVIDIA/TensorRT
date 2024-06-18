@@ -70,7 +70,7 @@
 //! * NvInferConsistency.h (for consistency checker)
 //! * NvInferPluginUtils.h (for plugin utilities)
 //!
-#if !defined(NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE) && !defined(TRT_VCAST_SAFE)
+#if !defined(NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE)
 static_assert(false, "Do not directly include this file. Include NvInferRuntime.h or NvInferSafeRuntime.h or NvInferConsistency.h or NvInferPluginUtils.h");
 #endif
 
@@ -174,6 +174,7 @@ enum class DataType : int32_t
 
     //! Signed 4-bit integer type.
     kINT4 = 9,
+
 };
 
 namespace impl
@@ -182,7 +183,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<DataType>
 {
-    //! Declaration of kVALUE that represents the maximum number of elements in the DataType enum.
+//! Declaration of kVALUE that represents the maximum number of elements in the DataType enum.
     static constexpr int32_t kVALUE = 10;
 };
 } // namespace impl
@@ -898,7 +899,7 @@ public:
     //!         If the upper bound of errors that can be stored is exceeded, the upper bound value must
     //!         be returned.
     //!
-    //! For example, if the error recorder can store up to 16 error descriptions but recordError() has
+    //! For example, if the error recorder can store up to 16 error descriptions but reportError() has
     //! been called 20 times, getNbErrors() must return 16.
     //!
     //! \see clear(), hasOverflowed()

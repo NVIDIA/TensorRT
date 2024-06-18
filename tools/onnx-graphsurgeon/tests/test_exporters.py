@@ -21,7 +21,10 @@ import numpy as np
 import onnx
 import onnx.numpy_helper
 import pytest
-from onnx_graphsurgeon.exporters.onnx_exporter import OnnxExporter
+from onnx_graphsurgeon.exporters.onnx_exporter import (
+    OnnxExporter,
+    constant_to_onnx_tensor,
+)
 from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.function import Function
@@ -78,6 +81,37 @@ class TestOnnxExporter(object):
         for dim in onnx_tensor.type.tensor_type.shape.dim:
             onnx_shape.append(dim.dim_value)
         assert tuple(onnx_shape) == shape
+
+    @pytest.mark.parametrize(
+        "export_dtype, container_dtype, threshold, onnx_to_numpy_converter",
+        [
+            (
+                onnx.TensorProto.BFLOAT16,
+                np.uint16,
+                0.02,
+                onnx.numpy_helper.bfloat16_to_float32,
+            ),
+            (
+                onnx.TensorProto.FLOAT8E4M3FN,
+                np.uint8,
+                0.35,
+                lambda x, dims: onnx.numpy_helper.float8e4m3_to_float32(x, dims, fn=True, uz=False),
+            ),
+        ],
+    )
+    def test_export_numpy_unsupported_dtypes_accuracy(
+        self, export_dtype, container_dtype, threshold, onnx_to_numpy_converter
+    ):
+        name = "constant_tensor"
+        shape = (3, 224, 224)
+        values = np.random.random_sample(size=shape).astype(np.float32)
+
+        tensor = Constant(name=name, values=values, export_dtype=export_dtype)
+        onnx_tensor = constant_to_onnx_tensor(tensor)
+        np_arr = np.frombuffer(onnx_tensor.raw_data, dtype=container_dtype)
+        np_arr_fp32 = onnx_to_numpy_converter(np_arr, dims=values.shape)
+
+        assert np.max(np.abs(np_arr_fp32 - values)) <= threshold
 
     @pytest.mark.parametrize(
         "dtype, expected_type",

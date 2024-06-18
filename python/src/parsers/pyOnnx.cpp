@@ -55,9 +55,9 @@ static const auto error_code_str = [](ErrorCode self) {
 };
 
 static const auto parser_error_str = [](IParserError& self) {
-    const std::string node_info = "In node " + std::to_string(self.node()) + " with name: " + self.nodeName()
+    std::string const node_info = "In node " + std::to_string(self.node()) + " with name: " + self.nodeName()
         + " and operator: " + self.nodeOperator() + " ";
-    const std::string error_info
+    std::string const error_info
         = std::string("(") + self.func() + "): " + error_code_str(self.code()) + ": " + self.desc();
     if (self.code() == ErrorCode::kMODEL_DESERIALIZE_FAILED || self.code() == ErrorCode::kREFIT_FAILED)
     {
@@ -66,24 +66,43 @@ static const auto parser_error_str = [](IParserError& self) {
     return node_info + error_info;
 };
 
-static const auto parse = [](IParser& self, const py::buffer& model, const char* path = nullptr) {
+static const auto parse = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     return self.parse(info.ptr, info.size * info.itemsize, path);
 };
 
-static const auto parse_with_weight_descriptors = [](IParser& self, const py::buffer& model) {
+static const auto parse_with_weight_descriptors = [](IParser& self, py::buffer const& model) {
     py::buffer_info info = model.request();
     return self.parseWithWeightDescriptors(info.ptr, info.size * info.itemsize);
 };
 
 static const auto parseFromFile
-    = [](IParser& self, const std::string& model) { return self.parseFromFile(model.c_str(), 0); };
+    = [](IParser& self, std::string const& model) { return self.parseFromFile(model.c_str(), 0); };
 
-static const auto supportsModel = [](IParser& self, const py::buffer& model, const char* path = nullptr) {
+static const auto supportsModel = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     SubGraphCollection_t subgraphs;
-    const bool supported = self.supportsModel(info.ptr, info.size * info.itemsize, subgraphs, path);
+    bool const supported = self.supportsModel(info.ptr, info.size * info.itemsize, subgraphs, path);
     return std::make_pair(supported, subgraphs);
+};
+
+static const auto supportsModelV2 = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
+    py::buffer_info info = model.request();
+    return self.supportsModelV2(info.ptr, info.size * info.itemsize, path);
+};
+
+static const auto isSubgraphSupported
+    = [](IParser& self, int64_t const index) { return self.isSubgraphSupported(index); };
+
+static const auto getSubgraphNodes = [](IParser& self, int64_t const index) {
+    py::list py_nodes;
+    int64_t nb_nodes = 0;
+    int64_t* nodes = self.getSubgraphNodes(index, nb_nodes);
+    for (int64_t i = 0; i < nb_nodes; i++)
+    {
+        py_nodes.append(nodes[i]);
+    }
+    return py_nodes;
 };
 
 static const auto get_used_vc_plugin_libraries = [](IParser& self) {
@@ -117,13 +136,13 @@ static const auto get_local_function_stack = [](IParserError& self) {
     return localFunctionStack;
 };
 
-static const auto refitFromBytes = [](IParserRefitter& self, const py::buffer& model, const char* path = nullptr) {
+static const auto refitFromBytes = [](IParserRefitter& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     return self.refitFromBytes(info.ptr, info.size * info.itemsize, path);
 };
 
 static const auto refitFromFile
-    = [](IParserRefitter& self, const std::string& model) { return self.refitFromFile(model.c_str()); };
+    = [](IParserRefitter& self, std::string const& model) { return self.refitFromFile(model.c_str()); };
 
 } // namespace lambdas
 
@@ -143,6 +162,11 @@ void bindOnnx(py::module& m)
             py::call_guard<py::gil_scoped_release>{})
         .def("supports_operator", &IParser::supportsOperator, "op_name"_a, OnnxParserDoc::supports_operator)
         .def("supports_model", lambdas::supportsModel, "model"_a, "path"_a = nullptr, OnnxParserDoc::supports_model)
+        .def("supports_model_v2", lambdas::supportsModelV2, "model"_a, "path"_a = nullptr,
+            OnnxParserDoc::supports_model_v2)
+        .def_property_readonly("num_subgraphs", &IParser::getNbSubgraphs)
+        .def("is_subgraph_supported", lambdas::isSubgraphSupported, "index"_a, OnnxParserDoc::is_subgraph_supported)
+        .def("get_subgraph_nodes", lambdas::getSubgraphNodes, "index"_a, OnnxParserDoc::get_subgraph_nodes)
         .def_property_readonly("num_errors", &IParser::getNbErrors)
         .def("get_error", &IParser::getError, "index"_a, OnnxParserDoc::get_error)
         .def("clear_errors", &IParser::clearErrors, OnnxParserDoc::clear_errors)

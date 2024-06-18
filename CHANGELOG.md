@@ -1,6 +1,23 @@
 # TensorRT OSS Release Changelog
 
-## 10.0.1 GA - 2024-04-30
+## 10.1.0 GA - 2024-06-17
+
+Key Features and Updates:
+
+ - Parser changes
+   - Added `supportsModelV2` API
+   - Added support for `DeformConv` operation
+   - Added support for `PluginV3` TensorRT Plugins
+   - Marked all IParser and IParserRefitter APIs as `noexcept`
+ - Plugin changes
+   - Added version 2 of ROIAlign_TRT plugin, which implements the IPluginV3 plugin interface. When importing an ONNX model with the RoiAlign op, this new version of the plugin will be inserted to the TRT network.
+ - Samples changes
+   - Added a new sample [non_zero_plugin](samples/python/non_zero_plugin), which is a Python version of the C++ sample [sampleNonZeroPlugin](samples/sampleNonZeroPlugin).
+ - Updated tooling
+   - Polygraphy v0.49.12
+   - ONNX-GraphSurgeon v0.5.3
+
+## 10.0.1 GA - 2024-04-24
 
 Key Features and Updates:
 

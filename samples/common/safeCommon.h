@@ -164,7 +164,7 @@ inline uint32_t elementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kFP8: return 1;
     case nvinfer1::DataType::kINT4:
-        SAFE_ASSERT(false && "Element size is not implemented for sub-byte data-types (INT4)");
+        SAFE_ASSERT(false && "Element size is not implemented for sub-byte data-types");
     }
     return 0;
 }
@@ -202,12 +202,18 @@ inline int64_t volume(nvinfer1::Dims dims, int32_t vecDim, int32_t comps, int32_
 
 inline int32_t getSMVersion()
 {
-    int32_t deviceIndex = 0;
+#if 0
+    // Use default value for 4090
+    int32_t major{8};
+    int32_t minor{9};
+#else
+    int32_t major{};
+    int32_t minor{};
+    int32_t deviceIndex{};
     CHECK(cudaGetDevice(&deviceIndex));
-    int32_t major, minor;
     CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
     CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
-
+#endif
     return ((major << 8) | minor);
 }
 

@@ -31,6 +31,8 @@ constexpr const char* descr = R"trtdoc(
 namespace IInt8CalibratorDoc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Application-implemented interface for calibration. Calibration is a step performed by the builder when deciding suitable scale factors for 8-bit inference. It must also provide a method for retrieving representative images which the calibration process can use to examine the distribution of activations. It may optionally implement a method for caching the calibration result for reuse on subsequent runs.
 
     To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
@@ -117,6 +119,8 @@ constexpr const char* write_calibration_cache = R"trtdoc(
 namespace IInt8LegacyCalibratorDoc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Extends the :class:`IInt8Calibrator` class.
     This calibrator requires user parameterization, and is provided as a fallback option if the other calibrators yield poor results.
 
@@ -160,6 +164,8 @@ constexpr const char* get_algorithm = R"trtdoc(
 namespace IInt8EntropyCalibratorDoc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Extends the :class:`IInt8Calibrator` class.
 
     To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
@@ -183,6 +189,8 @@ constexpr const char* get_algorithm = R"trtdoc(
 namespace IInt8EntropyCalibrator2Doc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Extends the :class:`IInt8Calibrator` class.
 
     To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :
@@ -205,6 +213,8 @@ constexpr const char* get_algorithm = R"trtdoc(
 namespace IInt8MinMaxCalibratorDoc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Extends the :class:`IInt8Calibrator` class.
 
     To implement a custom calibrator, ensure that you explicitly instantiate the base class in :func:`__init__` :

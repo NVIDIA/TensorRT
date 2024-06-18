@@ -17,6 +17,8 @@
 
 import onnx_graphsurgeon as gs
 import numpy as np
+import sys
+import os
 
 import tensorrt as trt
 from polygraphy.backend.trt import (
@@ -28,7 +30,8 @@ from polygraphy.backend.trt import (
 
 from polygraphy.json import to_json, from_json
 
-from utils import checkCudaErrors, KernelHelper, parseArgs, CudaCtxManager
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+from plugin_utils import checkCudaErrors, KernelHelper, parseArgs, CudaCtxManager
 from cuda import cuda
 
 circ_pad_half_kernel = r"""

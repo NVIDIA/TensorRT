@@ -413,10 +413,25 @@ bool SampleIOFormats::build(int32_t dataWidth)
     }
     config->setProfileStream(*profileStream);
 
+    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+
+    // Load timing cache
+    if (!mParams.timingCacheFile.empty())
+    {
+        timingCache = samplesCommon::buildTimingCacheFromFile(
+            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+    }
+
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return false;
+    }
+
+    if (timingCache != nullptr && !mParams.timingCacheFile.empty())
+    {
+        samplesCommon::updateTimingCacheFile(
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
     }
 
     if (!mRuntime)
@@ -541,6 +556,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const
     }
     params.onnxFileName = "mnist.onnx";
     params.dlaCore = args.useDLACore;
+    params.timingCacheFile = args.timingCacheFile;
 
     return params;
 }
@@ -550,16 +566,18 @@ samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const
 void printHelpInfo()
 {
     std::cout
-        << "Usage: ./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]"
-        << std::endl;
-    std::cout << "--help          Display help information" << std::endl;
-    std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
+        << "Usage: ./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] "
+        << "[-t or --timingCacheFile=<path to timing cache file>]" << std::endl;
+    std::cout << "--help             Display help information" << std::endl;
+    std::cout << "--datadir          Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "(data/samples/mnist/, data/mnist/)"
               << std::endl;
-    std::cout << "--useDLACore=N  Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
+    std::cout << "--useDLACore=N     Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, "
                  "where n is the number of DLA engines on the platform."
               << std::endl;
+    std::cout << "--timingCacheFile  Specify path to a timing cache file. If it does not already exist, it will be "
+              << "created." << std::endl;
 }
 //!
 //! \brief Used to run the engine build and inference/reference functions

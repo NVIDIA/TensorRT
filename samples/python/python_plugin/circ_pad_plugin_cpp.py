@@ -67,7 +67,7 @@ if __name__ == "__main__":
     pads = (1, 1, 1, 1)
 
     # create ONNX model
-    onnx_path = "test_CircPadPlugin.onnx"
+    onnx_path = f"test_CircPadPlugin_cpp_{args.precision}.onnx"
     inputA = gs.Variable(name="X", shape=inp_shape, dtype=precision)
     Y = gs.Variable(name="Y", dtype=precision)
     myPluginNode = gs.Node(

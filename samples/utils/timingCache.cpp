@@ -18,6 +18,7 @@
 #include "timingCache.h"
 #include "NvInfer.h"
 #include "fileLock.h"
+#include "sampleUtils.h"
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -59,6 +60,19 @@ std::vector<char> loadTimingCacheFile(ILogger& logger, std::string const& inFile
         std::cerr << "Exception detected: " << e.what() << std::endl;
     }
     return {};
+}
+
+std::unique_ptr<ITimingCache> buildTimingCacheFromFile(
+    ILogger& logger, IBuilderConfig& config, std::string const& timingCacheFile, std::ostream& err)
+{
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
+    auto timingCacheContents = loadTimingCacheFile(logger, timingCacheFile);
+    timingCache.reset(config.createTimingCache(timingCacheContents.data(), timingCacheContents.size()));
+    SMP_RETVAL_IF_FALSE(timingCache != nullptr, "TimingCache creation failed", nullptr, err);
+    config.clearFlag(BuilderFlag::kDISABLE_TIMING_CACHE);
+    SMP_RETVAL_IF_FALSE(
+        config.setTimingCache(*timingCache, true), "IBuilderConfig setTimingCache failed", nullptr, err);
+    return timingCache;
 }
 
 void saveTimingCacheFile(ILogger& logger, std::string const& outFileName, IHostMemory const* blob)

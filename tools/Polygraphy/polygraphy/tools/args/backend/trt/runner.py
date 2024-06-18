@@ -56,10 +56,10 @@ class TrtRunnerArgs(BaseRunnerArgs):
         self.group.add_argument(
             "--weight-streaming-budget",
             help="The amount of GPU memory in bytes that TensorRT can use for weights at runtime. The engine must be built with weight streaming enabled. It can take on the following values: "
-            "None or 0: Disables weight streaming at runtime. "
+            "None or -2: Disables weight streaming at runtime. "
             "-1: TensorRT will decide the streaming budget automatically. "
-            "0 to 100%%: The percentage of weights TRT will stream. 100%% will stream the maximum number of weights. "
-            ">0B: The exact amount of streamable weights that reside on the GPU (unit suffixes are supported).",
+            "0 to 100%%: The percentage of weights that TRT keeps on the GPU. 0%% will stream the maximum number of weights."
+            ">=0B: The exact amount of streamable weights that reside on the GPU (unit suffixes are supported).",
             type=str,
             default=None,
         )
@@ -71,8 +71,8 @@ class TrtRunnerArgs(BaseRunnerArgs):
         Attributes:
             optimization_profile (int): The index of the optimization profile to initialize the runner with.
             allocation_strategy (str): The way activation memory is allocated.
-            weight_streaming_budget (int): The weight streaming budget in bytes.
-            weight_streaming_percent (float): The percentage of weights streamed.
+            weight_streaming_budget (int): The size of the weights on the GPU in bytes.
+            weight_streaming_percent (float): The percentage of weights on the GPU.
         """
         self.optimization_profile = args_util.get(args, "optimization_profile")
         self.allocation_strategy = args_util.get(args, "allocation_strategy")
@@ -89,7 +89,7 @@ class TrtRunnerArgs(BaseRunnerArgs):
         elif ws_arg:
             budget = args_util.parse_num_bytes(ws_arg)
             assert (
-                budget == -1 or budget >= 0
+                budget == -2 or budget == -1 or budget >= 0
             ), "Invalid amount for --weight-streaming-budget!"
             self.weight_streaming_budget = budget
 

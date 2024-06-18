@@ -30,52 +30,79 @@ namespace nvinfer1
 namespace plugin
 {
 
-class ROIAlign : public IPluginV2DynamicExt
+class ROIAlignV3PluginCreator : public nvinfer1::IPluginCreatorV3One
 {
 public:
-    ROIAlign(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale,
-        int32_t aligned);
-    ROIAlign(void const* data, size_t length);
-    ROIAlign() = default;
-    ~ROIAlign() override = default;
+    ROIAlignV3PluginCreator();
 
-    // IPluginV2 methods
-    char const* getPluginType() const noexcept override;
+    ~ROIAlignV3PluginCreator() override = default;
+
+    char const* getPluginName() const noexcept override;
+
     char const* getPluginVersion() const noexcept override;
-    int32_t getNbOutputs() const noexcept override;
-    int32_t initialize() noexcept override;
-    void terminate() noexcept override;
-    size_t getSerializationSize() const noexcept override;
-    void serialize(void* buffer) const noexcept override;
-    void destroy() noexcept override;
-    void setPluginNamespace(char const* libNamespace) noexcept override;
+
+    PluginFieldCollection const* getFieldNames() noexcept override;
+
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
+
+    void setPluginNamespace(char const* libNamespace) noexcept;
+
     char const* getPluginNamespace() const noexcept override;
-    void setClipParam(bool clip) noexcept;
-    void setScoreBits(int32_t scoreBits) noexcept;
-    void setCaffeSemantics(bool caffeSemantics) noexcept;
 
-    // IPluginV2Ext methods
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const noexcept override;
+private:
+    static PluginFieldCollection mFC;
+    static std::vector<PluginField> mPluginAttributes;
+    std::string mNamespace;
+};
 
-    // IPluginV2DynamicExt methods
-    IPluginV2DynamicExt* clone() const noexcept override;
-    DimsExprs getOutputDimensions(
-        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept override;
-    bool supportsFormatCombination(
-        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+class ROIAlignV3 : public IPluginV3, public IPluginV3OneCore, public IPluginV3OneBuild, public IPluginV3OneRuntime
+{
+public:
+    ROIAlignV3(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale,
+        int32_t aligned);
+    ROIAlignV3(ROIAlignV3 const&) = default;
+    ~ROIAlignV3() override = default;
+
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
+
+    IPluginV3* clone() noexcept override;
+
+    char const* getPluginName() const noexcept override;
+
+    char const* getPluginVersion() const noexcept override;
+
+    char const* getPluginNamespace() const noexcept override;
+
+    int32_t getNbOutputs() const noexcept override;
+
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
         int32_t nbOutputs) noexcept override;
-    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
-        int32_t nbOutputs) const noexcept override;
+
+    bool supportsFormatCombination(
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override;
+
     int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-private:
-    void checkValidInputs(nvinfer1::DynamicPluginTensorDesc const* inputs, int32_t nbInputDims);
-    void validateAttributes(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode,
-        float spatialScale, int32_t aligned);
+    int32_t onShapeChange(
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
 
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override;
+
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override;
+
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+
+    void setPluginNamespace(char const* libNamespace) noexcept;
+
+private:
     int32_t mOutputHeight{};
     int32_t mOutputWidth{};
     int32_t mSamplingRatio{};
@@ -91,29 +118,9 @@ private:
     int32_t mMaxThreadsPerBlock{};
 
     std::string mNameSpace{};
-};
 
-class ROIAlignPluginCreator : public nvinfer1::pluginInternal::BaseCreator
-{
-public:
-    ROIAlignPluginCreator();
-
-    ~ROIAlignPluginCreator() override = default;
-
-    char const* getPluginName() const noexcept override;
-
-    char const* getPluginVersion() const noexcept override;
-
-    PluginFieldCollection const* getFieldNames() noexcept override;
-
-    IPluginV2DynamicExt* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
-
-    IPluginV2DynamicExt* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-private:
-    static PluginFieldCollection mFC;
-    static std::vector<PluginField> mPluginAttributes;
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
 };
 
 } // namespace plugin

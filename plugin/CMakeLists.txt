@@ -24,9 +24,7 @@ set(VFC_SHARED_TARGET ${VFC_TARGET_NAME})
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports.map)
-set(PLUGIN_EXPORT_DEF ${TARGET_DIR}/exports.def)
 set(VFC_PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports-vfc_plugin.map)
-set(VFC_PLUGIN_EXPORT_DEF ${TARGET_DIR}/exports-vfc_plugin.def)
 
 if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")

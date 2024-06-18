@@ -181,10 +181,25 @@ bool SampleNamedDimensions::build()
 
     addOptimizationProfile(config, builder);
 
+    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+
+    // Load timing cache
+    if (!mParams.timingCacheFile.empty())
+    {
+        timingCache = samplesCommon::buildTimingCacheFromFile(
+            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+    }
+
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return false;
+    }
+
+    if (timingCache != nullptr && !mParams.timingCacheFile.empty())
+    {
+        samplesCommon::updateTimingCacheFile(
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
     }
 
     if (!mRuntime)
@@ -387,6 +402,7 @@ samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const
     params.inputTensorNames.push_back("input0");
     params.inputTensorNames.push_back("input1");
     params.outputTensorNames.push_back("output");
+    params.timingCacheFile = params.timingCacheFile;
 
     return params;
 }
@@ -396,14 +412,15 @@ samplesCommon::OnnxSampleParams initializeSampleParams(samplesCommon::Args const
 //!
 void printHelpInfo()
 {
-    std::cout
-        << "Usage: ./sample_named_dimensions [-h or --help] [-d or --datadir=<path to data directory>]"
-        << std::endl;
-    std::cout << "--help          Display help information" << std::endl;
-    std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
+    std::cout << "Usage: ./sample_named_dimensions [-h or --help] [-d or --datadir=<path to data directory>] "
+              << "[--timingCacheFile=<path to timing cache file>]" << std::endl;
+    std::cout << "--help             Display help information" << std::endl;
+    std::cout << "--datadir          Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "(trt/samples/sampleNamedDimensions)"
               << std::endl;
+    std::cout << "--timingCacheFile  Specify path to a timing cache file. If it does not already exist, it will be "
+              << "created." << std::endl;
 }
 
 int32_t main(int32_t argc, char** argv)

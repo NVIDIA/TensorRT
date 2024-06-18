@@ -107,10 +107,10 @@ def allocate_buffers(engine: trt.ICudaEngine, profile_idx: Optional[int] = None)
         trt_type = engine.get_tensor_dtype(binding)
 
         # Allocate host and device buffers
-        if trt.nptype(trt_type):
+        try:
             dtype = np.dtype(trt.nptype(trt_type))
             bindingMemory = HostDeviceMem(size, dtype)
-        else: # no numpy support: create a byte array instead (BF16, FP8, INT4)
+        except TypeError: # no numpy support: create a byte array instead (BF16, FP8, INT4)
             size = int(size * trt_type.itemsize)
             bindingMemory = HostDeviceMem(size)
 

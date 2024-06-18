@@ -52,9 +52,6 @@ constexpr char const* uint8 = R"trtdoc(
 constexpr char const* fp8 = R"trtdoc(
     Signed 8-bit floating point with 1 sign bit, 4 exponent bits, 3 mantissa
     bits, and exponent-bias 7.
-
-    .. warning::
-       fp8 is not supported yet and will result in an error or undefined behavior.
 )trtdoc";
 constexpr char const* int4 = R"trtdoc(Signed 4-bit integer representing a quantized floating-point value.)trtdoc";
 

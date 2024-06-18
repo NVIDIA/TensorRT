@@ -186,7 +186,8 @@ void bindFoundationalTypes(py::module& m)
         .value("BOOL", DataType::kBOOL, DataTypeDoc::boolean)
         .value("UINT8", DataType::kUINT8, DataTypeDoc::uint8)
         .value("FP8", DataType::kFP8, DataTypeDoc::fp8)
-        .value("INT4", DataType::kINT4, DataTypeDoc::int4); // DataType
+        .value("INT4", DataType::kINT4, DataTypeDoc::int4)
+        ; // DataType
 
     // Also create direct mappings (so we can call trt.float32, for example).
     m.attr("float32") = DataType::kFLOAT;

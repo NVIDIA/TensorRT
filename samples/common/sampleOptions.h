@@ -147,10 +147,10 @@ using StringSet = std::unordered_set<std::string>;
 class WeightStreamingBudget
 {
 public:
-    static constexpr int64_t kDISABLE{0};
+    static constexpr int64_t kDISABLE{-2};
     static constexpr int64_t kAUTOMATIC{-1};
     int64_t bytes{kDISABLE};
-    double percent{static_cast<double>(kDISABLE)};
+    double percent{static_cast<double>(100.0)};
 
     bool isDisabled()
     {
@@ -198,10 +198,15 @@ constexpr nvinfer1::TempfileControlFlags getTempfileControlDefaults()
 class BuildOptions : public Options
 {
 public:
+    // Unit in MB.
     double workspace{-1.0};
+    // Unit in MB.
     double dlaSRAM{-1.0};
+    // Unit in MB.
     double dlaLocalDRAM{-1.0};
+    // Unit in MB.
     double dlaGlobalDRAM{-1.0};
+    // Unit in KB.
     double tacticSharedMem{-1.0};
     int32_t avgTiming{defaultAvgTiming};
     size_t calibProfile{defaultOptProfileIndex};
@@ -210,6 +215,7 @@ public:
     bool bf16{false};
     bool int8{false};
     bool fp8{false};
+    bool int4{false};
     bool stronglyTyped{false};
     bool directIO{false};
     PrecisionConstraints precisionConstraints{PrecisionConstraints::kNONE};
@@ -349,6 +355,7 @@ public:
     std::vector<IOFormat> outputFormats;
     bool int8{false};
     bool fp8{false};
+    bool int4{false};
     std::string calibFile{};
     std::vector<std::string> plugins;
     bool consistency{false};

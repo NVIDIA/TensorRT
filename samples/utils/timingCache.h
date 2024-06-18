@@ -27,6 +27,8 @@ namespace nvinfer1
 namespace utils
 {
 std::vector<char> loadTimingCacheFile(nvinfer1::ILogger& logger, std::string const& inFileName);
+std::unique_ptr<ITimingCache> buildTimingCacheFromFile(
+    ILogger& logger, IBuilderConfig& config, std::string const& timingCacheFile, std::ostream& err);
 void saveTimingCacheFile(nvinfer1::ILogger& logger, std::string const& outFileName, nvinfer1::IHostMemory const* blob);
 void updateTimingCacheFile(nvinfer1::ILogger& logger, std::string const& fileName,
     nvinfer1::ITimingCache const* timingCache, nvinfer1::IBuilder& builder);

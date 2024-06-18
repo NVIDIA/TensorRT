@@ -20,6 +20,7 @@
 
 #include "common/cublasWrapper.h"
 #include <cub/cub.cuh>
+#include <cfloat>
 
 #define HDI inline __host__ __device__
 

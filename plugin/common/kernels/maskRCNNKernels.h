@@ -56,8 +56,9 @@ inline size_t typeSize(const nvinfer1::DataType type)
     case nvinfer1::DataType::kINT64: return sizeof(int64_t);
     case nvinfer1::DataType::kBOOL: return sizeof(bool);
     case nvinfer1::DataType::kUINT8: return sizeof(uint8_t);
-    case nvinfer1::DataType::kFP8: PLUGIN_FAIL("FP8 is not supported"); break;
-    case nvinfer1::DataType::kINT4: PLUGIN_FAIL("INT4 is not supported"); break;
+    case nvinfer1::DataType::kFP8:
+    case nvinfer1::DataType::kINT4:
+        PLUGIN_FAIL("Unsupported data type");
     }
     return 0;
 }

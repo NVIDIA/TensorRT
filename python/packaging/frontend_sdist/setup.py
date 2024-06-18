@@ -157,7 +157,7 @@ When the extra index url does not contain `{}`, a nested `pip install` will run 
     ],
     packages=[tensorrt_package],
     install_requires=install_requires,
-    setup_requires=["wheel"],
+    setup_requires=["wheel", "pip"],
     python_requires=">=3.6",  # ref https://pypi.nvidia.com/tensorrt-bindings/
     cmdclass=cmdclass,
     extras_require={"numpy": "numpy"},

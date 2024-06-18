@@ -20,6 +20,8 @@ import numpy as np
 import onnx
 import cupy as cp
 import logging
+import sys
+import os
 
 import tensorrt as trt
 from polygraphy.backend.trt import (
@@ -37,7 +39,10 @@ from enum import IntEnum
 from polygraphy.json import to_json, from_json
 import torch
 
-from utils import volume, parseArgs
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+from plugin_utils import volume, parseArgs
+
+import argparse
 
 logger = logging.getLogger("CircPadMultiTactic")
 
@@ -82,7 +87,12 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
         trt.IPluginV3OneRuntime.__init__(self)
         self.pads = []
         self.X_shape = []
-        
+
+        self.per_format_tactics = (
+            False  # whether per-format tactics or global tactics should be used
+        )
+        self.curr_type = None  # format being timed currently by TRT auto-tuner
+
         self.num_outputs = 1
         self.plugin_namespace = ""
         self.plugin_name = "CircPadPlugin"
@@ -94,8 +104,11 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
         self.tactic = None
 
         if fc is not None:
-            assert fc[0].name == "pads"
-            self.pads = fc[0].data
+            for f in fc:
+                if f.name == "pads":
+                    self.pads = f.data
+                elif f.name == "per_format_tactics":
+                    self.per_format_tactics = int(f.data)
 
         if phase is not None:
             self.phase = phase
@@ -117,16 +130,29 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
             )
 
         return [output_dims]
-    
+
     def get_fields_to_serialize(self):
         return trt.PluginFieldCollection([
-            trt.PluginField("pads", self.pads, trt.PluginFieldType.INT32)
+            trt.PluginField("pads", self.pads, trt.PluginFieldType.INT32),
+            trt.PluginField(
+                "per_format_tactics",
+                np.array([self.per_format_tactics], dtype=np.int32),
+                trt.PluginFieldType.INT32,
+            ),
         ])
 
     def configure_plugin(self, inp, out):
-        pass
+        assert inp[0].desc.type == trt.float32 or inp[0].desc.type == trt.float16
+        self.curr_type = inp[0].desc.type
 
     def on_shape_change(self, inp, out):
+        if (
+            self.phase == trt.TensorRTPhase.RUNTIME
+            and self.per_format_tactics
+            and inp[0].type == trt.float16
+        ):
+            assert self.tactic == Tactic.TRITON
+
         X_dims = inp[0].dims
         self.X_shape = np.zeros((len(X_dims),))
         for i in range(len(X_dims)):
@@ -197,7 +223,7 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
             out_dims = out_dims.tolist()
 
             blockSize = 256
-            numBlocks = tuple(int((np.prod(out_dims) + blockSize - 1) // blockSize))
+            numBlocks = tuple([int((np.prod(out_dims) + blockSize - 1) // blockSize)])
 
             circ_pad[numBlocks](a_t,
                 all_pads[0], all_pads[2], all_pads[4], all_pads[6],
@@ -213,6 +239,10 @@ class CircPadPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
         return self.clone()
     
     def get_valid_tactics(self):
+        assert self.curr_type is not None
+        if self.per_format_tactics and self.curr_type == trt.float16:
+            return [int(Tactic.TRITON)]
+
         return [int(Tactic.TORCH), int(Tactic.TRITON)]
 
     def set_tactic(self, tactic):
@@ -244,7 +274,10 @@ class CircPadPluginCreator(trt.IPluginCreatorV3One):
         self.plugin_namespace = ""
         self.plugin_version = "1"
         self.field_names = trt.PluginFieldCollection([
-            trt.PluginField("pads", np.array([]), trt.PluginFieldType.INT32)
+            trt.PluginField("pads", np.array([]), trt.PluginFieldType.INT32),
+            trt.PluginField(
+                "per_format_tactics", np.array([]), trt.PluginFieldType.INT32
+            ),
         ])
 
     def create_plugin(self, name, fc, phase):
@@ -255,8 +288,27 @@ if __name__ == "__main__":
     logging.basicConfig()
     logger.setLevel(logging.INFO)
 
-    args = parseArgs()
+    parser = argparse.ArgumentParser(
+        description="Options for Circular Padding plugin multi-tactic sample"
+    )
+
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default="fp32",
+        choices=["fp32", "fp16"],
+        help="Precision to use for plugin",
+    )
+    parser.add_argument(
+        "--per-format-tactics",
+        action="store_true",
+        help="Whether per-format tactics or global tactics should be used",
+    )
+
+    args = parser.parse_args()
+
     precision = np.float32 if args.precision == "fp32" else np.float16
+    is_tactics_per_format = 1 if args.per_format_tactics else 0
 
     inp_shape = (10, 3, 32, 32)
     X_A = np.random.normal(size=inp_shape).astype(precision)
@@ -270,7 +322,7 @@ if __name__ == "__main__":
     plg_registry.register_creator(my_plugin_creator, "")
 
     # create ONNX model
-    onnx_path = "test_CircPadPlugin.onnx"
+    onnx_path = f"test_CircPadPlugin_multi_tactic_{args.precision}.onnx"
     inputA = gs.Variable(name="X_A", shape=inp_shape, dtype=precision)
     inputB = gs.Variable(name="X_B", shape=inp_shape, dtype=precision)
     Y_A = gs.Variable(name="Y_A", dtype=precision)
@@ -280,14 +332,20 @@ if __name__ == "__main__":
         op="CircPadPlugin",
         inputs=[inputA],
         outputs=[Y_A],
-        attrs={"pads": pads},
+        attrs={
+            "pads": pads,
+            "per_format_tactics": np.array([is_tactics_per_format], dtype=np.int32),
+        },
     )
     myPluginNode_B = gs.Node(
         name="CircPadPlugin_B",
         op="CircPadPlugin",
         inputs=[inputB],
         outputs=[Y_B],
-        attrs={"pads": pads},
+        attrs={
+            "pads": pads,
+            "per_format_tactics": np.array([is_tactics_per_format], dtype=np.int32),
+        },
     )
 
     graph = gs.Graph(nodes=[myPluginNode_A, myPluginNode_B], inputs=[inputA, inputB], outputs=[Y_A, Y_B], opset=16)

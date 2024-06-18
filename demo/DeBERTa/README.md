@@ -75,7 +75,7 @@ Note that the performance gap between BERT's self-attention and DeBERTa's disent
 ## Environment Setup
 It is recommended to use docker for reproducing the following steps. Follow the setup steps in TensorRT OSS [README](https://github.com/NVIDIA/TensorRT#setting-up-the-build-environment) to build and launch the container and build OSS:
 
-**Example: Ubuntu 20.04 on x86-64 with cuda-11.6.2 (default)**
+**Example: Ubuntu 20.04 on x86-64 with cuda-12.4 (default)**
 ```bash
 # Download this TensorRT OSS repo
 git clone -b main https://github.com/nvidia/TensorRT TensorRT
@@ -84,10 +84,10 @@ git submodule update --init --recursive
 
 ## at root of TensorRT OSS
 # build container
-./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda11.6
+./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda12.4
 
 # launch container
-./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda11.6 --gpus all
+./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda12.4 --gpus all
 
 ## now inside container
 # build OSS (only required for pre-8.4.3 TensorRT versions)

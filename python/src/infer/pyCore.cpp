@@ -336,6 +336,11 @@ void context_set_device_memory(IExecutionContext& self, size_t memory)
     self.setDeviceMemory(reinterpret_cast<void*>(memory));
 }
 
+void context_set_device_memory_v2(IExecutionContext& self, size_t memory, int64_t size)
+{
+    self.setDeviceMemoryV2(reinterpret_cast<void*>(memory), size);
+}
+
 void serialization_config_set_flags(ISerializationConfig& self, uint32_t flags)
 {
     if (!self.setFlags(flags))
@@ -1034,6 +1039,8 @@ void bindCore(py::module& m)
             "name", &IExecutionContext::getName, py::cpp_function(&IExecutionContext::setName, py::keep_alive<1, 2>{}))
         // For writeonly properties, we use a nullptr getter.
         .def_property("device_memory", nullptr, &lambdas::context_set_device_memory)
+        .def("set_device_memory", &lambdas::context_set_device_memory_v2, "memory"_a, "size"_a,
+            IExecutionContextDoc::set_device_memory)
         .def("update_device_memory_size_for_shapes", &IExecutionContext::updateDeviceMemorySizeForShapes,
             IExecutionContextDoc::update_device_memory_size_for_shapes)
         .def_property_readonly("active_optimization_profile", &IExecutionContext::getOptimizationProfile)
@@ -1162,9 +1169,16 @@ void bindCore(py::module& m)
             utils::deprecateMember(&ICudaEngine::createExecutionContextWithoutDeviceMemory, "create_execution_context"),
             ICudaEngineDoc::create_execution_context_without_device_memory, py::keep_alive<0, 1>{},
             py::call_guard<py::gil_scoped_release>{})
-        .def("get_device_memory_size_for_profile", &ICudaEngine::getDeviceMemorySizeForProfile, "profile_index"_a,
-            ICudaEngineDoc::get_device_memory_size_for_profile)
-        .def_property_readonly("device_memory_size", &ICudaEngine::getDeviceMemorySize)
+        .def("get_device_memory_size_for_profile",
+            utils::deprecateMember(&ICudaEngine::getDeviceMemorySizeForProfile,
+                "Deprecated in TensorRT 10.1. Superseded by get_device_memory_size_for_profile_v2"),
+            "profile_index"_a, ICudaEngineDoc::get_device_memory_size_for_profile)
+        .def("get_device_memory_size_for_profile_v2", &ICudaEngine::getDeviceMemorySizeForProfile, "profile_index"_a,
+            ICudaEngineDoc::get_device_memory_size_for_profile_v2)
+        .def_property_readonly("device_memory_size",
+            utils::deprecateMember(&ICudaEngine::getDeviceMemorySize,
+                "Deprecated in TensorRT 10.1. Superseded by get_device_memory_size_v2"))
+        .def_property_readonly("device_memory_size_v2", &ICudaEngine::getDeviceMemorySizeV2)
         .def_property_readonly("refittable", &ICudaEngine::isRefittable)
         .def_property_readonly("name", &ICudaEngine::getName)
         .def_property_readonly("num_optimization_profiles", &ICudaEngine::getNbOptimizationProfiles)
@@ -1258,10 +1272,26 @@ void bindCore(py::module& m)
         .def_property_readonly("hardware_compatibility_level", &ICudaEngine::getHardwareCompatibilityLevel)
         .def_property_readonly("num_aux_streams", &ICudaEngine::getNbAuxStreams)
         // Weight streaming APIs
-        .def_property(
-            "weight_streaming_budget", &ICudaEngine::getWeightStreamingBudget, &ICudaEngine::setWeightStreamingBudget)
-        .def_property_readonly("minimum_weight_streaming_budget", &ICudaEngine::getMinimumWeightStreamingBudget)
+        .def_property("weight_streaming_budget",
+            utils::deprecateMember(&ICudaEngine::getWeightStreamingBudget,
+                "Deprecated in TensorRT 10.1. Superseded by weight_streaming_budget_v2"),
+            utils::deprecateMember(&ICudaEngine::setWeightStreamingBudget,
+                "Deprecated in TensorRT 10.1. Superseded by weight_streaming_budget_v2"))
+        .def_property("weight_streaming_budget_v2", &ICudaEngine::getWeightStreamingBudgetV2,
+            &ICudaEngine::setWeightStreamingBudgetV2)
+        .def_property_readonly("minimum_weight_streaming_budget",
+            utils::deprecateMember(
+                &ICudaEngine::getMinimumWeightStreamingBudget, "Deprecated in TensorRT 10.1. Not required by V2 APIs."))
         .def_property_readonly("streamable_weights_size", &ICudaEngine::getStreamableWeightsSize)
+        // We keep this as a method so that future TRT versions may overload if the automatic budgeting algorithm ever
+        // requires additional arguments.
+        .def(
+            "get_weight_streaming_automatic_budget",
+            [](ICudaEngine& self) -> int32_t { return self.getWeightStreamingAutomaticBudget(); },
+            ICudaEngineDoc::get_weight_streaming_automatic_budget)
+        .def_property_readonly(
+            "weight_streaming_scratch_memory_size", &ICudaEngine::getWeightStreamingScratchMemorySize)
+        // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
                .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
@@ -1332,7 +1362,9 @@ void bindCore(py::module& m)
         .value("WEIGHTLESS", BuilderFlag::kWEIGHTLESS, BuilderFlagDoc::WEIGHTLESS)
         .value("STRIP_PLAN", BuilderFlag::kSTRIP_PLAN, BuilderFlagDoc::STRIP_PLAN)
         .value("REFIT_IDENTICAL", BuilderFlag::kREFIT_IDENTICAL, BuilderFlagDoc::REFIT_IDENTICAL)
-        .value("WEIGHT_STREAMING", BuilderFlag::kWEIGHT_STREAMING, BuilderFlagDoc::WEIGHT_STREAMING);
+        .value("WEIGHT_STREAMING", BuilderFlag::kWEIGHT_STREAMING, BuilderFlagDoc::WEIGHT_STREAMING)
+        .value("INT4", BuilderFlag::kINT4, BuilderFlagDoc::INT4)
+        ;
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1386,8 +1418,12 @@ void bindCore(py::module& m)
     py::class_<IBuilderConfig>(m, "IBuilderConfig", IBuilderConfigDoc::descr, py::module_local())
         .def_property(
             "avg_timing_iterations", &IBuilderConfig::getAvgTimingIterations, &IBuilderConfig::setAvgTimingIterations)
-        .def_property("int8_calibrator", &IBuilderConfig::getInt8Calibrator,
-            py::cpp_function(&IBuilderConfig::setInt8Calibrator, py::keep_alive<1, 2>{}))
+        .def_property("int8_calibrator",
+            utils::deprecateMember(&IBuilderConfig::getInt8Calibrator,
+                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
+            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setInt8Calibrator,
+                                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
+                py::keep_alive<1, 2>{}))
         .def_property("engine_capability", &IBuilderConfig::getEngineCapability, &IBuilderConfig::setEngineCapability)
         .def("set_memory_pool_limit", &IBuilderConfig::setMemoryPoolLimit, "pool"_a, "pool_size"_a,
             IBuilderConfigDoc::set_memory_pool_limit)
@@ -1412,9 +1448,13 @@ void bindCore(py::module& m)
         .def_property("profile_stream", lambdas::netconfig_get_profile_stream, lambdas::netconfig_set_profile_stream)
         .def("add_optimization_profile", &IBuilderConfig::addOptimizationProfile, "profile"_a,
             IBuilderConfigDoc::add_optimization_profile)
-        .def("set_calibration_profile", &IBuilderConfig::setCalibrationProfile, "profile"_a,
-            IBuilderConfigDoc::set_calibration_profile)
-        .def("get_calibration_profile", &IBuilderConfig::getCalibrationProfile,
+        .def("set_calibration_profile",
+            utils::deprecateMember(&IBuilderConfig::setCalibrationProfile,
+                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
+            "profile"_a, IBuilderConfigDoc::set_calibration_profile)
+        .def("get_calibration_profile",
+            utils::deprecateMember(&IBuilderConfig::getCalibrationProfile,
+                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
             IBuilderConfigDoc::get_calibration_profile)
         .def_property_readonly("num_optimization_profiles", &IBuilderConfig::getNbOptimizationProfiles)
         .def("set_device_type", &IBuilderConfig::setDeviceType, "layer"_a, "device_type"_a,
@@ -1523,10 +1563,18 @@ void bindCore(py::module& m)
         .def("get_missing_weights", lambdas::refitter_get_missing_weights, RefitterDoc::get_missing_weights)
         .def("get_all", lambdas::refitter_get_all, RefitterDoc::get_all)
         .def("get_all_weights", lambdas::refitter_get_all_weights, RefitterDoc::get_all_weights)
-        .def("get_dynamic_range", lambdas::refitter_get_dynamic_range, "tensor_name"_a, RefitterDoc::get_dynamic_range)
-        .def("set_dynamic_range", lambdas::refitter_set_dynamic_range, "tensor_name"_a, "range"_a,
-            RefitterDoc::set_dynamic_range)
-        .def("get_tensors_with_dynamic_range", lambdas::refitter_get_tensors_with_dynamic_range,
+        // Using a plus sign converts the lambda function into a function pointer.
+        .def("get_dynamic_range",
+            utils::deprecate(+lambdas::refitter_get_dynamic_range,
+                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
+            "tensor_name"_a, RefitterDoc::get_dynamic_range)
+        .def("set_dynamic_range",
+            utils::deprecate(+lambdas::refitter_set_dynamic_range,
+                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
+            "tensor_name"_a, "range"_a, RefitterDoc::set_dynamic_range)
+        .def("get_tensors_with_dynamic_range",
+            utils::deprecate(+lambdas::refitter_get_tensors_with_dynamic_range,
+                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
             RefitterDoc::get_tensors_with_dynamic_range)
         .def_property("error_recorder", &IRefitter::getErrorRecorder,
             py::cpp_function(&IRefitter::setErrorRecorder, py::keep_alive<1, 2>{}))

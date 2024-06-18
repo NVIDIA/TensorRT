@@ -1,8 +1,8 @@
 ---
 name: ROIAlign_TRT
-interface: "IPluginV2DynamicExt"
+interface: "IPluginV3"
 versions:
-  "1":
+  "2":
     inputs:
       - X
       - rois

@@ -308,7 +308,7 @@ class PlanGraph(object):
         constants_outputs = [const.outputs[0].name for const in plan.constants]
         constants_producers = {const.outputs[0].name + ".0": const for const in plan.constants}
         for region in self.regions:
-            is_myelin_const = len(region.writers()) == 0 and region.name not in plan.bindings
+            is_myelin_const = len(region.writers()) == 0
             is_constant = region.name in constants_outputs
             if (is_constant or is_myelin_const) and not self.include_constants:
                 continue
@@ -735,7 +735,6 @@ class DotGraph(object):
         for layer_node in plan_graph.layer_nodes:
             layer = layer_node.layer
             latency = _get_latency(plan, layer, self.latency_type)
-
             if not layer.type == 'Constant' or plan_graph.include_constants:
                 dot_id = _get_dot_id(layer.name)
                 node_name_2_node_id[layer.name] = dot_id

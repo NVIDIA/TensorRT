@@ -168,14 +168,14 @@ class TrtRunner(BaseRunner):
                         - "profile": Allocate device memory enough for the current profile based on profile max shapes.
                         - "runtime": Allocate device meomry enough for the current input shapes.
             weight_streaming_budget (int):
-                    The amount of GPU memory that TensorRT can use for weights at runtime. Tt can take on the following values:
-                        None or 0: Disables weight streaming at runtime.
+                    The amount of GPU memory that TensorRT can use for weights at runtime. It can take on the following values:
+                        None or -2: Disables weight streaming at runtime.
                         -1: TensorRT will decide the streaming budget automatically.
-                        > 0: The maximum amount of GPU memory TensorRT is allowed to use for weights in bytes.
+                        >= 0: The maximum amount of GPU memory TensorRT is allowed to use for weights in bytes.
             weight_streaming_percent (float):
-                    The percentage of weights that TRT will stream from CPU to GPU. It can take on the following values:
-                        None or 0: Disables weight streaming at runtime.
-                        [0 to 100]: The percentage of weights TRT will stream. 100 will stream the maximum number of weights.
+                    The percentage of weights that TRT will keep on the GPU. It can take on the following values:
+                        None or 100%: Disables weight streaming at runtime.
+                        [0 to 100]: The percentage of weights TRT will stream. 0 will stream the maximum number of weights.
         """
         super().__init__(name=name, prefix="trt-runner")
         self._engine_or_context = engine
@@ -190,35 +190,7 @@ class TrtRunner(BaseRunner):
 
         if isinstance(engine_or_context, trt.ICudaEngine):
             self.engine = engine_or_context
-
-            # Setup weight streaming if applicable
-            if self.weight_streaming_budget != None and self.weight_streaming_percent != None:
-                G_LOGGER.critical(f"Cannot specify the weight streaming budget both in bytes and percentage.")
-
-            budget_bytes = None
-            if self.weight_streaming_budget is not None:
-                assert self.weight_streaming_budget == -1 or self.weight_streaming_budget >= 0
-                budget_bytes = self.weight_streaming_budget
-            elif self.weight_streaming_percent is not None:
-                assert 0 <= self.weight_streaming_percent <= 100
-                if self.weight_streaming_percent == 0:
-                    budget_bytes = 0  # Disable weight streaming
-                else:
-                    min_budget = self.engine.minimum_weight_streaming_budget
-                    max_budget = self.engine.streamable_weights_size
-                    budget_bytes = (1 - self.weight_streaming_percent / 100.0) * (max_budget - min_budget) + min_budget
-            if budget_bytes is not None:
-                budget_bytes = int(budget_bytes)
-                self.engine.weight_streaming_budget = budget_bytes
-                if self.engine.weight_streaming_budget != budget_bytes:
-                    G_LOGGER.critical(f"Failed to set weight streaming budget to {budget_bytes}!")
-                if budget_bytes == 0:
-                    G_LOGGER.info(f"Weight streaming is disabled.")
-                elif budget_bytes == -1:
-                    G_LOGGER.info(f"Weight streaming is enabled with TensorRT automatically determiing the budget.")
-                else:
-                    G_LOGGER.info(f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes.")
-
+            self._set_weight_streaming_budget()
             allocation_strategy = util.default(self.allocation_strategy, "static")
             if allocation_strategy == "static":
                 self.context = self.engine.create_execution_context()
@@ -352,9 +324,15 @@ class TrtRunner(BaseRunner):
         if self.allocation_strategy in ["profile", "runtime"]:
             if self.allocation_strategy == "profile":
                 # Perform per-profile allocation.
-                size_to_allocate = self.engine.get_device_memory_size_for_profile(
-                    self.context.active_optimization_profile
-                )
+                size_to_allocate = 0
+                if mod.version(trt.__version__) >= mod.version("10.1"):
+                    size_to_allocate = self.engine.get_device_memory_size_for_profile_v2(
+                        self.context.active_optimization_profile
+                    )
+                else:
+                    size_to_allocate = self.engine.get_device_memory_size_for_profile(
+                        self.context.active_optimization_profile
+                    )
             elif self.allocation_strategy == "runtime":
                 # Perform runtime allocation.
                 size_to_allocate = self.context.update_device_memory_size_for_shapes()
@@ -363,7 +341,10 @@ class TrtRunner(BaseRunner):
                 self.context_memory_buffer = cuda.DeviceArray.raw((size_to_allocate,))
 
             self.context_memory_buffer.resize((size_to_allocate,))
-            self.context.device_memory = self.context_memory_buffer.ptr
+            if mod.version(trt.__version__) >= mod.version("10.1"):
+                self.context.set_device_memory(self.context_memory_buffer.ptr, self.context_memory_buffer.allocated_nbytes)
+            else:
+                self.context.device_memory = self.context_memory_buffer.ptr
 
         if not self.context.execute_async_v3(self.stream.ptr):
             G_LOGGER.critical("`execute_async_v3()` failed. Please see the logging output above for details.")
@@ -467,3 +448,75 @@ class TrtRunner(BaseRunner):
             self.context_memory_buffer,
             self.output_allocator,
         )
+
+    def _set_weight_streaming_budget(self):
+        # Setup weight streaming if applicable
+        if self.weight_streaming_budget != None and self.weight_streaming_percent != None:
+            G_LOGGER.warning(f"Cannot specify the weight streaming budget both in bytes and percentage. Prioritizing the bytes value.")
+
+        if self.weight_streaming_budget is not None:
+            assert self.weight_streaming_budget == -2 or self.weight_streaming_budget == -1 or self.weight_streaming_budget >= 0
+
+        if mod.version(trt.__version__) >= mod.version("10.1"):
+            self._set_weight_streaming_budget_v2()
+        else:
+            self._set_weight_streaming_budget_v1()
+
+    def _set_weight_streaming_budget_v1(self):
+        budget_bytes = None
+        if self.weight_streaming_budget is not None:
+            if self.weight_streaming_budget == -2:
+                budget_bytes = 0
+            else:
+                budget_bytes = self.weight_streaming_budget
+
+        elif self.weight_streaming_percent is not None:
+            assert 0 <= self.weight_streaming_percent <= 100
+            if self.weight_streaming_percent == 0:
+                budget_bytes = 0  # Disable weight streaming
+            else:
+                min_budget = self.engine.minimum_weight_streaming_budget
+                max_budget = self.engine.streamable_weights_size
+                budget_bytes = (1 - self.weight_streaming_percent / 100.0) * (max_budget - min_budget) + min_budget
+
+        if budget_bytes is not None:
+            budget_bytes = int(budget_bytes)
+            self.engine.weight_streaming_budget = budget_bytes
+            if self.engine.weight_streaming_budget != budget_bytes:
+                G_LOGGER.critical(f"Failed to set weight streaming budget to {budget_bytes}!")
+            if budget_bytes == 0:
+                G_LOGGER.info(f"Weight streaming is disabled.")
+            elif budget_bytes == -1:
+                G_LOGGER.info(f"Weight streaming is enabled with TensorRT automatically determiing the budget.")
+            else:
+                G_LOGGER.info(f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes.")
+
+
+    def _set_weight_streaming_budget_v2(self):
+        budget_bytes = None
+        if self.weight_streaming_budget is not None:
+            # use V2 path
+            assert self.weight_streaming_budget == -2 or self.weight_streaming_budget == -1 or self.weight_streaming_budget >= 0
+            if self.weight_streaming_budget == -2:
+                budget_bytes = self.engine.streamable_weights_size
+            elif self.weight_streaming_budget == -1:
+                budget_bytes = self.engine.get_weight_streaming_automatic_budget()
+            else:
+                budget_bytes = self.weight_streaming_budget
+
+        elif self.weight_streaming_percent is not None:
+            assert 0 <= self.weight_streaming_percent <= 100
+            if self.weight_streaming_percent == 100:
+                budget_bytes = self.engine.streamable_weights_size
+            else:
+                budget_bytes = self.weight_streaming_percent / 100.0 * (self.engine.streamable_weights_size)
+
+        if budget_bytes is not None:
+            budget_bytes = int(budget_bytes)
+            self.engine.weight_streaming_budget_v2 = budget_bytes
+            if self.engine.weight_streaming_budget_v2 != budget_bytes:
+                G_LOGGER.critical(f"Failed to set weight streaming budget to {budget_bytes}!")
+            if budget_bytes == self.engine.streamable_weights_size:
+                G_LOGGER.info(f"Weight streaming is disabled.")
+            else:
+                G_LOGGER.info(f"Weight streaming is enabled with a memory budget of {budget_bytes} bytes.")

@@ -31,7 +31,9 @@
 #include <vector>
 
 #include "NvInfer.h"
+#if !TRT_WINML
 #include "NvInferPlugin.h"
+#endif
 
 #include "buffers.h"
 #include "common.h"
@@ -278,7 +280,7 @@ int main(int argc, char** argv)
 
         // Record specified runtime
         gUseRuntime = options.build.useRuntime;
-
+#if !TRT_WINML
 #if !TRT_STATIC
         LibraryPtr nvinferPluginLib{};
 #endif
@@ -305,7 +307,7 @@ int main(int argc, char** argv)
         {
             throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
         }
-
+#endif // !TRT_WINML
         if (options.build.safe && !sample::hasSafeRuntime())
         {
             sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
@@ -336,9 +338,10 @@ int main(int argc, char** argv)
             return sample::gLogger.reportPass(sampleTest);
         }
 
+#if !TRT_WINML
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
-
+#endif
         if (!options.build.safe && !options.build.buildDLAStandalone && options.build.refittable)
         {
             auto* engine = bEnv->engine.get();
@@ -401,9 +404,12 @@ int main(int argc, char** argv)
 
         bool const profilerEnabled = options.reporting.profile || !options.reporting.exportProfile.empty();
 
-        if (iEnv->safe && profilerEnabled)
+        bool const layerInfoEnabled = options.reporting.layerInfo || !options.reporting.exportLayerInfo.empty();
+
+        if (iEnv->safe && (profilerEnabled || layerInfoEnabled))
         {
-            sample::gLogError << "Safe runtime does not support --dumpProfile or --exportProfile=<file>, please use "
+            sample::gLogError << "Safe runtime does not support --dumpProfile or --exportProfile=<file> or "
+                                 "--dumpLayerInfo or --exportLayerInfo=<file>, please use "
                                  "--verbose to print profiling info."
                               << std::endl;
             return sample::gLogger.reportFail(sampleTest);

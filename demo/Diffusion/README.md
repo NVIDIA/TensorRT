@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.0 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.1 --single-branch
 cd TensorRT
 ```
 
@@ -16,7 +16,7 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:24.01-py3 /bin/bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:24.05-py3 /bin/bash
 ```
 
 NOTE: The demo supports CUDA>=11.8
@@ -48,12 +48,12 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.0.1.6
+tensorrt            10.1.0.27
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.33.1
 controlnet-aux      0.0.6
-nvidia-ammo         0.9.4
+nvidia-modelopt     0.11.2
 ```
 > NOTE: optionally install HuggingFace [accelerate](https://pypi.org/project/accelerate/) package for faster and less memory-intense model loading.
 
@@ -139,12 +139,14 @@ python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --hf
 python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees and mountains" --version=xl-1.0 --lora-path "ostris/crayon_style_lora_sdxl" "ostris/watercolor_style_lora_sdxl" --lora-scale 0.3 0.7 --onnx-dir onnx-sdxl-lora --engine-dir engine-sdxl-lora --build-enable-refit
 ```
 
-### Faster Text-to-image using SDXL & INT8 quantization using AMMO
+### Faster Text-to-image using SDXL & INT8 quantization using ModelOpt
 
 ```bash
 python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --int8 
 ```
 > Note that INT8 quantization is only supported for SDXL, and won't work with LoRA weights. Some prompts may produce better inputs with fewer denoising steps (e.g. `--denoising-steps 20`) but this will repeat the calibration, ONNX export, and engine building processes for the U-Net. 
+
+For step-by-step tutorials to run INT8 inference on stable diffusion models, please refer to examples in [TensorRT ModelOpt diffusers sample](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/diffusers).
 
 ### Faster Text-to-Image using SDXL + LCM (Latent Consistency Model) LoRA weights
 [LCM-LoRA](https://arxiv.org/abs/2311.05556) produces good quality images in 4 to 8 denoising steps instead of 30+ needed base model. Note that we use LCM scheduler and disable classifier-free-guidance by setting `--guidance-scale` to 0.
@@ -157,6 +159,24 @@ Even faster image generation than LCM, producing coherent images in just 1 step.
 ```bash
 python3 demo_txt2img_xl.py "Einstein" --version xl-turbo --onnx-dir onnx-sdxl-turbo --engine-dir engine-sdxl-turbo --denoising-steps 1 --scheduler EulerA --guidance-scale 0.0 --width 512 --height 512
 ```
+
+### Generate an image guided by a text prompt using Stable Diffusion 3
+
+Run the command below to generate an image using Stable Diffusion 3
+
+```bash
+python3 demo_txt2img_sd3.py "A vibrant street wall covered in colorful graffiti, the centerpiece spells \"SD3 MEDIUM\", in a storm of colors" --version sd3 --hf-token=$HF_TOKEN
+```
+
+You can also specify an input image conditioning as shown below
+
+```bash
+wget https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png -O dog-on-bench.png
+
+python3 demo_txt2img_sd3.py "dog wearing a sweater and a blue collar" --version sd3 --input-image dog-on-bench.png --hf-token=$HF_TOKEN
+```
+
+Note that a denosing-percentage is applied to the number of denoising-steps when an input image conditioning is provided. Its default value is set to 0.6. This parameter can be updated using `--denoising-percentage`
 
 ## Configuration options
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.

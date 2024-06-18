@@ -726,12 +726,25 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
     network->markOutput(*pred->getOutput(1));
     pred->getOutput(1)->setType(nvinfer1::DataType::kINT32);
 
+    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+    if (!mParams.timingCacheFile.empty())
+    {
+        timingCache = samplesCommon::buildTimingCacheFromFile(
+            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+    }
+
     sample::gLogInfo << "Done constructing network..." << std::endl;
 
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return;
+    }
+
+    if (timingCache != nullptr && !mParams.timingCacheFile.empty())
+    {
+        samplesCommon::updateTimingCacheFile(
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
     }
 
     mRuntime = std::shared_ptr<nvinfer1::IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
@@ -924,6 +937,7 @@ SampleCharRNNParams initializeSampleParams(const samplesCommon::Args& args)
     params.weightFileName = locateFile("char-rnn.wts", params.dataDirs);
     params.saveEngine = args.saveEngine;
     params.loadEngine = args.loadEngine;
+    params.timingCacheFile = args.timingCacheFile;
 
     // Input strings and their respective expected output strings
     const std::vector<std::string> inS{
@@ -963,15 +977,16 @@ SampleCharRNNParams initializeSampleParams(const samplesCommon::Args& args)
 void printHelpInfo()
 {
     std::cout << "Usage: ./sample_char_rnn [-h or --help] [-d or --datadir=<path to data directory>]\n";
-    std::cout << "--help          Display help information\n";
-    std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
+    std::cout << "--help             Display help information\n";
+    std::cout << "--datadir          Specify path to a data directory, overriding the default. This option can be used "
                  "multiple times to add multiple directories. If no data directories are given, the default is to use "
                  "data/samples/char-rnn/ and data/char-rnn/"
               << std::endl;
-    std::cout << "--loadEngine    Specify path from which to load the engine. When this option is provided, engine "
-                 "building is skipped."
+    std::cout << "--loadEngine       Specify path from which to load the engine. When this option is provided, engine "
               << std::endl;
-    std::cout << "--saveEngine    Specify path at which to save the engine." << std::endl;
+    std::cout << "--saveEngine       Specify path at which to save the engine." << std::endl;
+    std::cout << "--timingCacheFile  Specify path to a timing cache file. If it does not already exist, it will be "
+              << "created." << std::endl;
 }
 
 //!

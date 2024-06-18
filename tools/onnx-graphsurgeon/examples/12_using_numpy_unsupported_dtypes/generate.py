@@ -20,14 +20,19 @@ import onnx_graphsurgeon as gs
 import numpy as np
 import onnx
 
-BF16 = onnx.TensorProto.BFLOAT16
 
-X = gs.Variable(name="X", dtype=BF16, shape=(1, 3, 224, 224))
-W = gs.Constant(name="W", values=np.ones(shape=(5, 3, 3, 3), dtype=np.float32) * 0.5, export_dtype=BF16)
-Y = gs.Variable(name="Y", dtype=BF16, shape=(1, 5, 222, 222))
+def generate(dtype, out_path):
+    X = gs.Variable(name="X", dtype=dtype, shape=(1, 3, 224, 224))
+    W = gs.Constant(
+        name="W",
+        values=np.ones(shape=(5, 3, 3, 3), dtype=np.float32) * 0.5,
+        export_dtype=dtype,
+    )
+    Y = gs.Variable(name="Y", dtype=dtype, shape=(1, 5, 222, 222))
+    node = gs.Node(op="Conv", inputs=[X, W], outputs=[Y])
+    graph = gs.Graph(nodes=[node], inputs=[X], outputs=[Y])
+    onnx.save(gs.export_onnx(graph), out_path)
 
-node = gs.Node(op="Conv", inputs=[X, W], outputs=[Y])
 
-graph = gs.Graph(nodes=[node], inputs=[X], outputs=[Y])
-
-onnx.save(gs.export_onnx(graph), "test_conv_bf16.onnx")
+generate(onnx.TensorProto.BFLOAT16, "test_conv_bf16.onnx")
+generate(onnx.TensorProto.FLOAT8E4M3FN, "test_conv_float8e4m3fn.onnx")

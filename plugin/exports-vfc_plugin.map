@@ -18,7 +18,6 @@
 /* Hides all symbols except those specified in the global section */
 {
   global:
-    getPluginCreators;
     getCreators;
     setLoggerFinder;
   local: *;

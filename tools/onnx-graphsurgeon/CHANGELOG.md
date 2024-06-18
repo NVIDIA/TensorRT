@@ -2,9 +2,14 @@
 
 Dates are in YYYY-MM-DD format.
 
-## v0.5.2 (2024-04-01)
+## v0.5.3 (TBD)
 ### Added
 - Added `export_dtype` field to `gs.Constant` to allow numpy-unsupported dtypes such as BFloat16.
+
+
+## v0.5.2 (2024-04-11)
+### Fixed
+- Fixed a bug in `setup.py` where the format of the long description was not specified.
 
 
 ## v0.5.1 (2024-02-23)

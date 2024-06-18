@@ -452,6 +452,15 @@ class TrtConfigArgs(BaseArgs):
             default=None,
         )
 
+        self.group.add_argument(
+            "--runtime-platform",
+            help="The target runtime platform (operating system and CPU architecture) for the execution of the TensorRT engine. "
+            "TensorRT provides support for cross-platform engine compatibility when the target runtime platform is different from the build platform. "
+            "Values come from the names of values in the `trt.RuntimePlatform` enum and are case-insensitive. "
+            "For example, `--runtime-platform same_as_build`, `--runtime-platform windows_amd64` ",
+            default=None,
+        )
+
         if self._allow_engine_capability:
             self.group.add_argument(
                 "--engine-capability",
@@ -512,6 +521,7 @@ class TrtConfigArgs(BaseArgs):
             error_on_timing_cache_miss (bool): Whether to emit error when a tactic being timed is not present in the timing cache.
             disable_compilation_cache (bool): Whether to disable caching JIT-compiled code.
             weight_streaming (bool): Whether to enable weight streaming for the TensorRT Engine.
+            runtime_platform (str): A string representing the target runtime platform enum value.
         """
 
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
@@ -637,6 +647,15 @@ class TrtConfigArgs(BaseArgs):
                 "HardwareCompatibilityLevel", hardware_compatibility_level
             )
 
+        self.runtime_platform = None
+        runtime_platform = args_util.get(
+            args, "runtime_platform"
+        )
+        if runtime_platform is not None:
+            self.runtime_platform = make_trt_enum_val(
+                "RuntimePlatform", runtime_platform
+            )
+
         self.profiling_verbosity = None
         profiling_verbosity = args_util.get(args, "profiling_verbosity")
         if profiling_verbosity is not None:
@@ -757,6 +776,7 @@ class TrtConfigArgs(BaseArgs):
                 self.engine_capability,
                 self.profiling_verbosity,
                 self.hardware_compatibility_level,
+                self.runtime_platform,
                 self.quantization_flags,
             ]
         ):
@@ -805,6 +825,7 @@ class TrtConfigArgs(BaseArgs):
                 error_on_timing_cache_miss=self.error_on_timing_cache_miss,
                 disable_compilation_cache=self.disable_compilation_cache,
                 weight_streaming=self.weight_streaming,
+                runtime_platform=self.runtime_platform,
             )
             if config_loader_str is not None:
                 script.add_import(

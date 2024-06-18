@@ -27,6 +27,7 @@ import numpy as np
 import onnx
 from onnx import numpy_helper, shape_inference
 import onnx_graphsurgeon as gs
+from safetensors import safe_open
 import os
 from polygraphy.backend.onnx.loader import fold_constants
 import re
@@ -38,7 +39,11 @@ from transformers import (
     CLIPTextModelWithProjection,
     CLIPTokenizer
 )
+from huggingface_hub import hf_hub_download
 from utilities import merge_loras
+from utils_sd3.sd3_impls import BaseModel as BaseModelSD3
+from utils_sd3.sd3_impls import SDVAE
+from utils_sd3.other_impls import load_into, SDClipModel, SDXLClipG, T5XXLModel
 
 class Optimizer():
     def __init__(
@@ -160,7 +165,6 @@ class Optimizer():
         print(f"Removed {removed} QDQ nodes")
         return removed # expected 72 for L2.5
 
-
 def get_path(version, pipeline, controlnets=None):
     if controlnets is not None:
         return ["lllyasviel/sd-controlnet-" + modality for modality in controlnets]
@@ -203,6 +207,8 @@ def get_path(version, pipeline, controlnets=None):
             return "stabilityai/sdxl-turbo"
         else:
             raise ValueError(f"Unsupported SDXL Turbo pipeline {pipeline.name}")
+    elif version == 'sd3':
+        return "stabilityai/stable-diffusion-3-medium"
     else:
         raise ValueError(f"Incorrect version {version}")
 
@@ -213,6 +219,8 @@ def get_clip_embedding_dim(version, pipeline):
         return 1024
     elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_base():
         return 768
+    elif version in ("sd3"):
+        return 4096
     else:
         raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
 
@@ -342,6 +350,12 @@ class BaseModel():
             use_auth_token=self.hf_token,
             **model_opts,
         ).to(self.device)
+
+    def get_model_path(self, model_dir, model_opts, model_name="diffusion_pytorch_model"):
+        variant = "." + model_opts.get("variant") if "variant" in model_opts else ""
+        suffix = ".safetensors" if self.hf_safetensor else ".bin"
+        model_file = model_name + variant + suffix
+        return os.path.join(model_dir, model_file)
 
     def get_model(self, torch_inference=''):
         pass
@@ -641,6 +655,126 @@ class CLIPWithProjModel(CLIPModel):
         return output
 
 
+class SD3_CLIPGModel(CLIPModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        max_batch_size,
+        embedding_dim,
+        fp16=False,
+    ):
+        super(SD3_CLIPGModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
+        self.CLIPG_CONFIG = {
+            "hidden_act": "gelu",
+            "hidden_size": 1280,
+            "intermediate_size": 5120,
+            "num_attention_heads": 20,
+            "num_hidden_layers": 32
+        }
+        self.subfolder = 'text_encoders'
+
+    def get_model(self, torch_inference=''):
+        clip_g_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+        clip_g_filename="clip_g.safetensors"
+        clip_g_model_path = f"{clip_g_model_dir}/{clip_g_filename}"
+        if not os.path.exists(clip_g_model_path):
+            hf_hub_download(
+                repo_id=self.path,
+                filename=clip_g_filename,
+                local_dir=get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, '', torch_inference),
+                subfolder=self.subfolder
+            )
+        with safe_open(clip_g_model_path, framework="pt", device=self.device) as f:
+            dtype = torch.float16 if self.fp16 else torch.float32
+            model = SDXLClipG(self.CLIPG_CONFIG, device=self.device, dtype=dtype)
+            load_into(f, model.transformer, "", self.device, dtype)
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
+class SD3_CLIPLModel(CLIPModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        max_batch_size,
+        embedding_dim,
+        fp16=False,
+    ):
+        super(SD3_CLIPLModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
+        self.CLIPL_CONFIG = {
+            "hidden_act": "quick_gelu",
+            "hidden_size": 768,
+            "intermediate_size": 3072,
+            "num_attention_heads": 12,
+            "num_hidden_layers": 12
+        }
+        self.subfolder = 'text_encoders'
+
+    def get_model(self, torch_inference=''):
+        clip_l_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+        clip_l_filename="clip_l.safetensors"
+        clip_l_model_path = f"{clip_l_model_dir}/{clip_l_filename}"
+        if not os.path.exists(clip_l_model_path):
+            hf_hub_download(
+                repo_id=self.path,
+                filename=clip_l_filename,
+                local_dir=get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, '', torch_inference),
+                subfolder=self.subfolder
+            )
+        with safe_open(clip_l_model_path, framework="pt", device=self.device) as f:
+            dtype = torch.float16 if self.fp16 else torch.float32
+            model = SDClipModel(layer="hidden", layer_idx=-2, device=self.device, dtype=dtype, layer_norm_hidden_state=False, return_projected_pooled=False, textmodel_json_config=self.CLIPL_CONFIG)
+            load_into(f, model.transformer, "", self.device, dtype)
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
+class SD3_T5XXLModel(CLIPModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        max_batch_size,
+        embedding_dim,
+        fp16=False,
+    ):
+        super(SD3_T5XXLModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
+        self.T5_CONFIG = {
+            "d_ff": 10240,
+            "d_model": 4096,
+            "num_heads": 64,
+            "num_layers": 24,
+            "vocab_size": 32128
+        }
+        self.subfolder = 'text_encoders'
+
+    def get_model(self, torch_inference=''):
+        t5xxl_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+        t5xxl_filename="t5xxl_fp16.safetensors"
+        t5xxl_model_path = f"{t5xxl_model_dir}/{t5xxl_filename}"
+        if not os.path.exists(t5xxl_model_path):
+            hf_hub_download(
+                repo_id=self.path,
+                filename=t5xxl_filename,
+                local_dir=get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, '', torch_inference),
+                subfolder=self.subfolder
+            )
+        with safe_open(t5xxl_model_path, framework="pt", device=self.device) as f:
+            dtype = torch.float16 if self.fp16 else torch.float32
+            model = T5XXLModel(self.T5_CONFIG, device=self.device, dtype=dtype)
+            load_into(f, model.transformer, "", self.device, dtype)
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
 class UNet2DConditionControlNetModel(torch.nn.Module):
     def __init__(self, unet, controlnets) -> None:
         super().__init__()
@@ -725,16 +859,17 @@ class UNetModel(BaseModel):
             model = UNet2DConditionControlNetModel(unet_model, controlnets)
         else:
             unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
-            if not os.path.exists(unet_model_dir):
+            unet_path = self.get_model_path(unet_model_dir, model_opts)
+            if not os.path.exists(unet_path):
                 model = UNet2DConditionModel.from_pretrained(self.path,
                     subfolder=self.subfolder,
                     use_safetensors=self.hf_safetensor,
                     use_auth_token=self.hf_token,
                     **model_opts).to(self.device)
-                model.save_pretrained(unet_model_dir)
+                model.save_pretrained(unet_model_dir, **model_opts)
             else:
-                print(f"[I] Load UNet pytorch model from: {unet_model_dir}")
-                model = UNet2DConditionModel.from_pretrained(unet_model_dir).to(self.device)
+                print(f"[I] Load UNet pytorch model from: {unet_path}")
+                model = UNet2DConditionModel.from_pretrained(unet_model_dir, **model_opts).to(self.device)
             if torch_inference:
                 model.to(memory_format=torch.channels_last)
         model = optimize_checkpoint(model, torch_inference)
@@ -862,7 +997,8 @@ class UNetXLModel(BaseModel):
     def get_model(self, torch_inference=''):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
         unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
-        if not os.path.exists(unet_model_dir):
+        unet_path = self.get_model_path(unet_model_dir, model_opts)
+        if not os.path.exists(unet_path):
             model = UNet2DConditionModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -871,11 +1007,10 @@ class UNetXLModel(BaseModel):
             # Use default attention processor for ONNX export
             if not torch_inference:
                 model.set_default_attn_processor()
-            model.save_pretrained(unet_model_dir)
+            model.save_pretrained(unet_model_dir, **model_opts)
         else:
-            print(f"[I] Load UNet pytorch model from: {unet_model_dir}")
-            model_load_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
-            model = UNet2DConditionModel.from_pretrained(unet_model_dir, **model_load_opts).to(self.device)
+            print(f"[I] Load UNet pytorch model from: {unet_path}")
+            model = UNet2DConditionModel.from_pretrained(unet_model_dir, **model_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
 
@@ -944,6 +1079,87 @@ class UNetXLModel(BaseModel):
     def optimize(self, onnx_graph):
         return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
 
+class SD3_MMDiTModel(BaseModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        shift=1.0,
+        fp16 = False,
+        max_batch_size = 16,
+        text_maxlen = 77,
+    ):
+
+        super(SD3_MMDiTModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, text_maxlen=text_maxlen)
+        self.subfolder = 'sd3'
+        self.mmdit_dim = 16
+        self.shift = shift
+        self.xB = 2
+
+    def get_model(self, torch_inference=''):
+        sd3_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+        sd3_filename="sd3_medium.safetensors"
+        sd3_model_path = f"{sd3_model_dir}/{sd3_filename}"
+        if not os.path.exists(sd3_model_path):
+            hf_hub_download(repo_id=self.path, filename=sd3_filename, local_dir=sd3_model_dir)
+        with safe_open(sd3_model_path, framework="pt", device=self.device) as f:
+            model = BaseModelSD3(shift=self.shift, file=f, prefix="model.diffusion_model.", device=self.device, dtype=torch.float16).eval()
+            load_into(f, model, "model.", self.device, torch.float16)
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_names(self):
+        return ['sample', 'sigma', 'c_crossattn', 'y']
+
+    def get_output_names(self):
+       return ['latent']
+
+    def get_dynamic_axes(self):
+        xB = '2B' if self.xB == 2 else 'B'
+        return {
+            'sample': {0: xB, 2: 'H', 3: 'W'},
+            'sigma': {0: xB},
+            'c_crossattn': {0: xB},
+            'y': {0: xB},
+            'latent': {0: xB, 2: 'H', 3: 'W'}
+        }
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, _, _, _, _, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        return {
+            'sample': [(self.xB*min_batch, self.mmdit_dim, min_latent_height, min_latent_width), (self.xB*batch_size, self.mmdit_dim, latent_height, latent_width), (self.xB*max_batch, self.mmdit_dim, max_latent_height, max_latent_width)],
+            'sigma': [(self.xB*min_batch,), (self.xB*batch_size,), (self.xB*max_batch,)],
+            'c_crossattn': [(self.xB*min_batch, 154, 4096), (self.xB*batch_size, 154, 4096), (self.xB*max_batch, 154, 4096)],
+            'y': [(self.xB*min_batch, 2048), (self.xB*batch_size, 2048), (self.xB*max_batch, 2048)]
+        }
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        return {
+            'sample': (self.xB*batch_size, self.mmdit_dim, latent_height, latent_width),
+            'sigma': (self.xB*batch_size,),
+            'c_crossattn': (self.xB*batch_size, 154, 4096),
+            'y': (self.xB*batch_size, 2048),
+            'latent': (self.xB*batch_size, self.mmdit_dim, latent_height, latent_width)
+        }
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        dtype = torch.float16 if self.fp16 else torch.float32
+        return (
+            torch.randn(batch_size, self.mmdit_dim, latent_height, latent_width, dtype=dtype, device=self.device),
+            torch.randn(batch_size, dtype=dtype, device=self.device),
+            {
+                'c_crossattn': torch.randn(batch_size, 154, 4096, dtype=dtype, device=self.device),
+                'y': torch.randn(batch_size, 2048, dtype=dtype, device=self.device),
+            }
+        )
+
 class VAEModel(BaseModel):
     def __init__(self,
         version,
@@ -1004,6 +1220,56 @@ class VAEModel(BaseModel):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return torch.randn(batch_size, 4, latent_height, latent_width, dtype=torch.float32, device=self.device)
 
+class SD3_VAEDecoderModel(VAEModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        max_batch_size,
+        fp16=False,
+    ):
+        super(SD3_VAEDecoderModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size)
+        self.subfolder = 'sd3'
+
+    def get_model(self, torch_inference=''):
+        dtype = torch.float16 if self.fp16 else torch.float32
+        sd3_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+        sd3_filename="sd3_medium.safetensors"
+        sd3_model_path = f"{sd3_model_dir}/{sd3_filename}"
+        if not os.path.exists(sd3_model_path):
+            hf_hub_download(repo_id=self.path, filename=sd3_filename, local_dir=sd3_model_dir)
+        with safe_open(sd3_model_path, framework="pt", device=self.device) as f:
+            model = SDVAE(device=self.device, dtype=dtype).eval().cuda()
+            prefix = ""
+            if any(k.startswith("first_stage_model.") for k in f.keys()):
+                prefix = "first_stage_model."
+            load_into(f, model, prefix, self.device, dtype)
+        model.forward = model.decode
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, _, _, _, _, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        return {
+            'latent': [(min_batch, 16, min_latent_height, min_latent_width), (batch_size, 16, latent_height, latent_width), (max_batch, 16, max_latent_height, max_latent_width)]
+        }
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        return {
+            'latent': (batch_size, 16, latent_height, latent_width),
+            'images': (batch_size, 3, image_height, image_width)
+        }
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        dtype = torch.float16 if self.fp16 else torch.float32
+        return torch.randn(batch_size, 16, latent_height, latent_width, dtype=dtype, device=self.device)
 
 class TorchVAEEncoder(torch.nn.Module):
     def __init__(self, version, pipeline, hf_token, device, path, framework_model_dir, hf_safetensor=False):
@@ -1075,6 +1341,54 @@ class VAEEncoderModel(BaseModel):
         self.check_dims(batch_size, image_height, image_width)
         return torch.randn(batch_size, 3, image_height, image_width, dtype=torch.float32, device=self.device)
 
+class SD3_VAEEncoderModel(VAEEncoderModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        max_batch_size,
+        fp16=False,
+    ):
+        super(SD3_VAEEncoderModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size)
+        self.subfolder = 'sd3'
+
+    def get_model(self, torch_inference=''):
+        dtype = torch.float16 if self.fp16 else torch.float32
+        sd3_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder, torch_inference)
+        sd3_filename="sd3_medium.safetensors"
+        sd3_model_path = f"{sd3_model_dir}/{sd3_filename}"
+        if not os.path.exists(sd3_model_path):
+            hf_hub_download(repo_id=self.path, filename=sd3_filename, local_dir=sd3_model_dir)
+        with safe_open(sd3_model_path, framework="pt", device=self.device) as f:
+            model = SDVAE(device=self.device, dtype=dtype).eval().cuda()
+            prefix = ""
+            if any(k.startswith("first_stage_model.") for k in f.keys()):
+                prefix = "first_stage_model."
+            load_into(f, model, prefix, self.device, dtype)
+        model.forward = model.encode
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        min_batch, max_batch, _, _, _, _, _, _, _, _ = \
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        return {
+            'images': [(min_batch, 3, image_height, image_width), (batch_size, 3, image_height, image_width), (max_batch, 3, image_height, image_width)]
+        }
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        return {
+            'images': (batch_size, 3, image_height, image_width),
+            'latent': (batch_size, 16, latent_height, latent_width)
+        }
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        dtype = torch.float16 if self.fp16 else torch.float32
+        return torch.randn(batch_size, 3, image_height, image_width, dtype=dtype, device=self.device)
 
 def make_tokenizer(version, pipeline, hf_token, framework_model_dir, subfolder="tokenizer", **kwargs):
     tokenizer_model_dir = get_checkpoint_dir(framework_model_dir, version, pipeline.name, subfolder, '')
