@@ -1,6 +1,6 @@
 # TensorRT OSS Release Changelog
 
-## 10.2.0 GA - 2024-07-09
+## 10.2.0 GA - 2024-07-10
 
 Key Features and Updates:
 
