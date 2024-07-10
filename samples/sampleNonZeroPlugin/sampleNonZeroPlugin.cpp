@@ -226,6 +226,12 @@ public:
 
         cudaMemsetAsync(outputs[1], 0, sizeof(int32_t), stream);
 
+        if (workspace == nullptr)
+        {
+            sample::gLogError << "Unsupported: workspace is null" << std::endl;
+            return -1;
+        }
+
         if (!mRowOrder)
         {
             // When constructing a column major output, the kernel needs to be aware of the total number of non-zero

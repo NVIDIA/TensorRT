@@ -90,9 +90,9 @@ def download(data_dir, yaml_path, overwrite=False):
         from requests.adapters import HTTPAdapter, Retry
 
         session = requests.Session()
-        retries = Retry(total=5, backoff_factor=0.5)
+        retries = Retry(total=10, backoff_factor=0.5)
         session.mount("http://", HTTPAdapter(max_retries=retries))
-        r = session.get(url, stream=True, timeout=10)
+        r = session.get(url, stream=True, timeout=30)
 
         size = int(r.headers.get("content-length", 0))
         from tqdm import tqdm

@@ -5620,17 +5620,18 @@ constexpr inline int32_t EnumMax<ScatterMode>() noexcept
 //! Output, and a scatter mode. When kELEMENT mode is used an optional axis parameter is available.
 //! * Data is a tensor of rank r >= 1 that stores the values to be duplicated in Output.
 //! * Indices is a tensor of rank q that determines which locations in Output to write new
-//!   values to. Constraints on the rank of q depend on the mode:
+//!   values to. Constraints on the rank q depend on the mode:
 //!       ScatterMode::kND: q >= 1
 //!       ScatterMode::kELEMENT: q must be the same as r
-//! * Updates is atensor of rank s >=1 that provides the data
-//!   to write to Output specified by its corresponding location in Index. Constraints the rank of Updates depend on the
-//!   mode:
+//! * Updates is a tensor of rank s >= 1 that provides the data
+//!   to write to Output specified by its corresponding location in Indices.
+//!   Constraints on the rank of Updates depend on the mode:
 //!       ScatterMode::kND: s = r + q - shape(Indices)[-1] - 1
 //!       Scattermode::kELEMENT: s = q = r
 //! * Output is a tensor with the same dimensions as Data that stores the resulting values of the
 //!   transformation. It must not be a shape tensor.
-//! The types of Data, Update, and Output shall be the same, and Indices shall be DataType::kINT32 or DataType::kINT64.
+//! The types of Data, Update, and Output shall be the same, and Indices shall be of type DataType::kINT32 or
+//! DataType::kINT64.
 //!
 //! The output is computed by copying the data, and then updating elements of it based on indices.
 //! How Indices are interpreted depends upon the ScatterMode.
@@ -5643,7 +5644,7 @@ constexpr inline int32_t EnumMax<ScatterMode>() noexcept
 //!     Given that data dims are {d_0,...,d_{r-1}} and indices dims are {i_0,...,i_{q-1}},
 //!     define k = indices[q-1], it follows that updates dims are {i_0,...,i_{q-2},d_k,...,d_{r-1}}
 //!     The updating can be computed by:
-//!         foreach slice in indices[i_0,...i_{q-2}]
+//!         foreach slice in indices[i_0,...,i_{q-2}]
 //!             output[indices[slice]] = updates[slice]
 //!
 //! ScatterMode::kELEMENT
@@ -7539,6 +7540,44 @@ public:
         return mImpl->getBuilder();
     }
 
+    //!
+    //! \brief Mark weights as refittable when the builder flag kREFIT_INDIVIDUAL is set.
+    //!
+    //! \param name The name of the weights.
+    //!
+    //! \return True if the weights were successfully marked as refittable, false if the weights do not exist or cannot
+    //! be refitted.
+    //!
+    bool markWeightsRefittable(char const* name) noexcept
+    {
+        return mImpl->markWeightsRefittable(name);
+    }
+
+    //!
+    //! \brief Unmark weights as refittable when the builder flag kREFIT_INDIVIDUAL is set.
+    //!
+    //! \param name The name of the weights.
+    //!
+    //! \return True if the weights were successfully marked as unrefittable, false if the weights do not exist.
+    //!
+    bool unmarkWeightsRefittable(char const* name) noexcept
+    {
+        return mImpl->unmarkWeightsRefittable(name);
+    }
+
+    //!
+    //! \brief Whether the weight has been marked as refittable.
+    //!
+    //! \param name The name of the weights to check.
+    //!
+    //! \return True if the weights are marked as refittable, false if the weights do not exist or are marked as
+    //! non-refittable.
+    //!
+    bool areWeightsMarkedRefittable(char const* name) const noexcept
+    {
+        return mImpl->areWeightsMarkedRefittable(name);
+    }
+
 protected:
     apiv::VNetworkDefinition* mImpl;
 };
@@ -8146,6 +8185,48 @@ constexpr inline int32_t EnumMax<QuantizationFlag>() noexcept
 }
 
 //!
+//! \enum RuntimePlatform
+//!
+//! \brief Describes the intended runtime platform (operating system and CPU architecture) for the execution of the
+//!        TensorRT engine. TensorRT provides support for cross-platform engine compatibility when the target runtime
+//!        platform is different from the build platform.
+//!
+//! \note The cross-platform engine will not be able to run on the host platform it was built on.
+//!
+//! \note When building a cross-platform engine that also requires version forward compatibility,
+//!       kEXCLUDE_LEAN_RUNTIME must be set to exclude the target platform lean runtime.
+//!
+//! \note The cross-platform engine might have performance differences compared to the natively built engine on the
+//!       target platform.
+//!
+//! \see IBuilderConfig::setRuntimePlatform(), IBuilderConfig::getRuntimePlatform()
+//!
+enum class RuntimePlatform : int32_t
+{
+    //! No requirement for cross-platform compatibility. The engine constructed by TensorRT can only run on the
+    //! identical platform it was built on.
+    kSAME_AS_BUILD = 0,
+
+    //! Designates the target platform for engine execution as Windows AMD64 system. Currently this flag can only be
+    //! enabled when building engines on Linux AMD64 platforms.
+    kWINDOWS_AMD64 = 1,
+};
+
+namespace impl
+{
+//!
+//! Maximum number of elements in RuntimePlatform enum.
+//!
+//! \see RuntimePlatform
+//!
+template <>
+struct EnumMaxImpl<RuntimePlatform>
+{
+    static constexpr int32_t kVALUE = 2;
+};
+} // namespace impl
+
+//!
 //! \brief Represents one or more BuilderFlag values using binary OR
 //! operations, e.g., 1U << BuilderFlag::kFP16 | 1U << BuilderFlag::kDEBUG.
 //!
@@ -8289,6 +8370,12 @@ enum class BuilderFlag : int32_t
     //! Enable plugins with INT4 input/output.
     kINT4 = 22,
 
+    //! Enable building a refittable engine and provide fine-grained control. This allows
+    //! control over which weights are refittable or not using INetworkDefinition::markWeightsRefittable and
+    //! INetworkDefinition::unmarkWeightsRefittable. By default, all weights are non-refittable when this flag is
+    //! enabled. This flag cannot be used together with kREFIT or kREFIT_IDENTICAL.
+    kREFIT_INDIVIDUAL = 23,
+
 };
 
 //!
@@ -8299,7 +8386,7 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 23;
+    return 24;
 }
 
 //!
@@ -9409,6 +9496,34 @@ public:
     IProgressMonitor* getProgressMonitor() const noexcept
     {
         return mImpl->getProgressMonitor();
+    }
+
+    //!
+    //! \brief Set the target platform for runtime execution.
+    //!
+    //! Cross-platform compatibility allows an engine to be built and executed on different platforms.
+    //!
+    //! The default cross-platform target is RuntimePlatform::kSAME_AS_BUILD.
+    //!
+    //! \param runtimePlatform The target platform for runtime execution.
+    //!
+    //! \see IBuilderConfig::getRuntimePlatform()
+    //!
+    void setRuntimePlatform(RuntimePlatform runtimePlatform) noexcept
+    {
+        mImpl->setRuntimePlatform(runtimePlatform);
+    }
+
+    //!
+    //! \brief Get the target platform for runtime execution.
+    //!
+    //! \return The target platform for runtime execution.
+    //!
+    //! \see IBuilderConfig::setRuntimePlatform()
+    //!
+    RuntimePlatform getRuntimePlatform() const noexcept
+    {
+        return mImpl->getRuntimePlatform();
     }
 
 protected:

@@ -18,7 +18,9 @@
 #ifndef INSTANCE_NORM_COMMON_H
 #define INSTANCE_NORM_COMMON_H
 
+#include "common/plugin.h"
 #include <stdint.h>
+using namespace nvinfer1::pluginInternal;
 
 #define DEVICE_FUNCTION static inline __device__
 
@@ -760,5 +762,42 @@ struct ParallelSums<8, 4>
         parallelSums_8x4<THREADS_PER_CTA>(smem, x, nhw);
     }
 };
+
+namespace
+{
+int32_t divUp(int32_t m, int32_t n)
+{
+    PLUGIN_ASSERT(m >= 0);
+    PLUGIN_ASSERT(n > 0);
+    // Use unsigned arithmetic to preclude overflow.
+    auto const mu = static_cast<uint32_t>(m);
+    auto const nu = static_cast<uint32_t>(n);
+    return (mu + nu - 1U) / nu;
+}
+
+cudnnStatus_t convertTrt2cudnnDtype(nvinfer1::DataType trt_dtype, cudnnDataType_t* cudnn_dtype)
+{
+    switch (trt_dtype)
+    {
+    case nvinfer1::DataType::kFLOAT: *cudnn_dtype = CUDNN_DATA_FLOAT; break;
+    case nvinfer1::DataType::kHALF: *cudnn_dtype = CUDNN_DATA_HALF; break;
+    default: return CUDNN_STATUS_BAD_PARAM;
+    }
+    return CUDNN_STATUS_SUCCESS;
+}
+
+} // namespace
+template <typename T, int32_t THREADS_PER_CTA>
+__global__ __launch_bounds__(THREADS_PER_CTA) void in3dReluActivation(T* dst, T const* src, T alpha, int32_t count)
+{
+    int32_t idx = blockIdx.x * THREADS_PER_CTA + threadIdx.x;
+    if (idx >= count)
+    {
+        return;
+    }
+
+    T val = src[idx];
+    dst[idx] = (val < static_cast<T>(0.F)) ? val * alpha : val;
+}
 
 #endif // INSTANCE_NORM_COMMON_H

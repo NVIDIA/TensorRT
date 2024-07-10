@@ -16,6 +16,7 @@
  */
 #include "common/checkMacrosPlugin.h"
 #include "instanceNormalizationPlugin.h"
+#include "instanceNormCommon.h"
 #include <algorithm>
 #include <cuda_fp16.h>
 #include <stdexcept>
@@ -24,58 +25,19 @@ using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 using namespace nvinfer1::pluginInternal;
 using namespace instance_norm_impl;
-using nvinfer1::plugin::InstanceNormalizationPlugin;
-using nvinfer1::plugin::InstanceNormalizationPluginV2;
-using nvinfer1::plugin::InstanceNormalizationPluginCreator;
-using nvinfer1::plugin::InstanceNormalizationPluginCreatorV2;
-namespace
-{
-int32_t divUp(int32_t m, int32_t n)
-{
-    PLUGIN_ASSERT(m >= 0);
-    PLUGIN_ASSERT(n > 0);
-    // Use unsigned arithmetic to preclude overflow.
-    auto const mu = static_cast<uint32_t>(m);
-    auto const nu = static_cast<uint32_t>(n);
-    return (mu + nu - 1U) / nu;
-}
-} // namespace
-template <typename T, int32_t THREADS_PER_CTA>
-__global__ __launch_bounds__(THREADS_PER_CTA) void in3dReluActivation(
-    T* dst, T const* src, float alpha, int32_t count)
-{
-    int32_t idx = blockIdx.x * THREADS_PER_CTA + threadIdx.x;
-    if (idx >= count)
-    {
-        return;
-    }
-
-    float val = src[idx];
-    dst[idx] = (val < 0.F) ? val * alpha : val;
-}
-
-cudnnStatus_t convertTrt2cudnnDtype(nvinfer1::DataType trt_dtype, cudnnDataType_t* cudnn_dtype)
-{
-    switch (trt_dtype)
-    {
-    case nvinfer1::DataType::kFLOAT: *cudnn_dtype = CUDNN_DATA_FLOAT; break;
-    case nvinfer1::DataType::kHALF: *cudnn_dtype = CUDNN_DATA_HALF; break;
-    default: return CUDNN_STATUS_BAD_PARAM;
-    }
-    return CUDNN_STATUS_SUCCESS;
-}
+using nvinfer1::plugin::InstanceNormalizationV3Plugin;
+using nvinfer1::plugin::InstanceNormalizationV3PluginCreator;
 
 namespace
 {
-constexpr char const* INSTANCE_PLUGIN_VERSION{"1"};
-constexpr char const* INSTANCE_PLUGIN_VERSION_V2{"2"};
-constexpr char const* INSTANCE_PLUGIN_NAME{"InstanceNormalization_TRT"};
+constexpr char const* gInstancePluginVersion{"3"};
+constexpr char const* gInstancePluginName{"InstanceNormalization_TRT"};
 } // namespace
 
-PluginFieldCollection InstanceNormalizationPluginCreator::mFC{};
-std::vector<PluginField> InstanceNormalizationPluginCreator::mPluginAttributes;
+PluginFieldCollection InstanceNormalizationV3PluginCreator::mFC{};
+std::vector<PluginField> InstanceNormalizationV3PluginCreator::mPluginAttributes;
 
-InstanceNormalizationPlugin::InstanceNormalizationPlugin(
+InstanceNormalizationV3Plugin::InstanceNormalizationV3Plugin(
     float epsilon, std::vector<float> const& scale, std::vector<float> const& bias, int32_t relu, float alpha)
     : mEpsilon(epsilon)
     , mAlpha(alpha)
@@ -87,7 +49,7 @@ InstanceNormalizationPlugin::InstanceNormalizationPlugin(
     PLUGIN_VALIDATE(scale.size() == bias.size());
 }
 
-InstanceNormalizationPlugin::InstanceNormalizationPlugin(
+InstanceNormalizationV3Plugin::InstanceNormalizationV3Plugin(
     float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias, int32_t relu, float alpha)
     : mEpsilon(epsilon)
     , mAlpha(alpha)
@@ -113,7 +75,7 @@ InstanceNormalizationPlugin::InstanceNormalizationPlugin(
         }
         else
         {
-            throw std::runtime_error("Unsupported scale/bias dtype");
+            PLUGIN_ERROR("Unsupported scale/bias dtype");
         }
     };
 
@@ -121,35 +83,40 @@ InstanceNormalizationPlugin::InstanceNormalizationPlugin(
     copyWeights(bias, mHostBias);
 }
 
-InstanceNormalizationPlugin::InstanceNormalizationPlugin(void const* serialData, size_t serialLength)
+InstanceNormalizationV3Plugin::~InstanceNormalizationV3Plugin()
 {
-    deserialize_value(&serialData, &serialLength, &mEpsilon);
-    deserialize_value(&serialData, &serialLength, &mNchan);
-    deserialize_value(&serialData, &serialLength, &mHostScale);
-    deserialize_value(&serialData, &serialLength, &mHostBias);
-    deserialize_value(&serialData, &serialLength, &mRelu);
-    deserialize_value(&serialData, &serialLength, &mAlpha);
+    exitContext();
 }
 
-InstanceNormalizationPlugin::~InstanceNormalizationPlugin()
-{
-    terminate();
-}
-
-// InstanceNormalizationPlugin returns one output.
-int32_t InstanceNormalizationPlugin::getNbOutputs() const noexcept
+// InstanceNormalizationV3Plugin returns one output.
+int32_t InstanceNormalizationV3Plugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-DimsExprs InstanceNormalizationPlugin::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
-    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+IPluginCapability* InstanceNormalizationV3Plugin::getCapabilityInterface(PluginCapabilityType type) noexcept
 {
-    nvinfer1::DimsExprs output(inputs[0]);
-    return output;
+    try
+    {
+        if (type == PluginCapabilityType::kBUILD)
+        {
+            return static_cast<IPluginV3OneBuild*>(this);
+        }
+        if (type == PluginCapabilityType::kRUNTIME)
+        {
+            return static_cast<IPluginV3OneRuntime*>(this);
+        }
+        PLUGIN_ASSERT(type == PluginCapabilityType::kCORE);
+        return static_cast<IPluginV3OneCore*>(this);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-int32_t InstanceNormalizationPlugin::initialize() noexcept
+int32_t InstanceNormalizationV3Plugin::initializeContext()
 {
     if (!mInitialized)
     {
@@ -162,27 +129,29 @@ int32_t InstanceNormalizationPlugin::initialize() noexcept
         // NDHWC path
         // Device info.
         int32_t device;
-        PLUGIN_CHECK_CUDA(cudaGetDevice(&device));
+        PLUGIN_CUASSERT(cudaGetDevice(&device));
         cudaDeviceProp props;
-        PLUGIN_CHECK_CUDA(cudaGetDeviceProperties(&props, device));
+        PLUGIN_CUASSERT(cudaGetDeviceProperties(&props, device));
 
         mContext.sm_count = props.multiProcessorCount;
         mContext.sm_shared_size = props.sharedMemPerMultiprocessor;
         mContext.sm_version = props.major * 100 + props.minor * 10;
 
-        PLUGIN_CHECK_CUDA(cudaMalloc(&mDeviceScale, mNchan * sizeof(float)));
-        PLUGIN_CHECK_CUDA(cudaMalloc(&mDeviceBias, mNchan * sizeof(float)));
-        PLUGIN_CHECK_CUDA(cudaMemcpy(mDeviceScale, &mHostScale[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
-        PLUGIN_CHECK_CUDA(cudaMemcpy(mDeviceBias, &mHostBias[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
-
-        PLUGIN_CHECK_CUDA(cudaDriverGetVersion(&mCudaDriverVersion));
+        PLUGIN_CUASSERT(cudaMalloc(&mDeviceScale, mNchan * sizeof(float)));
+        PLUGIN_ASSERT(mDeviceScale != nullptr);
+        PLUGIN_CUASSERT(cudaMalloc(&mDeviceBias, mNchan * sizeof(float)));
+        PLUGIN_ASSERT(mDeviceBias != nullptr);
+        PLUGIN_CUASSERT(cudaMemcpy(mDeviceScale, &mHostScale[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(mDeviceBias, &mHostBias[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
+        
+        PLUGIN_CUASSERT(cudaDriverGetVersion(&mCudaDriverVersion));
     }
     mInitialized = true;
 
     return 0;
 }
 
-void InstanceNormalizationPlugin::terminate() noexcept
+void InstanceNormalizationV3Plugin::exitContext()
 {
     if (mInitialized)
     {
@@ -198,15 +167,15 @@ void InstanceNormalizationPlugin::terminate() noexcept
     mInitialized = false;
 }
 
-size_t InstanceNormalizationPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t InstanceNormalizationV3Plugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    nvinfer1::Dims input_dims = inputs[0].dims;
+    nvinfer1::Dims input_dims = inputs[0].desc.dims;
     PLUGIN_ASSERT(input_dims.nbDims == 4 || input_dims.nbDims == 5);
 
-    if (inputs[0].format == nvinfer1::PluginFormat::kLINEAR)
+    if (inputs[0].desc.format == nvinfer1::PluginFormat::kLINEAR)
     {
-        nvinfer1::Dims input_dims = inputs[0].dims;
+        nvinfer1::Dims input_dims = inputs[0].desc.dims;
 
         int32_t n = input_dims.d[0];
         int32_t c = input_dims.d[1];
@@ -219,12 +188,12 @@ size_t InstanceNormalizationPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc 
 
         return total_wss;
     }
-    else if (inputs[0].format == nvinfer1::PluginFormat::kDHWC8 || inputs[0].format == nvinfer1::PluginFormat::kCDHW32)
+    else if (inputs[0].desc.format == nvinfer1::PluginFormat::kDHWC8 || inputs[0].desc.format == nvinfer1::PluginFormat::kCDHW32)
     {
         PLUGIN_ASSERT(input_dims.nbDims == 5);
-        int32_t input_data_type = (inputs[0].type == nvinfer1::DataType::kHALF) ? 1 : 2;
-        int32_t output_data_type = (outputs[0].type == nvinfer1::DataType::kHALF) ? 1 : 2;
-        nvinfer1::Dims input_dims = inputs[0].dims;
+        int32_t input_data_type = (inputs[0].desc.type == nvinfer1::DataType::kHALF) ? 1 : 2;
+        int32_t output_data_type = (outputs[0].desc.type == nvinfer1::DataType::kHALF) ? 1 : 2;
+        nvinfer1::Dims input_dims = inputs[0].desc.dims;
 
         int32_t n = input_dims.d[0];
         int32_t c = input_dims.d[1];
@@ -232,7 +201,7 @@ size_t InstanceNormalizationPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc 
         int32_t h = input_dims.d[3];
         int32_t w = input_dims.d[4];
 
-        InstanceNormFwdParams params;
+        InstanceNormFwdParams params{};
         // only these parameters are required for workspace computation
         params.nhw = d * h * w;
         params.c = c;
@@ -252,8 +221,8 @@ size_t InstanceNormalizationPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc 
     return 0;
 }
 
-int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
+int32_t InstanceNormalizationV3Plugin::enqueue(PluginTensorDesc const* inputDesc,
+    PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
 {
     PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
@@ -323,7 +292,7 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
         cudnnBatchNormMode_t cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL_PERSISTENT;
 
         cudaStreamCaptureStatus streamStatus;
-        PLUGIN_CHECK_CUDA(cudaStreamIsCapturing(stream, &streamStatus));
+        PLUGIN_CUASSERT(cudaStreamIsCapturing(stream, &streamStatus));
 
         if (streamStatus != cudaStreamCaptureStatusNone && mCudaDriverVersion < 11000)
         {
@@ -359,9 +328,9 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             float* d_bias = &_d_array[n * c];
             for (int32_t i = 0; i < n; ++i)
             {
-                PLUGIN_CHECK_CUDA(
+                PLUGIN_CUASSERT(
                     cudaMemcpyAsync(d_scale + i * c, mDeviceScale, nchan_bytes, cudaMemcpyDeviceToDevice, stream));
-                PLUGIN_CHECK_CUDA(
+                PLUGIN_CUASSERT(
                     cudaMemcpyAsync(d_bias + i * c, mDeviceBias, nchan_bytes, cudaMemcpyDeviceToDevice, stream));
             }
 
@@ -390,7 +359,7 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             cudnnBatchNormMode_t cudnnBatchNormMode = CUDNN_BATCHNORM_SPATIAL_PERSISTENT;
 
             cudaStreamCaptureStatus streamStatus;
-            PLUGIN_CHECK_CUDA(cudaStreamIsCapturing(stream, &streamStatus));
+            PLUGIN_CUASSERT(cudaStreamIsCapturing(stream, &streamStatus));
 
             if (streamStatus != cudaStreamCaptureStatusNone && mCudaDriverVersion < 11000)
             {
@@ -420,7 +389,7 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
             int32_t h = input_dims.d[3];
             int32_t w = input_dims.d[4];
 
-            InstanceNormFwdParams params;
+            InstanceNormFwdParams params{};
             params.nhw = d * h * w;
             params.c = c;
             params.n = n;
@@ -467,30 +436,14 @@ int32_t InstanceNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
         }
         else
         {
-            PLUGIN_ASSERT(false && "Unexpected input format");
+            PLUGIN_FAIL("Unexpected input format");
         }
     }
     return 0;
 }
 
-size_t InstanceNormalizationPlugin::getSerializationSize() const noexcept
-{
-    return (serialized_size(mEpsilon) + serialized_size(mNchan) + serialized_size(mHostScale)
-        + serialized_size(mHostBias) + serialized_size(mRelu) + serialized_size(mAlpha));
-}
-
-void InstanceNormalizationPlugin::serialize(void* buffer) const noexcept
-{
-    serialize_value(&buffer, mEpsilon);
-    serialize_value(&buffer, mNchan);
-    serialize_value(&buffer, mHostScale);
-    serialize_value(&buffer, mHostBias);
-    serialize_value(&buffer, mRelu);
-    serialize_value(&buffer, mAlpha);
-}
-
-bool InstanceNormalizationPlugin::supportsFormatCombination(
-    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+bool InstanceNormalizationV3Plugin::supportsFormatCombination(
+    int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     PLUGIN_ASSERT(inOut && pos < (nbInputs + nbOutputs));
     PLUGIN_ASSERT(pos == 0 || pos == 1);
@@ -499,70 +452,63 @@ bool InstanceNormalizationPlugin::supportsFormatCombination(
     // For 5-D tensor (nbSpatialDims == 3), FP32_Linear, FP16_Linear, FP16_DHWC8, and INT8_CDHW32 are supported.
     // This is because we have special InstanceNorm3D kernels for vectorized formats from MLPerf-Inference.
 
-    int32_t const nbDims = inOut[pos].dims.nbDims;
+    int32_t const nbDims = inOut[pos].desc.dims.nbDims;
     PLUGIN_ASSERT(nbDims >= 3);
     PLUGIN_ASSERT(nbDims <= 5);
     bool const is3DInstanceNorm = (nbDims == 5);
 
     bool const isFP32Linear
-        = (inOut[pos].type == nvinfer1::DataType::kFLOAT && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR
-            && inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format);
+        = (inOut[pos].desc.type == nvinfer1::DataType::kFLOAT && inOut[pos].desc.format == nvinfer1::PluginFormat::kLINEAR
+            && inOut[pos].desc.type == inOut[0].desc.type && inOut[pos].desc.format == inOut[0].desc.format);
 
     bool const isFP16Linear
-        = (inOut[pos].type == nvinfer1::DataType::kHALF && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR
-            && inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format);
+        = (inOut[pos].desc.type == nvinfer1::DataType::kHALF && inOut[pos].desc.format == nvinfer1::PluginFormat::kLINEAR
+            && inOut[pos].desc.type == inOut[0].desc.type && inOut[pos].desc.format == inOut[0].desc.format);
 
     bool const isFP16DHWC8
-        = (inOut[pos].type == nvinfer1::DataType::kHALF && inOut[pos].format == nvinfer1::PluginFormat::kDHWC8
-            && inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format);
+        = (inOut[pos].desc.type == nvinfer1::DataType::kHALF && inOut[pos].desc.format == nvinfer1::PluginFormat::kDHWC8
+            && inOut[pos].desc.type == inOut[0].desc.type && inOut[pos].desc.format == inOut[0].desc.format);
 
     bool const isINT8CDHW32
-        = (inOut[pos].type == nvinfer1::DataType::kINT8 && inOut[pos].format == nvinfer1::PluginFormat::kCDHW32
-            && inOut[pos].type == inOut[0].type && inOut[pos].format == inOut[0].format);
+        = (inOut[pos].desc.type == nvinfer1::DataType::kINT8 && inOut[pos].desc.format == nvinfer1::PluginFormat::kCDHW32
+            && inOut[pos].desc.type == inOut[0].desc.type && inOut[pos].desc.format == inOut[0].desc.format);
 
     bool const isFormatOK = isFP32Linear || isFP16Linear || (is3DInstanceNorm && (isFP16DHWC8 || isINT8CDHW32));
 
     // Kernels for vectorized formats only support the case of C % spv == 0.
     int32_t spv{1};
-    switch (inOut[pos].format)
+    switch (inOut[pos].desc.format)
     {
     case nvinfer1::PluginFormat::kDHWC8: spv = 8; break;
     case nvinfer1::PluginFormat::kCDHW32: spv = 32; break;
     default: break;
     }
-    int32_t const isAlignmentOK = (inOut[pos].dims.d[1] % spv == 0);
+    int32_t const isAlignmentOK = (inOut[pos].desc.dims.d[1] % spv == 0);
 
     return isFormatOK && isAlignmentOK;
 }
 
-char const* InstanceNormalizationPlugin::getPluginType() const noexcept
+char const* InstanceNormalizationV3Plugin::getPluginName() const noexcept
 {
-    return INSTANCE_PLUGIN_NAME;
+    return gInstancePluginName;
 }
 
-char const* InstanceNormalizationPlugin::getPluginVersion() const noexcept
+char const* InstanceNormalizationV3Plugin::getPluginVersion() const noexcept
 {
-    return INSTANCE_PLUGIN_VERSION;
+    return gInstancePluginVersion;
 }
 
-char const* InstanceNormalizationPluginV2::getPluginVersion() const noexcept
+char const* InstanceNormalizationV3Plugin::getPluginNamespace() const noexcept
 {
-    return INSTANCE_PLUGIN_VERSION_V2;
+    return mPluginNamespace.c_str();
 }
 
-void InstanceNormalizationPlugin::destroy() noexcept
-{
-    delete this;
-}
-
-template <class PluginType>
-IPluginV2DynamicExt* InstanceNormalizationPlugin::cloneBase() const noexcept
+InstanceNormalizationV3Plugin* InstanceNormalizationV3Plugin::clone() noexcept
 {
     try
     {
-        auto* plugin = new PluginType{mEpsilon, mHostScale, mHostBias, mRelu, mAlpha};
+        auto* plugin = new InstanceNormalizationV3Plugin{mEpsilon, mHostScale, mHostBias, mRelu, mAlpha};
         plugin->setPluginNamespace(mPluginNamespace.c_str());
-        plugin->initialize();
         return plugin;
     }
     catch (std::exception const& e)
@@ -572,53 +518,86 @@ IPluginV2DynamicExt* InstanceNormalizationPlugin::cloneBase() const noexcept
     return nullptr;
 }
 
-IPluginV2DynamicExt* InstanceNormalizationPlugin::clone() const noexcept
-{
-    return cloneBase<InstanceNormalizationPlugin>();
-}
-
-IPluginV2DynamicExt* InstanceNormalizationPluginV2::clone() const noexcept
-{
-    return cloneBase<InstanceNormalizationPluginV2>();
-}
-
 // Set plugin namespace
-void InstanceNormalizationPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
+void InstanceNormalizationV3Plugin::setPluginNamespace(char const* pluginNamespace) noexcept
 {
-    mPluginNamespace = pluginNamespace;
+    try
+    {
+        PLUGIN_ASSERT(pluginNamespace != nullptr);
+        mPluginNamespace = pluginNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
 }
 
-char const* InstanceNormalizationPlugin::getPluginNamespace() const noexcept
+int32_t InstanceNormalizationV3Plugin::getOutputDataTypes(
+    DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    return mPluginNamespace.c_str();
+    PLUGIN_ASSERT(inputTypes != nullptr);
+    PLUGIN_ASSERT(nbInputs == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    outputTypes[0] = inputTypes[0];
+    return 0;
 }
 
-nvinfer1::DataType InstanceNormalizationPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+int32_t InstanceNormalizationV3Plugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+    int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept
 {
-    PLUGIN_ASSERT(inputTypes && nbInputs > 0 && index == 0);
-    return inputTypes[0];
+    PLUGIN_ASSERT(inputs != nullptr);
+    PLUGIN_ASSERT(nbInputs == 1);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    outputs[0] = inputs[0];
+
+    return 0;
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void InstanceNormalizationPlugin::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+IPluginV3* InstanceNormalizationV3Plugin::attachToContext(IPluginResourceContext* context) noexcept
 {
+    InstanceNormalizationV3Plugin* obj = clone();
+    obj->initializeContext();
+    return obj;
 }
 
-// Detach the plugin object from its execution context.
-void InstanceNormalizationPlugin::detachFromContext() noexcept {}
-
-void InstanceNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+int32_t InstanceNormalizationV3Plugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
     nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
-    // Not support dynamic shape in C dimension
-    PLUGIN_ASSERT(nbInputs == 1 && in[0].desc.dims.d[1] != -1);
+    return STATUS_SUCCESS;
 }
 
-// InstanceNormalizationPluginCreator methods
-InstanceNormalizationPluginCreator::InstanceNormalizationPluginCreator()
+int32_t InstanceNormalizationV3Plugin::onShapeChange(PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
+    PLUGIN_ASSERT(in != nullptr);
+    PLUGIN_ASSERT(out != nullptr);
+    PLUGIN_ASSERT(nbOutputs == 1);
+    PLUGIN_ASSERT(nbInputs == 1);
+    // Not support dynamic shape in C dimension
+    PLUGIN_ASSERT(in[0].dims.d[1] != -1);
+    return STATUS_SUCCESS;
+}
+
+PluginFieldCollection const* InstanceNormalizationV3Plugin::getFieldsToSerialize() noexcept
+{
+    mDataToSerialize.clear();
+    mDataToSerialize.emplace_back("epsilon", &mEpsilon, PluginFieldType::kFLOAT32, 1);
+    mDataToSerialize.emplace_back("scales", mHostScale.data(), PluginFieldType::kFLOAT32, mHostScale.size());
+    mDataToSerialize.emplace_back("bias", mHostBias.data(), PluginFieldType::kFLOAT32, mHostBias.size());
+    mDataToSerialize.emplace_back("relu", &mRelu, PluginFieldType::kINT32, 1);
+    mDataToSerialize.emplace_back("alpha", &mAlpha, PluginFieldType::kFLOAT32, 1);
+
+    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.fields = mDataToSerialize.data();
+    return &mFCToSerialize;
+}
+
+
+// InstanceNormalizationV3PluginCreator methods
+InstanceNormalizationV3PluginCreator::InstanceNormalizationV3PluginCreator()
+{
+    static std::mutex sMutex;
+    std::lock_guard<std::mutex> guard(sMutex);
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("epsilon", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("scales", nullptr, PluginFieldType::kFLOAT32, 1));
@@ -630,29 +609,23 @@ InstanceNormalizationPluginCreator::InstanceNormalizationPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-char const* InstanceNormalizationPluginCreator::getPluginName() const noexcept
+char const* InstanceNormalizationV3PluginCreator::getPluginName() const noexcept
 {
-    return INSTANCE_PLUGIN_NAME;
+    return gInstancePluginName;
 }
 
-char const* InstanceNormalizationPluginCreator::getPluginVersion() const noexcept
+char const* InstanceNormalizationV3PluginCreator::getPluginVersion() const noexcept
 {
-    return INSTANCE_PLUGIN_VERSION;
+    return gInstancePluginVersion;
 }
 
-char const* InstanceNormalizationPluginCreatorV2::getPluginVersion() const noexcept
-{
-    return INSTANCE_PLUGIN_VERSION_V2;
-}
-
-PluginFieldCollection const* InstanceNormalizationPluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* InstanceNormalizationV3PluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-template <class PluginType>
-IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPluginBase(
-    char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept
+IPluginV3* InstanceNormalizationV3PluginCreator::createPlugin(
+    char const* name, nvinfer1::PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
     try
     {
@@ -709,9 +682,8 @@ IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPluginBase(
         Weights scaleWeights{DataType::kFLOAT, scaleValues.data(), (int64_t) scaleValues.size()};
         Weights biasWeights{DataType::kFLOAT, biasValues.data(), (int64_t) biasValues.size()};
 
-        auto* obj = new PluginType(epsilon, scaleWeights, biasWeights, relu, alpha);
+        auto* obj = new InstanceNormalizationV3Plugin(epsilon, scaleWeights, biasWeights, relu, alpha);
         obj->setPluginNamespace(mNamespace.c_str());
-        obj->initialize();
         return obj;
     }
     catch (std::exception const& e)
@@ -721,44 +693,21 @@ IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPluginBase(
     return nullptr;
 }
 
-IPluginV2DynamicExt* InstanceNormalizationPluginCreator::createPlugin(
-    char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept
-{
-    return createPluginBase<InstanceNormalizationPlugin>(name, fc);
-}
-
-IPluginV2DynamicExt* InstanceNormalizationPluginCreatorV2::createPlugin(
-    char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept
-{
-    return createPluginBase<InstanceNormalizationPluginV2>(name, fc);
-}
-
-template <class PluginType>
-IPluginV2DynamicExt* InstanceNormalizationPluginCreator::deserializePluginBase(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+void InstanceNormalizationV3PluginCreator::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        auto* obj = new PluginType{serialData, serialLength};
-        obj->setPluginNamespace(mNamespace.c_str());
-        obj->initialize();
-        return obj;
+        PLUGIN_VALIDATE(libNamespace != nullptr);
+        mNamespace = libNamespace;
     }
     catch (std::exception const& e)
     {
         caughtError(e);
     }
-    return nullptr;
 }
 
-IPluginV2DynamicExt* InstanceNormalizationPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+char const* InstanceNormalizationV3PluginCreator::getPluginNamespace() const noexcept
 {
-    return deserializePluginBase<InstanceNormalizationPlugin>(name, serialData, serialLength);
+    return mNamespace.c_str();
 }
 
-IPluginV2DynamicExt* InstanceNormalizationPluginCreatorV2::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
-{
-    return deserializePluginBase<InstanceNormalizationPluginV2>(name, serialData, serialLength);
-}

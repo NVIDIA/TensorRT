@@ -356,7 +356,7 @@ def evaluate_onnx(onnx_filename, data_loader, criterion, print_freq):
        The method returns the average top-1 accuracy on the given dataset.
     """
     print("Loading ONNX file: ", onnx_filename)
-    ort_session = onnxruntime.InferenceSession(onnx_filename)
+    ort_session = onnxruntime.InferenceSession(onnx_filename, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
     with torch.no_grad():
         metric_logger = utils.MetricLogger(delimiter="  ")
         header = 'Test:'

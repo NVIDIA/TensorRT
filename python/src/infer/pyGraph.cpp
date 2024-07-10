@@ -828,6 +828,8 @@ namespace tensorrt
             .def_property("error_recorder", &INetworkDefinition::getErrorRecorder,
                 py::cpp_function(&INetworkDefinition::setErrorRecorder, py::keep_alive<1, 2>{}))
             .def("mark_output", &INetworkDefinition::markOutput, "tensor"_a, INetworkDefinitionDoc::mark_output)
+            .def("mark_weights_refittable", &INetworkDefinition::markWeightsRefittable, "name"_a, INetworkDefinitionDoc::mark_weights_refittable)
+            .def("are_weights_marked_refittable", &INetworkDefinition::areWeightsMarkedRefittable, "name"_a, INetworkDefinitionDoc::are_weights_marked_refittable)
             // Layers
             .def("add_input", &INetworkDefinition::addInput, "name"_a, "dtype"_a, "shape"_a,
                 INetworkDefinitionDoc::add_input, py::return_value_policy::reference_internal)
@@ -933,6 +935,7 @@ namespace tensorrt
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)
             .def("unmark_output_for_shapes", &INetworkDefinition::unmarkOutputForShapes, "tensor"_a, INetworkDefinitionDoc::unmark_output_for_shapes)
+            .def("unmark_weights_refittable", &INetworkDefinition::unmarkWeightsRefittable, "name"_a, INetworkDefinitionDoc::unmark_weights_refittable)
             .def("set_weights_name", &INetworkDefinition::setWeightsName, "weights"_a, "name"_a, INetworkDefinitionDoc::set_weights_name)
             // Getters
             .def("get_layer", &INetworkDefinition::getLayer, "index"_a, INetworkDefinitionDoc::get_layer,

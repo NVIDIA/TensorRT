@@ -32,6 +32,7 @@
 #include "generateDetectionPlugin/generateDetectionPlugin.h"
 #include "gridAnchorPlugin/gridAnchorPlugin.h"
 #include "instanceNormalizationPlugin/instanceNormalizationPlugin.h"
+#include "instanceNormalizationPlugin/instanceNormalizationPluginLegacy.h"
 #include "leakyReluPlugin/lReluPlugin.h"
 #include "modulatedDeformConvPlugin/modulatedDeformConvPlugin.h"
 #include "multilevelCropAndResizePlugin/multilevelCropAndResizePlugin.h"
@@ -198,6 +199,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::GridAnchorRectPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::InstanceNormalizationPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::InstanceNormalizationPluginCreatorV2>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::InstanceNormalizationV3PluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::LReluPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ModulatedDeformableConvPluginDynamicCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultilevelCropAndResizePluginCreator>(logger, libNamespace);

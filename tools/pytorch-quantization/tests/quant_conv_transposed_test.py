@@ -100,7 +100,7 @@ class TestQuantConvTranspose2D():
 
         weight_copy = quant_conv_object.weight.clone()
 
-        amax = quant_utils.reduce_amax(weight_copy, axis=(1, 2, 3))
+        amax = quant_utils.reduce_amax(weight_copy, axis=(0, 2, 3))
         quant_weight = tensor_quant.fake_tensor_quant(weight_copy, amax)
 
         out1 = F.conv_transpose2d(test_input, quant_weight)
@@ -298,7 +298,7 @@ class TestQuantConvTranspose3D():
         quant_input = tensor_quant.fake_tensor_quant(test_input, torch.max(torch.abs(test_input)))
 
         weight_copy = quant_conv_object.weight.clone()
-        amax = quant_utils.reduce_amax(weight_copy, axis=(1, 2, 3, 4))
+        amax = quant_utils.reduce_amax(weight_copy, axis=(0, 2, 3, 4))
         quant_weight = tensor_quant.fake_tensor_quant(weight_copy, amax)
 
         out1 = F.conv_transpose3d(quant_input, quant_weight, bias=quant_conv_object.bias)
@@ -386,7 +386,7 @@ class TestQuantConvTranspose1D():
 
         weight_copy = quant_conv_object.weight.clone()
 
-        amax = quant_utils.reduce_amax(weight_copy, axis=(1, 2))
+        amax = quant_utils.reduce_amax(weight_copy, axis=(0, 2))
         quant_weight = tensor_quant.fake_tensor_quant(weight_copy, amax)
 
         out1 = F.conv_transpose1d(test_input, quant_weight)

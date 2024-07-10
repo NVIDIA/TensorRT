@@ -34,7 +34,9 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     packages=[],
-    install_requires=["##TENSORRT_MODULE##-cu##CUDA_MAJOR##"],
+    install_requires=[
+        "##TENSORRT_MODULE##-cu##CUDA_MAJOR##==##TENSORRT_PYTHON_VERSION##"
+    ],
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

@@ -18,6 +18,7 @@
 // Implementation of PyBind11 Binding Code for OnnxParser
 #include "ForwardDeclarations.h"
 #include "onnx/NvOnnxParser.h"
+#include "onnx/errorHelpers.hpp"
 #include "parsers/pyOnnxDoc.h"
 #include "utils.h"
 #include <pybind11/stl.h>
@@ -32,40 +33,6 @@ namespace tensorrt
 // Long lambda functions should go here rather than being inlined into the bindings (1 liners are OK).
 namespace lambdas
 {
-static const auto error_code_str = [](ErrorCode self) {
-    switch (self)
-    {
-    case ErrorCode::kSUCCESS: return "SUCCESS";
-    case ErrorCode::kINTERNAL_ERROR: return "INTERNAL_ERROR";
-    case ErrorCode::kMEM_ALLOC_FAILED: return "MEM_ALLOC_FAILED";
-    case ErrorCode::kMODEL_DESERIALIZE_FAILED: return "MODEL_DESERIALIZE_FAILED";
-    case ErrorCode::kINVALID_VALUE: return "INVALID_VALUE";
-    case ErrorCode::kINVALID_GRAPH: return "INVALID_GRAPH";
-    case ErrorCode::kINVALID_NODE: return "INVALID_NODE";
-    case ErrorCode::kUNSUPPORTED_GRAPH: return "UNSUPPORTED_GRAPH";
-    case ErrorCode::kUNSUPPORTED_NODE: return "UNSUPPORTED_NODE";
-    case ErrorCode::kUNSUPPORTED_NODE_ATTR: return "UNSUPPORTED_NODE_ATTR";
-    case ErrorCode::kUNSUPPORTED_NODE_INPUT: return "UNSUPPORTED_NODE_INPUT";
-    case ErrorCode::kUNSUPPORTED_NODE_DATATYPE: return "UNSUPPORTED_NODE_DATATYPE";
-    case ErrorCode::kUNSUPPORTED_NODE_DYNAMIC: return "UNSUPPORTED_NODE_DYNAMIC";
-    case ErrorCode::kUNSUPPORTED_NODE_SHAPE: return "UNSUPPORTED_NODE_SHAPE";
-    case ErrorCode::kREFIT_FAILED: return "REFIT_FAILED";
-    }
-    return "UNKNOWN";
-};
-
-static const auto parser_error_str = [](IParserError& self) {
-    std::string const node_info = "In node " + std::to_string(self.node()) + " with name: " + self.nodeName()
-        + " and operator: " + self.nodeOperator() + " ";
-    std::string const error_info
-        = std::string("(") + self.func() + "): " + error_code_str(self.code()) + ": " + self.desc();
-    if (self.code() == ErrorCode::kMODEL_DESERIALIZE_FAILED || self.code() == ErrorCode::kREFIT_FAILED)
-    {
-        return error_info;
-    }
-    return node_info + error_info;
-};
-
 static const auto parse = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     return self.parse(info.ptr, info.size * info.itemsize, path);
@@ -199,8 +166,8 @@ void bindOnnx(py::module& m)
         .value("UNSUPPORTED_NODE_DYNAMIC", ErrorCode::kUNSUPPORTED_NODE_DYNAMIC)
         .value("UNSUPPORTED_NODE_SHAPE", ErrorCode::kUNSUPPORTED_NODE_SHAPE)
         .value("REFIT_FAILED", ErrorCode::kREFIT_FAILED)
-        .def("__str__", lambdas::error_code_str)
-        .def("__repr__", lambdas::error_code_str);
+        .def("__str__", &onnx2trt::errorCodeStr)
+        .def("__repr__", &onnx2trt::errorCodeStr);
 
     py::class_<IParserError, std::unique_ptr<IParserError, py::nodelete>>(m, "ParserError", py::module_local())
         .def("code", &IParserError::code, ParserErrorDoc::code)
@@ -214,8 +181,8 @@ void bindOnnx(py::module& m)
         .def("local_function_stack", lambdas::get_local_function_stack, ParserErrorDoc::local_function_stack)
         .def("local_function_stack_size", &IParserError::localFunctionStackSize,
             ParserErrorDoc::local_function_stack_size)
-        .def("__str__", lambdas::parser_error_str)
-        .def("__repr__", lambdas::parser_error_str);
+        .def("__str__", &onnx2trt::parserErrorStr)
+        .def("__repr__", &onnx2trt::parserErrorStr);
 
     py::class_<IParserRefitter>(m, "OnnxParserRefitter", OnnxParserRefitterDoc::descr, py::module_local())
         .def(py::init(&nvonnxparser::createParserRefitter), "refitter"_a, "logger"_a, OnnxParserRefitterDoc::init,

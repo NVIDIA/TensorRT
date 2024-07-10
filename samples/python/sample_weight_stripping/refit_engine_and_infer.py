@@ -37,7 +37,7 @@ class ModelData(object):
     MODEL_PATH = "ResNet50.onnx"
     INPUT_SHAPE = (3, 224, 224)
     # We can convert TensorRT data types to numpy types with trt.nptype()
-    DTYPE = trt.float16
+    DTYPE = trt.float32
 
 def load_stripped_engine_and_refit(input_file, onnx_model_path):
     runtime = trt.Runtime(TRT_LOGGER)
