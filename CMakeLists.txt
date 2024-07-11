@@ -154,6 +154,9 @@ else()
       61
       70
       75
+      80
+      86
+      89 # Adding support for NVIDIA GeForce RTX 4090
     )
 
   string(REGEX MATCH "aarch64" IS_ARM "${TRT_PLATFORM_ID}")
@@ -168,6 +171,9 @@ else()
   endif()
   if (CUDA_VERSION VERSION_GREATER_EQUAL 11.1)
     list(APPEND GPU_ARCHS 86)
+  endif()
+  if (CUDA_VERSION VERSION_GREATER_EQUAL 12.1)
+    list(APPEND GPU_ARCHS 89)
   endif()
 
   message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${GPU_ARCHS}")
