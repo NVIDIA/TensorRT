@@ -1364,6 +1364,7 @@ void bindCore(py::module& m)
         .value("REFIT_IDENTICAL", BuilderFlag::kREFIT_IDENTICAL, BuilderFlagDoc::REFIT_IDENTICAL)
         .value("WEIGHT_STREAMING", BuilderFlag::kWEIGHT_STREAMING, BuilderFlagDoc::WEIGHT_STREAMING)
         .value("INT4", BuilderFlag::kINT4, BuilderFlagDoc::INT4)
+        .value("REFIT_INDIVIDUAL", BuilderFlag::kREFIT_INDIVIDUAL, BuilderFlagDoc::REFIT_INDIVIDUAL)
         ;
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
@@ -1385,6 +1386,10 @@ void bindCore(py::module& m)
         m, "HardwareCompatibilityLevel", HardwareCompatibilityLevelDoc::descr, py::module_local())
         .value("NONE", HardwareCompatibilityLevel::kNONE, HardwareCompatibilityLevelDoc::NONE)
         .value("AMPERE_PLUS", HardwareCompatibilityLevel::kAMPERE_PLUS, HardwareCompatibilityLevelDoc::AMPERE_PLUS);
+
+    py::enum_<RuntimePlatform>(m, "RuntimePlatform", RuntimePlatformDoc::descr, py::module_local())
+        .value("SAME_AS_BUILD", RuntimePlatform::kSAME_AS_BUILD, RuntimePlatformDoc::SAME_AS_BUILD)
+        .value("WINDOWS_AMD64", RuntimePlatform::kWINDOWS_AMD64, RuntimePlatformDoc::WINDOWS_AMD64);
 
     py::enum_<DeviceType>(m, "DeviceType", DeviceTypeDoc::descr, py::module_local())
         .value("GPU", DeviceType::kGPU, DeviceTypeDoc::GPU)
@@ -1483,6 +1488,7 @@ void bindCore(py::module& m)
             &IBuilderConfig::setBuilderOptimizationLevel)
         .def_property("hardware_compatibility_level", &IBuilderConfig::getHardwareCompatibilityLevel,
             &IBuilderConfig::setHardwareCompatibilityLevel)
+        .def_property("runtime_platform", &IBuilderConfig::getRuntimePlatform, &IBuilderConfig::setRuntimePlatform)
         .def_property("plugins_to_serialize", lambdas::get_plugins_to_serialize, lambdas::set_plugins_to_serialize)
         .def_property("max_aux_streams", &IBuilderConfig::getMaxAuxStreams, &IBuilderConfig::setMaxAuxStreams)
         .def_property("progress_monitor", &IBuilderConfig::getProgressMonitor,

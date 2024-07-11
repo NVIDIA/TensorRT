@@ -16,6 +16,8 @@
  */
 #ifndef TRT_INSTANCE_NORMALIZATION_PLUGIN_H
 #define TRT_INSTANCE_NORMALIZATION_PLUGIN_H
+#include "NvInfer.h"
+#include "NvInferPlugin.h"
 #include "common/plugin.h"
 #include "common/serialize.hpp"
 #include "instanceNormalizationPlugin/instanceNormFwd.h"
@@ -30,80 +32,75 @@ namespace nvinfer1
 {
 namespace plugin
 {
-class InstanceNormalizationPlugin : public nvinfer1::IPluginV2DynamicExt
+class InstanceNormalizationV3Plugin : public IPluginV3,
+                                      public IPluginV3OneCore,
+                                      public IPluginV3OneBuild,
+                                      public IPluginV3OneRuntime
 {
 
 public:
-    InstanceNormalizationPlugin(float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias,
+    InstanceNormalizationV3Plugin(float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias,
         int32_t relu = 0, float alpha = 0.F);
-    InstanceNormalizationPlugin(float epsilon, std::vector<float> const& scale, std::vector<float> const& bias,
+    InstanceNormalizationV3Plugin(float epsilon, std::vector<float> const& scale, std::vector<float> const& bias,
         int32_t relu = 0, float alpha = 0.F);
-    InstanceNormalizationPlugin(void const* serialData, size_t serialLength);
+    InstanceNormalizationV3Plugin(void const* serialData, size_t serialLength);
 
-    InstanceNormalizationPlugin() = delete;
+    InstanceNormalizationV3Plugin() = delete;
 
-    ~InstanceNormalizationPlugin() override;
+    InstanceNormalizationV3Plugin(InstanceNormalizationV3Plugin const&) = default;
+
+    ~InstanceNormalizationV3Plugin() override;
 
     int32_t getNbOutputs() const noexcept override;
 
-    // DynamicExt plugins returns DimsExprs class instead of Dims
-    using nvinfer1::IPluginV2::getOutputDimensions;
-    DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
 
-    int32_t initialize() noexcept override;
+    InstanceNormalizationV3Plugin* clone() noexcept override;
 
-    void terminate() noexcept override;
-
-    using nvinfer1::IPluginV2::getWorkspaceSize;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
-
-    using nvinfer1::IPluginV2::enqueue;
-    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
-
-    size_t getSerializationSize() const noexcept override;
-
-    void serialize(void* buffer) const noexcept override;
-
-    // DynamicExt plugin supportsFormat update.
-    bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-
-    char const* getPluginType() const noexcept override;
-
-    char const* getPluginVersion() const noexcept override;
-
-    void destroy() noexcept override;
-
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    char const* getPluginName() const noexcept override;
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
 
-    void attachToContext(
-        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
+    int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
+        void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    void detachFromContext() noexcept override;
+    // DynamicExt plugin supportsFormat update.
+    bool supportsFormatCombination(
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
 
-    using nvinfer1::IPluginV2Ext::configurePlugin;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    char const* getPluginVersion() const noexcept override;
+
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override;
+
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override;
+
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+
+    int32_t onShapeChange(
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override;
+
+    int32_t initializeContext();
 
 protected:
-    template <class PluginType>
-    nvinfer1::IPluginV2DynamicExt* cloneBase() const noexcept;
+    void exitContext();
 
 private:
-    float mEpsilon;
-    float mAlpha;
-    int32_t mRelu;
-    int32_t mNchan;
+    float mEpsilon{};
+    float mAlpha{};
+    int32_t mRelu{};
+    int32_t mNchan{};
     std::vector<float> mHostScale;
     std::vector<float> mHostBias;
     float* mDeviceScale{nullptr};
@@ -115,20 +112,21 @@ private:
     nvinfer1::pluginInternal::cudnnTensorDescriptor_t mYDescriptor{nullptr};
     nvinfer1::pluginInternal::cudnnTensorDescriptor_t mBDescriptor{nullptr};
     std::string mPluginNamespace;
-    std::string mNamespace;
     bool mInitialized{false};
     int32_t mCudaDriverVersion{-1};
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
 
     // NDHWC implementation
     instance_norm_impl::InstanceNormFwdContext mContext;
 };
 
-class InstanceNormalizationPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class InstanceNormalizationV3PluginCreator : public nvinfer1::IPluginCreatorV3One
 {
 public:
-    InstanceNormalizationPluginCreator();
+    InstanceNormalizationV3PluginCreator();
 
-    ~InstanceNormalizationPluginCreator() override = default;
+    ~InstanceNormalizationV3PluginCreator() override = default;
 
     char const* getPluginName() const noexcept override;
 
@@ -136,56 +134,16 @@ public:
 
     PluginFieldCollection const* getFieldNames() noexcept override;
 
-    IPluginV2DynamicExt* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
 
-    IPluginV2DynamicExt* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept;
 
-protected:
-    template <class PluginType>
-    IPluginV2DynamicExt* createPluginBase(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept;
-
-    template <class PluginType>
-    IPluginV2DynamicExt* deserializePluginBase(char const* name, void const* serialData, size_t serialLength) noexcept;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
     static PluginFieldCollection mFC;
     static std::vector<PluginField> mPluginAttributes;
-};
-
-// For backward compatibility, create version "2" of the identical plugin.
-// Background: in TRT 8.0, we added 3D InstanceNorm plugin as the version 2 of the "InstanceNormalization_TRT" plugin.
-// However, in TRT 8.2, we have fused it into version 1, so a separate version 2 is no longer needed, but is only kept
-// for backward compatibility.
-class InstanceNormalizationPluginV2 final : public InstanceNormalizationPlugin
-{
-public:
-    InstanceNormalizationPluginV2(float epsilon, nvinfer1::Weights const& scale, nvinfer1::Weights const& bias,
-        int32_t relu = 0, float alpha = 0.F)
-        : InstanceNormalizationPlugin(epsilon, scale, bias, relu, alpha)
-    {
-    }
-    InstanceNormalizationPluginV2(float epsilon, std::vector<float> const& scale, std::vector<float> const& bias,
-        int32_t relu = 0, float alpha = 0.F)
-        : InstanceNormalizationPlugin(epsilon, scale, bias, relu, alpha)
-    {
-    }
-    InstanceNormalizationPluginV2(void const* serialData, size_t serialLength)
-        : InstanceNormalizationPlugin(serialData, serialLength)
-    {
-    }
-    InstanceNormalizationPluginV2() = delete;
-    char const* getPluginVersion() const noexcept override;
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-};
-
-class InstanceNormalizationPluginCreatorV2 final : public InstanceNormalizationPluginCreator
-{
-public:
-    char const* getPluginVersion() const noexcept override;
-    IPluginV2DynamicExt* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
-    IPluginV2DynamicExt* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
+    std::string mNamespace;
 };
 
 } // namespace plugin

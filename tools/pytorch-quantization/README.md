@@ -1,3 +1,5 @@
+**Note: Pytorch Quantization development has transitioned to the [TensorRT Model Optimizer](https://github.com/NVIDIA/TensorRT-Model-Optimizer). All developers are encouraged to use the TensorRT Model Optimizer to benefit from the latest advancements on quantization and compression. While the Pytorch Quantization code will remain available, it will no longer receive further development.**
+
 # Pytorch Quantization
 
 PyTorch-Quantization is a toolkit for training and evaluating PyTorch models with simulated quantization. Quantization can be added to the model automatically, or manually, allowing the model to be tuned for accuracy and performance. Quantization is compatible with NVIDIAs high performance integer kernels which leverage integer Tensor Cores. The quantized model can be exported to ONNX and imported by TensorRT 8.0 and later.
@@ -38,6 +40,6 @@ python setup.py install
 
 ## Resources
 
-* Pytorch Quantization Toolkit [userguide](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/userguide.html)
+* Pytorch Quantization Toolkit [userguide](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/index.html)
 * Quantization Basics [whitepaper](https://arxiv.org/abs/2004.09602)
 

@@ -2160,8 +2160,7 @@ public:
     //! i = 0, ..., nbValues - 1. Execution of the network must be valid for the optVals.
     //!
     //! Shape tensors are tensors that contribute to shape calculations in some way. While input shape tensors can be
-    //! type kBOOL, kINT32, or kINT64, the values used to set the minimum, optimium, and maximum values must fit in int32_t.
-    //! Boolean values are represented as 0 for false and 1 for true.
+    //! type kINT32 or kINT64, the values used to set the minimum, optimium, and maximum values must fit in int32_t.
     //!
     //! Examples:
     //!
@@ -3123,8 +3122,8 @@ public:
     //! \return An IHostMemory object that contains the serialized engine.
     //!
     //! The network may be deserialized with IRuntime::deserializeCudaEngine().
-    //! Serializing plan file with SerializationFlag::kEXCLUDE_WEIGHTS requires building the engine with kREFIT or
-    //! kREFIT_IDENTICAL.
+    //! Serializing plan file with SerializationFlag::kEXCLUDE_WEIGHTS requires building the engine with kREFIT,
+    //! kREFIT_IDENTICAL or kREFIT_INDIVIDUAL.
     //!
     //! \see IRuntime::deserializeCudaEngine()
     //!
@@ -3298,7 +3297,12 @@ public:
     }
 
     //!
-    //! \brief TensorRT automatically determines an ideal budget for the model to run.
+    //! \brief TensorRT automatically determines a device memory budget for the model to run. The budget is close to the
+    //! current free memory size, leaving some space for other memory needs in the user's application. If the budget
+    //! exceeds the size obtained from getStreamableWeightsSize(), it is capped to that size, effectively disabling
+    //! weight streaming. Since TensorRT lacks information about the user's allocations, the remaining memory size might
+    //! be larger than required, leading to wasted memory, or smaller than required, causing an out-of-memory error. For
+    //! optimal memory allocation, it is recommended to manually calculate and set the budget.
     //!
     //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
     //!

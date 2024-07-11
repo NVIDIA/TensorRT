@@ -18,12 +18,12 @@
 /*
  **************************************************************************
  * Modified from Deformable DETR
- * Copyright (c) 2020 SenseTime. All Rights Reserved.
+ * Copyright (c) 2020-2023 SenseTime. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 [see LICENSE for details]
  * https://github.com/fundamentalvision/Deformable-DETR/blob/main/LICENSE
  **************************************************************************
  * Modified from DCN (https://github.com/msracver/Deformable-ConvNets)
- * Copyright (c) 2018 Microsoft
+ * Copyright (c) 2018-2023 Microsoft
  **************************************************************************
  * Modified from https://github.com/chengdazhi/Deformable-Convolution-V2-PyTorch/tree/pytorch_1.0.0
  **************************************************************************************************

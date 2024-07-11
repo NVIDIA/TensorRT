@@ -1162,6 +1162,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     }
 
     config.setHardwareCompatibilityLevel(build.hardwareCompatibilityLevel);
+    config.setRuntimePlatform(build.runtimePlatform);
 
     if (build.maxAuxStreams != defaultMaxAuxStreams)
     {

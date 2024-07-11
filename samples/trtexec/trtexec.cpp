@@ -342,7 +342,13 @@ int main(int argc, char** argv)
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
 #endif
-        if (!options.build.safe && !options.build.buildDLAStandalone && options.build.refittable)
+
+        // When some options are enabled, engine deserialization is not supported on the platform that the engine was
+        // built.
+        bool const supportDeserialization = !options.build.safe && !options.build.buildDLAStandalone
+            && options.build.runtimePlatform == nvinfer1::RuntimePlatform::kSAME_AS_BUILD;
+
+        if (supportDeserialization && options.build.refittable)
         {
             auto* engine = bEnv->engine.get();
             if (options.reporting.refit)
@@ -369,7 +375,7 @@ int main(int argc, char** argv)
 
         if (options.build.skipInference)
         {
-            if (!options.build.safe && !options.build.buildDLAStandalone)
+            if (supportDeserialization)
             {
                 printLayerInfo(options.reporting, bEnv->engine.get(), nullptr);
                 printOptimizationProfileInfo(options.reporting, bEnv->engine.get());

@@ -1006,6 +1006,8 @@ constexpr char const* WEIGHTLESS
 constexpr char const* STRIP_PLAN = R"trtdoc(Strip the refittable weights from the engine plan file.)trtdoc";
 constexpr char const* REFIT_IDENTICAL
     = R"trtdoc(Create a refittable engine using identical weights. Different weights during refits yield unpredictable behavior.)trtdoc";
+constexpr char const* REFIT_INDIVIDUAL
+    = R"trtdoc(Create a refittable engine and allows the users to specify which weights are refittable and which are not.)trtdoc";
 constexpr char const* WEIGHT_STREAMING
     = R"trtdoc(Enable building with the ability to stream varying amounts of weights during Runtime. This decreases GPU memory of TRT at the expense of performance.)trtdoc";
 constexpr char const* INT4 = R"trtdoc(Enable plugins with INT4 input/output)trtdoc";
@@ -1091,6 +1093,26 @@ constexpr char const* AMPERE_PLUS = R"trtdoc(
     This option will disable cuDNN, cuBLAS, and cuBLAS LT as tactic sources.
 )trtdoc";
 } // namespace HardwareCompatibilityLevelDoc
+
+namespace RuntimePlatformDoc
+{
+constexpr char const* descr = R"trtdoc(
+    Describes the intended runtime platform for the execution of the TensorRT engine.
+    TensorRT provides support for cross-platform engine compatibility when the target runtime platform is different from the build platform.
+
+    **NOTE:** The cross-platform engine will not be able to run on the host platform it was built on.
+
+    **NOTE:** When building a cross-platform engine that also requires version forward compatibility, EXCLUDE_LEAN_RUNTIME must be set to exclude the target platform lean runtime.
+
+    **NOTE:** The cross-platform engine might have performance differences compared to the natively built engine on the target platform.
+)trtdoc";
+constexpr char const* SAME_AS_BUILD = R"trtdoc(
+    No requirement for cross-platform compatibility. The engine constructed by TensorRT can only run on the identical platform it was built on.
+)trtdoc";
+constexpr char const* WINDOWS_AMD64 = R"trtdoc(
+    Designates the target platform for engine execution as Windows AMD64 system. Currently this flag can only be enabled when building engines on Linux AMD64 platforms.
+)trtdoc";
+} // namespace RuntimePlatformDoc
 
 namespace NetworkDefinitionCreationFlagDoc
 {

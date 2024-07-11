@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.4.0
+ARG CUDA_VERSION=12.5.0
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
-ENV TRT_VERSION 10.1.0.27
+ENV TRT_VERSION 10.2.0.19
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -71,7 +71,7 @@ RUN apt-get install -y --no-install-recommends \
 # Install TensorRT. This will also pull in CUDNN
 RUN ver="${CUDA_VERSION%.*}" &&\
     if [ "${ver%.*}" = "12" ] ; then \
-        ver="12.4"; \
+        ver="12.5"; \
     fi &&\
     v="${TRT_VERSION}-1+cuda${ver}" &&\
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/3bf863cc.pub &&\

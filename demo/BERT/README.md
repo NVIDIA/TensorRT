@@ -30,7 +30,8 @@ This subfolder of the BERT TensorFlow repository, tested and maintained by NVIDI
        * [TensorRT inference benchmark](#tensorrt-inference-benchmark)
   * [Results](#results)
     * [Inference performance: NVIDIA A100](#inference-performance-nvidia-a100-40gb)
-    * [Inference performance: NVIDIA A30](#inference-performance-nvidia-a30)
+    * [Inference performance: NVIDIA L4](#inference-performance-nvidia-l4)
+    * [Inference performance: NVIDIA L40S](#inference-performance-nvidia-l40s)
 
 
 ## Model overview
@@ -74,8 +75,8 @@ The following software version configuration has been tested:
 |Software|Version|
 |--------|-------|
 |Python|>=3.8|
-|TensorRT|10.1.0.27|
-|CUDA|12.4|
+|TensorRT|10.2.0.19|
+|CUDA|12.5|
 
 ## Setup
 

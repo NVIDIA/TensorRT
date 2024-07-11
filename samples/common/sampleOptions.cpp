@@ -792,6 +792,11 @@ std::ostream& printTacticSources(
 
 std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
 {
+    if (options.stronglyTyped)
+    {
+        os << "Strongly Typed";
+        return os;
+    }
     os << "FP32";
     if (options.fp16)
     {
@@ -812,10 +817,6 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
     if (options.int4)
     {
         os << "+INT4";
-    }
-    if (options.stronglyTyped)
-    {
-        os << " (Strongly Typed)";
     }
     if (options.precisionConstraints == PrecisionConstraints::kOBEY)
     {
@@ -1445,6 +1446,22 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--errorOnTimingCacheMiss", errorOnTimingCacheMiss);
     getAndDelOption(arguments, "--builderOptimizationLevel", builderOptimizationLevel);
 
+    std::string runtimePlatformArgs;
+    getAndDelOption(arguments, "--runtimePlatform", runtimePlatformArgs);
+    if (runtimePlatformArgs == "SameAsBuild" || runtimePlatformArgs.empty())
+    {
+        runtimePlatform = RuntimePlatform::kSAME_AS_BUILD;
+    }
+    else if (runtimePlatformArgs == "WindowsAMD64")
+    {
+        runtimePlatform = RuntimePlatform::kWINDOWS_AMD64;
+    }
+    else
+    {
+        throw std::invalid_argument(std::string("Unknown runtime platform: ") + runtimePlatformArgs
+            + ". Valid options: SameAsBuild, WindowsAMD64.");
+    }
+
     std::string hardwareCompatibleArgs;
     getAndDelOption(arguments, "--hardwareCompatibilityLevel", hardwareCompatibleArgs);
     if (hardwareCompatibleArgs == "none" || hardwareCompatibleArgs.empty())
@@ -1747,6 +1764,10 @@ void AllOptions::parse(Arguments& arguments)
         {
             build.buildDLAStandalone = true;
         }
+        if (build.runtimePlatform != nvinfer1::RuntimePlatform::kSAME_AS_BUILD)
+        {
+            build.skipInference = true;
+        }
         if (build.buildDLAStandalone)
         {
             build.skipInference = true;
@@ -2045,6 +2066,24 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType)
     return os;
 }
 
+std::ostream& operator<<(std::ostream& os, nvinfer1::RuntimePlatform platform)
+{
+    switch (platform)
+    {
+    case nvinfer1::RuntimePlatform::kSAME_AS_BUILD:
+    {
+        os << "Same As Build";
+        break;
+    }
+    case nvinfer1::RuntimePlatform::kWINDOWS_AMD64:
+    {
+        os << "Windows AMD64";
+        break;
+    }
+    }
+    return os;
+}
+
 std::ostream& operator<<(std::ostream& os, const ShapeRange& dims)
 {
     int32_t i = 0;
@@ -2138,6 +2177,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "BuilderOptimizationLevel: " << options.builderOptimizationLevel                                              << std::endl <<
           "Calibration Profile Index: " << options.calibProfile                                                         << std::endl <<
           "Weight Streaming: " << boolToEnabled(options.allowWeightStreaming)                                           << std::endl <<
+          "Runtime Platform: " << options.runtimePlatform                                                               << std::endl <<
           "Debug Tensors: " << options.debugTensors                                                                     << std::endl;
     // clang-format on
 
@@ -2514,6 +2554,11 @@ void BuildOptions::help(std::ostream& os)
           R"(                                   Hardware Compatibility Level: mode ::= "none" | "ampere+")"                                         "\n"
           "                                         none = no compatibility"                                                                        "\n"
           "                                         ampere+ = compatible with Ampere and newer GPUs"                                                "\n"
+          "  --runtimePlatform=platform         Set the target platform for runtime execution. (default = SameAsBuild)"                             "\n"
+          "                                     When this option is enabled, --skipInference is enabled by default."                                "\n"
+          R"(                                   RuntimePlatfrom: platform ::= "SameAsBuild" | "WindowsAMD64")"                                      "\n"
+          "                                         SameAsBuild = no requirement for cross-platform compatibility."                                 "\n"
+          "                                         WindowsAMD64 = set the target platform for engine execution as Windows AMD64 system"            "\n"
           "  --tempdir=<dir>                    Overrides the default temporary directory TensorRT will use when creating temporary files."         "\n"
           "                                     See IRuntime::setTemporaryDirectory API documentation for more information."                        "\n"
           "  --tempfileControls=controls        Controls what TensorRT is allowed to use when creating temporary executable files."                 "\n"

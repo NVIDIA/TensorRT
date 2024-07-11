@@ -178,6 +178,7 @@ enum class WeightsRole : int32_t;
 enum class PreviewFeature : int32_t;
 enum class HardwareCompatibilityLevel : int32_t;
 enum class ExecutionContextAllocationStrategy : int32_t;
+enum class RuntimePlatform : int32_t;
 
 using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
@@ -1058,6 +1059,9 @@ public:
     virtual bool markDebug(ITensor& tensor) noexcept = 0;
     virtual bool unmarkDebug(ITensor& tensor) noexcept = 0;
     virtual bool isDebugTensor(nvinfer1::ITensor const& tensor) const noexcept = 0;
+    virtual bool markWeightsRefittable(char const* name) noexcept = 0;
+    virtual bool unmarkWeightsRefittable(char const* name) noexcept = 0;
+    virtual bool areWeightsMarkedRefittable(char const* name) const noexcept = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot
@@ -1161,6 +1165,8 @@ public:
     virtual int32_t getMaxAuxStreams() const noexcept = 0;
     virtual void setProgressMonitor(IProgressMonitor* monitor) noexcept = 0;
     virtual IProgressMonitor* getProgressMonitor() const noexcept = 0;
+    virtual void setRuntimePlatform(RuntimePlatform runtimePlatform) noexcept = 0;
+    virtual RuntimePlatform getRuntimePlatform() const noexcept = 0;
 };
 
 class VSerializationConfig : public VRoot

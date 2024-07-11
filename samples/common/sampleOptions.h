@@ -257,6 +257,7 @@ public:
     // Use int32_t to support C++11 compilers.
     std::unordered_map<int32_t, bool> previewFeatures;
     nvinfer1::HardwareCompatibilityLevel hardwareCompatibilityLevel{nvinfer1::HardwareCompatibilityLevel::kNONE};
+    nvinfer1::RuntimePlatform runtimePlatform{nvinfer1::RuntimePlatform::kSAME_AS_BUILD};
     std::string tempdir{};
     nvinfer1::TempfileControlFlags tempfileControls{getTempfileControlDefaults()};
     RuntimeMode useRuntime{RuntimeMode::kFULL};

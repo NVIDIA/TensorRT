@@ -1839,12 +1839,30 @@ constexpr const char* mark_output = R"trtdoc(
     :arg tensor: The tensor to mark.
 )trtdoc";
 
+constexpr const char* mark_weights_refittable = R"trtdoc(
+    Mark a weight as refittable.
+
+    :arg name: The weight to mark.
+)trtdoc";
+
+constexpr const char* are_weights_marked_refittable = R"trtdoc(
+    Whether the weight has been marked as refittable.
+
+    :arg name: The name of the weights to check.
+)trtdoc";
+
 constexpr const char* mark_debug = R"trtdoc(
     Mark a tensor as a debug tensor in the network.
 
     :arg tensor: The tensor to be marked as debug tensor.
 
     :returns: True on success, False otherwise.
+)trtdoc";
+
+constexpr const char* unmark_weights_refittable = R"trtdoc(
+    Unmark a weight as refittable.
+
+    :arg name: The weight to unmark.
 )trtdoc";
 
 constexpr const char* unmark_debug = R"trtdoc(

@@ -1,5 +1,18 @@
 # TensorRT OSS Release Changelog
 
+## 10.2.0 GA - 2024-07-10
+
+Key Features and Updates:
+
+ - Demo changes
+   - Added [Stable Diffusion 3 demo](demo/Diffusion).
+ - Plugin changes
+   - Version 3 of the [InstanceNormalization plugin](plugin/instanceNormalizationPlugin/) (`InstanceNormalization_TRT`) has been added. This version is based on the `IPluginV3` interface and is used by the TensorRT ONNX parser when native `InstanceNormalization` is disabled.
+ - Tooling changes
+   - Pytorch Quantization development has transitioned to [TensorRT Model Optimizer](https://github.com/NVIDIA/TensorRT-Model-Optimizer). All developers are encouraged to use TensorRT Model Optimizer to benefit from the latest advancements on quantization and compression.
+ - Build containers
+   - Updated default cuda versions to `12.5.0`.
+
 ## 10.1.0 GA - 2024-06-17
 
 Key Features and Updates:
