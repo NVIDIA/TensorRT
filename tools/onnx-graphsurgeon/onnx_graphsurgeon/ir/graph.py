@@ -595,6 +595,7 @@ class Graph(object):
                 return inputs
 
             if get_id(node_or_func) in hierarchy_levels:
+                visited.remove(get_id(node_or_func))
                 return hierarchy_levels[get_id(node_or_func)].level
 
             # The level of a node is the level of its highest input + 1.
