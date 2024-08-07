@@ -44,6 +44,8 @@ OS=$(lsb_release -si)-$(lsb_release -sr | cut -d '.' -f 1-2)
 
 if [ "$OS" = "Ubuntu-22.04" ] ; then
     EXTRA_NM_FLAG="--without-symbol-versions"
+elif [ "$OS" = "Ubuntu-24.04" ] ; then
+    EXTRA_NM_FLAG="--without-symbol-versions"
 fi
 
 # make stub library

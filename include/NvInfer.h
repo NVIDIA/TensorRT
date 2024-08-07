@@ -102,7 +102,7 @@ enum class LayerType : int32_t
     kNMS = 43,                //!< NMS layer
     kREVERSE_SEQUENCE = 44,   //!< Reverse sequence layer
     kNORMALIZATION = 45,      //!< Normalization layer
-    kPLUGIN_V3 = 46           //!< PluginV3 layer.
+    kPLUGIN_V3 = 46,          //!< PluginV3 layer.
 };
 
 //!
@@ -841,8 +841,8 @@ protected:
 //! \code
 //! Shorthand:
 //!     I = dimensions of input image.
-//!     B = prePadding, before the image data. For deconvolution, prePadding is set before output.
-//!     A = postPadding, after the image data. For deconvolution, postPadding is set after output.
+//!     B = prePadding, before the image data.
+//!     A = postPadding, after the image data.
 //!     P = delta between input and output
 //!     S = stride
 //!     F = filter
@@ -2202,7 +2202,6 @@ public:
     //!
     //! Default: (0, 0, ..., 0)
     //!
-    //! If executing this layer on DLA, padding must be 0.
     //!
     //! \see getPrePadding()
     //!
@@ -2230,7 +2229,6 @@ public:
     //!
     //! Default: (0, 0, ..., 0)
     //!
-    //! If executing this layer on DLA, padding must be 0.
     //!
     //! \see getPostPadding()
     //!
@@ -2949,8 +2947,10 @@ protected:
 //!
 //! \brief Layer that represents a padding operation.
 //!
-//! The padding layer adds zero-padding at the start and end of the input tensor. It only supports padding along the two
-//! innermost dimensions. Applying negative padding results in cropping of the input.
+//! The padding layer adds zero-padding at the start and end of the input tensor. It supports padding
+//! only the last two dimensions. Applying negative padding results in cropping of the input.
+//!
+//! To pad across any subset of dimensions, use ISliceLayer with SampleMode::kFILL.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -3237,12 +3237,13 @@ constexpr inline int32_t EnumMax<SampleMode>() noexcept
 //!
 //! The slice layer has two variants, static and dynamic. Static slice specifies the start, size, and stride
 //! dimensions at layer creation time via Dims and can use the get/set accessor functions of the ISliceLayer.
-//! Dynamic slice specifies one or more of start, size or stride as ITensors, by using ILayer::setInput to add
-//! a second, third, or fourth input respectively. The corresponding Dims are used if an input
+//! Static slice layers can also optionally specify axes through the get/set accessor functions of the ISliceLayer.
+//! Dynamic slice specifies one or more of start, size, stride, or axes as ITensors, by using ILayer::setInput to add
+//! a second, third, fourth, or sixth input respectively. The corresponding Dims are used if an input
 //! is missing or null.
 //!
 //! An application can determine if the ISliceLayer has a dynamic output shape based on whether
-//! the size input (third input) is present and non-null.
+//! the size or axes input is present and non-null.
 //!
 //! The slice layer selects for each dimension a start location from within the input tensor, and
 //! copies elements to the output tensor using the specified stride across the input tensor.
@@ -3255,18 +3256,35 @@ constexpr inline int32_t EnumMax<SampleMode>() noexcept
 //! stride = {1, 2}
 //! output = {{1, 5}}
 //!
+//! If axes are provided then starts, ends, and strides must have the same length as axes
+//! and specifies a subset of dimensions to slice. If axes are not provided, starts, ends, and strides
+//! must be of the same length as the rank of the input tensor.
+//!
+//! An example of using slice on a tensor with axes specified:
+//! input = {{0, 2, 4}, {1, 3, 5}}
+//! start = {1}
+//! size = {2}
+//! stride = {1}
+//! axes = {1}
+//! output = {{2, 4}, {3, 5}}
+//!
 //! When the sampleMode is kCLAMP or kREFLECT, for each input dimension, if its size is 0 then the corresponding output
 //! dimension must be 0 too.
+//!
+//! When the sampleMode is kFILL, the fifth input to the slice layer is used to determine the value to fill in out-of-bound
+//! indices. It is an error to specify the fifth input in any other sampleMode.
 //!
 //! A slice layer can produce a shape tensor if the following conditions are met:
 //!
 //! * start, size, and stride are build time constants, either as static Dims or as constant input tensors.
+//! * axes, if provided, are build time constants, either as static Dims or as a constant input tensor.
 //! * The number of elements in the output tensor does not exceed 2 * Dims::MAX_DIMS.
 //!
 //! The input tensor is a shape tensor if the output is a shape tensor.
 //!
 //! The following constraints must be satisfied to execute this layer on DLA:
 //! * start, size, and stride are build time constants, either as static Dims or as constant input tensors.
+//! * axes, if provided, are build time constants, either as static Dims or as a constant input tensor.
 //! * sampleMode is kSTRICT_BOUNDS.
 //! * Strides are 1 for all dimensions.
 //! * Slicing is not performed on the first dimension
@@ -3401,6 +3419,10 @@ public:
     //!      or be implicitly convertible to the input data type.
     //!      Implicit data type conversion is supported among kFLOAT, kHALF, kINT8, and kFP8 data types.
     //!      This input is disallowed for other modes.
+    //! - 5: The axes tensor indicating the corresponding axes that start, size, and stride
+    //!      should apply to, as a 1D Int32 shape tensor. Negative values for axes
+    //!      indicate indexing from the back of the input tensor. Values must be unique and be
+    //!      within the interval of [-rank(input), rank(input)-1].
     //!
     //! Using the corresponding setter resets the input to null.
     //!
@@ -3408,6 +3430,35 @@ public:
     //! from returning 1 to index + 1.
     //!
     using ILayer::setInput;
+
+    //!
+    //! \brief Set the axes for this ISliceLayer.
+    //!
+    //! \param axes The axes on which the starts, ends, and strides parameters of the slice apply to.
+    //!
+    //! If a sixth input had been used to create this layer, that input is reset to null by this method.
+    //!
+    //! \see getAxes
+    //!
+    void setAxes(Dims const& axes) noexcept
+    {
+        mImpl->setAxes(axes);
+    }
+
+    //!
+    //! \brief Get the axes for this ISliceLayer.
+    //!
+    //! \return The axes on which the starts, ends, and strides parameters of this slice apply to.
+    //!
+    //! If the sixth input is present and non-null,
+    //! this function returns a Dims with nbDims = -1.
+    //!
+    //! \see setAxes
+    //!
+    Dims getAxes() const noexcept
+    {
+        return mImpl->getAxes();
+    }
 
 protected:
     apiv::VSliceLayer* mImpl;
@@ -4007,8 +4058,8 @@ struct EnumMaxImpl<ResizeRoundMode>
 //! Resize layer can be used for resizing a N-D tensor.
 //!
 //! Resize layer currently supports the following configurations:
-//!     -   InterpolationMode::kNEAREST - resizes innermost `m` dimensions of N-D, where 0 < m <= min(8, N) and N > 0
-//!     -   InterpolationMode::kLINEAR - resizes innermost `m` dimensions of N-D, where 0 < m <= min(3, N) and N > 0
+//!     -   InterpolationMode::kNEAREST - resizes last `m` dimensions of N-D, where 0 < m <= min(8, N) and N > 0
+//!     -   InterpolationMode::kLINEAR - resizes last `m` dimensions of N-D, where 0 < m <= min(3, N) and N > 0
 //!
 //! Default resize mode is InterpolationMode::kNEAREST.
 //!
@@ -5518,6 +5569,7 @@ protected:
     virtual ~IDequantizeLayer() noexcept = default;
     apiv::VDequantizeLayer* mImpl;
 };
+
 
 //!
 //! \class IEinsumLayer
@@ -7435,6 +7487,7 @@ public:
         return mImpl->addQuantizeV2(input, scale, outputType);
     }
 
+
     //!
     //! \brief Add an Einsum layer to the network.
     //!
@@ -8549,7 +8602,13 @@ enum class PreviewFeature : int32_t
     //! \deprecated Deprecated in TensorRT 10.0. The default value for this flag is on and can not be changed.
     //!
     kPROFILE_SHARING_0806 TRT_DEPRECATED_ENUM = 0,
+
+    //!
+    //! Allows plugin I/O to be aliased when using IPluginV3OneBuildV2
+    //!
+    kALIASED_PLUGIN_IO_10_03 = 1
 };
+
 namespace impl
 {
 //!
@@ -8560,7 +8619,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<PreviewFeature>
 {
-    static constexpr int32_t kVALUE = 1;
+    static constexpr int32_t kVALUE = 2;
 };
 } // namespace impl
 

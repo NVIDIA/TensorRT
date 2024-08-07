@@ -48,14 +48,14 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.2.0.19
+tensorrt            10.3.0.26
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.33.1
 controlnet-aux      0.0.6
 nvidia-modelopt     0.11.2
 ```
-> NOTE: optionally install HuggingFace [accelerate](https://pypi.org/project/accelerate/) package for faster and less memory-intense model loading.
+> NOTE: optionally install HuggingFace [accelerate](https://pypi.org/project/accelerate/) package for faster and less memory-intense model loading. Note that installing accelerate is known to cause failures while running certain pipelines in Torch Compile mode ([known issue](https://github.com/huggingface/diffusers/issues/9091))
 
 # Running demoDiffusion
 
@@ -177,6 +177,28 @@ python3 demo_txt2img_sd3.py "dog wearing a sweater and a blue collar" --version 
 ```
 
 Note that a denosing-percentage is applied to the number of denoising-steps when an input image conditioning is provided. Its default value is set to 0.6. This parameter can be updated using `--denoising-percentage`
+
+### Image-to-video using SVD (Stable Video Diffusion)
+
+Download the pre-exported ONNX model
+
+```bash
+git lfs install
+git clone https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt-1-1-tensorrt onnx-svd-xt-1-1
+cd onnx-svd-xt-1-1 && git lfs pull && cd ..
+```
+
+SVD-XT-1.1 (25 frames at resolution 576x1024)
+```bash
+python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --hf-token=$HF_TOKEN
+```
+
+You may also specify a custom conditioning image using `--input-image`:
+```bash
+python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --input-image https://www.hdcarwallpapers.com/walls/2018_chevrolet_camaro_zl1_nascar_race_car_2-HD.jpg --hf-token=$HF_TOKEN
+```
+
+NOTE: The min and max guidance scales are configured using --min-guidance-scale and --max-guidance-scale respectively.
 
 ## Configuration options
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.

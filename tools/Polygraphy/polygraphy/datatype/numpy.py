@@ -39,7 +39,7 @@ def _get_mapping():
         np.uint64: DataType.UINT64,
         np.uint8: DataType.UINT8,
         np.bool_: DataType.BOOL,
-        np.unicode_: DataType.STRING,
+        np.str_: DataType.STRING,
     }
     return {np.dtype(key): val for key, val in DATATYPE_FROM_NUMPY.items()}
 

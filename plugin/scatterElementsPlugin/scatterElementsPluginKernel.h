@@ -25,6 +25,7 @@
 
 #include "common/plugin.h"
 #include "scatterElementsPlugin.h"
+#include "scatterElementsPluginLegacy.h"
 
 namespace nvinfer1
 {

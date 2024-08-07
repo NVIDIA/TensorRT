@@ -16,9 +16,12 @@
 #
 
 import inspect
+import logging
 
 import pytest
+
 from polygraphy import util
+from polygraphy.exception.exception import PolygraphyException
 from polygraphy.logger.logger import Logger, SeverityTrie
 
 
@@ -72,6 +75,46 @@ class TestLogger:
             assert num_times_called == 3
         assert num_times_called == 4
 
+    @pytest.mark.serial    
+    def test_use_python_logging_system(self, tmp_python_log_file):
+        logger = Logger(severity=Logger.ULTRA_VERBOSE)
+        logger.use_python_logging_system = True
+        # add custom Polygraphy levels
+        logging.addLevelName(2, "ULTRA_VERBOSE")
+        logging.addLevelName(4, "SUPER_VERBOSE")
+        logging.addLevelName(6, "EXTRA_VERBOSE")
+        logging.addLevelName(22, "START")
+        logging.addLevelName(28, "FINISH")
+
+        # emit logs
+        logger.ultra_verbose("ultra verbose")
+        logger.super_verbose("super verbose")
+        logger.extra_verbose("extra verbose")
+        logger.verbose("verbose")
+        logger.info("info")
+        logger.start("start")
+        logger.finish("finish")
+        logger.warning("warning")
+        logger.error("error")
+        with pytest.raises(PolygraphyException):
+            logger.critical("critical")
+
+        # verify logs written in the log file
+        with tmp_python_log_file.open() as fp:
+            log_messages = fp.read()
+
+        assert log_messages == """\
+ULTRA_VERBOSE:Polygraphy:[U] ultra verbose
+SUPER_VERBOSE:Polygraphy:[S] super verbose
+EXTRA_VERBOSE:Polygraphy:[X] extra verbose
+DEBUG:Polygraphy:[V] verbose
+INFO:Polygraphy:[I] info
+START:Polygraphy:[I] start
+FINISH:Polygraphy:[I] finish
+WARNING:Polygraphy:[W] warning
+ERROR:Polygraphy:[E] error
+CRITICAL:Polygraphy:[!] critical
+"""
 
 class TestSeverityTrie:
     @pytest.mark.parametrize(

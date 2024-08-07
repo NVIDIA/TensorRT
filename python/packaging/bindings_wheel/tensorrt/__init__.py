@@ -195,7 +195,6 @@ def _itemsize(trt_type):
         fp8: 1,
         int4: 0.5,
     }
-    
     if trt_type in mapping:
         return mapping[trt_type]
 

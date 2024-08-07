@@ -164,6 +164,17 @@ For example:
 G_LOGGER.module_severity = G_LOGGER.EXTRA_VERBOSE
 ```
 
+By default logs are emitted to the stdout/stderr stream. If you would like to have them stored in a file, set the `log_file` property to your log file:
+```py
+G_LOGGER.log_file = "your_log_file.log"
+```
+
+If you would like to have logs being emitted to python `logging` module, set the following flag:
+```py
+G_LOGGER.use_python_logging_system = True
+```
+
+After that, you can define your logging configuration using the `logging` module.
 
 ## Putting It All Together
 

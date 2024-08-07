@@ -18,6 +18,7 @@
 import copy
 import ctypes.util
 import glob
+import logging
 import os
 import subprocess as sp
 import sys
@@ -195,3 +196,20 @@ def nvinfer_lean_path():
             return path
 
     assert False, "Could not find nvinfer_lean!"
+
+
+@pytest.fixture()
+def tmp_python_log_file(tmp_path):
+    # backup original logging configuration
+    orig_handlers = logging.root.handlers[:]
+    orig_level = logging.root.level
+    logging.root.handlers = []
+    tmp_log_file = tmp_path / "test.log"
+    # setup logging to file
+    logging.basicConfig(filename=tmp_log_file, level=0)
+    try:
+        yield tmp_log_file
+    finally:
+        # revert back original configuration
+        logging.root.handlers = orig_handlers
+        logging.root.level = orig_level

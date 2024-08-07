@@ -52,6 +52,7 @@
 #include "roiAlignPlugin/roiAlignPlugin.h"
 #include "roiAlignPlugin/roiAlignPluginLegacy.h"
 #include "scatterElementsPlugin/scatterElementsPlugin.h"
+#include "scatterElementsPlugin/scatterElementsPluginLegacy.h"
 #include "scatterPlugin/scatterPlugin.h"
 #include "specialSlicePlugin/specialSlicePlugin.h"
 #include "splitPlugin/split.h"
@@ -221,7 +222,8 @@ extern "C"
         initializePlugin<nvinfer1::plugin::ROIAlignPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ROIAlignV3PluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::RPROIPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::ScatterElementsPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ScatterElementsPluginV3Creator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ScatterElementsPluginV2Creator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterNDPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SplitPluginCreator>(logger, libNamespace);

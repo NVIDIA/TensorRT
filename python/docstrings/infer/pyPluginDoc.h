@@ -420,6 +420,10 @@ constexpr const char* ipluginv3onebuild_descr = R"trtdoc(
     :ivar num_outputs: :class:`int` The number of outputs from the plugin. This is used by the implementations of :class:`INetworkDefinition` and :class:`Builder`.
 )trtdoc";
 
+constexpr const char* ipluginv3onebuildv2_descr = R"trtdoc(
+    A plugin capability interface that extends IPluginV3OneBuild by providing I/O aliasing functionality.
+)trtdoc";
+
 constexpr const char* ipluginv3oneruntime_descr = R"trtdoc(
     A plugin capability interface that enables the runtime capability (PluginCapabilityType.RUNTIME).
 
@@ -613,6 +617,35 @@ constexpr const char* get_valid_tactics = R"trtdoc(
 
     .. warning::
         This `get_valid_tactics()` method is not available to be called from Python on C++-based plugins.
+
+)trtdoc";
+
+constexpr const char* get_aliased_input = R"trtdoc(
+    Communicates to TensorRT that the output at the specified output index is aliased to the input at the returned index
+
+    Enables read-modify-write behavior in plugins. TensorRT may insert copies to facilitate this capability.
+
+    .. note::
+        A given plugin input can only be aliased to a single plugin output.
+
+    .. note::
+        This API will only be called and have an effect when PreviewFeature.ALIASED_PLUGIN_IO_10_03 is turned on.
+
+    .. warning::
+        If an input is not shallow copyable, a copy inserted by TensorRT may not work as intended. Therefore, using this feature with tensors requiring deep copies is not supported.
+
+    .. warning::
+        If a given tensor is requested to be aliased by two different plugins, this may result in divergent copies of the tensor after writes from each plugin. e.g. In the below example, t1 and t2 could be divergent.
+
+           +-----+            +--------+
+        +->|Copy +--> t* ---->|Plugin0 +--> t1
+        |  +-----+            +--------+
+        t
+        |  +-----+            +--------+
+        +->|Copy +--> t** --->|Plugin1 +--> t2
+           +-----+            +--------+
+
+    :returns: An integer denoting the index of the input which is aliased to the output at output_index. Returning -1 indicates that the output is not aliased to any input. Otherwise, the valid range for return value is [0, nbInputs - 1].
 
 )trtdoc";
 

@@ -1097,7 +1097,7 @@ void bindCore(py::module& m)
         .def("get_debug_state", &IExecutionContext::getDebugState, "name"_a, IExecutionContextDoc::get_debug_state)
         .def("set_all_tensors_debug_state", &IExecutionContext::setAllTensorsDebugState, "flag"_a,
             IExecutionContextDoc::set_all_tensors_debug_state)
-               ;
+        ;
 
     py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
         ExecutionContextAllocationStrategyDoc::descr, py::module_local())
@@ -1293,7 +1293,7 @@ void bindCore(py::module& m)
             "weight_streaming_scratch_memory_size", &ICudaEngine::getWeightStreamingScratchMemorySize)
         // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
-               .def("__del__", &utils::doNothingDel<ICudaEngine>);
+        .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
         .value("RESIZABLE", AllocatorFlag::kRESIZABLE, AllocatorFlagDoc::RESIZABLE);
@@ -1380,7 +1380,9 @@ void bindCore(py::module& m)
             QuantizationFlagDoc::CALIBRATE_BEFORE_FUSION);
 
     py::enum_<PreviewFeature>(m, "PreviewFeature", PreviewFeatureDoc::descr, py::module_local())
-        .value("PROFILE_SHARING_0806", PreviewFeature::kPROFILE_SHARING_0806, PreviewFeatureDoc::PROFILE_SHARING_0806);
+        .value("PROFILE_SHARING_0806", PreviewFeature::kPROFILE_SHARING_0806, PreviewFeatureDoc::PROFILE_SHARING_0806)
+        .value("ALIASED_PLUGIN_IO_10_03", PreviewFeature::kALIASED_PLUGIN_IO_10_03,
+            PreviewFeatureDoc::ALIASED_PLUGIN_IO_10_03);
 
     py::enum_<HardwareCompatibilityLevel>(
         m, "HardwareCompatibilityLevel", HardwareCompatibilityLevelDoc::descr, py::module_local())
@@ -1493,7 +1495,7 @@ void bindCore(py::module& m)
         .def_property("max_aux_streams", &IBuilderConfig::getMaxAuxStreams, &IBuilderConfig::setMaxAuxStreams)
         .def_property("progress_monitor", &IBuilderConfig::getProgressMonitor,
             py::cpp_function(&IBuilderConfig::setProgressMonitor, py::keep_alive<1, 2>{}))
-               .def("__del__", &utils::doNothingDel<IBuilderConfig>);
+        .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
         NetworkDefinitionCreationFlagDoc::descr, py::module_local())
@@ -1539,7 +1541,7 @@ void bindCore(py::module& m)
         .def("deserialize_cuda_engine", py::overload_cast<IStreamReader&>(&IRuntime::deserializeCudaEngine),
             "stream_reader"_a, RuntimeDoc::deserialize_cuda_engine_reader, py::call_guard<py::gil_scoped_release>{},
             py::keep_alive<0, 1>{})
-               .def_property("DLA_core", &IRuntime::getDLACore, &IRuntime::setDLACore)
+        .def_property("DLA_core", &IRuntime::getDLACore, &IRuntime::setDLACore)
         .def_property_readonly("num_DLA_cores", &IRuntime::getNbDLACores)
         .def_property("gpu_allocator", nullptr, py::cpp_function(&IRuntime::setGpuAllocator, py::keep_alive<1, 2>{}))
         .def_property("error_recorder", &IRuntime::getErrorRecorder,

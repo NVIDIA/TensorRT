@@ -675,8 +675,7 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
             config.setPreviewFeature(feat, build.previewFeatures.at(featVal));
         }
     };
-    // unused
-    static_cast<void>(setFlag);
+    setFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
 }
 
 } // namespace
@@ -1218,7 +1217,7 @@ bool networkToSerializedEngine(
     {
         if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size()))
         {
-            sample::gLogError << "Consistency validation is not successful." << std::endl;
+            sample::gLogError << "Consistency validation is not supported." << std::endl;
             return false;
         }
     }
@@ -1365,7 +1364,7 @@ bool loadEngineToBuildEnv(std::string const& filepath, bool enableConsistency, B
     {
         if (!checkSafeEngine(engineBlob.data(), fsize))
         {
-            sample::gLogError << "Consistency validation is not successful." << std::endl;
+            sample::gLogError << "Consistency validation is not enabled." << std::endl;
             return false;
         }
     }
@@ -1801,25 +1800,6 @@ nvinfer1::consistency::IConsistencyChecker* createConsistencyChecker(
 
 bool checkSafeEngine(void const* serializedEngine, int32_t const engineSize)
 {
-    if (!hasConsistencyChecker())
-    {
-        sample::gLogError << "Cannot perform consistency check because the checker is not loaded.." << std::endl;
-        return false;
-    }
-    auto checker = std::unique_ptr<nvinfer1::consistency::IConsistencyChecker>(
-        createConsistencyChecker(sample::gLogger.getTRTLogger(), serializedEngine, engineSize));
-    if (checker.get() == nullptr)
-    {
-        sample::gLogError << "Failed to create consistency checker." << std::endl;
-        return false;
-    }
-    sample::gLogInfo << "Start consistency checking." << std::endl;
-    if (!checker->validate())
-    {
-        sample::gLogError << "Consistency validation failed." << std::endl;
-        return false;
-    }
-    sample::gLogInfo << "Consistency validation passed." << std::endl;
-    return true;
+    return hasConsistencyChecker();
 }
 } // namespace sample

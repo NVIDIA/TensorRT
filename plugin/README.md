@@ -25,7 +25,8 @@
 | [gridAnchorPlugin](gridAnchorPlugin) | GridAnchor_TRT | 1 |
 | [gridAnchorRectPlugin](gridAnchorPlugin) | GridAnchorRect_TRT | 1 |
 | [groupNormalizationPlugin](groupNormalizationPlugin) | GroupNormalizationPlugin | 1 |
-| [instanceNormalizationPlugin](instanceNormalizationPlugin) | InstanceNormalization_TRT | 1 |
+| [instanceNormalizationPlugin](instanceNormalizationPlugin) [DEPRECATED] | InstanceNormalization_TRT | 1 |
+| [instanceNormalizationPlugin](instanceNormalizationPlugin) | InstanceNormalization_TRT | 2 |
 | [leakyReluPlugin](leakyReluPlugin) [DEPRECATED] | LReLU_TRT | 1 |
 | [modulatedDeformConvPlugin](modulatedDeformConvPlugin) | ModulatedDeformConv2d | 1 |
 | [multilevelCropAndResizePlugin](multilevelCropAndResizePlugin) | MultilevelCropAndResize_TRT | 1 |
@@ -46,7 +47,8 @@
 | [roiAlignPlugin](roiAlignPlugin) [DEPRECATED] | ROIAlign_TRT | 1 |
 | [roiAlignPlugin](roiAlignPlugin) | ROIAlign_TRT | 2 |
 | [resizeNearestPlugin](resizeNearestPlugin) | ResizeNearest_TRT | 1 |
-| [scatterElementsPlugin](scatterElementsPlugin) | ScatterElements | 1 |
+| [scatterElementsPlugin](scatterElementsPlugin) [DEPRECATED] | ScatterElements | 1 |
+| [scatterElementsPlugin](scatterElementsPlugin) | ScatterElements | 2 |
 | [scatterPlugin](scatterPlugin) | ScatterND | 1 |
 | [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1, 2, 3 |
 | [specialSlicePlugin](specialSlicePlugin) [DEPRECATED] | SpecialSlice_TRT | 1 |

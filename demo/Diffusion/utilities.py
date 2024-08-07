@@ -1,4 +1,5 @@
 #
+# Copyright (c) Alibaba, Inc. and its affiliates.
 # SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -45,6 +46,9 @@ import torch
 import types
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
+
+def GiB(val):
+    return val * 1 << 30
 
 # Map of numpy dtype -> torch dtype
 numpy_to_torch_dtype_dict = {
@@ -151,6 +155,7 @@ def CUASSERT(cuda_ret):
 class PIPELINE_TYPE(Enum):
     TXT2IMG = auto()
     IMG2IMG = auto()
+    IMG2VID = auto()
     INPAINT = auto()
     CONTROLNET = auto()
     XL_BASE = auto()
@@ -161,6 +166,9 @@ class PIPELINE_TYPE(Enum):
 
     def is_img2img(self):
         return self == self.IMG2IMG
+
+    def is_img2vid(self):
+        return self == self.IMG2VID
 
     def is_inpaint(self):
         return self == self.INPAINT
@@ -236,6 +244,7 @@ class Engine():
         enable_all_tactics=False,
         timing_cache=None,
         update_output_names=None,
+        native_instancenorm=True,
         verbose=False,
         **extra_build_args
     ):
@@ -249,7 +258,10 @@ class Engine():
         if not enable_all_tactics:
             extra_build_args['tactic_sources'] = []
 
-        network = network_from_onnx_path(onnx_path, flags=[trt.OnnxParserFlag.NATIVE_INSTANCENORM])
+        flags = []
+        if native_instancenorm:
+            flags.append(trt.OnnxParserFlag.NATIVE_INSTANCENORM)
+        network = network_from_onnx_path(onnx_path, flags=flags)
         if update_output_names:
             print(f"Updating network outputs to {update_output_names}")
             network = ModifyNetworkOutputs(network, update_output_names)
@@ -272,12 +284,20 @@ class Engine():
         print(f"Loading TensorRT engine: {self.engine_path}")
         self.engine = engine_from_bytes(bytes_from_path(self.engine_path))
 
-    def activate(self, reuse_device_memory=None):
-        if reuse_device_memory:
+    def activate(self, device_memory=None):
+        if device_memory:
             self.context = self.engine.create_execution_context_without_device_memory()
-            self.context.device_memory = reuse_device_memory
+            self.context.device_memory = device_memory
         else:
             self.context = self.engine.create_execution_context()
+
+    def reactivate(self, device_memory):
+        assert self.context
+        self.context.device_memory = device_memory
+
+    def deactivate(self):
+        del self.context
+        self.context = None
 
     def allocate_buffers(self, shape_dict=None, device='cuda'):
         for binding in range(self.engine.num_io_tensors):
@@ -293,8 +313,12 @@ class Engine():
             self.tensors[name] = tensor
 
 
-    def infer(self, feed_dict, stream, use_cuda_graph=False):
+    def deallocate_buffers(self):
+        for idx in range(self.engine.num_io_tensors):
+            binding = self.engine[idx]
+            del self.tensors[binding]
 
+    def infer(self, feed_dict, stream, use_cuda_graph=False):
         for name, buf in feed_dict.items():
             self.tensors[name].copy_(buf)
 
@@ -322,13 +346,13 @@ class Engine():
 
         return self.tensors
 
-def save_image(images, image_path_dir, image_name_prefix):
+def save_image(images, image_path_dir, image_name_prefix, image_name_suffix):
     """
     Save the generated images to png files.
     """
     images = ((images + 1) * 255 / 2).clamp(0, 255).detach().permute(0, 2, 3, 1).round().type(torch.uint8).cpu().numpy()
     for i in range(images.shape[0]):
-        image_path  = os.path.join(image_path_dir, image_name_prefix+str(i+1)+'-'+str(random.randint(1000,9999))+'.png')
+        image_path  = os.path.join(image_path_dir, image_name_prefix+str(i+1)+'-'+str(random.randint(1000,9999))+'-'+image_name_suffix+'.png')
         print(f"Saving image {i+1} / {images.shape[0]} to: {image_path}")
         Image.fromarray(images[i]).save(image_path)
 
@@ -343,6 +367,137 @@ def preprocess_image(image):
     image = image[None].transpose(0, 3, 1, 2)
     image = torch.from_numpy(image).contiguous()
     return 2.0 * image - 1.0
+
+# Taken from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_video_diffusion/pipeline_stable_video_diffusion.py#L620
+def _resize_with_antialiasing(input, size, interpolation="bicubic", align_corners=True):
+    h, w = input.shape[-2:]
+    factors = (h / size[0], w / size[1])
+
+    # First, we have to determine sigma
+    # Taken from skimage: https://github.com/scikit-image/scikit-image/blob/v0.19.2/skimage/transform/_warps.py#L171
+    sigmas = (
+        max((factors[0] - 1.0) / 2.0, 0.001),
+        max((factors[1] - 1.0) / 2.0, 0.001),
+    )
+
+    # Now kernel size. Good results are for 3 sigma, but that is kind of slow. Pillow uses 1 sigma
+    # https://github.com/python-pillow/Pillow/blob/master/src/libImaging/Resample.c#L206
+    # But they do it in the 2 passes, which gives better results. Let's try 2 sigmas for now
+    ks = int(max(2.0 * 2 * sigmas[0], 3)), int(max(2.0 * 2 * sigmas[1], 3))
+
+    # Make sure it is odd
+    if (ks[0] % 2) == 0:
+        ks = ks[0] + 1, ks[1]
+
+    if (ks[1] % 2) == 0:
+        ks = ks[0], ks[1] + 1
+
+    input = _gaussian_blur2d(input, ks, sigmas)
+
+    output = torch.nn.functional.interpolate(input, size=size, mode=interpolation, align_corners=align_corners)
+    return output
+
+
+def _compute_padding(kernel_size):
+    """Compute padding tuple."""
+    # 4 or 6 ints:  (padding_left, padding_right,padding_top,padding_bottom)
+    # https://pytorch.org/docs/stable/nn.html#torch.nn.functional.pad
+    if len(kernel_size) < 2:
+        raise AssertionError(kernel_size)
+    computed = [k - 1 for k in kernel_size]
+
+    # for even kernels we need to do asymmetric padding :(
+    out_padding = 2 * len(kernel_size) * [0]
+
+    for i in range(len(kernel_size)):
+        computed_tmp = computed[-(i + 1)]
+
+        pad_front = computed_tmp // 2
+        pad_rear = computed_tmp - pad_front
+
+        out_padding[2 * i + 0] = pad_front
+        out_padding[2 * i + 1] = pad_rear
+
+    return out_padding
+
+
+def _filter2d(input, kernel):
+    # prepare kernel
+    b, c, h, w = input.shape
+    tmp_kernel = kernel[:, None, ...].to(device=input.device, dtype=input.dtype)
+
+    tmp_kernel = tmp_kernel.expand(-1, c, -1, -1)
+
+    height, width = tmp_kernel.shape[-2:]
+
+    padding_shape: list[int] = _compute_padding([height, width])
+    input = torch.nn.functional.pad(input, padding_shape, mode="reflect")
+
+    # kernel and input tensor reshape to align element-wise or batch-wise params
+    tmp_kernel = tmp_kernel.reshape(-1, 1, height, width)
+    input = input.view(-1, tmp_kernel.size(0), input.size(-2), input.size(-1))
+
+    # convolve the tensor with the kernel.
+    output = torch.nn.functional.conv2d(input, tmp_kernel, groups=tmp_kernel.size(0), padding=0, stride=1)
+
+    out = output.view(b, c, h, w)
+    return out
+
+
+def _gaussian(window_size: int, sigma):
+    if isinstance(sigma, float):
+        sigma = torch.tensor([[sigma]])
+
+    batch_size = sigma.shape[0]
+
+    x = (torch.arange(window_size, device=sigma.device, dtype=sigma.dtype) - window_size // 2).expand(batch_size, -1)
+
+    if window_size % 2 == 0:
+        x = x + 0.5
+
+    gauss = torch.exp(-x.pow(2.0) / (2 * sigma.pow(2.0)))
+
+    return gauss / gauss.sum(-1, keepdim=True)
+
+
+def _gaussian_blur2d(input, kernel_size, sigma):
+    if isinstance(sigma, tuple):
+        sigma = torch.tensor([sigma], dtype=input.dtype)
+    else:
+        sigma = sigma.to(dtype=input.dtype)
+
+    ky, kx = int(kernel_size[0]), int(kernel_size[1])
+    bs = sigma.shape[0]
+    kernel_x = _gaussian(kx, sigma[:, 1].view(bs, 1))
+    kernel_y = _gaussian(ky, sigma[:, 0].view(bs, 1))
+    out_x = _filter2d(input, kernel_x[..., None, :])
+    out = _filter2d(out_x, kernel_y[..., None])
+
+    return out
+
+def _append_dims(x, target_dims):
+    """Appends dimensions to the end of a tensor until it has target_dims dimensions."""
+    dims_to_append = target_dims - x.ndim
+    if dims_to_append < 0:
+        raise ValueError(f"input has {x.ndim} dims but target_dims is {target_dims}, which is less")
+    return x[(...,) + (None,) * dims_to_append]
+
+# Not a contribution
+# Changes made by NVIDIA CORPORATION & AFFILIATES enabling tensor2vid or otherwise documented as
+# NVIDIA-proprietary are not a contribution and subject to the terms and conditions at the top of the file
+def tensor2vid(video: torch.Tensor, processor, output_type="np"):
+    # Based on:
+    # https://github.com/modelscope/modelscope/blob/1509fdb973e5871f37148a4b5e5964cafd43e64d/modelscope/pipelines/multi_modal/text_to_video_synthesis_pipeline.py#L78
+
+    batch_size, channels, num_frames, height, width = video.shape
+    outputs = []
+    for batch_idx in range(batch_size):
+        batch_vid = video[batch_idx].permute(1, 0, 2, 3)
+        batch_output = processor.postprocess(batch_vid, output_type)
+
+        outputs.append(batch_output)
+
+    return outputs
 
 def prepare_mask_and_masked_image(image, mask):
     """
@@ -509,7 +664,6 @@ def process_pipeline_args(args):
         'timing_cache': args.timing_cache,
         'int8': args.int8,
         'quantization_level': args.quantization_level,
-        'denoising_steps': args.denoising_steps,
     }
 
     args_run_demo = (args.prompt, args.negative_prompt, args.height, args.width, args.batch_size, args.batch_count, args.num_warmup_runs, args.use_cuda_graph)

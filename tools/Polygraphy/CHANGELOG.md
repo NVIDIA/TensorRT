@@ -3,6 +3,11 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.49.13 (2024-07-15)
+### Added
+- Added option to emit logs using python `logging` module.
+
+
 ## v0.49.12 (2024-05-28)
 ### Added
 - Added `runtime_platform` to `CreateConfig` for TensorRT and corresponding `--runtime-platform` command-line option.

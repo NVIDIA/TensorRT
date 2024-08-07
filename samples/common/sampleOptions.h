@@ -399,6 +399,7 @@ public:
     static void help(std::ostream& out);
 };
 
+
 Arguments argsToArgumentsMap(int32_t argc, char* argv[]);
 
 bool parseHelp(Arguments& arguments);

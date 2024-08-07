@@ -198,8 +198,8 @@ constexpr const char* descr = R"trtdoc(
     :ivar dynamic_range: :class:`Tuple[float, float]` [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization. A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
-)trtdoc"
-        ;
+)trtdoc";
+
 constexpr const char* set_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     Set dynamic range for the tensor.
@@ -771,13 +771,13 @@ constexpr const char* descr = R"trtdoc(
 
     The slice layer has two variants, static and dynamic.
     Static slice specifies the start, size, and stride dimensions at layer creation time via :class:`Dims` and can use the get/set accessor functions of the :class:`ISliceLayer` .
-    Dynamic slice specifies one or more of start, size or stride as :class:`ITensor`s, by using :func:`ILayer.set_input` to add a second, third, or fourth input respectively.
+    Dynamic slice specifies one or more of start, size, stride, or axes as :class:`ITensor`s, by using :func:`ILayer.set_input` to add a second, third, fourth, or sixth input respectively.
     The corresponding :class:`Dims` are used if an input is missing or null.
 
-    An application can determine if the :class:`ISliceLayer` has a dynamic output shape based on whether the size input (third input) is present and non-null.
+    An application can determine if the :class:`ISliceLayer` has a dynamic output shape based on whether the size or axes input is present and non-null.
 
     The slice layer selects for each dimension a start location from within the input tensor, and copies elements to the output tensor using the specified stride across the input tensor.
-    Start, size, and stride tensors must be 1-D :class:`int32` shape tensors if not specified via :class:`Dims` .
+    Start, size, and stride tensors must be 1-D integer-typed shape tensors if not specified via :class:`Dims` .
 
     An example of using slice on a tensor:
     input = {{0, 2, 4}, {1, 3, 5}}
@@ -786,17 +786,32 @@ constexpr const char* descr = R"trtdoc(
     stride = {1, 2}
     output = {{1, 5}}
 
+    If axes is provided then starts, ends, and strides must have the same length as axes and specifies a subset of dimensions to slice. If axes is not provided, starts, ends, and strides
+    must be of the same length as the rank of the input tensor.
+
+    An example of using slice on a tensor with axes specified:
+    input = {{0, 2, 4}, {1, 3, 5}}
+    start = {1}
+    size = {2}
+    stride = {1}
+    axes = {1}
+    output = {{2, 4}, {3, 5}}
+
     When the sampleMode is :const:`SampleMode.CLAMP` or :const:`SampleMode.REFLECT` , for each input dimension, if its size is 0 then the corresponding output dimension must be 0 too.
+
+    When the sampleMode is :const:`SampleMode.FILL`, the fifth input to the slice layer is used to determine the value to fill in out-of-bound indices. It is an error to specify the fifth input in any other sample mode.
 
     A slice layer can produce a shape tensor if the following conditions are met:
 
     * ``start``, ``size``, and ``stride`` are build time constants, either as static :class:`Dims` or as constant input tensors.
+    * ``axes``, if provided, is a build time constant, either as static :class:`Dims` or as a constant input tensor.
     * The number of elements in the output tensor does not exceed 2 * :const:`Dims.MAX_DIMS` .
 
     The input tensor is a shape tensor if the output is a shape tensor.
 
     The following constraints must be satisfied to execute this layer on DLA:
     * ``start``, ``size``, and ``stride`` are build time constants, either as static :class:`Dims` or as constant input tensors.
+    * ``axes``, if provided, is a build time constant, either as static :class:`Dims` or as a constant input tensor.
     * sampleMode is :const:`SampleMode.STRICT_BOUNDS` .
     * Strides are 1 for all dimensions.
     * Slicing is not performed on the first dimension
@@ -806,6 +821,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar shape: :class:`Dims` The output dimensions.
     :ivar stride: :class:`Dims` The slicing stride.
     :ivar mode: :class:`SampleMode` Controls how :class:`ISliceLayer` handles out of bounds coordinates.
+    :ivar axes: :class:`Dims` The axes that starts, sizes, and strides correspond to.
 )trtdoc";
 
 constexpr const char* set_input = R"trtdoc(
@@ -823,6 +839,7 @@ constexpr const char* set_input = R"trtdoc(
         2     The size tensor of the resulting slice, N-dimensional for Data, and 1-D for Shape.
         3     The stride of the slicing operation, N-dimensional for Data, and 1-D for Shape.
         4     Value for the :const:`SampleMode.FILL` slice mode. Disallowed for other modes.
+        5     The axes tensor indicating the axes that starts, sizes, and strides correspond to. Must be a 1-D tensor.
     =====   ==================================================================================
 
     If this function is called with a value greater than 0, then :attr:`num_inputs` changes

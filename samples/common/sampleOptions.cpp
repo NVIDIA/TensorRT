@@ -905,6 +905,7 @@ std::string previewFeatureToString(PreviewFeature feature)
         gLogWarning << "profileSharing0806 is on by default in TensorRT 10.0. This flag is deprecated and has no effect." << std::endl;
         break;
     }
+    case PreviewFeature::kALIASED_PLUGIN_IO_10_03: return "kALIASED_PLUGIN_IO_10_03";
     }
     return "Invalid Preview Feature";
     // clang-format on
@@ -925,8 +926,8 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
             os << previewFeatureToString(feat) << (options.previewFeatures.at(featVal) ? " [ON], " : " [OFF], ");
         }
     };
-    // unused
-    static_cast<void>(addFlag);
+
+    addFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
 
     return os;
 }
@@ -1509,6 +1510,10 @@ void BuildOptions::parse(Arguments& arguments)
             sample::gLogWarning
                 << "profileSharing0806 is on by default in TensorRT 10.0. This flag is deprecated and has no effect."
                 << std::endl;
+        }
+        else if (featureName == "aliasedPluginIO1003")
+        {
+            feat = PreviewFeature::kALIASED_PLUGIN_IO_10_03;
         }
         else
         {
@@ -2546,7 +2551,8 @@ void BuildOptions::help(std::ostream& os)
           "  --preview=features                 Specify preview feature to be used by adding (+) or removing (-) preview features from the default" "\n"
           R"(                                   Preview Features: features ::= [","feature])"                                                       "\n"
           "                                                       feature  ::= (+|-)flag"                                                           "\n"
-          R"(                                                     flag     ::= "profileSharing0806")"                                               "\n"
+          R"(                                                     flag     ::= "aliasedPluginIO1003")"                                              "\n"
+          R"(                                                                  |"profileSharing0806")"                                              "\n"
           "  --builderOptimizationLevel         Set the builder optimization level. (default is 3)"                                                 "\n"
           "                                     Higher level allows TensorRT to spend more building time for more optimization options."            "\n"
           "                                     Valid values include integers from 0 to the maximum optimization level, which is currently 5."      "\n"
