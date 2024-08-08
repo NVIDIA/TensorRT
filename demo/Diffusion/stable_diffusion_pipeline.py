@@ -169,6 +169,8 @@ class StableDiffusionPipeline:
                 self.stages.append('vae')
         elif self.pipeline_type.is_sd_xl_refiner():
             self.stages = ['clip2', 'unetxl', 'vae']
+        elif self.pipeline_type.is_img2vid():
+            self.stages = ['clip-vis', 'clip-imgfe', 'unet-temp', 'vae-temp']
         else:
             raise ValueError(f"Unsupported pipeline {self.pipeline_type.name}.")
         self.return_latents = return_latents
@@ -183,7 +185,8 @@ class StableDiffusionPipeline:
             '2.1-base': 'PNDM',
             '2.1': 'DDIM',
             'xl-1.0' : 'Euler',
-            'xl-turbo': 'EulerA'
+            'xl-turbo': 'EulerA',
+            'svd-xt-1.1': 'Euler'
         }
 
         if not scheduler:
@@ -273,6 +276,9 @@ class StableDiffusionPipeline:
         if self.shared_device_memory:
             cudart.cudaFree(self.shared_device_memory)
 
+        for torch_model in self.torch_models.values():
+            del torch_model
+
         cudart.cudaStreamDestroy(self.stream)
         del self.stream
 
@@ -324,7 +330,6 @@ class StableDiffusionPipeline:
         quantization_alpha=0.8,
         calibration_size=32,
         calib_batch_size=2,
-        denoising_steps=30,
     ):
         """
         Build and load engines for TensorRT accelerated inference.
@@ -370,9 +375,6 @@ class StableDiffusionPipeline:
                 Recommendation: 32, 64, 128 for SDXL
             calib_batch_size (int):
                 The batch size to use for calibration. Defaults to 2.
-            denoising_steps (int):
-                The number of denoising steps.
-                More denoising steps usually lead to a higher quality image at the expense of slower inference.
         """
         # Create directories if missing
         for directory in [engine_dir, onnx_dir]:
@@ -435,7 +437,7 @@ class StableDiffusionPipeline:
         if int8:
             assert self.pipeline_type.is_sd_xl_base(), "int8 quantization only supported for SDXL pipeline"
             use_int8['unetxl'] = True
-            model_suffix['unetxl'] += f"-int8.l{quantization_level}.bs2.s{denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
+            model_suffix['unetxl'] += f"-int8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False, suffix=model_suffix[model_name]) for model_name in model_names]))
         onnx_opt_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, suffix=model_suffix[model_name]) for model_name in model_names]))
         engine_path = dict(zip(model_names, [self.getEnginePath(model_name, engine_dir, do_engine_refit[model_name], suffix=model_suffix[model_name]) for model_name in model_names]))
@@ -465,7 +467,7 @@ class StableDiffusionPipeline:
                             quantization_level,
                             quantization_alpha,
                             quantization_percentile,
-                            denoising_steps
+                            self.denoising_steps
                         )
 
                         def do_calibrate(base, calibration_prompts, **kwargs):
@@ -487,7 +489,7 @@ class StableDiffusionPipeline:
                                 base=pipeline,
                                 calibration_prompts=calibration_prompts,
                                 calib_size=calibration_size // calib_batch_size,
-                                n_steps=denoising_steps,
+                                n_steps=self.denoising_steps,
                             )
 
                         print(f"[I] Performing int8 calibration for {calibration_size} steps.")
@@ -580,7 +582,7 @@ class StableDiffusionPipeline:
         self.shared_device_memory = shared_device_memory
         # Load and activate TensorRT engines
         for engine in self.engine.values():
-            engine.activate(reuse_device_memory=self.shared_device_memory)
+            engine.activate(device_memory=self.shared_device_memory)
 
     def runEngine(self, model_name, feed_dict):
         engine = self.engine[model_name]
@@ -830,7 +832,8 @@ class StableDiffusionPipeline:
     def save_image(self, images, pipeline, prompt, seed):
         # Save image
         image_name_prefix = pipeline+''.join(set(['-'+prompt[i].replace(' ','_')[:10] for i in range(len(prompt))]))+'-'+str(seed)+'-'
-        save_image(images, self.output_dir, image_name_prefix)
+        image_name_suffix = 'torch' if self.torch_inference else 'trt'
+        save_image(images, self.output_dir, image_name_prefix, image_name_suffix)
 
     def infer(
         self,

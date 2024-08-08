@@ -202,7 +202,7 @@ The IResizeLayer implements the resize operation on an input tensor.
 
     For example:
     ```bash
-    ./sample_dynamic_reshape --datadir $TRT_DATADIR/char-rnn --fp16
+    ./sample_dynamic_reshape --datadir $TRT_DATADIR/mnist --fp16
     ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:

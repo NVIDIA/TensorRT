@@ -703,6 +703,8 @@ public:
     virtual Dims getStride() const noexcept = 0;
     virtual void setMode(SampleMode mode) noexcept = 0;
     virtual SampleMode getMode() const noexcept = 0;
+    virtual void setAxes(Dims const& axes) noexcept = 0;
+    virtual Dims getAxes() const noexcept = 0;
 };
 
 class VShapeLayer : public VRoot
@@ -908,6 +910,7 @@ public:
     virtual DataType getToType() const noexcept = 0;
     virtual void setToType(DataType toType) noexcept = 0;
 };
+
 
 class VScatterLayer : public VRoot
 {

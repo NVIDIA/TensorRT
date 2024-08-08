@@ -1,4 +1,5 @@
-cuda-python
+cuda-python==12.2.0; python_version <= "3.10"
+cuda-python==12.5.0; python_version >= "3.11"
 cupy-cuda12x
 numba
 triton; platform_system != "Windows"
@@ -6,7 +7,8 @@ torch
 --extra-index-url https://pypi.ngc.nvidia.com
 polygraphy
 colored
-numpy==1.23.5; platform_system != "Windows"
+numpy==1.23.5; (platform_system != "Windows" and python_version <= "3.10")
+numpy==1.26.4; (platform_system != "Windows" and python_version >= "3.11")
 --extra-index-url https://pypi.ngc.nvidia.com
 onnx-graphsurgeon
 pywin32; platform_system == "Windows"

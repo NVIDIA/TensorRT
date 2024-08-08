@@ -92,17 +92,27 @@ def download(data_dir, yaml_path, overwrite=False):
         session = requests.Session()
         retries = Retry(total=10, backoff_factor=0.5)
         session.mount("http://", HTTPAdapter(max_retries=retries))
-        r = session.get(url, stream=True, timeout=30)
+        session.mount("https://", HTTPAdapter(max_retries=retries))
+        try:
+            r = session.get(url, stream=True, timeout=30)
+            
+            if r.status_code == 200:
+                logger.info("Connecting to %s is successful.", url)
 
-        size = int(r.headers.get("content-length", 0))
-        from tqdm import tqdm
+                size = int(r.headers.get("content-length", 0))
+                from tqdm import tqdm
 
-        progress_bar = tqdm(total=size, unit="iB", unit_scale=True)
-        with open(path, "wb") as fd:
-            for chunk in r.iter_content(chunk_size=1024):
-                progress_bar.update(len(chunk))
-                fd.write(chunk)
-        progress_bar.close()
+                progress_bar = tqdm(total=size, unit="iB", unit_scale=True)
+                with open(path, "wb") as fd:
+                    for chunk in r.iter_content(chunk_size=1024):
+                        progress_bar.update(len(chunk))
+                        fd.write(chunk)
+                progress_bar.close()
+            else:
+                logger.info("Failed to connect to %s with status code: %s.", url, r.status_code)
+                
+        except requests.exceptions.RequestException as e:
+            logger.debug("Error occurred while requesting connection to %s: %s.", url, e)
 
     allGood = True
     for f in sample_data.files:

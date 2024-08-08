@@ -114,6 +114,12 @@ include_directories(${TENSORRT_ROOT}/include ${PROJECT_SOURCE_DIR}/include ${CUD
 link_directories(${TENSORRT_BUILD})
 
 if (MSVC)
+  # Prevent pybind11 from sharing resources with other, potentially ABI incompatible modules
+  # https://github.com/pybind/pybind11/issues/2898
+  add_definitions(-DPYBIND11_COMPILER_TYPE="_${PROJECT_NAME}_abi")
+endif()
+
+if (MSVC)
     message(STATUS "include_dirs: ${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um ${NV_WDKSDK_INC}/shared")
     message(STATUS "link dirs: ${PY_LIB_DIR} ${NV_WDKSDK_LIB}/um/x64 ${MSVC_COMPILER_DIR}/lib/amd64 ${MSVC_COMPILER_DIR}/../ucrt/lib/x64")
     include_directories(${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um ${NV_WDKSDK_INC}/shared)

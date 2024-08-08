@@ -146,7 +146,13 @@ def str_output_stats(output, runner_name=None):
         ret += f"{runner_name} | Stats: "
 
     try:
-        ret += f"mean={compute_mean(output):.5g}, std-dev={compute_std(output):.5g}, var={compute_variance(output):.5g}, median={compute_median(output):.5g}, min={compute_min(output):.5g} at {compute_argmin(output)}, max={compute_max(output):.5g} at {compute_argmax(output)}, avg-magnitude={compute_average_magnitude(output):.5g}\n"
+        ret += f"mean={compute_mean(output):.5g}, std-dev={compute_std(output):.5g}, var={compute_variance(output):.5g}, median={compute_median(output):.5g}, min={compute_min(output):.5g} at {compute_argmin(output)}, max={compute_max(output):.5g} at {compute_argmax(output)}, avg-magnitude={compute_average_magnitude(output):.5g}"
+
+        # np.quantile doesn't work with boolean input, so we don't show quantile error if the output type is boolean
+        if output.dtype == bool:
+            ret += "\n"
+        else:
+            ret += f", p90={compute_quantile(output, 0.9):.5g}, p95={compute_quantile(output, 0.9):.5g}, p99={compute_quantile(output, 0.99):.5g}\n"
     except Exception as err:
         G_LOGGER.verbose(f"Could not generate statistics.\nNote: Error was: {err}")
         ret += "<Error while computing statistics>"

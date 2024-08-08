@@ -26,21 +26,6 @@
 namespace util
 {
 
-struct InferDeleter
-{
-    template <typename T>
-    void operator()(T* obj) const
-    {
-        if (obj)
-        {
-            obj->destroy();
-        }
-    }
-};
-
-template <typename T>
-using UniquePtr = std::unique_ptr<T, util::InferDeleter>;
-
 size_t getMemorySize(const nvinfer1::Dims& dims, const int32_t elem_size);
 
 struct PPM

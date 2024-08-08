@@ -1,6 +1,22 @@
 # TensorRT OSS Release Changelog
 
-## 10.2.0 GA - 2024-07-10
+## 10.3.0 GA - 2024-08-07
+
+Key Features and Updates:
+
+ - Demo changes
+   - Added [Stable Video Diffusion](demo/Diffusion)(`SVD`) pipeline.
+ - Plugin changes
+   - Deprecated Version 1 of [ScatterElements plugin](plugin/scatterElementsPlugin). It is superseded by Version 2, which implements the `IPluginV3` interface.
+ - Quickstart guide
+   - Updated the [SemanticSegmentation](quickstart/SemanticSegmentation) guide with latest APIs.
+ - Parser changes
+   - Added support for tensor `axes` inputs for `Slice` node.
+   - Updated `ScatterElements` importer to use Version 2 of [ScatterElements plugin](plugin/scatterElementsPlugin), which implements the `IPluginV3` interface.
+ - Updated tooling
+   - Polygraphy v0.49.13
+
+## 10.2.0 GA - 2024-07-09
 
 Key Features and Updates:
 

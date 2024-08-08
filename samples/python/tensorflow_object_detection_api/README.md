@@ -31,6 +31,8 @@ cd /workspace/models/research
 git checkout 66e22c4
 protoc object_detection/protos/*.proto --python_out=.
 cp object_detection/packages/tf2/setup.py ./
+## Pin pyyaml==6.0.1 to avoid v5.4.1 with known CVEs
+sed -i '22i\    '"'"'pyyaml==6.0.1'"'"',' setup.py
 pip --use-deprecated=legacy-resolver install .
 ```
 
