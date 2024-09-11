@@ -120,7 +120,7 @@ After the engine has been built, it can be used just like an FP32 engine. For ex
 
 3.  Enqueue the inference work and perform actual inference.
 	```
-	context->enqueueV3(input_stream);
+	context->enqueueV3(input_stream))
 	```
 
 4.  Copy data from the device output buffers to the host output buffers.

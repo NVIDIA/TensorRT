@@ -26,6 +26,7 @@ from diffusers import (
     LCMScheduler, LMSDiscreteScheduler,
     PNDMScheduler,
     UniPCMultistepScheduler,
+    DDPMWuerstchenScheduler
 )
 from hashlib import md5
 import inspect
@@ -65,6 +66,11 @@ from utils_modelopt import (
     filter_func,
     quantize_lvl,
     get_int8_config,
+    check_lora,
+    set_fmha,
+    generate_fp8_scales,
+    SD_FP8_FP16_DEFAULT_CONFIG,
+    SD_FP8_FP32_DEFAULT_CONFIG,
 )
 
 class StableDiffusionPipeline:
@@ -171,6 +177,10 @@ class StableDiffusionPipeline:
             self.stages = ['clip2', 'unetxl', 'vae']
         elif self.pipeline_type.is_img2vid():
             self.stages = ['clip-vis', 'clip-imgfe', 'unet-temp', 'vae-temp']
+        elif self.pipeline_type.is_cascade_prior():
+            self.stages = ['clip', 'unet']
+        elif self.pipeline_type.is_cascade_decoder():
+            self.stages = ['clip', 'unet', 'vqgan']
         else:
             raise ValueError(f"Unsupported pipeline {self.pipeline_type.name}.")
         self.return_latents = return_latents
@@ -186,7 +196,8 @@ class StableDiffusionPipeline:
             '2.1': 'DDIM',
             'xl-1.0' : 'Euler',
             'xl-turbo': 'EulerA',
-            'svd-xt-1.1': 'Euler'
+            'svd-xt-1.1': 'Euler',
+            'cascade': 'DDPMWuerstchen'
         }
 
         if not scheduler:
@@ -212,6 +223,8 @@ class StableDiffusionPipeline:
             self.scheduler = makeScheduler(PNDMScheduler)
         elif scheduler == "UniPC":
             self.scheduler = makeScheduler(UniPCMultistepScheduler)
+        elif scheduler == "DDPMWuerstchen":
+            self.scheduler = makeScheduler(DDPMWuerstchenScheduler)
         else:
             raise ValueError(f"Unsupported scheduler {scheduler}. Should be either DDIM, DDPM, EulerA, Euler, LCM, LMSD, PNDM, or UniPC.")
 
@@ -256,7 +269,7 @@ class StableDiffusionPipeline:
             self.generator = torch.Generator(device="cuda").manual_seed(seed)
 
         # Create CUDA events and stream
-        for stage in ['clip', 'denoise', 'vae', 'vae_encoder']:
+        for stage in ['clip', 'denoise', 'vae', 'vae_encoder', 'vqgan']:
             self.events[stage] = [cudart.cudaEventCreate()[1], cudart.cudaEventCreate()[1]]
         self.stream = cudart.cudaStreamCreate()[1]
 
@@ -310,6 +323,49 @@ class StableDiffusionPipeline:
         os.makedirs(onnx_model_dir, exist_ok=True)
         return os.path.join(onnx_model_dir, 'state_dict.pt')
 
+    def initializeModels(self, framework_model_dir, int8, fp8):
+        # Load text tokenizer(s)
+        if not self.pipeline_type.is_sd_xl_refiner():
+            self.tokenizer = make_tokenizer(self.version, self.pipeline_type, self.hf_token, framework_model_dir)
+        if self.pipeline_type.is_sd_xl():
+            self.tokenizer2 = make_tokenizer(self.version, self.pipeline_type, self.hf_token, framework_model_dir, subfolder='tokenizer_2')
+
+        # Load pipeline models
+        models_args = {'version': self.version, 'pipeline': self.pipeline_type, 'device': self.device,
+            'hf_token': self.hf_token, 'verbose': self.verbose, 'framework_model_dir': framework_model_dir,
+            'max_batch_size': self.max_batch_size}
+
+        if 'clip' in self.stages:
+            subfolder = 'text_encoder'
+            self.models['clip'] = CLIPModel(**models_args, fp16=True, embedding_dim=get_clip_embedding_dim(self.version, self.pipeline_type), output_hidden_states=self.config.get('clip_hidden_states', False), subfolder=subfolder)
+
+        if 'clip2' in self.stages:
+            subfolder = 'text_encoder_2'
+            self.models['clip2'] = CLIPWithProjModel(**models_args, fp16=True, output_hidden_states=self.config.get('clip_hidden_states', False), subfolder=subfolder)
+
+        lora_dict, lora_alphas = (None, None)
+        if 'unet' in self.stages:
+            if self.lora_loader:
+                lora_dict, lora_alphas = self.lora_loader.get_dicts('unet')
+                assert len(lora_dict) == len(self.lora_scales)
+            self.models['unet'] = UNetModel(**models_args, fp16=True, int8=int8, fp8=fp8, controlnets=self.controlnets,
+                lora_scales=self.lora_scales, lora_dict=lora_dict, lora_alphas=lora_alphas, do_classifier_free_guidance=self.do_classifier_free_guidance)
+
+        if 'unetxl' in self.stages:
+            if not self.pipeline_type.is_sd_xl_refiner() and self.lora_loader:
+                lora_dict, lora_alphas = self.lora_loader.get_dicts('unet')
+                assert len(lora_dict) == len(self.lora_scales)
+            self.models['unetxl'] = UNetXLModel(**models_args, fp16=True, int8=int8, fp8=fp8,
+                lora_scales=self.lora_scales, lora_dict=lora_dict, lora_alphas=lora_alphas, do_classifier_free_guidance=self.do_classifier_free_guidance)
+
+        vae_fp16 = not self.pipeline_type.is_sd_xl()
+
+        if 'vae' in self.stages:
+            self.models['vae'] = VAEModel(**models_args, fp16=vae_fp16)
+
+        if 'vae_encoder' in self.stages:
+            self.models['vae_encoder'] = VAEEncoderModel(**models_args, fp16=vae_fp16)
+
     def loadEngines(
         self,
         engine_dir,
@@ -325,6 +381,7 @@ class StableDiffusionPipeline:
         enable_all_tactics=False,
         timing_cache=None,
         int8=False,
+        fp8=False,
         quantization_level=2.5,
         quantization_percentile=1.0,
         quantization_alpha=0.8,
@@ -361,7 +418,9 @@ class StableDiffusionPipeline:
             timing_cache (str):
                 Path to the timing cache to speed up TensorRT build.
             int8 (bool):
-                Whether to quantize to int8 format or not (SDXL only).
+                Whether to quantize to int8 format or not (SDXL, SD15 and SD21 only).
+            fp8 (bool):
+                Whether to quantize to fp8 format or not (SDXL, SD15 and SD21 only).
             quantization_level (float):
                 Controls which layers to quantize. 1: CNN, 2: CNN+FFN, 2.5: CNN+FFN+QKV, 3: CNN+FC
             quantization_percentile (float):
@@ -382,47 +441,8 @@ class StableDiffusionPipeline:
                 print(f"[I] Create directory: {directory}")
                 pathlib.Path(directory).mkdir(parents=True)
 
-        # Load text tokenizer(s)
-        if not self.pipeline_type.is_sd_xl_refiner():
-            self.tokenizer = make_tokenizer(self.version, self.pipeline_type, self.hf_token, framework_model_dir)
-        if self.pipeline_type.is_sd_xl():
-            self.tokenizer2 = make_tokenizer(self.version, self.pipeline_type, self.hf_token, framework_model_dir, subfolder='tokenizer_2')
-
-        # Load pipeline models
-        models_args = {'version': self.version, 'pipeline': self.pipeline_type, 'device': self.device,
-            'hf_token': self.hf_token, 'verbose': self.verbose, 'framework_model_dir': framework_model_dir,
-            'max_batch_size': self.max_batch_size}
-
-        if 'clip' in self.stages:
-            subfolder = 'text_encoder'
-            self.models['clip'] = CLIPModel(**models_args, fp16=True, embedding_dim=get_clip_embedding_dim(self.version, self.pipeline_type), output_hidden_states=self.config.get('clip_hidden_states', False), subfolder=subfolder)
-
-        if 'clip2' in self.stages:
-            subfolder = 'text_encoder_2'
-            self.models['clip2'] = CLIPWithProjModel(**models_args, fp16=True, output_hidden_states=self.config.get('clip_hidden_states', False), subfolder=subfolder)
-
-        lora_dict, lora_alphas = (None, None)
-        if 'unet' in self.stages:
-            if self.lora_loader:
-                lora_dict, lora_alphas = self.lora_loader.get_dicts('unet')
-                assert len(lora_dict) == len(self.lora_scales)
-            self.models['unet'] = UNetModel(**models_args, fp16=True, controlnets=self.controlnets,
-                lora_scales=self.lora_scales, lora_dict=lora_dict, lora_alphas=lora_alphas, do_classifier_free_guidance=self.do_classifier_free_guidance)
-
-        if 'unetxl' in self.stages:
-            if not self.pipeline_type.is_sd_xl_refiner() and self.lora_loader:
-                lora_dict, lora_alphas = self.lora_loader.get_dicts('unet')
-                assert len(lora_dict) == len(self.lora_scales)
-            self.models['unetxl'] = UNetXLModel(**models_args, fp16=True,
-                lora_scales=self.lora_scales, lora_dict=lora_dict, lora_alphas=lora_alphas, do_classifier_free_guidance=self.do_classifier_free_guidance)
-
-        vae_fp16 = not self.pipeline_type.is_sd_xl()
-
-        if 'vae' in self.stages:
-            self.models['vae'] = VAEModel(**models_args, fp16=vae_fp16)
-
-        if 'vae_encoder' in self.stages:
-            self.models['vae_encoder'] = VAEEncoderModel(**models_args, fp16=vae_fp16)
+        # Initialize models
+        self.initializeModels(framework_model_dir, int8, fp8)
 
         # Configure pipeline models to load
         model_names = self.models.keys()
@@ -434,10 +454,17 @@ class StableDiffusionPipeline:
         torch_fallback = dict(zip(model_names, [self.torch_inference for model_name in model_names]))
         model_suffix = dict(zip(model_names, [lora_suffix if do_lora_merge[model_name] else '' for model_name in model_names]))
         use_int8 = dict.fromkeys(model_names, False)
+        use_fp8 = dict.fromkeys(model_names, False)
         if int8:
-            assert self.pipeline_type.is_sd_xl_base(), "int8 quantization only supported for SDXL pipeline"
-            use_int8['unetxl'] = True
-            model_suffix['unetxl'] += f"-int8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
+            assert self.pipeline_type.is_sd_xl_base() or self.version in ["1.5", "2.1", "2.1-base"], "int8 quantization only supported for SDXL, SD1.5 and SD2.1 pipeline"
+            model_name = 'unetxl' if self.pipeline_type.is_sd_xl() else 'unet'
+            use_int8[model_name] = True
+            model_suffix[model_name] += f"-int8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}" 
+        elif fp8:
+            assert self.pipeline_type.is_sd_xl() or self.version in ["1.5", "2.1", "2.1-base"], "fp8 quantization only supported for SDXL, SD1.5 and SD2.1 pipeline"
+            model_name = 'unetxl' if self.pipeline_type.is_sd_xl() else 'unet'
+            use_fp8[model_name] = True
+            model_suffix[model_name] += f"-fp8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False, suffix=model_suffix[model_name]) for model_name in model_names]))
         onnx_opt_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, suffix=model_suffix[model_name]) for model_name in model_names]))
         engine_path = dict(zip(model_names, [self.getEnginePath(model_name, engine_dir, do_engine_refit[model_name], suffix=model_suffix[model_name]) for model_name in model_names]))
@@ -451,30 +478,25 @@ class StableDiffusionPipeline:
             do_export_weights_map = weights_map_path[model_name] and not os.path.exists(weights_map_path[model_name])
             if do_export_onnx or do_export_weights_map:
                 # Non-quantized ONNX export
-                if not use_int8[model_name]:
+                if not use_int8[model_name] and not use_fp8[model_name]:
                     obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=do_lora_merge[model_name], static_shape=static_shape)
                 else:
+                    pipeline = obj.get_pipeline()
+                    model = pipeline.unet
+                    if use_fp8[model_name] and quantization_level == 4.0:
+                        set_fmha(model)
+
                     state_dict_path = self.getStateDictPath(model_name, onnx_dir, suffix=model_suffix[model_name])
                     if not os.path.exists(state_dict_path):
                         print(f"[I] Calibrated weights not found, generating {state_dict_path}")
-                        pipeline = obj.get_pipeline()
-                        model = pipeline.unet
                         calibration_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'calibration-prompts.txt')
                         calibration_prompts = load_calib_prompts(calib_batch_size, calibration_file)
                         # TODO check size > calibration_size
-                        quant_config = get_int8_config(
-                            model, 
-                            quantization_level,
-                            quantization_alpha,
-                            quantization_percentile,
-                            self.denoising_steps
-                        )
-
-                        def do_calibrate(base, calibration_prompts, **kwargs):
+                        def do_calibrate(pipeline, calibration_prompts, **kwargs):
                             for i_th, prompts in enumerate(calibration_prompts):
                                 if i_th >= kwargs["calib_size"]:
                                     return
-                                base(
+                                pipeline(
                                     prompt=prompts,
                                     num_inference_steps=kwargs["n_steps"],
                                     negative_prompt=[
@@ -482,35 +504,43 @@ class StableDiffusionPipeline:
                                     ]
                                     * len(prompts),
                                 ).images
-                        
-                        def calibration_loop(unet):
-                            pipeline.model = unet
+
+                        def forward_loop(model):
+                            pipeline.unet = model
                             do_calibrate(
-                                base=pipeline,
+                                pipeline=pipeline,
                                 calibration_prompts=calibration_prompts,
                                 calib_size=calibration_size // calib_batch_size,
                                 n_steps=self.denoising_steps,
                             )
-
-                        print(f"[I] Performing int8 calibration for {calibration_size} steps.")
-                        mtq.quantize(model, quant_config, forward_loop=calibration_loop)
+                        
+                        print(f"[I] Performing calibration for {calibration_size} steps.")
+                        if use_int8[model_name]:
+                            quant_config = get_int8_config(
+                                model,
+                                quantization_level,
+                                quantization_alpha,
+                                quantization_percentile,
+                                self.denoising_steps
+                            )
+                        elif use_fp8[model_name]:
+                            check_lora(model)
+                            quant_config = SD_FP8_FP32_DEFAULT_CONFIG if self.version == "2.1" else SD_FP8_FP16_DEFAULT_CONFIG
+                        mtq.quantize(model, quant_config, forward_loop)
                         mto.save(model, state_dict_path)
+                    else:
+                        mto.restore(model, state_dict_path)
 
                     print(f"[I] Generating quantized ONNX model: {onnx_opt_path[model_name]}")
                     if not os.path.exists(onnx_path[model_name]):
-                        model = obj.get_model()
-                        mto.restore(model, state_dict_path)
-                        quantize_lvl(model, quantization_level) 
+                        quantize_lvl(model, quantization_level)
                         mtq.disable_quantizer(model, filter_func)
-                        model.to(torch.float32).to("cpu") # QDQ needs to be in FP32
-                        # WAR to enable ONNX export of quantized UNet
-                        obj.device="cpu"
-                        obj.fp16=False
+                        if use_fp8[model_name]:
+                            generate_fp8_scales(model)
                     else:
-                        model = None
-                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, custom_model=model)
-                    obj.fp16=True # Part of WAR, UNET obj.fp16 defaults to True so it is safe to reset this way
-            
+                        model = None                    
+                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, custom_model=model, static_shape=static_shape)
+
             # FIXME do_export_weights_map needs ONNX graph
             if do_export_weights_map:
                 print(f"[I] Saving weights map: {weights_map_path[model_name]}")
@@ -523,14 +553,20 @@ class StableDiffusionPipeline:
             engine = Engine(engine_path[model_name])
             if not os.path.exists(engine_path[model_name]):
                 update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
+                fp16amp = obj.fp16 if not use_fp8[model_name] else False
+                bf16amp = obj.bf16 if not use_fp8[model_name] else False
+                strongly_typed = False if not use_fp8[model_name] else True
                 extra_build_args = {'verbose': self.verbose}
                 if use_int8[model_name]:
                     extra_build_args['int8'] = True
                     extra_build_args['precision_constraints'] = 'prefer'
                     extra_build_args['builder_optimization_level'] = 4
-                fp16amp = obj.fp16
+                elif use_fp8[model_name]:
+                    extra_build_args['builder_optimization_level'] = 4
                 engine.build(onnx_opt_path[model_name],
+                    strongly_typed=strongly_typed,
                     fp16=fp16amp,
+                    bf16=bf16amp,
                     input_profile=obj.get_input_profile(
                         opt_batch_size, opt_image_height, opt_image_width,
                         static_batch=static_batch, static_shape=static_shape
@@ -588,8 +624,8 @@ class StableDiffusionPipeline:
         engine = self.engine[model_name]
         return engine.infer(feed_dict, self.stream, use_cuda_graph=self.use_cuda_graph)
 
-    def initialize_latents(self, batch_size, unet_channels, latent_height, latent_width):
-        latents_dtype = torch.float32 # text_embeddings.dtype
+    def initialize_latents(self, batch_size, unet_channels, latent_height, latent_width, latents_dtype=torch.float32):
+        latents_dtype = latents_dtype # text_embeddings.dtype
         latents_shape = (batch_size, unet_channels, latent_height, latent_width)
         latents = torch.randn(latents_shape, device=self.device, dtype=latents_dtype, generator=self.generator)
         # Scale the initial noise by the standard deviation required by the scheduler
@@ -1002,6 +1038,8 @@ class StableDiffusionPipeline:
         if not warmup:
             self.print_summary(num_inference_steps, walltime_ms, batch_size)
             if not self.return_latents and save_image:
+                # post-process images
+                images = ((images + 1) * 255 / 2).clamp(0, 255).detach().permute(0, 2, 3, 1).round().type(torch.uint8).cpu().numpy()
                 self.save_image(images, self.pipeline_type.name.lower(), prompt, self.seed)
 
         return (latents, walltime_ms) if self.return_latents else (images, walltime_ms)

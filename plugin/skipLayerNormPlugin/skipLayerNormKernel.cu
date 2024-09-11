@@ -23,6 +23,7 @@
 #include "common/common.cuh"
 #include "common/serialize.hpp"
 #include "skipLayerNormPlugin.h"
+#include "skipLayerNormPluginLegacy.h"
 
 #include <cassert>
 #include <cstring>

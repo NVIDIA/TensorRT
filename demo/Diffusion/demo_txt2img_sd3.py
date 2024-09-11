@@ -20,16 +20,14 @@ from PIL import Image
 from cuda import cudart
 
 from stable_diffusion_3_pipeline import StableDiffusion3Pipeline
-from utilities import PIPELINE_TYPE
+from utilities import PIPELINE_TYPE, add_arguments
 from utils_sd3.other_impls import preprocess_image_sd3
 
-def add_arguments(parser):
-    # Stable Diffusion configuration
+def parseArgs():
+    # Stable Diffusion 3 configuration
+    parser = argparse.ArgumentParser(description="Options for Stable Diffusion 3 Txt2Img Demo", conflict_handler='resolve')
+    parser = add_arguments(parser)
     parser.add_argument('--version', type=str, default="sd3", choices=["sd3"], help="Version of Stable Diffusion")
-    parser.add_argument('prompt', nargs = '*', help="Text prompt(s) to guide image generation")
-    parser.add_argument('--negative-prompt', nargs = '*', default=[''], help="The negative prompt(s) to guide the image generation.")
-    parser.add_argument('--batch-size', type=int, default=1, choices=[1, 2, 4], help="Batch size (repeat prompt)")
-    parser.add_argument('--batch-count', type=int, default=1, help="Number of images to generate in sequence, one at a time.")
     parser.add_argument('--height', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--shift', type=int, default=1.0, help="Shift parameter for SD3")
@@ -38,31 +36,7 @@ def add_arguments(parser):
     parser.add_argument('--denoising-percentage', type=float, default=0.6, help="Percentage of denoising steps to run. This parameter is only used if input-image is provided")
     parser.add_argument('--input-image', type=str, default="", help="Path to the input image")
 
-    # ONNX export
-    parser.add_argument('--onnx-opset', type=int, default=19, choices=range(7,20), help="Select ONNX opset version to target for exported models")
-    parser.add_argument('--onnx-dir', default='onnx', help="Output directory for ONNX export")
-
-    # Framework model ckpt
-    parser.add_argument('--framework-model-dir', default='pytorch_model', help="Directory for HF saved models")
-
-    # TensorRT engine build
-    parser.add_argument('--engine-dir', default='engine', help="Output directory for TensorRT engines")
-    parser.add_argument('--build-static-batch', action='store_true', help="Build TensorRT engines with fixed batch size.")
-    parser.add_argument('--build-dynamic-shape', action='store_true', help="Build TensorRT engines with dynamic image shapes.")
-    parser.add_argument('--build-all-tactics', action='store_true', help="Build TensorRT engines using all tactic sources.")
-    parser.add_argument('--timing-cache', default=None, type=str, help="Path to the precached timing measurements to accelerate build.")
-
-    # TensorRT inference
-    parser.add_argument('--num-warmup-runs', type=int, default=5, help="Number of warmup runs before benchmarking performance")
-    parser.add_argument('--use-cuda-graph', action='store_true', help="Enable cuda graph")
-    parser.add_argument('--nvtx-profile', action='store_true', help="Enable NVTX markers for performance profiling")
-    parser.add_argument('--torch-inference', default='', help="Run inference with PyTorch (using specified compilation mode) instead of TensorRT.")
-
-    parser.add_argument('--seed', type=int, default=None, help="Seed for random generator to get consistent results")
-    parser.add_argument('--output-dir', default='output', help="Output directory for logs and image artifacts")
-    parser.add_argument('--hf-token', type=str, help="HuggingFace API access token for downloading model checkpoints")
-    parser.add_argument('-v', '--verbose', action='store_true', help="Show verbose output")
-    return parser
+    return parser.parse_args()
 
 def process_pipeline_args(args):
     if args.height % 8 != 0 or args.width % 8 != 0:
@@ -118,11 +92,6 @@ def process_pipeline_args(args):
     args_run_demo = (args.prompt, args.negative_prompt, args.height, args.width, args.batch_size, args.batch_count, args.num_warmup_runs, args.use_cuda_graph)
 
     return kwargs_init_pipeline, kwargs_load_engine, args_run_demo
-
-def parseArgs():
-    parser = argparse.ArgumentParser(description="Options for Stable Diffusion 3 Demo")
-    parser = add_arguments(parser)
-    return parser.parse_args()
 
 if __name__ == "__main__":
     print("[I] Initializing Stable Diffusion 3 demo using TensorRT")

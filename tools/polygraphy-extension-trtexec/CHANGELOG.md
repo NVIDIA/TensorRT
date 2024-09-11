@@ -3,6 +3,12 @@
 Dates are in YYYY-MM-DD format.
 ## vNext
 
+## v0.0.9 (2023-08-21)
+### Changed
+- Update API usage to accomodate `Polygraphy==0.49.0`.
+- Replace `workspace` with `memPoolSize` in `TrtexecRunner`.
+- Remove usage of `polygraphy.backend.trt.util` in `polygraphy_trtexec/backend/runner.py`.
+
 ## v0.0.8 (2022-09-08)
 ### Added
 - `trtexec-export-times`, `trtexec-export-output`, `trtexec-export-profile` and `trtexec-export-layer-info` flags

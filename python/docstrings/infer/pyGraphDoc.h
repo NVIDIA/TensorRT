@@ -666,8 +666,7 @@ constexpr const char* SIGN
 constexpr const char* ROUND = R"trtdoc(Round to nearest even for floating-point data type.)trtdoc";
 constexpr const char* ISINF
     = R"trtdoc(Return true if the input value equals +/- infinity for floating-point data type.)trtdoc";
-constexpr const char* ISNAN
-    = R"trtdoc(Return true if the input value equals NaN for floating-point data type.)trtdoc";
+constexpr const char* ISNAN = R"trtdoc(Return true if the input value equals NaN for floating-point data type.)trtdoc";
 } // namespace UnaryOperationDoc
 
 namespace IUnaryLayerDoc
@@ -812,10 +811,11 @@ constexpr const char* descr = R"trtdoc(
     The following constraints must be satisfied to execute this layer on DLA:
     * ``start``, ``size``, and ``stride`` are build time constants, either as static :class:`Dims` or as constant input tensors.
     * ``axes``, if provided, is a build time constant, either as static :class:`Dims` or as a constant input tensor.
-    * sampleMode is :const:`SampleMode.STRICT_BOUNDS` .
+    * sampleMode is :const:`SampleMode.DEFAULT` , :const:`SampleMode.WRAP` , or :const:`SampleMode.FILL` .
     * Strides are 1 for all dimensions.
-    * Slicing is not performed on the first dimension
-    * The input tensor has four dimensions
+    * Slicing is not performed on the first dimension.
+    * The input tensor has four dimensions.
+    * For :const:`SliceMode.FILL` , the fill value input is a scalar output of an :class:`IConstantLayer` with value 0 that is not consumed by any other layer.
 
     :ivar start: :class:`Dims` The start offset.
     :ivar shape: :class:`Dims` The output dimensions.
@@ -1697,7 +1697,7 @@ constexpr const char* descr = R"trtdoc(
     The following constraints apply to If-conditionals:
     - Both the trueSubgraph and falseSubgraph must be defined.
     - The number of output tensors in both subgraphs is the same.
-    - The type and shape of each output tensor from true/false subgraphs are the same.
+    - The type and shape of each output tensor from the true/false subgraphs are the same, except that the shapes are allowed to differ if the condition is a build-time constant.
 
 )trtdoc";
 

@@ -509,11 +509,19 @@ public:
         return reallocateOutput(tensorName, currentMemory, size, alignment);
     }
 
-    void notifyShape(char const* tensorName, nvinfer1::Dims const& dims) noexcept override {}
+    void notifyShape(char const* tensorName, nvinfer1::Dims const& dims) noexcept override
+    {
+        mFinalDims = dims;
+    }
 
     IMirroredBuffer* getBuffer()
     {
         return mBuffer.get();
+    }
+
+    nvinfer1::Dims getFinalDims()
+    {
+        return mFinalDims;
     }
 
     ~OutputAllocator() override {}
@@ -521,6 +529,7 @@ public:
 private:
     std::unique_ptr<IMirroredBuffer> mBuffer;
     uint64_t mSize{};
+    nvinfer1::Dims mFinalDims;
 };
 
 //! Set the GPU to run the inference on.

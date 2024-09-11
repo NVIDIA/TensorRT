@@ -150,40 +150,6 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::release()
     return mEngine.release();
 }
 
-nvinfer1::safe::ICudaEngine* LazilyDeserializedEngine::getSafe()
-{
-    SMP_RETVAL_IF_FALSE(
-        mIsSafe, "Safe mode is not enabled, but trying to get safe engine!", nullptr, sample::gLogError);
-
-    ASSERT(sample::hasSafeRuntime());
-    auto engineBlob = getBlob();
-    if (mSafeEngine == nullptr)
-    {
-        SMP_RETVAL_IF_FALSE(
-            !engineBlob.empty(), "Engine blob is empty. Nothing to deserialize!", nullptr, sample::gLogError);
-
-        SMP_RETVAL_IF_FALSE(mDLACore == -1,
-            "Safe DLA engine built with kDLA_STANDALONE should not be deserialized in TRT!", nullptr,
-            sample::gLogError);
-
-        using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
-        using duration = std::chrono::duration<float>;
-        time_point const deserializeStartTime{std::chrono::high_resolution_clock::now()};
-
-        std::unique_ptr<safe::IRuntime> safeRuntime{sample::createSafeInferRuntime(sample::gLogger.getTRTLogger())};
-        SMP_RETVAL_IF_FALSE(safeRuntime != nullptr, "SafeRuntime creation failed", nullptr, sample::gLogError);
-        safeRuntime->setErrorRecorder(&gRecorder);
-        mSafeEngine.reset(safeRuntime->deserializeCudaEngine(engineBlob.data, engineBlob.size));
-        SMP_RETVAL_IF_FALSE(mSafeEngine != nullptr, "SafeEngine deserialization failed", nullptr, sample::gLogError);
-
-        time_point const deserializeEndTime{std::chrono::high_resolution_clock::now()};
-        sample::gLogInfo << "SafeEngine deserialized in " << duration(deserializeEndTime - deserializeStartTime).count()
-                         << " sec." << std::endl;
-    }
-
-    return mSafeEngine.get();
-}
-
 void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::vector<IOFormat> const& inputFormats,
     std::vector<IOFormat> const& outputFormats, std::string const& calibrationFile)
 {
@@ -877,6 +843,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setBuilderOptimizationLevel(build.builderOptimizationLevel);
     }
 
+    if (build.maxTactics != defaultMaxTactics)
+    {
+        config.setMaxNbTactics(build.maxTactics);
+    }
+
     if (build.timingCacheMode == TimingCacheMode::kDISABLE)
     {
         config.setFlag(BuilderFlag::kDISABLE_TIMING_CACHE);
@@ -1213,15 +1184,6 @@ bool networkToSerializedEngine(
     sample::gLogInfo << "Engine built in " << buildTime << " sec." << std::endl;
     sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
 
-    if (build.safe && build.consistency)
-    {
-        if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size()))
-        {
-            sample::gLogError << "Consistency validation is not supported." << std::endl;
-            return false;
-        }
-    }
-
     env.engine.setBlob(serializedEngine);
 
     if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
@@ -1343,7 +1305,7 @@ bool loadStreamingEngineToBuildEnv(std::string const& filepath, BuildEnvironment
     return true;
 }
 
-bool loadEngineToBuildEnv(std::string const& filepath, bool enableConsistency, BuildEnvironment& env, std::ostream& err)
+bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err)
 {
     auto const tBegin = std::chrono::high_resolution_clock::now();
     std::ifstream engineFile(filepath, std::ios::binary);
@@ -1359,15 +1321,6 @@ bool loadEngineToBuildEnv(std::string const& filepath, bool enableConsistency, B
     float const loadTime = std::chrono::duration<float>(tEnd - tBegin).count();
     sample::gLogInfo << "Engine loaded in " << loadTime << " sec." << std::endl;
     sample::gLogInfo << "Loaded engine with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
-
-    if (enableConsistency)
-    {
-        if (!checkSafeEngine(engineBlob.data(), fsize))
-        {
-            sample::gLogError << "Consistency validation is not enabled." << std::endl;
-            return false;
-        }
-    }
 
     env.engine.setBlob(std::move(engineBlob));
 
@@ -1433,7 +1386,7 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
 ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream& err)
 {
     BuildEnvironment env(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
-    return loadEngineToBuildEnv(engine, false, env, err) ? env.engine.release() : nullptr;
+    return loadEngineToBuildEnv(engine, env, err) ? env.engine.release() : nullptr;
 }
 
 bool saveEngine(const ICudaEngine& engine, std::string const& fileName, std::ostream& err)
@@ -1465,7 +1418,7 @@ bool getEngineBuildEnv(
     {
         if (build.safe)
         {
-            createEngineSuccess = loadEngineToBuildEnv(build.engine, build.safe && build.consistency, env, err);
+            createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err);
         }
         else
         {
@@ -1691,30 +1644,14 @@ namespace
 void* initSafeRuntime()
 {
     void* handle{nullptr};
+    // Currently libsafe_executor_debug.so for samplesCommon::isDebug() is not ready.
 #if !defined(_WIN32)
-    std::string const dllName{samplesCommon::isDebug() ? "libnvinfer_safe_debug.so." + std::to_string(NV_TENSORRT_MAJOR)
-                                                       : "libnvinfer_safe.so." + std::to_string(NV_TENSORRT_MAJOR)};
+    std::string const dllName{"libsafe_executor.so"};
 #if SANITIZER_BUILD
     handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
 #else
     // RTLD_GLOBAL is used for symbol resolution of subsequently loaded plugin libraries
     handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_GLOBAL);
-#endif
-#endif
-    return handle;
-}
-
-void* initConsistencyCheckerLibrary()
-{
-    void* handle{nullptr};
-#if !defined(_WIN32)
-    std::string const dllName{samplesCommon::isDebug()
-            ? "libnvinfer_checker_debug.so." + std::to_string(NV_TENSORRT_MAJOR)
-            : "libnvinfer_checker.so." + std::to_string(NV_TENSORRT_MAJOR)};
-#if SANITIZER_BUILD
-    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
-#else
-    handle = dlopen(dllName.c_str(), RTLD_LAZY);
 #endif
 #endif
     return handle;
@@ -1732,7 +1669,6 @@ struct DllDeleter
     }
 };
 const std::unique_ptr<void, DllDeleter> safeRuntimeLibrary{initSafeRuntime()};
-const std::unique_ptr<void, DllDeleter> consistencyCheckerLibrary{initConsistencyCheckerLibrary()};
 #endif
 } // namespace
 
@@ -1745,61 +1681,4 @@ bool hasSafeRuntime()
     return ret;
 }
 
-nvinfer1::safe::IRuntime* createSafeInferRuntime(nvinfer1::ILogger& logger) noexcept
-{
-    nvinfer1::safe::IRuntime* runtime{nullptr};
-#if !defined(_WIN32)
-    constexpr char symbolName[] = "_ZN8nvinfer14safe18createInferRuntimeERNS_7ILoggerE";
-    typedef nvinfer1::safe::IRuntime* (*CreateInferRuntimeFn)(nvinfer1::ILogger & logger);
-    if (hasSafeRuntime())
-    {
-        auto createFn = reinterpret_cast<CreateInferRuntimeFn>(dlsym(safeRuntimeLibrary.get(), symbolName));
-        if (createFn != nullptr)
-        {
-            runtime = createFn(logger);
-        }
-    }
-#endif
-    return runtime;
-}
-
-bool hasConsistencyChecker()
-{
-    bool ret{false};
-#if !defined(_WIN32)
-    ret = (consistencyCheckerLibrary != nullptr);
-#endif
-    return ret;
-}
-
-nvinfer1::consistency::IConsistencyChecker* createConsistencyChecker(
-    nvinfer1::ILogger& logger, void const* serializedEngine, int32_t const engineSize) noexcept
-{
-    nvinfer1::consistency::IConsistencyChecker* checker{nullptr};
-
-    if (serializedEngine == nullptr || engineSize == 0)
-    {
-        return checker;
-    }
-
-#if !defined(_WIN32)
-    constexpr char symbolName[] = "createConsistencyChecker_INTERNAL";
-    typedef nvinfer1::consistency::IConsistencyChecker* (*CreateCheckerFn)(
-        nvinfer1::ILogger * logger, void const* data, size_t size, uint32_t version);
-    if (hasSafeRuntime())
-    {
-        auto createFn = reinterpret_cast<CreateCheckerFn>(dlsym(consistencyCheckerLibrary.get(), symbolName));
-        if (createFn != nullptr)
-        {
-            checker = createFn(&logger, serializedEngine, engineSize, NV_TENSORRT_VERSION);
-        }
-    }
-#endif
-    return checker;
-}
-
-bool checkSafeEngine(void const* serializedEngine, int32_t const engineSize)
-{
-    return hasConsistencyChecker();
-}
 } // namespace sample

@@ -18,16 +18,13 @@
 #ifndef TRT_SAMPLE_ENGINES_H
 #define TRT_SAMPLE_ENGINES_H
 
-#include <iostream>
-#include <vector>
-
 #include "NvInfer.h"
-#include "NvInferConsistency.h"
-#include "NvInferSafeRuntime.h"
 #include "NvOnnxParser.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 #include "streamReader.h"
+#include <iostream>
+#include <vector>
 
 namespace sample
 {
@@ -107,11 +104,6 @@ public:
     nvinfer1::ICudaEngine* release();
 
     //!
-    //! \brief Get the pointer to the safe::ICudaEngine. Triggers deserialization if not already done so.
-    //!
-    nvinfer1::safe::ICudaEngine* getSafe();
-
-    //!
     //! \brief Get the underlying blob storing serialized engine.
     //!
     EngineBlob const getBlob() const
@@ -138,7 +130,6 @@ public:
         ASSERT(data.get() && data->size() > 0);
         mEngineBlobHostMemory = std::move(data);
         mEngine.reset();
-        mSafeEngine.reset();
     }
 
     //!
@@ -148,7 +139,6 @@ public:
     {
         mEngineBlob = std::move(engineBlob);
         mEngine.reset();
-        mSafeEngine.reset();
     }
 
     //!
@@ -200,8 +190,8 @@ private:
     //! \name Owned TensorRT objects
     //! Per TensorRT object lifetime requirements as outlined in the developer guide,
     //! the runtime must remain live while any engines created by the runtime are live.
-    //! DO NOT ADJUST the declaration order here: runtime -> (engine|safeEngine).
-    //! Destruction occurs in reverse declaration order: (engine|safeEngine) -> runtime.
+    //! DO NOT ADJUST the declaration order here: runtime -> (engine).
+    //! Destruction occurs in reverse declaration order: (engine) -> runtime.
     //!@{
 
     //! The runtime used to track parent of mRuntime if one exists.
@@ -213,9 +203,6 @@ private:
 
     //! If mIsSafe is false, this points to the deserialized std engine
     std::unique_ptr<nvinfer1::ICudaEngine> mEngine{};
-
-    //! If mIsSafe is true, this points to the deserialized safe engine
-    std::unique_ptr<nvinfer1::safe::ICudaEngine> mSafeEngine{};
 
     //!@}
 };
@@ -326,30 +313,9 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
 //!
 bool hasSafeRuntime();
 
-//!
-//! \brief Create a safe runtime object if the dynamic library is loaded.
-//!
-nvinfer1::safe::IRuntime* createSafeInferRuntime(nvinfer1::ILogger& logger) noexcept;
-
-//!
-//! \brief Check if consistency checker is loaded.
-//!
-bool hasConsistencyChecker();
-
-//!
-//! \brief Create a consistency checker object if the dynamic library is loaded.
-//!
-nvinfer1::consistency::IConsistencyChecker* createConsistencyChecker(
-    nvinfer1::ILogger& logger, nvinfer1::IHostMemory const* engine) noexcept;
-
-//!
-//! \brief Run consistency check on serialized engine.
-//!
-bool checkSafeEngine(void const* serializedEngine, int32_t const engineSize);
-
 bool loadStreamingEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
 
-bool loadEngineToBuildEnv(std::string const& engine, bool enableConsistency, BuildEnvironment& env, std::ostream& err);
+bool loadEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
 } // namespace sample
 
 #endif // TRT_SAMPLE_ENGINES_H

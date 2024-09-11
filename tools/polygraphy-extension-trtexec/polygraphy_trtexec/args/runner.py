@@ -23,7 +23,7 @@ The argument group implements the standard `BaseRunnerArgs` interface, which inh
 
 import polygraphy
 from polygraphy import mod
-from polygraphy.tools.args import ModelArgs, TrtConfigArgs, TrtLoadPluginsArgs, TrtLoadNetworkArgs, TrtSaveEngineArgs, util as args_util
+from polygraphy.tools.args import ModelArgs, TrtConfigArgs, TrtLoadPluginsArgs, TrtLoadNetworkArgs, TrtSaveEngineBytesArgs, util as args_util
 from polygraphy.tools.args.base import BaseRunnerArgs
 from polygraphy.tools.script import make_invocable
 
@@ -36,7 +36,7 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         ModelArgs
         TrtConfigArgs
         TrtLoadPluginsArgs
-        TrtSaveEngineArgs
+        TrtSaveEngineBytesArgs
     """
 
     def get_name_opt_impl(self):
@@ -294,7 +294,7 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         int8 = self.arg_groups[TrtConfigArgs].int8
         allow_gpu_fallback = self.arg_groups[TrtConfigArgs].allow_gpu_fallback
         precision_constraints = self.arg_groups[TrtConfigArgs].precision_constraints
-        workspace = self.arg_groups[TrtConfigArgs].workspace
+        mem_pool_size = self.arg_groups[TrtConfigArgs].memory_pool_limits
         use_dla = self.arg_groups[TrtConfigArgs].use_dla
         if mod.version(polygraphy.__version__) >= mod.version('0.39.0'):
             refit = self.arg_groups[TrtConfigArgs].refittable
@@ -306,7 +306,10 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
         if layer_precisions:
             layer_precisions = {layer:str(precision) for (layer, precision) in layer_precisions.items()}
 
-        save_engine = self.arg_groups[TrtSaveEngineArgs].path
+        save_engine = self.arg_groups[TrtSaveEngineBytesArgs].path
+
+        # Add an import for TensorRT
+        script.add_import(imports=["tensorrt"], imp_as="trt")
 
         # Add an import for the Trtexec runner.
         script.add_import(imports=["TrtexecRunner"], frm="polygraphy_trtexec.backend")
@@ -355,7 +358,7 @@ class TrtexecRunnerArgs(BaseRunnerArgs):
             int8=int8,
             allow_gpu_fallback=allow_gpu_fallback,
             precision_constraints=precision_constraints,
-            workspace=workspace,
+            mem_pool_size=mem_pool_size,
             use_dla=use_dla,
             layer_precisions=layer_precisions,
             plugins=plugins,

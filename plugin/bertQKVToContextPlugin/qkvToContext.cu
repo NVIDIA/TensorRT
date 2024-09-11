@@ -630,9 +630,9 @@ static inline void set_alpha(uint32_t& alpha, float norm, Data_type dtype)
 class FusedMHARunnerFP16::mhaImpl
 {
 public:
-    mhaImpl(FusedMHARunnerFP16* interface)
-        : interface(interface)
-        , sm(interface->mSm)
+    mhaImpl(FusedMHARunnerFP16* mhaInterface)
+        : mhaInterface(mhaInterface)
+        , sm(mhaInterface->mSm)
         , xmmaKernel(getXMMAKernels(DATA_TYPE_FP16, sm))
         , xmmas_m(0U)
         , xmmas_n(0U)
@@ -647,8 +647,8 @@ public:
         // check that we initialized
         assert(xmmas_m > 0);
         assert(threads_per_cta > 0);
-        assert(interface->mB > 0);
-        return interface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
+        assert(mhaInterface->mB > 0);
+        return mhaInterface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
     }
 
     void setup(int32_t S, int32_t B, int32_t headSize)
@@ -679,7 +679,7 @@ public:
         // The number of xmmas in the N dimension.
         xmmas_n = (S + 16 * warps_n - 1) / (16 * warps_n);
 
-        const float scale_bmm1 = interface->mRsqrtHeadSize;
+        const float scale_bmm1 = mhaInterface->mRsqrtHeadSize;
         const float scale_softmax = 1.f; // Seems to be only required for int8
         const float scale_bmm2 = 1.f;
 
@@ -689,13 +689,13 @@ public:
         set_alpha(params.scale_bmm2, scale_bmm2, scale_type);
 
         params.b = B;
-        params.h = interface->mNumHeads;
+        params.h = mhaInterface->mNumHeads;
         params.s = S;
-        params.d = interface->mHeadSize;
+        params.d = mhaInterface->mHeadSize;
 
-        params.qkv_stride_in_bytes = get_size_in_bytes(interface->mLdQKV, DATA_TYPE_FP16);
+        params.qkv_stride_in_bytes = get_size_in_bytes(mhaInterface->mLdQKV, DATA_TYPE_FP16);
         params.packed_mask_stride_in_bytes = xmmas_m * threads_per_cta * sizeof(uint32_t);
-        params.o_stride_in_bytes = get_size_in_bytes(interface->mLdOut, DATA_TYPE_FP16);
+        params.o_stride_in_bytes = get_size_in_bytes(mhaInterface->mLdOut, DATA_TYPE_FP16);
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
@@ -718,7 +718,7 @@ public:
     }
 
 private:
-    FusedMHARunnerFP16* interface;
+    FusedMHARunnerFP16* mhaInterface;
     Fused_multihead_attention_params params;
     int sm;
     const FusedMultiHeadAttentionXMMAKernel* xmmaKernel;
@@ -774,11 +774,11 @@ class FusedMHARunnerInt8::mhaImpl
 {
 
 public:
-    mhaImpl(FusedMHARunnerInt8* interface)
-        : interface(interface)
-        , sm(interface->mSm)
+    mhaImpl(FusedMHARunnerInt8* mhaInterface)
+        : mhaInterface(mhaInterface)
+        , sm(mhaInterface->mSm)
         , xmmaKernel(getXMMAKernels(DATA_TYPE_INT8, sm))
-        , mDqProbs(interface->mDqProbs)
+        , mDqProbs(mhaInterface->mDqProbs)
         , xmmas_m(0U)
         , xmmas_n(0U)
         , threads_per_cta(1U)
@@ -791,8 +791,8 @@ public:
     {
         assert(xmmas_m > 0);
         assert(threads_per_cta > 0);
-        assert(interface->mB > 0);
-        return interface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
+        assert(mhaInterface->mB > 0);
+        return mhaInterface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
     }
 
     void setup(int32_t S, int32_t B, int32_t headSize)
@@ -823,13 +823,13 @@ public:
 
 
         params.b = B;
-        params.h = interface->mNumHeads;
+        params.h = mhaInterface->mNumHeads;
         params.s = S;
-        params.d = interface->mHeadSize;
+        params.d = mhaInterface->mHeadSize;
 
-        params.qkv_stride_in_bytes = get_size_in_bytes(interface->mLdQKV, DATA_TYPE_INT8);
+        params.qkv_stride_in_bytes = get_size_in_bytes(mhaInterface->mLdQKV, DATA_TYPE_INT8);
         params.packed_mask_stride_in_bytes = xmmas_m * threads_per_cta * sizeof(uint32_t);
-        params.o_stride_in_bytes = get_size_in_bytes(interface->mLdOut, DATA_TYPE_INT8);
+        params.o_stride_in_bytes = get_size_in_bytes(mhaInterface->mLdOut, DATA_TYPE_INT8);
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
@@ -838,7 +838,7 @@ public:
         float scaleQkv = inputDesc.scale;
         float scaleCtx = outputDesc.scale;
 
-        float scaleBmm1 = scaleQkv * scaleQkv * interface->mRsqrtHeadSize;
+        float scaleBmm1 = scaleQkv * scaleQkv * mhaInterface->mRsqrtHeadSize;
         float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
         float scaleSoftmax = 1.f / mDqProbs;
 
@@ -866,7 +866,7 @@ public:
 
 private:
     float mDqProbs;
-    FusedMHARunnerInt8* interface;
+    FusedMHARunnerInt8* mhaInterface;
     Fused_multihead_attention_params params;
     int sm;
     const FusedMultiHeadAttentionXMMAKernel* xmmaKernel;
@@ -920,9 +920,9 @@ bool FusedMHARunnerInt8::isValid(int32_t headSize, int32_t s) const
 class FusedMHARunnerFP16v2::mhaImpl
 {
 public:
-    mhaImpl(FusedMHARunnerFP16v2* interface)
-        : interface(interface)
-        , sm(interface->mSm)
+    mhaImpl(FusedMHARunnerFP16v2* mhaInterface)
+        : mhaInterface(mhaInterface)
+        , sm(mhaInterface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_FP16, sm))
     {
         assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90)
@@ -937,8 +937,8 @@ public:
         // check that we initialized
         assert(xmmas_m > 0);
         assert(threads_per_cta > 0);
-        assert(interface->mB > 0);
-        return interface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
+        assert(mhaInterface->mB > 0);
+        return mhaInterface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
     }
 
     void setup(int32_t S, int32_t B, int32_t headSize)
@@ -986,7 +986,7 @@ public:
         // The number of xmmas in the N dimension.
         xmmas_n = (S + 16 * warps_n - 1) / (16 * warps_n);
 
-        const float scale_bmm1 = interface->mRsqrtHeadSize;
+        const float scale_bmm1 = mhaInterface->mRsqrtHeadSize;
         const float scale_softmax = 1.f; // Seems to be only required for int8
         const float scale_bmm2 = 1.f;
 
@@ -996,16 +996,16 @@ public:
         set_alpha(params.scale_bmm2, scale_bmm2, scale_type);
 
         params.b = B;
-        params.h = interface->mNumHeads;
+        params.h = mhaInterface->mNumHeads;
         params.s = S;
-        params.d = interface->mHeadSize;
+        params.d = mhaInterface->mHeadSize;
 
         // mLdQKV = 3 * B * mNumHeads * mHeadSize;
         // mLdOut = B * mNumHeads * mHeadSize;
 
-        params.qkv_stride_in_bytes = 3 * interface->mNumHeads * interface->mHeadSize * sizeof(half);
+        params.qkv_stride_in_bytes = 3 * mhaInterface->mNumHeads * mhaInterface->mHeadSize * sizeof(half);
         params.packed_mask_stride_in_bytes = xmmas_m * threads_per_cta * sizeof(uint32_t);
-        params.o_stride_in_bytes = interface->mNumHeads * interface->mHeadSize * sizeof(half);
+        params.o_stride_in_bytes = mhaInterface->mNumHeads * mhaInterface->mHeadSize * sizeof(half);
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
@@ -1030,7 +1030,7 @@ public:
     }
 
 private:
-    FusedMHARunnerFP16v2* interface;
+    FusedMHARunnerFP16v2* mhaInterface;
     Fused_multihead_attention_params_v2 params;
     int sm;
     const FusedMultiHeadAttentionXMMAKernelV2* xmmaKernel;
@@ -1087,11 +1087,11 @@ class FusedMHARunnerInt8v2::mhaImpl
 {
 
 public:
-    mhaImpl(FusedMHARunnerInt8v2* interface)
-        : interface(interface)
-        , sm(interface->mSm)
+    mhaImpl(FusedMHARunnerInt8v2* mhaInterface)
+        : mhaInterface(mhaInterface)
+        , sm(mhaInterface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_INT8, sm))
-        , mDqProbs(interface->mDqProbs)
+        , mDqProbs(mhaInterface->mDqProbs)
         , xmmas_m(0U)
         , xmmas_n(0U)
         , threads_per_cta(1U)
@@ -1107,8 +1107,8 @@ public:
     {
         assert(xmmas_m > 0);
         assert(threads_per_cta > 0);
-        assert(interface->mB > 0);
-        return interface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
+        assert(mhaInterface->mB > 0);
+        return mhaInterface->mB * xmmas_m * threads_per_cta * sizeof(uint32_t);
     }
 
     void setup(int32_t S, int32_t B, int32_t headSize)
@@ -1163,13 +1163,13 @@ public:
         xmmas_n = (S + 16 * warps_n - 1) / (16 * warps_n);
 
         params.b = B;
-        params.h = interface->mNumHeads;
+        params.h = mhaInterface->mNumHeads;
         params.s = S;
-        params.d = interface->mHeadSize;
-        params.use_int8_scale_max = interface->mUseInt8ScaleMax;
+        params.d = mhaInterface->mHeadSize;
+        params.use_int8_scale_max = mhaInterface->mUseInt8ScaleMax;
         params.packed_mask_stride_in_bytes = xmmas_m * threads_per_cta * sizeof(uint32_t);
-        params.qkv_stride_in_bytes = 3 * interface->mNumHeads * interface->mHeadSize * sizeof(int8_t);
-        params.o_stride_in_bytes = interface->mNumHeads * interface->mHeadSize * sizeof(int8_t);
+        params.qkv_stride_in_bytes = 3 * mhaInterface->mNumHeads * mhaInterface->mHeadSize * sizeof(int8_t);
+        params.o_stride_in_bytes = mhaInterface->mNumHeads * mhaInterface->mHeadSize * sizeof(int8_t);
     }
 
     void run(const PluginTensorDesc& inputDesc, const PluginTensorDesc& outputDesc, const void* qkvPtr,
@@ -1178,7 +1178,7 @@ public:
         float scaleQkv = inputDesc.scale;
         float scaleCtx = outputDesc.scale;
 
-        float scaleBmm1 = scaleQkv * scaleQkv * interface->mRsqrtHeadSize;
+        float scaleBmm1 = scaleQkv * scaleQkv * mhaInterface->mRsqrtHeadSize;
         float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
         float scaleSoftmax = 1.f / mDqProbs;
 
@@ -1194,7 +1194,7 @@ public:
         // dummy input in V2/V3 because now we use cu_seqlens
         params.packed_mask_ptr = nullptr;
 
-        params.use_int8_scale_max = interface->mUseInt8ScaleMax;
+        params.use_int8_scale_max = mhaInterface->mUseInt8ScaleMax;
 
         params.o_ptr = output;
 
@@ -1211,7 +1211,7 @@ public:
 
 private:
     float mDqProbs;
-    FusedMHARunnerInt8v2* interface;
+    FusedMHARunnerInt8v2* mhaInterface;
     Fused_multihead_attention_params_v2 params;
     int sm;
     const FusedMultiHeadAttentionXMMAKernelV2* xmmaKernel;

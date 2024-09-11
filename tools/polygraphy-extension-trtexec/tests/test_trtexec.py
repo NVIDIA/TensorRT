@@ -69,7 +69,7 @@ class TestParameterMapping:
     def test_kwargs(self):
         assert poly_run([ONNX_MODELS_PATH['identity'],
             "--trtexec",
-            "--workspace=1M", "--streams=2", "--device=0",
+            "--memory-pool-limit=workspace:1M", "--streams=2", "--device=0",
             "--avg-runs=1", "--min-timing=1", "--avg-timing=3",
             "--trtexec-iterations=1", "--trtexec-warmup=1", "--duration=1",
         ])

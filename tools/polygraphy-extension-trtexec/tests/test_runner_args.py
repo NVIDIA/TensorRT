@@ -22,7 +22,7 @@ from polygraphy.tools.args import (
     TrtConfigArgs,
     TrtLoadPluginsArgs,
     TrtLoadNetworkArgs,
-    TrtSaveEngineArgs,
+    TrtSaveEngineBytesArgs,
 )
 from polygraphy.tools.script import Script
 from tests.models.meta import ONNX_MODELS_PATH
@@ -39,7 +39,7 @@ def trtexec_runner_args():
             TrtConfigArgs(),
             TrtLoadPluginsArgs(),
             TrtLoadNetworkArgs(),
-            TrtSaveEngineArgs(),
+            TrtSaveEngineBytesArgs(),
         ],
     )
 

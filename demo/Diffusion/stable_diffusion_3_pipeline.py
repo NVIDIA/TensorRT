@@ -562,6 +562,8 @@ class StableDiffusion3Pipeline:
             num_inference_steps = int(self.denoising_steps * self.denoising_percentage)
             self.print_summary(num_inference_steps, walltime_ms, batch_size)
             if save_image:
+                # post-process images
+                images = ((images + 1) * 255 / 2).clamp(0, 255).detach().permute(0, 2, 3, 1).round().type(torch.uint8).cpu().numpy()
                 self.save_image(images, self.pipeline_type.name.lower(), prompt, self.seed)
 
         return images, walltime_ms

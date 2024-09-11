@@ -314,12 +314,6 @@ int main(int argc, char** argv)
             return sample::gLogger.reportFail(sampleTest);
         }
 
-        if (!options.build.safe && options.build.consistency)
-        {
-            sample::gLogInfo << "Skipping consistency checker on non-safety mode." << std::endl;
-            options.build.consistency = false;
-        }
-
         // Start engine building phase.
         std::unique_ptr<BuildEnvironment> bEnv(new BuildEnvironment(options.build.safe, options.build.versionCompatible,
             options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath));
@@ -386,6 +380,21 @@ int main(int argc, char** argv)
 
         // Start inference phase.
         std::unique_ptr<InferenceEnvironment> iEnv(new InferenceEnvironment(*bEnv));
+
+        // We avoid re-loading some dynamic plugins while deserializing
+        // if they were already serialized with `setPluginsToSerialize`.
+        std::vector<std::string> dynamicPluginsNotSerialized;
+        for (auto& pluginName : options.system.dynamicPlugins)
+        {
+            if (std::find(options.system.setPluginsToSerialize.begin(), options.system.setPluginsToSerialize.end(),
+                    pluginName)
+                == options.system.setPluginsToSerialize.end())
+            {
+                dynamicPluginsNotSerialized.emplace_back(pluginName);
+            }
+        }
+
+        iEnv->engine.setDynamicPlugins(dynamicPluginsNotSerialized);
 
         // Delete build environment.
         bEnv.reset();

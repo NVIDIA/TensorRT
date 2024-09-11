@@ -119,8 +119,12 @@ void bindOnnx(py::module& m)
     py::bind_vector<SubGraphCollection_t>(m, "SubGraphCollection");
 
     py::class_<IParser>(m, "OnnxParser", OnnxParserDoc::descr, py::module_local())
-        .def(py::init(&nvonnxparser::createParser), "network"_a, "logger"_a, OnnxParserDoc::init,
-            py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
+        // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
+        // constructors. https://github.com/pybind/pybind11/issues/2856
+        .def(py::init([](nvinfer1::INetworkDefinition& network, nvinfer1::ILogger& logger) {
+            return nvonnxparser::createParser(network, logger);
+        }),
+            "network"_a, "logger"_a, OnnxParserDoc::init, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
         .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse,
             py::call_guard<py::gil_scoped_release>{})
         .def("parse_with_weight_descriptors", lambdas::parse_with_weight_descriptors, "model"_a,
@@ -185,8 +189,12 @@ void bindOnnx(py::module& m)
         .def("__repr__", &onnx2trt::parserErrorStr);
 
     py::class_<IParserRefitter>(m, "OnnxParserRefitter", OnnxParserRefitterDoc::descr, py::module_local())
-        .def(py::init(&nvonnxparser::createParserRefitter), "refitter"_a, "logger"_a, OnnxParserRefitterDoc::init,
-            py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
+        // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
+        // constructors. https://github.com/pybind/pybind11/issues/2856
+        .def(py::init([](nvinfer1::IRefitter& refitter, nvinfer1::ILogger& logger) {
+            return nvonnxparser::createParserRefitter(refitter, logger);
+        }),
+            "refitter"_a, "logger"_a, OnnxParserRefitterDoc::init, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
         .def("refit_from_bytes", lambdas::refitFromBytes, "model"_a, "path"_a = nullptr,
             OnnxParserRefitterDoc::refit_from_bytes, py::call_guard<py::gil_scoped_release>{})
         .def("refit_from_file", lambdas::refitFromFile, "model"_a, OnnxParserRefitterDoc::refit_from_file,

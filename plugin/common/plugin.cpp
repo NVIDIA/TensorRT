@@ -149,5 +149,20 @@ int32_t dimToInt32(int64_t d)
     return static_cast<int32_t>(d);
 }
 
+bool supportsMemPoolsHelper()
+{
+    int32_t device;
+    PLUGIN_CUASSERT(cudaGetDevice(&device));
+    int32_t value;
+    PLUGIN_CUASSERT(cudaDeviceGetAttribute(&value, cudaDevAttrMemoryPoolsSupported, device));
+    return value != 0;
+}
+
+bool supportsMemPools()
+{
+    static bool sResult = supportsMemPoolsHelper();
+    return sResult;
+}
+
 } // namespace plugin
 } // namespace nvinfer1

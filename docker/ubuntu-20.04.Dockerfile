@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.5.0
+ARG CUDA_VERSION=12.6.0
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu20.04
 LABEL maintainer="NVIDIA CORPORATION"
@@ -28,7 +28,7 @@ ENV CUDA_VERSION_MAJOR_MINOR=12.2
 ENV NV_CUDNN_PACKAGE "libcudnn8=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
 ENV NV_CUDNN_PACKAGE_DEV "libcudnn8-dev=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
 
-ENV TRT_VERSION 10.3.0.26
+ENV TRT_VERSION 10.4.0.26
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -84,15 +84,15 @@ RUN apt-get install -y --no-install-recommends \
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.3.0/tars/TensorRT-10.3.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && tar -xf TensorRT-10.3.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && cp -a TensorRT-10.3.0.26/lib/*.so* /usr/lib/x86_64-linux-gnu \
-        && pip install TensorRT-10.3.0.26/python/tensorrt-10.3.0-cp38-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.4.0/tars/TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && tar -xf TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && cp -a TensorRT-10.4.0.26/lib/*.so* /usr/lib/x86_64-linux-gnu \
+        && pip install TensorRT-10.4.0.26/python/tensorrt-10.4.0-cp38-none-linux_x86_64.whl ;\
 elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.3.0/tars/TensorRT-10.3.0.26.Linux.x86_64-gnu.cuda-12.5.tar.gz \
-        && tar -xf TensorRT-10.3.0.26.Linux.x86_64-gnu.cuda-12.5.tar.gz \
-        && cp -a TensorRT-10.3.0.26/lib/*.so* /usr/lib/x86_64-linux-gnu \
-        && pip install TensorRT-10.3.0.26/python/tensorrt-10.3.0-cp38-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.4.0/tars/TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-12.6.tar.gz \
+        && tar -xf TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-12.6.tar.gz \
+        && cp -a TensorRT-10.4.0.26/lib/*.so* /usr/lib/x86_64-linux-gnu \
+        && pip install TensorRT-10.4.0.26/python/tensorrt-10.4.0-cp38-none-linux_x86_64.whl ;\
 else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \
@@ -120,7 +120,7 @@ RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_cat_linux.
 # Set environment and working directory
 ENV TRT_LIBPATH /usr/lib/x86_64-linux-gnu
 ENV TRT_OSSPATH /workspace/TensorRT
-ENV PATH="${PATH}:/usr/local/bin/ngc-cli"
+ENV PATH="/workspace/TensorRT/build/out:${PATH}:/usr/local/bin/ngc-cli"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 WORKDIR /workspace
 
