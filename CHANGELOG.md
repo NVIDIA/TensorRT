@@ -1,6 +1,38 @@
 # TensorRT OSS Release Changelog
 
-## 10.3.0 GA - 2024-08-07
+## 10.4.0 GA - 2024-09-11
+Key Features and Updates:
+
+- Demo changes
+    - Added [Stable Cascade](demo/Diffusion) pipeline.
+    - Enabled INT8 and FP8 quantization for Stable Diffusion v1.5, v2.0 and v2.1 pipelines.
+    - Enabled FP8 quantization for Stable Diffusion XL pipeline.
+- Sample changes
+    - Add a new python sample `aliased_io_plugin` which demonstrates how in-place updates to plugin inputs can be achieved through I/O aliasing.
+- Plugin changes
+    - Migrated IPluginV2-descendent versions (a) of the following plugins to newer versions (b) which implement IPluginV3 (a->b):
+        - scatterElementsPlugin (1->2)
+        - skipLayerNormPlugin (1->5, 2->6, 3->7, 4->8)
+        - embLayerNormPlugin (2->4, 3->5)
+        - bertQKVToContextPlugin (1->4, 2->5, 3->6)
+    - Note
+        - The newer versions preserve the corresponding attributes and I/O of the corresponding older plugin version.
+        - The older plugin versions are deprecated and will be removed in a future release.
+
+- Quickstart guide
+    - Updated deploy_to_triton guide and removed legacy APIs.
+    - Removed legacy TF-TRT code as the project is no longer supported.
+    - Removed quantization_tutorial as pytorch_quantization has been deprecated. Check out https://github.com/NVIDIA/TensorRT-Model-Optimizer for the latest quantization support. Check [Stable Diffusion XL (Base/Turbo) and Stable Diffusion 1.5 Quantization with Model Optimizer](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/diffusers/quantization) for integration with TensorRT.
+- Parser changes
+    - Added support for tensor `axes` for `Pad` operations.
+    - Added support for `BlackmanWindow`, `HammingWindow`, and `HannWindow` operations.
+    - Improved error handling in `IParserRefitter`.
+    - Fixed kernel shape inference in multi-input convolutions.
+
+- Updated tooling
+    - polygraphy-extension-trtexec v0.0.9
+
+## 10.3.0 GA - 2024-08-02
 
 Key Features and Updates:
 

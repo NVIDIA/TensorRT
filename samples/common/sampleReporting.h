@@ -170,19 +170,15 @@ void dumpInputs(nvinfer1::IExecutionContext const& context, Bindings const& bind
 //!
 //! \brief Print output tensors to stream
 //!
-template <typename ContextType>
-void dumpOutputs(ContextType const& context, Bindings const& bindings, std::ostream& os);
+void dumpOutputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
 
-template <typename ContextType>
-void dumpRawBindingsToFiles(ContextType const& context, Bindings const& bindings, std::ostream& os);
+void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
 
 //!
 //! \brief Export output tensors to JSON file
 //!
-template <typename ContextType>
 void exportJSONOutput(
-    ContextType const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
-
+    nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
 
 //!
 //! \struct LayerProfile

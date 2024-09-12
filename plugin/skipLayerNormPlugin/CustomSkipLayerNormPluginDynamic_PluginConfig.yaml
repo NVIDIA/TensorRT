@@ -16,9 +16,9 @@
 #
 ---
 name: CustomSkipLayerNormPluginDynamic
-interface: "IPluginV2DynamicExt"
+interface: "IPluginV3"
 versions:
-  "1":
+  "5": # SkipLayerNormPluginV3
     inputs:
       - input
       - skip
@@ -115,13 +115,13 @@ versions:
         attribute_options:
           type_id:
             value: 0
-          ld: 
+          ld:
             value: 128
-          beta: 
+          beta:
             shape: "1, 1, 128"
-          gamma: 
+          gamma:
             shape: "1, 1, 128"
-          bias: 
+          bias:
             shape: "1, 1, 128"
       config2:
         input_types:
@@ -130,12 +130,118 @@ versions:
         attribute_options:
           type_id:
             value: 1
-          ld: 
+          ld:
             value: 768
-          beta: 
+          beta:
             shape: "1, 1, 768"
-          gamma: 
+          gamma:
             shape: "1, 1, 768"
-          bias: 
+          bias:
+            shape: "1, 1, 768"
+  "6": # SkipLayerNormVarSeqlenPluginV3
+    inputs:
+      - input
+      - skip
+    outputs:
+      - output
+    input_dims:
+      input: 5
+      skip: 5
+    input_dim_constraints:
+      - "input_2 == bias_2"
+      - "skip_0 == input_0"
+      - "skip_1 == input_1"
+      - "skip_2 == input_2"
+    input_dim_range:
+      input:
+        min: "=1, =1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =1, =1"
+      skip:
+        min: "=1, =1, =1, =1, =1"
+        max: "=pinf, =pinf, =pinf, =1, =1"
+    supported_input_types:
+      - combination1:
+          input: float32
+          skip: float32
+      - combination2:
+          input: float16
+          skip: float16
+    output_dims:
+      output: "input_0, input_1, input_2, input_3, input_4"
+    attributes:
+      - type_id
+      - beta
+      - gamma
+      - bias
+    attribute_types:
+      type_id: int32
+      beta: float32
+      gamma: float32
+      bias: float32
+    attribute_dims:
+      type_id: 1
+      beta: 3
+      gamma: 3
+      bias: 3
+    attribute_dim_range:
+      type_id:
+        min: "=1"
+        max: "=1"
+      beta:
+        min: "=1, =1, =1"
+        max: "=1, =1, =pinf"
+      gamma:
+        min: "=1, =1, =1"
+        max: "=1, =1, =pinf"
+      bias:
+        min: "=1, =1, =1"
+        max: "=1, =1, =pinf"
+    attribute_options:
+      type_id:
+        - 0
+        - 1
+        - 2
+      beta:
+        min: "=ninf"
+        max: "=pinf"
+      gamma:
+        min: "=ninf"
+        max: "=pinf"
+      bias:
+        min: "=ninf"
+        max: "=pinf"
+    attributes_required:
+      - type_id
+      - beta
+      - gamma
+    golden_reference_script: "plugin/skipLayerNormPlugin/CustomSkipLayerNormPluginDynamic_PluginReference.py"
+    abs_tol: 1e-2
+    rel_tol: 1e-2
+    configs:
+      config1:
+        input_types:
+          input: float32
+          skip: float32
+        attribute_options:
+          type_id:
+            value: 0
+          beta:
+            shape: "1, 1, 128"
+          gamma:
+            shape: "1, 1, 128"
+          bias:
+            shape: "1, 1, 128"
+      config2:
+        input_types:
+          input: float16
+          skip: float16
+        attribute_options:
+          type_id:
+            value: 1
+          beta:
+            shape: "1, 1, 768"
+          gamma:
+            shape: "1, 1, 768"
+          bias:
             shape: "1, 1, 768"
 ...

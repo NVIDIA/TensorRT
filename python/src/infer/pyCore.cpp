@@ -1293,6 +1293,7 @@ void bindCore(py::module& m)
             "weight_streaming_scratch_memory_size", &ICudaEngine::getWeightStreamingScratchMemorySize)
         // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
+
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
@@ -1488,6 +1489,7 @@ void bindCore(py::module& m)
             IBuilderConfigDoc::get_preview_feature)
         .def_property("builder_optimization_level", &IBuilderConfig::getBuilderOptimizationLevel,
             &IBuilderConfig::setBuilderOptimizationLevel)
+        .def_property("max_num_tactics", &IBuilderConfig::getMaxNbTactics, &IBuilderConfig::setMaxNbTactics)
         .def_property("hardware_compatibility_level", &IBuilderConfig::getHardwareCompatibilityLevel,
             &IBuilderConfig::setHardwareCompatibilityLevel)
         .def_property("runtime_platform", &IBuilderConfig::getRuntimePlatform, &IBuilderConfig::setRuntimePlatform)
@@ -1506,7 +1508,10 @@ void bindCore(py::module& m)
 
     // Builder
     py::class_<IBuilder>(m, "Builder", BuilderDoc::descr, py::module_local())
-        .def(py::init(&nvinfer1::createInferBuilder), "logger"_a, BuilderDoc::init, py::keep_alive<1, 2>{})
+        // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
+        // constructors. https://github.com/pybind/pybind11/issues/2856
+        .def(py::init([](ILogger& logger) { return nvinfer1::createInferBuilder(logger); }), "logger"_a,
+            BuilderDoc::init, py::keep_alive<1, 2>{})
         .def("create_network", &IBuilder::createNetworkV2, "flags"_a = 0U, BuilderDoc::create_network,
             py::keep_alive<0, 1>{})
         .def_property_readonly("platform_has_tf32", &IBuilder::platformHasTf32)
@@ -1535,7 +1540,10 @@ void bindCore(py::module& m)
 
     // Runtime
     py::class_<IRuntime>(m, "Runtime", RuntimeDoc::descr, py::module_local())
-        .def(py::init(&nvinfer1::createInferRuntime), "logger"_a, RuntimeDoc::init, py::keep_alive<1, 2>{})
+        // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
+        // constructors. https://github.com/pybind/pybind11/issues/2856
+        .def(py::init([](ILogger& logger) { return nvinfer1::createInferRuntime(logger); }), "logger"_a,
+            RuntimeDoc::init, py::keep_alive<1, 2>{})
         .def("deserialize_cuda_engine", lambdas::runtime_deserialize_cuda_engine, "serialized_engine"_a,
             RuntimeDoc::deserialize_cuda_engine, py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
         .def("deserialize_cuda_engine", py::overload_cast<IStreamReader&>(&IRuntime::deserializeCudaEngine),
@@ -1559,8 +1567,11 @@ void bindCore(py::module& m)
 
     // Refitter
     py::class_<IRefitter>(m, "Refitter", RefitterDoc::descr, py::module_local())
-        .def(py::init(&nvinfer1::createInferRefitter), "engine"_a, "logger"_a, py::keep_alive<1, 2>{},
-            py::keep_alive<1, 3>{}, RefitterDoc::init)
+        // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
+        // constructors. https://github.com/pybind/pybind11/issues/2856
+        .def(py::init(
+                 [](ICudaEngine& engine, ILogger& logger) { return nvinfer1::createInferRefitter(engine, logger); }),
+            "engine"_a, "logger"_a, py::keep_alive<1, 2>{}, py::keep_alive<1, 3>{}, RefitterDoc::init)
         .def("set_weights", &IRefitter::setWeights, "layer_name"_a, "role"_a, "weights"_a, py::keep_alive<1, 4>{},
             RefitterDoc::set_weights)
         .def("set_named_weights", py::overload_cast<char const*, Weights>(&IRefitter::setNamedWeights), "name"_a,

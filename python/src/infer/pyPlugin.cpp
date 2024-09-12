@@ -851,8 +851,15 @@ public:
                 pyDestroy();
             }
 
-            // Remove reference to the Python plugin object so that it could be garbage-collected
-            py::cast(this).dec_ref();
+            // If ref_count is > 1 at this point, then this is guaranteed to be a plugin instance
+            // which was release()'d (e.g. after being clone()'d) (lifetime managed by TRT)
+            // So only dec_ref() for those plugin instances
+            // Ref counts for others will be automatically managed by Python
+            auto obj = py::cast(this);
+            if (obj.ref_count() > 1)
+            {
+                obj.dec_ref();
+            }
         }
         PLUGIN_API_CATCH("destroy")
     }
@@ -1997,6 +2004,48 @@ static const auto get_all_creators = [](IPluginRegistry& self) -> std::vector<py
     return nullptr;
 };
 
+static const auto get_capability_interface = [](IPluginV3& self, PluginCapabilityType type) -> py::object {
+    IPluginCapability* capability_interface = self.getCapabilityInterface(type);
+
+    if (capability_interface == nullptr)
+    {
+        return py::none{};
+    }
+    else
+    {
+        try
+        {
+            if (type == PluginCapabilityType::kCORE)
+            {
+                return py::cast(static_cast<IPluginV3OneCore*>(capability_interface));
+            }
+            if (type == PluginCapabilityType::kBUILD)
+            {
+                try
+                {
+                    return py::cast(static_cast<IPluginV3OneBuildV2*>(capability_interface));
+                }
+                catch (py::cast_error const& e)
+                {
+                    try
+                    {
+                        return py::cast(static_cast<IPluginV3OneBuild*>(capability_interface));
+                    }
+                    PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid build capability interface")
+                }
+            }
+            if (type == PluginCapabilityType::kRUNTIME)
+            {
+                return py::cast(static_cast<IPluginV3OneRuntime*>(capability_interface));
+            }
+        }
+        PLUGIN_API_CATCH_CAST("get_capability_interface", "nvinfer1::IPluginCapability")
+    }
+
+    utils::throwPyError(PyExc_RuntimeError, "Unknown plugin capability type");
+    return py::none{};
+};
+
 static const auto get_creator = [](IPluginRegistry& self, char const* pluginType, char const* pluginVersion,
                                     char const* pluginNamespace) -> py::object {
     IPluginCreatorInterface* creator = self.getCreator(pluginType, pluginVersion, pluginNamespace);
@@ -2253,11 +2302,6 @@ PyIPluginV2DynamicExt* clone(PyIPluginV2DynamicExt& self)
 size_t getSerializationSize(PyIPluginV2DynamicExt& self)
 {
     return 0U;
-}
-
-IPluginCapability* getCapabilityInterface(IPluginV3& self, PluginCapabilityType type)
-{
-    return nullptr;
 }
 
 std::vector<DataType> getOutputDataTypes(IPluginV3& self, std::vector<DataType> const& inputTypes)
@@ -2538,8 +2582,9 @@ void bindPlugin(py::module& m)
         m, "IPluginV3", IPluginV3Doc::ipluginv3_descr, py::module_local())
         .def(py::init<>())
         .def(py::init<const IPluginV3&>())
-        // The following defs are only for documenting the API for Python-based plugins
-        .def("get_capability_interface", &pluginDoc::getCapabilityInterface, IPluginV3Doc::get_capability_interface)
+        .def("get_capability_interface", lambdas::get_capability_interface, "type"_a,
+            py::return_value_policy::reference_internal, IPluginV3Doc::get_capability_interface)
+        // The following defs are only for documenting API for Python-based plugins
         .def("clone", &pluginDoc::cloneV3, IPluginV3Doc::clone)
         .def("destroy", &pluginDoc::destroyV3, IPluginV3Doc::destroy);
 

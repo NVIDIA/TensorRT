@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.5.0
+ARG CUDA_VERSION=12.6.0
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
-ENV TRT_VERSION 10.3.0.26
+ENV TRT_VERSION 10.4.0.26
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -71,7 +71,7 @@ RUN apt-get install -y --no-install-recommends \
 # Install TensorRT. This will also pull in CUDNN
 RUN ver="${CUDA_VERSION%.*}" &&\
     if [ "${ver%.*}" = "12" ] ; then \
-        ver="12.5"; \
+        ver="12.6"; \
     fi &&\
     v="${TRT_VERSION}-1+cuda${ver}" &&\
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/3bf863cc.pub &&\
@@ -104,7 +104,7 @@ RUN cd /usr/local/bin && wget https://ngc.nvidia.com/downloads/ngccli_arm64.zip 
 # Set environment and working directory
 ENV TRT_LIBPATH /usr/lib/aarch64-linux-gnu/
 ENV TRT_OSSPATH /workspace/TensorRT
-ENV PATH="${PATH}:/usr/local/bin/ngc-cli"
+ENV PATH="/workspace/TensorRT/build/out:${PATH}:/usr/local/bin/ngc-cli"
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${TRT_OSSPATH}/build/out:${TRT_LIBPATH}"
 WORKDIR /workspace
 

@@ -21,18 +21,6 @@
 #include <cuda.h>
 #endif // CUDA_VERSION
 
-#if CUDA_VERSION >= 12050
-#include <cuda/__cccl_config>
-#undef _CCCL_FORCEINLINE
-
-#if defined(_CCCL_CUDA_COMPILER)
-#  define _CCCL_FORCEINLINE __forceinline__
-#else // ^^^ _CCCL_CUDA_COMPILER ^^^ / vvv !_CCCL_CUDA_COMPILER vvv
-#  define _CCCL_FORCEINLINE inline
-#endif // !_CCCL_CUDA_COMPILER
-
-#endif // CUDA_VERSION >= 12050
-
 #include "common/kernels/kernel.h"
 #include <cub/cub.cuh>
 template <typename KeyT, typename ValueT>

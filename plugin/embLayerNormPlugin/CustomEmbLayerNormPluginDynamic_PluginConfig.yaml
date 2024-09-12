@@ -82,13 +82,13 @@ versions:
       bert_embeddings_token_type_embeddings: 2
       bert_embeddings_position_embeddings: 2
     attribute_dim_range:
-      output_fp16: 
+      output_fp16:
       - min: "=1"
       - max: "=1"
-      full_mask: 
+      full_mask:
       - min: "=1"
       - max: "=1"
-      mha_type_id: 
+      mha_type_id:
       - min: "=1"
       - max: "=1"
       bert_embeddings_layernorm_beta:
@@ -107,29 +107,29 @@ versions:
       - min: "=1, =1"
       - max: "=pinf, =pinf"
     attribute_options:
-      output_fp16: 
+      output_fp16:
         - 0
         - 1
-      full_mask: 
+      full_mask:
         - 0
         - 1
-      mha_type_id: 
+      mha_type_id:
         - 0
         - 1
         - 2
-      bert_embeddings_layernorm_beta: 
+      bert_embeddings_layernorm_beta:
         min: "=ninf"
         max: "=pinf"
-      bert_embeddings_layernorm_gamma: 
+      bert_embeddings_layernorm_gamma:
         min: "=ninf"
         max: "=pinf"
-      bert_embeddings_word_embeddings: 
+      bert_embeddings_word_embeddings:
         min: "=ninf"
         max: "=pinf"
-      bert_embeddings_token_type_embeddings: 
+      bert_embeddings_token_type_embeddings:
         min: "=ninf"
         max: "=pinf"
-      bert_embeddings_position_embeddings: 
+      bert_embeddings_position_embeddings:
         min: "=ninf"
         max: "=pinf"
     attributes_required:
@@ -148,23 +148,23 @@ versions:
           segment_id: int32
           input_mask: int32
         attribute_options:
-          output_fp16: 
+          output_fp16:
             value: 0
             shape: "1"
-          full_mask: 
+          full_mask:
             value: 0
             shape: "1"
-          mha_type_id: 
+          mha_type_id:
             value: 0
             shape: "1"
-          bert_embeddings_layernorm_beta: 
+          bert_embeddings_layernorm_beta:
             shape: "128"
-          bert_embeddings_layernorm_gamma: 
+          bert_embeddings_layernorm_gamma:
             shape: "128"
-          bert_embeddings_word_embeddings: 
+          bert_embeddings_word_embeddings:
             shape: "100, 128"
-          bert_embeddings_token_type_embeddings: 
+          bert_embeddings_token_type_embeddings:
             shape: "2, 128"
-          bert_embeddings_position_embeddings:    
+          bert_embeddings_position_embeddings:
             shape: "20, 128"
 ...

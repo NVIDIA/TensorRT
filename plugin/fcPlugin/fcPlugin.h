@@ -451,12 +451,18 @@ nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(int32_t const m, int32
     Gemm<T> g(m, n, k, false, false);
     std::vector<customMatmulPerf_t> perfResults(kNB_ALGO_COMBINATIONS);
 
-    PLUGIN_CUASSERT(cudaMallocAsync(reinterpret_cast<void**>(&g.A), g.bytesA, stream));
-    PLUGIN_CUASSERT(cudaMallocAsync(reinterpret_cast<void**>(&g.B), g.bytesB, stream));
-    PLUGIN_CUASSERT(cudaMallocAsync(reinterpret_cast<void**>(&g.C), g.bytesC, stream));
+    bool const useAsync = supportsMemPools();
+
+    PLUGIN_CUASSERT(useAsync ? cudaMallocAsync(reinterpret_cast<void**>(&g.A), g.bytesA, stream)
+                             : cudaMalloc(reinterpret_cast<void**>(&g.A), g.bytesA));
+    PLUGIN_CUASSERT(useAsync ? cudaMallocAsync(reinterpret_cast<void**>(&g.B), g.bytesB, stream)
+                             : cudaMalloc(reinterpret_cast<void**>(&g.B), g.bytesB));
+    PLUGIN_CUASSERT(useAsync ? cudaMallocAsync(reinterpret_cast<void**>(&g.C), g.bytesC, stream)
+                             : cudaMalloc(reinterpret_cast<void**>(&g.C), g.bytesC));
 
     void* workspace;
-    PLUGIN_CUASSERT(cudaMallocAsync(&workspace, workspaceSize, stream));
+    PLUGIN_CUASSERT(
+        useAsync ? cudaMallocAsync(&workspace, workspaceSize, stream) : cudaMalloc(&workspace, workspaceSize));
     nvinfer1::pluginInternal::cublasLtHandle_t lt;
     nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
     PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtCreate(&lt));
@@ -464,11 +470,11 @@ nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(int32_t const m, int32
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults, stream);
     PLUGIN_CUASSERT(cudaStreamSynchronize(stream));
     PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
-    PLUGIN_CUASSERT(cudaFreeAsync(workspace, stream));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(workspace, stream) : cudaFree(workspace));
 
-    PLUGIN_CUASSERT(cudaFreeAsync(g.A, stream));
-    PLUGIN_CUASSERT(cudaFreeAsync(g.B, stream));
-    PLUGIN_CUASSERT(cudaFreeAsync(g.C, stream));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(g.A, stream) : cudaFree(g.A));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(g.B, stream) : cudaFree(g.B));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(g.C, stream) : cudaFree(g.C));
 
     actualWorkspace = perfResults[0].workspaceSize;
     return perfResults[0].algo;
@@ -480,12 +486,18 @@ nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
 {
     std::vector<customMatmulPerf_t> perfResults(kNB_ALGO_COMBINATIONS);
 
-    PLUGIN_CUASSERT(cudaMallocAsync(&g.A, g.bytesA, stream));
-    PLUGIN_CUASSERT(cudaMallocAsync(&g.B, g.bytesB, stream));
-    PLUGIN_CUASSERT(cudaMallocAsync(&g.C, g.bytesC, stream));
+    bool const useAsync = supportsMemPools();
+
+    PLUGIN_CUASSERT(useAsync ? cudaMallocAsync(reinterpret_cast<void**>(&g.A), g.bytesA, stream)
+                             : cudaMalloc(reinterpret_cast<void**>(&g.A), g.bytesA));
+    PLUGIN_CUASSERT(useAsync ? cudaMallocAsync(reinterpret_cast<void**>(&g.B), g.bytesB, stream)
+                             : cudaMalloc(reinterpret_cast<void**>(&g.B), g.bytesB));
+    PLUGIN_CUASSERT(useAsync ? cudaMallocAsync(reinterpret_cast<void**>(&g.C), g.bytesC, stream)
+                             : cudaMalloc(reinterpret_cast<void**>(&g.C), g.bytesC));
 
     void* workspace;
-    PLUGIN_CUASSERT(cudaMallocAsync(&workspace, workspaceSize, stream));
+    PLUGIN_CUASSERT(
+        useAsync ? cudaMallocAsync(&workspace, workspaceSize, stream) : cudaMalloc(&workspace, workspaceSize));
     nvinfer1::pluginInternal::cublasLtHandle_t lt;
     nvinfer1::pluginInternal::CublasLtWrapper& cublasLtWrapper = nvinfer1::pluginInternal::getCublasLtWrapper();
     PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtCreate(&lt));
@@ -493,11 +505,11 @@ nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
     LtGemmSearch(lt, g, workspace, workspaceSize, perfResults, stream);
     PLUGIN_CUASSERT(cudaStreamSynchronize(stream));
     PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtDestroy(lt));
-    PLUGIN_CUASSERT(cudaFreeAsync(workspace, stream));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(workspace, stream) : cudaFree(workspace));
 
-    PLUGIN_CUASSERT(cudaFreeAsync(g.A, stream));
-    PLUGIN_CUASSERT(cudaFreeAsync(g.B, stream));
-    PLUGIN_CUASSERT(cudaFreeAsync(g.C, stream));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(g.A, stream) : cudaFree(g.A));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(g.B, stream) : cudaFree(g.B));
+    PLUGIN_CUASSERT(useAsync ? cudaFreeAsync(g.C, stream) : cudaFree(g.C));
 
     actualWorkspace = perfResults[0].workspaceSize;
     return perfResults[0].algo;

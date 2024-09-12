@@ -17,7 +17,8 @@
 | [disentangledAttentionPlugin](disentangledAttentionPlugin) | DisentangledAttention_TRT | 1 |
 | [efficientNMSPlugin](efficientNMSPlugin) | EfficientNMS_TRT | 1 |
 | [efficientNMSONNXPlugin](efficientNMSPlugin) [DEPRECATED] | EfficientNMS_ONNX_TRT | 1 |
-| [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 1, 2 |
+| [embLayerNormPlugin](embLayerNormPlugin) [DEPRECATED]| CustomEmbLayerNormPluginDynamic | 1, 2, 3 |
+| [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 4, 5 |
 | [fcPlugin](fcPlugin) | CustomFCPluginDynamic | 1 |
 | [flattenConcat](flattenConcat) | FlattenConcat_TRT | 1 |
 | [geluPlugin](geluPlugin) [DEPRECATED] | CustomGeluPluginDynamic | 1 |
@@ -50,7 +51,8 @@
 | [scatterElementsPlugin](scatterElementsPlugin) [DEPRECATED] | ScatterElements | 1 |
 | [scatterElementsPlugin](scatterElementsPlugin) | ScatterElements | 2 |
 | [scatterPlugin](scatterPlugin) | ScatterND | 1 |
-| [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 1, 2, 3 |
+| [skipLayerNormPlugin](skipLayerNormPlugin) [DEPRECATED] | CustomSkipLayerNormPluginDynamic | 1, 2, 3, 4 |
+| [skipLayerNormPlugin](skipLayerNormPlugin) | CustomSkipLayerNormPluginDynamic | 5, 6, 7, 8 |
 | [specialSlicePlugin](specialSlicePlugin) [DEPRECATED] | SpecialSlice_TRT | 1 |
 | [splitPlugin](splitPlugin) [DEPRECATED] | Split | 1 |
 | [voxelGeneratorPlugin](voxelGeneratorPlugin) | VoxelGeneratorPlugin | 1 |

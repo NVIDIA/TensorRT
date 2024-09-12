@@ -1170,6 +1170,8 @@ public:
     virtual IProgressMonitor* getProgressMonitor() const noexcept = 0;
     virtual void setRuntimePlatform(RuntimePlatform runtimePlatform) noexcept = 0;
     virtual RuntimePlatform getRuntimePlatform() const noexcept = 0;
+    virtual void setMaxNbTactics(int32_t maxTactics) noexcept = 0;
+    virtual int32_t getMaxNbTactics() const noexcept = 0;
 };
 
 class VSerializationConfig : public VRoot

@@ -23,7 +23,9 @@ from diffusers.models import (
     ControlNetModel,
     UNet2DConditionModel,
     UNetSpatioTemporalConditionModel,
+    StableCascadeUNet
 )
+from diffusers.pipelines.wuerstchen import PaellaVQModel
 import json
 import numpy as np
 import onnx
@@ -48,6 +50,13 @@ from utilities import merge_loras
 from utils_sd3.sd3_impls import BaseModel as BaseModelSD3
 from utils_sd3.sd3_impls import SDVAE
 from utils_sd3.other_impls import load_into, SDClipModel, SDXLClipG, T5XXLModel
+from utils_modelopt import (
+    convert_zp_fp8,
+    cast_resize_io,
+    convert_fp16_io,
+    cast_fp8_mha_io,
+)
+from onnxmltools.utils.float16_converter import convert_float_to_float16
 
 class Optimizer():
     def __init__(
@@ -99,7 +108,7 @@ class Optimizer():
         if return_onnx:
             return onnx_graph
 
-    def clip_add_hidden_states(self, return_onnx=False):
+    def clip_add_hidden_states(self, hidden_layer_offset, return_onnx=False):
         hidden_layers = -1
         onnx_graph = gs.export_onnx(self.graph)
         for i in range(len(onnx_graph.graph.node)):
@@ -109,10 +118,10 @@ class Optimizer():
                     hidden_layers = max(int(name.split(".")[1].split("/")[0]), hidden_layers)
         for i in range(len(onnx_graph.graph.node)):
             for j in range(len(onnx_graph.graph.node[i].output)):
-                if onnx_graph.graph.node[i].output[j] == "/text_model/encoder/layers.{}/Add_1_output_0".format(hidden_layers-1):
+                if onnx_graph.graph.node[i].output[j] == "/text_model/encoder/layers.{}/Add_1_output_0".format(hidden_layers+hidden_layer_offset):
                     onnx_graph.graph.node[i].output[j] = "hidden_states"
             for j in range(len(onnx_graph.graph.node[i].input)):
-                if onnx_graph.graph.node[i].input[j] == "/text_model/encoder/layers.{}/Add_1_output_0".format(hidden_layers-1):
+                if onnx_graph.graph.node[i].input[j] == "/text_model/encoder/layers.{}/Add_1_output_0".format(hidden_layers+hidden_layer_offset):
                     onnx_graph.graph.node[i].input[j] = "hidden_states"
         if return_onnx:
             return onnx_graph
@@ -169,16 +178,30 @@ class Optimizer():
         print(f"Removed {removed} QDQ nodes")
         return removed # expected 72 for L2.5
 
+    def modify_fp8_graph(self):
+        onnx_graph = gs.export_onnx(self.graph)
+        # Convert INT8 Zero to FP8.
+        onnx_graph = convert_zp_fp8(onnx_graph)
+        # Convert weights and activations to FP16 and insert Cast nodes in FP8 MHA.
+        onnx_graph = convert_float_to_float16(onnx_graph, keep_io_types=True, disable_shape_infer=True)
+        self.graph = gs.import_onnx(onnx_graph)
+        # Add cast nodes to Resize I/O.
+        cast_resize_io(self.graph)
+        # Convert model inputs and outputs to fp16 I/O.
+        convert_fp16_io(self.graph)
+        # Add cast nodes to MHA's BMM1 and BMM2's I/O.
+        cast_fp8_mha_io(self.graph)
+
 def get_path(version, pipeline, controlnets=None):
     if controlnets is not None:
         return ["lllyasviel/sd-controlnet-" + modality for modality in controlnets]
-    
+
     if version in ("1.4", "1.5") and pipeline.is_inpaint():
-        return "runwayml/stable-diffusion-inpainting"
+        return "benjamin-paine/stable-diffusion-v1-5-inpainting"
     elif version == "1.4":
         return "CompVis/stable-diffusion-v1-4"
     elif version == "1.5":
-        return "runwayml/stable-diffusion-v1-5"
+        return "benjamin-paine/stable-diffusion-v1-5"
     elif version == 'dreamshaper-7':
         return 'Lykon/dreamshaper-7'
     elif version in ("2.0-base", "2.0") and pipeline.is_inpaint():
@@ -202,6 +225,11 @@ def get_path(version, pipeline, controlnets=None):
         return "stabilityai/stable-diffusion-3-medium"
     elif version == 'svd-xt-1.1' and pipeline.is_img2vid():
         return "stabilityai/stable-video-diffusion-img2vid-xt-1-1"
+    elif version == 'cascade':
+        if pipeline.is_cascade_decoder():
+            return "stabilityai/stable-cascade"
+        else:
+            return "stabilityai/stable-cascade-prior"
     else:
         raise ValueError(f"Unsupported version {version} + pipeline {pipeline.name}")
 
@@ -218,7 +246,7 @@ def get_clip_embedding_dim(version, pipeline):
         raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
 
 def get_clipwithproj_embedding_dim(version, pipeline):
-    if version in ("xl-1.0", "xl-turbo"):
+    if version in ("xl-1.0", "xl-turbo", "cascade"):
         return 1280
     else:
         raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
@@ -230,6 +258,8 @@ def get_unet_embedding_dim(version, pipeline):
         return 1024
     elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_base():
         return 2048
+    elif version in ("cascade"):
+        return 1280
     elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_refiner():
         return 1280
     elif pipeline.is_img2vid():
@@ -305,10 +335,13 @@ class BaseModel():
         verbose=True,
         framework_model_dir='pytorch_model',
         fp16=False,
+        bf16=False,
         int8=False,
+        fp8=False,
         max_batch_size=16,
         text_maxlen=77,
         embedding_dim=768,
+        compression_factor=8
     ):
 
         self.name = self.__class__.__name__
@@ -322,23 +355,28 @@ class BaseModel():
         self.framework_model_dir = framework_model_dir
 
         self.fp16 = fp16
+        self.bf16 = bf16
         self.int8 = int8
+        self.fp8 = fp8
 
+        self.compression_factor = compression_factor
         self.min_batch = 1
         self.max_batch = max_batch_size
         self.min_image_shape = 256   # min image resolution: 256x256
         self.max_image_shape = 1024  # max image resolution: 1024x1024
-        self.min_latent_shape = self.min_image_shape // 8
-        self.max_latent_shape = self.max_image_shape // 8
+        self.min_latent_shape = self.min_image_shape // self.compression_factor
+        self.max_latent_shape = self.max_image_shape // self.compression_factor
 
         self.text_maxlen = text_maxlen
         self.embedding_dim = embedding_dim
         self.extra_output_names = []
 
         self.lora_dict = None
+        self.do_constant_folding = True
 
     def get_pipeline(self):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
+        model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else model_opts
         return DiffusionPipeline.from_pretrained(
             self.path,
             use_safetensors=self.hf_safetensor,
@@ -399,7 +437,7 @@ class BaseModel():
                         onnx_path,
                         export_params=True,
                         opset_version=onnx_opset,
-                        do_constant_folding=True,
+                        do_constant_folding=self.do_constant_folding,
                         input_names=self.get_input_names(),
                         output_names=self.get_output_names(),
                         dynamic_axes=self.get_dynamic_axes(),
@@ -479,13 +517,17 @@ class BaseModel():
         opt.info(self.name + ': original')
         opt.cleanup()
         opt.info(self.name + ': cleanup')
-        opt.fold_constants()
-        opt.info(self.name + ': fold constants')
-        opt.infer_shapes()
-        opt.info(self.name + ': shape inference')
-        if kwargs.get('fuse_mha_qkv_int8', False):
-            opt.fuse_mha_qkv_int8_sq()
-            opt.info(self.name + ': fuse QKV nodes')
+        if kwargs.get('modify_fp8_graph', False):
+            opt.modify_fp8_graph()
+            opt.info(self.name + ': modify fp8 graph')
+        else:
+            opt.fold_constants()
+            opt.info(self.name + ': fold constants')
+            opt.infer_shapes()
+            opt.info(self.name + ': shape inference')
+            if kwargs.get('fuse_mha_qkv_int8', False):
+                opt.fuse_mha_qkv_int8_sq()
+                opt.info(self.name + ': fuse QKV nodes')
         onnx_opt_graph = opt.cleanup(return_onnx=return_onnx)
         opt.info(self.name + ': finished')
         return onnx_opt_graph
@@ -493,8 +535,8 @@ class BaseModel():
     def check_dims(self, batch_size, image_height, image_width):
         assert batch_size >= self.min_batch and batch_size <= self.max_batch
         assert image_height % 8 == 0 or image_width % 8 == 0
-        latent_height = image_height // 8
-        latent_width = image_width // 8
+        latent_height = image_height // self.compression_factor
+        latent_width = image_width // self.compression_factor
         assert latent_height >= self.min_latent_shape and latent_height <= self.max_latent_shape
         assert latent_width >= self.min_latent_shape and latent_width <= self.max_latent_shape
         return (latent_height, latent_width)
@@ -502,8 +544,8 @@ class BaseModel():
     def get_minmax_dims(self, batch_size, image_height, image_width, static_batch, static_shape):
         min_batch = batch_size if static_batch else self.min_batch
         max_batch = batch_size if static_batch else self.max_batch
-        latent_height = image_height // 8
-        latent_width = image_width // 8
+        latent_height = image_height // self.compression_factor
+        latent_width = image_width // self.compression_factor
         min_image_height = image_height if static_shape else self.min_image_shape
         max_image_height = image_height if static_shape else self.max_image_shape
         min_image_width = image_width if static_shape else self.min_image_shape
@@ -526,13 +568,15 @@ class CLIPModel(BaseModel):
         max_batch_size,
         embedding_dim,
         fp16=False,
+        bf16=False,
         output_hidden_states=False,
         subfolder="text_encoder",
         lora_dict=None,
         lora_alphas=None,
     ):
-        super(CLIPModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
+        super(CLIPModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, bf16=bf16, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
         self.subfolder = subfolder
+        self.hidden_layer_offset = 0 if pipeline.is_cascade() else -1
 
         # Output the final hidden state
         if output_hidden_states:
@@ -599,7 +643,7 @@ class CLIPModel(BaseModel):
         opt.info(self.name + ': remove output[0]')
         opt_onnx_graph = opt.cleanup(return_onnx=True)
         if 'hidden_states' in self.extra_output_names:
-            opt_onnx_graph = opt.clip_add_hidden_states(return_onnx=True)
+            opt_onnx_graph = opt.clip_add_hidden_states(self.hidden_layer_offset, return_onnx=True)
             opt.info(self.name + ': added hidden_states')
         opt.info(self.name + ': finished')
         return opt_onnx_graph
@@ -614,6 +658,7 @@ class CLIPWithProjModel(CLIPModel):
         verbose,
         framework_model_dir,
         fp16=False,
+        bf16=False,
         max_batch_size=16,
         output_hidden_states=False,
         subfolder="text_encoder_2",
@@ -621,34 +666,64 @@ class CLIPWithProjModel(CLIPModel):
         lora_alphas=None,
     ):
 
-        super(CLIPWithProjModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, embedding_dim=get_clipwithproj_embedding_dim(version, pipeline), output_hidden_states=output_hidden_states)
+        super(CLIPWithProjModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, bf16=bf16, max_batch_size=max_batch_size, embedding_dim=get_clipwithproj_embedding_dim(version, pipeline), output_hidden_states=output_hidden_states)
         self.subfolder = subfolder
 
     def get_model(self, torch_inference=''):
+        model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else {}
         clip_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        if not os.path.exists(clip_model_dir):
+        clip_path = self.get_model_path(clip_model_dir, model_opts, model_name='model')
+        if not os.path.exists(clip_path):
             model = CLIPTextModelWithProjection.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
-                use_auth_token=self.hf_token).to(self.device)
-            model.save_pretrained(clip_model_dir)
+                use_auth_token=self.hf_token,
+                **model_opts).to(self.device)
+            model.save_pretrained(clip_model_dir, **model_opts)
         else:
-            print(f"[I] Load CLIPTextModelWithProjection model from: {clip_model_dir}")
-            model = CLIPTextModelWithProjection.from_pretrained(clip_model_dir).to(self.device)
+            print(f"[I] Load CLIPTextModelWithProjection model from: {clip_path}")
+            model = CLIPTextModelWithProjection.from_pretrained(clip_model_dir, **model_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
+
+    def get_input_names(self):
+        return ['input_ids', 'attention_mask']
+
+    def get_output_names(self):
+       return ['text_embeddings']
+
+    def get_dynamic_axes(self):
+        return {
+            'input_ids': {0: 'B'},
+            'attention_mask': {0: 'B'},
+            'text_embeddings': {0: 'B'}
+        }
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, _, _, _, _, _, _, _, _ = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        return {
+            'input_ids': [(min_batch, self.text_maxlen), (batch_size, self.text_maxlen), (max_batch, self.text_maxlen)],
+            'attention_mask': [(min_batch, self.text_maxlen), (batch_size, self.text_maxlen), (max_batch, self.text_maxlen)]
+        }
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         self.check_dims(batch_size, image_height, image_width)
         output = {
             'input_ids': (batch_size, self.text_maxlen),
+            'attention_mask': (batch_size, self.text_maxlen),
             'text_embeddings': (batch_size, self.embedding_dim)
         }
         if 'hidden_states' in self.extra_output_names:
             output["hidden_states"] = (batch_size, self.text_maxlen, self.embedding_dim)
-
         return output
 
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        self.check_dims(batch_size, image_height, image_width)
+        return (
+            torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device),
+            torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device)
+        )
 
 class SD3_CLIPGModel(CLIPModel):
     def __init__(self,
@@ -914,6 +989,7 @@ class UNetModel(BaseModel):
         framework_model_dir,
         fp16 = False,
         int8 = False,
+        fp8 = False,
         max_batch_size = 16,
         text_maxlen = 77,
         controlnets = None,
@@ -923,7 +999,7 @@ class UNetModel(BaseModel):
         do_classifier_free_guidance = False,
     ):
 
-        super(UNetModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
+        super(UNetModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, int8=int8, fp8=fp8, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
         self.subfolder = 'unet'
         self.controlnets = get_path(version, pipeline, controlnets) if controlnets else None
         self.unet_dim = (9 if pipeline.is_inpaint() else 4)
@@ -1054,6 +1130,13 @@ class UNetModel(BaseModel):
                 torch.randn(len(self.controlnets), dtype=dtype, device=self.device)
             )
 
+    def optimize(self, onnx_graph):
+        if self.fp8:
+            return super().optimize(onnx_graph, modify_fp8_graph=True)
+        if self.int8:
+            return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
+        return super().optimize(onnx_graph)
+
 
 class UNetXLModel(BaseModel):
     def __init__(self,
@@ -1065,6 +1148,7 @@ class UNetXLModel(BaseModel):
         framework_model_dir,
         fp16 = False,
         int8 = False,
+        fp8 = False,
         max_batch_size = 16,
         text_maxlen = 77,
         lora_scales = None,
@@ -1072,7 +1156,7 @@ class UNetXLModel(BaseModel):
         lora_alphas = None,
         do_classifier_free_guidance = False,
     ):
-        super(UNetXLModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
+        super(UNetXLModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, int8=int8, fp8=fp8, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
         self.subfolder = 'unet'
         self.unet_dim = (9 if pipeline.is_inpaint() else 4)
         self.time_dim = (5 if pipeline.is_sd_xl_refiner() else 6)
@@ -1164,7 +1248,11 @@ class UNetXLModel(BaseModel):
         )
 
     def optimize(self, onnx_graph):
-        return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
+        if self.fp8:
+            return super().optimize(onnx_graph, modify_fp8_graph=True)
+        if self.int8:
+            return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
+        return super().optimize(onnx_graph)
 
 class SD3_MMDiTModel(BaseModel):
     def __init__(self,
@@ -1332,6 +1420,151 @@ class UNetTemporalModel(BaseModel):
             torch.randn(self.xB*batch_size, 3, dtype=dtype, device=self.device),
         )
 
+
+class UNetCascadeModel(BaseModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        fp16 = False,
+        bf16 = False,
+        max_batch_size = 16,
+        text_maxlen = 77,
+        do_classifier_free_guidance = False,
+        compression_factor=42,
+        latent_dim_scale=10.67,
+        image_embedding_dim=768,
+        lite=False
+    ):
+        super(UNetCascadeModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, bf16=bf16, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline), compression_factor=compression_factor)
+        self.is_prior = True if pipeline.is_cascade_prior() else False
+        self.subfolder = 'prior' if self.is_prior else 'decoder'
+        if lite:
+            self.subfolder += '_lite'
+        self.prior_dim = 16
+        self.decoder_dim = 4
+        self.xB = 2 if do_classifier_free_guidance else 1 # batch multiplier
+        self.latent_dim_scale = latent_dim_scale
+        self.min_latent_shape = self.min_image_shape // self.compression_factor
+        self.max_latent_shape = self.max_image_shape // self.compression_factor
+        self.do_constant_folding = False
+        self.image_embedding_dim = image_embedding_dim
+
+    def get_model(self, torch_inference=''):
+        # FP16 variant doesn't exist
+        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
+        model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else model_opts
+        unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
+        unet_path = self.get_model_path(unet_model_dir, model_opts)
+        if not os.path.exists(unet_path):
+            model = StableCascadeUNet.from_pretrained(self.path,
+                subfolder=self.subfolder,
+                use_safetensors=self.hf_safetensor,
+                use_auth_token=self.hf_token,
+                **model_opts).to(self.device)
+            model.save_pretrained(unet_model_dir, **model_opts)
+        else:
+            print(f"[I] Load Stable Cascade UNet pytorch model from: {unet_path}")
+            model = StableCascadeUNet.from_pretrained(unet_model_dir, **model_opts).to(self.device)
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_names(self):
+        if self.is_prior:
+            return ['sample', 'timestep_ratio', 'clip_text_pooled', 'clip_text', 'clip_img']
+        else:
+            return ['sample', 'timestep_ratio', 'clip_text_pooled', 'effnet']
+
+    def get_output_names(self):
+       return ['latent']
+
+    def get_dynamic_axes(self):
+        xB = '2B' if self.xB == 2 else 'B'
+        if self.is_prior:
+            return {
+                'sample': {0: xB, 2: 'H', 3: 'W'},
+                'timestep_ratio': {0: xB},
+                'clip_text_pooled': {0: xB},
+                'clip_text': {0: xB},
+                'clip_img': {0: xB},
+                'latent': {0: xB, 2: 'H', 3: 'W'}
+            }
+        else:
+            return {
+                'sample': {0: xB, 2: 'H', 3: 'W'},
+                'timestep_ratio': {0: xB},
+                'clip_text_pooled': {0: xB},
+                'effnet': {0: xB, 2: 'H_effnet', 3: 'W_effnet'},
+                'latent': {0: xB, 2: 'H', 3: 'W'}
+            }
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, _, _, _, _, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        if self.is_prior:
+            return {
+                'sample': [(self.xB*min_batch, self.prior_dim, min_latent_height, min_latent_width), (self.xB*batch_size, self.prior_dim, latent_height, latent_width), (self.xB*max_batch, self.prior_dim, max_latent_height, max_latent_width)],
+                'timestep_ratio': [(self.xB*min_batch,), (self.xB*batch_size,), (self.xB*max_batch,)],
+                'clip_text_pooled': [(self.xB*min_batch, 1, self.embedding_dim), (self.xB*batch_size, 1, self.embedding_dim), (self.xB*max_batch, 1, self.embedding_dim)],
+                'clip_text': [(self.xB*min_batch, self.text_maxlen, self.embedding_dim), (self.xB*batch_size, self.text_maxlen, self.embedding_dim), (self.xB*max_batch, self.text_maxlen, self.embedding_dim)],
+                'clip_img': [(self.xB*min_batch, 1, self.image_embedding_dim), (self.xB*batch_size, 1, self.image_embedding_dim), (self.xB*max_batch, 1, self.image_embedding_dim)],
+            }
+        else:
+            return {
+                'sample': [(self.xB*min_batch, self.decoder_dim, int(min_latent_height * self.latent_dim_scale), int(min_latent_width * self.latent_dim_scale)),
+                    (self.xB*batch_size, self.decoder_dim, int(latent_height * self.latent_dim_scale), int(latent_width * self.latent_dim_scale)),
+                    (self.xB*max_batch, self.decoder_dim, int(max_latent_height * self.latent_dim_scale), int(max_latent_width * self.latent_dim_scale))],
+                'timestep_ratio': [(self.xB*min_batch,), (self.xB*batch_size,), (self.xB*max_batch,)],
+                'clip_text_pooled': [(self.xB*min_batch, 1, self.embedding_dim), (self.xB*batch_size, 1, self.embedding_dim), (self.xB*max_batch, 1, self.embedding_dim)],
+                'effnet': [(self.xB*min_batch, self.prior_dim, min_latent_height, min_latent_width), (self.xB*batch_size, self.prior_dim, latent_height, latent_width), (self.xB*max_batch, self.prior_dim, max_latent_height, max_latent_width)]
+            }
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        if self.is_prior:
+            return {
+                'sample': (self.xB*batch_size, self.prior_dim, latent_height, latent_width),
+                'timestep_ratio': (self.xB*batch_size,),
+                'clip_text_pooled': (self.xB*batch_size, 1, self.embedding_dim),
+                'clip_text': (self.xB*batch_size, self.text_maxlen, self.embedding_dim),
+                'clip_img': (self.xB*batch_size, 1, self.image_embedding_dim),
+                'latent': (self.xB*batch_size, self.prior_dim, latent_height, latent_width)
+            }
+        else:
+            return {
+                'sample': (self.xB*batch_size, self.decoder_dim, int(latent_height * self.latent_dim_scale), int(latent_width * self.latent_dim_scale)),
+                'timestep_ratio': (self.xB*batch_size,),
+                'clip_text_pooled': (self.xB*batch_size, 1, self.embedding_dim),
+                'effnet': (self.xB*batch_size, self.prior_dim, latent_height, latent_width),
+                'latent': (self.xB*batch_size, self.decoder_dim, int(latent_height * self.latent_dim_scale), int(latent_width * self.latent_dim_scale))
+            }
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
+        if self.is_prior:
+            return (
+                torch.randn(batch_size, self.prior_dim, latent_height, latent_width, dtype=dtype, device=self.device),
+                torch.tensor([1.]*batch_size, dtype=dtype, device=self.device),
+                torch.randn(batch_size, 1, self.embedding_dim, dtype=dtype, device=self.device),
+                {
+                    'clip_text': torch.randn(batch_size, self.text_maxlen, self.embedding_dim, dtype=dtype, device=self.device),
+                    'clip_img': torch.randn(batch_size, 1, self.image_embedding_dim, dtype=dtype, device=self.device),
+                }
+            )
+        else:
+            return (
+                torch.randn(batch_size, self.decoder_dim, int(latent_height * self.latent_dim_scale), int(latent_width * self.latent_dim_scale), dtype=dtype, device=self.device),
+                torch.tensor([1.]*batch_size, dtype=dtype, device=self.device),
+                torch.randn(batch_size, 1, self.embedding_dim, dtype=dtype, device=self.device),
+                {
+                    'effnet': torch.randn(batch_size, self.prior_dim, latent_height, latent_width, dtype=dtype, device=self.device),
+                }
+            )
 
 class VAEModel(BaseModel):
     def __init__(self,
@@ -1632,6 +1865,90 @@ class SD3_VAEEncoderModel(VAEEncoderModel):
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         dtype = torch.float16 if self.fp16 else torch.float32
         return torch.randn(batch_size, 3, image_height, image_width, dtype=dtype, device=self.device)
+
+class VQGANModel(BaseModel):
+    def __init__(self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        fp16=False,
+        bf16=False,
+        max_batch_size=16,
+        compression_factor=42,
+        latent_dim_scale=10.67,
+        scale_factor=0.3764
+    ):
+        super(VQGANModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, bf16=bf16, max_batch_size=max_batch_size, compression_factor=compression_factor)
+        self.subfolder = 'vqgan'
+        self.latent_dim_scale = latent_dim_scale
+        self.scale_factor = scale_factor
+
+    def get_model(self, torch_inference=''):
+        model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else {}
+        vqgan_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
+        vqgan_path = self.get_model_path(vqgan_model_dir, model_opts, model_name='model')
+        if not os.path.exists(vqgan_path):
+            model = PaellaVQModel.from_pretrained(self.path,
+                subfolder=self.subfolder,
+                use_safetensors=self.hf_safetensor,
+                use_auth_token=self.hf_token,
+                **model_opts).to(self.device)
+            model.save_pretrained(vqgan_model_dir, **model_opts)
+        else:
+            print(f"[I] Load VQGAN pytorch model from: {vqgan_path}")
+            model = PaellaVQModel.from_pretrained(vqgan_model_dir, **model_opts).to(self.device)
+        model.forward = model.decode
+        model = optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_names(self):
+        return ['latent']
+
+    def get_output_names(self):
+       return ['images']
+
+    def get_dynamic_axes(self):
+        return {
+            'latent': {0: 'B', 2: 'H', 3: 'W'},
+            'images': {0: 'B', 2: '8H', 3: '8W'}
+        }
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, _, _, _, _, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        return {
+            'latent': [(min_batch, 4, min_latent_height, min_latent_width), (batch_size, 4, latent_height, latent_width), (max_batch, 4, max_latent_height, max_latent_width)]
+        }
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        return {
+            'latent': (batch_size, 4, latent_height, latent_width),
+            'images': (batch_size, 3, image_height, image_width)
+        }
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
+        return torch.randn(batch_size, 4, latent_height, latent_width, dtype=dtype, device=self.device)
+
+    def check_dims(self, batch_size, image_height, image_width):
+        latent_height, latent_width = super().check_dims(batch_size, image_height, image_width)
+        latent_height = int(latent_height * self.latent_dim_scale)
+        latent_width = int(latent_width * self.latent_dim_scale)
+        return (latent_height, latent_width)
+
+    def get_minmax_dims(self, batch_size, image_height, image_width, static_batch, static_shape):
+        min_batch, max_batch, min_image_height, max_image_height, min_image_width, max_image_width, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
+            super().get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        min_latent_height = int(min_latent_height * self.latent_dim_scale)
+        min_latent_width = int(min_latent_width * self.latent_dim_scale)
+        max_latent_height = int(max_latent_height * self.latent_dim_scale)
+        max_latent_width = int(max_latent_width * self.latent_dim_scale)
+        return (min_batch, max_batch, min_image_height, max_image_height, min_image_width, max_image_width, min_latent_height, max_latent_height, min_latent_width, max_latent_width)
 
 def make_tokenizer(version, pipeline, hf_token, framework_model_dir, subfolder="tokenizer", **kwargs):
     tokenizer_model_dir = get_checkpoint_dir(framework_model_dir, version, pipeline.name, subfolder)

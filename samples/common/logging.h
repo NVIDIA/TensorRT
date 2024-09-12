@@ -380,7 +380,8 @@ public:
     static TestAtom defineTest(const std::string& name, int32_t argc, char const* const* argv)
     {
         // Append TensorRT version as info
-        const std::string vname = name + " [TensorRT v" + std::to_string(NV_TENSORRT_VERSION) + "]";
+        const std::string vname = name + " [TensorRT v" + std::to_string(NV_TENSORRT_VERSION) + "] [b"
+            + std::to_string(NV_TENSORRT_BUILD) + "]";
         auto cmdline = genCmdlineString(argc, argv);
         return defineTest(vname, cmdline);
     }

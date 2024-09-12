@@ -31,12 +31,14 @@ import shutil
 from polygraphy import mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.common import TensorMetadata
+from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
 from polygraphy.backend.onnx import onnx_from_path
 from polygraphy.backend.onnx.util import get_input_metadata
-from polygraphy.backend.trt import engine_from_bytes, util as trt_util
+from polygraphy.backend.trt import engine_from_bytes
 from polygraphy.backend.common import bytes_from_path
 
+trt = mod.lazy_import("tensorrt>=8.5")
 np = mod.lazy_import("numpy")
 
 TRTEXEC_DEFAULT_PATH = "trtexec"
@@ -138,7 +140,7 @@ class TrtexecRunner(BaseRunner):
     def __init__(self, model_path, model_type=None,
     trtexec_path=None, use_cuda_graph=None, avg_runs=None, best=None, duration=None, device=None, streams=None, min_timing=None, avg_timing=None, expose_dma=None, no_data_transfers=None, trtexec_warmup=None, trtexec_iterations=None, trtexec_export_times=None, trtexec_export_output=None, trtexec_export_profile=None, trtexec_export_layer_info=None,
     use_spin_wait=None, threads=None, use_managed_memory=None, dump_refit=None, dump_output=None, dump_profile=None, dump_layer_info=None, refit=None, separate_profile_run=None, trtexec_no_builder_cache=None, trtexec_profiling_verbosity=None, layer_output_types=None, use_dla_core=None,
-    input_shapes=None, profile_dicts=None, tf32=None, fp16=None, int8=None, allow_gpu_fallback=None, precision_constraints=None, workspace=None, use_dla=None, layer_precisions=None, plugins=None, save_engine=None):
+    input_shapes=None, profile_dicts=None, tf32=None, fp16=None, int8=None, allow_gpu_fallback=None, precision_constraints=None, mem_pool_size=None, use_dla=None, layer_precisions=None, plugins=None, save_engine=None):
         super().__init__(prefix="trtexec-runner")
         self.model_path = model_path
         self.model_type = model_type
@@ -183,11 +185,28 @@ class TrtexecRunner(BaseRunner):
         self.int8 = int8
         self.allow_gpu_fallback = allow_gpu_fallback
         self.precision_constraints = precision_constraints
-        self.workspace = None if workspace is None else workspace / MiB # Convert bytes into MiB
         self.use_dla = 0 if use_dla else None
         self.plugins = plugins
         self.layer_precisions = parse_layer_precisions(layer_precisions)
         self.save_engine = save_engine
+        if mem_pool_size is None:
+            self.mem_pool_size = None
+        else:
+            self.mem_pool_size = ""
+            for k, v in mem_pool_size.items():
+                v = v / MiB # Convert bytes into MiB
+                if int(k) == 0:
+                    self.mem_pool_size += f"workspace:{v},"
+                elif int(k) == 1:
+                    self.mem_pool_size += f"dlaSRAM:{v},"
+                elif int(k) == 2:
+                    self.mem_pool_size += f"dlaLocalDRAM:{v},"
+                elif int(k) == 3:
+                    self.mem_pool_size += f"dlaGlobalDRAM:{v},"
+                else:
+                    pass
+            self.mem_pool_size = self.mem_pool_size.rstrip(',')
+
 
     def activate_impl(self):
         """
@@ -251,7 +270,7 @@ class TrtexecRunner(BaseRunner):
             'int8': self.int8,
             'allowGPUFallback': self.allow_gpu_fallback,
             'precisionConstraints': self.precision_constraints,
-            'workspace': self.workspace,
+            'memPoolSize': self.mem_pool_size,
             'plugins': self.plugins,
             'saveEngine': self.save_engine,
 
@@ -326,8 +345,14 @@ class TrtexecRunner(BaseRunner):
 
         if self.model_type =='engine':
             engine = engine_from_bytes(bytes_from_path(self.model_path))
-            start_binding, end_binding = 0, trt_util.get_bindings_per_profile(engine)
-            return trt_util.get_input_metadata_from_engine(engine, start_binding, end_binding)
+            meta = TensorMetadata()
+            for idx in range(engine.num_io_tensors):
+                name = engine.get_tensor_name(idx)
+                if engine.get_tensor_mode(name) != trt.TensorIOMode.INPUT:
+                    continue
+                meta.add(name=name, dtype=DataType.from_dtype(engine.get_tensor_dtype(name), "tensorrt"), shape=engine.get_tensor_shape(name))
+            return meta
+
 
     def infer_impl(self, feed_dict):
         outputs = OrderedDict()

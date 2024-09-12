@@ -35,7 +35,7 @@ endfunction()
 # -------- CMAKE OPTIONS --------
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${TENSORRT_MODULE}/)
-set(CPP_STANDARD 14 CACHE STRING "CPP Standard Version")
+set(CPP_STANDARD 17 CACHE STRING "CPP Standard Version")
 set(CMAKE_CXX_STANDARD ${CPP_STANDARD})
 
 if (NOT MSVC)
@@ -177,13 +177,6 @@ elseif (${TENSORRT_MODULE} STREQUAL "tensorrt_dispatch")
     set(TRT_LIBS ${nvinfer_dispatch_lib_name})
 else()
     message(FATAL_ERROR "Unknown TensorRT module " ${TENSORRT_MODULE})
-endif()
-
-
-# -------- START BUILD PROCESS --------
-message(STATUS "Building in ${CMAKE_BUILD_TYPE} mode")
-if (ENABLE_INETWORK_SERIALIZE)
-    set(TRT_LIBS ${TRT_LIBS} nvserialize)
 endif()
 
 # -------- BUILDING --------

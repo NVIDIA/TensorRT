@@ -30,8 +30,6 @@
 #include <string>
 #include <vector>
 
-#include "NvInferSafeRuntime.h"
-
 namespace sample
 {
 
@@ -70,10 +68,8 @@ struct InferenceEnvironment
     bool error{false};
 
     bool safe{false};
-    std::vector<std::unique_ptr<nvinfer1::safe::IExecutionContext>> safeContexts;
 
-    template <class ContextType>
-    inline ContextType* getContext(int32_t streamIdx);
+    inline nvinfer1::IExecutionContext* getContext(int32_t streamIdx);
 
     //! Storage for input shape tensors.
     //!
@@ -87,16 +83,9 @@ struct InferenceEnvironment
     std::list<std::vector<int32_t>> inputShapeTensorValues;
 };
 
-template <>
 inline nvinfer1::IExecutionContext* InferenceEnvironment::getContext(int32_t streamIdx)
 {
     return contexts[streamIdx].get();
-}
-
-template <>
-inline nvinfer1::safe::IExecutionContext* InferenceEnvironment::getContext(int32_t streamIdx)
-{
-    return safeContexts[streamIdx].get();
 }
 
 //!
@@ -183,40 +172,30 @@ public:
         mBindings[binding].fill();
     }
 
-    template <typename ContextType>
-    void dumpBindingDimensions(std::string const& name, ContextType const& context, std::ostream& os) const;
+    void dumpBindingDimensions(
+        std::string const& name, nvinfer1::IExecutionContext const& context, std::ostream& os) const;
 
-    template <typename ContextType>
-    void dumpBindingValues(ContextType const& context, int32_t binding, std::ostream& os,
+    void dumpBindingValues(nvinfer1::IExecutionContext const& context, int32_t binding, std::ostream& os,
         std::string const& separator = " ", int32_t batch = 1) const;
 
-    template <typename ContextType>
-    void dumpRawBindingToFiles(ContextType const& context, std::ostream& os) const;
+    void dumpRawBindingToFiles(nvinfer1::IExecutionContext const& context, std::ostream& os) const;
 
-    template <typename ContextType>
-    void dumpInputs(ContextType const& context, std::ostream& os) const
+    void dumpInputs(nvinfer1::IExecutionContext const& context, std::ostream& os) const
     {
         auto isInput = [](Binding const& b) { return b.isInput; };
         dumpBindings(context, isInput, os);
     }
 
-    template <typename ContextType>
-    void dumpOutputs(ContextType const& context, std::ostream& os) const
-    {
-        auto isOutput = [](Binding const& b) { return !b.isInput; };
-        dumpBindings(context, isOutput, os);
-    }
+    void dumpOutputs(nvinfer1::IExecutionContext const& context, std::ostream& os) const;
 
-    template <typename ContextType>
-    void dumpBindings(ContextType const& context, std::ostream& os) const
+    void dumpBindings(nvinfer1::IExecutionContext const& context, std::ostream& os) const
     {
         auto all = [](Binding const& b) { return true; };
         dumpBindings(context, all, os);
     }
 
-    template <typename ContextType>
-    void dumpBindings(
-        ContextType const& context, std::function<bool(Binding const&)> predicate, std::ostream& os) const
+    void dumpBindings(nvinfer1::IExecutionContext const& context, std::function<bool(Binding const&)> predicate,
+        std::ostream& os) const
     {
         for (auto const& n : mNames)
         {
@@ -255,8 +234,6 @@ public:
     std::unordered_map<std::string, int> getBindings(std::function<bool(Binding const&)> predicate) const;
 
     bool setTensorAddresses(nvinfer1::IExecutionContext& context) const;
-
-    bool setSafeTensorAddresses(nvinfer1::safe::IExecutionContext& context) const;
 
 private:
     std::unordered_map<std::string, int32_t> mNames;
