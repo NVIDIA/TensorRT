@@ -250,15 +250,14 @@ class StableDiffusion3Pipeline:
         self.tokenizer = SD3Tokenizer()
 
         # Load text encoders
-        embedding_dim = get_clip_embedding_dim(self.version, self.pipeline_type)
         if 'clip_g' in self.stages:
-            self.models['clip_g'] = SD3_CLIPGModel(**models_args, fp16=True, embedding_dim=embedding_dim)
+            self.models['clip_g'] = SD3_CLIPGModel(**models_args, fp16=True, pooled_output=True)
 
         if 'clip_l' in self.stages:
-            self.models['clip_l'] = SD3_CLIPLModel(**models_args, fp16=True, embedding_dim=embedding_dim)
+            self.models['clip_l'] = SD3_CLIPLModel(**models_args, fp16=True, pooled_output=True)
 
         if 't5xxl' in self.stages:
-            self.models['t5xxl'] = SD3_T5XXLModel(**models_args, fp16=True, embedding_dim=embedding_dim)
+            self.models['t5xxl'] = SD3_T5XXLModel(**models_args, fp16=True, embedding_dim=get_clip_embedding_dim(self.version, self.pipeline_type))
 
         # Load MMDiT model
         if 'mmdit' in self.stages:
@@ -275,7 +274,7 @@ class StableDiffusion3Pipeline:
         # Configure pipeline models to load
         model_names = self.models.keys()
         # Torch fallback
-        self.torch_fallback = dict(zip(model_names, [self.torch_inference or model_name in ('clip_g', 'clip_l', 't5xxl') for model_name in model_names]))
+        self.torch_fallback = dict(zip(model_names, [self.torch_inference or model_name in ('t5xxl') for model_name in model_names]))
 
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False) for model_name in model_names]))
         onnx_opt_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir) for model_name in model_names]))
@@ -334,7 +333,7 @@ class StableDiffusion3Pipeline:
         self.shared_device_memory = shared_device_memory
         # Load and activate TensorRT engines
         for engine in self.engine.values():
-            engine.activate(reuse_device_memory=self.shared_device_memory)
+            engine.activate(device_memory=self.shared_device_memory)
 
     def runEngine(self, model_name, feed_dict):
         engine = self.engine[model_name]
@@ -374,7 +373,8 @@ class StableDiffusion3Pipeline:
     def save_image(self, images, pipeline, prompt, seed):
         # Save image
         image_name_prefix = pipeline+''.join(set(['-'+prompt[i].replace(' ','_')[:10] for i in range(len(prompt))]))+'-'+str(seed)+'-'
-        save_image(images, self.output_dir, image_name_prefix)
+        image_name_suffix = 'torch' if self.torch_inference else 'trt'
+        save_image(images, self.output_dir, image_name_prefix, image_name_suffix)
 
     def encode_prompt(self, prompt, negative_prompt):
         def encode_token_weights(model_name, token_weight_pairs):
@@ -385,8 +385,8 @@ class StableDiffusion3Pipeline:
             if self.torch_inference or self.torch_fallback[model_name]:
                 out, pooled = self.torch_models[model_name](tokens)
             else:
-                out = self.runEngine('t5xxl', {'input_ids': tokens})['text_embeddings']
-                pooled = None
+                trt_out = self.runEngine(model_name, {'input_ids': tokens})
+                out, pooled = trt_out['text_embeddings'], trt_out["pooled_output"]
             
             self.profile_stop(model_name)
 
@@ -562,6 +562,8 @@ class StableDiffusion3Pipeline:
             num_inference_steps = int(self.denoising_steps * self.denoising_percentage)
             self.print_summary(num_inference_steps, walltime_ms, batch_size)
             if save_image:
+                # post-process images
+                images = ((images + 1) * 255 / 2).clamp(0, 255).detach().permute(0, 2, 3, 1).round().type(torch.uint8).cpu().numpy()
                 self.save_image(images, self.pipeline_type.name.lower(), prompt, self.seed)
 
         return images, walltime_ms

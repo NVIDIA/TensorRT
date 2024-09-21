@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.2 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.4 --single-branch
 cd TensorRT
 ```
 
@@ -43,19 +43,19 @@ pip3 install -r requirements.txt
 
 > NOTE: demoDiffusion has been tested on systems with NVIDIA H100, A100, L40, T4, and RTX4090 GPUs, and the following software configuration.
 ```
-diffusers           0.26.3
+diffusers           0.29.2
 onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.2.0.19
+tensorrt            10.4.0.26
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.33.1
 controlnet-aux      0.0.6
-nvidia-modelopt     0.11.2
+nvidia-modelopt     0.15.1
 ```
-> NOTE: optionally install HuggingFace [accelerate](https://pypi.org/project/accelerate/) package for faster and less memory-intense model loading.
+> NOTE: optionally install HuggingFace [accelerate](https://pypi.org/project/accelerate/) package for faster and less memory-intense model loading. Note that installing accelerate is known to cause failures while running certain pipelines in Torch Compile mode ([known issue](https://github.com/huggingface/diffusers/issues/9091))
 
 # Running demoDiffusion
 
@@ -82,6 +82,20 @@ export HF_TOKEN=<your access token>
 
 ```bash
 python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN
+```
+
+### Faster Text-to-image using SD1.5 or SD2.1 INT8 & FP8 quantization using ModelOpt
+
+Run the below command to generate an image with SD1.5 or SD2.1 in INT8
+
+```bash
+python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --int8
+```
+
+Run the below command to generate an image with SD1.5 or SD2.1 in FP8. (FP8 is only supppoted on Hopper.)
+
+```bash
+python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8
 ```
 
 ### Generate an image guided by an initial image and a text prompt
@@ -139,16 +153,26 @@ python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --hf
 python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees and mountains" --version=xl-1.0 --lora-path "ostris/crayon_style_lora_sdxl" "ostris/watercolor_style_lora_sdxl" --lora-scale 0.3 0.7 --onnx-dir onnx-sdxl-lora --engine-dir engine-sdxl-lora --build-enable-refit
 ```
 
-### Faster Text-to-image using SDXL & INT8 quantization using ModelOpt
+### Faster Text-to-image using SDXL INT8 & FP8 quantization using ModelOpt
+
+Run the below command to generate an image with Stable Diffusion XL in INT8
 
 ```bash
 python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --int8 
 ```
-> Note that INT8 quantization is only supported for SDXL, and won't work with LoRA weights. Some prompts may produce better inputs with fewer denoising steps (e.g. `--denoising-steps 20`) but this will repeat the calibration, ONNX export, and engine building processes for the U-Net. 
 
-For step-by-step tutorials to run INT8 inference on stable diffusion models, please refer to examples in [TensorRT ModelOpt diffusers sample](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/diffusers).
+Run the below command to generate an image with Stable Diffusion XL in FP8. (FP8 is only supppoted on Hopper.)
+
+```bash
+python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --fp8
+```
+
+> Note that INT8 & FP8 quantization is only supported for SDXL, SD1.5, SD2.1 and SD2.1-base, and won't work with LoRA weights. FP8 quantization is only supported on Hopper. Some prompts may produce better inputs with fewer denoising steps (e.g. `--denoising-steps 20`) but this will repeat the calibration, ONNX export, and engine building processes for the U-Net.
+
+For step-by-step tutorials to run INT8 & FP8 inference on stable diffusion models, please refer to examples in [TensorRT ModelOpt diffusers sample](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/diffusers).
 
 ### Faster Text-to-Image using SDXL + LCM (Latent Consistency Model) LoRA weights
+
 [LCM-LoRA](https://arxiv.org/abs/2311.05556) produces good quality images in 4 to 8 denoising steps instead of 30+ needed base model. Note that we use LCM scheduler and disable classifier-free-guidance by setting `--guidance-scale` to 0.
 LoRA weights are fused into the ONNX and finalized TensorRT plan files in this example.
 ```bash
@@ -177,6 +201,46 @@ python3 demo_txt2img_sd3.py "dog wearing a sweater and a blue collar" --version 
 ```
 
 Note that a denosing-percentage is applied to the number of denoising-steps when an input image conditioning is provided. Its default value is set to 0.6. This parameter can be updated using `--denoising-percentage`
+
+### Image-to-video using SVD (Stable Video Diffusion)
+
+Download the pre-exported ONNX model
+
+```bash
+git lfs install
+git clone https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt-1-1-tensorrt onnx-svd-xt-1-1
+cd onnx-svd-xt-1-1 && git lfs pull && cd ..
+```
+
+SVD-XT-1.1 (25 frames at resolution 576x1024)
+```bash
+python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --hf-token=$HF_TOKEN
+```
+
+You may also specify a custom conditioning image using `--input-image`:
+```bash
+python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --input-image https://www.hdcarwallpapers.com/walls/2018_chevrolet_camaro_zl1_nascar_race_car_2-HD.jpg --hf-token=$HF_TOKEN
+```
+
+NOTE: The min and max guidance scales are configured using --min-guidance-scale and --max-guidance-scale respectively.
+
+### Generate an image using Stable Cascade guided by a text prompt
+
+Run the below command to generate an image using Stable Cascade
+```bash
+python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a pilot" --onnx-dir onnx-sc --engine-dir engine-sc
+```
+
+The lite versions of the models are also supported using the command below
+```bash
+python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a pilot" --onnx-dir onnx-sc-lite --engine-dir engine-sc-lite --lite
+```
+
+> NOTE: The pipeline is only enabled for the BF16 model weights
+
+> NOTE: The pipeline only supports ONNX export using Opset 16.
+
+> NOTE: The denoising steps and guidance scale for the Prior and Decoder models are configured using --prior-denoising-steps, --prior-guidance-scale, --decoder-denoising-steps, and --decoder-guidance-scale respectively.
 
 ## Configuration options
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.

@@ -1,7 +1,10 @@
 Pillow>=10.0.0
-onnx==1.14.0
-onnxruntime==1.15.1
-tf2onnx==1.8.1
+onnx==1.14.0; python_version <= "3.10"
+onnx==1.16.1; python_version >= "3.11"
+onnxruntime==1.15.1; python_version <= "3.10"
+onnxruntime==1.18.1; python_version >= "3.11"
+tf2onnx==1.8.1; python_version <= "3.10"
+tf2onnx==1.16.0; python_version >= "3.11"
 cuda-python==12.2.0; python_version <= "3.10"
 cuda-python==12.5.0; python_version >= "3.11"
 pywin32; platform_system == "Windows"

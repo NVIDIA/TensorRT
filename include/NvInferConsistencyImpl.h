@@ -32,7 +32,10 @@ namespace nvinfer1
 namespace apiv
 {
 
-class VConsistencyChecker
+//!
+//! \deprecated Deprecated in TensorRT 10.4.
+//!
+class TRT_DEPRECATED VConsistencyChecker
 {
 public:
     virtual ~VConsistencyChecker() noexcept = default;

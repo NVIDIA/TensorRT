@@ -150,6 +150,8 @@ Set the output type of this layer. Setting the output type forces TensorRT to ch
 
 ## Preparing sample data
 
+`ResNet50.onnx` is located in the `data/resnet50` directory.
+
 In addition to the model file and input image, you will need per-tensor dynamic range stored in a text file along with the ImageNet label reference file.
 
 The following required files are included in the package and are located in the `data/int8_api` directory.
@@ -162,21 +164,6 @@ The ResNet-50 per-tensor dynamic ranges file.
 
 `airliner.ppm`
 The image to be inferred.
-
-1.  Download the [ONNX ResNet-50 model](https://github.com/onnx/models/tree/master/vision/classification/resnet/model).
-    ```bash
-    wget https://download.onnxruntime.ai/onnx/models/resnet50.tar.gz -O $TRT_DATADIR/int8_api/resnet50.tar.gz
-    ```
-
-2.  Unpackage the model file.
-    ```bash
-    tar zxvf $TRT_DATADIR/int8_api/resnet50.tar.gz -C $TRT_DATADIR/int8_api/
-    ```
-
-3.  Copy `resnet50/model.onnx` to the `data/int8_api/resnet50.onnx` directory.
-    ```bash
-    mv $TRT_DATADIR/int8_api/resnet50/model.onnx $TRT_DATADIR/int8_api/resnet50.onnx
-    ```
 
 ## Running the sample
 

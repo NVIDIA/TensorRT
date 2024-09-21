@@ -38,7 +38,7 @@
     }
 
 #define PLUGIN_API_CATCH_CAST(func, returnType)                                                                        \
-    catch (const py::cast_error& e)                                                                                    \
+    catch (py::cast_error const& e)                                                                                    \
     {                                                                                                                  \
         std::cerr << "[ERROR] Return value of " << (func) << "() could not be interpreted as " << (returnType)         \
                   << std::endl;                                                                                        \
@@ -786,7 +786,18 @@ public:
                 }
                 if (type == PluginCapabilityType::kBUILD)
                 {
-                    return pyResult.cast<IPluginV3OneBuild*>();
+                    try
+                    {
+                        return pyResult.cast<IPluginV3OneBuildV2*>();
+                    }
+                    catch (py::cast_error const& e)
+                    {
+                        try
+                        {
+                            return pyResult.cast<IPluginV3OneBuild*>();
+                        }
+                        PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid build capability interface")
+                    }
                 }
                 if (type == PluginCapabilityType::kRUNTIME)
                 {
@@ -840,8 +851,15 @@ public:
                 pyDestroy();
             }
 
-            // Remove reference to the Python plugin object so that it could be garbage-collected
-            py::cast(this).dec_ref();
+            // If ref_count is > 1 at this point, then this is guaranteed to be a plugin instance
+            // which was release()'d (e.g. after being clone()'d) (lifetime managed by TRT)
+            // So only dec_ref() for those plugin instances
+            // Ref counts for others will be automatically managed by Python
+            auto obj = py::cast(this);
+            if (obj.ref_count() > 1)
+            {
+                obj.dec_ref();
+            }
         }
         PLUGIN_API_CATCH("destroy")
     }
@@ -937,13 +955,19 @@ public:
     }
 };
 
-class PyIPluginV3OneBuildImpl : public IPluginV3OneBuild
+template <class T>
+class PyIPluginV3OneBuildBaseImpl : public T
 {
-public:
-    using IPluginV3OneBuild::IPluginV3OneBuild;
-    PyIPluginV3OneBuildImpl() = default;
-    PyIPluginV3OneBuildImpl(const IPluginV3OneBuild& a){};
+private:
+    T* mBuild{nullptr};
 
+protected:
+    PyIPluginV3OneBuildBaseImpl(T* build)
+        : mBuild{build}
+    {
+    }
+
+public:
     APILanguage getAPILanguage() const noexcept final
     {
         return APILanguage::kPYTHON;
@@ -972,8 +996,7 @@ public:
 
             try
             {
-                py::function pyGetValidTactics
-                    = py::get_override(static_cast<IPluginV3OneBuild const*>(this), "get_valid_tactics");
+                py::function pyGetValidTactics = py::get_override(static_cast<T const*>(mBuild), "get_valid_tactics");
 
                 mIsTacticsInitialized = true;
 
@@ -1047,7 +1070,7 @@ public:
             py::gil_scoped_acquire gil{};
 
             py::function pySupportsFormatCombination
-                = utils::getOverride(static_cast<IPluginV3OneBuild*>(this), "supports_format_combination");
+                = utils::getOverride(static_cast<T*>(mBuild), "supports_format_combination");
             if (!pySupportsFormatCombination)
             {
                 utils::throwPyError(PyExc_RuntimeError, "no implementation provided for supports_format_combination()");
@@ -1081,7 +1104,7 @@ public:
             py::gil_scoped_acquire gil{};
 
             py::function pyGetOutputDataTypes
-                = utils::getOverride(static_cast<IPluginV3OneBuild const*>(this), "get_output_data_types");
+                = utils::getOverride(static_cast<T const*>(mBuild), "get_output_data_types");
             if (!pyGetOutputDataTypes)
             {
                 utils::throwPyError(PyExc_RuntimeError, "no implementation provided for get_output_data_types()");
@@ -1124,8 +1147,7 @@ public:
         {
             py::gil_scoped_acquire gil{};
 
-            py::function pyGetOutputShapes
-                = utils::getOverride(static_cast<IPluginV3OneBuild*>(this), "get_output_shapes");
+            py::function pyGetOutputShapes = utils::getOverride(static_cast<T*>(mBuild), "get_output_shapes");
             if (!pyGetOutputShapes)
             {
                 utils::throwPyError(PyExc_RuntimeError, "no implementation provided for get_output_shapes()");
@@ -1174,8 +1196,7 @@ public:
         {
             py::gil_scoped_acquire gil{};
 
-            py::function pyConfigurePlugin
-                = utils::getOverride(static_cast<IPluginV3OneBuild*>(this), "configure_plugin");
+            py::function pyConfigurePlugin = utils::getOverride(static_cast<T*>(mBuild), "configure_plugin");
 
             if (!pyConfigurePlugin)
             {
@@ -1215,8 +1236,7 @@ public:
         {
             py::gil_scoped_acquire gil{};
 
-            py::function pyGetWorkspaceSize
-                = py::get_override(static_cast<IPluginV3OneBuild const*>(this), "get_workspace_size");
+            py::function pyGetWorkspaceSize = py::get_override(static_cast<T const*>(mBuild), "get_workspace_size");
 
             if (!pyGetWorkspaceSize)
             {
@@ -1331,6 +1351,57 @@ private:
     bool mIsFormatCombinationLimitInitialized{false};
     bool mIsMetadataStringInitialized{false};
     bool mIsTacticsInitialized{false};
+};
+
+class PyIPluginV3OneBuildImpl : public PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuild>
+{
+public:
+    PyIPluginV3OneBuildImpl()
+        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuild>(this)
+    {
+    }
+    PyIPluginV3OneBuildImpl(IPluginV3OneBuild const& a)
+        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuild>(this){};
+};
+
+class PyIPluginV3OneBuildV2Impl : public PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuildV2>
+{
+public:
+    PyIPluginV3OneBuildV2Impl()
+        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuildV2>(this)
+    {
+    }
+    PyIPluginV3OneBuildV2Impl(IPluginV3OneBuildV2 const& a)
+        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuildV2>(this){};
+
+    int32_t getAliasedInput(int32_t outputIndex) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+
+            py::function pyGetAliasedInput
+                = py::get_override(static_cast<IPluginV3OneBuildV2*>(this), "get_aliased_input");
+
+            if (!pyGetAliasedInput)
+            {
+                // if no implementation is provided for get_aliased_input(), default to no aliasing
+                return -1;
+            }
+
+            py::object pyResult = pyGetAliasedInput(outputIndex);
+
+            try
+            {
+                auto result = pyResult.cast<int32_t>();
+                return result;
+            }
+            PLUGIN_API_CATCH_CAST("get_aliased_input", "int32_t")
+            return 0U;
+        }
+        PLUGIN_API_CATCH("get_aliased_input")
+        return -1;
+    }
 };
 
 class PyIPluginV3OneRuntimeImpl : public IPluginV3OneRuntime
@@ -1933,6 +2004,48 @@ static const auto get_all_creators = [](IPluginRegistry& self) -> std::vector<py
     return nullptr;
 };
 
+static const auto get_capability_interface = [](IPluginV3& self, PluginCapabilityType type) -> py::object {
+    IPluginCapability* capability_interface = self.getCapabilityInterface(type);
+
+    if (capability_interface == nullptr)
+    {
+        return py::none{};
+    }
+    else
+    {
+        try
+        {
+            if (type == PluginCapabilityType::kCORE)
+            {
+                return py::cast(static_cast<IPluginV3OneCore*>(capability_interface));
+            }
+            if (type == PluginCapabilityType::kBUILD)
+            {
+                try
+                {
+                    return py::cast(static_cast<IPluginV3OneBuildV2*>(capability_interface));
+                }
+                catch (py::cast_error const& e)
+                {
+                    try
+                    {
+                        return py::cast(static_cast<IPluginV3OneBuild*>(capability_interface));
+                    }
+                    PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid build capability interface")
+                }
+            }
+            if (type == PluginCapabilityType::kRUNTIME)
+            {
+                return py::cast(static_cast<IPluginV3OneRuntime*>(capability_interface));
+            }
+        }
+        PLUGIN_API_CATCH_CAST("get_capability_interface", "nvinfer1::IPluginCapability")
+    }
+
+    utils::throwPyError(PyExc_RuntimeError, "Unknown plugin capability type");
+    return py::none{};
+};
+
 static const auto get_creator = [](IPluginRegistry& self, char const* pluginType, char const* pluginVersion,
                                     char const* pluginNamespace) -> py::object {
     IPluginCreatorInterface* creator = self.getCreator(pluginType, pluginVersion, pluginNamespace);
@@ -2191,11 +2304,6 @@ size_t getSerializationSize(PyIPluginV2DynamicExt& self)
     return 0U;
 }
 
-IPluginCapability* getCapabilityInterface(IPluginV3& self, PluginCapabilityType type)
-{
-    return nullptr;
-}
-
 std::vector<DataType> getOutputDataTypes(IPluginV3& self, std::vector<DataType> const& inputTypes)
 {
     return {};
@@ -2263,6 +2371,11 @@ void release(IPluginResource& self) {}
 IPluginResource* clonePluginResource(IPluginResource& self)
 {
     return nullptr;
+}
+
+int32_t getAliasedInput(int32_t outputIndex)
+{
+    return -1;
 }
 
 } // namespace pluginDoc
@@ -2469,8 +2582,9 @@ void bindPlugin(py::module& m)
         m, "IPluginV3", IPluginV3Doc::ipluginv3_descr, py::module_local())
         .def(py::init<>())
         .def(py::init<const IPluginV3&>())
-        // The following defs are only for documenting the API for Python-based plugins
-        .def("get_capability_interface", &pluginDoc::getCapabilityInterface, IPluginV3Doc::get_capability_interface)
+        .def("get_capability_interface", lambdas::get_capability_interface, "type"_a,
+            py::return_value_policy::reference_internal, IPluginV3Doc::get_capability_interface)
+        // The following defs are only for documenting API for Python-based plugins
         .def("clone", &pluginDoc::cloneV3, IPluginV3Doc::clone)
         .def("destroy", &pluginDoc::destroyV3, IPluginV3Doc::destroy);
 
@@ -2503,7 +2617,7 @@ void bindPlugin(py::module& m)
         .def_property("timing_cache_id", &IPluginV3OneBuild::getTimingCacheID,
             py::cpp_function(lambdas::IPluginV3_get_timing_cache_id, py::keep_alive<1, 2>{}))
         // The following defs are only for documenting the API for Python-based plugins
-        .def("get_output_datatypes", &pluginDoc::getOutputDataTypes, "input_types"_a,
+        .def("get_output_data_types", &pluginDoc::getOutputDataTypes, "input_types"_a,
             IPluginV3Doc::get_output_data_types)
         .def("get_output_shapes", &pluginDoc::getOutputShapes, "inputs"_a, "shape_inputs"_a, "expr_builder"_a,
             IPluginV3Doc::get_output_shapes)
@@ -2512,6 +2626,14 @@ void bindPlugin(py::module& m)
         .def("supports_format_combination", &pluginDoc::supportsFormatCombinationV3, "pos"_a, "in_out"_a,
             "num_inputs"_a, IPluginV3Doc::supports_format_combination)
         .def("get_valid_tactics", &pluginDoc::getValidTactics, IPluginV3Doc::get_valid_tactics);
+
+    py::class_<IPluginV3OneBuildV2, IPluginV3OneBuild, IPluginCapability, IVersionedInterface,
+        PyIPluginV3OneBuildV2Impl, std::unique_ptr<IPluginV3OneBuildV2>>(
+        m, "IPluginV3OneBuildV2", IPluginV3Doc::ipluginv3onebuildv2_descr, py::module_local())
+        .def(py::init<>())
+        .def(py::init<const IPluginV3OneBuildV2&>())
+        // The following defs are only for documenting the API for Python-based plugins
+        .def("get_aliased_input", &pluginDoc::getAliasedInput, IPluginV3Doc::get_valid_tactics);
 
     py::class_<IPluginV3OneRuntime, IPluginCapability, IVersionedInterface, PyIPluginV3OneRuntimeImpl,
         std::unique_ptr<IPluginV3OneRuntime>>(

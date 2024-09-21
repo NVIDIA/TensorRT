@@ -43,75 +43,100 @@ template <typename T, bool hasBias>
 int32_t computeSkipLayerNorm(cudaStream_t stream, int32_t const ld, int32_t const n, T const* input, T const* skip,
     T const* beta, T const* gamma, T* output, T const* bias);
 
-class SkipLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
+class SkipLayerNormPluginV3 : public IPluginV3,
+                              public IPluginV3OneCore,
+                              public IPluginV3OneBuild,
+                              public IPluginV3OneRuntime
 {
 public:
-    SkipLayerNormPluginDynamic(const std::string name, const nvinfer1::DataType type, int32_t const ld,
+    SkipLayerNormPluginV3(const std::string name, const nvinfer1::DataType type, int32_t const ld,
         nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& bias);
 
-    SkipLayerNormPluginDynamic(const std::string name, void const* data, size_t length);
-
-    // It doesn't make sense to make SkipLayerNormPluginDynamic without arguments,
+    // It doesn't make sense to make SkipLayerNormPluginV3 without arguments,
     // so we delete default constructor.
-    SkipLayerNormPluginDynamic() = delete;
+    SkipLayerNormPluginV3() = delete;
 
-    // IPluginV2DynamicExt Methods
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    ~SkipLayerNormPluginV3() override;
+
+    // IPluginV3 Methods
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
+
+    IPluginV3* clone() noexcept override;
+    // end of IPluginV3 Methods
+
+    // IPluginV3OneCore Methods
+    char const* getPluginName() const noexcept override;
+
+    char const* getPluginVersion() const noexcept override;
+
+    char const* getPluginNamespace() const noexcept override;
+
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+    // end of IPluginV3OneCore Methods
+
+    // IPluginV3Build Methods
+    int32_t getNbOutputs() const noexcept override;
+
     bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override;
+
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    // end IPluginV3Build Methods
+
+    // IPluginV3Runtime Methods
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    int32_t onShapeChange(
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
 
-    // IPluginV2 Methods
-    char const* getPluginType() const noexcept override;
-    char const* getPluginVersion() const noexcept override;
-    int32_t getNbOutputs() const noexcept override;
-    int32_t initialize() noexcept override;
-    void terminate() noexcept override;
-    size_t getSerializationSize() const noexcept override;
-    void serialize(void* buffer) const noexcept override;
-    void destroy() noexcept override;
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
-    char const* getPluginNamespace() const noexcept override;
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override;
+
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override;
+    // end IPluginV3Runtime Methods
 
 private:
+    // metadata
     const std::string mLayerName;
     std::string mNamespace;
 
-    bert::cuda_unique_ptr<void> mGammaDev;
-    bert::cuda_unique_ptr<void> mBetaDev;
-    size_t mLd{}; // leading dim
+    // members that participate in ser/deserialization
     bert::WeightsWithOwnership mGamma;
     bert::WeightsWithOwnership mBeta;
+    bert::WeightsWithOwnership mBias;
     nvinfer1::DataType mType;
     nvinfer1::DataType mCfgType;
-
+    int32_t mLd{}; // leading dim
     bool mHasBias{};
-    bert::cuda_unique_ptr<void> mBiasDev;
-    bert::WeightsWithOwnership mBias;
 
+    // device-side
+    bert::cuda_unique_ptr<void> mGammaDev;
+    bert::cuda_unique_ptr<void> mBetaDev;
+    bert::cuda_unique_ptr<void> mBiasDev;
+
+    // derived member from mCfgType
     size_t mParamWordsize{};
 
-    using IPluginV2::enqueue;
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2Ext::configurePlugin;
+    // serialization data structures
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
 };
 
-class SkipLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator
+class SkipLayerNormPluginV3Creator : public nvinfer1::IPluginCreatorV3One
 {
 public:
-    SkipLayerNormPluginDynamicCreator();
+    SkipLayerNormPluginV3Creator();
+    ~SkipLayerNormPluginV3Creator() override = default;
 
     char const* getPluginName() const noexcept override;
 
@@ -119,61 +144,81 @@ public:
 
     nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept;
 
     char const* getPluginNamespace() const noexcept override;
 
 private:
-    static nvinfer1::PluginFieldCollection mFC;
-    static std::vector<nvinfer1::PluginField> mPluginAttributes;
+    static PluginFieldCollection mFC;
+    static std::vector<PluginField> mPluginAttributes;
     std::string mNamespace;
 };
 
-class SkipLayerNormVarSeqlenPlugin : public nvinfer1::IPluginV2DynamicExt
+class SkipLayerNormVarSeqlenPluginV3 : public IPluginV3,
+                                       public IPluginV3OneCore,
+                                       public IPluginV3OneBuild,
+                                       public IPluginV3OneRuntime
 {
 public:
-    SkipLayerNormVarSeqlenPlugin(const std::string name, const nvinfer1::DataType type, nvinfer1::Weights const& beta,
+    SkipLayerNormVarSeqlenPluginV3(const std::string name, const nvinfer1::DataType type, nvinfer1::Weights const& beta,
         nvinfer1::Weights const& gamma, nvinfer1::Weights const& bias);
 
-    SkipLayerNormVarSeqlenPlugin(const std::string name, void const* data, size_t length);
+    SkipLayerNormVarSeqlenPluginV3(const std::string name, void const* data, size_t length);
 
-    // It doesn't make sense to make SkipLayerNormVarSeqlenPlugin without
+    // It doesn't make sense to make SkipLayerNormVarSeqlenPluginV3 without
     // arguments, so we delete default constructor.
-    SkipLayerNormVarSeqlenPlugin() = delete;
+    SkipLayerNormVarSeqlenPluginV3() = delete;
 
-    // IPluginV2DynamicExt Methods
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    ~SkipLayerNormVarSeqlenPluginV3() override;
+
+    // IPluginV3 Methods
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
+
+    IPluginV3* clone() noexcept override;
+    // end of IPluginV3 Methods
+
+    // IPluginV3OneCore Methods
+    char const* getPluginName() const noexcept override;
+
+    char const* getPluginVersion() const noexcept override;
+
+    char const* getPluginNamespace() const noexcept override;
+
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+    // end of IPluginV3OneCore Methods
+
+    // IPluginV3Build Methods
+    int32_t getNbOutputs() const noexcept override;
+
     bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override;
+
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    // end IPluginV3Build Methods
+
+    // IPluginV3Runtime Methods
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    int32_t onShapeChange(
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
 
-    // IPluginV2 Methods
-    char const* getPluginType() const noexcept override;
-    char const* getPluginVersion() const noexcept override;
-    int32_t getNbOutputs() const noexcept override;
-    int32_t initialize() noexcept override;
-    void terminate() noexcept override;
-    size_t getSerializationSize() const noexcept override;
-    void serialize(void* buffer) const noexcept override;
-    void destroy() noexcept override;
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
-    char const* getPluginNamespace() const noexcept override;
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override;
+
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override;
+    // end IPluginV3Runtime Methods
 
 private:
     const std::string mLayerName;
@@ -181,7 +226,7 @@ private:
 
     bert::cuda_unique_ptr<void> mGammaDev;
     bert::cuda_unique_ptr<void> mBetaDev;
-    size_t mLd{}; // leading dim
+    int32_t mLd{}; // leading dim
     bert::WeightsWithOwnership mGamma;
     bert::WeightsWithOwnership mBeta;
     nvinfer1::DataType mType;
@@ -193,29 +238,25 @@ private:
 
     size_t mParamWordsize{};
 
-    using IPluginV2::enqueue;
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2Ext::configurePlugin;
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
 };
 
-class SkipLayerNormVarSeqlenPluginCreator : public nvinfer1::IPluginCreator
+class SkipLayerNormVarSeqlenPluginV3Creator : public nvinfer1::IPluginCreatorV3One
 {
 public:
-    SkipLayerNormVarSeqlenPluginCreator();
+    SkipLayerNormVarSeqlenPluginV3Creator();
+    ~SkipLayerNormVarSeqlenPluginV3Creator() override = default;
 
     char const* getPluginName() const noexcept override;
 
     char const* getPluginVersion() const noexcept override;
 
-    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept;
 
     char const* getPluginNamespace() const noexcept override;
 

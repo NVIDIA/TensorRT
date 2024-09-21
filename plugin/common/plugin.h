@@ -141,6 +141,11 @@ struct CudaBind
 // Throw exception if it doesn't fit.
 int32_t dimToInt32(int64_t);
 
+// Helper function to determine whether memory pool support is available on the device.
+bool supportsMemPoolsHelper();
+
+// Wrapper function around the helper to keep the result in a static variable to avoid mulitple calls to CUDA APIs.
+bool supportsMemPools();
 } // namespace plugin
 } // namespace nvinfer1
 

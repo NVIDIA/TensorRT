@@ -102,7 +102,7 @@ enum class LayerType : int32_t
     kNMS = 43,                //!< NMS layer
     kREVERSE_SEQUENCE = 44,   //!< Reverse sequence layer
     kNORMALIZATION = 45,      //!< Normalization layer
-    kPLUGIN_V3 = 46           //!< PluginV3 layer.
+    kPLUGIN_V3 = 46,          //!< PluginV3 layer.
 };
 
 //!
@@ -841,8 +841,8 @@ protected:
 //! \code
 //! Shorthand:
 //!     I = dimensions of input image.
-//!     B = prePadding, before the image data. For deconvolution, prePadding is set before output.
-//!     A = postPadding, after the image data. For deconvolution, postPadding is set after output.
+//!     B = prePadding, before the image data.
+//!     A = postPadding, after the image data.
 //!     P = delta between input and output
 //!     S = stride
 //!     F = filter
@@ -2202,7 +2202,6 @@ public:
     //!
     //! Default: (0, 0, ..., 0)
     //!
-    //! If executing this layer on DLA, padding must be 0.
     //!
     //! \see getPrePadding()
     //!
@@ -2230,7 +2229,6 @@ public:
     //!
     //! Default: (0, 0, ..., 0)
     //!
-    //! If executing this layer on DLA, padding must be 0.
     //!
     //! \see getPostPadding()
     //!
@@ -2538,7 +2536,6 @@ constexpr inline int32_t EnumMax<GatherMode>() noexcept
 //!     * GatherMode::kDEFAULT: s = q + r - 1 - nbElementwiseDims
 //!     * GatherMode::kND:      s = q + r - indices.d[q-1] - 1 - nbElementwiseDims
 //!     * GatherMode::kELEMENT: s = q = r.
-//! The output can be a shape tensor only if the mode is GatherMode::kDEFAULT.
 //!
 //! The dimensions of the output likewise depends on the mode:
 //!
@@ -2949,8 +2946,10 @@ protected:
 //!
 //! \brief Layer that represents a padding operation.
 //!
-//! The padding layer adds zero-padding at the start and end of the input tensor. It only supports padding along the two
-//! innermost dimensions. Applying negative padding results in cropping of the input.
+//! The padding layer adds zero-padding at the start and end of the input tensor. It supports padding
+//! only the last two dimensions. Applying negative padding results in cropping of the input.
+//!
+//! To pad across any subset of dimensions, use ISliceLayer with SampleMode::kFILL.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -3037,7 +3036,7 @@ struct Permutation
 //! This layer shuffles data by applying in sequence: a transpose operation, a reshape operation
 //! and a second transpose operation. The dimension types of the output are those of the reshape dimension.
 //!
-//! The layer has an optional second input. If present, it must be a 1D Int32 shape tensor,
+//! The layer has an optional second input. If present, it must be a 1D tensor of type Int32 or Int64,
 //! and the reshape dimensions are taken from it.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
@@ -3126,7 +3125,7 @@ public:
     //! The indices in the dynamic case are as follows:
     //!
     //! - 0: Data or Shape tensor to be shuffled.
-    //! - 1: The dimensions for the reshape operation, as a 1D Int32 shape tensor.
+    //! - 1: The dimensions for the reshape operation, as a 1D tensor of type Int32 or Int64.
     //!
     //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
@@ -3237,16 +3236,17 @@ constexpr inline int32_t EnumMax<SampleMode>() noexcept
 //!
 //! The slice layer has two variants, static and dynamic. Static slice specifies the start, size, and stride
 //! dimensions at layer creation time via Dims and can use the get/set accessor functions of the ISliceLayer.
-//! Dynamic slice specifies one or more of start, size or stride as ITensors, by using ILayer::setInput to add
-//! a second, third, or fourth input respectively. The corresponding Dims are used if an input
+//! Static slice layers can also optionally specify axes through the get/set accessor functions of the ISliceLayer.
+//! Dynamic slice specifies one or more of start, size, stride, or axes as ITensors, by using ILayer::setInput to add
+//! a second, third, fourth, or sixth input respectively. The corresponding Dims are used if an input
 //! is missing or null.
 //!
 //! An application can determine if the ISliceLayer has a dynamic output shape based on whether
-//! the size input (third input) is present and non-null.
+//! the size or axes input is present and non-null.
 //!
 //! The slice layer selects for each dimension a start location from within the input tensor, and
 //! copies elements to the output tensor using the specified stride across the input tensor.
-//! Start, size, and stride tensors must be 1D Int32 shape tensors if not specified via Dims.
+//! Start, size, and stride tensors must be 1D tensors of type Int32 or Int64 if not specified via Dims.
 //!
 //! An example of using slice on a tensor:
 //! input = {{0, 2, 4}, {1, 3, 5}}
@@ -3255,22 +3255,41 @@ constexpr inline int32_t EnumMax<SampleMode>() noexcept
 //! stride = {1, 2}
 //! output = {{1, 5}}
 //!
+//! If axes are provided then starts, ends, and strides must have the same length as axes
+//! and specifies a subset of dimensions to slice. If axes are not provided, starts, ends, and strides
+//! must be of the same length as the rank of the input tensor.
+//!
+//! An example of using slice on a tensor with axes specified:
+//! input = {{0, 2, 4}, {1, 3, 5}}
+//! start = {1}
+//! size = {2}
+//! stride = {1}
+//! axes = {1}
+//! output = {{2, 4}, {3, 5}}
+//!
 //! When the sampleMode is kCLAMP or kREFLECT, for each input dimension, if its size is 0 then the corresponding output
 //! dimension must be 0 too.
+//!
+//! When the sampleMode is kFILL, the fifth input to the slice layer is used to determine the value to fill in out-of-bound
+//! indices. It is an error to specify the fifth input in any other sampleMode.
 //!
 //! A slice layer can produce a shape tensor if the following conditions are met:
 //!
 //! * start, size, and stride are build time constants, either as static Dims or as constant input tensors.
+//! * axes, if provided, are build time constants, either as static Dims or as a constant input tensor.
 //! * The number of elements in the output tensor does not exceed 2 * Dims::MAX_DIMS.
 //!
 //! The input tensor is a shape tensor if the output is a shape tensor.
 //!
 //! The following constraints must be satisfied to execute this layer on DLA:
 //! * start, size, and stride are build time constants, either as static Dims or as constant input tensors.
-//! * sampleMode is kSTRICT_BOUNDS.
+//! * axes, if provided, are build time constants, either as static Dims or as a constant input tensor.
+//! * sampleMode is kDEFAULT, kWRAP, or kFILL.
 //! * Strides are 1 for all dimensions.
-//! * Slicing is not performed on the first dimension
-//! * The input tensor has four dimensions
+//! * Slicing is not performed on the first dimension.
+//! * The input tensor has four dimensions.
+//! * For kFILL sliceMode, the fill value input is a scalar output of an IConstantLayer with value 0 that is not
+//!   consumed by any other layer.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -3394,13 +3413,17 @@ public:
     //! The indices are as follows:
     //!
     //! - 0: Tensor to be sliced.
-    //! - 1: The start tensor to begin slicing, as a 1D Int32 shape tensor.
-    //! - 2: The size tensor of the resulting slice, as a 1D Int32 shape tensor.
-    //! - 3: The stride of the slicing operation, as a 1D Int32 shape tensor.
+    //! - 1: The start tensor to begin slicing, as a 1D tensor of type Int32 or Int64.
+    //! - 2: The size tensor of the resulting slice, as a 1D tensor of type Int32 or Int64.
+    //! - 3: The stride of the slicing operation, as a 1D tensor of type Int32 or Int64.
     //! - 4: Value for the kFILL slice mode. The fill value data type should either be the same
     //!      or be implicitly convertible to the input data type.
     //!      Implicit data type conversion is supported among kFLOAT, kHALF, kINT8, and kFP8 data types.
     //!      This input is disallowed for other modes.
+    //! - 5: The axes tensor indicating the corresponding axes that start, size, and stride
+    //!      should apply to, as a 1D tensor or type Int32 or Int64. Negative values for axes
+    //!      indicate indexing from the back of the input tensor. Values must be unique and be
+    //!      within the interval of [-rank(input), rank(input)-1].
     //!
     //! Using the corresponding setter resets the input to null.
     //!
@@ -3408,6 +3431,35 @@ public:
     //! from returning 1 to index + 1.
     //!
     using ILayer::setInput;
+
+    //!
+    //! \brief Set the axes for this ISliceLayer.
+    //!
+    //! \param axes The axes on which the starts, ends, and strides parameters of the slice apply to.
+    //!
+    //! If a sixth input had been used to create this layer, that input is reset to null by this method.
+    //!
+    //! \see getAxes
+    //!
+    void setAxes(Dims const& axes) noexcept
+    {
+        mImpl->setAxes(axes);
+    }
+
+    //!
+    //! \brief Get the axes for this ISliceLayer.
+    //!
+    //! \return The axes on which the starts, ends, and strides parameters of this slice apply to.
+    //!
+    //! If the sixth input is present and non-null,
+    //! this function returns a Dims with nbDims = -1.
+    //!
+    //! \see setAxes
+    //!
+    Dims getAxes() const noexcept
+    {
+        return mImpl->getAxes();
+    }
 
 protected:
     apiv::VSliceLayer* mImpl;
@@ -4007,8 +4059,8 @@ struct EnumMaxImpl<ResizeRoundMode>
 //! Resize layer can be used for resizing a N-D tensor.
 //!
 //! Resize layer currently supports the following configurations:
-//!     -   InterpolationMode::kNEAREST - resizes innermost `m` dimensions of N-D, where 0 < m <= min(8, N) and N > 0
-//!     -   InterpolationMode::kLINEAR - resizes innermost `m` dimensions of N-D, where 0 < m <= min(3, N) and N > 0
+//!     -   InterpolationMode::kNEAREST - resizes last `m` dimensions of N-D, where 0 < m <= min(8, N) and N > 0
+//!     -   InterpolationMode::kLINEAR - resizes last `m` dimensions of N-D, where 0 < m <= min(3, N) and N > 0
 //!
 //! Default resize mode is InterpolationMode::kNEAREST.
 //!
@@ -4157,7 +4209,7 @@ public:
     //! The indices in the dynamic case are as follows:
     //!
     //! - 0: Execution tensor to be resized.
-    //! - 1: The output dimensions, as a 1D Int32 shape tensor.
+    //! - 1: The output dimensions, as a 1D tensor of type Int32 or Int64.
     //!
     //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
@@ -4416,7 +4468,9 @@ protected:
 //!
 //! \brief This layer represents an output of an IIfConditional.
 //!
-//! An IIfConditionalOutputLayer has exactly one output.
+//! An IIfConditionalOutputLayer has two inputs and one output.
+//!
+//! \see IIfConditional::addOutput
 //!
 class IIfConditionalOutputLayer : public IIfConditionalBoundaryLayer
 {
@@ -4487,6 +4541,8 @@ public:
     //!
     //! Each output layer of an IIfConditional represents a single output of either the true-subgraph or the
     //! false-subgraph of an IIfConditional, depending on which subgraph was executed.
+    //!
+    //! The shapes of the two tensors must be equal unless the condition is a build-time constant.
     //!
     //! \see IIfConditionalOutputLayer
     //!
@@ -4642,7 +4698,7 @@ public:
     //! The indices in the kCONCATENATE or kREVERSE cases are as follows:
     //!
     //! - 0: Contribution to the output tensor.  The contribution must come from inside the loop.
-    //! - 1: The concatenation length scalar value, must come from outside the loop, as a 0D Int32 or Int64 shape tensor.
+    //! - 1: The concatenation length scalar value, must come from outside the loop, as a 0D shape tensor of type Int32 or Int64.
     //!
     //! If this function is called with the value 1, then the function getNbInputs() changes
     //! from returning 1 to 2.
@@ -5519,6 +5575,7 @@ protected:
     apiv::VDequantizeLayer* mImpl;
 };
 
+
 //!
 //! \class IEinsumLayer
 //!
@@ -5723,8 +5780,8 @@ protected:
 //! Output, and an axis attribute.
 //! * Indices is an Int32 tensor that determines which locations in Output to set as on_value.
 //! * Values is a two-element (rank=1) tensor that consists of [off_value, on_value]
-//! * Depth is an Int32 shape tensor of rank 0, which contains the depth (number of classes) of the one-hot encoding.
-//!   The depth tensor must be a build-time constant, and its value should be positive.
+//! * Depth is an 0D tensor of type Int32 or Int64, which contains the depth (number of classes) of the one-hot encoding.
+//!   The depth tensor must be a positive build-time constant.
 //! * Output is a tensor with rank = rank(indices)+1, where the added dimension contains the one-hot encoding.
 //!   The data types of Output is equal to the Values data type.
 //! * Axis is a scalar specifying to which dimension of the output one-hot encoding is added.
@@ -6994,7 +7051,7 @@ public:
     //!
     //! \see IParametricReLULayer
     //!
-    //! \warning Int32 tensors are not valid input tensors.
+    //! \warning Tensors of type Int32, Int64, Bool, or UInt8 are not allowed as inputs.
     //!
     //! \return The new parametric ReLU layer, or nullptr if it could not be created.
     //!
@@ -7434,6 +7491,7 @@ public:
     {
         return mImpl->addQuantizeV2(input, scale, outputType);
     }
+
 
     //!
     //! \brief Add an Einsum layer to the network.
@@ -8549,7 +8607,13 @@ enum class PreviewFeature : int32_t
     //! \deprecated Deprecated in TensorRT 10.0. The default value for this flag is on and can not be changed.
     //!
     kPROFILE_SHARING_0806 TRT_DEPRECATED_ENUM = 0,
+
+    //!
+    //! Allows plugin I/O to be aliased when using IPluginV3OneBuildV2
+    //!
+    kALIASED_PLUGIN_IO_10_03 = 1
 };
+
 namespace impl
 {
 //!
@@ -8560,7 +8624,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<PreviewFeature>
 {
-    static constexpr int32_t kVALUE = 1;
+    static constexpr int32_t kVALUE = 2;
 };
 } // namespace impl
 
@@ -9524,6 +9588,30 @@ public:
     RuntimePlatform getRuntimePlatform() const noexcept
     {
         return mImpl->getRuntimePlatform();
+    }
+
+    //!
+    //! \brief Set the maximum number of tactics to time when there is a choice of tactics.
+    //!
+    //! This function controls the number of tactics timed when there are multiple tactics to choose from.
+    //!
+    //! \see getMaxNbTactics()
+    //!
+    void setMaxNbTactics(int32_t maxNbTactics) noexcept
+    {
+        mImpl->setMaxNbTactics(maxNbTactics);
+    }
+
+    //!
+    //! \brief Query the maximum number of tactics timed when there is a choice.
+    //!
+    //! By default the value is -1, indicating TensorRT can determine the number of tactics based on its own heuristic.
+    //!
+    //! \see setMaxNbTactics()
+    //!
+    int32_t getMaxNbTactics() const noexcept
+    {
+        return mImpl->getMaxNbTactics();
     }
 
 protected:

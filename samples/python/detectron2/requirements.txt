@@ -1,5 +1,6 @@
 onnx==1.16.0
-onnxruntime==1.15.1
+onnxruntime==1.15.1; python_version <= "3.10"
+onnxruntime==1.18.1; python_version >= "3.11"
 Pillow>=10.0.0
 git+https://github.com/facebookresearch/detectron2.git
 git+https://github.com/NVIDIA/TensorRT#subdirectory=tools/onnx-graphsurgeon

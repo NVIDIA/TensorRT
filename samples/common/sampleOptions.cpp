@@ -905,6 +905,7 @@ std::string previewFeatureToString(PreviewFeature feature)
         gLogWarning << "profileSharing0806 is on by default in TensorRT 10.0. This flag is deprecated and has no effect." << std::endl;
         break;
     }
+    case PreviewFeature::kALIASED_PLUGIN_IO_10_03: return "kALIASED_PLUGIN_IO_10_03";
     }
     return "Invalid Preview Feature";
     // clang-format on
@@ -925,8 +926,8 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
             os << previewFeatureToString(feat) << (options.previewFeatures.at(featVal) ? " [ON], " : " [OFF], ");
         }
     };
-    // unused
-    static_cast<void>(addFlag);
+
+    addFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
 
     return os;
 }
@@ -1253,7 +1254,6 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--safe", safe);
     getAndDelOption(arguments, "--buildDLAStandalone", buildDLAStandalone);
     getAndDelOption(arguments, "--allowGPUFallback", allowGPUFallback);
-    getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--restricted", restricted);
     getAndDelOption(arguments, "--skipInference", skipInference);
     getAndDelOption(arguments, "--directIO", directIO);
@@ -1445,6 +1445,7 @@ void BuildOptions::parse(Arguments& arguments)
     }
     getAndDelOption(arguments, "--errorOnTimingCacheMiss", errorOnTimingCacheMiss);
     getAndDelOption(arguments, "--builderOptimizationLevel", builderOptimizationLevel);
+    getAndDelOption(arguments, "--maxTactics", maxTactics);
 
     std::string runtimePlatformArgs;
     getAndDelOption(arguments, "--runtimePlatform", runtimePlatformArgs);
@@ -1509,6 +1510,10 @@ void BuildOptions::parse(Arguments& arguments)
             sample::gLogWarning
                 << "profileSharing0806 is on by default in TensorRT 10.0. This flag is deprecated and has no effect."
                 << std::endl;
+        }
+        else if (featureName == "aliasedPluginIO1003")
+        {
+            feat = PreviewFeature::kALIASED_PLUGIN_IO_10_03;
         }
         else
         {
@@ -1834,7 +1839,6 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     getFormats(outputFormats, "--outputIOFormats");
     getAndDelOption(arguments, "--int8", int8);
     getAndDelOption(arguments, "--calib", calibFile);
-    getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--std", standard);
 #if !TRT_WINML
     std::string pluginName;
@@ -2175,6 +2179,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl <<
           "MaxAuxStreams: "   << options.maxAuxStreams                                                                  << std::endl <<
           "BuilderOptimizationLevel: " << options.builderOptimizationLevel                                              << std::endl <<
+          "MaxTactics: " << options.maxTactics                                                                          << std::endl <<
           "Calibration Profile Index: " << options.calibProfile                                                         << std::endl <<
           "Weight Streaming: " << boolToEnabled(options.allowWeightStreaming)                                           << std::endl <<
           "Runtime Platform: " << options.runtimePlatform                                                               << std::endl <<
@@ -2524,7 +2529,6 @@ void BuildOptions::help(std::ostream& os)
           "                                     specifying --inputIOFormats and --outputIOFormats restricts I/O data type and memory layout"        "\n"
           "                                     (default = disabled)"        "\n"
           "  --allowGPUFallback                 When DLA is enabled, allow GPU fallback for unsupported layers (default = disabled)"                "\n"
-          "  --consistency                      Perform consistency checking on safety certified engine"                                            "\n"
           "  --restricted                       Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
           "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
           "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
@@ -2546,10 +2550,14 @@ void BuildOptions::help(std::ostream& os)
           "  --preview=features                 Specify preview feature to be used by adding (+) or removing (-) preview features from the default" "\n"
           R"(                                   Preview Features: features ::= [","feature])"                                                       "\n"
           "                                                       feature  ::= (+|-)flag"                                                           "\n"
-          R"(                                                     flag     ::= "profileSharing0806")"                                               "\n"
+          R"(                                                     flag     ::= "aliasedPluginIO1003")"                                              "\n"
+          R"(                                                                  |"profileSharing0806")"                                              "\n"
           "  --builderOptimizationLevel         Set the builder optimization level. (default is 3)"                                                 "\n"
           "                                     Higher level allows TensorRT to spend more building time for more optimization options."            "\n"
           "                                     Valid values include integers from 0 to the maximum optimization level, which is currently 5."      "\n"
+          "  --maxTactics                       Set the maximum number of tactics to time when there is a choice of tactics. (default is -1)"       "\n"
+          "                                     Larger number of tactics allow TensorRT to spend more building time on evaluating tactics."         "\n"
+          "                                     Default value -1 means TensorRT can decide the number of tactics based on its own heuristic."       "\n"
           "  --hardwareCompatibilityLevel=mode  Make the engine file compatible with other GPU architectures. (default = none)"                     "\n"
           R"(                                   Hardware Compatibility Level: mode ::= "none" | "ampere+")"                                         "\n"
           "                                         none = no compatibility"                                                                        "\n"
@@ -2764,7 +2772,6 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
           R"(                                          fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                      << std::endl <<
           R"(                                                     "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                          << std::endl <<
           "  --int8                      Enable int8 precision, in addition to fp16 (default = disabled)"                                    << std::endl <<
-          "  --consistency               Enable consistency check for serialized engine, (default = disabled)"                               << std::endl <<
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
           "  --serialized=<file>         Save the serialized network"                                                                        << std::endl <<

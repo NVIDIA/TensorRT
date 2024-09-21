@@ -13,7 +13,7 @@
 
 The `InstanceNormalizePlugin` is used for the InstanceNormalization layer, which is generally used in deep learning models that perform image generation. This plugin is based off the [ONNX opset 6 definition](https://github.com/onnx/onnx/blob/master/docs/Operators.md#InstanceNormalization), and is used in any ONNX model that uses this operation.
 
-Specifically, given an array of values `x = [x_0, x_1, ..., x_n]` , a scale factor, a bias factor, and an epislon,  the InstanceNormalization of x is  `scale * (x-mean) / sqrt(variance + epsilon) + bias` where the mean and variance are computed per instance per channel.
+Specifically, given an array of values `x = [x_0, x_1, ..., x_n]` , a scale factor, a bias factor, and an epsilon,  the InstanceNormalization of x is  `scale * (x-mean) / sqrt(variance + epsilon) + bias` where the mean and variance are computed per instance per channel.
   
 ### Structure
 

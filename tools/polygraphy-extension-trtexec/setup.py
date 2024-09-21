@@ -39,7 +39,7 @@ def main():
         ],
         license="Apache 2.0",
         install_requires=[
-            "polygraphy>=0.42.1",
+            "polygraphy>=0.49.0",
         ],
         packages=find_packages(exclude=("tests", "tests.*")),
         entry_points={

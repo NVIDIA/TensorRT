@@ -37,6 +37,7 @@ namespace sample
 constexpr int32_t defaultAvgTiming{8};
 constexpr int32_t defaultMaxAuxStreams{-1};
 constexpr int32_t defaultBuilderOptimizationLevel{-1};
+constexpr int32_t defaultMaxTactics{-1};
 
 // System default params
 constexpr int32_t defaultDevice{0};
@@ -227,7 +228,6 @@ public:
     bool safe{false};
     bool buildDLAStandalone{false};
     bool allowGPUFallback{false};
-    bool consistency{false};
     bool restricted{false};
     bool skipInference{false};
     bool save{false};
@@ -239,6 +239,7 @@ public:
     bool excludeLeanRuntime{false};
     bool disableCompilationCache{false};
     int32_t builderOptimizationLevel{defaultBuilderOptimizationLevel};
+    int32_t maxTactics{defaultMaxTactics};
     SparsityFlag sparsity{SparsityFlag::kDISABLE};
     nvinfer1::ProfilingVerbosity profilingVerbosity{nvinfer1::ProfilingVerbosity::kLAYER_NAMES_ONLY};
     std::string engine;
@@ -359,7 +360,6 @@ public:
     bool int4{false};
     std::string calibFile{};
     std::vector<std::string> plugins;
-    bool consistency{false};
     bool standard{false};
     TimingCacheMode timingCacheMode{TimingCacheMode::kLOCAL};
     std::string timingCacheFile{};
@@ -398,6 +398,7 @@ public:
     void parse(Arguments& arguments) override;
     static void help(std::ostream& out);
 };
+
 
 Arguments argsToArgumentsMap(int32_t argc, char* argv[]);
 

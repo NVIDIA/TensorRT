@@ -461,33 +461,19 @@ void dumpInputs(nvinfer1::IExecutionContext const& context, Bindings const& bind
     bindings.dumpInputs(context, os);
 }
 
-template <typename ContextType>
-void dumpOutputs(ContextType const& context, Bindings const& bindings, std::ostream& os)
+void dumpOutputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os)
 {
-    os << "Output Tensors:" << std::endl;
-    bindings.dumpOutputs(context, os);
+    auto isOutput = [](Binding const& b) { return !b.isInput; };
+    bindings.dumpBindings(context, isOutput, os);
 }
 
-template
-void dumpOutputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
-template
-void dumpOutputs(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
-
-template <typename ContextType>
-void dumpRawBindingsToFiles(ContextType const& context, Bindings const& bindings, std::ostream& os)
+void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os)
 {
     bindings.dumpRawBindingToFiles(context, os);
 }
 
-template
-void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
-
-template
-void dumpRawBindingsToFiles(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
-
-template <typename ContextType>
 void exportJSONOutput(
-    ContextType const& context, Bindings const& bindings, std::string const& fileName, int32_t batch)
+    nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch)
 {
     std::ofstream os(fileName, std::ofstream::trunc);
     std::string sep = "  ";
@@ -509,11 +495,8 @@ void exportJSONOutput(
     os << "]" << std::endl;
 }
 
-template
-void exportJSONOutput(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
-
-template void exportJSONOutput(nvinfer1::safe::IExecutionContext const& context, Bindings const& bindings,
-    std::string const& fileName, int32_t batch);
+void exportJSONOutput(
+    nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
 
 void printLayerInfo(
     ReportingOptions const& reporting, nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context)
@@ -583,8 +566,7 @@ void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnviron
 
 namespace details
 {
-template <typename ContextType>
-void dump(std::unique_ptr<ContextType> const& context, std::unique_ptr<Bindings> const& binding,
+void dump(std::unique_ptr<nvinfer1::IExecutionContext> const& context, std::unique_ptr<Bindings> const& binding,
     ReportingOptions const& reporting, int32_t batch)
 {
     if (!context)
@@ -615,17 +597,13 @@ void printOutput(ReportingOptions const& reporting, InferenceEnvironment const& 
         sample::gLogError << "Empty bindings! Skip printing outputs." << std::endl;
         return;
     }
-
     if (iEnv.safe)
     {
-        auto const& context = iEnv.safeContexts.at(0);
-        details::dump(context, binding, reporting, batch);
+        sample::gLogError << "Safe inferernce is not supported!" << std::endl;
+        return;
     }
-    else
-    {
-        auto const& context = iEnv.contexts.at(0);
-        details::dump(context, binding, reporting, batch);
-    }
+    auto const& context = iEnv.contexts.at(0);
+    details::dump(context, binding, reporting, batch);
 }
 
 } // namespace sample

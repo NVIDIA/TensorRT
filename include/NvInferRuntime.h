@@ -1093,6 +1093,54 @@ public:
 };
 } // namespace v_1_0
 
+namespace v_2_0
+{
+
+class IPluginV3OneBuild : public v_1_0::IPluginV3OneBuild
+{
+public:
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return InterfaceInfo{"PLUGIN_V3ONE_BUILD", 2, 0};
+    }
+
+    //!
+    //! \brief Communicates to TensorRT that the output at the specified output index is aliased to the input at the
+    //! returned index
+    //!
+    //! Enables read-modify-write behavior in plugins. TensorRT may insert copies to facilitate this capability.
+    //!
+    //! \return An integer denoting the index of the input which is aliased to the output at outputIndex.
+    //!         Returning -1 indicates that the output is not aliased to any input. Otherwise, the valid range for
+    //!         return value is [0, nbInputs - 1].
+    //!
+    //! \note A given plugin input can only be aliased to a single plugin output.
+    //!
+    //! \note This API will only be called and have an effect when PreviewFeature::kALIASED_PLUGIN_IO_10_03 is turned
+    //! on.
+    //!
+    //! \warning If an input is not shallow copyable, a copy inserted by TensorRT may not work as intended. Therefore,
+    //!          using this feature with tensors requiring deep copies is not supported.
+    //!
+    //! \warning If a given tensor is requested to be aliased by two different plugins, this may result in divergent
+    //! copies of the tensor after writes from each plugin. e.g. In the below example, t1 and t2 could be divergent.
+    //!
+    //!        +-----+            +--------+
+    //!     +->|Copy +--> t* ---->|Plugin0 +--> t1
+    //!     |  +-----+            +--------+
+    //!     t
+    //!     |  +-----+            +--------+
+    //!     +->|Copy +--> t** --->|Plugin1 +--> t2
+    //!        +-----+            +--------+
+    //!
+    virtual int32_t getAliasedInput(int32_t outputIndex) noexcept
+    {
+        return -1;
+    }
+};
+
+} // namespace v_2_0
+
 //!
 //! \class IPluginV3OneCore
 //!
@@ -1127,6 +1175,15 @@ using IPluginV3OneBuild = v_1_0::IPluginV3OneBuild;
 //! \see IPluginV3::getCapabilityInterface()
 //!
 using IPluginV3OneRuntime = v_1_0::IPluginV3OneRuntime;
+
+//!
+//! \class IPluginV3OneBuildV2
+//!
+//! \brief A plugin capability interface that extends IPluginV3OneBuild by providing I/O aliasing functionality.
+//!
+//! \see IPluginV3OneBuild
+//!
+using IPluginV3OneBuildV2 = v_2_0::IPluginV3OneBuild;
 
 namespace v_1_0
 {

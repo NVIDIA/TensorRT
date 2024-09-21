@@ -17,6 +17,7 @@
 import copy
 import enum
 import functools
+import logging
 import os
 import sys
 import time
@@ -239,6 +240,15 @@ class Logger:
         This is converted to a ``SeverityTrie`` on assignment.
         Defaults to G_LOGGER.INFO.
         """
+        self._use_python_logging_system = False
+        """
+        A flag indicating whether to use the Python `logging` module for log emission.
+        By default, logs are emitted to `stdout` or `stderr`. When this flag is set to `True`, 
+        the logger uses the Python `logging` module instead of `stdout`/`stderr`. 
+        This allows logs to be integrated into a unified logging system which can be helpful
+        in advanced cases like using multiprocessing or when the user wants one logging system
+        to manage Polygraphy and other libraries logs.
+        """
 
     @property
     def log_file(self):
@@ -285,6 +295,17 @@ class Logger:
             "Warning: Accessing the `severity` property of G_LOGGER is deprecated and will be removed in v0.50.0. Use `module_severity` instead"
         )
         self.module_severity = value
+
+    @property
+    def use_python_logging_system(self):
+        return self._use_python_logging_system
+    
+    @use_python_logging_system.setter
+    def use_python_logging_system(self, value):
+        self._use_python_logging_system = value
+        if value:
+            self.python_logger = logging.getLogger("Polygraphy")
+            self.severity_level_mapping = { Logger.ULTRA_VERBOSE : 2, Logger.SUPER_VERBOSE: 4, Logger.EXTRA_VERBOSE: 6 }
 
     def module_path(self, path):
         """
@@ -459,7 +480,12 @@ class Logger:
             self._log_file.write(message + "\n")
             self._log_file.flush()
 
-        print(message, file=sys.stdout if severity < Logger.CRITICAL else sys.stderr)
+        if self._use_python_logging_system:
+            # python logging system does not handle negative levels, map them to positive values
+            level = severity if severity > 0 else self.severity_level_mapping[severity]
+            self.python_logger.log(level=level, msg=message)
+        else:
+            print(message, file=sys.stdout if severity < Logger.CRITICAL else sys.stderr)
 
     def backtrace(self, depth=0, limit=None, severity=ERROR):
         limit = (

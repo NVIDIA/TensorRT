@@ -41,7 +41,9 @@ namespace consistency
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IConsistencyChecker
+//! \deprecated Deprecated in TensorRT 10.4.
+//!
+class TRT_DEPRECATED IConsistencyChecker
 {
 public:
     //!
@@ -80,7 +82,9 @@ protected:
 //!
 //! Supported IPlugin inferfaces are limited to IPluginV2IOExt only.
 //!
-class IPluginChecker : public IPluginCreator
+//! \deprecated Deprecated in TensorRT 10.4.
+//!
+class TRT_DEPRECATED IPluginChecker : public IPluginCreator
 {
 public:
     //!
@@ -114,6 +118,9 @@ protected:
 
 } // namespace nvinfer1
 
+//!
+//! \deprecated Deprecated in TensorRT 10.4.
+//!
 extern "C" TENSORRTAPI void* createConsistencyChecker_INTERNAL(void* logger, void const* blob, size_t size,
     int32_t version); //!< Internal C entry point for creating IConsistencyChecker.
 
@@ -132,7 +139,10 @@ namespace consistency
 namespace // anonymous
 {
 
-inline IConsistencyChecker* createConsistencyChecker(ILogger& logger, void const* blob, size_t size)
+//!
+//! \deprecated Deprecated in TensorRT 10.4.
+//!
+TRT_DEPRECATED inline IConsistencyChecker* createConsistencyChecker(ILogger& logger, void const* blob, size_t size)
 {
     return static_cast<IConsistencyChecker*>(
         createConsistencyChecker_INTERNAL(&logger, blob, size, NV_TENSORRT_VERSION));

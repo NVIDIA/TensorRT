@@ -35,7 +35,7 @@ endfunction()
 # -------- CMAKE OPTIONS --------
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${TENSORRT_MODULE}/)
-set(CPP_STANDARD 14 CACHE STRING "CPP Standard Version")
+set(CPP_STANDARD 17 CACHE STRING "CPP Standard Version")
 set(CMAKE_CXX_STANDARD ${CPP_STANDARD})
 
 if (NOT MSVC)
@@ -114,6 +114,12 @@ include_directories(${TENSORRT_ROOT}/include ${PROJECT_SOURCE_DIR}/include ${CUD
 link_directories(${TENSORRT_BUILD})
 
 if (MSVC)
+  # Prevent pybind11 from sharing resources with other, potentially ABI incompatible modules
+  # https://github.com/pybind/pybind11/issues/2898
+  add_definitions(-DPYBIND11_COMPILER_TYPE="_${PROJECT_NAME}_abi")
+endif()
+
+if (MSVC)
     message(STATUS "include_dirs: ${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um ${NV_WDKSDK_INC}/shared")
     message(STATUS "link dirs: ${PY_LIB_DIR} ${NV_WDKSDK_LIB}/um/x64 ${MSVC_COMPILER_DIR}/lib/amd64 ${MSVC_COMPILER_DIR}/../ucrt/lib/x64")
     include_directories(${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um ${NV_WDKSDK_INC}/shared)
@@ -171,13 +177,6 @@ elseif (${TENSORRT_MODULE} STREQUAL "tensorrt_dispatch")
     set(TRT_LIBS ${nvinfer_dispatch_lib_name})
 else()
     message(FATAL_ERROR "Unknown TensorRT module " ${TENSORRT_MODULE})
-endif()
-
-
-# -------- START BUILD PROCESS --------
-message(STATUS "Building in ${CMAKE_BUILD_TYPE} mode")
-if (ENABLE_INETWORK_SERIALIZE)
-    set(TRT_LIBS ${TRT_LIBS} nvserialize)
 endif()
 
 # -------- BUILDING --------

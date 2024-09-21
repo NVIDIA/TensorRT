@@ -23,6 +23,7 @@
 #if ENABLE_INETWORK_SERIALIZE
 #include "NvInferSerialize.h"
 #endif
+
 #include "infer/pyGraphDoc.h"
 
 // clang-format off
@@ -243,7 +244,6 @@ namespace tensorrt
             else
                 return py::cast(self.getBeta());
         };
-
     } /* lambdas */
 
     void bindGraph(py::module& m)
@@ -297,6 +297,7 @@ namespace tensorrt
             .value("REVERSE_SEQUENCE", LayerType::kREVERSE_SEQUENCE, LayerTypeDoc::REVERSE_SEQUENCE)
             .value("NORMALIZATION", LayerType::kNORMALIZATION, LayerTypeDoc::NORMALIZATION)
             .value("PLUGIN_V3", LayerType::kPLUGIN_V3, LayerTypeDoc::PLUGIN_V3)
+
         ; // LayerType
 
         py::enum_<TensorFormat>(m, "TensorFormat", TensorFormatDoc::descr, py::arithmetic{}, py::module_local())
@@ -450,7 +451,6 @@ namespace tensorrt
             .def_property("axis", &IDequantizeLayer::getAxis, &IDequantizeLayer::setAxis)
             .def_property("to_type", &IDequantizeLayer::getToType, &IDequantizeLayer::setToType)
         ;
-
         py::class_<ISoftMaxLayer, ILayer, std::unique_ptr<ISoftMaxLayer, py::nodelete>>(m, "ISoftMaxLayer", ISoftMaxLayerDoc::descr, py::module_local())
             .def_property("axes", &ISoftMaxLayer::getAxes, &ISoftMaxLayer::setAxes)
         ;
@@ -605,6 +605,7 @@ namespace tensorrt
             .def_property("stride", &ISliceLayer::getStride, &ISliceLayer::setStride)
             .def_property("mode", &ISliceLayer::getMode, &ISliceLayer::setMode)
             .def("set_input", &ISliceLayer::setInput, "index"_a, "tensor"_a, ISliceLayerDoc::set_input)
+            .def_property("axes", &ISliceLayer::getAxes, &ISliceLayer::setAxes)
         ;
 
         py::enum_<InterpolationMode>(m, "InterpolationMode", InterpolationModeDoc::descr, py::module_local())
