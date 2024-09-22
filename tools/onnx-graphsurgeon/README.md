@@ -65,10 +65,13 @@ ONNX GraphSurgeon is composed of three major components: Importers, the IR, and 
 Importers are used to import a graph into the ONNX GraphSurgeon IR.
 The importer interface is defined in [base_importer.py](./onnx_graphsurgeon/importers/base_importer.py).
 
-ONNX GraphSurgeon also provides [high-level importer APIs](./onnx_graphsurgeon/api/api.py) for ease of use:
+ONNX GraphSurgeon also provides [high-level importer APIs](./onnx_graphsurgeon/__init__.py) for ease of use:
 ```python
+import onnx_graphsurgeon as gs
 graph = gs.import_onnx(onnx.load("model.onnx"))
 ```
+
+The `model.onnx` file used in the following examples is [resnet50-v2-7.onnx](https://github.com/onnx/models/blob/main/validated/vision/classification/resnet/model/resnet50-v2-7.onnx).
 
 ### IR
 
@@ -94,25 +97,33 @@ The inputs and outputs of Tensors are always Nodes.
 
 **An example constant tensor from ResNet50:**
 ```
+>>> tensor = graph.tensors()['resnetv24_batchnorm1_gamma']
 >>> print(tensor)
-Constant (gpu_0/res_conv1_bn_s_0)
-[0.85369843 1.1515082  0.9152944  0.9577646  1.0663182  0.55629414
- 1.2009839  1.1912311  2.2619808  0.62263143 1.1149117  1.4921428
- 0.89566356 1.0358194  1.431092   1.5360111  1.25086    0.8706703
- 1.2564877  0.8524589  0.9436758  0.7507614  0.8945271  0.93587166
- 1.8422242  3.0609846  1.3124607  1.2158023  1.3937513  0.7857263
- 0.8928106  1.3042281  1.0153942  0.89356416 1.0052011  1.2964457
- 1.1117343  1.0669073  0.91343874 0.92906713 1.0465593  1.1261675
- 1.4551278  1.8252873  1.9678202  1.1031747  2.3236883  0.8831993
- 1.1133649  1.1654979  1.2705412  2.5578163  0.9504889  1.0441847
- 1.0620039  0.92997414 1.2119316  1.3101407  0.7091761  0.99814713
- 1.3404484  0.96389204 1.3435135  0.9236031 ]
+Constant (resnetv24_batchnorm1_gamma): (shape=(64,), dtype=float32)
+>>> print(tensor.values)
+[-9.83304853e-05  2.17902549e-02  8.74318480e-02  3.26565914e-02
+  8.23329296e-03  5.41263507e-05 -9.77454185e-02  2.29816716e-02
+  7.52642791e-06  6.15647587e-05  3.15795541e-02  2.24303094e-05
+ -9.81112898e-05 -3.51903400e-05  2.34726686e-02 -3.48845992e-06
+  1.07414778e-02 -2.35510282e-02 -6.32902316e-04  2.36321557e-02
+ -2.30935775e-02  9.88963172e-02  2.41898187e-02  2.11347304e-02
+  2.35060174e-02  5.13273444e-05  2.67624146e-05  2.45444812e-02
+  6.36491532e-05  4.07683291e-02 -4.90635410e-02  1.20312367e-02
+  2.06732173e-02 -1.19354352e-01 -5.92932338e-05 -4.35315929e-02
+  3.90425622e-02  6.16753958e-02  1.35400733e-02  2.10027705e-04
+ -2.40152876e-05  2.48841383e-02  1.38983105e-05  2.23469138e-02
+ -3.32205333e-02  2.01729666e-02  2.43023913e-02  2.44748250e-01
+  2.33223271e-02  5.36156949e-05  4.04572971e-02  1.73668638e-02
+ -3.28809301e-06  2.53515430e-02 -3.43644933e-06  2.19323078e-06
+  1.24725382e-04  1.08645864e-01 -3.93772598e-06  1.88900251e-02
+  2.35187691e-02  1.16659294e-05 -7.32624685e-05  2.96757370e-02]
 ```
 
 **An example variable tensor from ResNet50:**
 ```
+>>> tensor = graph.inputs[0]
 >>> print(tensor)
-Variable (gpu_0/data_0): (shape=[1, 3, 224, 224], dtype=float32)
+Variable (data): (shape=['N', 3, 224, 224], dtype=float32)
 ```
 
 
@@ -125,10 +136,15 @@ The inputs and outputs of Nodes are always Tensors
 
 **An example ReLU node from ResNet50:**
 ```
+>>> node = next(node for node in graph.nodes if node.name == "resnetv24_relu0_fwd")
 >>> print(node)
- (Relu)
-    Inputs: [Tensor (gpu_0/res_conv1_bn_1)]
-    Outputs: [Tensor (gpu_0/res_conv1_bn_2)]
+resnetv24_relu0_fwd (Relu)
+	Inputs: [
+		Variable (resnetv24_batchnorm1_fwd): (shape=None, dtype=None)
+	]
+	Outputs: [
+		Variable (resnetv24_relu0_fwd): (shape=None, dtype=None)
+	]
 ```
 
 In this case, the node has no attributes. Otherwise, attributes are displayed as an `OrderedDict`.
@@ -143,20 +159,28 @@ of a Node when you make a change to the `outputs` of its input tensor.
 Consider the following node:
 ```
 >>> print(node)
- (Relu).
-    Inputs: [Tensor (gpu_0/res_conv1_bn_1)]
-    Outputs: [Tensor (gpu_0/res_conv1_bn_2)]
+resnetv24_relu0_fwd (Relu)
+	Inputs: [
+		Variable (resnetv24_batchnorm1_fwd): (shape=None, dtype=None)
+	]
+	Outputs: [
+		Variable (resnetv24_relu0_fwd): (shape=None, dtype=None)
+	]
 ```
 
 The input tensor can be accessed like so:
 ```
 >>> tensor = node.inputs[0]
 >>> print(tensor)
-Tensor (gpu_0/res_conv1_bn_1)
+Variable (resnetv24_batchnorm1_fwd): (shape=None, dtype=None)
 >>> print(tensor.outputs)
-[ (Relu).
-	Inputs: [Tensor (gpu_0/res_conv1_bn_1)]
-	Outputs: [Tensor (gpu_0/res_conv1_bn_2)]
+[resnetv24_relu0_fwd (Relu)
+	Inputs: [
+		Variable (resnetv24_batchnorm1_fwd): (shape=None, dtype=None)
+	]
+	Outputs: [
+		Variable (resnetv24_relu0_fwd): (shape=None, dtype=None)
+	]]
 ```
 
 If we remove the node from the outputs of the tensor, this is reflected in the node inputs as well:
@@ -165,11 +189,13 @@ If we remove the node from the outputs of the tensor, this is reflected in the n
 >>> print(tensor.outputs)
 []
 >>> print(node)
- (Relu).
-    Inputs: []
-    Outputs: [Tensor (gpu_0/res_conv1_bn_2)]
+resnetv24_relu0_fwd (Relu)
+	Inputs: [
+	]
+	Outputs: [
+		Variable (resnetv24_relu0_fwd): (shape=None, dtype=None)
+	]
 ```
-
 
 #### Graph
 
@@ -191,7 +217,7 @@ To see the full Graph API, you can see `help(onnx_graphsurgeon.Graph)` in an int
 Exporters are used to export the ONNX GraphSurgeon IR to ONNX or other types of graphs.
 The exporter interface is defined in [base_exporter.py](./onnx_graphsurgeon/exporters/base_exporter.py).
 
-ONNX GraphSurgeon also provides [high-level exporter APIs](./onnx_graphsurgeon/api/api.py) for ease of use:
+ONNX GraphSurgeon also provides [high-level exporter APIs](./onnx_graphsurgeon/__init__.py) for ease of use:
 ```python
 onnx.save(gs.export_onnx(graph), "model.onnx")
 ```
