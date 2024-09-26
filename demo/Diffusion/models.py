@@ -596,7 +596,7 @@ class CLIPModel(BaseModel):
         opt.infer_shapes()
         opt.info(self.name + ': shape inference')
         opt.select_outputs([0], names=['text_embeddings']) # rename network output
-        opt.info(self.name + ': remove output[0]')
+        opt.info(self.name + ': rename output[0]')
         opt_onnx_graph = opt.cleanup(return_onnx=True)
         if 'hidden_states' in self.extra_output_names:
             opt_onnx_graph = opt.clip_add_hidden_states(return_onnx=True)
