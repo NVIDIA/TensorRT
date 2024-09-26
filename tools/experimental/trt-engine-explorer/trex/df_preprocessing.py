@@ -254,7 +254,8 @@ def drop_columns(df: pd.DataFrame, columns: list):
 
 def clean_df(df: pd.DataFrame, inplace=True) -> pd.DataFrame:
     clean_io(df)
-    columns = set([col for col_list in layer_attributes.keys() for col in col_list])
+    lists = [list(layer.keys()) for layer in layer_attributes.values()]
+    columns = {key for list_ in lists for key in list_}
     drop_columns(df, columns)
     df.fillna(0, inplace=inplace)
     return df
