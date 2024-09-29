@@ -364,6 +364,24 @@ public:
     }
 
     //!
+    //! \brief Copy the selected contents of output device buffers by bidingIdx to output host buffers synchronously.
+    //!
+    void copyOutputToHost(const std::vector<int>& bindingIndices) 
+    { 
+        for (int i : bindingIndices)
+        {
+          void* dstPtr = mManagedBuffers[i]->hostBuffer.data();
+          const void* srcPtr = mManagedBuffers[i]->deviceBuffer.data();
+          const size_t byteSize = mManagedBuffers[i]->hostBuffer.nbBytes();
+          const cudaMemcpyKind memcpyType = cudaMemcpyDeviceToHost;
+          if (!mEngine->bindingIsInput(i))
+          {
+            CHECK(cudaMemcpy(dstPtr, srcPtr, byteSize, memcpyType));
+          }
+        }
+    }
+
+    //!
     //! \brief Copy the contents of input host buffers to input device buffers asynchronously.
     //!
     void copyInputToDeviceAsync(const cudaStream_t& stream = 0)
@@ -378,6 +396,24 @@ public:
     {
         memcpyBuffers(false, true, true, stream);
     }
+
+    //!
+    //! \brief Copy the selected contents of output device buffers to output host buffers asynchronously.
+    //!
+    void copyOutputToHostAsync(const std::vector<int>& bindingIndices, const cudaStream_t& stream = 0)
+    {
+        for (int i : bindingIndices)
+        {
+          void* dstPtr = mManagedBuffers[i]->hostBuffer.data();
+          const void* srcPtr = mManagedBuffers[i]->deviceBuffer.data();
+          const size_t byteSize = mManagedBuffers[i]->hostBuffer.nbBytes();
+          const cudaMemcpyKind memcpyType = cudaMemcpyDeviceToHost;
+          if (!mEngine->bindingIsInput(i))
+          {
+            CHECK(cudaMemcpy(dstPtr, srcPtr, byteSize, memcpyType, stream));
+          }
+        }
+    } 
 
     ~BufferManager() = default;
 
