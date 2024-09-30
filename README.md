@@ -66,6 +66,7 @@ To build the TensorRT-OSS components, you will first need the following software
 	git clone -b main https://github.com/nvidia/TensorRT TensorRT
 	cd TensorRT
 	git submodule update --init --recursive
+ 	export TRT_OSSPATH=`pwd`
 	```
 
 2. #### (Optional - if not using TensorRT container) Specify the TensorRT GA release build path
@@ -82,7 +83,7 @@ To build the TensorRT-OSS components, you will first need the following software
     ```bash
     cd ~/Downloads
     tar -xvzf TensorRT-10.0.1.6.Linux.x86_64-gnu.cuda-12.4.tar.gz
-    export TRT_LIBPATH=`pwd`/TensorRT-10.0.1.6
+    export TRT_LIBPATH=`pwd`/TensorRT-10.0.1.6/lib
     ```
 
 ## Setting Up The Build Environment
