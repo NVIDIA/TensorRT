@@ -8,20 +8,5 @@
 	branch = 1.8.0
 [submodule "parsers/onnx"]
 	path = parsers/onnx
-	url = https://gitlab-master.nvidia.com/TensorRT/Public/onnx.git
+	url = https://github.com/onnx/onnx-tensorrt.git
 	branch = main
-[submodule "tools/Polygraphy"]
-	path = tools/Polygraphy
-	url = https://gitlab-master.nvidia.com/TensorRT/Infrastructure/Polygraphy.git
-[submodule "tools/experimental/trt-engine-explorer"]
-	path = tools/experimental/trt-engine-explorer
-	url = https://gitlab-master.nvidia.com/TensorRT/Tools/trt-engine-explorer.git
-[submodule "tools/pytorch-quantization"]
-	path = tools/pytorch-quantization
-	url = https://gitlab-master.nvidia.com/TensorRT/Tools/pytorch-quantization.git
-[submodule "tools/tensorflow-quantization"]
-	path = tools/tensorflow-quantization
-	url = https://gitlab-master.nvidia.com/TensorRT/Tools/tensorflow-quantization.git
-[submodule "tools/polygraphy-extension-trtexec"]
-	path = tools/polygraphy-extension-trtexec
-	url = https://gitlab-master.nvidia.com/TensorRT/Tools/polygraphy-extension-trtexec.git
