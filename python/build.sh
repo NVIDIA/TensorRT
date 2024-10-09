@@ -13,19 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+#!/bin/bash
 set -e
 
 PYTHON_MAJOR_VERSION=${PYTHON_MAJOR_VERSION:-3}
-PYTHON_MINOR_VERSION=${PYTHON_MINOR_VERSION:-8}
-TARGET=${TARGET_ARCHITECTURE:-x86_64}
+PYTHON_MINOR_VERSION=${PYTHON_MINOR_VERSION:-12}
+TARGET=${TARGET_ARCHITECTURE:-aarch64}
 CUDA_ROOT=${CUDA_ROOT:-/usr/local/cuda}
 ROOT_PATH=${TRT_OSSPATH:-/workspace/TensorRT}
 EXT_PATH=${EXT_PATH:-/tmp/external}
 WHEEL_OUTPUT_DIR=${ROOT_PATH}/python/build
+HEADER_PATH=/usr/include/aarch64-linux-gnu
 
 mkdir -p ${WHEEL_OUTPUT_DIR}
-pushd ${WHEEL_OUTPUT_DIR}
+cd ${WHEEL_OUTPUT_DIR}
 
 # Generate tensorrt.so
 cmake .. -DCMAKE_BUILD_TYPE=Release \
@@ -36,8 +37,9 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
          -DCUDA_INCLUDE_DIRS=${CUDA_ROOT}/include \
          -DTENSORRT_ROOT=${ROOT_PATH} \
          -DTENSORRT_MODULE=${TENSORRT_MODULE} \
-         -DTENSORRT_LIBPATH=${TRT_LIBPATH}
-make -j12
+         -DTENSORRT_LIBPATH=${TRT_LIBPATH} \
+         -DTENSORRT_BUILD=${ROOT_PATH}/build/
+make -j8
 
 # Generate wheel
 TRT_MAJOR=$(awk '/^\#define NV_TENSORRT_MAJOR/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
@@ -58,14 +60,13 @@ expand_vars_cp () {
         ${1} > ${2}
 }
 
-pushd ${ROOT_PATH}/python/packaging
+cd ${ROOT_PATH}/python/packaging
 for dir in $(find . -type d); do mkdir -p ${WHEEL_OUTPUT_DIR}/$dir; done
 for file in $(find . -type f); do expand_vars_cp $file ${WHEEL_OUTPUT_DIR}/${file}; done
-popd
 
-cp tensorrt/tensorrt.so bindings_wheel/tensorrt/tensorrt.so
+cd ${ROOT_PATH}/python/build
 
-pushd ${WHEEL_OUTPUT_DIR}/bindings_wheel
-python3 setup.py -q bdist_wheel --python-tag=cp${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION} --plat-name=linux_${TARGET}
+cp ./tensorrt/tensorrt.so ./bindings_wheel/tensorrt/tensorrt.so
+cd bindings_wheel
 
-popd
+python3.12 setup.py -q bdist_wheel --python-tag=cp${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION} --plat-name=linux_${TARGET}
