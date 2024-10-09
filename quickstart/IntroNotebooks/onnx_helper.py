@@ -69,12 +69,12 @@ class ONNXClassifierWrapper():
         
         return self.output
 
-def convert_onnx_to_engine(onnx_filename, engine_filename = None, max_batch_size = 32, max_workspace_size = 1 << 30, fp16_mode = True):
+def convert_onnx_to_engine(onnx_filename, engine_filename = None, max_workspace_size = 1 << 30, fp16_mode = True):
     logger = trt.Logger(trt.Logger.WARNING)
-    with trt.Builder(logger) as builder, builder.create_network() as network, trt.OnnxParser(network, logger) as parser:
-        builder.max_workspace_size = max_workspace_size
-        builder.fp16_mode = fp16_mode
-        builder.max_batch_size = max_batch_size
+    with trt.Builder(logger) as builder, builder.create_network() as network, trt.OnnxParser(network, logger) as parser, builder.create_builder_config() as builder_config:
+        builder_config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, max_workspace_size)
+        if (fp16_mode):
+            builder_config.set_flag(trt.BuilderFlag.FP16)
 
         print("Parsing ONNX file.")
         with open(onnx_filename, 'rb') as model:
@@ -83,10 +83,10 @@ def convert_onnx_to_engine(onnx_filename, engine_filename = None, max_batch_size
                     print(parser.get_error(error))
 
         print("Building TensorRT engine. This may take a few minutes.")
-        engine = builder.build_cuda_engine(network)
+        serialized_engine = builder.build_serialized_network(network, builder_config)
 
         if engine_filename:
             with open(engine_filename, 'wb') as f:
-                f.write(engine.serialize())
+                f.write(serialized_engine)
 
-        return engine, logger
+        return serialized_engine, logger
