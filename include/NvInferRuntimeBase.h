@@ -258,7 +258,7 @@ enum class TensorFormat : int32_t
     //! Vector-major format with two scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This format requires FP16 or BF16 and at least three dimensions.
+    //! This format requires FP16 and at least three dimensions.
     kCHW2 = 1,
 
     //! Vector-minor format with eight scalars per vector.
@@ -284,7 +284,7 @@ enum class TensorFormat : int32_t
     //! Vector-major format with 16 scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This format requires INT8 or FP16 and at least three dimensions.
+    //! This format requires FP16 and at least three dimensions.
     //!
     //! For DLA usage, this format maps to the native feature format for FP16,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
@@ -313,7 +313,7 @@ enum class TensorFormat : int32_t
 
     //! Vector-minor format where channel dimension is third to last and unpadded.
     //!
-    //! This format requires either FP32 or UINT8 and at least three dimensions.
+    //! This format requires either FP32, FP16, UINT8, INT64 or BF16 and at least three dimensions.
     kHWC = 8,
 
     //! DLA planar format. For a tensor with dimension {N, C, H, W}, the W axis
@@ -344,7 +344,7 @@ enum class TensorFormat : int32_t
     //! Vector-minor format with 16 scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This requires FP16 and at least three dimensions.
+    //! This requires FP16 or INT8 and at least three dimensions.
     kHWC16 = 11,
 
     //! Vector-minor format with one scalar per vector.

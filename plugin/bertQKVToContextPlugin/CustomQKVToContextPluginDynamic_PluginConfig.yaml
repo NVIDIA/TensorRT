@@ -16,9 +16,9 @@
 #
 ---
 name: CustomQKVToContextPluginDynamic
-interface: "IPluginV2DynamicExt"
+interface: "IPluginV3"
 versions:
-  "1":
+  "4":
     inputs:
       - input
     outputs:
@@ -148,7 +148,7 @@ versions:
             shape: "1"
         output_types:
           output: float32
-  "2":
+  "5":
     inputs:
       - input
       - input_mask
@@ -205,7 +205,7 @@ versions:
         - 1
       var_seqlen:
         - 0
-        # - 1 Disabled since SM specific tests are not supported yet
+        # - 1 # Disabled since SM specific tests are not supported yet
     attributes_required:
       - type_id
       - hidden_size

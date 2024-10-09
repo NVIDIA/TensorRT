@@ -56,9 +56,6 @@ constexpr uint32_t BDIM = 1; // batch dimension
 constexpr uint32_t SDIM = 0; // seq len dimension
 constexpr uint32_t HDIM = 2; // hidden dimension
 
-constexpr int32_t kSM_53 = 53;
-constexpr int32_t kSM_70 = 70;
-constexpr int32_t kSM_72 = 72;
 constexpr int32_t kSM_75 = 75;
 constexpr int32_t kSM_80 = 80;
 constexpr int32_t kSM_86 = 86;

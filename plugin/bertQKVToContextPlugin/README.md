@@ -46,16 +46,18 @@ The parameters are defined below and consists of the following attributes:
 
 | Type     | Parameter                               |  Version                          | Description
 |----------|-----------------------------------------|-----------------------------------|-------------------------------------------------------------------
-|`int`     |`type_id`                                |  1, 2                             |Integer encoding the DataType (0: FP32, 1: FP16, 2: INT8)
-|`int`     |`hidden_size`                            |  1, 2, 3                          |The hidden size, denoted by `E` above.
-|`int`     |`num_heads`                              |  1, 2, 3                          |The number of self-attention heads.
-|`bool`    |`has_mask`                               |  1, 2                             |Whether to use the input_mask input.
-|`float`   |`dq_probs`                               |  1, 2, 3                          |inner layer scale factor when run in int8 precision, default 1.f/127.f.
-|`int`     |`var_seqlen`                             |  2                                |Whether to use variable sequence length (0: disable, 1: enable), default 0.
-|`int`     |`use_int8_scale_max`                     |  2, 3                             |Whether to use INT8 scale factors to optimize softmax MAX reduction. Only active when `type_id==2`. (0: disable, 1: enable), default 1.
-|`int`     |`use_explicit_int8`                      |  3                                |Whether to use explicit INT8, (0: disable, 1: enable), default 0.
-|`float`   |`input_qkv_scale`                        |  3                                |The int8 scale for the input qkv tensor when explicit precision is used, default 1.f.
-|`float`   |`output_ctx_scale`                       |  3                                |The int8 scale for the output context tensor when explicit precision is used, default 1.f.
+|`int`     |`type_id`                                |  1, 2, 4, 5                       |Integer encoding the DataType (0: FP32, 1: FP16, 2: INT8)
+|`int`     |`hidden_size`                            |  1, 2, 3, 4, 5, 6                 |The hidden size, denoted by `E` above.
+|`int`     |`num_heads`                              |  1, 2, 3, 4, 5, 6                 |The number of self-attention heads.
+|`bool`    |`has_mask`                               |  1, 2, 4, 5                       |Whether to use the input_mask input.
+|`float`   |`dq_probs`                               |  1, 2, 3, 4, 5, 6                 |inner layer scale factor when run in int8 precision, default 1.f/127.f.
+|`int`     |`var_seqlen`                             |  2, 5                             |Whether to use variable sequence length (0: disable, 1: enable), default 0.
+|`int`     |`use_int8_scale_max`                     |  2, 3, 5, 6                       |Whether to use INT8 scale factors to optimize softmax MAX reduction. Only active when `type_id==2`. (0: disable, 1: enable), default 1.
+|`int`     |`use_explicit_int8`                      |  3, 6                             |Whether to use explicit INT8, (0: disable, 1: enable), default 0.
+|`float`   |`input_qkv_scale`                        |  3, 6                             |The int8 scale for the input qkv tensor when explicit precision is used, default 1.f.
+|`float`   |`output_ctx_scale`                       |  3, 6                             |The int8 scale for the output context tensor when explicit precision is used, default 1.f.
+
+Note: version 1, 2, 3 are deprecated and will be removed in a future release; please use their corresponding updated versions: 4, 5, 6 respectively.
 
 ## Additional resources
 
@@ -70,6 +72,11 @@ documentation.
 
 
 ## Changelog
+Aug 2024
+Ported v3 variant (IPluginV2 design) to v6 (IpluginV3 design), but preserves identical attributes and I/O to v3.
+Ported v2 variant (IPluginV2 design) to v5 (IpluginV3 design), but preserves identical attributes and I/O to v2.
+Ported v1 variant (IPluginV2 design) to v4 (IpluginV3 design), but preserves identical attributes and I/O to v1.
+
 Feb 2024
 The issue of the V2 plugin not supporting head sizes of 32 or less and variable sequences of 64, 96, and 384 has been resolved.
 

@@ -1,7 +1,9 @@
+accelerate
 colored
 controlnet_aux==0.0.6
 cuda-python
-diffusers==0.29.2
+# TODO: Pin Diffusers version after the next release
+git+https://github.com/huggingface/diffusers.git # Install from source for the latest changes in main
 ftfy
 matplotlib
 nvtx
@@ -9,7 +11,7 @@ onnx==1.15.0
 onnxruntime==1.17.3
 opencv-python==4.8.0.74
 scipy
-transformers==4.36.2
+transformers==4.42.2
 --extra-index-url https://pypi.nvidia.com
 nvidia-modelopt[torch,onnx]==0.15.1
 onnx-graphsurgeon

@@ -740,7 +740,7 @@ public:
     }
 
 private:
-    nvinfer1::PluginFieldCollection mFC;
+    nvinfer1::PluginFieldCollection mFC{};
     std::string mNamespace;
     std::string mName;
     std::string mPluginVersion;
@@ -1824,7 +1824,7 @@ public:
     }
 
 private:
-    nvinfer1::PluginFieldCollection mFC;
+    nvinfer1::PluginFieldCollection mFC{};
     std::string mNamespace;
     std::string mName;
     std::string mPluginVersion;

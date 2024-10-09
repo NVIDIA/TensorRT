@@ -97,6 +97,7 @@ endforeach(PLUGIN_ITER)
 
 # Add common
 add_subdirectory(common)
+add_subdirectory(vc)
 
 # Set gencodes
 set_source_files_properties(${PLUGIN_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${GENCODES} ${ENABLED_SMS}")

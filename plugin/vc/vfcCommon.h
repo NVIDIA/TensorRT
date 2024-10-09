@@ -14,17 +14,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef TRT_ROIALIGN_KERNEL_H
-#define TRT_ROIALIGN_KERNEL_H
 
-#include "vc/checkMacrosPlugin.h"
-#include <cuda_runtime.h>
-#include <stdint.h>
+#ifndef TRT_PLUGIN_VFC_COMMON_H
+#define TRT_PLUGIN_VFC_COMMON_H
+#include "NvInfer.h"
+#include "NvInferPlugin.h"
+#include "NvInferRuntimeCommon.h"
 
-template <typename T>
-cudaError_t RoiAlignImpl(cudaStream_t stream, int32_t const maxThreadsPerBlock, T const* bottomData,
-    T const spatialScale, int32_t const numRois, int32_t const channels, int32_t const height, int32_t const width,
-    int32_t const pooledHeight, int32_t const pooledWidth, int32_t const samplingRatio, T const* bottomRois, T* topData,
-    int32_t const isModeAvg, int32_t const* batchIndicesPtr, int32_t const aligned);
+using namespace nvinfer1;
 
-#endif // TRT_ROIALIGN_KERNEL_H
+namespace nvinfer1
+{
+namespace plugin
+{
+
+ILogger* getPluginLogger();
+
+} // namespace plugin
+} // namespace nvinfer1
+
+extern "C" TENSORRTAPI void setLoggerFinder(nvinfer1::ILoggerFinder* finder);
+
+extern "C" TENSORRTAPI IPluginCreatorInterface* const* getCreators(int32_t& nbCreators);
+#endif // TRT_PLUGIN_VFC_COMMON_H

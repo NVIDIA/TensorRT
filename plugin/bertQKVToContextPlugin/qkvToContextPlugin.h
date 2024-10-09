@@ -24,6 +24,7 @@
 
 #include "NvInferPlugin.h"
 #include "common/cublasWrapper.h"
+#include "mhaRunner.h"
 #include "zeroPadding2d.h"
 #include <math.h>
 #include <string>
@@ -35,83 +36,6 @@ namespace plugin
 {
 namespace bert
 {
-
-// Multi Head Attention runner
-class MHARunner
-{
-public:
-    MHARunner(const nvinfer1::DataType type, const int32_t numHeads)
-        : mType(type)
-        , mS(0)
-        , mB(0)
-        , mOmatSize(0)
-        , mNumMats(0)
-        , mNumHeads(numHeads)
-        , mHeadSize(0)
-        , mWordSize(getElementSize(type))
-        , mLdQKV(0)
-        , mStrideQKV(0)
-        , mLdOut(0)
-        , mStrideOut(0)
-        , mRsqrtHeadSize(0)
-    {
-    }
-
-    virtual ~MHARunner() = default;
-
-    virtual void setup(int32_t S, int32_t B, int32_t headSize)
-    {
-        PLUGIN_ASSERT(S);
-        PLUGIN_ASSERT(B);
-        mB = B;
-        mS = S;
-        mHeadSize = headSize;
-        mRsqrtHeadSize = 1.F / std::sqrt(headSize);
-
-        mLdQKV = 3 * B * mNumHeads * mHeadSize;
-        mStrideQKV = 3 * mHeadSize;
-
-        mLdOut = B * mNumHeads * mHeadSize;
-        mStrideOut = mHeadSize;
-        mOmatSize = S * S;
-        mNumMats = B * mNumHeads;
-    }
-
-    virtual void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas)
-        = 0;
-
-    virtual void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas)
-        = 0;
-
-    virtual size_t getSerializationSize() const noexcept;
-    virtual void serialize(void* buffer) const noexcept;
-    virtual void deserialize(void const* data, size_t length);
-
-    virtual size_t getWorkspaceSize() const = 0;
-
-    virtual bool isValid(int32_t headSize, int32_t s) const = 0;
-
-protected:
-    nvinfer1::DataType mType;
-
-    int32_t mS;
-    int32_t mB;
-    int32_t mOmatSize;
-    int32_t mNumMats;
-    int32_t mNumHeads;
-    int32_t mHeadSize;
-    int32_t mWordSize;
-    int32_t mLdQKV;
-    int32_t mStrideQKV;
-    int32_t mLdOut;
-    int32_t mStrideOut;
-
-    float mRsqrtHeadSize;
-};
 
 std::pair<int32_t, int32_t> tuneBatchedGemm(
     const int32_t B, const int32_t S, const int32_t numHeads, const int32_t headSize);
@@ -128,51 +52,78 @@ int32_t computeMaskedScaledSoftmax(cudaStream_t stream, const int32_t ld, const 
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
 // For requirements for overriden functions, check TensorRT API docs.
 
-class QKVToContextPluginDynamic : public nvinfer1::IPluginV2DynamicExt
+class QKVToContextPluginDynamic : public IPluginV3,
+                                  public IPluginV3OneCore,
+                                  public IPluginV3OneBuild,
+                                  public IPluginV3OneRuntime
 {
 public:
     QKVToContextPluginDynamic(const std::string name, const nvinfer1::DataType type, const int32_t hiddenSize,
         const int32_t numHeads, float const dqProbs, bool hasImask = false);
 
-    QKVToContextPluginDynamic(const std::string name, void const* data, size_t length);
+    // constructor that also takes in MHARunner state
+    // this constructor should only be called during runtime plugin creation after engine deserialization
+    QKVToContextPluginDynamic(const std::string name, const DataType type, const int32_t S, const int32_t B,
+        const int32_t SM, const int32_t hiddenSize, const int32_t numHeads, float const dqProbs, bool hasImask,
+        bool hasUnfusedDispatcher, void const* runnerStateBuffer);
 
     // It doesn't make sense to make QKVToContextPluginDynamic without arguments, so we
     // delete default constructor.
     QKVToContextPluginDynamic() = delete;
 
-    // IPluginV2DynamicExt Methods
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    ~QKVToContextPluginDynamic() override;
+
+    // IPluginV3 Methods
+    // NOTE: since this is itself is an abstract class, the rest of virtual methods defined in its children classes
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
+    // end of IPluginV3 Methods
+
+    // IPluginV3OneCore Methods
+    char const* getPluginName() const noexcept override;
+
+    char const* getPluginNamespace() const noexcept override;
+
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+
+    char const* getPluginVersion() const noexcept override;
+    // end of IPluginV3OneCore Methods
+
+    // IPluginV3Build Methods
     bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+
+    int32_t getNbOutputs() const noexcept override;
+
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override;
+    // end IPluginV3Build Methods
+
+    // IPluginV3Runtime Methods
+    IPluginV3* clone() noexcept;
+
+    int32_t onShapeChange(
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
-    void attachToContext(
-        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override;
 
-    // IPluginV2 Methods
-    char const* getPluginType() const noexcept override;
-    char const* getPluginVersion() const noexcept override;
-    int32_t getNbOutputs() const noexcept override;
-    int32_t initialize() noexcept override;
-    void terminate() noexcept override;
-    size_t getSerializationSize() const noexcept override;
-    void serialize(void* buffer) const noexcept override;
-    void destroy() noexcept override;
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
-    char const* getPluginNamespace() const noexcept override;
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override;
+    // end IPluginV3Runtime Methods
 
 protected:
     void createMHARunner();
+    void setCublasHandle(cublasContext*);
 
 private:
     const std::string mLayerName;
@@ -190,36 +141,35 @@ private:
     int32_t mHeadSize{};
     int32_t mHiddenSize;
     int32_t mNumHeads{};
-    bool mHasImask{};
+    int32_t mHasImask{};
+    int32_t mHasUnfusedDispatcher{};
     nvinfer1::DataType mType{};
     float mDqProbs{};
     nvinfer1::pluginInternal::cublasHandle_t mCublas{};
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
+    // IPluginV3 serialization related
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
+    std::vector<char> mRunnerStateBuffer; // memory management of this is handled automatically by class destructor
 };
 
-class QKVToContextPluginDynamicCreator : public nvinfer1::IPluginCreator
+class QKVToContextPluginDynamicCreator : public nvinfer1::IPluginCreatorV3One
 {
 public:
     QKVToContextPluginDynamicCreator();
+    ~QKVToContextPluginDynamicCreator() override = default;
 
     char const* getPluginName() const noexcept override;
 
     char const* getPluginVersion() const noexcept override;
 
-    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept;
 
     char const* getPluginNamespace() const noexcept override;
 
@@ -229,52 +179,76 @@ private:
     std::string mNamespace;
 };
 
-class QKVToContextVarSeqlenPlugin : public nvinfer1::IPluginV2DynamicExt
+class QKVToContextVarSeqlenPlugin : public IPluginV3,
+                                    public IPluginV3OneCore,
+                                    public IPluginV3OneBuild,
+                                    public IPluginV3OneRuntime
 {
 public:
     QKVToContextVarSeqlenPlugin(std::string const name, nvinfer1::DataType const type, int32_t const hiddenSize,
         int32_t const numHeads, float const dqProbs, bool hasImask = false, bool varSeqlen = false,
         bool const useInt8ScaleMax = true);
 
-    QKVToContextVarSeqlenPlugin(const std::string name, void const* data, size_t length);
+    QKVToContextVarSeqlenPlugin(std::string const name, int32_t const s, int32_t b, nvinfer1::DataType const type,
+        int32_t const hiddenSize, int32_t const numHeads, float const dqProbs, bool hasImask, bool varSeqlen,
+        bool const useInt8ScaleMax, void const* runnerStateBuffer);
 
     // It doesn't make sense to make QKVToContextVarSeqlenPlugin without arguments, so we
     // delete default constructor.
     QKVToContextVarSeqlenPlugin() = delete;
 
-    // IPluginV2DynamicExt Methods
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+    ~QKVToContextVarSeqlenPlugin() override;
+
+    // IPluginV3 Methods
+    // NOTE: since this is itself is an abstract class, the rest of virtual methods defined in its children classes
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
+    // end of IPluginV3 Methods
+
+    // IPluginV3OneCore Methods
+    char const* getPluginName() const noexcept override;
+
+    char const* getPluginNamespace() const noexcept override;
+
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+
+    char const* getPluginVersion() const noexcept override;
+    // end of IPluginV3OneCore Methods
+
+    // IPluginV3Build Methods
     bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+
+    int32_t getNbOutputs() const noexcept override;
+
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override;
+    // end IPluginV3Build Methods
+
+    // IPluginV3Runtime Methods
+    IPluginV3* clone() noexcept;
+
+    int32_t onShapeChange(
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
-    void attachToContext(
-        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override;
 
-    // IPluginV2 Methods
-    char const* getPluginType() const noexcept override;
-    char const* getPluginVersion() const noexcept override;
-    int32_t getNbOutputs() const noexcept override;
-    int32_t initialize() noexcept override;
-    void terminate() noexcept override;
-    size_t getSerializationSize() const noexcept override;
-    void serialize(void* buffer) const noexcept override;
-    void destroy() noexcept override;
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
-    char const* getPluginNamespace() const noexcept override;
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override;
 
 protected:
     void createMHARunner();
+    void setCublasHandle(cublasContext*);
 
 private:
     const std::string mLayerName;
@@ -290,41 +264,39 @@ private:
     int32_t mHeadSize{};
     int32_t mHiddenSize{};
     int32_t mNumHeads{};
-    bool mHasImask{};
+    int32_t mHasImask{};
     nvinfer1::DataType mType{};
 
     float mDqProbs{};
 
     int32_t mHdim{};
-    bool mUseVarSeqlen{};
-    bool mUseInt8ScaleMax{true};
+    int32_t mUseVarSeqlen{};
+    int32_t mUseInt8ScaleMax{true};
     nvinfer1::pluginInternal::cublasHandle_t mCublas{};
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
+    // serialization data structures
+    std::vector<char> mRunnerStateBuffer; // memory management of this is handled automatically by class destructor
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
 };
 
-class QKVToContextVarSeqlenPluginCreator : public nvinfer1::IPluginCreator
+class QKVToContextVarSeqlenPluginCreator : public nvinfer1::IPluginCreatorV3One
 {
 public:
     QKVToContextVarSeqlenPluginCreator();
+    ~QKVToContextVarSeqlenPluginCreator() override = default;
 
     char const* getPluginName() const noexcept override;
 
     char const* getPluginVersion() const noexcept override;
 
-    nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* libNamespace) noexcept;
 
     char const* getPluginNamespace() const noexcept override;
 
@@ -332,151 +304,6 @@ private:
     static nvinfer1::PluginFieldCollection mFC;
     static std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
-};
-
-class UnfusedMHARunner : public MHARunner
-{
-public:
-    UnfusedMHARunner(const nvinfer1::DataType type, const int32_t numHeads, const int32_t smVersion);
-    virtual ~UnfusedMHARunner();
-
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
-
-    void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    size_t getWorkspaceSize() const override;
-
-    size_t getSerializationSize() const noexcept override;
-    void serialize(void* buffer) const noexcept override;
-    void deserialize(void const* data, size_t length) override;
-    bool isValid(int32_t headSize, int32_t s) const override;
-
-private:
-    bool mIsBestAlgoFound{};
-    int32_t mAlgoBatchedEx1{};
-    int32_t mAlgoBatchedEx2{};
-    int32_t mSm{};
-};
-
-class FusedMHARunnerFP16 : public MHARunner
-{
-public:
-    FusedMHARunnerFP16(const int32_t numHeads, const int32_t sm);
-    ~FusedMHARunnerFP16() = default; // for pimpl
-
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
-
-    void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    size_t getWorkspaceSize() const override;
-
-    void deserialize(void const* data, size_t length) override;
-
-    bool isValid(int32_t headSize, int32_t s) const override;
-
-private:
-    int32_t mSm;
-    class mhaImpl;
-    std::unique_ptr<mhaImpl> pimpl;
-};
-
-class FusedMHARunnerInt8 : public MHARunner
-{
-public:
-    FusedMHARunnerInt8(const int32_t numHeads, const int32_t sm, float const dqProbs);
-    ~FusedMHARunnerInt8() = default; // for pimpl
-
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
-
-    void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    size_t getWorkspaceSize() const override;
-
-    void deserialize(void const* data, size_t length) override;
-
-    bool isValid(int32_t headSize, int32_t s) const override;
-
-private:
-    float mDqProbs;
-    int32_t mSm;
-    class mhaImpl;
-    std::unique_ptr<mhaImpl> pimpl;
-};
-
-class FusedMHARunnerFP16v2 : public MHARunner
-{
-public:
-    FusedMHARunnerFP16v2(const int32_t numHeads, const int32_t sm);
-    ~FusedMHARunnerFP16v2() = default; // for pimpl
-
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
-
-    void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    size_t getWorkspaceSize() const override;
-
-    void deserialize(void const* data, size_t length) override;
-
-    bool isValid(int32_t headSize, int32_t s) const override;
-
-private:
-    int32_t mSm;
-    class mhaImpl;
-    std::unique_ptr<mhaImpl> pimpl;
-};
-
-class FusedMHARunnerInt8v2 : public MHARunner
-{
-public:
-    FusedMHARunnerInt8v2(int32_t const numHeads, int32_t const sm, float const dqProbs, bool const useInt8ScaleMax);
-    ~FusedMHARunnerInt8v2() = default; // for pimpl
-
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
-
-    void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
-        void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    void run(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream,
-        nvinfer1::pluginInternal::cublasHandle_t cublas) override;
-
-    size_t getWorkspaceSize() const override;
-
-    void deserialize(void const* data, size_t length) override;
-
-    bool isValid(int32_t headSize, int32_t s) const override;
-
-private:
-    float mDqProbs;
-    int32_t mSm;
-    class mhaImpl;
-    std::unique_ptr<mhaImpl> pimpl;
-    bool mUseInt8ScaleMax{true};
 };
 
 } // namespace bert

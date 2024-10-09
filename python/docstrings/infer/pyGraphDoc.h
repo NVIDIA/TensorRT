@@ -102,14 +102,14 @@ constexpr const char* CHW2 = R"trtdoc(
 constexpr const char* HWC8 = R"trtdoc(
     Eight channel format where C is padded to a multiple of 8.
 
-    This format is bound to FP16. It is only available for dimensions >= 3.
+    This format is bound to FP16 and BF16. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to the array with dimensions [N][H][W][(C+7)/8*8], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][h][w][c].
 )trtdoc";
 
 constexpr const char* CHW4 = R"trtdoc(
     Four wide channel vectorized row major format.
-    This format is bound to INT8. It is only available for dimensions >= 3.
+    This format is bound to FP16 and INT8. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+3)/4][H][W][4], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/4][h][w][c%4].
 )trtdoc";
@@ -133,7 +133,7 @@ constexpr const char* CHW32 = R"trtdoc(
 constexpr const char* DHWC8 = R"trtdoc(
     Eight channel format where C is padded to a multiple of 8.
 
-    This format is bound to FP16, and it is only available for dimensions >= 4.
+    This format is bound to FP16 and BF16, and it is only available for dimensions >= 4.
 
     For a tensor with dimensions {N, C, D, H, W}, the memory layout is equivalent to an array with dimensions [N][D][H][W][(C+7)/8*8], with the tensor coordinates (n, c, d, h, w) mapping to array subscript [n][d][h][w][c].
 )trtdoc";
@@ -148,7 +148,7 @@ constexpr const char* CDHW32 = R"trtdoc(
 
 constexpr const char* HWC = R"trtdoc(
     Non-vectorized channel-last format.
-    This format is bound to FP32 and is only available for dimensions >= 3.
+    This format is bound to FP32, FP16, INT8, INT64 and BF16, and is only available for dimensions >= 3.
 )trtdoc";
 
 constexpr const char* DLA_LINEAR = R"trtdoc(
@@ -168,7 +168,7 @@ constexpr const char* DLA_HWC4 = R"trtdoc(
 )trtdoc";
 
 constexpr const char* HWC16 = R"trtdoc(
-    Sixteen channel format where C is padded to a multiple of 16. This format is bound to FP16. It is only available for dimensions >= 3.
+    Sixteen channel format where C is padded to a multiple of 16. This format is bound to FP16 and INT8. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to the array with dimensions [N][H][W][(C+15)/16*16], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][h][w][c].
 )trtdoc";
@@ -347,7 +347,7 @@ namespace IConvolutionLayerDoc
 constexpr const char* descr = R"trtdoc(
     A convolution layer in an :class:`INetworkDefinition` .
 
-    This layer performs a correlation operation between 3-dimensional filter with a 4-dimensional tensor to produce another 4-dimensional tensor.
+    This layer performs a correlation operation between 3 or 4 dimensional filter with a 4 or 5 dimensional tensor to produce another 4 or 5 dimensional tensor.
 
     An optional bias argument is supported, which adds a per-channel constant to each value in the output.
 
@@ -666,7 +666,8 @@ constexpr const char* SIGN
 constexpr const char* ROUND = R"trtdoc(Round to nearest even for floating-point data type.)trtdoc";
 constexpr const char* ISINF
     = R"trtdoc(Return true if the input value equals +/- infinity for floating-point data type.)trtdoc";
-constexpr const char* ISNAN = R"trtdoc(Return true if the input value equals NaN for floating-point data type.)trtdoc";
+constexpr const char* ISNAN
+    = R"trtdoc(Return true if the input value equals NaN for floating-point data type.)trtdoc";
 } // namespace UnaryOperationDoc
 
 namespace IUnaryLayerDoc

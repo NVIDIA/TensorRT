@@ -713,8 +713,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
     :ivar weight_streaming_budget_v2: Set and get the current weight streaming budget for inference. The budget may be set any non-negative value. A value of 0 streams the most weights. Values equal to streamable_weights_size (default) or larger will disable weight streaming.
     :ivar weight_streaming_scratch_memory_size: The amount of scratch memory required by a TensorRT ExecutionContext to perform inference. This value may change based on the current weight streaming budget. Please use the V2 memory APIs, engine.device_memory_size_v2 and ExecutionContext.set_device_memory() to provide memory which includes the current weight streaming scratch memory. Not specifying these APIs or using the V1 APIs will not include this memory, so TensorRT will resort to allocating itself.
-    )trtdoc"
-    ;
+    )trtdoc";
 
 // Documentation bug with parameters on these three functions because they are overloaded.
 constexpr char const* serialize = R"trtdoc(

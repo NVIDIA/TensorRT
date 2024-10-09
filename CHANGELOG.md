@@ -1,6 +1,30 @@
 # TensorRT OSS Release Changelog
 
-## 10.4.0 GA - 2024-09-11
+
+## 10.5.0 GA - 2024-09-30
+Key Features and Updates:
+
+- Demo changes
+    - Added [Flux.1-dev](demo/Diffusion) pipeline
+- Sample changes
+    - None
+- Plugin changes
+    - Migrated `IPluginV2`-descendent versions of `bertQKVToContextPlugin` (1, 2, 3) to newer versions (4, 5, 6 respectively) which implement `IPluginV3`.
+    - Note:
+        - The newer versions preserve the attributes and I/O of the corresponding older plugin version
+        - The older plugin versions are deprecated and will be removed in a future release
+- Quickstart guide
+    - None
+- Parser changes
+    - Added support for real-valued `STFT` operations
+    - Improved error handling in `IParser`
+
+Known issues:
+
+- Demos:
+    - TensorRT engine might not be build successfully when using `--fp8` flag on H100 GPUs.
+
+## 10.4.0 GA - 2024-09-18
 Key Features and Updates:
 
 - Demo changes

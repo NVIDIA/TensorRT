@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.4 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.5 --single-branch
 cd TensorRT
 ```
 
@@ -16,7 +16,7 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:24.05-py3 /bin/bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:24.07-py3 /bin/bash
 ```
 
 NOTE: The demo supports CUDA>=11.8
@@ -43,19 +43,18 @@ pip3 install -r requirements.txt
 
 > NOTE: demoDiffusion has been tested on systems with NVIDIA H100, A100, L40, T4, and RTX4090 GPUs, and the following software configuration.
 ```
-diffusers           0.29.2
+diffusers           0.30.2
 onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.4.0.26
+tensorrt            10.5.0.18
 tokenizers          0.13.3
 torch               2.2.0
-transformers        4.33.1
+transformers        4.42.2
 controlnet-aux      0.0.6
 nvidia-modelopt     0.15.1
 ```
-> NOTE: optionally install HuggingFace [accelerate](https://pypi.org/project/accelerate/) package for faster and less memory-intense model loading. Note that installing accelerate is known to cause failures while running certain pipelines in Torch Compile mode ([known issue](https://github.com/huggingface/diffusers/issues/9091))
 
 # Running demoDiffusion
 
@@ -72,7 +71,6 @@ python3 demo_txt2img_xl.py --help
 ### HuggingFace user access token
 
 To download model checkpoints for the Stable Diffusion pipelines, obtain a `read` access token to HuggingFace Hub. See [instructions](https://huggingface.co/docs/hub/security-tokens).
-> NOTE: This step isn't required for many models now. 
 
 ```bash
 export HF_TOKEN=<your access token>
@@ -158,7 +156,7 @@ python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees
 Run the below command to generate an image with Stable Diffusion XL in INT8
 
 ```bash
-python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --int8 
+python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --int8
 ```
 
 Run the below command to generate an image with Stable Diffusion XL in FP8. (FP8 is only supppoted on Hopper.)
@@ -202,7 +200,7 @@ python3 demo_txt2img_sd3.py "dog wearing a sweater and a blue collar" --version 
 
 Note that a denosing-percentage is applied to the number of denoising-steps when an input image conditioning is provided. Its default value is set to 0.6. This parameter can be updated using `--denoising-percentage`
 
-### Image-to-video using SVD (Stable Video Diffusion)
+### Generate a video guided by an initial image using Stable Video Diffusion
 
 Download the pre-exported ONNX model
 
@@ -224,7 +222,7 @@ python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine
 
 NOTE: The min and max guidance scales are configured using --min-guidance-scale and --max-guidance-scale respectively.
 
-### Generate an image using Stable Cascade guided by a text prompt
+### Generate an image guided by a text prompt using Stable Cascade
 
 Run the below command to generate an image using Stable Cascade
 ```bash
@@ -242,11 +240,22 @@ python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a
 
 > NOTE: The denoising steps and guidance scale for the Prior and Decoder models are configured using --prior-denoising-steps, --prior-guidance-scale, --decoder-denoising-steps, and --decoder-guidance-scale respectively.
 
+### Generate an image guided by a text prompt using Flux
+
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN
+```
+
+NOTE: Running the Flux pipeline requires 80GB of GPU memory or higher
+
 ## Configuration options
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.
 - To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
+
+## Known Issues
+- LoRA adapter functionality is compatible with diffusers version 0.26.3. To run the LoRA pipeline, we recommend installing this specific version. However, the Stable Cascade pipeline requires diffusers version 0.29.2 or higher and will not be compatible if diffusers is downgraded.
 
 
 

@@ -41,6 +41,7 @@ from models import (
     UNetXLModel,
     VAEModel,
     VAEEncoderModel,
+    make_scheduler
 )
 import numpy as np
 import nvtx
@@ -74,6 +75,19 @@ from utils_modelopt import (
 )
 
 class StableDiffusionPipeline:
+    SCHEDULER_DEFAULTS = {
+        "1.4": "PNDM",
+        "1.5": "PNDM",
+        "dreamshaper-7": "PNDM",
+        "2.0-base": "DDIM",
+        "2.0": "DDIM",
+        "2.1-base": "PNDM",
+        "2.1": "DDIM",
+        "xl-1.0" : "Euler",
+        "xl-turbo": "EulerA",
+        "svd-xt-1.1": "Euler",
+        "cascade": "DDPMWuerstchen"
+    }
     """
     Application showcasing the acceleration of Stable Diffusion pipelines using NVidia TensorRT.
     """
@@ -185,48 +199,26 @@ class StableDiffusionPipeline:
             raise ValueError(f"Unsupported pipeline {self.pipeline_type.name}.")
         self.return_latents = return_latents
 
-        # Schedulers
-        map_version_scheduler = {
-            '1.4': 'PNDM',
-            '1.5': 'PNDM',
-            'dreamshaper-7': 'PNDM',
-            '2.0-base': 'DDIM',
-            '2.0': 'DDIM',
-            '2.1-base': 'PNDM',
-            '2.1': 'DDIM',
-            'xl-1.0' : 'Euler',
-            'xl-turbo': 'EulerA',
-            'svd-xt-1.1': 'Euler',
-            'cascade': 'DDPMWuerstchen'
-        }
-
         if not scheduler:
-            scheduler = 'UniPC' if self.pipeline_type.is_controlnet() else map_version_scheduler.get(version, 'DDIM')
+            scheduler = 'UniPC' if self.pipeline_type.is_controlnet() else self.SCHEDULER_DEFAULTS.get(version, 'DDIM')
             print(f"[I] Autoselected scheduler: {scheduler}")
 
-        def makeScheduler(cls, subfolder="scheduler", **kwargs):
-            return cls.from_pretrained(get_path(self.version, self.pipeline_type), subfolder=subfolder)
-
-        if scheduler == "DDIM":
-            self.scheduler = makeScheduler(DDIMScheduler)
-        elif scheduler == "DDPM":
-            self.scheduler = makeScheduler(DDPMScheduler)
-        elif scheduler == "EulerA":
-            self.scheduler = makeScheduler(EulerAncestralDiscreteScheduler)
-        elif scheduler == "Euler":
-            self.scheduler = makeScheduler(EulerDiscreteScheduler)
-        elif scheduler == "LCM":
-            self.scheduler = makeScheduler(LCMScheduler)
-        elif scheduler == "LMSD":
-            self.scheduler = makeScheduler(LMSDiscreteScheduler)
-        elif scheduler == "PNDM":
-            self.scheduler = makeScheduler(PNDMScheduler)
-        elif scheduler == "UniPC":
-            self.scheduler = makeScheduler(UniPCMultistepScheduler)
-        elif scheduler == "DDPMWuerstchen":
-            self.scheduler = makeScheduler(DDPMWuerstchenScheduler)
-        else:
-            raise ValueError(f"Unsupported scheduler {scheduler}. Should be either DDIM, DDPM, EulerA, Euler, LCM, LMSD, PNDM, or UniPC.")
+        scheduler_class_map = {
+            "DDIM" : DDIMScheduler,
+            "DDPM" : DDPMScheduler,
+            "EulerA" : EulerAncestralDiscreteScheduler,
+            "Euler" : EulerDiscreteScheduler,
+            "LCM" : LCMScheduler,
+            "LMSD" : LMSDiscreteScheduler,
+            "PNDM" : PNDMScheduler,
+            "UniPC" : UniPCMultistepScheduler,
+            "DDPMWuerstchen" : DDPMWuerstchenScheduler,
+        }
+        try:
+            scheduler_class = scheduler_class_map[scheduler]
+        except KeyError:
+            raise ValueError(f"Unsupported scheduler {scheduler}.  Should be one of {list(scheduler_class.keys())}.")
+        self.scheduler = make_scheduler(scheduler_class, version, pipeline_type, hf_token, framework_model_dir)
 
         self.config = {}
         if self.pipeline_type.is_sd_xl():
@@ -375,6 +367,7 @@ class StableDiffusionPipeline:
         opt_batch_size,
         opt_image_height,
         opt_image_width,
+        optimization_level=3,
         static_batch=False,
         static_shape=True,
         enable_refit=False,
@@ -407,6 +400,8 @@ class StableDiffusionPipeline:
                 Image height to optimize for during engine building. Must be a multiple of 8.
             opt_image_width (int):
                 Image width to optimize for during engine building. Must be a multiple of 8.
+            optimization_level (int):
+                Optimization level to build the TensorRT engine with.
             static_batch (bool):
                 Build engine only for specified opt_batch_size.
             static_shape (bool):
@@ -424,7 +419,7 @@ class StableDiffusionPipeline:
             quantization_level (float):
                 Controls which layers to quantize. 1: CNN, 2: CNN+FFN, 2.5: CNN+FFN+QKV, 3: CNN+FC
             quantization_percentile (float):
-                Control quantization scaling factors (amax) collecting range, where the minimum amax in 
+                Control quantization scaling factors (amax) collecting range, where the minimum amax in
                 range(n_steps * percentile) will be collected. Recommendation: 1.0
             quantization_alpha (float):
                 The alpha parameter for SmoothQuant quantization used for linear layers.
@@ -456,12 +451,12 @@ class StableDiffusionPipeline:
         use_int8 = dict.fromkeys(model_names, False)
         use_fp8 = dict.fromkeys(model_names, False)
         if int8:
-            assert self.pipeline_type.is_sd_xl_base() or self.version in ["1.5", "2.1", "2.1-base"], "int8 quantization only supported for SDXL, SD1.5 and SD2.1 pipeline"
+            assert self.pipeline_type.is_sd_xl_base() or self.version in ["1.4", "1.5", "2.1", "2.1-base"], "int8 quantization only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipeline"
             model_name = 'unetxl' if self.pipeline_type.is_sd_xl() else 'unet'
             use_int8[model_name] = True
-            model_suffix[model_name] += f"-int8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}" 
+            model_suffix[model_name] += f"-int8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
         elif fp8:
-            assert self.pipeline_type.is_sd_xl() or self.version in ["1.5", "2.1", "2.1-base"], "fp8 quantization only supported for SDXL, SD1.5 and SD2.1 pipeline"
+            assert self.pipeline_type.is_sd_xl() or self.version in ["1.4", "1.5", "2.1", "2.1-base"], "fp8 quantization only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipeline"
             model_name = 'unetxl' if self.pipeline_type.is_sd_xl() else 'unet'
             use_fp8[model_name] = True
             model_suffix[model_name] += f"-fp8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
@@ -513,7 +508,7 @@ class StableDiffusionPipeline:
                                 calib_size=calibration_size // calib_batch_size,
                                 n_steps=self.denoising_steps,
                             )
-                        
+
                         print(f"[I] Performing calibration for {calibration_size} steps.")
                         if use_int8[model_name]:
                             quant_config = get_int8_config(
@@ -524,8 +519,8 @@ class StableDiffusionPipeline:
                                 self.denoising_steps
                             )
                         elif use_fp8[model_name]:
-                            check_lora(model)
                             quant_config = SD_FP8_FP32_DEFAULT_CONFIG if self.version == "2.1" else SD_FP8_FP16_DEFAULT_CONFIG
+                        check_lora(model)
                         mtq.quantize(model, quant_config, forward_loop)
                         mto.save(model, state_dict_path)
                     else:
@@ -538,7 +533,7 @@ class StableDiffusionPipeline:
                         if use_fp8[model_name]:
                             generate_fp8_scales(model)
                     else:
-                        model = None                    
+                        model = None
                     obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, custom_model=model, static_shape=static_shape)
 
             # FIXME do_export_weights_map needs ONNX graph
@@ -557,12 +552,10 @@ class StableDiffusionPipeline:
                 bf16amp = obj.bf16 if not use_fp8[model_name] else False
                 strongly_typed = False if not use_fp8[model_name] else True
                 extra_build_args = {'verbose': self.verbose}
+                extra_build_args['builder_optimization_level'] = optimization_level
                 if use_int8[model_name]:
                     extra_build_args['int8'] = True
                     extra_build_args['precision_constraints'] = 'prefer'
-                    extra_build_args['builder_optimization_level'] = 4
-                elif use_fp8[model_name]:
-                    extra_build_args['builder_optimization_level'] = 4
                 engine.build(onnx_opt_path[model_name],
                     strongly_typed=strongly_typed,
                     fp16=fp16amp,
@@ -845,7 +838,7 @@ class StableDiffusionPipeline:
     def decode_latent(self, latents):
         self.profile_start('vae', color='red')
         if self.torch_inference:
-            images = self.torch_models['vae'](latents)['sample']
+            images = self.torch_models['vae'](latents, return_dict=False)[0]
         else:
             images = self.runEngine('vae', {'latent': latents})['images']
         self.profile_stop('vae')

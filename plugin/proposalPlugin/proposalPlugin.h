@@ -148,7 +148,7 @@ public:
     char const* getPluginNamespace() const noexcept override;
 
     // IPluginV2Ext methods
-    DataType getOutputDataType(int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const noexcept override;
+    DataType getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;

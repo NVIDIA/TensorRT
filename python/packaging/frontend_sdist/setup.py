@@ -63,8 +63,10 @@ if sys.platform not in ("linux", "win32"):
     raise RuntimeError("TensorRT currently only builds wheels for Linux and Windows")
 if sys.implementation.name != "cpython":
     raise RuntimeError("TensorRT currently only builds wheels for CPython")
-if platform.machine() not in ("x86_64", "AMD64"):
-    raise RuntimeError("TensorRT currently only builds wheels for x86_64 processors")
+if platform.machine() not in ("x86_64", "AMD64", "aarch64"):
+    raise RuntimeError("TensorRT currently only builds wheels for x86_64 and ARM SBSA processors")
+if "tegra" in platform.release():
+    raise RuntimeError("TensorRT does not currently build wheels for Tegra systems")
 
 
 class InstallCommand(install):

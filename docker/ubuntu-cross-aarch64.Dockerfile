@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.6.0
+ARG CUDA_VERSION=12.5.0
 ARG OS_VERSION=22.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.4.0.26
+ENV TRT_VERSION 10.3.0.26
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG uid=1000
