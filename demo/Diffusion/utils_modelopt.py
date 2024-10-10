@@ -133,6 +133,7 @@ def quantize_lvl(unet, quant_level=2.5, linear_only=False):
                 module.input_quantizer.disable()
                 module.weight_quantizer.disable()
         elif isinstance(module, Attention):
+            # TRT only supports FP8 MHA with head_size % 16 == 0.
             head_size = int(module.inner_dim / module.heads)
             if quant_level >= 4 and head_size % 16 == 0:
                 module.q_bmm_quantizer.enable()

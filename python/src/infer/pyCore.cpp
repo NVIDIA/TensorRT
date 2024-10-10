@@ -1096,8 +1096,7 @@ void bindCore(py::module& m)
             IExecutionContextDoc::set_tensor_debug_state)
         .def("get_debug_state", &IExecutionContext::getDebugState, "name"_a, IExecutionContextDoc::get_debug_state)
         .def("set_all_tensors_debug_state", &IExecutionContext::setAllTensorsDebugState, "flag"_a,
-            IExecutionContextDoc::set_all_tensors_debug_state)
-        ;
+            IExecutionContextDoc::set_all_tensors_debug_state);
 
     py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
         ExecutionContextAllocationStrategyDoc::descr, py::module_local())
@@ -1293,7 +1292,6 @@ void bindCore(py::module& m)
             "weight_streaming_scratch_memory_size", &ICudaEngine::getWeightStreamingScratchMemorySize)
         // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
-
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())

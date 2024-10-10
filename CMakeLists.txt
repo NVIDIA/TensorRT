@@ -158,7 +158,11 @@ endif()
 
 find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED ${TRT_LIB_DIR})
 
-find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
+if (DEFINED USE_CUGFX)
+    find_library(CUDART_LIB cugfx_dll HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
+else()
+    find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
+endif()
 
 if (NOT MSVC)
     find_library(RT_LIB rt)
@@ -174,7 +178,6 @@ if (DEFINED GPU_ARCHS)
   separate_arguments(GPU_ARCHS)
 else()
   list(APPEND GPU_ARCHS
-      70
       75
     )
 
@@ -202,7 +205,7 @@ endif()
 set(BERT_GENCODES)
 # Generate SASS for each architecture
 foreach(arch ${GPU_ARCHS})
-    if (${arch} GREATER_EQUAL 70)
+    if (${arch} GREATER_EQUAL 75)
         set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
     endif()
     set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
@@ -211,7 +214,7 @@ endforeach()
 # Generate PTX for the last architecture in the list.
 list(GET GPU_ARCHS -1 LATEST_SM)
 set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-if (${LATEST_SM} GREATER_EQUAL 70)
+if (${LATEST_SM} GREATER_EQUAL 75)
     set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
 endif()
 

@@ -24,6 +24,8 @@ August 2023:
 
 ## Setup
 
+Note: The sample is not compatible with Python-3.12 because tensorflow-addons does not support Python-3.12.
+
 For best results, we recommend running these scripts on an environment with TensorRT >= 8.0.1 and TensorFlow 2.12.0.
 
 Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.

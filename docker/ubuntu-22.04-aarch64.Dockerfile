@@ -20,7 +20,7 @@ ARG CUDA_VERSION=12.6.0
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
-ENV TRT_VERSION 10.4.0.26
+ENV TRT_VERSION 10.5.0.18
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account

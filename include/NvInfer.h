@@ -1011,8 +1011,8 @@ struct EnumMaxImpl<PaddingMode>
 //!
 //! \brief A convolution layer in a network definition.
 //!
-//! This layer performs a correlation operation between 3-dimensional filter with a 4-dimensional tensor to produce
-//! another 4-dimensional tensor.
+//! This layer performs a correlation operation between 3 or 4 dimensional filter with a 4 or 5 dimensional tensor to
+//! produce another 4 or 5 dimensional tensor.
 //!
 //! An optional bias argument is supported, which adds a per-channel constant to each value in the output.
 //!
@@ -9675,7 +9675,9 @@ public:
     //!
     //! \brief Determine whether the platform has fast native fp16.
     //!
-    bool platformHasFastFp16() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.5. Please query data type support from CUDA directly.
+    //!
+    TRT_DEPRECATED bool platformHasFastFp16() const noexcept
     {
         return mImpl->platformHasFastFp16();
     }
@@ -9683,7 +9685,9 @@ public:
     //!
     //! \brief Determine whether the platform has fast native int8.
     //!
-    bool platformHasFastInt8() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.5. Please query data type support from CUDA directly.
+    //!
+    TRT_DEPRECATED bool platformHasFastInt8() const noexcept
     {
         return mImpl->platformHasFastInt8();
     }
@@ -9817,7 +9821,9 @@ public:
     //!
     //! \brief Determine whether the platform has TF32 support.
     //!
-    bool platformHasTf32() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.5. Please query data type support from CUDA directly.
+    //!
+    TRT_DEPRECATED bool platformHasTf32() const noexcept
     {
         return mImpl->platformHasTf32();
     }

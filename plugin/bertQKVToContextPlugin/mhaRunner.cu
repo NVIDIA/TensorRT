@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,6 @@
 #include "common/bertCommon.h"
 #include "common/common.cuh"
 #include "common/serialize.hpp"
-#include "qkvToContextPlugin.h"
 
 #include <cassert>
 #include <cstring>
@@ -28,6 +27,7 @@
 #include <vector>
 
 #include "bertQKVToContextPlugin/fused_multihead_attention_v2/include/fused_multihead_attention_v2.h"
+#include "mhaRunner.h"
 using namespace nvinfer1;
 using namespace nvinfer1::pluginInternal;
 
@@ -391,7 +391,7 @@ std::pair<int, int> tuneBatchedGemm(
     float ms1 = 1000000;
     float ms2 = 1000000;
 
-    PLUGIN_ASSERT(smVersion >= kSM_53);
+    PLUGIN_ASSERT(smVersion >= kSM_75);
     for (int a = startAlgo; a <= endAlgo; a++)
     {
         cublasGemmAlgo_t algo = static_cast<cublasGemmAlgo_t>(a);
@@ -925,7 +925,7 @@ public:
         , sm(mhaInterface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_FP16, sm))
     {
-        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90)
+        assert((sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90)
             && "Unsupported architecture");
         params.clear();
     }
@@ -1096,7 +1096,7 @@ public:
         , xmmas_n(0U)
         , threads_per_cta(1U)
     {
-        assert((sm == kSM_72 || sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90)
+        assert((sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90)
             && "Unsupported architecture");
         params.clear();
     }

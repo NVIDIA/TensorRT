@@ -329,33 +329,6 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
     uint32_t mUnrollStep;
     bool mInterleaved;
 } sMhaKernelMetaInfosV2[] = {
-#if defined(ENABLE_SM72)
-    // Xavier
-    {DATA_TYPE_INT8, 128, 64, kSM_72, fused_multihead_attention_v2_int8_128_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_128_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_128_64_kernel_sm72_interleaved", 24576, 128, 0, true},
-    {DATA_TYPE_INT8, 128, 64, kSM_72, fused_multihead_attention_v2_int8_128_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_128_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_128_64_kernel_sm72", 32768, 128, 0, false},
-    {DATA_TYPE_INT8, 192, 64, kSM_72, fused_multihead_attention_v2_int8_192_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_192_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_192_64_kernel_sm72_interleaved", 28672, 128, 0, true},
-    {DATA_TYPE_INT8, 192, 64, kSM_72, fused_multihead_attention_v2_int8_192_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_192_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_192_64_kernel_sm72", 45056, 128, 0, false},
-    {DATA_TYPE_INT8, 256, 64, kSM_72, fused_multihead_attention_v2_int8_256_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_256_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_256_64_kernel_sm72_interleaved", 36864, 128, 0, true},
-    {DATA_TYPE_INT8, 256, 64, kSM_72, fused_multihead_attention_v2_int8_256_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_256_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_256_64_kernel_sm72", 57344, 128, 0, false},
-    {DATA_TYPE_INT8, 384, 64, kSM_72, fused_multihead_attention_v2_int8_384_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_384_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_384_64_kernel_sm72_interleaved", 51200, 128, 0, true},
-    {DATA_TYPE_INT8, 384, 64, kSM_72, fused_multihead_attention_v2_int8_384_64_kernel_cubin,
-        fused_multihead_attention_v2_int8_384_64_kernel_cubin_len,
-        "fused_multihead_attention_v2_int8_384_64_kernel_sm72", 77824, 128, 0, false},
-#endif // defined(ENABLE_SM72)
 #if defined(ENABLE_SM75)
     // Turing
     {DATA_TYPE_FP16, 64, 64, kSM_75, fused_multihead_attention_v2_fp16_64_64_kernel_sm75_cubin,

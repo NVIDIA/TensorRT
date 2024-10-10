@@ -7,7 +7,8 @@
 | [batchTilePlugin](batchTilePlugin) [DEPRECATED] | BatchTilePlugin_TRT | 1 |
 | [batchedNMSPlugin](batchedNMSPlugin) [DEPRECATED] | BatchedNMS_TRT | 1 |
 | [batchedNMSDynamicPlugin](batchedNMSPlugin) [DEPRECATED] | BatchedNMSDynamic_TRT | 1 |
-| [bertQKVToContextPlugin](bertQKVToContextPlugin) | CustomQKVToContextPluginDynamic | 1, 2, 3 |
+| [bertQKVToContextPlugin](bertQKVToContextPlugin) [DEPRECATED] | CustomQKVToContextPluginDynamic | 1, 2, 3 |
+| [bertQKVToContextPlugin](bertQKVToContextPlugin) | CustomQKVToContextPluginDynamic | 4, 5, 6 |
 | [clipPlugin](clipPlugin) [DEPRECATED] | Clip_TRT | 1 |
 | [coordConvACPlugin](coordConvACPlugin) [DEPRECATED] | CoordConvAC | 1 |
 | [cropAndResizePlugin](cropAndResizePlugin) [DEPRECATED] | CropAndResize | 1 |

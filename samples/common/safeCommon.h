@@ -43,6 +43,8 @@
 #include <sys/procmgr.h>
 #endif // IS_QNX_SAFE
 
+using namespace nvinfer1;
+
 #undef CHECK
 #define CHECK(status)                                                                                                  \
     do                                                                                                                 \
@@ -65,6 +67,52 @@
             exit(EXIT_FAILURE);                                                                                        \
         }                                                                                                              \
     } while (0)
+
+#define LWE_CALL(api_call, recorder)                                                                                   \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        const ErrorCode ret = (api_call);                                                                              \
+        if (ret != ErrorCode::kSUCCESS)                                                                                \
+        {                                                                                                              \
+            std::cerr << "LWE Error: [" << #api_call << "]: " << toString(ret);                                        \
+            throw ret;                                                                                                 \
+        }                                                                                                              \
+        std::cout << "LWE:[" << #api_call << "]: PASSED";                                                              \
+    } while (0)
+
+#define CUDA_CALL(cuda_api_call, recorder)                                                                             \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        cudaError_t error = (cuda_api_call);                                                                           \
+        if (error != cudaSuccess)                                                                                      \
+        {                                                                                                              \
+            std::cerr << "CUDA Error: [" << #cuda_api_call << "]: " << cudaGetErrorString(error);                      \
+            throw ErrorCode::kFAILED_EXECUTION;                                                                        \
+        }                                                                                                              \
+        std::cout << "CUDA:[" << #cuda_api_call << "]: PASSED";                                                        \
+    } while (0)
+
+inline std::string toString(ErrorCode ec)
+{
+    static const auto ecStrings = [] {
+        std::unordered_map<ErrorCode, std::string> result;
+#define INSERT_ELEMENT(p, s) result.emplace(p, s);
+        INSERT_ELEMENT(ErrorCode::kSUCCESS, "SUCCESS")
+        INSERT_ELEMENT(ErrorCode::kUNSPECIFIED_ERROR, "UNSPECIFIED_ERROR")
+        INSERT_ELEMENT(ErrorCode::kINTERNAL_ERROR, "INTERNAL_ERROR")
+        INSERT_ELEMENT(ErrorCode::kINVALID_ARGUMENT, "INVALID_ARGUMENT")
+        INSERT_ELEMENT(ErrorCode::kINVALID_CONFIG, "INVALID_CONFIG")
+        INSERT_ELEMENT(ErrorCode::kFAILED_ALLOCATION, "FAILED_ALLOCATION")
+        INSERT_ELEMENT(ErrorCode::kFAILED_INITIALIZATION, "FAILED_INITIALIZATION")
+        INSERT_ELEMENT(ErrorCode::kFAILED_EXECUTION, "FAILED_EXECUTION")
+        INSERT_ELEMENT(ErrorCode::kFAILED_COMPUTATION, "FAILED_COMPUTATION")
+        INSERT_ELEMENT(ErrorCode::kINVALID_STATE, "INVALID_STATE")
+        INSERT_ELEMENT(ErrorCode::kUNSUPPORTED_STATE, "UNSUPPORTED_STATE")
+#undef INSERT_ELEMENT
+        return result;
+    }();
+    return ecStrings.at(ec);
+}
 
 //! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
 //! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
@@ -219,8 +267,7 @@ inline int32_t getSMVersion()
 inline bool isSMSafe()
 {
     const int32_t smVersion = getSMVersion();
-    return smVersion == 0x0700 || smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806
-        || smVersion == 0x0807;
+    return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807;
 }
 
 inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)

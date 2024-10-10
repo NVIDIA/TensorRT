@@ -16,6 +16,8 @@
 # limitations under the License.
 #
 
+import warnings
+from importlib import import_module
 from collections import OrderedDict
 from cuda import cudart
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
@@ -60,6 +62,19 @@ trt_to_torch_dtype_dict = {
     trt.DataType.FLOAT    : torch.float32,
     trt.DataType.BF16     : torch.bfloat16
 }
+
+# Define valid optimization levels for TensorRT engine build
+VALID_OPTIMIZATION_LEVELS = list(range(6))
+
+def import_from_diffusers(model_name, module_name):
+    try:
+        module = import_module(module_name)
+        return getattr(module, model_name)
+    except ImportError:
+        warnings.warn(f"Failed to import {module_name}. The {model_name} model will not be available.", ImportWarning)
+    except AttributeError:
+        warnings.warn(f"The {model_name} model is not available in the installed version of diffusers.", ImportWarning)
+    return None
 
 def unload_model(model):
     if model:
@@ -266,8 +281,8 @@ class Engine():
         if native_instancenorm:
             flags.append(trt.OnnxParserFlag.NATIVE_INSTANCENORM)
         network = network_from_onnx_path(
-            onnx_path, 
-            flags=flags, 
+            onnx_path,
+            flags=flags,
             strongly_typed=strongly_typed
         )
         if update_output_names:
@@ -584,7 +599,7 @@ class PercentileAmaxes:
 
 def add_arguments(parser):
     # Stable Diffusion configuration
-    parser.add_argument('--version', type=str, default="1.5", choices=["1.4", "1.5", "dreamshaper-7", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0", "xl-turbo", "svd-xt-1.1", "sd3", "cascade"], help="Version of Stable Diffusion")
+    parser.add_argument('--version', type=str, default="1.5", choices=("1.4", "1.5", "dreamshaper-7", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0", "xl-turbo", "svd-xt-1.1", "sd3", "cascade", "flux.1-dev"), help="Version of Stable Diffusion")
     parser.add_argument('prompt', nargs = '*', help="Text prompt(s) to guide image generation")
     parser.add_argument('--negative-prompt', nargs = '*', default=[''], help="The negative prompt(s) to guide the image generation.")
     parser.add_argument('--batch-size', type=int, default=1, choices=[1, 2, 4], help="Batch size (repeat prompt)")
@@ -592,7 +607,7 @@ def add_arguments(parser):
     parser.add_argument('--height', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=512, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--denoising-steps', type=int, default=30, help="Number of denoising steps")
-    parser.add_argument('--scheduler', type=str, default=None, choices=["DDIM", "DDPM", "EulerA", "Euler", "LCM", "LMSD", "PNDM", "UniPC"], help="Scheduler for diffusion process")
+    parser.add_argument('--scheduler', type=str, default=None, choices=("DDIM", "DDPM", "EulerA", "Euler", "LCM", "LMSD", "PNDM", "UniPC", "DDPMWuerstchen", "FlowMatchEuler"), help="Scheduler for diffusion process")
     parser.add_argument('--guidance-scale', type=float, default=7.5, help="Value of classifier-free guidance scale (must be greater than 1)")
     parser.add_argument('--lora-scale', type=float, nargs='+', default=None, help="Scale of LoRA weights, default 1 (must between 0 and 1)")
     parser.add_argument('--lora-path', type=str, nargs='+', default=None, help="Path to LoRA adaptor. Ex: 'latent-consistency/lcm-lora-sdv1-5'")
@@ -609,6 +624,7 @@ def add_arguments(parser):
     parser.add_argument('--int8', action='store_true', help="Apply int8 quantization.")
     parser.add_argument('--fp8', action='store_true', help="Apply fp8 quantization.")
     parser.add_argument('--quantization-level', type=float, default=0.0, choices=[0.0, 1.0, 2.0, 2.5, 3.0, 4.0], help="int8/fp8 quantization level, 1: CNN, 2: CNN + FFN, 2.5: CNN + FFN + QKV, 3: CNN + Almost all Linear (Including FFN, QKV, Proj and others), 4: CNN + Almost all Linear + fMHA, 0: Default to 2.5 for int8 and 4.0 for fp8.")
+    parser.add_argument('--optimization-level', type=int, default=None, help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {VALID_OPTIMIZATION_LEVELS}.")
     parser.add_argument('--build-static-batch', action='store_true', help="Build TensorRT engines with fixed batch size.")
     parser.add_argument('--build-dynamic-shape', action='store_true', help="Build TensorRT engines with dynamic image shapes.")
     parser.add_argument('--build-enable-refit', action='store_true', help="Enable Refit option in TensorRT engines during build.")
@@ -638,28 +654,42 @@ def process_pipeline_args(args):
     if args.use_cuda_graph and (not args.build_static_batch or args.build_dynamic_shape):
         raise ValueError(f"Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
 
-    if args.int8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.5', '2.1']):
-        raise ValueError(f"int8 quantization is only supported for SDXL, SD1.5 and SD2.1 pipelines.")
+    if args.optimization_level is None:
+        if args.int8 or args.fp8:
+            args.optimization_level = 4
+        else:
+            args.optimization_level = 3
 
-    if args.fp8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.5', '2.1']):
-        raise ValueError(f"fp8 quantization is only supported for SDXL, SD1.5 and SD2.1 pipelines.")
-    
+    if args.optimization_level not in VALID_OPTIMIZATION_LEVELS:
+        raise ValueError(f"Optimization level {args.optimization_level} not valid.  Valid values are: {VALID_OPTIMIZATION_LEVELS}")
+
+    if args.int8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1']):
+        raise ValueError(f"int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
+
+    if args.fp8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1']):
+        raise ValueError(f"fp8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
+
     if args.fp8 and args.int8:
         raise ValueError(f"Cannot apply both int8 and fp8 quantization, please choose only one.")
-    
+
     if args.fp8:
         device_info = torch.cuda.get_device_properties(0)
         version = device_info.major * 10 + device_info.minor
         if version < 90: # if Ada or older
             raise ValueError(f"Cannot apply FP8 quantization for GPU with compute capability {version / 10.0}. Only Hopper is supported.")
-    
+
     if args.quantization_level == 0.0:
+        def override_quant_level(level : float, dtype_str : str):
+            args.quantization_level = level
+            print(f"The default quantization level has been set to {level} for {dtype_str}.")
+
         if args.fp8:
-            args.quantization_level = 4.0
-            print("The default quantization level has been set to 4.0 for FP8.")
+            override_quant_level(3.0 if args.version in ("1.4", "1.5") else 4.0, "FP8")
         elif args.int8:
-            args.quantization_level = 2.5
-            print("The default quantization level has been set to 2.5 for INT8.")
+            override_quant_level(3.0, "INT8")
+
+    if args.lora_path and not any(args.version.startswith(prefix) for prefix in ('1.5', '2.1', 'xl')):
+        raise ValueError(f"LoRA adapter support is only supported for SD1.5, SD2.1 and SDXL pipelines")
 
     if args.lora_scale:
         for lora_scale in (lora_scale for lora_scale in args.lora_scale if not 0 <= lora_scale <= 1):
@@ -687,6 +717,7 @@ def process_pipeline_args(args):
         'opt_batch_size': args.batch_size,
         'opt_image_height': args.height,
         'opt_image_width': args.width,
+        'optimization_level': args.optimization_level,
         'static_batch': args.build_static_batch,
         'static_shape': not args.build_dynamic_shape,
         'enable_all_tactics': args.build_all_tactics,

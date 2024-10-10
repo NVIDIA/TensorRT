@@ -17,7 +17,7 @@
 #ifndef TRT_ROIALIGN_KERNEL_H
 #define TRT_ROIALIGN_KERNEL_H
 
-#include "common/checkMacrosPlugin.h"
+#include "vc/checkMacrosPlugin.h"
 #include <cuda_runtime.h>
 #include <stdint.h>
 

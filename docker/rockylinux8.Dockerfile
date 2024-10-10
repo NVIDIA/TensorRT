@@ -25,7 +25,7 @@ ENV NV_CUDNN_VERSION 8.9.6.50-1
 ENV NV_CUDNN_PACKAGE libcudnn8-${NV_CUDNN_VERSION}.cuda12.2
 ENV NV_CUDNN_PACKAGE_DEV libcudnn8-devel-${NV_CUDNN_VERSION}.cuda12.2
 
-ENV TRT_VERSION 10.4.0.26
+ENV TRT_VERSION 10.5.0.18
 SHELL ["/bin/bash", "-c"]
 
 RUN dnf install -y \
@@ -62,15 +62,15 @@ RUN dnf install -y python38 python38-devel &&\
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.4.0/tars/TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && tar -xf TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && cp -a TensorRT-10.4.0.26/lib/*.so* /usr/lib64 \
-        && pip install TensorRT-10.4.0.26/python/tensorrt-10.4.0-cp38-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.5.0/tars/TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && tar -xf TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && cp -a TensorRT-10.5.0.18/lib/*.so* /usr/lib64 \
+        && pip install TensorRT-10.5.0.18/python/tensorrt-10.5.0-cp38-none-linux_x86_64.whl ;\
 elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.4.0/tars/TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-12.6.tar.gz \
-        && tar -xf TensorRT-10.4.0.26.Linux.x86_64-gnu.cuda-12.6.tar.gz \
-        && cp -a TensorRT-10.4.0.26/lib/*.so* /usr/lib64 \
-        && pip install TensorRT-10.4.0.26/python/tensorrt-10.4.0-cp38-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.5.0/tars/TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-12.6.tar.gz \
+        && tar -xf TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-12.6.tar.gz \
+        && cp -a TensorRT-10.5.0.18/lib/*.so* /usr/lib64 \
+        && pip install TensorRT-10.5.0.18/python/tensorrt-10.5.0-cp38-none-linux_x86_64.whl ;\
 else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \

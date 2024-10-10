@@ -24,8 +24,7 @@
 #define TRT_SCATTER_ELEMENTS_KERNEL_PLUGIN_H
 
 #include "common/plugin.h"
-#include "scatterElementsPlugin.h"
-#include "scatterElementsPluginLegacy.h"
+#include "scatterElementsCommon.h"
 
 namespace nvinfer1
 {

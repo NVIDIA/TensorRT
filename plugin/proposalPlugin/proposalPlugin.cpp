@@ -514,7 +514,7 @@ void ProposalPlugin::setPluginNamespace(char const* libNamespace) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace == nullptr);
+        PLUGIN_VALIDATE(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
@@ -527,7 +527,7 @@ void ProposalDynamicPlugin::setPluginNamespace(char const* libNamespace) noexcep
 {
     try
     {
-        PLUGIN_VALIDATE(libNamespace == nullptr);
+        PLUGIN_VALIDATE(libNamespace != nullptr);
         mNamespace = libNamespace;
     }
     catch (std::exception const& e)
