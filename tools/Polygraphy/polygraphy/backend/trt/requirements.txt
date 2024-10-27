@@ -1,2 +1,0 @@
--i https://pypi.ngc.nvidia.com/
-nvidia-tensorrt

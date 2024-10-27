@@ -1,5 +1,0 @@
-numpy
-onnx==1.14.0
-onnxruntime==1.15.0
-protobuf>=3.20.2
-pytest

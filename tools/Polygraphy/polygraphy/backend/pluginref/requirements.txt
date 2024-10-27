@@ -1,2 +1,0 @@
-numpy
-onnx_graphsurgeon

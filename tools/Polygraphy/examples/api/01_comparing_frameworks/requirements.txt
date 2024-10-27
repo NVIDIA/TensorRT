@@ -1,2 +1,0 @@
-onnx
-onnxruntime

@@ -99,26 +99,15 @@ endif()
 
 set(DEFAULT_CUDA_VERSION 12.2.0)
 set(DEFAULT_CUDNN_VERSION 8.9)
-set(DEFAULT_PROTOBUF_VERSION 3.20.1)
 
 # Dependency Version Resolution
 set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
 message(STATUS "CUDA version set to ${CUDA_VERSION}")
 set_ifndef(CUDNN_VERSION ${DEFAULT_CUDNN_VERSION})
 message(STATUS "cuDNN version set to ${CUDNN_VERSION}")
-set_ifndef(PROTOBUF_VERSION ${DEFAULT_PROTOBUF_VERSION})
-message(STATUS "Protobuf version set to ${PROTOBUF_VERSION}")
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-if (BUILD_PLUGINS OR BUILD_PARSERS)
-    include(third_party/protobuf.cmake)
-endif()
-if(NOT CUB_ROOT_DIR)
-  if (CUDA_VERSION VERSION_LESS 11.0)
-    set(CUB_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cub CACHE STRING "directory of CUB installation")
-  endif()
-endif()
 
 ## find_package(CUDA) is broken for cross-compilation. Enable CUDA language instead.
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -128,15 +117,11 @@ endif()
 include_directories(
     ${CUDA_INCLUDE_DIRS}
 )
-if(BUILD_PARSERS)
-    configure_protobuf(${PROTOBUF_VERSION})
-endif()
 
-# Windows library names have major version appended.
-    set(nvinfer_lib_name "nvinfer")
-    set(nvinfer_plugin_lib_name "nvinfer_plugin")
-    set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
-    set(nvonnxparser_lib_name "nvonnxparser")
+set(nvinfer_lib_name "nvinfer")
+set(nvinfer_plugin_lib_name "nvinfer_plugin")
+set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
+set(nvonnxparser_lib_name "nvonnxparser")
 
 find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED ${TRT_LIB_DIR})
 
@@ -154,7 +139,6 @@ set(CUDA_LIBRARIES ${CUDART_LIB})
 
 ############################################################################################
 # CUDA targets
-
 if (DEFINED GPU_ARCHS)
   message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
   separate_arguments(GPU_ARCHS)
@@ -200,12 +184,7 @@ if (${LATEST_SM} GREATER_EQUAL 75)
     set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
 endif()
 
-if(NOT MSVC)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xcompiler -Wno-deprecated-declarations")
-else()
-    set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xcompiler")
-endif()
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xcompiler -Wno-deprecated-declarations")
 
 ############################################################################################
 # TensorRT

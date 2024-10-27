@@ -1,3 +1,0 @@
-include LICENSE
-include requirements.txt
-recursive-include src *
