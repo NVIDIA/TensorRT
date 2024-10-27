@@ -7,7 +7,7 @@ Will be clean up only for samples modifying, building, running and studying.
 # Environment
 ## Developing
 1. tbd -- conda env
-## deployment -- c++ compiling and running
+## Deployment -- c++ compiling and running
 1. WSL2 + Unbuntu22.04: 5.15.153.1-microsoft-standard-WSL2
 2. CUDA: 12.4.99
 3. Tensorrt: 10.5.0
