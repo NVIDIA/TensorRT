@@ -18,17 +18,18 @@
 add_custom_target(samples)
 
 set(OPENSOURCE_SAMPLES_LIST
-    sampleAlgorithmSelector
-    sampleCharRNN
-    sampleDynamicReshape
-    sampleINT8API
-    sampleNonZeroPlugin
+    # sampleAlgorithmSelector
+    # sampleCharRNN
+    # sampleDynamicReshape
+    # sampleINT8API
+    # sampleNonZeroPlugin
     sampleOnnxMNIST
-    sampleIOFormats
-    sampleOnnxMnistCoordConvAC
-    sampleNamedDimensions
-    sampleProgressMonitor
-    trtexec)
+    # sampleIOFormats
+    # sampleOnnxMnistCoordConvAC
+    # sampleNamedDimensions
+    # sampleProgressMonitor
+    # trtexec
+    )
 
 foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})
     add_subdirectory(${SAMPLE_ITER})

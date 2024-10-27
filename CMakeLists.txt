@@ -124,12 +124,7 @@ set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
 set(nvonnxparser_lib_name "nvonnxparser")
 
 find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED ${TRT_LIB_DIR})
-
-if (DEFINED USE_CUGFX)
-    find_library(CUDART_LIB cugfx_dll HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
-else()
-    find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
-endif()
+find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
 
 if (NOT MSVC)
     find_library(RT_LIB rt)
