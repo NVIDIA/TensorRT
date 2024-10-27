@@ -31,21 +31,12 @@ else()
     cmake_path(SET TRT_OUT_DIR ${TRT_OUT_DIR})
 endif()
 
-# Required to export symbols to build *.libs
-if(WIN32)
-    add_compile_definitions(TENSORRT_BUILD_LIB 1)
-endif()
-
 # Set output paths
 set(RUNTIME_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for runtime target files")
 set(LIBRARY_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for library target files")
 set(ARCHIVE_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for archive target files")
 
-if(WIN32)
-    set(STATIC_LIB_EXT "lib")
-else()
-    set(STATIC_LIB_EXT "a")
-endif()
+set(STATIC_LIB_EXT "a")
 
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
 
@@ -75,8 +66,6 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX ${TRT_LIB_DIR}/../ CACHE PATH "TensorRT installation" FORCE)
 endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 
-option(BUILD_PLUGINS "Build TensorRT plugin" ON)
-option(BUILD_PARSERS "Build TensorRT parsers" ON)
 option(BUILD_SAMPLES "Build TensorRT samples" ON)
 
 # C++14
@@ -144,17 +133,10 @@ if(BUILD_PARSERS)
 endif()
 
 # Windows library names have major version appended.
-if (MSVC)
-    set(nvinfer_lib_name "nvinfer_${TRT_SOVERSION}")
-    set(nvinfer_plugin_lib_name "nvinfer_plugin_${TRT_SOVERSION}")
-    set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin_${TRT_SOVERSION}")
-    set(nvonnxparser_lib_name "nvonnxparser_${TRT_SOVERSION}")
-else()
     set(nvinfer_lib_name "nvinfer")
     set(nvinfer_plugin_lib_name "nvinfer_plugin")
     set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
     set(nvonnxparser_lib_name "nvonnxparser")
-endif()
 
 find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED ${TRT_LIB_DIR})
 
@@ -227,18 +209,6 @@ endif()
 
 ############################################################################################
 # TensorRT
-
-if(BUILD_PLUGINS)
-    add_subdirectory(plugin)
-else()
-    find_library_create_target(nvinfer_plugin ${nvinfer_plugin_lib_name} SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
-endif()
-
-if(BUILD_PARSERS)
-    add_subdirectory(parsers)
-else()
-    find_library_create_target(nvonnxparser ${nvonnxparser_lib_name} SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
-endif()
 
 if(BUILD_SAMPLES)
     add_subdirectory(samples)
