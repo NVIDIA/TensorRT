@@ -1,4 +1,5 @@
 build/
+bin/
 /demo/BERT/models
 /demo/BERT/engines
 /demo/BERT/squad/*.json

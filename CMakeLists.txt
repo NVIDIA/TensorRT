@@ -19,10 +19,10 @@ cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 include(cmake/modules/set_ifndef.cmake)
 include(cmake/modules/find_library_create_target.cmake)
 
+# Set lib and out path equals current build path, e.g. : tensorrt-github-samples/build
 set_ifndef(TRT_LIB_DIR ${CMAKE_BINARY_DIR})
 set_ifndef(TRT_OUT_DIR ${CMAKE_BINARY_DIR})
 
-# Converts Windows paths
 if(CMAKE_VERSION VERSION_LESS 3.20)
     file(TO_CMAKE_PATH "${TRT_LIB_DIR}" TRT_LIB_DIR)
     file(TO_CMAKE_PATH "${TRT_OUT_DIR}" TRT_OUT_DIR)
@@ -30,14 +30,17 @@ else()
     cmake_path(SET TRT_LIB_DIR ${TRT_LIB_DIR})
     cmake_path(SET TRT_OUT_DIR ${TRT_OUT_DIR})
 endif()
+message(STATUS "TRT_LIB_DIR: ${TRT_LIB_DIR}")
+message(STATUS "TRT_OUT_DIR: ${TRT_OUT_DIR}")
 
-# Set output paths
+# Set compile output paths
 set(RUNTIME_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for runtime target files")
 set(LIBRARY_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for library target files")
 set(ARCHIVE_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for archive target files")
 
 set(STATIC_LIB_EXT "a")
 
+# Get tensorrt version info
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
 
 foreach(TYPE MAJOR MINOR PATCH BUILD)
@@ -50,57 +53,56 @@ set(ONNX2TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "ONNX
 set(TRT_SOVERSION "${TRT_MAJOR}" CACHE STRING "TensorRT library so version")
 message("Building for TensorRT version: ${TRT_VERSION}, library version: ${TRT_SOVERSION}")
 
+# Set g++ cmake flag
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    find_program(CMAKE_CXX_COMPILER NAMES $ENV{CXX} g++)
+    find_program(CMAKE_CXX_COMPILER NAMES $ENV{CXX} g++) # CMake 的 find_program 行为是 "lazy" 的，只在变量为空或未定义时才会查找并赋值
+    message(STATUS "CMAKE_CXX_COMPILER is: ${CMAKE_CXX_COMPILER}")
+    if(NOT CMAKE_CXX_COMPILER)
+      message(FATAL_ERROR "C++ compiler not found. Please specify one using the CXX environment variable or ensure g++ is installed.")
+    endif()
 endif()
 
-set(CMAKE_SKIP_BUILD_RPATH True)
-
+# Set project info : languages c++ and cuda
 project(TensorRT
         LANGUAGES CXX CUDA
         VERSION ${TRT_VERSION}
         DESCRIPTION "TensorRT is a C++ library that facilitates high-performance inference on NVIDIA GPUs and deep learning accelerators."
         HOMEPAGE_URL "https://github.com/NVIDIA/TensorRT")
 
+# Set cmake install path ../bin/
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX ${TRT_LIB_DIR}/../ CACHE PATH "TensorRT installation" FORCE)
 endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 
 option(BUILD_SAMPLES "Build TensorRT samples" ON)
 
-# C++14
+# Set C++ standard version
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Set cmake cxx flags, define: -DBUILD_SYSTEM=cmake_oss
 if(NOT MSVC)
     set(CMAKE_CXX_FLAGS "-Wno-deprecated-declarations ${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss")
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBUILD_SYSTEM=cmake_oss")
 endif()
 
-############################################################################################
-# Cross-compilation settings
-
+# Set plat form info, tbd
 set_ifndef(TRT_PLATFORM_ID "x86_64")
 message(STATUS "Targeting TRT Platform: ${TRT_PLATFORM_ID}")
-
-############################################################################################
-# Debug settings
 
 set(TRT_DEBUG_POSTFIX _debug CACHE STRING "suffix for debug builds")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message("Building in debug mode ${DEBUG_POSTFIX}")
+    message(STATUS "Building in debug mode ${DEBUG_POSTFIX}")
 endif()
 
-############################################################################################
-# Dependencies
-
+# Set dependency: threads, find cuda lib, include cuda CUDA_INCLUDE_DIRS
 set(DEFAULT_CUDA_VERSION 12.2.0)
 set(DEFAULT_CUDNN_VERSION 8.9)
 
-# Dependency Version Resolution
+## Dependency Version Resolution
 set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
 message(STATUS "CUDA version set to ${CUDA_VERSION}")
 set_ifndef(CUDNN_VERSION ${DEFAULT_CUDNN_VERSION})
@@ -109,10 +111,13 @@ message(STATUS "cuDNN version set to ${CUDNN_VERSION}")
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
+message(STATUS "CUDA_INCLUDE_DIRS before find package: ${CUDA_INCLUDE_DIRS}")
 ## find_package(CUDA) is broken for cross-compilation. Enable CUDA language instead.
+message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    find_package(CUDA ${CUDA_VERSION} REQUIRED)
+    find_package(CUDA ${CUDA_VERSION} REQUIRED EXACT) # 即使精确指定，仍然可能找到本机的12.4的cuda版本
 endif()
+message(STATUS "CUDA_INCLUDE_DIRS after find package: ${CUDA_INCLUDE_DIRS}")
 
 include_directories(
     ${CUDA_INCLUDE_DIRS}
@@ -131,53 +136,6 @@ if (NOT MSVC)
 endif()
 
 set(CUDA_LIBRARIES ${CUDART_LIB})
-
-############################################################################################
-# CUDA targets
-if (DEFINED GPU_ARCHS)
-  message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
-  separate_arguments(GPU_ARCHS)
-else()
-  list(APPEND GPU_ARCHS
-      75
-    )
-
-  find_file(IS_L4T_NATIVE nv_tegra_release PATHS /env/)
-  set (IS_L4T_CROSS "False")
-  if (DEFINED ENV{IS_L4T_CROSS})
-    set(IS_L4T_CROSS $ENV{IS_L4T_CROSS})
-  endif()
-
-  if (IS_L4T_NATIVE OR ${IS_L4T_CROSS} STREQUAL "True")
-    # Only Orin (SM87) supported
-    list(APPEND GPU_ARCHS 87)
-  endif()
-
-  if (CUDA_VERSION VERSION_GREATER_EQUAL 11.0)
-    # Ampere GPU (SM80) support is only available in CUDA versions > 11.0
-    list(APPEND GPU_ARCHS 80)
-  endif()
-  if (CUDA_VERSION VERSION_GREATER_EQUAL 11.1)
-    list(APPEND GPU_ARCHS 86)
-  endif()
-
-  message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${GPU_ARCHS}")
-endif()
-set(BERT_GENCODES)
-# Generate SASS for each architecture
-foreach(arch ${GPU_ARCHS})
-    if (${arch} GREATER_EQUAL 75)
-        set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
-    endif()
-    set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
-endforeach()
-
-# Generate PTX for the last architecture in the list.
-list(GET GPU_ARCHS -1 LATEST_SM)
-set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-if (${LATEST_SM} GREATER_EQUAL 75)
-    set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-endif()
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xcompiler -Wno-deprecated-declarations")
 
