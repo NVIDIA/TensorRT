@@ -38,7 +38,9 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
          -DTENSORRT_ROOT=${ROOT_PATH} \
          -DTENSORRT_MODULE=${TENSORRT_MODULE} \
          -DTENSORRT_LIBPATH=${TRT_LIBPATH} \
-         -DTENSORRT_BUILD=${ROOT_PATH}/build/
+         -DTENSORRT_BUILD=${ROOT_PATH}/build/ \
+         -DPY_CONFIG_INCLUDE=`python-config --prefix`/bin \
+         -DPY_INCLUDE=`python-config --prefix`/../../include/python3.12
 make -j8
 
 # Generate wheel
