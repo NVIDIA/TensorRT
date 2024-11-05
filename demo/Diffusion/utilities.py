@@ -21,6 +21,7 @@ from importlib import import_module
 from collections import OrderedDict
 from cuda import cudart
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
+from diffusers.utils import load_image
 from enum import Enum, auto
 import gc
 from io import BytesIO
@@ -45,6 +46,7 @@ import requests
 import tensorrt as trt
 import torch
 import types
+import gc
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
@@ -141,12 +143,18 @@ def replace_lora_layers(model):
             new_linear._torch_forward = new_linear.forward
             new_linear.forward = types.MethodType(lora_forward, new_linear)
 
-def merge_loras(model, lora_dict, lora_alphas, lora_scales):
-    assert len(lora_scales) == len(lora_dict)
-    for path, lora in lora_dict.items():
-        print(f"[I] Fusing LoRA: {path}, scale {lora_scales[path]}")
-        model.load_attn_procs(lora, network_alphas=lora_alphas[path])
-        model.fuse_lora(lora_scale=lora_scales[path])
+def merge_loras(model, lora_loader):
+    paths, weights, scale = lora_loader.paths, lora_loader.weights, lora_loader.scale
+    for i, path in enumerate(paths):
+        print(f"[I] Loading LoRA: {path}, weight {weights[i]}")
+        state_dict, network_alphas = lora_loader.lora_state_dict(path, unet_config=model.config)
+        lora_loader.load_lora_into_unet(state_dict, network_alphas=network_alphas,
+        unet=model, adapter_name=path)
+
+    model.set_adapters(paths, weights=weights)
+    # NOTE: fuse_lora an experimental API in Diffusers
+    model.fuse_lora(adapter_names=paths, lora_scale=scale)
+    model.unload_lora()
     return model
 
 def CUASSERT(cuda_ret):
@@ -219,21 +227,15 @@ class Engine():
         del self.buffers
         del self.tensors
 
-    def refit(self, refit_weights, is_fp16):
+    def refit(self, refit_weights, updated_weight_names):
         # Initialize refitter
         refitter = trt.Refitter(self.engine, TRT_LOGGER)
-
         refitted_weights = set()
-        # iterate through all tensorrt refittable weights
-        for trt_weight_name in refitter.get_all_weights():
-            if trt_weight_name not in refit_weights:
-                continue
 
+        def refit_single_weight(trt_weight_name):
             # get weight from state dict
-            trt_datatype = trt.DataType.FLOAT
-            if is_fp16:
-                refit_weights[trt_weight_name] = refit_weights[trt_weight_name].half()
-                trt_datatype = trt.DataType.HALF
+            trt_datatype = refitter.get_weights_prototype(trt_weight_name).dtype
+            refit_weights[trt_weight_name] = refit_weights[trt_weight_name].to(trt_to_torch_dtype_dict[trt_datatype])
 
             # trt.Weight and trt.TensorLocation
             trt_wt_tensor = trt.Weights(trt_datatype, refit_weights[trt_weight_name].data_ptr(), torch.numel(refit_weights[trt_weight_name]))
@@ -243,7 +245,17 @@ class Engine():
             refitter.set_named_weights(trt_weight_name, trt_wt_tensor, trt_wt_location)
             refitted_weights.add(trt_weight_name)
 
-        assert set(refitted_weights) == set(refit_weights.keys())
+        # iterate through all tensorrt refittable weights
+        for trt_weight_name in refitter.get_all_weights():
+            if trt_weight_name not in updated_weight_names:
+                continue
+
+            refit_single_weight(trt_weight_name)
+
+        # iterate through missing weights required by tensorrt - addresses the case where lora_scale=0
+        for trt_weight_name in refitter.get_missing_weights():
+            refit_single_weight(trt_weight_name)
+
         if not refitter.refit_cuda_engine():
             print("Error: failed to refit new weights.")
             exit(0)
@@ -306,8 +318,24 @@ class Engine():
             save_engine(engine, path=self.engine_path)
 
     def load(self):
-        print(f"Loading TensorRT engine: {self.engine_path}")
-        self.engine = engine_from_bytes(bytes_from_path(self.engine_path))
+        if self.engine is not None:
+            print(f"[W]: Engine {self.engine_path} already loaded, skip reloading")
+            return
+        if not hasattr(self,'engine_bytes_cpu') or self.engine_bytes_cpu is None:
+            # keep a cpu copy of the engine to reduce reloading time.
+            print(f"Loading TensorRT engine to cpu bytes: {self.engine_path}")
+            self.engine_bytes_cpu = bytes_from_path(self.engine_path)
+        print(f"Loading TensorRT engine from bytes: {self.engine_path}")
+        self.engine = engine_from_bytes(self.engine_bytes_cpu)
+    
+    def unload(self):
+        if self.engine is not None:
+            print(f"Unloading TensorRT engine: {self.engine_path}")
+            del self.engine
+            self.engine = None
+            gc.collect()
+        else:
+            print(f"[W]: Unload an unloaded engine {self.engine_path}, skip unloading")
 
     def activate(self, device_memory=None):
         if device_memory:
@@ -559,6 +587,7 @@ def get_refit_weights(state_dict, onnx_opt_path, weight_name_mapping, weight_sha
         initializer_hash_mapping[initializer.name] = initializer_hash
 
     refit_weights = OrderedDict()
+    updated_weight_names = set() # save names of updated weights to refit only the required weights
     for wt_name, wt in state_dict.items():
         # query initializer to compare
         initializer_name = weight_name_mapping[wt_name]
@@ -574,13 +603,27 @@ def get_refit_weights(state_dict, onnx_opt_path, weight_name_mapping, weight_sha
         # include weight if hashes differ
         wt_hash = hash(wt.cpu().detach().numpy().astype(np.float16).data.tobytes())
         if initializer_hash != wt_hash:
-            refit_weights[initializer_name] = wt.contiguous()
-    return refit_weights
+            updated_weight_names.add(initializer_name)
+        # Store all weights as the refitter may require unchanged weights too
+        # docs: https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#refitting-engine-c
+        refit_weights[initializer_name] = wt.contiguous()
+    return refit_weights, updated_weight_names
 
 def load_calib_prompts(batch_size, calib_data_path):
     with open(calib_data_path, "r") as file:
         lst = [line.rstrip("\n") for line in file]
     return [lst[i : i + batch_size] for i in range(0, len(lst), batch_size)]
+
+def load_calibration_images(folder_path):
+    images = []
+    for filename in os.listdir(folder_path):
+        img_path = os.path.join(folder_path, filename)
+        if os.path.isfile(img_path):
+            image = load_image(img_path)
+            if image is not None:
+                images.append(image)
+    return images
+
 
 class PercentileAmaxes:
     def __init__(self, total_step, percentile) -> None:
@@ -609,7 +652,8 @@ def add_arguments(parser):
     parser.add_argument('--denoising-steps', type=int, default=30, help="Number of denoising steps")
     parser.add_argument('--scheduler', type=str, default=None, choices=("DDIM", "DDPM", "EulerA", "Euler", "LCM", "LMSD", "PNDM", "UniPC", "DDPMWuerstchen", "FlowMatchEuler"), help="Scheduler for diffusion process")
     parser.add_argument('--guidance-scale', type=float, default=7.5, help="Value of classifier-free guidance scale (must be greater than 1)")
-    parser.add_argument('--lora-scale', type=float, nargs='+', default=None, help="Scale of LoRA weights, default 1 (must between 0 and 1)")
+    parser.add_argument('--lora-scale', type=float, default=1.0, help="Controls how much to influence the outputs with the LoRA parameters. (must between 0 and 1)")
+    parser.add_argument('--lora-weight', type=float, nargs='+', default=None, help="The LoRA adapter(s) weights to use with the UNet. (must between 0 and 1)")
     parser.add_argument('--lora-path', type=str, nargs='+', default=None, help="Path to LoRA adaptor. Ex: 'latent-consistency/lcm-lora-sdv1-5'")
 
     # ONNX export
@@ -666,8 +710,8 @@ def process_pipeline_args(args):
     if args.int8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1']):
         raise ValueError(f"int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
 
-    if args.fp8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1']):
-        raise ValueError(f"fp8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
+    if args.fp8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1', 'flux.1-dev']):
+        raise ValueError(f"fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1 and FLUX pipelines.")
 
     if args.fp8 and args.int8:
         raise ValueError(f"Cannot apply both int8 and fp8 quantization, please choose only one.")
@@ -675,8 +719,8 @@ def process_pipeline_args(args):
     if args.fp8:
         device_info = torch.cuda.get_device_properties(0)
         version = device_info.major * 10 + device_info.minor
-        if version < 90: # if Ada or older
-            raise ValueError(f"Cannot apply FP8 quantization for GPU with compute capability {version / 10.0}. Only Hopper is supported.")
+        if version < 89:
+            raise ValueError(f"Cannot apply FP8 quantization for GPU with compute capability {version / 10.0}.  Only Ada and Hopper are supported.")
 
     if args.quantization_level == 0.0:
         def override_quant_level(level : float, dtype_str : str):
@@ -684,16 +728,19 @@ def process_pipeline_args(args):
             print(f"The default quantization level has been set to {level} for {dtype_str}.")
 
         if args.fp8:
-            override_quant_level(3.0 if args.version in ("1.4", "1.5") else 4.0, "FP8")
+            override_quant_level(3.0 if args.version in ("1.4", "1.5", "flux.1-dev") else 4.0, "FP8")
         elif args.int8:
             override_quant_level(3.0, "INT8")
 
     if args.lora_path and not any(args.version.startswith(prefix) for prefix in ('1.5', '2.1', 'xl')):
         raise ValueError(f"LoRA adapter support is only supported for SD1.5, SD2.1 and SDXL pipelines")
 
-    if args.lora_scale:
-        for lora_scale in (lora_scale for lora_scale in args.lora_scale if not 0 <= lora_scale <= 1):
-            raise ValueError(f"Scale of LoRA weights must be between 0 and 1, provided {lora_scale}")
+    if args.lora_weight:
+        for weight in (weight for weight in args.lora_weight if not 0 <= weight <= 1):
+            raise ValueError(f"LoRA adapter weights must be between 0 and 1, provided {weight}")
+
+    if not 0 <= args.lora_scale <= 1:
+        raise ValueError(f"LoRA scale value must be between 0 and 1, provided {args.lora_scale}")
 
     kwargs_init_pipeline = {
         'version': args.version,
@@ -707,6 +754,7 @@ def process_pipeline_args(args):
         'nvtx_profile': args.nvtx_profile,
         'use_cuda_graph': args.use_cuda_graph,
         'lora_scale': args.lora_scale,
+        'lora_weight': args.lora_weight,
         'lora_path': args.lora_path,
         'framework_model_dir': args.framework_model_dir,
         'torch_inference': args.torch_inference,

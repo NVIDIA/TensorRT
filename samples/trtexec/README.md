@@ -53,12 +53,37 @@ Compile the sample by following build instructions in [TensorRT README](https://
 
 ### Example 1: Profiling a custom layer
 
-You can profile a custom layer using the `IPluginRegistry` for the plugins and `trtexec`. You’ll need to first register the plugin with `IPluginRegistry`.
+You can profile a custom layer, implemented as a [TensorRT plugin](https://github.com/NVIDIA/TensorRT/tree/main/plugin#tensorrt-plugins), by leveraging `trtexec`. Plugins need to be registered in the plugin registry (instance of `IPluginRegistry`) to be visible to TensorRT. `trtexec` will load the TensorRT standard plugin library (`libnvinfer_plugin.so` / `nvinfer_plugin.dll`) that provides plugin support to TensorRT. Checkout the [Non-Zero Plugins Sample](../sampleNonZeroPlugin/) for a quick sample, or the [Plugins section](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#extending) of the TensorRT Developer Guide for a more detailed walkthrough.
 
-If you are using TensorRT shipped plugins, you should load the `libnvinfer_plugin.so` file, as these plugins are pre-registered.
+Plugins can be used with `trtexec` in the following 2 ways:
 
-If you have your own plugin, then it has to be registered explicitly. The following macro can be used to register the plugin creator `YourPluginCreator` with the `IPluginRegistry`.
-`REGISTER_TENSORRT_PLUGIN(YourPluginCreator);`
+<details>
+<summary> Using TensorRT-shipped Plugins </summary>
+
+
+- If you are using TensorRT-shipped plugins (included in `libnvinfer_plugin.so` / `nvinfer_plugin.dll`), no extra steps are required from the user as these plugins are pre-registered with the plugin registry.
+</details>
+
+<details>
+<summary> Using your own Plugin  </summary>
+
+  - If you want to define your own plugin and have `trtexec` use it as part of the network, you should define your own _Plugin Shared library_ with specific entry-points recognized by TensorRT. Then, provide the shared plugin library path to `trtexec` using the `--dynamicPlugins` flag.
+  - More information on Plugin Shared Libraries and how to define them can be seen in the [Plugin Shared Libraries](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#plugin-serialization) section of the [TensorRT Developer Guide](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html).
+
+    In summary, there are two methods:
+    1. The `REGISTER_TENSORRT_PLUGIN` macro can be applied to the plugin creator for each plugin that needs to be statically registered. i.e. Registered at load-time of the plugin library.
+    2. For dynamic registration, the plugin shared library must expose the below symbols which will be the entry points for TensorRT:
+
+        ```cpp
+        extern "C" void setLoggerFinder(ILoggerFinder* finder);
+        extern "C" IPluginCreatorInterface* const* getCreators(int32_t& nbCreators)
+        ```
+    In the above, `setLoggerFinder()` should accept a pointer to an `ILoggerFinder`, through which an `ILogger` instance can be retrieved for the purpose of logging inside the library code. `getCreators()` should return an array of plugin creators the library contains. Example implementations of these entry points can be found in [plugin/vc/vfcCommon.cpp](../../plugin/vc/vfcCommon.cpp) and [plugin/vc/vfcCommon.h](../../plugin/vc/vfcCommon.h).
+
+      **Note**: Usage of `getPluginCreators` instead of `getCreators` is also valid, but deprecated.
+  - If the user wants to build a TensorRT engine first and run later, the user has the option to serialize the shared plugin library as part of the engine itself by specifying `--setPluginsToSerialize`. By doing so, the user does not have to specify `--dynamicPlugins` to `trtexec` when running the built engine.
+  - For more information on these flags, run `./trtexec --help`.
+</details>
 
 ### Example 2: Running a network on DLA
 

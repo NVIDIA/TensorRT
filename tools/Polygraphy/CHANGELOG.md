@@ -3,6 +3,11 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.49.14 (2024-09-10)
+### Added
+- Added `DataType.FLOAT4` for 4-bit floats (E2M1).
+
+
 ## v0.49.13 (2024-07-15)
 ### Added
 - Added option to emit logs using python `logging` module.

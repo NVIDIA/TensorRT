@@ -713,7 +713,8 @@ constexpr char const* descr = R"trtdoc(
     :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
     :ivar weight_streaming_budget_v2: Set and get the current weight streaming budget for inference. The budget may be set any non-negative value. A value of 0 streams the most weights. Values equal to streamable_weights_size (default) or larger will disable weight streaming.
     :ivar weight_streaming_scratch_memory_size: The amount of scratch memory required by a TensorRT ExecutionContext to perform inference. This value may change based on the current weight streaming budget. Please use the V2 memory APIs, engine.device_memory_size_v2 and ExecutionContext.set_device_memory() to provide memory which includes the current weight streaming scratch memory. Not specifying these APIs or using the V1 APIs will not include this memory, so TensorRT will resort to allocating itself.
-    )trtdoc";
+    )trtdoc"
+    ;
 
 // Documentation bug with parameters on these three functions because they are overloaded.
 constexpr char const* serialize = R"trtdoc(
@@ -955,12 +956,12 @@ constexpr char const* read = R"trtdoc(
 
     If an allocation request cannot be satisfied, ``0`` should be returned.
 
-    :arg destination: The host memory address to copy read memory to.
     :arg size: The number of bytes required.
 
-    :returns: The number of bytes read.
+    :returns: A buffer containing the bytes read.
 )trtdoc";
 } // namespace StreamReaderDoc
+
 
 namespace BuilderFlagDoc
 {
@@ -1010,6 +1011,9 @@ constexpr char const* REFIT_INDIVIDUAL
 constexpr char const* WEIGHT_STREAMING
     = R"trtdoc(Enable building with the ability to stream varying amounts of weights during Runtime. This decreases GPU memory of TRT at the expense of performance.)trtdoc";
 constexpr char const* INT4 = R"trtdoc(Enable plugins with INT4 input/output)trtdoc";
+constexpr char const* STRICT_NANS
+    = R"trtdoc(Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are not true when x is a NaN or Inf, and thus might hide propagation or generation of NaNs.)trtdoc";
+constexpr char const* MONITOR_MEMORY = R"trtdoc(Enable memory monitor during build time.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1599,6 +1603,17 @@ constexpr char const* build_serialized_network = R"trtdoc(
     :returns: A pointer to a :class:`IHostMemory` object that contains a serialized network.
 )trtdoc";
 
+constexpr char const* build_engine_with_config = R"trtdoc(
+    Builds a network for the given :class:`INetworkDefinition` and :class:`IBuilderConfig` .
+
+    This function allows building a network and creating an engine.
+
+    :arg network: Network definition.
+    :arg config: Builder configuration.
+
+    :returns: A pointer to a :class:`ICudaEngine` object that contains a built engine.
+)trtdoc";
+
 constexpr char const* is_network_supported = R"trtdoc(
     Checks that a network is within the scope of the :class:`IBuilderConfig` settings.
 
@@ -1664,7 +1679,8 @@ constexpr char const* deserialize_cuda_engine = R"trtdoc(
 constexpr char const* deserialize_cuda_engine_reader = R"trtdoc(
     Deserialize an :class:`ICudaEngine` from a stream reader.
 
-    :arg stream_reader: The :class:`PyStreamReader` that will read the serialized :class:`ICudaEngine`. This enables deserialization from a file directly.
+    :arg stream_reader: The :class:`PyStreamReader` that will read the serialized :class:`ICudaEngine`. This enables
+        deserialization from a file directly.
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";

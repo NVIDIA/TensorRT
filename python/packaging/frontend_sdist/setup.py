@@ -64,7 +64,9 @@ if sys.platform not in ("linux", "win32"):
 if sys.implementation.name != "cpython":
     raise RuntimeError("TensorRT currently only builds wheels for CPython")
 if platform.machine() not in ("x86_64", "AMD64", "aarch64"):
-    raise RuntimeError("TensorRT currently only builds wheels for x86_64 and ARM SBSA processors")
+    raise RuntimeError(
+        "TensorRT currently only builds wheels for x86_64 and ARM SBSA processors"
+    )
 if "tegra" in platform.release():
     raise RuntimeError("TensorRT does not currently build wheels for Tegra systems")
 
@@ -167,6 +169,6 @@ When the extra index url does not contain `{}`, a nested `pip install` will run 
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",
-    url="https://developer.nvidia.com/tensorrt",
-    download_url="https://github.com/nvidia/tensorrt/tags",
+    url="https://github.com/nvidia/tensorrt",
+    download_url="https://developer.nvidia.com/tensorrt",
 )

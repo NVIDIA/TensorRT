@@ -18,9 +18,9 @@
 #ifndef NV_INFER_RUNTIME_PLUGIN_H
 #define NV_INFER_RUNTIME_PLUGIN_H
 
-#define NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE 1
-#include "NvInferRuntimeBase.h"
-#undef NV_INFER_INTERNAL_INCLUDE_RUNTIME_BASE
+#define NV_INFER_INTERNAL_INCLUDE 1
+#include "NvInferPluginBase.h"
+#undef NV_INFER_INTERNAL_INCLUDE
 
 //!
 //! \file NvInferRuntimePlugin.h
@@ -28,8 +28,7 @@
 //! This file contains common definitions, data structures and interfaces that relate to plugins and are shared
 //! between the standard and safe runtime.
 //!
-//! \warning Do not directly include this file. Instead include either NvInferRuntime.h (for the standard runtime) or
-//! NvInferSafeRuntime.h (for the safety runtime).
+//! \warning Do not directly include this file. Instead include NvInferRuntime.h
 //!
 
 //!
@@ -39,6 +38,13 @@
 //!
 namespace nvinfer1
 {
+
+enum class TensorFormat : int32_t;
+namespace v_1_0
+{
+class IGpuAllocator;
+}
+using IGpuAllocator = v_1_0::IGpuAllocator;
 
 //!
 //! \brief PluginFormat is reserved for backward compatibility.
@@ -824,126 +830,8 @@ private:
     }
 };
 
-//!
-//! \enum PluginFieldType
-//!
-//! \brief The possible field types for custom layer.
-//!
-enum class PluginFieldType : int32_t
-{
-    //! FP16 field type.
-    kFLOAT16 = 0,
-    //! FP32 field type.
-    kFLOAT32 = 1,
-    //! FP64 field type.
-    kFLOAT64 = 2,
-    //! INT8 field type.
-    kINT8 = 3,
-    //! INT16 field type.
-    kINT16 = 4,
-    //! INT32 field type.
-    kINT32 = 5,
-    //! char field type.
-    kCHAR = 6,
-    //! nvinfer1::Dims field type.
-    kDIMS = 7,
-    //! Unknown field type.
-    kUNKNOWN = 8,
-    //! BF16 field type.
-    kBF16 = 9,
-    //! INT64 field type.
-    kINT64 = 10,
-    //! FP8 field type.
-    kFP8 = 11,
-    //! INT4 field type.
-    kINT4 = 12,
-};
-
-//!
-//! \class PluginField
-//!
-//! \brief Structure containing plugin attribute field names and associated data
-//! This information can be parsed to decode necessary plugin metadata
-//!
-//!
-class PluginField
-{
-public:
-    //! Plugin field attribute name
-    AsciiChar const* name;
-    //! Plugin field attribute data
-    void const* data;
-    //! Plugin field attribute type
-    PluginFieldType type;
-    //! Number of data entries in the Plugin attribute
-    int32_t length;
-
-    PluginField(AsciiChar const* const name_ = nullptr, void const* const data_ = nullptr,
-        PluginFieldType const type_ = PluginFieldType::kUNKNOWN, int32_t const length_ = 0) noexcept
-        : name(name_)
-        , data(data_)
-        , type(type_)
-        , length(length_)
-    {
-    }
-};
-
-//!
-//! \struct PluginFieldCollection
-//!
-//! \brief Plugin field collection struct.
-//!
-struct PluginFieldCollection
-{
-    //! Number of PluginField entries.
-    int32_t nbFields;
-    //! Pointer to PluginField entries.
-    PluginField const* fields;
-};
-
-//!
-//! \enum PluginCapabilityType
-//!
-//! \brief Enumerates the different capability types a IPluginV3 object may have
-//!
-enum class PluginCapabilityType : int32_t
-{
-    //! Core capability. Every IPluginV3 object must have this.
-    kCORE = 0,
-    //! Build capability. IPluginV3 objects provided to TensorRT build phase must have this.
-    kBUILD = 1,
-    //! Runtime capability. IPluginV3 objects provided to TensorRT build and execution phases must have this.
-    kRUNTIME = 2
-};
-
-//!
-//! \enum TensorRTPhase
-//!
-//! \brief Indicates a phase of operation of TensorRT
-//!
-enum class TensorRTPhase : int32_t
-{
-    //! Build phase of TensorRT
-    kBUILD = 0,
-    //! Execution phase of TensorRT
-    kRUNTIME = 1
-};
-
 namespace v_1_0
 {
-class IPluginCreatorInterface : public IVersionedInterface
-{
-public:
-    ~IPluginCreatorInterface() noexcept override = default;
-
-protected:
-    IPluginCreatorInterface() = default;
-    IPluginCreatorInterface(IPluginCreatorInterface const&) = default;
-    IPluginCreatorInterface(IPluginCreatorInterface&&) = default;
-    IPluginCreatorInterface& operator=(IPluginCreatorInterface const&) & = default;
-    IPluginCreatorInterface& operator=(IPluginCreatorInterface&&) & = default;
-};
-
 class TRT_DEPRECATED IPluginCreator : public IPluginCreatorInterface
 {
 public:
@@ -1070,15 +958,6 @@ public:
     }
 };
 } // namespace v_1_0
-
-//!
-//! \class IPluginCreatorInterface
-//!
-//! \brief Base class for all plugin creator versions.
-//!
-//! \see IPluginCreator and IPluginRegistry
-//!
-using IPluginCreatorInterface = v_1_0::IPluginCreatorInterface;
 
 //!
 //! \class IPluginCreator

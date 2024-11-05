@@ -25,6 +25,9 @@
 //!
 
 #include "NvInferImpl.h"
+#define NV_INFER_INTERNAL_INCLUDE 1
+#include "NvInferPluginBase.h"
+#undef NV_INFER_INTERNAL_INCLUDE
 #include "NvInferRuntimeCommon.h"
 
 namespace nvinfer1
@@ -622,6 +625,55 @@ private:
     }
 };
 
+namespace v_1_0
+{
+class IStreamReader : public IVersionedInterface
+{
+public:
+    //!
+    //! TensorRT never calls the destructor for an IStreamReader defined by the
+    //! application.
+    //!
+    ~IStreamReader() override = default;
+    IStreamReader() = default;
+
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return InterfaceInfo{"IStreamReader", 1, 0};
+    }
+
+    //!
+    //! \brief Read the next number of bytes in the stream.
+    //!
+    //! \param destination The memory to write to
+    //! \param nbBytes The number of bytes to read
+    //!
+    //! \returns The number of bytes read. Negative values will be considered an automatic error.
+    //!
+    virtual int64_t read(void* destination, int64_t nbBytes) = 0;
+
+protected:
+    IStreamReader(IStreamReader const&) = default;
+    IStreamReader(IStreamReader&&) = default;
+    IStreamReader& operator=(IStreamReader const&) & = default;
+    IStreamReader& operator=(IStreamReader&&) & = default;
+};
+} // namespace v_1_0
+
+//!
+//! \class IStreamReader
+//!
+//! \brief Application-implemented class for reading data in a stream-based manner.
+//!
+//! \note To ensure compatibility of source code with future versions of TensorRT, use IStreamReader, not
+//!       v_1_0::IStreamReader
+//!
+using IStreamReader = v_1_0::IStreamReader;
+
+
 //!
 //! \class IPluginResourceContext
 //!
@@ -658,82 +710,6 @@ protected:
     IPluginResourceContext& operator=(IPluginResourceContext const&) & = default;
     IPluginResourceContext& operator=(IPluginResourceContext&&) & = default;
 };
-
-namespace v_1_0
-{
-class IPluginCapability : public IVersionedInterface
-{
-};
-} // namespace v_1_0
-
-//!
-//! \class IPluginCapability
-//!
-//! \brief Base class for plugin capability interfaces
-//!
-//!  IPluginCapability represents a split in TensorRT V3 plugins to sub-objects that expose different types of
-//!  capabilites a plugin may have, as opposed to a single interface which defines all capabilities and behaviors of a
-//!  plugin.
-//!
-//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
-//!
-//! \see PluginCapabilityType
-//!
-using IPluginCapability = v_1_0::IPluginCapability;
-
-namespace v_1_0
-{
-class IPluginV3 : public IVersionedInterface
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"PLUGIN", 1, 0};
-    }
-
-    //! \brief Return a pointer to plugin object implementing the specified PluginCapabilityType.
-    //!
-    //! \note IPluginV3 objects added for the build phase (through addPluginV3()) must return valid objects for
-    //! PluginCapabilityType::kCORE, PluginCapabilityType::kBUILD and PluginCapabilityType::kRUNTIME.
-    //!
-    //! \note IPluginV3 objects added for the runtime phase must return valid objects for
-    //! PluginCapabilityType::kCORE and PluginCapabilityType::kRUNTIME.
-    //!
-    //! \see TensorRTPhase
-    //! \see IPluginCreatorV3One::createPlugin()
-    //!
-    virtual IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept = 0;
-
-    //!
-    //! \brief Clone the plugin object. This copies over internal plugin parameters and returns a new plugin object with
-    //! these parameters. The cloned object must be in a fully initialized state.
-    //!
-    //! \note The cloned object must return valid objects through getCapabilityInterface() for at least the same
-    //! PluginCapabilityTypes as the original object.
-    //!
-    //! \return A cloned plugin object in an initialized state with the same parameters as the current object.
-    //!         nullptr must be returned if the cloning fails.
-    //!
-    virtual IPluginV3* clone() noexcept = 0;
-};
-
-} // namespace v_1_0
-
-//!
-//! \class IPluginV3
-//!
-//! \brief Plugin class for the V3 generation of user-implemented layers.
-//!
-//! IPluginV3 acts as a wrapper around the plugin capability interfaces that define the actual behavior of the plugin.
-//!
-//! \see IPluginCapability
-//! \see IPluginCreatorV3One
-//! \see IPluginRegistry
-//!
-using IPluginV3 = v_1_0::IPluginV3;
 
 namespace v_1_0
 {
@@ -814,6 +790,8 @@ public:
     //! \param nbInputs Number of input tensors.
     //! \param out The output tensors attributes that are used for configuration.
     //! \param nbOutputs Number of output tensors.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination, if invoked by TensorRT).
     //!
     virtual int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
         DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
@@ -1187,87 +1165,6 @@ using IPluginV3OneBuildV2 = v_2_0::IPluginV3OneBuild;
 
 namespace v_1_0
 {
-class IPluginCreatorV3One : public IPluginCreatorInterface
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"PLUGIN CREATOR_V3ONE", 1, 0};
-    }
-
-    //!
-    //! \brief Return a plugin object. Return nullptr in case of error.
-    //!
-    //! \param name A NULL-terminated name string of length 1024 or less, including the NULL terminator.
-    //! \param fc A pointer to a collection of fields needed for constructing the plugin.
-    //! \param phase The TensorRT phase in which the plugin is being created
-    //!
-    //! When the phase is TensorRTPhase::kRUNTIME, the PluginFieldCollection provided for serialization by the plugin's
-    //! runtime interface will be passed as fc.
-    //!
-    //! \note The returned plugin object must be in an initialized state
-    //!
-    virtual IPluginV3* createPlugin(
-        AsciiChar const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept = 0;
-
-    //!
-    //! \brief Return a list of fields that need to be passed to createPlugin() when creating a plugin for use in the
-    //! TensorRT build phase.
-    //!
-    //! \see PluginFieldCollection
-    //!
-    virtual PluginFieldCollection const* getFieldNames() noexcept = 0;
-
-    //!
-    //! \brief Return the plugin name.
-    //!
-    //! \warning The string returned must be NULL-terminated and have a length of 1024 bytes or less including
-    //! the NULL terminator.
-    //!
-    virtual AsciiChar const* getPluginName() const noexcept = 0;
-
-    //!
-    //! \brief Return the plugin version.
-    //!
-    //! \warning The string returned must be NULL-terminated and have a length of 1024 bytes or less including
-    //! the NULL terminator.
-    //!
-    virtual AsciiChar const* getPluginVersion() const noexcept = 0;
-
-    //!
-    //! \brief Return the plugin namespace.
-    //!
-    //! \warning The string returned must be NULL-terminated and have a length of 1024 bytes or less including
-    //! the NULL terminator.
-    //!
-    virtual AsciiChar const* getPluginNamespace() const noexcept = 0;
-
-    IPluginCreatorV3One() = default;
-    virtual ~IPluginCreatorV3One() = default;
-
-protected:
-    IPluginCreatorV3One(IPluginCreatorV3One const&) = default;
-    IPluginCreatorV3One(IPluginCreatorV3One&&) = default;
-    IPluginCreatorV3One& operator=(IPluginCreatorV3One const&) & = default;
-    IPluginCreatorV3One& operator=(IPluginCreatorV3One&&) & = default;
-};
-} // namespace v_1_0
-
-//!
-//! \class IPluginCreatorV3One
-//!
-//! \brief A plugin creator class capable of producing IPluginV3 objects
-//!
-//! \see IPluginV3
-//! \see IPluginRegistry
-//!
-using IPluginCreatorV3One = v_1_0::IPluginCreatorV3One;
-
-namespace v_1_0
-{
 class IProfiler
 {
 public:
@@ -1374,6 +1271,464 @@ constexpr inline int32_t EnumMax<TempfileControlFlag>() noexcept
 //!      IRuntime::setTempfileControlFlags(),
 //!      IRuntime::getTempfileControlFlags()
 using TempfileControlFlags = uint32_t;
+
+//!
+//! \enum TensorFormat
+//!
+//! \brief Format of the input/output tensors.
+//!
+//! This enum is used by both plugins and network I/O tensors.
+//!
+//! \see IPluginV2::supportsFormat(), safe::ICudaEngine::getBindingFormat()
+//!
+//! Many of the formats are **vector-major** or **vector-minor**. These formats specify
+//! a <em>vector dimension</em> and <em>scalars per vector</em>.
+//! For example, suppose that the tensor has has dimensions [M,N,C,H,W],
+//! the vector dimension is C and there are V scalars per vector.
+//!
+//! * A **vector-major** format splits the vectorized dimension into two axes in the
+//!   memory layout. The vectorized dimension is replaced by an axis of length ceil(C/V)
+//!   and a new dimension of length V is appended. For the example tensor, the memory layout
+//!   is equivalent to an array with dimensions [M][N][ceil(C/V)][H][W][V].
+//!   Tensor coordinate (m,n,c,h,w) maps to array location [m][n][c/V][h][w][c\%V].
+//!
+//! * A **vector-minor** format moves the vectorized dimension to become the last axis
+//!   in the memory layout. For the example tensor, the memory layout is equivalent to an
+//!   array with dimensions [M][N][H][W][ceil(C/V)*V]. Tensor coordinate (m,n,c,h,w) maps
+//!   array location subscript [m][n][h][w][c].
+//!
+//! In interfaces that refer to "components per element", that's the value of V above.
+//!
+//! For more information about data formats, see the topic "Data Format Description" located in the
+//! TensorRT Developer Guide. https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#data-format-desc
+//!
+enum class TensorFormat : int32_t
+{
+    //! Memory layout is similar to an array in C or C++.
+    //! The stride of each dimension is the product of the dimensions after it.
+    //! The last dimension has unit stride.
+    //!
+    //! For DLA usage, the tensor sizes are limited to C,H,W in the range [1,8192].
+    kLINEAR = 0,
+
+    //! Vector-major format with two scalars per vector.
+    //! Vector dimension is third to last.
+    //!
+    //! This format requires FP16 and at least three dimensions.
+    kCHW2 = 1,
+
+    //! Vector-minor format with eight scalars per vector.
+    //! Vector dimension is third to last.
+    //! This format requires FP16 or BF16 and at least three dimensions.
+    kHWC8 = 2,
+
+    //! Vector-major format with four scalars per vector.
+    //! Vector dimension is third to last.
+    //!
+    //! This format requires INT8 or FP16 and at least three dimensions.
+    //! For INT8, the length of the vector dimension must be a build-time constant.
+    //!
+    //! Deprecated usage:
+    //!
+    //! If running on the DLA, this format can be used for acceleration
+    //! with the caveat that C must be less than or equal to 4.
+    //! If used as DLA input and the build option kGPU_FALLBACK is not specified,
+    //! it needs to meet line stride requirement of DLA format. Column stride in
+    //! bytes must be a multiple of 64 on Orin.
+    kCHW4 = 3,
+
+    //! Vector-major format with 16 scalars per vector.
+    //! Vector dimension is third to last.
+    //!
+    //! This format requires FP16 and at least three dimensions.
+    //!
+    //! For DLA usage, this format maps to the native feature format for FP16,
+    //! and the tensor sizes are limited to C,H,W in the range [1,8192].
+    kCHW16 = 4,
+
+    //! Vector-major format with 32 scalars per vector.
+    //! Vector dimension is third to last.
+    //!
+    //! This format requires at least three dimensions.
+    //!
+    //! For DLA usage, this format maps to the native feature format for INT8,
+    //! and the tensor sizes are limited to C,H,W in the range [1,8192].
+    kCHW32 = 5,
+
+    //! Vector-minor format with eight scalars per vector.
+    //! Vector dimension is fourth to last.
+    //!
+    //! This format requires FP16 or BF16 and at least four dimensions.
+    kDHWC8 = 6,
+
+    //! Vector-major format with 32 scalars per vector.
+    //! Vector dimension is fourth to last.
+    //!
+    //! This format requires FP16 or INT8 and at least four dimensions.
+    kCDHW32 = 7,
+
+    //! Vector-minor format where channel dimension is third to last and unpadded.
+    //!
+    //! This format requires either FP32, FP16, UINT8, INT64 or BF16 and at least three dimensions.
+    kHWC = 8,
+
+    //! DLA planar format. For a tensor with dimension {N, C, H, W}, the W axis
+    //! always has unit stride. The stride for stepping along the H axis is
+    //! rounded up to 64 bytes.
+    //!
+    //! The memory layout is equivalent to a C array with dimensions
+    //! [N][C][H][roundUp(W, 64/elementSize)] where elementSize is
+    //! 2 for FP16 and 1 for Int8, with the tensor coordinates (n, c, h, w)
+    //! mapping to array subscript [n][c][h][w].
+    kDLA_LINEAR = 9,
+
+    //! DLA image format. For a tensor with dimension {N, C, H, W} the C axis
+    //! always has unit stride. The stride for stepping along the H axis is rounded up
+    //! to 64 bytes on Orin. C can only be 1, 3 or 4.
+    //! If C == 1, it will map to grayscale format.
+    //! If C == 3 or C == 4, it will map to color image format. And if C == 3,
+    //! the stride for stepping along the W axis needs to be padded to 4 in elements.
+    //!
+    //! When C is {1, 3, 4}, then C' is {1, 4, 4} respectively,
+    //! the memory layout is equivalent to a C array with dimensions
+    //! [N][H][roundUp(W, 64/C'/elementSize)][C'] on Orin
+    //! where elementSize is 2 for FP16
+    //! and 1 for Int8. The tensor coordinates (n, c, h, w) mapping to array
+    //! subscript [n][h][w][c].
+    kDLA_HWC4 = 10,
+
+    //! Vector-minor format with 16 scalars per vector.
+    //! Vector dimension is third to last.
+    //!
+    //! This requires FP16 or INT8 and at least three dimensions.
+    kHWC16 = 11,
+
+    //! Vector-minor format with one scalar per vector.
+    //! Vector dimension is fourth to last.
+    //!
+    //! This format requires FP32 and at least four dimensions.
+    kDHWC = 12
+};
+
+namespace impl
+{
+//! Maximum number of elements in TensorFormat enum. \see TensorFormat
+template <>
+struct EnumMaxImpl<TensorFormat>
+{
+    //! Declaration of kVALUE that represents the maximum number of elements in the TensorFormat enum.
+    static constexpr int32_t kVALUE = 13;
+};
+} // namespace impl
+
+//!
+//! \enum AllocatorFlag
+//!
+//! \brief Allowed type of memory allocation.
+//!
+enum class AllocatorFlag : int32_t
+{
+    //! TensorRT may call realloc() on this allocation.
+    kRESIZABLE = 0,
+};
+
+namespace impl
+{
+//! Maximum number of elements in AllocatorFlag enum. \see AllocatorFlag
+template <>
+struct EnumMaxImpl<AllocatorFlag>
+{
+    //! Declaration of kVALUE that represents the maximum number of elements in the AllocatorFlag enum.
+    static constexpr int32_t kVALUE = 1;
+};
+} // namespace impl
+
+using AllocatorFlags = uint32_t;
+
+//! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
+//! The name v_1_0 may change in future versions of TensoRT.
+
+//!
+//! \class ILogger
+//!
+//! \brief Application-implemented logging interface for the builder, refitter and runtime.
+//!
+//! The logger used to create an instance of IBuilder, IRuntime or IRefitter is used for all objects created through
+//! that interface. The logger must be valid until all objects created are released.
+//!
+//! The Logger object implementation must be thread safe. All locking and synchronization is pushed to the
+//! interface implementation and TensorRT does not hold any synchronization primitives when calling the interface
+//! functions.
+//!
+class ILogger
+{
+public:
+    //!
+    //! \enum Severity
+    //!
+    //! \brief The severity corresponding to a log message.
+    //!
+    enum class Severity : int32_t
+    {
+        //! An internal error has occurred. Execution is unrecoverable.
+        kINTERNAL_ERROR = 0,
+        //! An application error has occurred.
+        kERROR = 1,
+        //! An application error has been discovered, but TensorRT has recovered or fallen back to a default.
+        kWARNING = 2,
+        //!  Informational messages with instructional information.
+        kINFO = 3,
+        //!  Verbose messages with debugging information.
+        kVERBOSE = 4,
+    };
+
+    //!
+    //! \brief A callback implemented by the application to handle logging messages;
+    //!
+    //! \param severity The severity of the message.
+    //! \param msg A null-terminated log message.
+    //!
+    //! \warning Loggers used in the safety certified runtime must set a maximum message length and truncate
+    //!          messages exceeding this length. It is up to the implementer of the derived class to define
+    //!          a suitable limit that will prevent buffer overruns, resource exhaustion, and other security
+    //!          vulnerabilities in their implementation. The TensorRT safety certified runtime will never
+    //!          emit messages longer than 1024 bytes.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
+    //!                  when multiple execution contexts are used during runtime, or if the same logger is used
+    //!                  for multiple runtimes, builders, or refitters.
+    //!
+    virtual void log(Severity severity, AsciiChar const* msg) noexcept = 0;
+
+    ILogger() = default;
+    virtual ~ILogger() = default;
+
+protected:
+    // @cond SuppressDoxyWarnings
+    ILogger(ILogger const&) = default;
+    ILogger(ILogger&&) = default;
+    ILogger& operator=(ILogger const&) & = default;
+    ILogger& operator=(ILogger&&) & = default;
+    // @endcond
+};
+
+namespace impl
+{
+//! Maximum number of elements in ILogger::Severity enum. \see ILogger::Severity
+template <>
+struct EnumMaxImpl<ILogger::Severity>
+{
+    //! Declaration of kVALUE that represents the maximum number of elements in the ILogger::Severity enum.
+    static constexpr int32_t kVALUE = 5;
+};
+} // namespace impl
+
+namespace v_1_0
+{
+
+class IGpuAllocator : public IVersionedInterface
+{
+public:
+    //!
+    //! \brief A thread-safe callback implemented by the application to handle acquisition of GPU memory.
+    //!
+    //! \param size The size of the memory block required (in bytes).
+    //! \param alignment The required alignment of memory. Alignment will be zero
+    //!        or a power of 2 not exceeding the alignment guaranteed by cudaMalloc.
+    //!        Thus this allocator can be safely implemented with cudaMalloc/cudaFree.
+    //!        An alignment value of zero indicates any alignment is acceptable.
+    //! \param flags Reserved for future use. In the current release, 0 will be passed.
+    //!
+    //! \return If the allocation was successful, the start address of a device memory block of the requested size.
+    //! If an allocation request of size 0 is made, nullptr must be returned.
+    //! If an allocation request cannot be satisfied, nullptr must be returned.
+    //! If a non-null address is returned, it is guaranteed to have the specified alignment.
+    //!
+    //! \note The implementation must guarantee thread safety for concurrent allocate/reallocate/deallocate
+    //! requests.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
+    //!
+    //! \deprecated Deprecated in TensorRT 10.0. Superseded by allocateAsync
+    //!
+    TRT_DEPRECATED virtual void* allocate(
+        uint64_t const size, uint64_t const alignment, AllocatorFlags const flags) noexcept = 0;
+
+    ~IGpuAllocator() override = default;
+    IGpuAllocator() = default;
+
+    //!
+    //! \brief A thread-safe callback implemented by the application to resize an existing allocation.
+    //!
+    //! Only allocations which were allocated with AllocatorFlag::kRESIZABLE will be resized.
+    //!
+    //! Options are one of:
+    //! * resize in place leaving min(oldSize, newSize) bytes unchanged and return the original address
+    //! * move min(oldSize, newSize) bytes to a new location of sufficient size and return its address
+    //! * return nullptr, to indicate that the request could not be fulfilled.
+    //!
+    //! If nullptr is returned, TensorRT will assume that resize() is not implemented, and that the
+    //! allocation at baseAddr is still valid.
+    //!
+    //! This method is made available for use cases where delegating the resize
+    //! strategy to the application provides an opportunity to improve memory management.
+    //! One possible implementation is to allocate a large virtual device buffer and
+    //! progressively commit physical memory with cuMemMap. CU_MEM_ALLOC_GRANULARITY_RECOMMENDED
+    //! is suggested in this case.
+    //!
+    //! TensorRT may call realloc to increase the buffer by relatively small amounts.
+    //!
+    //! \param baseAddr the address of the original allocation, which will have been returned by previously calling
+    //!        allocate() or reallocate() on the same object.
+    //! \param alignment The alignment used by the original allocation. This will be the same value that was previously
+    //!        passed to the allocate() or reallocate() call that returned baseAddr.
+    //! \param newSize The new memory size required (in bytes).
+    //!
+    //! \return The address of the reallocated memory, or nullptr. If a non-null address is returned, it is
+    //!         guaranteed to have the specified alignment.
+    //!
+    //! \note The implementation must guarantee thread safety for concurrent allocate/reallocate/deallocate
+    //! requests.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
+    //!
+    virtual void* reallocate(void* const /*baseAddr*/, uint64_t /*alignment*/, uint64_t /*newSize*/) noexcept
+    {
+        return nullptr;
+    }
+
+    //!
+    //! \brief A thread-safe callback implemented by the application to handle release of GPU memory.
+    //!
+    //! TensorRT may pass a nullptr to this function if it was previously returned by allocate().
+    //!
+    //! \param memory A memory address that was previously returned by an allocate() or reallocate() call of the same
+    //! allocator object.
+    //!
+    //! \return True if the acquired memory is released successfully.
+    //!
+    //! \note The implementation must guarantee thread safety for concurrent allocate/reallocate/deallocate
+    //! requests.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
+    //! \deprecated Deprecated in TensorRT 10.0. Superseded by deallocateAsync
+    //!
+    TRT_DEPRECATED virtual bool deallocate(void* const memory) noexcept = 0;
+
+    //!
+    //! \brief A thread-safe callback implemented by the application to handle stream-ordered acquisition of GPU memory.
+    //!
+    //! The default behavior is to call method allocate(), which is synchronous and thus loses
+    //! any performance benefits of asynchronous allocation. If you want the benefits of asynchronous
+    //! allocation, see discussion of IGpuAsyncAllocator vs. IGpuAllocator in the documentation
+    //! for nvinfer1::IGpuAllocator.
+    //!
+    //! \param size The size of the memory block required (in bytes).
+    //! \param alignment The required alignment of memory. Alignment will be zero
+    //!        or a power of 2 not exceeding the alignment guaranteed by cudaMalloc.
+    //!        Thus this allocator can be safely implemented with cudaMalloc/cudaFree.
+    //!        An alignment value of zero indicates any alignment is acceptable.
+    //! \param flags Reserved for future use. In the current release, 0 will be passed.
+    //! \param stream specifies the cudaStream for asynchronous usage.
+    //!
+    //! \return If the allocation was successful, the start address of a device memory block of the requested size.
+    //! If an allocation request of size 0 is made, nullptr must be returned.
+    //! If an allocation request cannot be satisfied, nullptr must be returned.
+    //! If a non-null address is returned, it is guaranteed to have the specified alignment.
+    //!
+    //! \note The implementation must guarantee thread safety for concurrent allocate/reallocate/deallocate
+    //! requests.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
+    //!
+    virtual void* allocateAsync(
+        uint64_t const size, uint64_t const alignment, AllocatorFlags const flags, cudaStream_t /*stream*/) noexcept
+    {
+        return allocate(size, alignment, flags);
+    }
+    //!
+    //! \brief A thread-safe callback implemented by the application to handle stream-ordered release of GPU memory.
+    //!
+    //! The default behavior is to call method deallocate(), which is synchronous and thus loses
+    //! any performance benefits of asynchronous deallocation. If you want the benefits of asynchronous
+    //! deallocation, see discussion of IGpuAsyncAllocator vs. IGpuAllocator in the documentation
+    //! for nvinfer1::IGpuAllocator.
+    //!
+    //! TensorRT may pass a nullptr to this function if it was previously returned by allocate().
+    //!
+    //! \param memory A memory address that was previously returned by an allocate() or reallocate() call of the same
+    //! allocator object.
+    //! \param stream specifies the cudaStream for asynchronous usage.
+    //!
+    //! \return True if the acquired memory is released successfully.
+    //!
+    //! \note The implementation must guarantee thread safety for concurrent allocate/reallocate/deallocate
+    //! requests.
+    //!
+    //! \note The implementation is not required to be asynchronous. It is permitted to synchronize,
+    //! albeit doing so will lose the performance advantage of asynchronous deallocation.
+    //! Either way, it is critical that it not actually free the memory until the current
+    //! stream position is reached.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
+    //!
+    virtual bool deallocateAsync(void* const memory, cudaStream_t /*stream*/) noexcept
+    {
+        return deallocate(memory);
+    }
+
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return {"IGpuAllocator", 1, 0};
+    }
+
+protected:
+    // @cond SuppressDoxyWarnings
+    IGpuAllocator(IGpuAllocator const&) = default;
+    IGpuAllocator(IGpuAllocator&&) = default;
+    IGpuAllocator& operator=(IGpuAllocator const&) & = default;
+    IGpuAllocator& operator=(IGpuAllocator&&) & = default;
+    // @endcond
+};
+
+} // namespace v_1_0
+
+//!
+//! \class IGpuAllocator
+//!
+//! \brief Application-implemented class for controlling allocation on the GPU.
+//!
+//! \warning The lifetime of an IGpuAllocator object must exceed that of all objects that use it.
+//!
+//! This class is intended as a base class for allocators that implement synchronous allocation.
+//! If you want the benefits of asynchronous allocation, you can do either of:
+//!
+//! * Derive your class from IGpuAllocator and override all four of its virtual methods
+//!   for allocation/deallocation, including the two deprecated methods.
+//!
+//! * Derive your class from IGpuAsyncAllocator and override its two pure virtual
+//!   methods for allocation/deallocation.
+//!
+//! The latter style is preferred because it does not tie code to deprecated methods.
+//!
+//! \see IGpuAsyncAllocator.
+//!
+using IGpuAllocator = v_1_0::IGpuAllocator;
 
 //!
 //! \class IRuntime
@@ -1502,6 +1857,7 @@ public:
     {
         return mImpl->deserializeCudaEngine(streamReader);
     }
+
 
     //!
     //! \brief get the logger with which the runtime was created
@@ -3533,7 +3889,7 @@ public:
     //! \param type data Type of the tensor.
     //! \param shape shape of the tensor.
     //! \param name name of the tensor.
-    //! \param stream Cuda stream object.
+    //! \param stream CUDA stream object.
     //!
     //! \return True on success, false otherwise.
     //!
@@ -3647,7 +4003,7 @@ public:
     //!
     //! \brief Set the device memory for use by this execution context.
     //!
-    //! The memory must be aligned with cuda memory alignment property (using cudaGetDeviceProperties()), and its size
+    //! The memory must be aligned with CUDA memory alignment property (using cudaGetDeviceProperties()), and its size
     //! must be large enough for performing inference with the given network inputs. getDeviceMemorySize() and
     //! getDeviceMemorySizeForProfile() report upper bounds of the size. Setting memory to nullptr is acceptable if the
     //! reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
@@ -3674,7 +4030,7 @@ public:
     //!
     //! \brief Set the device memory and its corresponding size for use by this execution context.
     //!
-    //! The memory must be aligned with cuda memory alignment property (using cudaGetDeviceProperties()), and its size
+    //! The memory must be aligned with CUDA memory alignment property (using cudaGetDeviceProperties()), and its size
     //! must be large enough for performing inference with the given network inputs. getDeviceMemorySize() and
     //! getDeviceMemorySizeForProfile() report upper bounds of the size. Setting memory to nullptr is acceptable if the
     //! reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
@@ -3875,7 +4231,7 @@ public:
     //! \param profileIndex Index of the profile. The value must lie between 0 and
     //!        getEngine().getNbOptimizationProfiles() - 1
     //!
-    //! \param stream A cuda stream on which the cudaMemcpyAsyncs may be
+    //! \param stream A CUDA stream on which the cudaMemcpyAsyncs may be
     //! enqueued
     //!
     //! When an optimization profile is switched via this API, TensorRT may
@@ -4145,7 +4501,7 @@ public:
     //!
     //! \brief Mark input as consumed.
     //!
-    //! \param event The cuda event that is triggered after all input tensors have been consumed.
+    //! \param event The CUDA event that is triggered after all input tensors have been consumed.
     //!
     //! \warning The set event must be valid during the inferece.
     //!
@@ -4161,7 +4517,7 @@ public:
     //!
     //! \brief The event associated with consuming the input.
     //!
-    //! \return The cuda event. Nullptr will be returned if the event is not set yet.
+    //! \return The CUDA event. Nullptr will be returned if the event is not set yet.
     //!
     cudaEvent_t getInputConsumedEvent() const noexcept
     {
@@ -4251,7 +4607,7 @@ public:
     //!
     //! \brief Enqueue inference on a stream.
     //!
-    //! \param stream A cuda stream on which the inference kernels will be enqueued.
+    //! \param stream A CUDA stream on which the inference kernels will be enqueued.
     //!
     //! \return True if the kernels were enqueued successfully, false otherwise.
     //!
@@ -4844,7 +5200,6 @@ public:
 //!
 //! \see IGpuAllocator
 using IGpuAsyncAllocator = v_1_0::IGpuAsyncAllocator;
-
 } // namespace nvinfer1
 
 //!

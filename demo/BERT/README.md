@@ -75,7 +75,7 @@ The following software version configuration has been tested:
 |Software|Version|
 |--------|-------|
 |Python|>=3.8|
-|TensorRT|10.5.0.18|
+|TensorRT|10.6.0.26|
 |CUDA|12.6|
 
 ## Setup
@@ -122,7 +122,7 @@ This demo BERT application can be run within the TensorRT OSS build container. I
     bash scripts/download_model.sh
     ```
 
-**Note:** Since the datasets and checkpoints are stored in the directory mounted from the host, they do *not* need to be downloaded each time the container is launched. 
+**Note:** Since the datasets and checkpoints are stored in the directory mounted from the host, they do *not* need to be downloaded each time the container is launched.
 
 **Warning:** In the event of encountering an error message stating, "Missing API key and missing Email Authentication. This command requires an API key or authentication via browser login", the recommended steps for resolution are as follows:
 * Generate an API key by logging in https://ngc.nvidia.com/setup/api-key and copy the generated API key.
@@ -153,11 +153,11 @@ Completing these steps should resolve the error you encountered and allow the co
     jupyter notebook --ip 0.0.0.0 inference.ipynb
     ```
     Then, use your browser to open the link displayed. The link should look similar to: `http://127.0.0.1:8888/?token=<TOKEN>`
-    
+
 6. Run inference with CUDA Graph support.
 
     A separate python `inference_c.py` script is provided to run inference with CUDA Graph support. This is necessary since CUDA Graph is only supported through CUDA C/C++ APIs, not pyCUDA. The `inference_c.py` script uses pybind11 to interface with C/C++ for CUDA graph capturing and launching. The cmdline interface is the same as `inference.py` except for an extra `--enable-graph` option.
-    
+
     ```bash
     mkdir -p build; pushd build
     cmake .. -DPYTHON_EXECUTABLE=$(which python)
@@ -167,11 +167,11 @@ Completing these steps should resolve the error you encountered and allow the co
     ```
 
     A separate C/C++ inference benchmark executable `perf` (compiled from `perf.cpp`) is provided to run inference benchmarks with CUDA Graph. The cmdline interface is the same as `perf.py` except for an extra `--enable_graph` option.
-    
+
     ```bash
     build/perf -e engines/bert_large_128.engine -b 1 -s 128 -w 100 -i 1000 --enable_graph
     ```
-    
+
 
 ### (Optional) Trying a different configuration
 
@@ -220,6 +220,9 @@ The `infer_c/` folder contains all the necessary C/C++ files required for CUDA G
 
 To view the available parameters for each script, you can use the help flag (`-h`).
 
+**Note:** In the builder scripts (`builder.py` and `builder_varseqlen.py`), the options `--use-deprecated-plugins` and `--use-v3-plugins` toggle the underlying implementation of the plugins used in demoBERT. They are mutually exclusive, and enabling either should not affect functionality, or performance. The `--use-deprecated-plugins` uses plugin versions that inherit from `IPluginV2DynamicExt`, while `--use-v3-plugins` uses plugin versions that inherit from `IPluginV3` classes.
+If unspecified, `--use-deprecated-plugins` is used by default.
+
 ### TensorRT inference process
 
 As mentioned in the [Quick Start Guide](#quick-start-guide), two options are provided for running inference:
@@ -245,7 +248,7 @@ As mentioned in the [Quick Start Guide](#quick-start-guide), two options are pro
     **Xavier GPU**
     ```bash
     # Only supports SkipLayerNormPlugin running with INT8 I/O. Use -iln builder flag to enable.
-    mkdir -p engines && python3 builder.py -m models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/model.ckpt -o engines/bert_large_384_int8mix.engine -b 1 -s 384 --int8 --fp16 --strict -c models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1 --squad-json ./squad/train-v1.1.json -v models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/vocab.txt --calib-num 100 -iln 
+    mkdir -p engines && python3 builder.py -m models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/model.ckpt -o engines/bert_large_384_int8mix.engine -b 1 -s 384 --int8 --fp16 --strict -c models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1 --squad-json ./squad/train-v1.1.json -v models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/vocab.txt --calib-num 100 -iln
     ```
 
     **Volta GPU**
@@ -278,13 +281,13 @@ As mentioned in the [Quick Start Guide](#quick-start-guide), two options are pro
     **Xavier GPU**
     ```bash
     # Only supports SkipLayerNormPlugin running with INT8 I/O. Use -iln builder flag to enable.
-    mkdir -p engines && python3 builder.py -o engines/bert_large_384_int8mix.engine -b 1 -s 384 --int8 --fp16 --strict -c models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1 -v models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/vocab.txt -x models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx -iln 
+    mkdir -p engines && python3 builder.py -o engines/bert_large_384_int8mix.engine -b 1 -s 384 --int8 --fp16 --strict -c models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1 -v models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/vocab.txt -x models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx -iln
     ```
 
     **Volta GPU**
     ```bash
     # No support for QKVToContextPlugin or SkipLayerNormPlugin running with INT8 I/O. Don't specify -imh or -iln in builder flags.
-    mkdir -p engines && python3 builder.py -o engines/bert_large_384_int8mix.engine -b 1 -s 384 --int8 --fp16 --strict -c models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1 -v models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/vocab.txt -x models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx 
+    mkdir -p engines && python3 builder.py -o engines/bert_large_384_int8mix.engine -b 1 -s 384 --int8 --fp16 --strict -c models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1 -v models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/vocab.txt -x models/fine-tuned/bert_pyt_onnx_large_qa_squad11_amp_fake_quant_v1/bert_large_v1_1_fake_quant.onnx
     ```
 
     This will build and engine with a maximum batch size of 1 (`-b 1`) and sequence length of 384 (`-s 384`) using INT8 mixed precision computation where possible (`--int8 --fp16 --strict`).
@@ -324,10 +327,10 @@ Note this is an experimental feature because we only support Xavier+ GPUs, also 
 
     This will build and engine with a maximum batch size of 1 (`-b 1`) and sequence length of 256 (`-s 256`) using INT8 precision computation where possible (`--int8`).
 
-3. Run inference 
+3. Run inference
 
     Evaluate the F1 score and exact match score using the squad dataset:
-    
+
     ```bash
     python3 inference_varseqlen.py -e engines/bert_varseq_int8.engine -s 256 -sq ./squad/dev-v1.1.json -v models/fine-tuned/bert_tf_ckpt_large_qa_squad2_amp_384_v19.03.1/vocab.txt -o ./predictions.json
     python3 squad/evaluate-v1.1.py  squad/dev-v1.1.json  ./predictions.json 90
@@ -345,11 +348,11 @@ Note this is an experimental feature because we only support Xavier+ GPUs, also 
     python3 perf_varseqlen.py -e engines/bert_varseq_int8.engine -b 1 -s 256
     ```
 
-    This will collect performance data run use batch size 1 (`-b 1`) and sequence length of 256 (`-s 256`). 
+    This will collect performance data run use batch size 1 (`-b 1`) and sequence length of 256 (`-s 256`).
 
 5. Collect performance data with CUDA graph enabled
 
-    We can use the same `inference_c.py` and `build/perf` to collect performance data with cuda graph enabled. The command line is the same as run without variable sequence length. 
+    We can use the same `inference_c.py` and `build/perf` to collect performance data with cuda graph enabled. The command line is the same as run without variable sequence length.
 
 ### Sparsity with Quantization Aware Training
 

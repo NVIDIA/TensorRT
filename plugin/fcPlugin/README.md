@@ -11,6 +11,8 @@
 
 ## Description
 
+> NOTE: This plugin is deprecated since TensorRT 10.6. Its functionality has been superseded by the [`IMatrixMultiplyLayer`](https://docs.nvidia.com/deeplearning/tensorrt/api/c_api/classnvinfer1_1_1_i_matrix_multiply_layer.html) (Can be added to the network definition using [`addMatrixMultiply()`](https://docs.nvidia.com/deeplearning/tensorrt/api/c_api/classnvinfer1_1_1_i_network_definition.html#acf109d93e91c86afbd263f5fea29ffe8))
+
 Performs a matrix multiplication similar to the FullyConnected Layer in TensorRT, but without bias. The main difference is that the weights are not transposed.
 Always dispatches to cuBLAS. At engine build time, the plugin runs a search over the parameters of the available algorithms to find the fastest one available.
 
@@ -51,8 +53,8 @@ documentation.
 
 ## Changelog
 
-November 2019
-This is the first release of this `README.md` file.
+- October 2024: Add deprecation note.
+- November 2019: This is the first release of this `README.md` file.
 
 
 ## Known issues

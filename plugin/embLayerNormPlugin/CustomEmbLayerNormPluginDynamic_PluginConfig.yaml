@@ -16,9 +16,9 @@
 #
 ---
 name: CustomEmbLayerNormPluginDynamic
-interface: "IPluginV2DynamicExt"
+interface: "IPluginV3"
 versions:
-  "1":
+  "6":
     inputs:
       - token_id
       - segment_id

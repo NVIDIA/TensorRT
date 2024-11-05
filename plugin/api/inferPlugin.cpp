@@ -16,11 +16,13 @@
  */
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
+#include "common/checkMacrosPlugin.h"
+#include "common/plugin.h"
+#include "roiAlignPlugin/roiAlignPlugin.h"
+#if !TRT_WINML
 #include "batchTilePlugin/batchTilePlugin.h"
 #include "batchedNMSPlugin/batchedNMSPlugin.h"
 #include "clipPlugin/clipPlugin.h"
-#include "common/checkMacrosPlugin.h"
-#include "common/plugin.h"
 #include "coordConvACPlugin/coordConvACPlugin.h"
 #include "cropAndResizePlugin/cropAndResizePlugin.h"
 #include "decodeBbox3DPlugin/decodeBbox3D.h"
@@ -57,7 +59,7 @@
 #include "specialSlicePlugin/specialSlicePlugin.h"
 #include "splitPlugin/split.h"
 #include "voxelGeneratorPlugin/voxelGenerator.h"
-
+#endif
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -181,6 +183,8 @@ extern "C"
 {
     bool initLibNvInferPlugins(void* logger, char const* libNamespace)
     {
+        initializePlugin<nvinfer1::plugin::ROIAlignV3PluginCreator>(logger, libNamespace);
+#if !TRT_WINML
         initializePlugin<nvinfer1::plugin::BatchedNMSDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::BatchedNMSPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::BatchTilePluginCreator>(logger, libNamespace);
@@ -220,14 +224,14 @@ extern "C"
         initializePlugin<nvinfer1::plugin::ReorgStaticPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ResizeNearestPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ROIAlignPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::ROIAlignV3PluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::RPROIPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::ScatterElementsPluginV3Creator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterElementsPluginV2Creator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ScatterElementsPluginV3Creator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterNDPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SplitPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::VoxelGeneratorPluginCreator>(logger, libNamespace);
+#endif
         return true;
     }
 } // extern "C"

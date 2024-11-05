@@ -31,7 +31,7 @@ Assuming contiguous input masks, encodes the masks as a single number denoting t
 The version 1 `embLayerNormPlugin` takes three inputs; `token_id`, `segment_id`, and `input_mask`.
 The subsequent versions 2,3,4,5 (variable seqlen) take four inputs; `token_id`, `segment_id`, `cu_seqlen`, and `max_seqlen`.
 
-### Version 1
+### Version 1 & 6
 Inputs:
 - `token_id`
 An input sequence containing token ids. token_id is an `int32` tensor with shape `[S, B,]` where `S` is the sequence length and `B` is the batch size.
@@ -56,7 +56,7 @@ The final output embedding is the sum of embeddings for the token, the segment a
 The `maskIdx` is a more compact representation of the input mask, consisting of the number of valid elements, assuming that the original mask was contiguous.
 For fixed sequence length version 1, the `maskIdx` is an `int32` tensor with shape `[B, packSize]` where `B` is batch size, `packSize` is the packed mask size that depends on the sequence length.
 
-### Version >= 2
+### 6 > Version >= 2
 
 Inputs:
 - `token_id`
@@ -95,17 +95,17 @@ The final output embedding is the sum of embeddings for the token, the segment a
 
 The parameters are defined below and consists of the following attributes:
 
-| Type     | Parameter                              |  Version       | Description
-|----------|----------------------------------------|----------------|--------------------------------------------------------
-|`int`     |`output_fp16`                           |  1, 2, 3, 4, 5 |Integer encoding the DataType, set 0 when build FP32 network and set 1 when build FP32/INT8 network (0: FP32, 1: FP16)
-|`int`     |`full_mask`                             |  1             |Whether to output the full mask that works with the specialized multi-head-attention plugin kernels (this is deprecated, please use mha_type_id)
-|`int`     |`mha_type_id`                           |  1             |Integer encoding the multi-head-attention plugin DataType (0: FP32, 1: FP16, 2: INT8)
-|`Weights` |`bert_embeddings_layernorm_beta`        |  1, 2, 3, 4, 5 |Beta parameter for layer norm. Shape: `[E,]` where `E` is hidden size
-|`Weights` |`bert_embeddings_layernorm_gamma`       |  1, 2, 3, 4, 5 |Gamma parameter for layer norm. Shape: `[E,]` where `E` is hidden size
-|`Weights` |`bert_embeddings_word_embeddings`       |  1, 2, 3, 4, 5 |Token embedding matrix. Shape: `[word_vocab_size, E]` where `E` is hidden size
-|`Weights` |`bert_embeddings_token_type_embeddings` |  1, 2, 3, 4, 5 |Token type embedding matrix. Shape: `[type_vocab_size, E]` where `E` is hidden size
-|`Weights` |`bert_embeddings_position_embeddings`   |  1, 2, 3, 4, 5 |Positional embedding matrix. Shape: `[S, E]` where `S` is the maximum sequence length and `E` is hidden size
-
+| Type     | Parameter                              |  Version          | Description
+|----------|----------------------------------------|-------------------|--------------------------------------------------------
+|`int`     |`output_fp16`                           |  1, 2, 3, 4, 5, 6 |Integer encoding the DataType, set 0 when build FP32 network and set 1 when build FP32/INT8 network (0: FP32, 1: FP16)
+|`int`     |`full_mask`                             |  1, 6             |Whether to output the full mask that works with the specialized multi-head-attention plugin kernels (this is deprecated, please use mha_type_id)
+|`int`     |`mha_type_id`                           |  1, 6             |Integer encoding the multi-head-attention plugin DataType (0: FP32, 1: FP16, 2: INT8)
+|`Weights` |`bert_embeddings_layernorm_beta`        |  1, 2, 3, 4, 5, 6 |Beta parameter for layer norm. Shape: `[E,]` where `E` is hidden size
+|`Weights` |`bert_embeddings_layernorm_gamma`       |  1, 2, 3, 4, 5, 6 |Gamma parameter for layer norm. Shape: `[E,]` where `E` is hidden size
+|`Weights` |`bert_embeddings_word_embeddings`       |  1, 2, 3, 4, 5, 6 |Token embedding matrix. Shape: `[word_vocab_size, E]` where `E` is hidden size
+|`Weights` |`bert_embeddings_token_type_embeddings` |  1, 2, 3, 4, 5, 6 |Token type embedding matrix. Shape: `[type_vocab_size, E]` where `E` is hidden size
+|`Weights` |`bert_embeddings_position_embeddings`   |  1, 2, 3, 4, 5, 6 |Positional embedding matrix. Shape: `[S, E]` where `S` is the maximum sequence length and `E` is hidden size
+Note: version 1, 2, 3 are deprecated and will be removed in a future release; please use their corresponding updated versions: 6, 4, 5 respectively.
 
 ## Additional resources
 
@@ -122,6 +122,9 @@ documentation.
 
 
 ## Changelog
+
+September 2024:
+Added `EmblayerNormPlugin` version 6 that mirrors version 1 in IO and attributes (but uses underlying `IPluginV3` implementation instead of the deprecated `IPluginV2DynamicExt` interface)
 
 July 2024:
 Add `EmbLayerNormPlugin` versions 3 & 4 that duplicate the behavior of v2 and v3 plugins respectively, but implement the `IPluginV3` interface instead of the deprecated `IPluginV2DynamicExt` interface.

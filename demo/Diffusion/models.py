@@ -16,7 +16,7 @@
 #
 
 from diffusers import DiffusionPipeline
-from diffusers.loaders import LoraLoaderMixin
+from diffusers.loaders import StableDiffusionLoraLoaderMixin
 from diffusers.pipelines.wuerstchen import PaellaVQModel
 import json
 import numpy as np
@@ -186,7 +186,7 @@ class Optimizer():
         print(f"Removed {removed} QDQ nodes")
         return removed # expected 72 for L2.5
 
-    def modify_fp8_graph(self):
+    def modify_fp8_graph(self, is_fp16_io=True):
         onnx_graph = gs.export_onnx(self.graph)
         # Convert INT8 Zero to FP8.
         onnx_graph = convert_zp_fp8(onnx_graph)
@@ -196,7 +196,8 @@ class Optimizer():
         # Add cast nodes to Resize I/O.
         cast_resize_io(self.graph)
         # Convert model inputs and outputs to fp16 I/O.
-        convert_fp16_io(self.graph)
+        if is_fp16_io:
+            convert_fp16_io(self.graph)
         # Add cast nodes to MHA's BMM1 and BMM2's I/O.
         cast_fp8_mha_io(self.graph)
 
@@ -289,52 +290,15 @@ def optimize_checkpoint(model, torch_inference):
     assert torch_inference in torch_inference_modes
     return torch.compile(model, mode=torch_inference, dynamic=False, fullgraph=False)
 
-class LoraLoader(LoraLoaderMixin):
+class LoraLoader(StableDiffusionLoraLoaderMixin):
     def __init__(self,
         paths,
+        weights,
+        scale
     ):
         self.paths = paths
-        self.state_dict = dict()
-        self.network_alphas = dict()
-
-        for path in paths:
-            state_dict, network_alphas = self.lora_state_dict(path)
-            is_correct_format = all("lora" in key for key in state_dict.keys())
-            if not is_correct_format:
-                raise ValueError("Invalid LoRA checkpoint.")
-
-            self.state_dict[path] = state_dict
-            self.network_alphas[path] = network_alphas
-
-    def get_dicts(self,
-        prefix='unet',
-        convert_to_diffusers=False,
-    ):
-        state_dict = dict()
-        network_alphas = dict()
-
-        for path in self.paths:
-            keys = list(self.state_dict[path].keys())
-            if all(key.startswith(('unet', 'text_encoder')) for key in keys):
-                keys = [k for k in keys if k.startswith(prefix)]
-                if keys:
-                    print(f"Processing {prefix} LoRA: {path}")
-                state_dict[path] = {k.replace(f"{prefix}.", ""): v for k, v in self.state_dict[path].items() if k in keys}
-
-                network_alphas[path] = None
-                if path in self.network_alphas and self.network_alphas[path] is not None:
-                    alpha_keys = [k for k in self.network_alphas[path].keys() if k.startswith(prefix)]
-                    network_alphas[path] = {
-                        k.replace(f"{prefix}.", ""): v for k, v in self.network_alphas[path].items() if k in alpha_keys
-                    }
-
-            else:
-                # Otherwise, we're dealing with the old format.
-                warn_message = "You have saved the LoRA weights using the old format. To convert LoRA weights to the new format, first load them in a dictionary and then create a new dictionary as follows: `new_state_dict = {f'unet.{module_name}': params for module_name, params in old_state_dict.items()}`."
-                print(warn_message)
-
-        return state_dict, network_alphas
-
+        self.weights = weights
+        self.scale = scale
 
 class BaseModel():
     def __init__(self,
@@ -383,12 +347,11 @@ class BaseModel():
         self.embedding_dim = embedding_dim
         self.extra_output_names = []
 
-        self.lora_dict = None
         self.do_constant_folding = True
 
     def get_pipeline(self):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
-        model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else model_opts
+        model_opts = {'torch_dtype': torch.bfloat16} if self.bf16 else model_opts
         return DiffusionPipeline.from_pretrained(
             self.path,
             use_safetensors=self.hf_safetensor,
@@ -434,6 +397,7 @@ class BaseModel():
         custom_model=None,
         enable_lora_merge=False,
         static_shape=False,
+        lora_loader=None
     ):
         onnx_opt_graph = None
         # Export optimized ONNX model (if missing)
@@ -442,7 +406,8 @@ class BaseModel():
                 print(f"[I] Exporting ONNX model: {onnx_path}")
                 def export_onnx(model):
                     if enable_lora_merge:
-                        model = merge_loras(model, self.lora_dict, self.lora_alphas, self.lora_scales)
+                        assert lora_loader is not None
+                        model = merge_loras(model, lora_loader)
                     inputs = self.get_sample_input(1, opt_image_height, opt_image_width, static_shape)
                     torch.onnx.export(model,
                         inputs,
@@ -530,16 +495,16 @@ class BaseModel():
         opt.cleanup()
         opt.info(self.name + ': cleanup')
         if kwargs.get('modify_fp8_graph', False):
-            opt.modify_fp8_graph()
+            is_fp16_io = kwargs.get('is_fp16_io', True)
+            opt.modify_fp8_graph(is_fp16_io=is_fp16_io)
             opt.info(self.name + ': modify fp8 graph')
-        else:
-            opt.fold_constants()
-            opt.info(self.name + ': fold constants')
-            opt.infer_shapes()
-            opt.info(self.name + ': shape inference')
-            if kwargs.get('fuse_mha_qkv_int8', False):
-                opt.fuse_mha_qkv_int8_sq()
-                opt.info(self.name + ': fuse QKV nodes')
+        opt.fold_constants()
+        opt.info(self.name + ': fold constants')
+        opt.infer_shapes()
+        opt.info(self.name + ': shape inference')
+        if kwargs.get('fuse_mha_qkv_int8', False):
+            opt.fuse_mha_qkv_int8_sq()
+            opt.info(self.name + ': fuse QKV nodes')
         onnx_opt_graph = opt.cleanup(return_onnx=return_onnx)
         opt.info(self.name + ': finished')
         return onnx_opt_graph
@@ -584,8 +549,6 @@ class CLIPModel(BaseModel):
         output_hidden_states=False,
         keep_pooled_output=False,
         subfolder="text_encoder",
-        lora_dict=None,
-        lora_alphas=None,
     ):
         super(CLIPModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, bf16=bf16, max_batch_size=max_batch_size, embedding_dim=embedding_dim)
         self.subfolder = subfolder
@@ -597,7 +560,7 @@ class CLIPModel(BaseModel):
             self.extra_output_names = ['hidden_states']
 
     def get_model(self, torch_inference=''):
-        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
+        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
         clip_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
         if not os.path.exists(clip_model_dir):
             model = CLIPTextModel.from_pretrained(self.path,
@@ -686,8 +649,6 @@ class CLIPWithProjModel(CLIPModel):
         max_batch_size=16,
         output_hidden_states=False,
         subfolder="text_encoder_2",
-        lora_dict=None,
-        lora_alphas=None,
     ):
 
         super(CLIPWithProjModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, bf16=bf16, max_batch_size=max_batch_size, embedding_dim=get_clipwithproj_embedding_dim(version, pipeline), output_hidden_states=output_hidden_states)
@@ -769,7 +730,7 @@ class T5Model(BaseModel):
         self.config = AutoConfig.from_pretrained(self.path, subfolder=self.subfolder, token=self.hf_token)
 
     def get_model(self, torch_inference=''):
-        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
+        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
         t5_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
         if not os.path.exists(t5_model_dir):
             model = T5EncoderModel.from_pretrained(self.path,
@@ -1083,9 +1044,6 @@ class UNetModel(BaseModel):
         max_batch_size = 16,
         text_maxlen = 77,
         controlnets = None,
-        lora_scales = None,
-        lora_dict = None,
-        lora_alphas = None,
         do_classifier_free_guidance = False,
     ):
 
@@ -1093,9 +1051,6 @@ class UNetModel(BaseModel):
         self.subfolder = 'unet'
         self.controlnets = get_path(version, pipeline, controlnets) if controlnets else None
         self.unet_dim = (9 if pipeline.is_inpaint() else 4)
-        self.lora_scales = lora_scales
-        self.lora_dict = lora_dict
-        self.lora_alphas = lora_alphas
         self.xB = 2 if do_classifier_free_guidance else 1 # batch multiplier
 
     def get_model(self, torch_inference=''):
@@ -1241,18 +1196,12 @@ class UNetXLModel(BaseModel):
         fp8 = False,
         max_batch_size = 16,
         text_maxlen = 77,
-        lora_scales = None,
-        lora_dict = None,
-        lora_alphas = None,
         do_classifier_free_guidance = False,
     ):
         super(UNetXLModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, int8=int8, fp8=fp8, max_batch_size=max_batch_size, text_maxlen=text_maxlen, embedding_dim=get_unet_embedding_dim(version, pipeline))
         self.subfolder = 'unet'
         self.unet_dim = (9 if pipeline.is_inpaint() else 4)
         self.time_dim = (5 if pipeline.is_sd_xl_refiner() else 6)
-        self.lora_scales = lora_scales
-        self.lora_dict = lora_dict
-        self.lora_alphas = lora_alphas
         self.xB = 2 if do_classifier_free_guidance else 1 # batch multiplier
 
     def get_model(self, torch_inference=''):
@@ -1498,7 +1447,7 @@ class UNetTemporalModel(BaseModel):
             'added_time_ids': (self.xB*batch_size, 3),
         }
 
-    def get_sample_input(self, batch_size, image_height, image_width):
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         # TODO chunk_size if forward_chunking is used
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
 
@@ -1668,18 +1617,18 @@ class FluxTransformerModel(BaseModel):
         tf32=False,
         int8 = False,
         fp8 = False,
+        bf16 = False,
         max_batch_size = 16,
         text_maxlen = 77,
         build_strongly_typed=False
     ):
-
-        super(FluxTransformerModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, int8=int8, fp8=fp8, max_batch_size=max_batch_size, text_maxlen=text_maxlen)
+        super(FluxTransformerModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, int8=int8, fp8=fp8, bf16=bf16, max_batch_size=max_batch_size, text_maxlen=text_maxlen)
         self.subfolder = 'transformer'
         self.config = FluxTransformer2DModel.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
         self.build_strongly_typed = build_strongly_typed
 
     def get_model(self, torch_inference=''):
-        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
+        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
         transformer_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
         transformer_path = self.get_model_path(transformer_model_dir, model_opts)
         if not os.path.exists(transformer_path):
@@ -1698,7 +1647,7 @@ class FluxTransformerModel(BaseModel):
         return model
 
     def get_input_names(self):
-            return ['hidden_states', 'encoder_hidden_states', 'pooled_projections', 'timestep', 'img_ids', 'txt_ids', 'guidance']
+        return ['hidden_states', 'encoder_hidden_states', 'pooled_projections', 'timestep', 'img_ids', 'txt_ids', 'guidance']
 
     def get_output_names(self):
        return ['latent']
@@ -1743,18 +1692,28 @@ class FluxTransformerModel(BaseModel):
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
-        dtype = torch.float16 if self.fp16 else torch.float32
+        dtype = torch.float32
+        assert not (self.fp16 and self.bf16), "fp16 and bf16 cannot be enabled simultaneously"
+        tensor_dtype = torch.bfloat16 if self.bf16 else (torch.float16 if self.fp16 else torch.float32)
+
         return (
-            torch.randn(batch_size, (latent_height // 2) * (latent_width // 2), self.config['in_channels'], dtype=dtype, device=self.device),
-            torch.randn(batch_size, self.text_maxlen, self.config['joint_attention_dim'], dtype=dtype, device=self.device),
-            torch.randn(batch_size, self.config['pooled_projection_dim'], dtype=dtype, device=self.device),
-            torch.tensor([1.]*batch_size, dtype=dtype, device=self.device),
+            torch.randn(batch_size, (latent_height // 2) * (latent_width // 2), self.config['in_channels'], dtype=tensor_dtype, device=self.device),
+            torch.randn(batch_size, self.text_maxlen, self.config['joint_attention_dim'], dtype=tensor_dtype, device=self.device),
+            torch.randn(batch_size, self.config['pooled_projection_dim'], dtype=tensor_dtype, device=self.device),
+            torch.tensor([1.]*batch_size, dtype=tensor_dtype, device=self.device),
             torch.randn((latent_height // 2) * (latent_width // 2), 3, dtype=dtype, device=self.device),
             torch.randn(self.text_maxlen, 3, dtype=dtype, device=self.device),
             {
                 'guidance': torch.tensor([1.]*batch_size, dtype=dtype, device=self.device),
             }
         )
+    def optimize(self, onnx_graph):
+        if self.fp8:
+            return super().optimize(onnx_graph, modify_fp8_graph=True, is_fp16_io=False)
+        if self.int8:
+            return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
+        return super().optimize(onnx_graph)
+
 
 class VAEModel(BaseModel):
     def __init__(self,
@@ -1766,23 +1725,26 @@ class VAEModel(BaseModel):
         framework_model_dir,
         fp16=False,
         tf32=False,
+        bf16=False,
         max_batch_size=16,
     ):
-        super(VAEModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, max_batch_size=max_batch_size)
+        super(VAEModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, bf16=bf16, max_batch_size=max_batch_size)
         self.subfolder = 'vae'
         self.config = AutoencoderKL.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
 
     def get_model(self, torch_inference=''):
+        model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
         vae_decoder_model_path = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
         if not os.path.exists(vae_decoder_model_path):
             model = AutoencoderKL.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
-                token=self.hf_token).to(self.device)
-            model.save_pretrained(vae_decoder_model_path)
+                token=self.hf_token,
+                **model_opts).to(self.device)
+            model.save_pretrained(vae_decoder_model_path, **model_opts)
         else:
             print(f"[I] Load AutoencoderKL (decoder) model from: {vae_decoder_model_path}")
-            model = AutoencoderKL.from_pretrained(vae_decoder_model_path).to(self.device)
+            model = AutoencoderKL.from_pretrained(vae_decoder_model_path, **model_opts).to(self.device)
         model.forward = model.decode
         model = optimize_checkpoint(model, torch_inference)
         return model
@@ -1819,7 +1781,8 @@ class VAEModel(BaseModel):
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
-        return torch.randn(batch_size, self.config['latent_channels'], latent_height, latent_width, dtype=torch.float32, device=self.device)
+        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
+        return torch.randn(batch_size, self.config['latent_channels'], latent_height, latent_width, dtype=dtype, device=self.device)
 
 class SD3_VAEDecoderModel(BaseModel):
     def __init__(self,

@@ -19,8 +19,8 @@
 | [efficientNMSPlugin](efficientNMSPlugin) | EfficientNMS_TRT | 1 |
 | [efficientNMSONNXPlugin](efficientNMSPlugin) [DEPRECATED] | EfficientNMS_ONNX_TRT | 1 |
 | [embLayerNormPlugin](embLayerNormPlugin) [DEPRECATED]| CustomEmbLayerNormPluginDynamic | 1, 2, 3 |
-| [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 4, 5 |
-| [fcPlugin](fcPlugin) | CustomFCPluginDynamic | 1 |
+| [embLayerNormPlugin](embLayerNormPlugin) | CustomEmbLayerNormPluginDynamic | 4, 5, 6 |
+| [fcPlugin](fcPlugin) [DEPRECATED] | CustomFCPluginDynamic | 1 |
 | [flattenConcat](flattenConcat) | FlattenConcat_TRT | 1 |
 | [geluPlugin](geluPlugin) [DEPRECATED] | CustomGeluPluginDynamic | 1 |
 | [generateDetectionPlugin](generateDetectionPlugin) | GenerateDetection_TRT | 1 |

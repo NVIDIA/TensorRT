@@ -107,7 +107,13 @@ def filter_func(name):
     )
     return pattern.match(name) is not None
 
-def quantize_lvl(unet, quant_level=2.5, linear_only=False):
+def filter_func_no_proj_out(name):
+    pattern = re.compile(
+        r".*(time_emb_proj|time_embedding|conv_in|conv_out|conv_shortcut|add_embedding|pos_embed|time_text_embed|context_embedder|norm_out).*"
+    )
+    return pattern.match(name) is not None
+
+def quantize_lvl(unet, quant_level=2.5, linear_only=False, enable_conv_3d=True):
     """
     We should disable the unwanted quantizer when exporting the onnx
     Because in the current modelopt setting, it will load the quantizer amax for all the layers even
@@ -132,6 +138,14 @@ def quantize_lvl(unet, quant_level=2.5, linear_only=False):
             else:
                 module.input_quantizer.disable()
                 module.weight_quantizer.disable()
+        elif isinstance(module, torch.nn.Conv3d) and not enable_conv_3d:
+            """
+                Error: Torch bug, ONNX export failed due to unknown kernel shape in QuantConv3d.
+                TRT_FP8QuantizeLinear and TRT_FP8DequantizeLinear operations in UNetSpatioTemporalConditionModel for svd
+                cause issues. Inputs on different devices (CUDA vs CPU) may contribute to the problem.
+            """
+            module.input_quantizer.disable()
+            module.weight_quantizer.disable()
         elif isinstance(module, Attention):
             # TRT only supports FP8 MHA with head_size % 16 == 0.
             head_size = int(module.inner_dim / module.heads)
@@ -214,6 +228,25 @@ SD_FP8_FP16_DEFAULT_CONFIG = {
     },
     "algorithm": "max",
 }
+
+SD_FP8_BF16_DEFAULT_CONFIG = {
+    "quant_cfg": {
+        "*weight_quantizer": {"num_bits": (4, 3), "axis": None, "trt_high_precision_dtype": "BFloat16"},
+        "*input_quantizer": {"num_bits": (4, 3), "axis": None, "trt_high_precision_dtype": "BFloat16"},
+        "*output_quantizer": {"enable": False},
+        "*q_bmm_quantizer": {"num_bits": (4, 3), "axis": None, "trt_high_precision_dtype": "BFloat16"},
+        "*k_bmm_quantizer": {"num_bits": (4, 3), "axis": None, "trt_high_precision_dtype": "BFloat16"},
+        "*v_bmm_quantizer": {"num_bits": (4, 3), "axis": None, "trt_high_precision_dtype": "BFloat16"},
+        "*softmax_quantizer": {
+            "num_bits": (4, 3),
+            "axis": None,
+            "trt_high_precision_dtype": "BFloat16",
+        },
+        "default": {"enable": False},
+    },
+    "algorithm": "max",
+}
+
 
 SD_FP8_FP32_DEFAULT_CONFIG = {
     "quant_cfg": {
@@ -464,6 +497,11 @@ def cast_fp8_mha_io(graph):
         insert_cast(graph, input_tensor=bmm2_node.inputs[0], attrs={"to": np.float32})
         insert_cast(graph, input_tensor=bmm2_node.inputs[1], attrs={"to": np.float32})
         insert_cast(graph, input_tensor=bmm2_node.outputs[0], attrs={"to": np.float16})
+
+def set_quant_precision(quant_config, precision: str = "Half"):
+    for key in quant_config["quant_cfg"]:
+        if "trt_high_precision_dtype" in quant_config["quant_cfg"][key]:
+            quant_config["quant_cfg"][key]["trt_high_precision_dtype"] = precision
 
 def convert_fp16_io(graph):
     """

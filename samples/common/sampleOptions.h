@@ -238,6 +238,7 @@ public:
     bool pluginInstanceNorm{false};
     bool excludeLeanRuntime{false};
     bool disableCompilationCache{false};
+    bool enableMonitorMemory{false};
     int32_t builderOptimizationLevel{defaultBuilderOptimizationLevel};
     int32_t maxTactics{defaultMaxTactics};
     SparsityFlag sparsity{SparsityFlag::kDISABLE};

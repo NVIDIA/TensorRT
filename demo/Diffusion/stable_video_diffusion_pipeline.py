@@ -41,7 +41,19 @@ from utilities import (
     _append_dims,
     _resize_with_antialiasing,
     tensor2vid,
+    load_calibration_images,
 )
+import modelopt.torch.opt as mto
+import modelopt.torch.quantization as mtq
+from utils_modelopt import (
+    filter_func,
+    quantize_lvl,
+    check_lora,
+    set_fmha,
+    generate_fp8_scales,
+    SD_FP8_FP16_DEFAULT_CONFIG,
+)
+
 from stable_diffusion_pipeline import StableDiffusionPipeline
 
 class StableVideoDiffusionPipeline(StableDiffusionPipeline):
@@ -151,6 +163,10 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
         enable_refit=False,
         enable_all_tactics=False,
         timing_cache=None,
+        fp8=False,
+        quantization_level=0.0,
+        calibration_size=32,
+        calib_batch_size=2
     ):
         """
         Build and load engines for TensorRT accelerated inference.
@@ -181,6 +197,14 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
                 Enable all tactic sources during TensorRT engine builds.
             timing_cache (str):
                 Path to the timing cache to speed up TensorRT build.
+            fp8 (bool):
+                Whether to quantize to fp8 format or not.
+            quantization_level (float):
+                Controls which layers to quantize.
+            calibration_size (int):
+                The number of steps to use for calibrating the model for quantization.
+            calib_batch_size (int):
+                The batch size to use for calibration. Defaults to 2.
         """
         # Create directories if missing
         for directory in [engine_dir, onnx_dir]:
@@ -210,13 +234,83 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
         engine_path = dict(zip(model_names, [self.getEnginePath(model_name, engine_dir) for model_name in model_names]))
         do_engine_refit = dict(zip(model_names, [enable_refit and model_name.startswith('unet') for model_name in model_names]))
 
+        # Quantization.
+        model_suffix = dict(zip(model_names, ['' for model_name in model_names]))
+        use_fp8 = dict.fromkeys(model_names, False)
+        if fp8:
+            model_name = "unet-temp"
+            use_fp8[model_name] = True
+            model_suffix[model_name] += f"-fp8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}"
+        onnx_path = { model_name : self.getOnnxPath(model_name, onnx_dir, opt=False, suffix=model_suffix[model_name]) for model_name in model_names }
+        onnx_opt_path = { model_name : self.getOnnxPath(model_name, onnx_dir, suffix=model_suffix[model_name]) for model_name in model_names }
+        engine_path = { model_name : self.getEnginePath(model_name, engine_dir, do_engine_refit[model_name], suffix=model_suffix[model_name]) for model_name in model_names }
+        weights_map_path = { model_name : (self.getWeightsMapPath(model_name, onnx_dir) if do_engine_refit[model_name] else None) for model_name in model_names }
+
+
         # Export models to ONNX
         for model_name, obj in self.models.items():
             if self.torch_fallback[model_name]:
                 continue
             do_export_onnx = not os.path.exists(engine_path[model_name]) and not os.path.exists(onnx_opt_path[model_name])
-            if do_export_onnx:
-                obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width)
+            do_export_weights_map = weights_map_path[model_name] and not os.path.exists(weights_map_path[model_name])
+            if do_export_onnx or do_export_weights_map:
+                if use_fp8[model_name]:
+                    pipeline = obj.get_pipeline()
+                    model = pipeline.unet
+
+                    state_dict_path = self.getStateDictPath(model_name, onnx_dir, suffix=model_suffix[model_name])
+                    if not os.path.exists(state_dict_path):
+                        # Load calibration images
+                        print(f"[I] Calibrated weights not found, generating {state_dict_path}")
+                        calibration_image_folder = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'calibration-images')
+                        calibration_image_list = load_calibration_images(calibration_image_folder)
+                        print("Number of images loaded:", len(calibration_image_list))
+
+                        # TODO check size > calibration_size
+                        def do_calibrate(pipeline, calibration_images, **kwargs):
+                            for i_th, image in enumerate(calibration_images):
+                                if i_th >= kwargs["calib_size"]:
+                                    return
+                                pipeline(
+                                    image=image,
+                                    num_inference_steps=kwargs["n_steps"],
+                                ).frames[0]
+
+                        def forward_loop(model):
+                            pipeline.unet = model
+                            do_calibrate(
+                                pipeline=pipeline,
+                                calibration_images=calibration_image_list,
+                                calib_size=calibration_size // calib_batch_size,
+                                n_steps=self.denoising_steps,
+                            )
+
+                        print(f"[I] Performing calibration for {calibration_size} steps.")
+                        if use_fp8[model_name]:
+                            quant_config = SD_FP8_FP16_DEFAULT_CONFIG
+                        check_lora(model)
+                        mtq.quantize(model, quant_config, forward_loop)
+                        mto.save(model, state_dict_path)
+                    else:
+                        mto.restore(model, state_dict_path)
+
+                    print(f"[I] Generating quantized ONNX model: {onnx_opt_path[model_name]}")
+                    if not os.path.exists(onnx_path[model_name]):
+                        """
+                            Error: Torch bug, ONNX export failed due to unknown kernel shape in QuantConv3d.
+                            TRT_FP8QuantizeLinear and TRT_FP8DequantizeLinear operations in UNetSpatioTemporalConditionModel for svd
+                            cause issues. Inputs on different devices (CUDA vs CPU) may contribute to the problem.
+                        """
+                        quantize_lvl(model, quantization_level, enable_conv_3d=False)
+                        mtq.disable_quantizer(model, filter_func)
+                        if use_fp8[model_name]:
+                            generate_fp8_scales(model)
+                    else:
+                        model = None
+
+                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, custom_model=model, static_shape=static_shape)
+                else:
+                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width)
 
         # Build TensorRT engines
         for model_name, obj in self.models.items():

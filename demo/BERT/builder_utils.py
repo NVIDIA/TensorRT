@@ -313,3 +313,84 @@ def load_megatron_pickle_weights(path, config):
 
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Found {:} entries in weight map".format(len(weight_dict)))
     return weight_dict
+
+
+"""
+Common Plugin Helper/Wrapper Functions
+"""
+BERT_PLUGINS_INFO_MAP = {
+    # MHA variants
+    "qkv_to_context": {
+        "IPluginV2_version": "1",
+        "IPluginV3_version": "4",
+        "trt_plugin_name": "CustomQKVToContextPluginDynamic",
+    },
+    "qkv_to_context_varseqlen": {
+        "IPluginV2_version": "2",
+        "IPluginV3_version": "5",
+        "trt_plugin_name": "CustomQKVToContextPluginDynamic",
+    },
+    "qkv_to_context_interleaved": {
+        "IPluginV2_version": "3",
+        "IPluginV3_version": "6",
+        "trt_plugin_name": "CustomQKVToContextPluginDynamic",
+    },
+    # skipLayernorm variants
+    "skip_layer_norm": {
+        "IPluginV2_version": "1",
+        "IPluginV3_version": "5",
+        "trt_plugin_name": "CustomSkipLayerNormPluginDynamic",
+    },
+    "skip_layer_norm_varseqlen": {
+        "IPluginV2_version": "2",
+        "IPluginV3_version": "6",
+        "trt_plugin_name": "CustomSkipLayerNormPluginDynamic",
+    },
+    "skip_layer_norm_huggingface": {
+        "IPluginV2_version": "3",
+        "IPluginV3_version": "7",
+        "trt_plugin_name": "CustomSkipLayerNormPluginDynamic",
+    },
+    "skip_layer_norm_megatron": {
+        "IPluginV2_version": "4",
+        "IPluginV3_version": "8",
+        "trt_plugin_name": "CustomSkipLayerNormPluginDynamic",
+    },
+    # embLayernorm variants
+    "emb_layer_norm": {
+        "IPluginV2_version": "1",
+        "IPluginV3_version": "6",
+        "trt_plugin_name": "CustomEmbLayerNormPluginDynamic",
+    },
+    "emb_layer_norm_huggingface": {
+        "IPluginV2_version": "2",
+        "IPluginV3_version": "4",
+        "trt_plugin_name": "CustomEmbLayerNormPluginDynamic",
+    },
+    "emb_layer_norm_megatron": {
+        "IPluginV2_version": "3",
+        "IPluginV3_version": "5",
+        "trt_plugin_name": "CustomEmbLayerNormPluginDynamic",
+    },
+}
+
+
+def create_plugin(layer_name, plg_registry, pfc, use_deprecated_plugins=False):
+    plg_trt_name = BERT_PLUGINS_INFO_MAP[layer_name]["trt_plugin_name"]
+    plg_version = BERT_PLUGINS_INFO_MAP[layer_name][
+        ("IPluginV2_version" if use_deprecated_plugins else "IPluginV3_version")
+    ]
+    plg_namespace = ""
+
+    creator = plg_registry.get_creator(plg_trt_name, plg_version, plg_namespace)
+    if use_deprecated_plugins:
+        return creator.create_plugin(layer_name, pfc)
+    else:
+        return creator.create_plugin(layer_name, pfc, trt.TensorRTPhase.BUILD)
+
+
+def add_plugin_to_network(network, plugin, inputs, use_deprecated_plugins=False):
+    if use_deprecated_plugins:
+        return network.add_plugin_v2(inputs, plugin)
+    else:
+        return network.add_plugin_v3(inputs, [], plugin)

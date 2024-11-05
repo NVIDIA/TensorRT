@@ -19,6 +19,7 @@
 #include "ForwardDeclarations.h"
 #include "utils.h"
 #include <pybind11/stl.h>
+#include <tuple>
 
 #if ENABLE_INETWORK_SERIALIZE
 #include "NvInferSerialize.h"
@@ -111,6 +112,14 @@ namespace tensorrt
 
         static const auto add_plugin_v3 = [] (INetworkDefinition& self, std::vector<ITensor*> const& inputs, std::vector<ITensor*> const& shapeInputs, IPluginV3& plugin)
         {
+            return self.addPluginV3(inputs.data(), inputs.size(), shapeInputs.data(), shapeInputs.size(), plugin);
+        };
+
+        static const auto add_plugin = [] (INetworkDefinition& self, std::tuple<std::vector<ITensor*> const&, std::vector<ITensor*> const&, IPluginV3&> tupleInput)
+        {
+            std::vector<ITensor*> const& inputs = std::get<0>(tupleInput);
+            std::vector<ITensor*> const& shapeInputs = std::get<1>(tupleInput);
+            IPluginV3& plugin = std::get<2>(tupleInput);
             return self.addPluginV3(inputs.data(), inputs.size(), shapeInputs.data(), shapeInputs.size(), plugin);
         };
 
@@ -244,6 +253,8 @@ namespace tensorrt
             else
                 return py::cast(self.getBeta());
         };
+
+
     } /* lambdas */
 
     void bindGraph(py::module& m)
@@ -818,6 +829,7 @@ namespace tensorrt
             .def_property("compute_precision", &INormalizationLayer::getComputePrecision, &INormalizationLayer::setComputePrecision)
         ;
 
+
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
         // Additionally, we use reference_internal so that pybind11 does not free layers when they go out of scope.
         py::class_<INetworkDefinition>(m, "INetworkDefinition", INetworkDefinitionDoc::descr, py::module_local())
@@ -893,6 +905,8 @@ namespace tensorrt
                 INetworkDefinitionDoc::add_plugin_v2, py::return_value_policy::reference_internal)
             .def("add_plugin_v3",  lambdas::add_plugin_v3, "inputs"_a, "shape_inputs"_a, "plugin"_a,
                 INetworkDefinitionDoc::add_plugin_v3, py::return_value_policy::reference_internal)
+            .def("add_plugin",  lambdas::add_plugin, "tuple"_a,
+                INetworkDefinitionDoc::add_plugin, py::return_value_policy::reference_internal)
             .def("add_parametric_relu", &INetworkDefinition::addParametricReLU, "input"_a,
                 "slopes"_a, INetworkDefinitionDoc::add_parametric_relu, py::return_value_policy::reference_internal)
             .def("add_resize", &INetworkDefinition::addResize, "input"_a, INetworkDefinitionDoc::add_resize,

@@ -909,6 +909,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         }
     }
 
+    if (build.enableMonitorMemory)
+    {
+        config.setFlag(BuilderFlag::kMONITOR_MEMORY);
+    }
+
     config.setProfilingVerbosity(build.profilingVerbosity);
     config.setAvgTimingIterations(build.avgTiming);
 
@@ -1305,6 +1310,7 @@ bool loadStreamingEngineToBuildEnv(std::string const& filepath, BuildEnvironment
     return true;
 }
 
+
 bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err)
 {
     auto const tBegin = std::chrono::high_resolution_clock::now();
@@ -1644,9 +1650,9 @@ namespace
 void* initSafeRuntime()
 {
     void* handle{nullptr};
-    // Currently libsafe_executor_debug.so for samplesCommon::isDebug() is not ready.
+    // Currently libnvinfer_safe_debug.so for samplesCommon::isDebug() is not ready.
 #if !defined(_WIN32)
-    std::string const dllName{"libsafe_executor.so"};
+    std::string const dllName{"libnvinfer_safe.so"};
 #if SANITIZER_BUILD
     handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
 #else

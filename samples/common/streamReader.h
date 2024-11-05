@@ -60,7 +60,7 @@ public:
 
     void reset()
     {
-        assert(mFile.good());
+        ASSERT(mFile.good());
         mFile.seekg(0);
     }
 
@@ -72,6 +72,7 @@ public:
 private:
     std::ifstream mFile;
 };
+
 
 } // namespace samplesCommon
 

@@ -532,6 +532,7 @@ private:
     nvinfer1::Dims mFinalDims;
 };
 
+#if !TRT_WINML
 //! Set the GPU to run the inference on.
 void setCudaDevice(int32_t device, std::ostream& os);
 
@@ -540,6 +541,8 @@ int32_t getCudaDriverVersion();
 
 //! Get the CUDA version of the current CUDA runtime.
 int32_t getCudaRuntimeVersion();
+
+#endif
 
 } // namespace sample
 

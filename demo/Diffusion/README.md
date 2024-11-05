@@ -48,7 +48,7 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.5.0.18
+tensorrt            10.6.0.26
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -148,7 +148,7 @@ python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --hf
 ### Generate an image guided by a text prompt, and using specified LoRA model weight updates
 
 ```bash
-python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees and mountains" --version=xl-1.0 --lora-path "ostris/crayon_style_lora_sdxl" "ostris/watercolor_style_lora_sdxl" --lora-scale 0.3 0.7 --onnx-dir onnx-sdxl-lora --engine-dir engine-sdxl-lora --build-enable-refit
+python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees and mountains" --version=xl-1.0 --lora-path "ostris/crayon_style_lora_sdxl" "ostris/watercolor_style_lora_sdxl" --lora-weight 0.3 0.7 --onnx-dir onnx-sdxl-lora --engine-dir engine-sdxl-lora --build-enable-refit
 ```
 
 ### Faster Text-to-image using SDXL INT8 & FP8 quantization using ModelOpt
@@ -174,7 +174,7 @@ For step-by-step tutorials to run INT8 & FP8 inference on stable diffusion model
 [LCM-LoRA](https://arxiv.org/abs/2311.05556) produces good quality images in 4 to 8 denoising steps instead of 30+ needed base model. Note that we use LCM scheduler and disable classifier-free-guidance by setting `--guidance-scale` to 0.
 LoRA weights are fused into the ONNX and finalized TensorRT plan files in this example.
 ```bash
-python3 demo_txt2img_xl.py "Einstein" --version xl-1.0 --lora-path "latent-consistency/lcm-lora-sdxl" --lora-scale 1.0 --onnx-dir onnx-sdxl-lcm-nocfg --engine-dir engine-sdxl-lcm-nocfg --denoising-steps 4 --scheduler LCM --guidance-scale 0.0
+python3 demo_txt2img_xl.py "Einstein" --version xl-1.0 --lora-path "latent-consistency/lcm-lora-sdxl" --lora-weight 1.0 --onnx-dir onnx-sdxl-lcm-nocfg --engine-dir engine-sdxl-lcm-nocfg --denoising-steps 4 --scheduler LCM --guidance-scale 0.0
 ```
 ### Faster Text-to-Image using SDXL Turbo
 Even faster image generation than LCM, producing coherent images in just 1 step. Note: SDXL Turbo works best for 512x512 resolution, EulerA scheduler and classifier-free-guidance disabled.
@@ -215,6 +215,21 @@ SVD-XT-1.1 (25 frames at resolution 576x1024)
 python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --hf-token=$HF_TOKEN
 ```
 
+
+Run the command below to generate a video in FP8.
+
+```bash
+python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --hf-token=$HF_TOKEN --fp8
+```
+
+> NOTE: There is a bug in HuggingFace, you can workaround with following this [PR](https://github.com/huggingface/diffusers/pull/6562/files)
+
+```
+if torch.is_tensor(num_frames):
+    num_frames = num_frames.item()
+emb = emb.repeat_interleave(num_frames, dim=0)
+```
+
 You may also specify a custom conditioning image using `--input-image`:
 ```bash
 python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --input-image https://www.hdcarwallpapers.com/walls/2018_chevrolet_camaro_zl1_nascar_race_car_2-HD.jpg --hf-token=$HF_TOKEN
@@ -246,6 +261,18 @@ python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN
 ```
 
+Run the below command to generate an image with FLUX in BF16.
+
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16
+```
+
+Run the below command to generate an image with FLUX in FP8. (FP8 is only supppoted on Hopper.)
+
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8
+```
+
 NOTE: Running the Flux pipeline requires 80GB of GPU memory or higher
 
 ## Configuration options
@@ -253,9 +280,5 @@ NOTE: Running the Flux pipeline requires 80GB of GPU memory or higher
 - To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
-
-## Known Issues
-- LoRA adapter functionality is compatible with diffusers version 0.26.3. To run the LoRA pipeline, we recommend installing this specific version. However, the Stable Cascade pipeline requires diffusers version 0.29.2 or higher and will not be compatible if diffusers is downgraded.
-
 
 

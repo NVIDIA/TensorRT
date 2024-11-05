@@ -86,6 +86,7 @@ class DataType:
         "FLOAT64": DataTypeEntry("float64", 8, _DataTypeKind.FLOATING_POINT),
         "FLOAT32": DataTypeEntry("float32", 4, _DataTypeKind.FLOATING_POINT),
         "FLOAT16": DataTypeEntry("float16", 2, _DataTypeKind.FLOATING_POINT),
+        "FLOAT4": DataTypeEntry("float4", 0.5, _DataTypeKind.FLOATING_POINT),
         "INT16": DataTypeEntry("int16", 2, _DataTypeKind.INTEGRAL),
         "INT32": DataTypeEntry("int32", 4, _DataTypeKind.INTEGRAL),
         "INT64": DataTypeEntry("int64", 8, _DataTypeKind.INTEGRAL),
