@@ -165,6 +165,8 @@ static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffe
     return self.deserializeCudaEngine(info.ptr, info.size * info.itemsize);
 };
 
+
+
 // For ICudaEngine
 // TODO: Add slicing support?
 static const auto engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
@@ -627,6 +629,7 @@ public:
         return 0;
     }
 };
+
 
 class PyDebugListener : public IDebugListener
 {
@@ -1096,7 +1099,8 @@ void bindCore(py::module& m)
             IExecutionContextDoc::set_tensor_debug_state)
         .def("get_debug_state", &IExecutionContext::getDebugState, "name"_a, IExecutionContextDoc::get_debug_state)
         .def("set_all_tensors_debug_state", &IExecutionContext::setAllTensorsDebugState, "flag"_a,
-            IExecutionContextDoc::set_all_tensors_debug_state);
+            IExecutionContextDoc::set_all_tensors_debug_state)
+        ;
 
     py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
         ExecutionContextAllocationStrategyDoc::descr, py::module_local())
@@ -1292,6 +1296,7 @@ void bindCore(py::module& m)
             "weight_streaming_scratch_memory_size", &ICudaEngine::getWeightStreamingScratchMemorySize)
         // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
+
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
@@ -1333,6 +1338,7 @@ void bindCore(py::module& m)
         .def(py::init<>())
         .def("read", &IStreamReader::read, "destination"_a, "size"_a, StreamReaderDoc::read);
 
+
     py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr, py::module_local())
         .value("FP16", BuilderFlag::kFP16, BuilderFlagDoc::FP16)
         .value("BF16", BuilderFlag::kBF16, BuilderFlagDoc::BF16)
@@ -1364,6 +1370,8 @@ void bindCore(py::module& m)
         .value("WEIGHT_STREAMING", BuilderFlag::kWEIGHT_STREAMING, BuilderFlagDoc::WEIGHT_STREAMING)
         .value("INT4", BuilderFlag::kINT4, BuilderFlagDoc::INT4)
         .value("REFIT_INDIVIDUAL", BuilderFlag::kREFIT_INDIVIDUAL, BuilderFlagDoc::REFIT_INDIVIDUAL)
+        .value("STRICT_NANS", BuilderFlag::kSTRICT_NANS, BuilderFlagDoc::STRICT_NANS)
+        .value("MONITOR_MEMORY", BuilderFlag::kMONITOR_MEMORY, BuilderFlagDoc::MONITOR_MEMORY)
         ;
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
@@ -1526,6 +1534,8 @@ void bindCore(py::module& m)
             py::keep_alive<0, 1>{})
         .def("build_serialized_network", &IBuilder::buildSerializedNetwork, "network"_a, "config"_a,
             BuilderDoc::build_serialized_network, py::call_guard<py::gil_scoped_release>{})
+        .def("build_engine_with_config", &IBuilder::buildEngineWithConfig, "network"_a, "config"_a,
+            BuilderDoc::build_engine_with_config, py::call_guard<py::gil_scoped_release>{})
         .def("is_network_supported", &IBuilder::isNetworkSupported, "network"_a, "config"_a,
             BuilderDoc::is_network_supported, py::call_guard<py::gil_scoped_release>{})
         .def_property_readonly("logger", &IBuilder::getLogger)

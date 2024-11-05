@@ -159,6 +159,7 @@ public:
         return *mFileReader;
     }
 
+
     //!
     //! \brief Get if safe mode is enabled.
     //!

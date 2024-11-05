@@ -1222,6 +1222,7 @@ void BuildOptions::parse(Arguments& arguments)
 
     getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
     getAndDelOption(arguments, "--noCompilationCache", disableCompilationCache);
+    getAndDelOption(arguments, "--monitorMemory", enableMonitorMemory);
     getAndDelNegOption(arguments, "--noTF32", tf32);
     getAndDelOption(arguments, "--fp16", fp16);
     getAndDelOption(arguments, "--bf16", bf16);
@@ -2175,6 +2176,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "timingCacheMode: ";  printTimingCache(os, options.timingCacheMode)                                           << std::endl <<
           "timingCacheFile: " << options.timingCacheFile                                                                << std::endl <<
           "Enable Compilation Cache: "<< boolToEnabled(!options.disableCompilationCache) << std::endl <<
+          "Enable Monitor Memory: "<< boolToEnabled(options.enableMonitorMemory) << std::endl <<
           "errorOnTimingCacheMiss: "  << boolToEnabled(options.errorOnTimingCacheMiss)                                  << std::endl <<
           "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl <<
           "MaxAuxStreams: "   << options.maxAuxStreams                                                                  << std::endl <<
@@ -2475,6 +2477,7 @@ void BuildOptions::help(std::ostream& os)
           "  --excludeLeanRuntime               When --versionCompatible is enabled, this flag indicates that the generated engine should"          "\n"
           "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
           "                                     valid lean runtime to use when loading the engine."     "\n"
+          "  --monitorMemory                    Enable memory monitor report for debugging usage. (default = disabled)"                             "\n"
           "  --sparsity=spec                    Control sparsity (default = disabled). "                                                            "\n"
           R"(                                   Sparsity: spec ::= "disable", "enable", "force")"                                                   "\n"
           "                                     Note: Description about each of these options is as below"                                          "\n"

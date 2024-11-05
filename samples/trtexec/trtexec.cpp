@@ -272,8 +272,9 @@ int main(int argc, char** argv)
         {
             sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
         }
-
+#if !TRT_WINML
         setCudaDevice(options.system.device, sample::gLogInfo);
+#endif
         sample::gLogInfo << std::endl;
         sample::gLogInfo << "TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "."
                          << NV_TENSORRT_PATCH << std::endl;
@@ -433,6 +434,7 @@ int main(int argc, char** argv)
         if (profilerEnabled && !options.inference.rerun)
         {
             iEnv->profiler.reset(new Profiler);
+#if !TRT_WINML
             if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
             {
                 options.inference.graph = false;
@@ -441,6 +443,7 @@ int main(int argc, char** argv)
                        "and disabled CUDA graph."
                     << std::endl;
             }
+#endif
         }
 
         if (!setUpInference(*iEnv, options.inference, options.system))
@@ -486,6 +489,7 @@ int main(int argc, char** argv)
             iEnv->profiler.reset(profiler);
             iEnv->contexts.front()->setProfiler(profiler);
             iEnv->contexts.front()->setEnqueueEmitsProfile(false);
+#if !TRT_WINML
             if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
             {
                 options.inference.graph = false;
@@ -494,6 +498,7 @@ int main(int argc, char** argv)
                        "and disabled CUDA graph."
                     << std::endl;
             }
+#endif
             if (!runInference(options.inference, *iEnv, options.system.device, trace))
             {
                 sample::gLogError << "Error occurred during inference" << std::endl;

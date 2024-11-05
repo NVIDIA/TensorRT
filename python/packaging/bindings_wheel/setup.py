@@ -29,6 +29,8 @@ if IS_STANDALONE:
     tensorrt_module += "-cu##CUDA_MAJOR##_bindings"
     package_name += "_bindings"
 
+plugin_subpackage_name = f"{package_name}.plugin"
+
 setup(
     name=tensorrt_module,
     version="##TENSORRT_PYTHON_VERSION##",
@@ -41,12 +43,12 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[package_name],
+    packages=[package_name, plugin_subpackage_name],
     extras_require={"numpy": "numpy"},
     package_data={package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",
-    url="https://developer.nvidia.com/tensorrt",
-    download_url="https://github.com/nvidia/tensorrt/tags",
+    url="https://github.com/nvidia/tensorrt",
+    download_url="https://developer.nvidia.com/tensorrt",
 )

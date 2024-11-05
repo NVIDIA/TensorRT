@@ -32,7 +32,6 @@ from hashlib import md5
 import inspect
 from models import (
     get_clip_embedding_dim,
-    get_path,
     LoraLoader,
     make_tokenizer,
     CLIPModel,
@@ -108,7 +107,8 @@ class StableDiffusionPipeline:
         vae_scaling_factor=0.18215,
         framework_model_dir='pytorch_model',
         controlnets=None,
-        lora_scale: Optional[List[int]] = None,
+        lora_scale: float = 1.0,
+        lora_weight: Optional[List[float]] = None,
         lora_path: Optional[List[str]] = None,
         return_latents=False,
         torch_inference='',
@@ -239,12 +239,12 @@ class StableDiffusionPipeline:
 
         # initialize lora loader and scales
         self.lora_loader = None
-        self.lora_scales = dict()
+        self.lora_weights = dict()
         if lora_path:
-            self.lora_loader = LoraLoader(lora_path)
-            assert len(lora_path) == len(lora_scale)
+            self.lora_loader = LoraLoader(lora_path, lora_weight, lora_scale)
+            assert len(lora_path) == len(lora_weight)
             for i, path in enumerate(lora_path):
-                self.lora_scales[path] = lora_scale[i]
+                self.lora_weights[path] = lora_weight[i]
 
         # initialized in loadResources()
         self.events = {}
@@ -335,20 +335,11 @@ class StableDiffusionPipeline:
             subfolder = 'text_encoder_2'
             self.models['clip2'] = CLIPWithProjModel(**models_args, fp16=True, output_hidden_states=self.config.get('clip_hidden_states', False), subfolder=subfolder)
 
-        lora_dict, lora_alphas = (None, None)
         if 'unet' in self.stages:
-            if self.lora_loader:
-                lora_dict, lora_alphas = self.lora_loader.get_dicts('unet')
-                assert len(lora_dict) == len(self.lora_scales)
-            self.models['unet'] = UNetModel(**models_args, fp16=True, int8=int8, fp8=fp8, controlnets=self.controlnets,
-                lora_scales=self.lora_scales, lora_dict=lora_dict, lora_alphas=lora_alphas, do_classifier_free_guidance=self.do_classifier_free_guidance)
+            self.models['unet'] = UNetModel(**models_args, fp16=True, int8=int8, fp8=fp8, controlnets=self.controlnets, do_classifier_free_guidance=self.do_classifier_free_guidance)
 
         if 'unetxl' in self.stages:
-            if not self.pipeline_type.is_sd_xl_refiner() and self.lora_loader:
-                lora_dict, lora_alphas = self.lora_loader.get_dicts('unet')
-                assert len(lora_dict) == len(self.lora_scales)
-            self.models['unetxl'] = UNetXLModel(**models_args, fp16=True, int8=int8, fp8=fp8,
-                lora_scales=self.lora_scales, lora_dict=lora_dict, lora_alphas=lora_alphas, do_classifier_free_guidance=self.do_classifier_free_guidance)
+            self.models['unetxl'] = UNetXLModel(**models_args, fp16=True, int8=int8, fp8=fp8, do_classifier_free_guidance=self.do_classifier_free_guidance)
 
         vae_fp16 = not self.pipeline_type.is_sd_xl()
 
@@ -441,7 +432,7 @@ class StableDiffusionPipeline:
 
         # Configure pipeline models to load
         model_names = self.models.keys()
-        lora_suffix = '-'+'-'.join([str(md5(path.encode('utf-8')).hexdigest())+'-'+('%.2f' % self.lora_scales[path]) for path in sorted(self.lora_loader.paths)]) if self.lora_loader else ''
+        lora_suffix = '-'+'-'.join([str(md5(path.encode('utf-8')).hexdigest())+'-'+('%.2f' % self.lora_weights[path])+'-'+('%.2f' % self.lora_loader.scale) for path in sorted(self.lora_loader.paths)]) if self.lora_loader else ''
         # Enable refit and LoRA merging only for UNet & UNetXL for now
         do_engine_refit = dict(zip(model_names, [not self.pipeline_type.is_sd_xl_refiner() and enable_refit and model_name.startswith('unet') for model_name in model_names]))
         do_lora_merge = dict(zip(model_names, [not enable_refit and self.lora_loader and model_name.startswith('unet') for model_name in model_names]))
@@ -474,7 +465,7 @@ class StableDiffusionPipeline:
             if do_export_onnx or do_export_weights_map:
                 # Non-quantized ONNX export
                 if not use_int8[model_name] and not use_fp8[model_name]:
-                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=do_lora_merge[model_name], static_shape=static_shape)
+                    obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=do_lora_merge[model_name], static_shape=static_shape, lora_loader=self.lora_loader)
                 else:
                     pipeline = obj.get_pipeline()
                     model = pipeline.unet
@@ -576,7 +567,7 @@ class StableDiffusionPipeline:
             if torch_fallback[model_name]:
                 continue
             self.engine[model_name].load()
-            if do_engine_refit[model_name] and obj.lora_dict:
+            if do_engine_refit[model_name] and self.lora_loader:
                 assert weights_map_path[model_name]
                 with open(weights_map_path[model_name], 'r') as fp_wts:
                     print(f"[I] Loading weights map: {weights_map_path[model_name]} ")
@@ -584,14 +575,14 @@ class StableDiffusionPipeline:
                     refit_weights_path = self.getRefitNodesPath(model_name, engine_dir, suffix=lora_suffix)
                     if not os.path.exists(refit_weights_path):
                             print(f"[I] Saving refit weights: {refit_weights_path}")
-                            model = merge_loras(obj.get_model(), obj.lora_dict, obj.lora_alphas, obj.lora_scales)
-                            refit_weights = get_refit_weights(model.state_dict(), onnx_opt_path[model_name], weights_name_mapping, weights_shape_mapping)
-                            torch.save(refit_weights, refit_weights_path)
+                            model = merge_loras(obj.get_model(), self.lora_loader)
+                            refit_weights, updated_weight_names = get_refit_weights(model.state_dict(), onnx_opt_path[model_name], weights_name_mapping, weights_shape_mapping)
+                            torch.save((refit_weights, updated_weight_names), refit_weights_path)
                             unload_model(model)
                     else:
                         print(f"[I] Loading refit weights: {refit_weights_path}")
-                        refit_weights = torch.load(refit_weights_path)
-                    self.engine[model_name].refit(refit_weights, obj.fp16)
+                        refit_weights, updated_weight_names = torch.load(refit_weights_path)
+                    self.engine[model_name].refit(refit_weights, updated_weight_names)
 
         # Load torch models
         for model_name, obj in self.models.items():
@@ -837,6 +828,9 @@ class StableDiffusionPipeline:
 
     def decode_latent(self, latents):
         self.profile_start('vae', color='red')
+        cast_to = torch.float16 if self.models['vae'].fp16 else torch.bfloat16 if self.models['vae'].bf16 else torch.float32
+        latents = latents.to(dtype=cast_to)
+
         if self.torch_inference:
             images = self.torch_models['vae'](latents, return_dict=False)[0]
         else:

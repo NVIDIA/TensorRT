@@ -24,9 +24,9 @@ import tensorrt as trt
 
 def preprocess(text):
     try:
-        nltk.data.find("tokenizers/punkt")
+        nltk.data.find("tokenizers/punkt_tab")
     except LookupError:
-        nltk.download("punkt")
+        nltk.download("punkt_tab")
     tokens = word_tokenize(text)
     # split into lower-case word tokens, in numpy array with shape of (seq, 1)
     words = np.asarray([w.lower() for w in tokens]).reshape(-1, 1)

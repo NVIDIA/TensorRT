@@ -1,12 +1,8 @@
 onnx==1.16.0
 --extra-index-url https://pypi.ngc.nvidia.com
 onnx-graphsurgeon>=0.3.20
--f https://download.pytorch.org/whl/torch_stable.html
-torch==2.0.0; (platform_machine=="aarch64" and sys.platform=="linux")
-torch==2.2.1+cpu; ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
--f https://download.pytorch.org/whl/torch_stable.html
-torchvision==0.15.1; (platform_machine=="aarch64" and sys.platform=="linux")
-torchvision==0.17.1+cpu; ((platform_machine=="x86_64" and sys.platform=="linux") or sys.platform=="win32")
+torch
+torchvision
 pyyaml==6.0.1
 requests==2.32.2
 tqdm==4.66.4

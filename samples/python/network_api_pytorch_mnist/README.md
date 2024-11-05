@@ -15,7 +15,7 @@
 
 ## Description
 
-This sample, `network_api_pytorch_mnist`, trains a convolutional model on the [MNIST](http://yann.lecun.com/exdb/mnist/) dataset and runs inference with a TensorRT engine.
+This sample, `network_api_pytorch_mnist`, trains a convolutional model on the [MNIST](https://ossci-datasets.s3.amazonaws.com/mnist/) dataset and runs inference with a TensorRT engine.
 
 ## How does this sample work?
 
@@ -79,7 +79,7 @@ The following resources provide a deeper understanding about getting started wit
 - [MNIST model](https://github.com/pytorch/examples/tree/master/mnist)
 
 **Dataset**
-- [MNIST database](http://yann.lecun.com/exdb/mnist/)
+- [MNIST database](https://ossci-datasets.s3.amazonaws.com/mnist/)
 
 **Documentation**
 - [Introduction To NVIDIA’s TensorRT Samples](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sample-support-guide/index.html#samples)

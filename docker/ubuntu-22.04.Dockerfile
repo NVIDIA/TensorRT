@@ -28,7 +28,7 @@ ENV CUDA_VERSION_MAJOR_MINOR=12.2
 ENV NV_CUDNN_PACKAGE "libcudnn8=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
 ENV NV_CUDNN_PACKAGE_DEV "libcudnn8-dev=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
 
-ENV TRT_VERSION 10.5.0.18
+ENV TRT_VERSION 10.6.0.26
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -84,15 +84,15 @@ RUN apt-get install -y --no-install-recommends \
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.5.0/tars/TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && tar -xf TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && cp -a TensorRT-10.5.0.18/lib/*.so* /usr/lib/x86_64-linux-gnu \
-        && pip install TensorRT-10.5.0.18/python/tensorrt-10.5.0-cp310-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.6.0/tars/TensorRT-10.6.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && tar -xf TensorRT-10.6.0.26.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+        && cp -a TensorRT-10.6.0.26/lib/*.so* /usr/lib/x86_64-linux-gnu \
+        && pip install TensorRT-10.6.0.26/python/tensorrt-10.6.0-cp310-none-linux_x86_64.whl ;\
 elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.5.0/tars/TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-12.6.tar.gz \
-        && tar -xf TensorRT-10.5.0.18.Linux.x86_64-gnu.cuda-12.6.tar.gz \
-        && cp -a TensorRT-10.5.0.18/lib/*.so* /usr/lib/x86_64-linux-gnu \
-        && pip install TensorRT-10.5.0.18/python/tensorrt-10.5.0-cp310-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.6.0/tars/TensorRT-10.6.0.26.Linux.x86_64-gnu.cuda-12.6.tar.gz \
+        && tar -xf TensorRT-10.6.0.26.Linux.x86_64-gnu.cuda-12.6.tar.gz \
+        && cp -a TensorRT-10.6.0.26/lib/*.so* /usr/lib/x86_64-linux-gnu \
+        && pip install TensorRT-10.6.0.26/python/tensorrt-10.6.0-cp310-none-linux_x86_64.whl ;\
 else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \

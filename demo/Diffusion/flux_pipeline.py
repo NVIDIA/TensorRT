@@ -61,7 +61,9 @@ class FluxPipeline(DiffusionPipeline):
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
         guidance_scale=3.5,
         max_sequence_length=512,
-        **kwargs,
+        bf16=False,
+        low_vram=False,
+        **kwargs
     ):
         """
         Initializes the Flux pipeline.
@@ -72,10 +74,14 @@ class FluxPipeline(DiffusionPipeline):
                 Higher guidance scale encourages to generate images that are closely linked to the text prompt, usually at the expense of lower image quality.
             max_sequence_length (`int`, defaults to 512):
                 Maximum sequence length to use with the `prompt`.
+            bf16 (`bool`, defaults to False):
+                Whether to run the pipeline in BFloat16 precision.
         """
         super().__init__(version=version, pipeline_type=pipeline_type, **kwargs)
         self.guidance_scale = guidance_scale
         self.max_sequence_length = max_sequence_length
+        self.bf16=bf16
+        self.low_vram = low_vram
 
         # Pipeline type
         self.stages = ["clip", "t5", "transformer", "vae"]
@@ -105,13 +111,15 @@ class FluxPipeline(DiffusionPipeline):
             "max_batch_size": self.max_batch_size,
         }
 
-        self.fp16 = True
+        self.bf16 = True if int8 or fp8 else self.bf16
+        self.fp16 = True if not self.bf16 else False
         self.tf32 = True
         if "clip" in self.stages:
             self.models["clip"] = CLIPModel(
                 **models_args,
                 fp16=self.fp16,
                 tf32=self.tf32,
+                bf16=self.bf16,
                 embedding_dim=get_clip_embedding_dim(self.version, self.pipeline_type),
                 keep_pooled_output=True,
                 subfolder="text_encoder",
@@ -123,6 +131,7 @@ class FluxPipeline(DiffusionPipeline):
                 **models_args,
                 fp16=False,
                 tf32=self.tf32,
+                bf16=self.bf16,
                 subfolder="text_encoder_2",
                 text_maxlen=self.max_sequence_length,
             )
@@ -130,15 +139,18 @@ class FluxPipeline(DiffusionPipeline):
         if "transformer" in self.stages:
             self.models["transformer"] = FluxTransformerModel(
                 **models_args,
-                fp16=self.fp16,
+                bf16=True if int8 or fp8 else self.bf16,
+                fp16=False if int8 or fp8 else self.fp16,
+                int8=int8,
+                fp8=fp8,
                 tf32=self.tf32,
                 text_maxlen=self.max_sequence_length,
-                build_strongly_typed=False,
+                build_strongly_typed=True,
             )
 
         if "vae" in self.stages:
             # Accuracy issues with FP16
-            self.models["vae"] = VAEModel(**models_args, fp16=False, tf32=self.tf32)
+            self.models["vae"] = VAEModel(**models_args, fp16=False, tf32=self.tf32, bf16=self.bf16)
 
         self.vae_scale_factor = (
             2 ** (len(self.models["vae"].config["block_out_channels"]))
@@ -297,9 +309,7 @@ class FluxPipeline(DiffusionPipeline):
         text_encoder_output = tokenize(prompt, max_sequence_length)
 
         self.profile_stop(encoder)
-        return (
-            text_encoder_output.to(torch.float16) if self.fp16 else text_encoder_output
-        )
+        return text_encoder_output.to(torch.float16) if self.fp16 else text_encoder_output.to(torch.bfloat16) if self.bf16 else text_encoder_output
 
     def denoise_latent(
         self,
@@ -347,7 +357,7 @@ class FluxPipeline(DiffusionPipeline):
                 )[0]
 
         self.profile_stop(denoiser)
-        return latents.to(dtype=torch.float32)
+        return latents.to(dtype=torch.bfloat16) if self.bf16 else latents.to(dtype=torch.float32)
 
     def decode_latent(self, latents, decoder="vae"):
         self.profile_start(decoder, color="red")
@@ -445,17 +455,40 @@ class FluxPipeline(DiffusionPipeline):
                 // 4,
                 latent_height=latent_height,
                 latent_width=latent_width,
-                latents_dtype=torch.float16 if self.fp16 else torch.float32,
-            )
+                latents_dtype=torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32)
+
+            class LoadModelContext:
+                def __init__(ctx, model_names, low_vram=False):
+                    ctx.model_names = model_names
+                    ctx.low_vram = low_vram
+                def __enter__(ctx):
+                    if not ctx.low_vram:
+                        return
+                    for model_name in ctx.model_names:
+                        # creating engine object (load from plan file)
+                        self.engine[model_name].load()
+                        # creating context
+                        self.engine[model_name].activate(device_memory=self.shared_device_memory)  
+                        # creating input and output buffer
+                        self.engine[model_name].allocate_buffers(shape_dict=self.shape_dicts[model_name], device=self.device)  
+                def __exit__(ctx, exc_type, exc_val, exc_tb):
+                    if not ctx.low_vram:
+                        return
+                    for model_name in ctx.model_names:
+                        self.engine[model_name].deallocate_buffers()
+                        self.engine[model_name].deactivate()
+                        self.engine[model_name].unload()
 
             # CLIP and T5 text encoder(s)
-            pooled_embeddings = self.encode_prompt(prompt, pooled_output=True)
-            text_embeddings = self.encode_prompt(
-                prompt2, encoder="t5", max_sequence_length=self.max_sequence_length
-            )
-            text_ids = torch.zeros(text_embeddings.shape[1], 3).to(
-                device=self.device, dtype=text_embeddings.dtype
-            )
+
+            with LoadModelContext(["clip","t5"], low_vram=self.low_vram):
+                pooled_embeddings = self.encode_prompt(prompt, pooled_output=True)
+                text_embeddings = self.encode_prompt(
+                    prompt2, encoder="t5", max_sequence_length=self.max_sequence_length
+                )
+                text_ids = torch.zeros(text_embeddings.shape[1], 3).to(
+                    device=self.device, dtype=text_embeddings.dtype
+                )
 
             # Prepare timesteps
             sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
@@ -486,23 +519,25 @@ class FluxPipeline(DiffusionPipeline):
             num_inference_steps = len(timesteps)
 
             # DiT denoiser
-            latents = self.denoise_latent(
-                latents,
-                timesteps,
-                text_embeddings,
-                pooled_embeddings,
-                text_ids,
-                latent_image_ids,
-            )
+            with LoadModelContext(["transformer"], low_vram=self.low_vram):
+                latents = self.denoise_latent(
+                    latents,
+                    timesteps,
+                    text_embeddings,
+                    pooled_embeddings,
+                    text_ids,
+                    latent_image_ids,
+                )
 
             # VAE decode latent
-            latents = self._unpack_latents(
-                latents, image_height, image_width, self.vae_scale_factor
-            )
-            latents = (
-                latents / self.models["vae"].config["scaling_factor"]
-            ) + self.models["vae"].config["shift_factor"]
-            images = self.decode_latent(latents)
+            with LoadModelContext(["vae"], low_vram=self.low_vram):
+                latents = self._unpack_latents(
+                    latents, image_height, image_width, self.vae_scale_factor
+                )
+                latents = (
+                    latents / self.models["vae"].config["scaling_factor"]
+                ) + self.models["vae"].config["shift_factor"]
+                images = self.decode_latent(latents)
 
             torch.cuda.synchronize()
             e2e_toc = time.perf_counter()
@@ -539,6 +574,9 @@ class FluxPipeline(DiffusionPipeline):
         use_cuda_graph,
         **kwargs,
     ):
+        if self.low_vram and self.use_cuda_graph:
+            print("[W] Using low_vram, use_cuda_graph will be disabled")
+            self.use_cuda_graph = False
         num_warmup_runs = max(1, num_warmup_runs) if use_cuda_graph else num_warmup_runs
         if num_warmup_runs > 0:
             print("[I] Warming up ..")

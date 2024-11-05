@@ -45,6 +45,7 @@ class TestDataType:
             DataType.FLOAT8E5M2,
             DataType.FLOAT8E5M2FNUZ,
             DataType.INT4,
+            DataType.FLOAT4,
         ]:
             pytest.xfail("Type not supported by NumPy")
 
@@ -61,6 +62,7 @@ class TestDataType:
     def test_onnxrt(self, dtype):
         if dtype in [
             DataType.INT4,
+            DataType.FLOAT4,
         ]:
             pytest.skip("Type not supported by ONNX-RT")
 
@@ -84,6 +86,7 @@ class TestDataType:
     def test_onnx(self, dtype):
         if dtype in [
             DataType.INT4,
+            DataType.FLOAT4,
         ]:
             pytest.skip("Type not supported by ONNX")
 
@@ -137,6 +140,7 @@ class TestDataType:
                 "float": "float32",
                 "half": "float16",
                 "fp8": "float8e4m3fn",
+                "fp4": "float4",
                 "bf16": "bfloat16",
             },
         )
@@ -162,6 +166,7 @@ class TestDataType:
             DataType.UINT64,
             DataType.STRING,
             DataType.INT4,
+            DataType.FLOAT4,
         ]:
             pytest.xfail("Type not supported by Torch")
 

@@ -35,6 +35,10 @@ from builder_utils import load_tf_weights, load_pytorch_weights_and_quant, load_
 from builder_utils import WQKV, BQKV  # Attention Keys
 from builder_utils import W_AOUT, B_AOUT, W_MID, B_MID, W_LOUT, B_LOUT  # Transformer Keys
 from builder_utils import SQD_W, SQD_B  # SQuAD Output Keys
+from builder_utils import (
+    create_plugin,
+    add_plugin_to_network,
+)  # Plugin Helper functions
 
 """
 TensorRT Initialization
@@ -51,13 +55,23 @@ if not handle:
 
 trt.init_libnvinfer_plugins(TRT_LOGGER, "")
 plg_registry = trt.get_plugin_registry()
-emln_plg_creator = plg_registry.get_plugin_creator("CustomEmbLayerNormPluginDynamic", "1", "")
-qkv2_plg_creator = plg_registry.get_plugin_creator("CustomQKVToContextPluginDynamic", "1", "")
-skln_plg_creator = plg_registry.get_plugin_creator("CustomSkipLayerNormPluginDynamic", "1", "")
-fc_plg_creator = plg_registry.get_plugin_creator("CustomFCPluginDynamic", "1", "")
+
 
 class BertConfig:
-    def __init__(self, bert_config_path, use_fp16, use_int8, use_strict, use_fc2_gemm, use_int8_skipln, use_int8_multihead, use_qat, use_sparsity, timing_cache):
+    def __init__(
+        self,
+        bert_config_path,
+        use_fp16,
+        use_int8,
+        use_strict,
+        use_fc2_gemm,
+        use_int8_skipln,
+        use_int8_multihead,
+        use_qat,
+        use_sparsity,
+        timing_cache,
+        use_deprecated_plugins=False,
+    ):
         with open(bert_config_path, "r") as f:
             data = json.load(f)
             self.num_attention_heads = data["num_attention_heads"]
@@ -75,6 +89,8 @@ class BertConfig:
             self.use_qat = use_qat
             self.use_sparsity = use_sparsity
             self.timing_cache = timing_cache
+            self.use_deprecated_plugins = use_deprecated_plugins
+
 
 def set_tensor_name(tensor, prefix, name):
     tensor.name = prefix + name
@@ -131,19 +147,26 @@ def attention_layer_opt(prefix, config, init_dict, network, input_tensor, imask)
         pf_dq_probs =  trt.PluginField("dq_probs", np.array([dq_probs], np.float32), trt.PluginFieldType.FLOAT32)
         pfc = trt.PluginFieldCollection([pf_hidden_size, pf_num_heads, pf_has_mask, pf_type, pf_dq_probs])
     else:
-        pfc = trt.PluginFieldCollection([pf_hidden_size, pf_num_heads, pf_has_mask, pf_type])
-    qkv2ctx_plug = qkv2_plg_creator.create_plugin("qkv2ctx", pfc)
+        pfc = trt.PluginFieldCollection(
+            [pf_hidden_size, pf_num_heads, pf_has_mask, pf_type]
+        )
+    qkv2ctx_plugin = create_plugin(
+        "qkv_to_context", plg_registry, pfc, use_deprecated_plugins=config.use_deprecated_plugins
+    )
 
     qkv_in = [mult_all.get_output(0)]
     if has_mask:
         qkv_in.append(imask)
-    qkv2ctx = network.add_plugin_v2(qkv_in, qkv2ctx_plug)
+
+    qkv2ctx_layer = add_plugin_to_network(
+        network, qkv2ctx_plugin, qkv_in, use_deprecated_plugins=config.use_deprecated_plugins
+    )
 
     if config.use_qat:
         dr_ctx = init_dict[prefix + 'output_dense_input_amax']
-        set_output_range(qkv2ctx, dr_ctx)
-    set_output_name(qkv2ctx, prefix, "context_layer")
-    return qkv2ctx
+        set_output_range(qkv2ctx_layer, dr_ctx)
+    set_output_name(qkv2ctx_layer, prefix, "context_layer")
+    return qkv2ctx_layer
 
 def skipln(prefix, config, init_dict, network, input_tensor, skip, bias=None):
     """
@@ -174,26 +197,15 @@ def skipln(prefix, config, init_dict, network, input_tensor, skip, bias=None):
         fields.append(pf_bias)
 
     pfc = trt.PluginFieldCollection(fields)
-    skipln_plug = skln_plg_creator.create_plugin("skipln", pfc)
+    skipln_plugin = create_plugin(
+        "skip_layer_norm", plg_registry, pfc, use_deprecated_plugins=config.use_deprecated_plugins
+    )
 
     skipln_inputs = [input_tensor, skip]
-    layer = network.add_plugin_v2(skipln_inputs, skipln_plug)
-    return layer
-
-# Custom FC plugin is faster than native FC only on older architectures.
-def use_custom_fc():
-    cc = pycuda.autoinit.device.compute_capability()
-    return cc[0] * 10 + cc[1] <= 70
-
-def custom_fc(config, network, input_tensor, out_dims, W):
-    pf_out_dims = trt.PluginField("out_dims", np.array([out_dims], dtype=np.int32), trt.PluginFieldType.INT32)
-    pf_W = trt.PluginField("W", W.numpy(), trt.PluginFieldType.FLOAT32)
-    pf_type = trt.PluginField("type_id", np.array([1 if config.use_fp16 else 0], np.int32), trt.PluginFieldType.INT32)
-    pfc = trt.PluginFieldCollection([pf_out_dims, pf_W, pf_type])
-    fc_plugin = fc_plg_creator.create_plugin("fcplugin", pfc)
-    plug_inputs = [input_tensor]
-    out_dense = network.add_plugin_v2(plug_inputs, fc_plugin)
-    return out_dense
+    skipln_layer = add_plugin_to_network(
+        network, skipln_plugin, skipln_inputs, use_deprecated_plugins=config.use_deprecated_plugins
+    )
+    return skipln_layer
 
 def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imask):
     """
@@ -214,22 +226,17 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
 
     # FC0
     B_aout = init_dict[prefix + B_AOUT]
-    if not config.use_int8 and use_custom_fc():
-        W_aoutT = init_dict[prefix + W_AOUT + "_notrans"]
-        attention_out_fc = custom_fc(config, network, attention_heads, hidden_size, W_aoutT)
-    else:
-        W_aout = init_dict[prefix + W_AOUT]
-        attention_out_fc = network.add_convolution_nd(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
-        B_aout = None
+    W_aout = init_dict[prefix + W_AOUT]
+    attention_out_fc = network.add_convolution_nd(attention_heads, hidden_size, (1, 1), W_aout, B_aout)
 
-        if config.use_int8 and not config.use_int8_skipln:
-            attention_out_fc.set_output_type(0, trt.DataType.HALF if config.use_fp16 else trt.DataType.FLOAT)
+    if config.use_int8 and not config.use_int8_skipln:
+        attention_out_fc.set_output_type(0, trt.DataType.HALF if config.use_fp16 else trt.DataType.FLOAT)
 
-        if config.use_int8 and config.use_qat:
-            dr_fc_aout = init_dict[prefix + 'attention_output_add_local_input_quantizer_amax']
-            set_output_range(attention_out_fc, dr_fc_aout)
+    if config.use_int8 and config.use_qat:
+        dr_fc_aout = init_dict[prefix + 'attention_output_add_local_input_quantizer_amax']
+        set_output_range(attention_out_fc, dr_fc_aout)
 
-    skiplayer = skipln(prefix + "attention_output_layernorm_",config, init_dict, network, attention_out_fc.get_output(0), input_tensor, B_aout)
+    skiplayer = skipln(prefix + "attention_output_layernorm_",config, init_dict, network, attention_out_fc.get_output(0), input_tensor, bias=None)
     attention_ln = skiplayer.get_output(0)
     if config.use_qat:
         dr_skln1 = init_dict[prefix + 'intermediate_dense_input_amax']
@@ -271,24 +278,18 @@ def transformer_layer_opt(prefix, config, init_dict, network, input_tensor, imas
     # FC2
     # Dense to hidden size
     B_lout = init_dict[prefix + B_LOUT]
-    prefer_conv = config.use_int8 and not config.use_fc2_gemm
-    if not prefer_conv and use_custom_fc():
-        W_loutT = init_dict[prefix + W_LOUT + "_notrans"]
-        out_dense = custom_fc(config, network, intermediate_act, hidden_size, W_loutT)
-    else:
-        W_lout = init_dict[prefix + W_LOUT]
-        out_dense = network.add_convolution_nd(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
-        B_lout = None
+    W_lout = init_dict[prefix + W_LOUT]
+    out_dense = network.add_convolution_nd(intermediate_act, hidden_size, (1, 1), W_lout, B_lout)
 
-        if config.use_int8 and not config.use_int8_skipln:
-            out_dense.set_output_type(0, trt.DataType.HALF if config.use_fp16 else trt.DataType.FLOAT)
+    if config.use_int8 and not config.use_int8_skipln:
+        out_dense.set_output_type(0, trt.DataType.HALF if config.use_fp16 else trt.DataType.FLOAT)
 
     if config.use_qat:
         dr_fc_out = init_dict[prefix + 'output_add_local_input_quantizer_amax']
         set_output_range(out_dense, dr_fc_out)
     set_output_name(out_dense, prefix + "output_", "dense")
 
-    out_layer = skipln(prefix + "output_layernorm_", config, init_dict, network, out_dense.get_output(0), attention_ln, B_lout)
+    out_layer = skipln(prefix + "output_layernorm_", config, init_dict, network, out_dense.get_output(0), attention_ln, bias=None)
     set_output_name(out_layer, prefix + "output_", "reshape")
 
     return out_layer
@@ -366,8 +367,12 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     output_fp16 = trt.PluginField("output_fp16", np.array([1 if config.use_fp16 else 0]).astype(np.int32), trt.PluginFieldType.INT32)
     mha_type = trt.PluginField("mha_type_id", np.array([get_mha_dtype(config)], np.int32), trt.PluginFieldType.INT32)
 
-    pfc = trt.PluginFieldCollection([wbeta, wgamma, wwordemb, wtokemb, wposemb, output_fp16, mha_type])
-    fn = emln_plg_creator.create_plugin("embeddings", pfc)
+    pfc = trt.PluginFieldCollection(
+        [wbeta, wgamma, wwordemb, wtokemb, wposemb, output_fp16, mha_type]
+    )
+    emln_plugin = create_plugin(
+        "emb_layer_norm", plg_registry, pfc, use_deprecated_plugins=config.use_deprecated_plugins
+    )
 
     input_ids = network.add_shuffle(input_ids)
     input_ids.second_transpose = (1, 0)
@@ -375,10 +380,14 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     segment_ids.second_transpose = (1, 0)
     input_mask = network.add_shuffle(input_mask)
     input_mask.second_transpose = (1, 0)
-    inputs = [input_ids.get_output(0),
-              segment_ids.get_output(0),
-              input_mask.get_output(0)]
-    emb_layer = network.add_plugin_v2(inputs, fn)
+    inputs = [
+        input_ids.get_output(0),
+        segment_ids.get_output(0),
+        input_mask.get_output(0),
+    ]
+    emb_layer = add_plugin_to_network(
+        network, emln_plugin, inputs, use_deprecated_plugins=config.use_deprecated_plugins
+    )
 
     if config.use_qat:
         set_output_range(emb_layer, 1, 1)
@@ -490,30 +499,151 @@ def generate_calibration_cache(sequence_lengths, workspace_size, config, weights
     config.is_calib_mode = False
 
 def main():
-    parser = argparse.ArgumentParser(description="TensorRT BERT Sample", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-m", "--ckpt", required=False,
-                        help="The checkpoint file basename, e.g.: basename(model.ckpt-766908.data-00000-of-00001) is model.ckpt-766908")
-    parser.add_argument("-x", "--onnx", required=False, help="The ONNX model file path.")
-    parser.add_argument("-pt", "--pytorch", required=False, help="The PyTorch checkpoint file path.")
-    parser.add_argument("-o", "--output", required=True, default="bert_base_384.engine", help="The bert engine file, ex bert.engine")
-    parser.add_argument("-b", "--batch-size", default=[], action="append", help="Batch size(s) to optimize for. The engine will be usable with any batch size below this, but may not be optimal for smaller sizes. Can be specified multiple times to optimize for more than one batch size.", type=int)
-    parser.add_argument("-s", "--sequence-length", default=[], action="append", help="Sequence length of the BERT model", type=int)
-    parser.add_argument("-c", "--config-dir", required=True,
-                        help="The folder containing the bert_config.json, which can be downloaded e.g. from https://github.com/google-research/bert#pre-trained-models or by running download_models.py in dle/TensorFlow/LanguageModeling/BERT/data/pretrained_models_google")
-    parser.add_argument("-f", "--fp16", action="store_true", help="Indicates that inference should be run in FP16 precision", required=False)
-    parser.add_argument("-i", "--int8", action="store_true", help="Indicates that inference should be run in INT8 precision", required=False)
-    parser.add_argument("-t", "--strict", action="store_true", help="Indicates that inference should be run in strict precision mode", required=False)
-    parser.add_argument("-w", "--workspace-size", default=2500, help="Workspace size in MiB for building the BERT engine", type=int)
-    parser.add_argument("-j", "--squad-json", default="squad/dev-v1.1.json", help="squad json dataset used for int8 calibration", required=False)
-    parser.add_argument("-v", "--vocab-file", default="./pre-trained_model/uncased_L-24_H-1024_A-16/vocab.txt", help="Path to file containing entire understandable vocab", required=False)
-    parser.add_argument("-n", "--calib-num", default=100, help="calibration batch numbers", type=int)
-    parser.add_argument("-p", "--calib-path", help="calibration cache path", required=False)
-    parser.add_argument("-g", "--force-fc2-gemm", action="store_true", help="Force use gemm to implement FC2 layer", required=False)
-    parser.add_argument("-iln", "--force-int8-skipln", action="store_true", help="Run skip layernorm with INT8 (FP32 or FP16 by default) inputs and output", required=False)
-    parser.add_argument("-imh", "--force-int8-multihead", action="store_true", help="Run multi-head attention with INT8 (FP32 or FP16 by default) input and output", required=False)
-    parser.add_argument("-sp", "--sparse", action="store_true", help="Indicates that model is sparse", required=False)
-    parser.add_argument("-tcf", "--timing-cache-file", help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later", required=False)
-    parser.add_argument("--verbose", action="store_true", help="Turn on verbose logger and set profiling verbosity to DETAILED", required=False)
+    parser = argparse.ArgumentParser(
+        description="TensorRT BERT Sample",
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument(
+        "-m",
+        "--ckpt",
+        required=False,
+        help="The checkpoint file basename, e.g.: basename(model.ckpt-766908.data-00000-of-00001) is model.ckpt-766908 (default: None)",
+    )
+    parser.add_argument(
+        "-x", "--onnx", required=False, help="The ONNX model file path. (default: None)"
+    )
+    parser.add_argument(
+        "-pt", "--pytorch", required=False, help="The PyTorch checkpoint file path. (default: None)"
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        default="bert_base_384.engine",
+        help="The bert engine file, ex bert.engine (default: bert_base_384.engine)",
+    )
+    parser.add_argument(
+        "-b",
+        "--batch-size",
+        default=[],
+        action="append",
+        help="Batch size(s) to optimize for. The engine will be usable with any batch size below this, but may not be optimal for smaller sizes. Can be specified multiple times to optimize for more than one batch size. (default: [1])",
+        type=int,
+    )
+    parser.add_argument(
+        "-s",
+        "--sequence-length",
+        default=[],
+        action="append",
+        help="Sequence length of the BERT model (default: [128])",
+        type=int,
+    )
+    parser.add_argument(
+        "-c",
+        "--config-dir",
+        required=True,
+        help="The folder containing the bert_config.json, which can be downloaded e.g. from https://github.com/google-research/bert#pre-trained-models or by running download_models.py in dle/TensorFlow/LanguageModeling/BERT/data/pretrained_models_google",
+    )
+    parser.add_argument(
+        "-f",
+        "--fp16",
+        action="store_true",
+        help="Indicates that inference should be run in FP16 precision (default: false)",
+        required=False,
+    )
+    parser.add_argument(
+        "-i",
+        "--int8",
+        action="store_true",
+        help="Indicates that inference should be run in INT8 precision (default: false)",
+        required=False,
+    )
+    parser.add_argument(
+        "-t",
+        "--strict",
+        action="store_true",
+        help="Indicates that inference should be run in strict precision mode (default: false)",
+        required=False,
+    )
+    parser.add_argument(
+        "-w",
+        "--workspace-size",
+        default=2500,
+        help="Workspace size in MiB for building the BERT engine (default: 2500)",
+        type=int,
+    )
+    parser.add_argument(
+        "-j",
+        "--squad-json",
+        default="squad/dev-v1.1.json",
+        help="squad json dataset used for int8 calibration (default: squad/dev-v1.1.json)",
+        required=False,
+    )
+    parser.add_argument(
+        "-v",
+        "--vocab-file",
+        default="./pre-trained_model/uncased_L-24_H-1024_A-16/vocab.txt",
+        help="Path to file containing entire understandable vocab (default: ./pre-trained_model/uncased_L-24_H-1024_A-16/vocab.txt)",
+        required=False,
+    )
+    parser.add_argument(
+        "-n", "--calib-num", default=100, help="calibration batch numbers (default: 100)", type=int
+    )
+    parser.add_argument(
+        "-p", "--calib-path", help="calibration cache path (default: None)", required=False
+    )
+    parser.add_argument(
+        "-g",
+        "--force-fc2-gemm",
+        action="store_true",
+        help="Force use gemm to implement FC2 layer (default: false)",
+        required=False,
+    )
+    parser.add_argument(
+        "-iln",
+        "--force-int8-skipln",
+        action="store_true",
+        help="Run skip layernorm with INT8 (FP32 or FP16 by default) inputs and output (default: false)",
+        required=False,
+    )
+    parser.add_argument(
+        "-imh",
+        "--force-int8-multihead",
+        action="store_true",
+        help="Run multi-head attention with INT8 (FP32 or FP16 by default) input and output (default: false)",
+        required=False,
+    )
+    parser.add_argument(
+        "-sp",
+        "--sparse",
+        action="store_true",
+        help="Indicates that model is sparse (default: false)",
+        required=False,
+    )
+    parser.add_argument(
+        "-tcf",
+        "--timing-cache-file",
+        help="Path to tensorrt build timeing cache file, only available for tensorrt 8.0 and later (default: None)",
+        required=False,
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Turn on verbose logger and set profiling verbosity to DETAILED (default: false)",
+        required=False,
+    )
+
+    plugin_group = parser.add_mutually_exclusive_group(required=False)
+    plugin_group.add_argument('--use-v3-plugins',
+                                dest='use_deprecated_plugins',
+                                action='store_false',
+                                help="Use plugins implementing the IPluginV3 interface wherever TensorRT plugins are used. Cannot be used with --use-deprecated-plugins. Enabling this option should not affect functionality or performance. (default: false)")
+    plugin_group.add_argument('--use-deprecated-plugins',
+                                dest='use_deprecated_plugins',
+                                action='store_true',
+                                help="Use deprecated plugins implementing the IPluginV2 interface wherever TensorRT plugins are used (instead of updated plugins implementing the IPluginV3 interface). Cannot be used with --use-v3-plugins. Disabling this option should not affect functionality or performance. (default: true)")
+
+    parser.set_defaults(use_deprecated_plugins=True)
 
     args, _ = parser.parse_known_args()
     args.batch_size = args.batch_size or [1]
@@ -531,7 +661,19 @@ def main():
     bert_config_path = os.path.join(args.config_dir, "bert_config.json")
     TRT_LOGGER.log(TRT_LOGGER.INFO, "Using configuration file: {:}".format(bert_config_path))
 
-    config = BertConfig(bert_config_path, args.fp16, args.int8, args.strict, args.force_fc2_gemm, args.force_int8_skipln, args.force_int8_multihead, args.int8 and args.onnx != None, args.sparse, args.timing_cache_file)
+    config = BertConfig(
+        bert_config_path,
+        args.fp16,
+        args.int8,
+        args.strict,
+        args.force_fc2_gemm,
+        args.force_int8_skipln,
+        args.force_int8_multihead,
+        args.int8 and args.onnx != None,
+        args.sparse,
+        args.timing_cache_file,
+        args.use_deprecated_plugins,
+    )
 
     if args.calib_path != None:
         calib_cache = args.calib_path

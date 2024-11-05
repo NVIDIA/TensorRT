@@ -256,6 +256,11 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     // Release serialized blob to save memory space.
     iEnv.engine.releaseBlob();
 
+#if TRT_WINML
+    // Start JIT Compilation time after engine deserialization
+    auto jitCompileBegin = std::chrono::high_resolution_clock::now();
+#endif
+
     // Setup weight streaming if enabled
     if (engine->getStreamableWeightsSize() > 0)
     {
@@ -502,8 +507,17 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     }
 
     auto const* context = iEnv.contexts.front().get();
-    return FillStdBindings(
+    bool fillBindingsSuccess = FillStdBindings(
         engine, context, inference.inputs, iEnv.bindings, 1, endBindingIndex, inference.optProfileIndex)();
+
+#if TRT_WINML
+    // Stop JIT Compile Time when setup for inference is complete
+    auto jitCompileEnd = std::chrono::high_resolution_clock::now();
+    sample::gLogInfo << "JIT Compilation in " << std::chrono::duration<float>(jitCompileEnd - jitCompileBegin).count()
+                     << " sec." << std::endl;
+#endif
+
+    return fillBindingsSuccess;
 }
 
 TaskInferenceEnvironment::TaskInferenceEnvironment(
@@ -1169,18 +1183,22 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
         bool deserializeOK{false};
         engine.reset(nullptr);
         auto startClock = std::chrono::high_resolution_clock::now();
+
         SMP_RETVAL_IF_FALSE(!iEnv.safe, "Safe inference is not supported!", false, sample::gLogError);
 
-        auto& reader = iEnv.engine.getFileReader();
-        reader.reset();
-        ASSERT(reader.isOpen());
 #if !TRT_WINML
         for (auto const& pluginPath : sys.dynamicPlugins)
         {
             rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
 #endif
+
+        auto& reader = iEnv.engine.getFileReader();
+        ASSERT(reader.isOpen());
+        reader.reset();
         engine.reset(rt->deserializeCudaEngine(reader));
+        deserializeOK = (engine != nullptr);
+
         deserializeOK = (engine != nullptr);
         auto endClock = std::chrono::high_resolution_clock::now();
         // return NAN if deserialization failed.

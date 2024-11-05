@@ -94,7 +94,7 @@ def download(data_dir, yaml_path, overwrite=False):
         session.mount("http://", HTTPAdapter(max_retries=retries))
         session.mount("https://", HTTPAdapter(max_retries=retries))
         try:
-            r = session.get(url, stream=True, timeout=30)
+            r = session.get(url, stream=True, timeout=60)
             
             if r.status_code == 200:
                 logger.info("Connecting to %s is successful.", url)
@@ -108,11 +108,18 @@ def download(data_dir, yaml_path, overwrite=False):
                         progress_bar.update(len(chunk))
                         fd.write(chunk)
                 progress_bar.close()
+                return True
             else:
                 logger.info("Failed to connect to %s with status code: %s.", url, r.status_code)
-                
+                return False
+        
+        except requests.exceptions.ConnectionError as e:
+            logger.debug("Connection failed after retries:", e)
+        except requests.exceptions.Timeout as e:
+            logger.debug("A timeout occurred:", e)
         except requests.exceptions.RequestException as e:
             logger.debug("Error occurred while requesting connection to %s: %s.", url, e)
+        return False
 
     allGood = True
     for f in sample_data.files:
@@ -130,7 +137,7 @@ def download(data_dir, yaml_path, overwrite=False):
                     allGood = False
                     continue
         _createDirIfNeeded(fpath)
-        _downloadFile(fpath, f.url)
+        assert _downloadFile(fpath, f.url)
         if not _checkMD5(fpath, f.checksum):
             logger.error("The downloaded file %s has a different checksum!", fpath)
             allGood = False

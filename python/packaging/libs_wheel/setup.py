@@ -45,6 +45,6 @@ setup(
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",
-    url="https://developer.nvidia.com/tensorrt",
-    download_url="https://github.com/nvidia/tensorrt/tags",
+    url="https://github.com/nvidia/tensorrt",
+    download_url="https://developer.nvidia.com/tensorrt",
 )

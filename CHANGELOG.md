@@ -1,5 +1,37 @@
 # TensorRT OSS Release Changelog
 
+## 10.6.0 GA - 2024-11-05
+Key Feature and Updates:
+- Demo Changes
+  - demoBERT: The use of `fcPlugin` in demoBERT has been removed.
+  - demoBERT: All TensorRT plugins now used in demoBERT (`CustomEmbLayerNormDynamic`, `CustomSkipLayerNormDynamic`, and `CustomQKVToContextDynamic`) now have versions that inherit from IPluginV3 interface classes. The user can opt-in to use these V3 plugins by specifying `--use-v3-plugins` to the builder scripts.
+    - Opting-in to use V3 plugins does not affect performance, I/O, or plugin attributes. 
+    - There is a known issue in the V3 (version 4) of `CustomQKVToContextDynamic` plugin from TensorRT 10.6.0, causing an internal assertion error if either the batch or sequence dimensions differ at runtime from the ones used to serialize the engine. See the “known issues” section of the [TensorRT-10.6.0 release notes](https://docs.nvidia.com/deeplearning/tensorrt/release-notes/index.html#rel-10-6-0).
+    - For smoother migration, the default behavior is still using the  deprecated `IPluginV2DynamicExt`-derived plugins, when the flag: `--use-v3-plugins` isn't specified in the builder scripts. The flag `--use-deprecated-plugins` was added as an explicit way to enforce the default behavior, and is mutually exclusive with `--use-v3-plugins`.
+  - demoDiffusion
+    - Introduced BF16 and FP8 support for the [Flux.1-dev](demo/Diffusion#generate-an-image-guided-by-a-text-prompt-using-flux) pipeline.
+    - Expanded FP8 support on Ada platforms.
+    - Enabled LoRA adapter compatibility for SDv1.5, SDv2.1, and SDXL pipelines using Diffusers version 0.30.3.
+
+- Sample Changes
+  - Added the Python sample [quickly_deployable_plugins](samples/python/quickly_deployable_plugins), which demonstrates quickly deployable Python-based plugin definitions (QDPs) in TensorRT. QDPs are a simple and intuitive decorator-based approach to defining TensorRT plugins, requiring drastically less code.
+
+- Plugin Changes
+  - The `fcPlugin` has been deprecated. Its functionality has been superseded by the [IMatrixMultiplyLayer](https://docs.nvidia.com/deeplearning/tensorrt/api/c_api/classnvinfer1_1_1_i_matrix_multiply_layer.html) that is natively provided by TensorRT.
+  - Migrated `IPluginV2`-descendent version 1 of `CustomEmbLayerNormDynamic`, to version 6, which implements `IPluginV3`.
+    - The newer versions preserve the attributes and I/O of the corresponding older plugin version.
+    - The older plugin versions are deprecated and will be removed in a future release.
+
+- Parser Changes
+  - Updated ONNX submodule version to 1.17.0.
+  - Fixed issue where conditional layers were incorrectly being added.
+  - Updated local function metadata to contain more information.
+  - Added support for parsing nodes with Quickly Deployable Plugins.
+  - Fixed handling of optional outputs.
+
+- Tool Updates
+  - ONNX-Graphsurgeon updated to version 0.5.3
+  - Polygraphy updated to 0.49.14.
 
 ## 10.5.0 GA - 2024-09-30
 Key Features and Updates:

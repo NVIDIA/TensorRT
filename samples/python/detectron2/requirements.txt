@@ -5,7 +5,7 @@ Pillow>=10.0.0
 git+https://github.com/facebookresearch/detectron2.git
 git+https://github.com/NVIDIA/TensorRT#subdirectory=tools/onnx-graphsurgeon
 cuda-python==12.2.0; python_version <= "3.10"
-cuda-python==12.5.0; python_version >= "3.11"
+cuda-python==12.6.0; python_version >= "3.11"
 pywin32; platform_system == "Windows"
 pyyaml==6.0.1
 requests==2.32.2

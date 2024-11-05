@@ -63,6 +63,19 @@ def process_pipeline_args(args):
     if not args.build_static_batch or args.build_dynamic_shape:
         raise ValueError(f"Dynamic shapes not supported. Do not specify `--build-dynamic-shape`")
 
+    if args.fp8:
+        import torch
+        device_info = torch.cuda.get_device_properties(0)
+        version = device_info.major * 10 + device_info.minor
+        if version < 90: # FP8 is only supppoted on Hopper.
+            raise ValueError(f"Cannot apply FP8 quantization for GPU with compute capability {version / 10.0}. FP8 is only supppoted on Hopper.")
+        args.optimization_level = 4
+        print(f"[I] The default optimization level has been set to {args.optimization_level} for FP8.")
+
+    if args.quantization_level == 0.0 and args.fp8:
+        args.quantization_level = 3.0
+        print("[I] The default quantization level has been set to 3.0 for FP8.")
+
     kwargs_init_pipeline = {
         'version': args.version,
         'max_batch_size': max_batch_size,
@@ -89,6 +102,9 @@ def process_pipeline_args(args):
         'enable_all_tactics': args.build_all_tactics,
         'enable_refit': args.build_enable_refit,
         'timing_cache': args.timing_cache,
+        'fp8': args.fp8,
+        'quantization_level': args.quantization_level,
+
     }
 
     args_run_demo = (input_image, args.height, args.width, args.batch_size, args.batch_count, args.num_warmup_runs, args.use_cuda_graph)
@@ -99,7 +115,6 @@ if __name__ == "__main__":
     print("[I] Initializing StableDiffusion img2vid demo using TensorRT")
     args = parseArgs()
     kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
-
     # Initialize demo
     demo = StableVideoDiffusionPipeline(
         pipeline_type=PIPELINE_TYPE.IMG2VID,

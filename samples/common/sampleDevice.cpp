@@ -31,6 +31,7 @@ void cudaCheck(cudaError_t ret, std::ostream& err)
     }
 }
 
+#if !TRT_WINML
 // Construct GPU UUID string in the same format as nvidia-smi does.
 std::string getUuidString(cudaUUID_t uuid)
 {
@@ -54,7 +55,6 @@ std::string getUuidString(cudaUUID_t uuid)
 
 void setCudaDevice(int32_t device, std::ostream& os)
 {
-#if !TRT_WINML
     os << "=== Device Information ===" << std::endl;
 
     // Get the number of visible GPUs.
@@ -113,7 +113,6 @@ void setCudaDevice(int32_t device, std::ostream& os)
     os << "Note: The application clock rates do not reflect the actual clock rates that the GPU is "
                                                                          << "currently running at." << std::endl;
     // clang-format on
-#endif
 }
 
 int32_t getCudaDriverVersion()
@@ -129,5 +128,6 @@ int32_t getCudaRuntimeVersion()
     cudaCheck(cudaRuntimeGetVersion(&version));
     return version;
 }
+#endif
 
 } // namespace sample

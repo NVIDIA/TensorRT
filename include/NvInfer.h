@@ -8434,6 +8434,19 @@ enum class BuilderFlag : int32_t
     //! enabled. This flag cannot be used together with kREFIT or kREFIT_IDENTICAL.
     kREFIT_INDIVIDUAL = 23,
 
+    //!  Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are
+    //!  not true when x is a NaN or Inf, and thus might hide propagation or generation of NaNs. This flag is typically
+    //!  used in combination with kSPARSE_WEIGHTS.
+    //!  There are three valid sparsity configurations.
+    //!  1. Disable all sparsity. Both kSPARSE_WEIGHTS and kSTRICT_NANS are unset
+    //!  2. Enable sparsity only where it does not affect propagation/generation of NaNs. Both kSPARSE_WEIGHTS and
+    //!  kSTRICT_NANS are set
+    //!  3. Enable all sparsity. kSPARSE_WEIGHTS is set and kSTRICT_NANS is unset
+    kSTRICT_NANS = 24,
+
+    //! Enable memory monitor during build time.
+    kMONITOR_MEMORY = 25,
+
 };
 
 //!
@@ -8444,7 +8457,7 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 24;
+    return 26;
 }
 
 //!
@@ -9024,9 +9037,9 @@ public:
     }
 
     //!
-    //! \brief Set the cuda stream that is used to profile this network.
+    //! \brief Set the CUDA stream that is used to profile this network.
     //!
-    //! \param stream The cuda stream used for profiling by the builder.
+    //! \param stream The CUDA stream used for profiling by the builder.
     //!
     //! \see getProfileStream()
     //!
@@ -9036,9 +9049,9 @@ public:
     }
 
     //!
-    //! \brief Get the cuda stream that is used to profile this network.
+    //! \brief Get the CUDA stream that is used to profile this network.
     //!
-    //! \return The cuda stream set by setProfileStream, nullptr if setProfileStream has not been called.
+    //! \return The CUDA stream set by setProfileStream, nullptr if setProfileStream has not been called.
     //!
     //! \see setProfileStream()
     //!
@@ -9838,13 +9851,33 @@ public:
     //!
     //! \return A pointer to a IHostMemory object that contains a serialized network.
     //!
-    //! \note This function will synchronize the cuda stream returned by \p config.getProfileStream() before returning.
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
     //!
     //! \see INetworkDefinition, IBuilderConfig, IHostMemory
     //!
     nvinfer1::IHostMemory* buildSerializedNetwork(INetworkDefinition& network, IBuilderConfig& config) noexcept
     {
         return mImpl->buildSerializedNetwork(network, config);
+    }
+
+    //!
+    //! \brief Builds a network for the given INetworkDefinition and IBuilderConfig.
+    //!
+    //! \param network Network definition.
+    //! \param config Builder configuration.
+    //!
+    //! \return A pointer to a ICudaEngine object that contains an engine.
+    //!
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
+    //!
+    //! \note This function does not support \p BuilderFlag::kVERSION_COMPATIBLE.
+    //! Please use \p buildSerializedNetwork to get a version compatible engine.
+    //!
+    //! \see INetworkDefinition, IBuilderConfig, ICudaEngine
+    //!
+    nvinfer1::ICudaEngine* buildEngineWithConfig(INetworkDefinition& network, IBuilderConfig& config) noexcept
+    {
+        return mImpl->buildEngineWithConfig(network, config);
     }
 
     //!
@@ -9862,7 +9895,7 @@ public:
     //! \return True if network is within the scope of the restrictions specified by the builder config,
     //! false otherwise.
     //!
-    //! \note This function will synchronize the cuda stream returned by \p config.getProfileStream() before returning.
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
     //!
     bool isNetworkSupported(INetworkDefinition const& network, IBuilderConfig const& config) const noexcept
     {

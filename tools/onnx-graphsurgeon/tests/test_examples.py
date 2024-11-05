@@ -51,9 +51,11 @@ EXAMPLES = [
     ("09_shape_operations_with_the_layer_api", [Artifact("model.onnx")]),
     ("10_dynamic_batch_size", [Artifact("model.onnx"), Artifact("dynamic.onnx")]),
     ("11_creating_a_local_function", [Artifact("model.onnx")]),
-
     # Skipping inference test as bf16 is not supported in ORT yet.
-    ("12_using_bf16", [Artifact("test_conv_bf16.onnx", infer=False)]),
+    (
+        "12_using_numpy_unsupported_dtypes",
+        [Artifact("test_conv_bf16.onnx", infer=False)],
+    ),
 ]
 
 

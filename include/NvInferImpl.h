@@ -26,6 +26,8 @@
 namespace nvinfer1
 {
 
+class ILogger;
+
 namespace v_1_0
 {
 class IProgressMonitor;
@@ -112,6 +114,12 @@ namespace v_1_0
 class IPluginV3;
 } // namespace v_1_0
 using IPluginV3 = v_1_0::IPluginV3;
+
+namespace v_1_0
+{
+class IStreamReader;
+} // namespace v_1_0
+using IStreamReader = v_1_0::IStreamReader;
 
 class IPluginV3Layer;
 class IPoolingLayer;
@@ -1199,13 +1207,14 @@ public:
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
     virtual void reset() noexcept = 0;
     virtual bool platformHasTf32() const noexcept = 0;
-    virtual nvinfer1::IHostMemory* buildSerializedNetwork(INetworkDefinition& network, IBuilderConfig& config) noexcept
-        = 0;
+    virtual nvinfer1::IHostMemory* buildSerializedNetwork(
+        INetworkDefinition& network, IBuilderConfig& config) noexcept = 0;
     virtual bool isNetworkSupported(INetworkDefinition const& network, IBuilderConfig const& config) const noexcept = 0;
     virtual ILogger* getLogger() const noexcept = 0;
     virtual bool setMaxThreads(int32_t maxThreads) noexcept = 0;
     virtual int32_t getMaxThreads() const noexcept = 0;
     virtual IPluginRegistry& getPluginRegistry() noexcept = 0;
+    virtual ICudaEngine* buildEngineWithConfig(INetworkDefinition& network, IBuilderConfig& config) noexcept = 0;
 };
 
 } // namespace apiv

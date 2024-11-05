@@ -198,7 +198,8 @@ constexpr const char* descr = R"trtdoc(
     :ivar dynamic_range: :class:`Tuple[float, float]` [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization. A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
-)trtdoc";
+)trtdoc"
+    ;
 
 constexpr const char* set_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
@@ -1653,6 +1654,7 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 } // namespace IDequantizeLayerDoc
 
+
 namespace IIfConditionalBoundaryLayerDoc
 {
 constexpr const char* descr = R"trtdoc(
@@ -2372,6 +2374,16 @@ constexpr const char* add_plugin_v2 = R"trtdoc(
     :returns: The new plugin layer, or :class:`None` if it could not be created.
 )trtdoc";
 
+constexpr const char* add_plugin = R"trtdoc(
+    Add a plugin layer to the network with a tuple of (inputs, shape_inputs, plugin). :func:`add_plugin_v3` can be thought of as an "unpacked tuple" version of this function.
+
+    Primarily intended to be used when using the `tensorrt.plugin` module to implement the plugin.
+
+    :arg tuple: A tuple of (inputs, shape_inputs, plugin).
+
+    :returns: The new plugin layer, or :class:`None` if it could not be created.
+)trtdoc";
+
 constexpr const char* add_plugin_v3 = R"trtdoc(
     Add a plugin layer to the network using an :class:`IPluginV3` interface.
     See :class:`IPluginV3` for more information.
@@ -2440,6 +2452,7 @@ constexpr const char* add_dequantize = R"trtdoc(
 
     :returns: The new dequantization layer, or :class:`None` if it could not be created.
 )trtdoc";
+
 
 constexpr const char* add_if_conditional = R"trtdoc(
     Adds an if-conditional to the network, which provides a way to specify subgraphs that will be conditionally executed using lazy evaluation.

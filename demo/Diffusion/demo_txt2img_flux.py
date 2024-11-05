@@ -68,6 +68,17 @@ def parse_args():
         default=512,
         help="Maximum sequence length to use with the prompt",
     )
+    parser.add_argument(
+        "--bf16",
+        action='store_true',
+        help="Run pipeline in BFloat16 precision"
+    )
+    parser.add_argument(
+        "--low-vram",
+        action='store_true',
+        help="Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default."
+    )
+
     return parser.parse_args()
 
 
@@ -118,8 +129,9 @@ if __name__ == "__main__":
     demo = FluxPipeline(
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
         max_sequence_length=args.max_sequence_length,
-        **kwargs_init_pipeline,
-    )
+        bf16=args.bf16,
+        low_vram=args.low_vram,
+        **kwargs_init_pipeline)
 
     # Load TensorRT engines and pytorch modules
     demo.load_engines(
