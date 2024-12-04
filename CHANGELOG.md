@@ -1,5 +1,30 @@
 # TensorRT OSS Release Changelog
 
+## 10.7.0 GA - 2024-12-4
+Key Feature and Updates:
+
+- Demo Changes
+  - demoDiffusion
+    - Enabled low-vram for the Flux pipeline. Users can now run the pipelines on systems with 32GB VRAM.
+    - Added support for [FLUX.1-schnell](https://huggingface.co/black-forest-labs/FLUX.1-schnell) pipeline.
+    - Enabled weight streaming mode for Flux pipeline.
+
+- Plugin Changes
+  - On Blackwell and later platforms, TensorRT will drop cuDNN support on the following categories of plugins
+    - User-written `IPluginV2Ext`, `IPluginV2DynamicExt`, and `IPluginV2IOExt` plugins that are dependent on cuDNN handles provided by TensorRT (via the `attachToContext()` API).
+    - TensorRT standard plugins that use cuDNN, specifically:
+      - `InstanceNormalization_TRT` (version: 1, 2, and 3) present in `plugin/instanceNormalizationPlugin/`.
+      - `GroupNormalizationPlugin` (version: 1) present in `plugin/groupNormalizationPlugin/`.
+      - Note: These normalization plugins are superseded by TensorRT’s native `INormalizationLayer` ([C++](https://docs.nvidia.com/deeplearning/tensorrt/api/c_api/classnvinfer1_1_1_i_normalization_layer.html), [Python](https://docs.nvidia.com/deeplearning/tensorrt/operators/docs/Normalization.html)). TensorRT support for cuDNN-dependent plugins remain unchanged on pre-Blackwell platforms.
+
+- Parser Changes
+  - Now prioritizes using plugins over local functions when a corresponding plugin is available in the registry.
+  - Added dynamic axes support for `Squeeze` and `Unsqueeze` operations.
+  - Added support for parsing mixed-precision `BatchNormalization` nodes in strongly-typed mode.
+
+- Addressed Issues
+  - Fixed [4113](https://github.com/NVIDIA/TensorRT/issues/4113).
+
 ## 10.6.0 GA - 2024-11-05
 Key Feature and Updates:
 - Demo Changes

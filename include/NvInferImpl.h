@@ -120,6 +120,11 @@ namespace v_1_0
 class IStreamReader;
 } // namespace v_1_0
 using IStreamReader = v_1_0::IStreamReader;
+namespace v_1_0
+{
+class IStreamReaderV2;
+} // namespace v_1_0
+using IStreamReaderV2 = v_1_0::IStreamReaderV2;
 
 class IPluginV3Layer;
 class IPoolingLayer;
@@ -139,11 +144,13 @@ class IShapeLayer;
 class IShuffleLayer;
 class ISliceLayer;
 class ISoftMaxLayer;
+class ISqueezeLayer;
 class ITensor;
 class ITimingCache;
 class ITopKLayer;
 class ITripLimitLayer;
 class IUnaryLayer;
+class IUnsqueezeLayer;
 struct Permutation;
 class Weights;
 
@@ -265,6 +272,8 @@ public:
     virtual IRuntime* loadRuntime(char const* path) noexcept = 0;
     virtual void setEngineHostCodeAllowed(bool allowed) noexcept = 0;
     virtual bool getEngineHostCodeAllowed() const noexcept = 0;
+    // Added in TensorRT version 10.7
+    virtual nvinfer1::ICudaEngine* deserializeCudaEngineV2(IStreamReaderV2& streamReader) noexcept = 0;
 };
 
 class VRefitter : public VRoot
@@ -986,6 +995,14 @@ public:
     virtual DataType getComputePrecision() const noexcept = 0;
 }; // class VNormalizationLayer
 
+class VSqueezeLayer : public VRoot
+{
+};
+
+class VUnsqueezeLayer : public VRoot
+{
+};
+
 class VNetworkDefinition : public VRoot
 {
 public:
@@ -1073,6 +1090,8 @@ public:
     virtual bool markWeightsRefittable(char const* name) noexcept = 0;
     virtual bool unmarkWeightsRefittable(char const* name) noexcept = 0;
     virtual bool areWeightsMarkedRefittable(char const* name) const noexcept = 0;
+    virtual ISqueezeLayer* addSqueeze(ITensor& input, ITensor& axes) noexcept = 0;
+    virtual IUnsqueezeLayer* addUnsqueeze(ITensor& input, ITensor& axes) noexcept = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot

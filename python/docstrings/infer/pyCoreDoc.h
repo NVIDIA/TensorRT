@@ -599,6 +599,7 @@ constexpr char const* set_all_tensors_debug_state = R"trtdoc(
 
     :arg flag: True if turning on debug state of tensor. False if turning off.
 )trtdoc";
+
 } // namespace IExecutionContextDoc
 
 namespace IDebugListenerDoc
@@ -714,6 +715,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar weight_streaming_budget_v2: Set and get the current weight streaming budget for inference. The budget may be set any non-negative value. A value of 0 streams the most weights. Values equal to streamable_weights_size (default) or larger will disable weight streaming.
     :ivar weight_streaming_scratch_memory_size: The amount of scratch memory required by a TensorRT ExecutionContext to perform inference. This value may change based on the current weight streaming budget. Please use the V2 memory APIs, engine.device_memory_size_v2 and ExecutionContext.set_device_memory() to provide memory which includes the current weight streaming scratch memory. Not specifying these APIs or using the V1 APIs will not include this memory, so TensorRT will resort to allocating itself.
     )trtdoc"
+
     ;
 
 // Documentation bug with parameters on these three functions because they are overloaded.
@@ -962,6 +964,53 @@ constexpr char const* read = R"trtdoc(
 )trtdoc";
 } // namespace StreamReaderDoc
 
+namespace StreamReaderV2Doc
+{
+constexpr char const* descr = R"trtdoc(
+    Application-implemented class for asynchronously reading data from a stream. Implementation does not need to be
+    asynchronous or use the provided cuda stream. Python users are unlikely to see performance gains over IStreamReader
+    or deserialization from a glob.
+
+    To implement a custom stream reader, ensure that you explicitly instantiate the base class in :func:`__init__` :
+    ::
+        class MyStreamReader(trt.IStreamReaderV2):
+            def __init__(self):
+                trt.IStreamReaderV2.__init__(self)
+
+            def read(self, num_bytes: int, stream: int) -> bytes:
+                ... # Your implementation here
+
+            def seek(self, offset: int, where: SeekPosition) -> bool:
+                ... # Your implementation here
+)trtdoc";
+
+constexpr char const* read = R"trtdoc(
+    A callback implemented by the application to read a particular chunk of memory.
+
+    :arg num_bytes: The number of bytes required.
+    :arg stream: A handle to the cudaStream your implementation can use for reading.
+
+    :returns: A buffer containing the bytes read.
+)trtdoc";
+
+constexpr char const* seek = R"trtdoc(
+    A callback implemented by the application to set the stream location.
+
+    :arg offset: The offset within the stream to seek to.
+    :arg where: A `SeekPosition` enum specifying where the offset is relative to.
+
+    :returns: A buffer containing the bytes read.
+)trtdoc";
+} // namespace StreamReaderV2Doc
+
+namespace SeekPositionDoc
+{
+constexpr char const* descr
+    = R"trtdoc(Specifies what the offset is relative to when calling `seek` on an `IStreamReaderV2`.)trtdoc";
+constexpr char const* SET = R"trtdoc(Offsets forward from the start of the stream.)trtdoc";
+constexpr char const* CUR = R"trtdoc(Offsets forward from the current position within the stream.)trtdoc";
+constexpr char const* END = R"trtdoc(Offsets backward from the end of the stream.)trtdoc";
+} // namespace SeekPositionDoc
 
 namespace BuilderFlagDoc
 {
@@ -988,7 +1037,8 @@ constexpr char const* OBEY_PRECISION_CONSTRAINTS
 constexpr char const* PREFER_PRECISION_CONSTRAINTS
     = R"trtdoc(Prefer that layers execute in specified precisions. Fall back (with warning) to another precision if build would otherwise fail.)trtdoc";
 constexpr char const* DIRECT_IO
-    = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ITensor.allowed_formats was set. Build fails if a reformat is required for functional correctness.)trtdoc";
+    = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ``ITensor.allowed_formats`` was set. Build fails if a reformat is required for functional correctness.
+               [DEPRECATED] Deprecated in TensorRT 10.7.))trtdoc";
 constexpr char const* REJECT_EMPTY_ALGORITHMS
     = R"trtdoc(Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
 constexpr char const* VERSION_COMPATIBLE
@@ -1532,6 +1582,7 @@ constexpr char const* get_preview_feature = R"trtdoc(
 
     :returns: true if the feature is enabled, false otherwise
 )trtdoc";
+
 } // namespace IBuilderConfigDoc
 
 namespace SerializationFlagDoc
@@ -1684,6 +1735,16 @@ constexpr char const* deserialize_cuda_engine_reader = R"trtdoc(
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";
+
+constexpr char const* deserialize_cuda_engine_reader_v2 = R"trtdoc(
+    Deserialize an :class:`ICudaEngine` from a stream reader v2.
+
+    :arg stream_reader: The :class:`PyStreamReaderV2` that will read the serialized :class:`ICudaEngine`. This
+        enables deserialization from a file directly, with possible benefits to performance.
+
+    :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
+)trtdoc";
+
 
 constexpr char const* get_plugin_registry = R"trtdoc(
     Get the local plugin registry that can be used by the runtime.

@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.5 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.7 --single-branch
 cd TensorRT
 ```
 
@@ -16,7 +16,7 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:24.07-py3 /bin/bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:24.10-py3 /bin/bash
 ```
 
 NOTE: The demo supports CUDA>=11.8
@@ -43,12 +43,12 @@ pip3 install -r requirements.txt
 
 > NOTE: demoDiffusion has been tested on systems with NVIDIA H100, A100, L40, T4, and RTX4090 GPUs, and the following software configuration.
 ```
-diffusers           0.30.2
+diffusers           0.31.0
 onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.6.0.26
+tensorrt            10.7.0.23
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -66,6 +66,7 @@ python3 demo_img2img.py --help
 python3 demo_inpaint.py --help
 python3 demo_controlnet.py --help
 python3 demo_txt2img_xl.py --help
+python3 demo_txt2img_flux.py --help
 ```
 
 ### HuggingFace user access token
@@ -257,23 +258,43 @@ python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a
 
 ### Generate an image guided by a text prompt using Flux
 
+Run the below command to generate an image with FLUX.1 Dev in FP16.
+
 ```bash
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN
 ```
 
-Run the below command to generate an image with FLUX in BF16.
+Run the below command to generate an image with FLUX.1 Dev in BF16.
 
 ```bash
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16
 ```
 
-Run the below command to generate an image with FLUX in FP8. (FP8 is only supppoted on Hopper.)
+Run the below command to generate an image with FLUX.1 Dev in FP8. (FP8 is suppported on Hopper and Ada.)
 
 ```bash
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8
 ```
 
-NOTE: Running the Flux pipeline requires 80GB of GPU memory or higher
+Run the below command to generate an image with FLUX.1 Schnell in FP16.
+
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell"
+```
+
+Run the below command to generate an image with FLUX.1 Schnell in BF16.
+
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --bf16
+```
+
+Run the below command to generate an image with FLUX.1 Schnell in FP8. (FP8 is suppported on Hopper and Ada.)
+
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp8
+```
+
+NOTE: Running the FLUX.1 Dev or FLUX.1 Schnell pipeline requires 48GB or 24GB of GPU memory or higher, respectively.
 
 ## Configuration options
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.

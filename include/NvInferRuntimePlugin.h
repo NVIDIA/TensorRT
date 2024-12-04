@@ -127,8 +127,7 @@ enum class PluginCreatorVersion : int32_t
 //! \see IPluginCreator
 //! \see IPluginRegistry
 //!
-//! \deprecated Deprecated in TensorRT 8.5. Implement IPluginV2DynamicExt or IPluginV2IOExt depending on your
-//! requirement.
+//! \deprecated Deprecated in TensorRT 8.5. Implement IPluginV3 instead.
 //!
 class TRT_DEPRECATED IPluginV2
 {
@@ -260,7 +259,7 @@ public:
     //! \param format The format selected for the engine.
     //! \param maxBatchSize The maximum batch size. Will be a positive integer.
     //!
-    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be
+    //! The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be
     //! 3-dimensional CHW dimensions).
     //!
     //! \warning for the format field, the values PluginFormat::kCHW4, PluginFormat::kCHW16, and PluginFormat::kCHW32
@@ -463,8 +462,7 @@ protected:
 //!
 //! \see IPluginV2
 //!
-//! \deprecated Deprecated in TensorRT 8.5. Implement IPluginV2DynamicExt or IPluginV2IOExt depending on your
-//! requirement.
+//! \deprecated Deprecated in TensorRT 8.5. Implement IPluginV3 instead.
 //!
 class TRT_DEPRECATED IPluginV2Ext : public IPluginV2
 {
@@ -566,7 +564,7 @@ public:
     //! \param floatFormat The format selected for the engine for the floating point inputs/outputs.
     //! \param maxBatchSize The maximum batch size. Will be a positive integer.
     //!
-    //! The dimensions passed here do not include the outermost batch size (i.e. for 2-D image networks, they will be
+    //! The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be
     //! 3-dimensional CHW dimensions). When inputIsBroadcast or outputIsBroadcast is true, the outermost batch size for
     //! that input or output must be treated as if it is one.
     //! Index 'i' of inputIsBroadcast is true only if the input is semantically broadcast across the batch and
@@ -713,7 +711,7 @@ protected:
 //!
 //! \see IPluginV2Ext
 //!
-//! \deprecated Deprecated in TensorRT 10.0.
+//! \deprecated Deprecated in TensorRT 10.0. Implement IPluginV3 instead.
 //!
 class TRT_DEPRECATED IPluginV2IOExt : public IPluginV2Ext
 {
@@ -966,8 +964,8 @@ public:
 //!
 //! \see IPlugin and IPluginFactory
 //!
-//! \deprecated Deprecated in TensorRT 10.0. Please implement IPluginCreatorV3One instead along with IPluginV3 plugins
-//! instead.
+//! \deprecated Deprecated in TensorRT 10.0. Please implement IPluginCreatorV3One
+//! along with IPluginV3 plugins instead.
 //!
 using IPluginCreator = v_1_0::IPluginCreator;
 

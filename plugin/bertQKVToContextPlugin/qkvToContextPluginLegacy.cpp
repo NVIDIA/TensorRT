@@ -617,9 +617,9 @@ QKVToContextVarSeqlenPluginLegacy::QKVToContextVarSeqlenPluginLegacy(std::string
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        PLUGIN_ASSERT(
-            (mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75)
-            && (type == DataType::kINT8 || type == DataType::kHALF)
+        bool isSMSupported =
+            mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75;
+        PLUGIN_ASSERT(isSMSupported && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
         mHdim = 1;
@@ -728,7 +728,8 @@ bool QKVToContextVarSeqlenPluginLegacy::supportsFormatCombination(
     // we only support variable sequence and int8 IO in fused mha runner, and we only support fused mha runner on
     // Turing, Ampere and Hopper
     bool const hasV2Kernels
-        = (mSM == kSM_90 || mSM == kSM_89 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75);
+        = (
+            mSM == kSM_90 || mSM == kSM_89 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75);
     PLUGIN_ASSERT(
         (mType != DataType::kINT8 || hasV2Kernels) && "INT8 IO is only supported on Xavier, Turing, Ampere and Hopper");
     PLUGIN_ASSERT(

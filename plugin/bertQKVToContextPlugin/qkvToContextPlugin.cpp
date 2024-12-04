@@ -333,8 +333,9 @@ int32_t QKVToContextPluginDynamic::onShapeChange(
 
         createMHARunner();
 
-        // during build, configurePlugin() should have set mS, mB appropriately
-        // during inference, the engine should have mS, mB information
+        // mS and mB that are set by configurePlugin() may be stale
+        mS = inDesc.dims.d[SDIM];
+        mB = inDesc.dims.d[BDIM];
         PLUGIN_ASSERT(mS);
         PLUGIN_ASSERT(mB);
         if (fusedDispatcher.get() && fusedDispatcher->isValid(mHeadSize, mS))
@@ -624,7 +625,7 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
         int32_t b = -1;
         int32_t sm = -1;
         bool hasUnfusedDispatcher = false;
-        void const* runnerStateBuffer;
+        void const* runnerStateBuffer = nullptr;
         float dqProbs = -1;
 
         PLUGIN_VALIDATE(fc->fields != nullptr);
@@ -784,9 +785,9 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        PLUGIN_ASSERT(
-            (mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75)
-            && (type == DataType::kINT8 || type == DataType::kHALF)
+        bool isSMSupported =
+            mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75;
+        PLUGIN_ASSERT(isSMSupported && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
         mHdim = 1;
@@ -815,9 +816,9 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        PLUGIN_ASSERT(
-            (mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75)
-            && (type == DataType::kINT8 || type == DataType::kHALF)
+        bool isSMSupported =
+            mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75;
+        PLUGIN_ASSERT(isSMSupported && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
         mHdim = 1;
@@ -947,13 +948,14 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     // we only support variable sequence and int8 IO in fused mha runner, and we only support fused mha runner on
-    // Turing, Ampere and Hopper
+    // Turing, Ampere, Hopper.
     bool const hasV2Kernels
-        = (mSM == kSM_90 || mSM == kSM_89 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75);
+        = (
+            mSM == kSM_90 || mSM == kSM_89 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75);
     PLUGIN_ASSERT(
-        (mType != DataType::kINT8 || hasV2Kernels) && "INT8 IO is only supported on Xavier, Turing, Ampere and Hopper");
+        (mType != DataType::kINT8 || hasV2Kernels) && "INT8 IO is only supported on Xavier, Turing, Ampere, Hopper!");
     PLUGIN_ASSERT(
-        (!mUseVarSeqlen || hasV2Kernels) && "Variable sequence is only supported on Xavier, Turing, Ampere and Hopper");
+        (!mUseVarSeqlen || hasV2Kernels) && "Variable sequence is only supported on Xavier, Turing, Ampere, Hopper!");
 
     PLUGIN_ASSERT(pos >= 0);
     PLUGIN_ASSERT(pos < 2 + mHasImask + 2 * mUseVarSeqlen);

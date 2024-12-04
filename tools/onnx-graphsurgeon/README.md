@@ -19,7 +19,10 @@
 
 ## Introduction
 
-ONNX GraphSurgeon is a tool that allows you to easily generate new ONNX graphs, or modify existing ones.
+ONNX GraphSurgeon is a Python library that allows you to create and modify ONNX models.
+
+If you prefer a GUI, try [Nsight DL Designer](https://developer.nvidia.com/nsight-dl-designer),
+which integrates ONNX GraphSurgeon and provides various extra features.
 
 
 ## Installation

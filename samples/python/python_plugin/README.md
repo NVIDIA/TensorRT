@@ -139,6 +139,7 @@ In this example,
  - The engine / ONNX model cannot be run from outside Python (e.g. with `trtexec`)
    - This functionality is possible to implement but comes at the cost of embedding the Python interpreter to the TRT runtime / the binary loading the engine
  - (For `IPluginV2DynamicExt` only) No bindings yet for `attachToContext()` and `detachFromContext()` which are not pure virtual.
+ - `circ_pad_plugin_torch.py` may work on aarch64 platforms but is unsupported.
 
 # FAQ
 

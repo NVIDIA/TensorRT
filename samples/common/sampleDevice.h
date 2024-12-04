@@ -24,13 +24,11 @@
 #include <iostream>
 #include <thread>
 
+#include "safeCommon.h"
 #include "sampleUtils.h"
 
 namespace sample
 {
-
-//! Check if the CUDA return status shows any error. If so, exit the program immediately.
-void cudaCheck(cudaError_t ret, std::ostream& err = std::cerr);
 
 class TrtCudaEvent;
 
@@ -53,7 +51,7 @@ class TrtCudaStream
 public:
     TrtCudaStream()
     {
-        cudaCheck(cudaStreamCreate(&mStream));
+        CHECK(cudaStreamCreate(&mStream));
     }
 
     TrtCudaStream(const TrtCudaStream&) = delete;
@@ -66,7 +64,7 @@ public:
 
     ~TrtCudaStream()
     {
-        cudaCheck(cudaStreamDestroy(mStream));
+        CHECK(cudaStreamDestroy(mStream));
     }
 
     cudaStream_t get() const
@@ -76,14 +74,14 @@ public:
 
     void synchronize()
     {
-        cudaCheck(cudaStreamSynchronize(mStream));
+        CHECK(cudaStreamSynchronize(mStream));
     }
 
     void wait(TrtCudaEvent& event);
 
     void sleep(float* ms)
     {
-        cudaCheck(cudaLaunchHostFunc(mStream, cudaSleep, ms));
+        CHECK(cudaLaunchHostFunc(mStream, cudaSleep, ms));
     }
 
 private:
@@ -100,7 +98,7 @@ public:
     explicit TrtCudaEvent(bool blocking = true)
     {
         const uint32_t flags = blocking ? cudaEventBlockingSync : cudaEventDefault;
-        cudaCheck(cudaEventCreateWithFlags(&mEvent, flags));
+        CHECK(cudaEventCreateWithFlags(&mEvent, flags));
     }
 
     TrtCudaEvent(const TrtCudaEvent&) = delete;
@@ -113,7 +111,7 @@ public:
 
     ~TrtCudaEvent()
     {
-        cudaCheck(cudaEventDestroy(mEvent));
+        CHECK(cudaEventDestroy(mEvent));
     }
 
     cudaEvent_t get() const
@@ -123,19 +121,19 @@ public:
 
     void record(const TrtCudaStream& stream)
     {
-        cudaCheck(cudaEventRecord(mEvent, stream.get()));
+        CHECK(cudaEventRecord(mEvent, stream.get()));
     }
 
     void synchronize()
     {
-        cudaCheck(cudaEventSynchronize(mEvent));
+        CHECK(cudaEventSynchronize(mEvent));
     }
 
     // Returns time elapsed time in milliseconds
     float operator-(const TrtCudaEvent& e) const
     {
         float time{0};
-        cudaCheck(cudaEventElapsedTime(&time, e.get(), get()));
+        CHECK(cudaEventElapsedTime(&time, e.get(), get()));
         return time;
     }
 
@@ -145,7 +143,7 @@ private:
 
 inline void TrtCudaStream::wait(TrtCudaEvent& event)
 {
-    cudaCheck(cudaStreamWaitEvent(mStream, event.get(), 0));
+    CHECK(cudaStreamWaitEvent(mStream, event.get(), 0));
 }
 
 //!
@@ -175,7 +173,7 @@ public:
 
     void beginCapture(TrtCudaStream& stream)
     {
-        cudaCheck(cudaStreamBeginCapture(stream.get(), cudaStreamCaptureModeThreadLocal));
+        CHECK(cudaStreamBeginCapture(stream.get(), cudaStreamCaptureModeThreadLocal));
     }
 
     bool launch(TrtCudaStream& stream)
@@ -185,9 +183,9 @@ public:
 
     void endCapture(TrtCudaStream& stream)
     {
-        cudaCheck(cudaStreamEndCapture(stream.get(), &mGraph));
-        cudaCheck(cudaGraphInstantiate(&mGraphExec, mGraph, nullptr, nullptr, 0));
-        cudaCheck(cudaGraphDestroy(mGraph));
+        CHECK(cudaStreamEndCapture(stream.get(), &mGraph));
+        CHECK(cudaGraphInstantiate(&mGraphExec, mGraph, nullptr, nullptr, 0));
+        CHECK(cudaGraphDestroy(mGraph));
     }
 
     void endCaptureOnError(TrtCudaStream& stream)
@@ -204,9 +202,9 @@ public:
         }
         else
         {
-            assert(ret == cudaSuccess);
+            CHECK(ret);
             assert(mGraph != nullptr);
-            cudaCheck(cudaGraphDestroy(mGraph));
+            CHECK(cudaGraphDestroy(mGraph));
             mGraph = nullptr;
         }
         // Clean up any CUDA error.
@@ -298,7 +296,7 @@ struct DeviceAllocator
 {
     void operator()(void** ptr, size_t size)
     {
-        cudaCheck(cudaMalloc(ptr, size));
+        CHECK(cudaMalloc(ptr, size));
     }
 };
 
@@ -306,7 +304,7 @@ struct DeviceDeallocator
 {
     void operator()(void* ptr)
     {
-        cudaCheck(cudaFree(ptr));
+        CHECK(cudaFree(ptr));
     }
 };
 
@@ -314,7 +312,7 @@ struct ManagedAllocator
 {
     void operator()(void** ptr, size_t size)
     {
-        cudaCheck(cudaMallocManaged(ptr, size));
+        CHECK(cudaMallocManaged(ptr, size));
     }
 };
 
@@ -322,7 +320,7 @@ struct HostAllocator
 {
     void operator()(void** ptr, size_t size)
     {
-        cudaCheck(cudaMallocHost(ptr, size));
+        CHECK(cudaMallocHost(ptr, size));
     }
 };
 
@@ -330,7 +328,7 @@ struct HostDeallocator
 {
     void operator()(void* ptr)
     {
-        cudaCheck(cudaFreeHost(ptr));
+        CHECK(cudaFreeHost(ptr));
     }
 };
 
@@ -415,12 +413,12 @@ public:
 
     void hostToDevice(TrtCudaStream& stream) override
     {
-        cudaCheck(cudaMemcpyAsync(mDeviceBuffer.get(), mHostBuffer.get(), mSize, cudaMemcpyHostToDevice, stream.get()));
+        CHECK(cudaMemcpyAsync(mDeviceBuffer.get(), mHostBuffer.get(), mSize, cudaMemcpyHostToDevice, stream.get()));
     }
 
     void deviceToHost(TrtCudaStream& stream) override
     {
-        cudaCheck(cudaMemcpyAsync(mHostBuffer.get(), mDeviceBuffer.get(), mSize, cudaMemcpyDeviceToHost, stream.get()));
+        CHECK(cudaMemcpyAsync(mHostBuffer.get(), mDeviceBuffer.get(), mSize, cudaMemcpyDeviceToHost, stream.get()));
     }
 
     size_t getSize() const override

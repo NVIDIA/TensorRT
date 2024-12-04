@@ -237,10 +237,10 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     int32_t const isIntegrated{};
 #else
     int32_t device{};
-    cudaCheck(cudaGetDevice(&device));
+    CHECK(cudaGetDevice(&device));
 
     cudaDeviceProp properties;
-    cudaCheck(cudaGetDeviceProperties(&properties, device));
+    CHECK(cudaGetDeviceProperties(&properties, device));
     int32_t const isIntegrated{properties.integrated};
 #endif
     // Use managed memory on integrated devices when transfers are skipped
@@ -531,7 +531,7 @@ TaskInferenceEnvironment::TaskInferenceEnvironment(
     std::unique_ptr<InferenceEnvironment> tmp(new InferenceEnvironment(bEnv));
     iEnv = std::move(tmp);
 
-    cudaCheck(cudaSetDevice(device));
+    CHECK(cudaSetDevice(device));
     SystemOptions system{};
     system.device = device;
     system.DLACore = DLACore;
@@ -625,7 +625,7 @@ private:
     bool isStreamCapturing(TrtCudaStream& stream) const
     {
         cudaStreamCaptureStatus status{cudaStreamCaptureStatusNone};
-        cudaCheck(cudaStreamIsCapturing(stream.get(), &status));
+        CHECK(cudaStreamIsCapturing(stream.get(), &status));
         return status != cudaStreamCaptureStatusNone;
     }
 
@@ -916,7 +916,7 @@ private:
             {
                 mGraph.endCaptureOnError(stream);
                 // Ensure any CUDA error has been cleaned up.
-                cudaCheck(cudaGetLastError());
+                CHECK(cudaGetLastError());
                 sample::gLogWarning << "The built TensorRT engine contains operations that are not permitted under "
                                        "CUDA graph capture mode."
                                     << std::endl;
@@ -1018,7 +1018,7 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
             durationMs = inference.duration * 1000.F + warmupMs;
         }
 
-        cudaCheck(cudaSetDevice(device));
+        CHECK(cudaSetDevice(device));
 
         std::vector<std::unique_ptr<Iteration>> iStreams;
 
@@ -1080,7 +1080,7 @@ bool runInference(
     InferenceOptions const& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace)
 {
     SMP_RETVAL_IF_FALSE(!iEnv.safe, "Safe inference is not supported!", false, sample::gLogError);
-    cudaCheck(cudaProfilerStart());
+    CHECK(cudaProfilerStart());
 
     trace.resize(0);
 
@@ -1106,7 +1106,7 @@ bool runInference(
         th.join();
     }
 
-    cudaCheck(cudaProfilerStop());
+    CHECK(cudaProfilerStop());
 
     auto cmpTrace = [](InferenceTrace const& a, InferenceTrace const& b) { return a.h2dStart < b.h2dStart; };
     std::sort(trace.begin(), trace.end(), cmpTrace);
@@ -1116,7 +1116,7 @@ bool runInference(
 
 bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment>>& tEnvList)
 {
-    cudaCheck(cudaProfilerStart());
+    CHECK(cudaProfilerStart());
     cudaSetDeviceFlags(cudaDeviceScheduleSpin);
 
     SyncStruct sync;
@@ -1137,7 +1137,7 @@ bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment
         th.join();
     }
 
-    cudaCheck(cudaProfilerStop());
+    CHECK(cudaProfilerStop());
 
     auto cmpTrace = [](InferenceTrace const& a, InferenceTrace const& b) { return a.h2dStart < b.h2dStart; };
     for (auto& tEnv : tEnvList)
@@ -1157,7 +1157,7 @@ size_t reportGpuMemory()
     size_t free{0};
     size_t total{0};
     size_t newlyAllocated{0};
-    cudaCheck(cudaMemGetInfo(&free, &total));
+    CHECK(cudaMemGetInfo(&free, &total));
     sample::gLogInfo << "Free GPU memory = " << free / 1024.0_MiB << " GiB";
     if (prevFree != 0)
     {
@@ -1192,11 +1192,19 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
             rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
 #endif
-
         auto& reader = iEnv.engine.getFileReader();
-        ASSERT(reader.isOpen());
-        reader.reset();
-        engine.reset(rt->deserializeCudaEngine(reader));
+        auto& asyncReader = iEnv.engine.getAsyncFileReader();
+        ASSERT(reader.isOpen() || asyncReader.isOpen());
+        if (asyncReader.isOpen())
+        {
+            asyncReader.reset();
+            engine.reset(rt->deserializeCudaEngine(asyncReader));
+        }
+        else
+        {
+            reader.reset();
+            engine.reset(rt->deserializeCudaEngine(reader));
+        }
         deserializeOK = (engine != nullptr);
 
         deserializeOK = (engine != nullptr);

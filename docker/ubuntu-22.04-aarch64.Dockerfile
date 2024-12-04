@@ -20,7 +20,7 @@ ARG CUDA_VERSION=12.6.0
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
-ENV TRT_VERSION 10.6.0.26
+ENV TRT_VERSION 10.7.0.23
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -84,10 +84,10 @@ RUN ver="${CUDA_VERSION%.*}" &&\
 
 # Install Cmake
 RUN cd /tmp && \
-    wget https://github.com/Kitware/CMake/releases/download/v3.21.4/cmake-3.21.4-linux-aarch64.sh && \
-    chmod +x cmake-3.21.4-linux-aarch64.sh && \
-    ./cmake-3.21.4-linux-aarch64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
-    rm ./cmake-3.21.4-linux-aarch64.sh
+    wget https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-linux-aarch64.sh && \
+    chmod +x cmake-3.27.9-linux-aarch64.sh && \
+    ./cmake-3.27.9-linux-aarch64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
+    rm ./cmake-3.27.9-linux-aarch64.sh
 
 # Install PyPI packages
 RUN pip3 install --upgrade pip

@@ -277,6 +277,7 @@ class Engine():
         update_output_names=None,
         native_instancenorm=True,
         verbose=False,
+        weight_streaming=False,
         **extra_build_args
     ):
         print(f"Building TensorRT engine for {onnx_path}: {self.engine_path}")
@@ -292,6 +293,16 @@ class Engine():
         flags = []
         if native_instancenorm:
             flags.append(trt.OnnxParserFlag.NATIVE_INSTANCENORM)
+
+        # Weight streaming requires the engine to have strong typing, therefore builder flags specifying precision, such as int8 and fp16, should not be enabled.
+        # Please find more details in our developer guide: https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#streaming-weights.
+        if weight_streaming:
+            strongly_typed = True
+            fp16 = False
+            bf16 = False
+            int8 = False
+            fp8 = False
+
         network = network_from_onnx_path(
             onnx_path,
             flags=flags,
@@ -311,13 +322,14 @@ class Engine():
                     refittable=enable_refit,
                     profiles=[p],
                     load_timing_cache=timing_cache,
+                    weight_streaming=weight_streaming,
                     **extra_build_args
                 ),
                 save_timing_cache=timing_cache
             )
             save_engine(engine, path=self.engine_path)
 
-    def load(self):
+    def load(self, weight_streaming=False, weight_streaming_budget_percentage=None):
         if self.engine is not None:
             print(f"[W]: Engine {self.engine_path} already loaded, skip reloading")
             return
@@ -327,6 +339,11 @@ class Engine():
             self.engine_bytes_cpu = bytes_from_path(self.engine_path)
         print(f"Loading TensorRT engine from bytes: {self.engine_path}")
         self.engine = engine_from_bytes(self.engine_bytes_cpu)
+        if weight_streaming:
+            if weight_streaming_budget_percentage is None:
+                warnings.warn(f"Weight streaming budget is not set for {self.engine_path}. Weights will not be streamed.")
+            else:
+                self.engine.weight_streaming_budget_v2 = int(weight_streaming_budget_percentage / 100 * self.engine.streamable_weights_size)
     
     def unload(self):
         if self.engine is not None:
@@ -642,7 +659,7 @@ class PercentileAmaxes:
 
 def add_arguments(parser):
     # Stable Diffusion configuration
-    parser.add_argument('--version', type=str, default="1.5", choices=("1.4", "1.5", "dreamshaper-7", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0", "xl-turbo", "svd-xt-1.1", "sd3", "cascade", "flux.1-dev"), help="Version of Stable Diffusion")
+    parser.add_argument('--version', type=str, default="1.5", choices=("1.4", "1.5", "dreamshaper-7", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0", "xl-turbo", "svd-xt-1.1", "sd3", "cascade", "flux.1-dev", "flux.1-schnell"), help="Version of Stable Diffusion")
     parser.add_argument('prompt', nargs = '*', help="Text prompt(s) to guide image generation")
     parser.add_argument('--negative-prompt', nargs = '*', default=[''], help="The negative prompt(s) to guide the image generation.")
     parser.add_argument('--batch-size', type=int, default=1, choices=[1, 2, 4], help="Batch size (repeat prompt)")
@@ -710,7 +727,7 @@ def process_pipeline_args(args):
     if args.int8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1']):
         raise ValueError(f"int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
 
-    if args.fp8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1', 'flux.1-dev']):
+    if args.fp8 and not any(args.version.startswith(prefix) for prefix in ('xl', '1.4', '1.5', '2.1', 'flux.1-dev', 'flux.1-schnell')):
         raise ValueError(f"fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1 and FLUX pipelines.")
 
     if args.fp8 and args.int8:
@@ -728,7 +745,7 @@ def process_pipeline_args(args):
             print(f"The default quantization level has been set to {level} for {dtype_str}.")
 
         if args.fp8:
-            override_quant_level(3.0 if args.version in ("1.4", "1.5", "flux.1-dev") else 4.0, "FP8")
+            override_quant_level(3.0 if args.version in ("1.4", "1.5", "flux.1-dev", "flux.1-schnell") else 4.0, "FP8")
         elif args.int8:
             override_quant_level(3.0, "INT8")
 

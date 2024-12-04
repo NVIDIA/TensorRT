@@ -333,6 +333,14 @@ int main(int argc, char** argv)
             return sample::gLogger.reportPass(sampleTest);
         }
 
+#if TRT_WINML
+        if (options.build.skipInference)
+        {
+            sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
+            return sample::gLogger.reportPass(sampleTest);
+        }
+#endif
+
 #if !TRT_WINML
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);

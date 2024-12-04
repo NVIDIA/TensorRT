@@ -18,11 +18,11 @@
 
 from setuptools import setup
 
-module_name = "##TENSORRT_MODULE##"
+distribution_package_name = "##TENSORRT_MODULE##"
 
 
 setup(
-    name=module_name,
+    name=distribution_package_name,
     version="##TENSORRT_PYTHON_VERSION##",
     description="TensorRT Metapackage",
     long_description="TensorRT Metapackage",
@@ -35,7 +35,7 @@ setup(
     ],
     packages=[],
     install_requires=[
-        "##TENSORRT_MODULE##-cu##CUDA_MAJOR##==##TENSORRT_PYTHON_VERSION##"
+        "##TENSORRT_MODULE##_cu##CUDA_MAJOR##==##TENSORRT_PYTHON_VERSION##"
     ],
     include_package_data=True,
     zip_safe=True,

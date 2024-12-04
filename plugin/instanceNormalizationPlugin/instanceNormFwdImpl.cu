@@ -66,8 +66,8 @@ __global__ __launch_bounds__(THREADS_PER_CTA, DESIRED_OCCUPANCY) void instanceNo
     // else:
     //     return M2 / (n - 1)
 
-    bool const IS_INPUT_INT8 = std::is_same<Input_Data_Type, int8_t>::value;
-    bool const IS_OUTPUT_INT8 = std::is_same<Output_Data_Type, int8_t>::value;
+    bool const IS_INPUT_INT8 = std::is_same_v<Input_Data_Type, int8_t>;
+    bool const IS_OUTPUT_INT8 = std::is_same_v<Output_Data_Type, int8_t>;
 
     // The number of pixels loaded in a single LDG.
     int32_t const PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL;

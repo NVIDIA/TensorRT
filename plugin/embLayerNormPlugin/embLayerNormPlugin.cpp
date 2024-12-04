@@ -421,7 +421,8 @@ int32_t EmbLayerNormPluginDynamic::getOutputShapes(DimsExprs const* inputs, int3
 
         // this code must match getMHAMaskPackedSize in bertCommon.h
         bool const isSmOK
-            = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87 || mSM == kSM_89 || mSM == kSM_90);
+            = (mSM == kSM_75 || mSM == kSM_80 || mSM == kSM_86 || mSM == kSM_87 || mSM == kSM_89 || mSM == kSM_90
+             );
         bool const isPrecisionOK = (mMhaType == nvinfer1::DataType::kHALF || mMhaType == nvinfer1::DataType::kINT8);
         if (mUseFullMask || (isSmOK && isPrecisionOK))
         {

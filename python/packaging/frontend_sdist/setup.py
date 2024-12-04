@@ -24,12 +24,12 @@ import glob
 from setuptools import setup
 from setuptools.command.install import install
 
-tensorrt_module = "##TENSORRT_MODULE##-cu##CUDA_MAJOR##"
-tensorrt_package = "##TENSORRT_MODULE##"
+distribution_package_name = "##TENSORRT_MODULE##_cu##CUDA_MAJOR##"
+import_package_name = "##TENSORRT_MODULE##"
 tensorrt_version = "##TENSORRT_PYTHON_VERSION##"
 tensorrt_submodules = [
-    "{}_libs=={}".format(tensorrt_module, tensorrt_version),
-    "{}_bindings=={}".format(tensorrt_module, tensorrt_version),
+    "{}_libs=={}".format(distribution_package_name, tensorrt_version),
+    "{}_bindings=={}".format(distribution_package_name, tensorrt_version),
 ]
 nvidia_pip_index_url = os.environ.get("NVIDIA_PIP_INDEX_URL", "https://pypi.nvidia.com")
 disable_internal_pip = os.environ.get("NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP", False)
@@ -129,7 +129,7 @@ else:
 
 
 setup(
-    name=tensorrt_module,
+    name=distribution_package_name,
     version=tensorrt_version,
     description="A high performance deep learning inference library",
     long_description="""
@@ -159,13 +159,13 @@ When the extra index url does not contain `{}`, a nested `pip install` will run 
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[tensorrt_package],
+    packages=[import_package_name],
     install_requires=install_requires,
     setup_requires=["wheel", "pip"],
     python_requires=">=3.6",  # ref https://pypi.nvidia.com/tensorrt-bindings/
     cmdclass=cmdclass,
     extras_require={"numpy": "numpy"},
-    package_data={tensorrt_package: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
+    package_data={import_package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

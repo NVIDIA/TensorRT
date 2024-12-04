@@ -18,6 +18,7 @@
 #include "sampleUtils.h"
 #include "bfloat16.h"
 #include "half.h"
+#include <type_traits>
 
 using namespace nvinfer1;
 
@@ -539,23 +540,23 @@ void transpose2DWeights(void* dst, void const* src, int32_t const m, int32_t con
 template void transpose2DWeights<float>(void* dst, void const* src, int32_t const m, int32_t const n);
 template void transpose2DWeights<half_float::half>(void* dst, void const* src, int32_t const m, int32_t const n);
 
-template <typename T, typename std::enable_if<std::is_integral<T>::value, bool>::type>
-void fillBuffer(void* buffer, int64_t volume, T min, T max)
+template <typename TType, typename std::enable_if_t<std::is_integral_v<TType>, bool>>
+void fillBuffer(void* buffer, int64_t volume, TType min, TType max)
 {
-    T* typedBuffer = static_cast<T*>(buffer);
+    TType* typedBuffer = static_cast<TType*>(buffer);
     std::default_random_engine engine;
     std::uniform_int_distribution<int32_t> distribution(min, max);
-    auto generator = [&engine, &distribution]() { return static_cast<T>(distribution(engine)); };
+    auto generator = [&engine, &distribution]() { return static_cast<TType>(distribution(engine)); };
     std::generate(typedBuffer, typedBuffer + volume, generator);
 }
 
-template <typename T, typename std::enable_if<!std::is_integral<T>::value, int32_t>::type>
-void fillBuffer(void* buffer, int64_t volume, T min, T max)
+template <typename TType, typename std::enable_if_t<!std::is_integral_v<TType>, int32_t>>
+void fillBuffer(void* buffer, int64_t volume, TType min, TType max)
 {
-    T* typedBuffer = static_cast<T*>(buffer);
+    TType* typedBuffer = static_cast<TType*>(buffer);
     std::default_random_engine engine;
     std::uniform_real_distribution<float> distribution(min, max);
-    auto generator = [&engine, &distribution]() { return static_cast<T>(distribution(engine)); };
+    auto generator = [&engine, &distribution]() { return static_cast<TType>(distribution(engine)); };
     std::generate(typedBuffer, typedBuffer + volume, generator);
 }
 

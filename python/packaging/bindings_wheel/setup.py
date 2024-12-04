@@ -19,20 +19,20 @@ import os
 
 from setuptools import setup
 
-tensorrt_module = "##TENSORRT_MODULE##"
-package_name = "##TENSORRT_MODULE##"
+distribution_package_name = "##TENSORRT_MODULE##"
+import_package_name = "##TENSORRT_MODULE##"
 
 # This file expects the following to be passed from the environment when using standalone wheels:
 # - STANDALONE: Whether we are building a standalone wheel
 IS_STANDALONE = os.environ.get("STANDALONE") == "1"
 if IS_STANDALONE:
-    tensorrt_module += "-cu##CUDA_MAJOR##_bindings"
-    package_name += "_bindings"
+    distribution_package_name += "_cu##CUDA_MAJOR##_bindings"
+    import_package_name += "_bindings"
 
-plugin_subpackage_name = f"{package_name}.plugin"
+plugin_import_package_name = f"{import_package_name}.plugin"
 
 setup(
-    name=tensorrt_module,
+    name=distribution_package_name,
     version="##TENSORRT_PYTHON_VERSION##",
     description="A high performance deep learning inference library",
     long_description="A high performance deep learning inference library",
@@ -43,9 +43,9 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[package_name, plugin_subpackage_name],
+    packages=[import_package_name, plugin_import_package_name],
     extras_require={"numpy": "numpy"},
-    package_data={package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
+    package_data={import_package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

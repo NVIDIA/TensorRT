@@ -20,7 +20,12 @@ import argparse
 from cuda import cudart
 
 from flux_pipeline import FluxPipeline
-from utilities import PIPELINE_TYPE, add_arguments, process_pipeline_args
+from utilities import (
+    PIPELINE_TYPE,
+    add_arguments,
+    process_pipeline_args,
+    VALID_OPTIMIZATION_LEVELS,
+)
 
 
 def parse_args():
@@ -32,7 +37,7 @@ def parse_args():
         "--version",
         type=str,
         default="flux.1-dev",
-        choices=["flux.1-dev"],
+        choices=("flux.1-dev", "flux.1-schnell"),
         help="Version of Flux",
     )
     parser.add_argument(
@@ -65,20 +70,48 @@ def parse_args():
     parser.add_argument(
         "--max_sequence_length",
         type=int,
-        default=512,
-        help="Maximum sequence length to use with the prompt",
+        help="Maximum sequence length to use with the prompt. Can be up to 512 for the dev and 256 for the schnell variant.",
     )
     parser.add_argument(
-        "--bf16",
-        action='store_true',
-        help="Run pipeline in BFloat16 precision"
+        "--bf16", action="store_true", help="Run pipeline in BFloat16 precision"
     )
     parser.add_argument(
         "--low-vram",
-        action='store_true',
-        help="Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default."
+        action="store_true",
+        help="Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default.",
+    )
+    parser.add_argument(
+        "--optimization-level",
+        type=int,
+        default=3,
+        help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {VALID_OPTIMIZATION_LEVELS}.",
+    )
+    parser.add_argument(
+        "--torch-fallback",
+        default=None,
+        type=str,
+        help="Name list of models to be inferenced using torch instead of TRT. For example --torch-fallback t5,transformer. If --torch-inference set, this parameter will be ignored."
     )
 
+    parser.add_argument(
+        "--ws",
+        action='store_true',
+        help="Build TensorRT engines with weight streaming enabled."
+    )
+
+    parser.add_argument(
+        "--t5-ws-percentage",
+        type=int,
+        default=None,
+        help="Set runtime weight streaming budget as the percentage of the size of streamable weights for the T5 model. This argument only takes effect when --ws is set. 0 streams the most weights and 100 or None streams no weights. "
+    )
+
+    parser.add_argument(
+        "--transformer-ws-percentage",
+        type=int,
+        default=None,
+        help="Set runtime weight streaming budget as the percentage of the size of streamable weights for the transformer model. This argument only takes effect when --ws is set. 0 streams the most weights and 100 or None streams no weights."
+    )
     return parser.parse_args()
 
 
@@ -100,10 +133,24 @@ def process_demo_args(args):
     if len(prompt2) == 1:
         prompt2 = prompt2 * batch_size
 
-    if args.max_sequence_length is not None and args.max_sequence_length > 512:
-        raise ValueError(
-            f"`max_sequence_length` cannot be greater than 512 but is {args.max_sequence_length}"
-        )
+    max_seq_supported_by_model = {
+        "flux.1-schnell": 256,
+        "flux.1-dev": 512,
+    }[args.version]
+    if args.max_sequence_length is not None:
+        if args.max_sequence_length > max_seq_supported_by_model:
+            raise ValueError(
+                f"For {args.version}, `max_sequence_length` cannot be greater than {max_seq_supported_by_model} but is {args.max_sequence_length}"
+            )
+    else:
+        args.max_sequence_length = max_seq_supported_by_model
+
+    if args.torch_fallback and not args.torch_inference:
+        args.torch_fallback = args.torch_fallback.split(",")
+
+    if args.torch_fallback and args.torch_inference:
+        print(f"[W] All models will run in PyTorch when --torch-inference is set. Parameter --torch-fallback will be ignored.")
+        args.torch_fallback = None
 
     args_run_demo = (
         prompt,
@@ -131,6 +178,10 @@ if __name__ == "__main__":
         max_sequence_length=args.max_sequence_length,
         bf16=args.bf16,
         low_vram=args.low_vram,
+        torch_fallback=args.torch_fallback,
+        weight_streaming=args.ws,
+        t5_weight_streaming_budget_percentage=args.t5_ws_percentage,
+        transformer_weight_streaming_budget_percentage=args.transformer_ws_percentage,
         **kwargs_init_pipeline)
 
     # Load TensorRT engines and pytorch modules

@@ -72,6 +72,8 @@ constexpr char const* NON_ZERO = R"trtdoc(NonZero layer)trtdoc";
 constexpr char const* REVERSE_SEQUENCE = R"trtdoc(ReverseSequence layer)trtdoc";
 constexpr char const* NORMALIZATION = R"trtdoc(Normalization layer)trtdoc";
 constexpr const char* PLUGIN_V3 = R"trtdoc(PluginV3 layer)trtdoc";
+constexpr const char* SQUEEZE = R"trtdoc(Squeeze layer)trtdoc";
+constexpr const char* UNSQUEEZE = R"trtdoc(Unsqueeze layer)trtdoc";
 } // namespace LayerTypeDoc
 
 namespace TensorFormatDoc
@@ -184,7 +186,7 @@ namespace ITensorDoc
 constexpr const char* descr = R"trtdoc(
     A tensor in an :class:`INetworkDefinition` .
 
-    :ivar name: :class:`str` The tensor name. For a network input, the name is assigned by the application. For tensors which are layer outputs, a default name is assigned consisting of the layer name followed by the index of the output in brackets.
+    :ivar name: :class:`str` The tensor name. For a network input, the name is assigned by the application. For tensors which are layer outputs, a default name is assigned consisting of the layer name followed by the index of the output in brackets. Each network input and output tensor must have a unique name.
 
     :ivar shape: :class:`Dims` The shape of a tensor. For a network input the shape is assigned by the application. For a network output it is computed based on the layer parameters and the inputs to the layer. If a tensor size or a parameter is modified in the network, the shape of all dependent tensors will be recomputed. This call is only legal for network input tensors, since the shape of layer output tensors are inferred based on layer inputs and parameters.
 
@@ -199,7 +201,9 @@ constexpr const char* descr = R"trtdoc(
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc"
+
     ;
+
 
 constexpr const char* set_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
@@ -1821,6 +1825,71 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 } // namespace INormalizationLayerDoc
 
+namespace ISqueezeLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A Squeeze layer in an :class:`INetworkDefinition` .
+
+    This layer represents a squeeze operation, removing unit dimensions of the input tensor on a set of axes.
+
+    Axes must be resolvable to a constant Int32 or Int64 1D shape tensor.
+    Values in axes must be unique and in the range of [-r, r-1], where r is the rank of the input tensor.
+    For each axis value, the corresponding dimension in the input tensor must be one.
+
+)trtdoc";
+
+constexpr const char* set_input = R"trtdoc(
+    Sets the input tensor for the given index. The index must be 0 or 1 for a Squeeze layer.
+
+    The indices are as follows:
+
+    =====   ==================================================================================
+    Index   Description
+    =====   ==================================================================================
+        0     Input data tensor.
+        1     The axes to remove. Must be resolvable to a constant Int32 or Int64 1D shape tensor.
+    =====   ==================================================================================
+
+    :arg index: The index of the input tensor.
+    :arg tensor: The input tensor.
+)trtdoc";
+
+} // namespace ISqueezeLayerDoc
+
+namespace IUnsqueezeLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    An Unsqueeze layer in an :class:`INetworkDefinition` .
+
+    This layer represents an unsqueeze operation, which reshapes the input tensor by inserting unit-length dimensions at specified axes of the output.
+
+    Axes must be resolvable to a constant Int32 or Int64 shape tensor.
+    Values in axes must be unique and in the range of [-r_final, r_final-1], where r_final is the sum of rank(input) and len(axes).
+
+    r_final must be less than Dims.MAX_DIMS.
+
+)trtdoc";
+
+constexpr const char* set_input = R"trtdoc(
+    Sets the input tensor for the given index. The index must be 0 or 1 for an Unsqueeze layer.
+
+    The indices are as follows:
+
+    =====   ==================================================================================
+    Index   Description
+    =====   ==================================================================================
+        0     Input data tensor.
+        1     The axes to add. Must be resolvable to a constant Int32 or Int64 1D shape tensor.
+    =====   ==================================================================================
+
+    :arg index: The index of the input tensor.
+    :arg tensor: The input tensor.
+)trtdoc";
+
+} // namespace IUnsqueezeLayerDoc
+
+
+
 namespace INetworkDefinitionDoc
 {
 constexpr const char* descr = R"trtdoc(
@@ -1846,9 +1915,9 @@ constexpr const char* get_flag = R"trtdoc(
 constexpr const char* add_input = R"trtdoc(
     Adds an input to the network.
 
-    :arg name: The name of the tensor.
+    :arg name: The name of the tensor. Each input and output tensor must have a unique name.
     :arg dtype: The data type of the tensor. Currently, tensorrt.int8 is not supported for inputs.
-    :arg shape: The dimensions of the tensor. The total volume must be less than 2^30 elements.
+    :arg shape: The dimensions of the tensor. The total volume must be less than 2^31 elements.
 
     :returns: The newly added Tensor.
 )trtdoc";
@@ -2504,6 +2573,28 @@ constexpr char const* add_normalization = R"trtdoc(
 
     :returns: the new Normalization layer, or :class:`None` if it could not be created.
 )trtdoc";
+
+constexpr char const* add_squeeze = R"trtdoc(
+    Adds a Squeeze layer to the network.
+    See :class:`ISqueezeLayer` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg axes: The tensor containing axes to remove. Must be resolvable to a constant Int32 or Int64 1D shape tensor.
+
+    :returns: the new Squeeze layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_unsqueeze = R"trtdoc(
+    Adds an Unsqueeze layer to the network.
+    See :class:`IUnsqueezeLayer` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg axes: The tensor containing axes to add. Must be resolvable to a constant Int32 or Int64 1D shape tensor.
+
+    :returns: the new Unsqueeze layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+
 
 } // namespace INetworkDefinitionDoc
 

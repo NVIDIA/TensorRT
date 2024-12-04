@@ -18,6 +18,7 @@
 // This contains the core elements of the API, i.e. builder, logger, engine, runtime, context.
 #include "ForwardDeclarations.h"
 #include "utils.h"
+
 #include <chrono>
 #include <iomanip>
 #include <pybind11/stl.h>
@@ -163,6 +164,10 @@ bool setInputShape(IExecutionContext& self, char const* tensorName, PyIterable& 
 static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffer& serializedEngine) {
     py::buffer_info info = serializedEngine.request();
     return self.deserializeCudaEngine(info.ptr, info.size * info.itemsize);
+};
+
+static const auto reader_v2_read = [](IStreamReaderV2& self, void* destination, int64_t nbBytes, size_t stream) {
+    return self.read(destination, nbBytes, reinterpret_cast<cudaStream_t>(stream));
 };
 
 
@@ -350,6 +355,7 @@ void serialization_config_set_flags(ISerializationConfig& self, uint32_t flags)
         utils::throwPyError(PyExc_RuntimeError, "Provided serialization flags is incorrect");
     }
 }
+
 
 // For IDebugListener, this function is intended to be override by client.
 // The bindings here will never be called and is for documentation purpose only.
@@ -630,6 +636,66 @@ public:
     }
 };
 
+class PyStreamReaderV2 : public IStreamReaderV2
+{
+public:
+    int64_t read(void* destination, int64_t nbBytes, cudaStream_t stream) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            py::function pyFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "read");
+
+            if (!pyFunc)
+            {
+                return 0;
+            }
+
+            intptr_t cudaStreamPtr = reinterpret_cast<intptr_t>(stream);
+
+            py::buffer data = pyFunc(nbBytes, cudaStreamPtr); // user implements this
+            py::buffer_info info = data.request();
+            int64_t bytesRead = info.size * info.itemsize;
+            std::memcpy(destination, info.ptr, std::min(bytesRead, nbBytes));
+            return bytesRead;
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in read(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in read()" << std::endl;
+        }
+        return 0;
+    }
+
+    bool seek(int64_t offset, SeekPosition where) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            py::function pyFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "seek");
+
+            if (!pyFunc)
+            {
+                return false;
+            }
+
+            py::bool_ ret = pyFunc(offset, where);
+            return ret;
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in seek(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in seek()" << std::endl;
+        }
+        return false;
+    }
+};
 
 class PyDebugListener : public IDebugListener
 {
@@ -1100,6 +1166,7 @@ void bindCore(py::module& m)
         .def("get_debug_state", &IExecutionContext::getDebugState, "name"_a, IExecutionContextDoc::get_debug_state)
         .def("set_all_tensors_debug_state", &IExecutionContext::setAllTensorsDebugState, "flag"_a,
             IExecutionContextDoc::set_all_tensors_debug_state)
+
         ;
 
     py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
@@ -1297,6 +1364,7 @@ void bindCore(py::module& m)
         // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
 
+
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
@@ -1338,6 +1406,15 @@ void bindCore(py::module& m)
         .def(py::init<>())
         .def("read", &IStreamReader::read, "destination"_a, "size"_a, StreamReaderDoc::read);
 
+    py::enum_<SeekPosition>(m, "SeekPosition", py::arithmetic{}, SeekPositionDoc::descr, py::module_local())
+        .value("SET", SeekPosition::kSET, SeekPositionDoc::SET)
+        .value("CUR", SeekPosition::kCUR, SeekPositionDoc::CUR)
+        .value("END", SeekPosition::kEND, SeekPositionDoc::END);
+
+    py::class_<IStreamReaderV2, PyStreamReaderV2>(m, "IStreamReaderV2", StreamReaderV2Doc::descr, py::module_local())
+        .def(py::init<>())
+        .def("read", lambdas::reader_v2_read, "destination"_a, "num_bytes"_a, "stream"_a, StreamReaderV2Doc::seek)
+        .def("seek", &IStreamReaderV2::seek, "offset"_a, "where"_a, StreamReaderV2Doc::read);
 
     py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr, py::module_local())
         .value("FP16", BuilderFlag::kFP16, BuilderFlagDoc::FP16)
@@ -1503,6 +1580,7 @@ void bindCore(py::module& m)
         .def_property("max_aux_streams", &IBuilderConfig::getMaxAuxStreams, &IBuilderConfig::setMaxAuxStreams)
         .def_property("progress_monitor", &IBuilderConfig::getProgressMonitor,
             py::cpp_function(&IBuilderConfig::setProgressMonitor, py::keep_alive<1, 2>{}))
+
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
@@ -1557,6 +1635,10 @@ void bindCore(py::module& m)
         .def("deserialize_cuda_engine", py::overload_cast<IStreamReader&>(&IRuntime::deserializeCudaEngine),
             "stream_reader"_a, RuntimeDoc::deserialize_cuda_engine_reader, py::call_guard<py::gil_scoped_release>{},
             py::keep_alive<0, 1>{})
+        .def("deserialize_cuda_engine", py::overload_cast<IStreamReaderV2&>(&IRuntime::deserializeCudaEngine),
+            "stream_reader_v2"_a, RuntimeDoc::deserialize_cuda_engine_reader_v2,
+            py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
+
         .def_property("DLA_core", &IRuntime::getDLACore, &IRuntime::setDLACore)
         .def_property_readonly("num_DLA_cores", &IRuntime::getNbDLACores)
         .def_property("gpu_allocator", nullptr, py::cpp_function(&IRuntime::setGpuAllocator, py::keep_alive<1, 2>{}))

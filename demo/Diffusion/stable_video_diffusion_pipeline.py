@@ -221,7 +221,7 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
         if 'clip-imgfe' in self.stages:
             self.models['clip-imgfe'] = CLIPImageProcessorModel(**models_args, subfolder='feature_extractor')
         if 'unet-temp' in self.stages:
-            self.models['unet-temp'] = UNetTemporalModel(**models_args, fp16=True, num_frames=self.num_frames, do_classifier_free_guidance=self.do_classifier_free_guidance)
+            self.models['unet-temp'] = UNetTemporalModel(**models_args, fp16=True, fp8=fp8, num_frames=self.num_frames, do_classifier_free_guidance=self.do_classifier_free_guidance)
         if 'vae-temp' in self.stages:
             self.models['vae-temp'] = VAEDecTemporalModel(**models_args, decode_chunk_size=self.decode_chunk_size)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
@@ -311,6 +311,9 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
                     obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, custom_model=model, static_shape=static_shape)
                 else:
                     obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width)
+
+        # Clean model cache
+        torch.cuda.empty_cache()
 
         # Build TensorRT engines
         for model_name, obj in self.models.items():

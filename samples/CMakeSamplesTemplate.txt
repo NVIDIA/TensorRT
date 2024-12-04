@@ -22,6 +22,7 @@ endif()
 
 set_ifndef(PLUGINS_NEEDED OFF)
 set_ifndef(SAMPLE_PARSERS "none")
+set_ifndef(CUDA_LIBS_REQUIRED False)
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -127,6 +128,11 @@ set_target_properties(${TARGET_NAME}
     LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
 )
+
+# Add CUDA dependencies for samples that require them.
+if(${CUDA_LIBS_REQUIRED})
+    target_link_directories(${TARGET_NAME} PUBLIC ${CUDA_ROOT}/lib)
+endif()
 
 add_dependencies(samples ${TARGET_NAME})
 

@@ -673,6 +673,82 @@ protected:
 //!
 using IStreamReader = v_1_0::IStreamReader;
 
+//!
+//! \enum SeekPosition
+//! \brief Controls the seek mode of IStreamReaderV2.
+//!
+enum class SeekPosition : int32_t
+{
+    //! From the beginning of the file.
+    kSET = 0,
+
+    //! From the current position of the file.
+    kCUR = 1,
+
+    //! From the tail of the file.
+    kEND = 2,
+};
+
+namespace v_1_0
+{
+class IStreamReaderV2 : public IVersionedInterface
+{
+public:
+    //!
+    //! TensorRT never calls the destructor for an IStreamReaderV2 defined by the
+    //! application.
+    //!
+    ~IStreamReaderV2() override = default;
+    IStreamReaderV2() = default;
+
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return InterfaceInfo{"IStreamReaderV2", 1, 0};
+    }
+
+    //!
+    //! \brief Read the next number of bytes in the stream asynchronously.
+    //!
+    //! \param destination The memory to write to, call cudaPointerGetAttributes to get the memory location
+    //! \param nbBytes The number of bytes to read
+    //! \param stream The CUDA stream used to do the copy
+    //!
+    //! \returns The number of bytes read. Negative values indicate an unrecoverable error.
+    //! A zero indicates that the end of the stream has been reached.
+    //!
+    virtual int64_t read(void* destination, int64_t nbBytes, cudaStream_t stream) noexcept = 0;
+
+    //!
+    //! \brief Sets the position of the stream to the given offset.
+    //!
+    //! \param offset The number of bytes to offset from where.
+    //! \param where The position from where the offset is added. \see SeekPosition
+    //!
+    //! \returns True if the position is updated successfully.
+    //!
+    virtual bool seek(int64_t offset, SeekPosition where) noexcept = 0;
+
+protected:
+    IStreamReaderV2(IStreamReaderV2 const&) = default;
+    IStreamReaderV2(IStreamReaderV2&&) = default;
+    IStreamReaderV2& operator=(IStreamReaderV2 const&) & = default;
+    IStreamReaderV2& operator=(IStreamReaderV2&&) & = default;
+};
+} // namespace v_1_0
+
+//!
+//! \class IStreamReaderV2
+//!
+//! \brief Application-implemented class for reading data in a stream-based manner asynchronously. Intended for use with
+//! the GDS API for optimizing load times.
+//!
+//! \note To ensure compatibility of source code with future versions of TensorRT, use IStreamReaderV2, not
+//!       v_1_0::IStreamReaderV2
+//!
+using IStreamReaderV2 = v_1_0::IStreamReaderV2;
 
 //!
 //! \class IPluginResourceContext
@@ -825,7 +901,7 @@ public:
     //! \param outputs Pre-allocated array to which the output dimensions must be written
     //! \param exprBuilder Object for generating new dimension expressions
     //!
-    //! \note Any size tensor outputs must be declared to be 0-D.
+    //! \note Any size tensor outputs must be declared to be 0D.
     //!
     //! \note The declaration of shapeInputs as DimsExprs is slightly abusive, because the "dimensions"
     //!       are actually the values of the shape tensor. For example, if the input shape tensor
@@ -1853,11 +1929,34 @@ public:
     //!
     //! \return The engine, or nullptr if it could not be deserialized.
     //!
-    ICudaEngine* deserializeCudaEngine(IStreamReader& streamReader)
+    //! \deprecated Deprecated in TensorRT 10.7. Superseded by deserializeCudaEngine that takes an IStreamReaderV2
+    //! instead of IStreamReader.
+    //!
+    TRT_DEPRECATED ICudaEngine* deserializeCudaEngine(IStreamReader& streamReader)
     {
         return mImpl->deserializeCudaEngine(streamReader);
     }
 
+    //!
+    //! \brief Deserialize an engine from a stream. IStreamReaderV2 is expected to support reading to both host and
+    //! device pointers.
+    //!
+    //! If an error recorder has been set for the runtime, it will also be passed to the
+    //! engine.
+    //!
+    //! This deserialization path will reduce engine load time when applied with GDS (GPU Direct storage), or when
+    //! weight streaming is enabled.
+    //!
+    //! \param streamReader a read-only stream from which TensorRT will deserialize a previously serialized engine.
+    //! \param stream The CUDA stream used when performing asynchronous I/O.
+    //!
+    //! \return The engine, or nullptr if it could not be deserialized. The pointer may not be valid immediately after
+    //! the function returns.
+    //!
+    ICudaEngine* deserializeCudaEngine(IStreamReaderV2& streamReader)
+    {
+        return mImpl->deserializeCudaEngineV2(streamReader);
+    }
 
     //!
     //! \brief get the logger with which the runtime was created
@@ -4344,14 +4443,17 @@ public:
     //! Before calling enqueueV3(), each input must have a non-null address and
     //! each output must have a non-null address or an IOutputAllocator to set it later.
     //!
-    //! If the TensorLocation of the tensor is kHOST, the pointer must point to a host buffer of sufficient size.
-    //! If the TensorLocation of the tensor is kDEVICE, the pointer must point to a device buffer of sufficient size and
-    //! alignment, or be nullptr if the tensor is an output tensor that will be allocated by IOutputAllocator.
+    //! If the TensorLocation of the tensor is kHOST:
+    //! - The pointer must point to a host buffer of sufficient size.
+    //! - Data representing shape values is not copied until enqueueV3 is invoked.
+    //!
+    //! If the TensorLocation of the tensor is kDEVICE:
+    //! - The pointer must point to a device buffer of sufficient size and alignment, or
+    //! - Be nullptr if the tensor is an output tensor that will be allocated by IOutputAllocator.
     //!
     //! If getTensorShape(name) reports a -1 for any dimension of an output after all
-    //! input shapes have been set, then to find out
-    //! the dimensions, use setOutputAllocator() to associate an IOutputAllocator to
-    //! which the dimensions will be reported when known.
+    //! input shapes have been set, use setOutputAllocator() to associate an IOutputAllocator
+    //! to which the dimensions will be reported when known.
     //!
     //! Calling both setTensorAddress and setOutputAllocator() for the same output is allowed,
     //! and can be useful for preallocating memory, and then reallocating if it's not big enough.
@@ -5184,6 +5286,79 @@ public:
         return {"IGpuAllocator", 1, 0};
     }
 };
+
+class IPluginCreatorV3One : public IPluginCreatorInterface
+{
+public:
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return InterfaceInfo{"PLUGIN CREATOR_V3ONE", 1, 0};
+    }
+
+    //!
+    //! \brief Return a plugin object. Return nullptr in case of error.
+    //!
+    //! \param name A NULL-terminated name string of length 1024 or less, including the NULL terminator.
+    //! \param fc A pointer to a collection of fields needed for constructing the plugin.
+    //! \param phase The TensorRT phase in which the plugin is being created
+    //!
+    //! When the phase is TensorRTPhase::kRUNTIME, the PluginFieldCollection provided for serialization by the plugin's
+    //! runtime interface will be passed as fc.
+    //!
+    //! \note The returned plugin object must be in an initialized state
+    //!
+    //! \note If invoked by the user (e.g. with TensorRTPhase::kBUILD, to add to the network defintion with
+    //! addPluginV3()), it is the user's responsibility to delete the plugin object. If invoked by TensorRT (e.g. during
+    //! engine deserialization), TensorRT will delete any objects it creates.
+    //!
+    virtual IPluginV3* createPlugin(
+        AsciiChar const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept = 0;
+
+    //!
+    //! \brief Return a list of fields that need to be passed to createPlugin() when creating a plugin for use in the
+    //! TensorRT build phase.
+    //!
+    //! \see PluginFieldCollection
+    //!
+    virtual PluginFieldCollection const* getFieldNames() noexcept = 0;
+
+    //!
+    //! \brief Return the plugin name.
+    //!
+    //! \warning The string returned must be NULL-terminated and have a length of 1024 bytes or less including
+    //! the NULL terminator.
+    //!
+    virtual AsciiChar const* getPluginName() const noexcept = 0;
+
+    //!
+    //! \brief Return the plugin version.
+    //!
+    //! \warning The string returned must be NULL-terminated and have a length of 1024 bytes or less including
+    //! the NULL terminator.
+    //!
+    virtual AsciiChar const* getPluginVersion() const noexcept = 0;
+
+    //!
+    //! \brief Return the plugin namespace.
+    //!
+    //! \warning The string returned must be NULL-terminated and have a length of 1024 bytes or less including
+    //! the NULL terminator.
+    //!
+    virtual AsciiChar const* getPluginNamespace() const noexcept = 0;
+
+    IPluginCreatorV3One() = default;
+    virtual ~IPluginCreatorV3One() = default;
+
+protected:
+    IPluginCreatorV3One(IPluginCreatorV3One const&) = default;
+    IPluginCreatorV3One(IPluginCreatorV3One&&) = default;
+    IPluginCreatorV3One& operator=(IPluginCreatorV3One const&) & = default;
+    IPluginCreatorV3One& operator=(IPluginCreatorV3One&&) & = default;
+};
+
 } // namespace v_1_0
 
 //!
@@ -5200,6 +5375,17 @@ public:
 //!
 //! \see IGpuAllocator
 using IGpuAsyncAllocator = v_1_0::IGpuAsyncAllocator;
+
+//!
+//! \class IPluginCreatorV3One
+//!
+//! \brief A plugin creator class capable of producing IPluginV3 objects
+//!
+//! \see IPluginV3
+//! \see IPluginRegistry
+//!
+using IPluginCreatorV3One = v_1_0::IPluginCreatorV3One;
+
 } // namespace nvinfer1
 
 //!

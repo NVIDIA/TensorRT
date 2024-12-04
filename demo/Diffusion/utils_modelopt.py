@@ -172,6 +172,7 @@ def get_int8_config(
         "quant_cfg": {
             "*lm_head*": {"enable": False},
             "*output_layer*": {"enable": False},
+            "*output_quantizer": {"enable": False},
             "default": {"num_bits": 8, "axis": None},
         },
         "algorithm": {"method": "smoothquant", "alpha": alpha},

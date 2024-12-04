@@ -80,9 +80,8 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
 
     if (mEngine == nullptr)
     {
-        SMP_RETVAL_IF_FALSE(getFileReader().isOpen() || !getBlob().empty(), "Engine is empty. Nothing to deserialize!",
-            nullptr, sample::gLogError);
-
+        SMP_RETVAL_IF_FALSE(getAsyncFileReader().isOpen() || getFileReader().isOpen() || !getBlob().empty(),
+            "Engine is empty. Nothing to deserialize!", nullptr, sample::gLogError);
         using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
         using duration = std::chrono::duration<float>;
         time_point const deserializeStartTime{std::chrono::high_resolution_clock::now()};
@@ -129,6 +128,10 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         if (getFileReader().isOpen())
         {
             mEngine.reset(mRuntime->deserializeCudaEngine(getFileReader()));
+        }
+        else if (getAsyncFileReader().isOpen())
+        {
+            mEngine.reset(mRuntime->deserializeCudaEngine(getAsyncFileReader()));
         }
         else
         {
@@ -268,7 +271,7 @@ public:
     {
         for (auto& elem : mInputDeviceBuffers)
         {
-            cudaCheck(cudaFree(elem.second), mErr);
+            CHECK_WITH_STREAM(cudaFree(elem.second), mErr);
         }
     }
 
@@ -316,8 +319,9 @@ RndInt8Calibrator::RndInt8Calibrator(int32_t batches, std::vector<int64_t>& elem
         std::generate_n(rnd_data.begin(), elemCount[i], gen);
 
         void* data;
-        cudaCheck(cudaMalloc(&data, elemCount[i] * sizeof(float)), mErr);
-        cudaCheck(cudaMemcpy(data, rnd_data.data(), elemCount[i] * sizeof(float), cudaMemcpyHostToDevice), mErr);
+        CHECK_WITH_STREAM(cudaMalloc(&data, elemCount[i] * sizeof(float)), mErr);
+        CHECK_WITH_STREAM(
+            cudaMemcpy(data, rnd_data.data(), elemCount[i] * sizeof(float), cudaMemcpyHostToDevice), mErr);
 
         mInputDeviceBuffers.insert(std::make_pair(input->getName(), data));
     }
@@ -1177,9 +1181,11 @@ bool networkToSerializedEngine(
     }
 
     // CUDA stream used for profiling by the builder.
+#if !TRT_WINML
     auto profileStream = samplesCommon::makeCudaStream();
     SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
     config->setProfileStream(*profileStream);
+#endif
 
     auto const tBegin = std::chrono::high_resolution_clock::now();
     std::unique_ptr<IHostMemory> serializedEngine{builder.buildSerializedNetwork(*env.network, *config)};
@@ -1310,6 +1316,13 @@ bool loadStreamingEngineToBuildEnv(std::string const& filepath, BuildEnvironment
     return true;
 }
 
+bool loadAsyncStreamingEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err)
+{
+    auto& asyncReader = env.engine.getAsyncFileReader();
+    SMP_RETVAL_IF_FALSE(asyncReader.open(filepath), "", false, err << "Error opening engine file: " << filepath);
+    return true;
+}
+
 
 bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err)
 {
@@ -1340,9 +1353,15 @@ bool printPlanVersion(BuildEnvironment& env, std::ostream& err)
     auto blob = data.data();
 
     auto& reader = env.engine.getFileReader();
+    auto& asyncReader = env.engine.getAsyncFileReader();
     if (reader.isOpen())
     {
         SMP_RETVAL_IF_FALSE(reader.read(data.data(), kPLAN_SIZE) == kPLAN_SIZE, "Failed to read plan file", false, err);
+    }
+    else if (asyncReader.isOpen())
+    {
+        SMP_RETVAL_IF_FALSE(asyncReader.read(data.data(), kPLAN_SIZE, cudaStream_t{}) == kPLAN_SIZE,
+            "Failed to read plan file", false, err);
     }
     else
     {
@@ -1428,7 +1447,14 @@ bool getEngineBuildEnv(
         }
         else
         {
-            createEngineSuccess = loadStreamingEngineToBuildEnv(build.engine, env, err);
+            if (build.asyncFileReader)
+            {
+                createEngineSuccess = loadAsyncStreamingEngineToBuildEnv(build.engine, env, err);
+            }
+            else
+            {
+                createEngineSuccess = loadStreamingEngineToBuildEnv(build.engine, env, err);
+            }
         }
     }
     else
@@ -1455,7 +1481,16 @@ bool getEngineBuildEnv(
         if (!build.safe)
         {
             env.engine.releaseBlob();
-            SMP_RETVAL_IF_FALSE(loadStreamingEngineToBuildEnv(build.engine, env, err), "Reading engine file failed.", false, err);
+            if (build.asyncFileReader)
+            {
+                SMP_RETVAL_IF_FALSE(loadAsyncStreamingEngineToBuildEnv(build.engine, env, err),
+                    "Reading engine file via async stream reader failed.", false, err);
+            }
+            else
+            {
+                SMP_RETVAL_IF_FALSE(loadStreamingEngineToBuildEnv(build.engine, env, err),
+                    "Reading engine file via stream reader failed.", false, err);
+            }
         }
     }
 
@@ -1546,9 +1581,11 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     case LayerType::kSHUFFLE:
     case LayerType::kSLICE:
     case LayerType::kSOFTMAX:
+    case LayerType::kSQUEEZE:
     case LayerType::kTOPK:
     case LayerType::kTRIP_LIMIT:
-    case LayerType::kUNARY: return {};
+    case LayerType::kUNARY:
+    case LayerType::kUNSQUEEZE: return {};
     }
     return {};
 }
