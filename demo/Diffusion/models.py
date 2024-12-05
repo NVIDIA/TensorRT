@@ -241,11 +241,13 @@ def get_path(version, pipeline, controlnets=None):
             return "stabilityai/stable-cascade-prior"
     elif version == 'flux.1-dev':
         return "black-forest-labs/FLUX.1-dev"
+    elif version == 'flux.1-schnell':
+        return "black-forest-labs/FLUX.1-schnell"
     else:
         raise ValueError(f"Unsupported version {version} + pipeline {pipeline.name}")
 
 def get_clip_embedding_dim(version, pipeline):
-    if version in ("1.4", "1.5", "dreamshaper-7", "flux.1-dev"):
+    if version in ("1.4", "1.5", "dreamshaper-7", "flux.1-dev", "flux.1-schnell"):
         return 768
     elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):
         return 1024
@@ -423,7 +425,9 @@ class BaseModel():
                     with torch.inference_mode():
                         export_onnx(custom_model)
                 else:
-                    with torch.inference_mode(), torch.autocast("cuda"):
+                    # WAR: Enable autocast for BF16 Stable Cascade pipeline
+                    do_autocast = True if self.version == "cascade" and self.bf16 else False
+                    with torch.inference_mode(), torch.autocast("cuda", enabled=do_autocast):
                         export_onnx(self.get_model())
             else:
                 print(f"[I] Found cached ONNX model: {onnx_path}")
@@ -724,10 +728,16 @@ class T5Model(BaseModel):
         bf16=False,
         subfolder="text_encoder",
         text_maxlen=512,
+        build_strongly_typed=False,
+        weight_streaming=False,
+        weight_streaming_budget_percentage=None,
     ):
         super(T5Model, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, bf16=bf16, max_batch_size=max_batch_size, text_maxlen=text_maxlen)
         self.subfolder = subfolder
         self.config = AutoConfig.from_pretrained(self.path, subfolder=self.subfolder, token=self.hf_token)
+        self.build_strongly_typed = build_strongly_typed
+        self.weight_streaming = weight_streaming
+        self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
 
     def get_model(self, torch_inference=''):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
@@ -1384,11 +1394,12 @@ class UNetTemporalModel(BaseModel):
         verbose,
         framework_model_dir,
         fp16 = False,
+        fp8 = False,
         max_batch_size = 16,
         num_frames = 14,
         do_classifier_free_guidance = True,
     ):
-        super(UNetTemporalModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size, embedding_dim=get_unet_embedding_dim(version, pipeline))
+        super(UNetTemporalModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, fp8=fp8, max_batch_size=max_batch_size, embedding_dim=get_unet_embedding_dim(version, pipeline))
         self.subfolder = 'unet'
         self.unet_dim = 4
         self.num_frames = num_frames
@@ -1458,6 +1469,9 @@ class UNetTemporalModel(BaseModel):
             torch.randn(self.xB*batch_size, 1, self.cross_attention_dim, dtype=dtype, device=self.device),
             torch.randn(self.xB*batch_size, 3, dtype=dtype, device=self.device),
         )
+
+    def optimize(self, onnx_graph):
+        return super().optimize(onnx_graph, modify_fp8_graph=self.fp8)
 
 
 class UNetCascadeModel(BaseModel):
@@ -1620,12 +1634,16 @@ class FluxTransformerModel(BaseModel):
         bf16 = False,
         max_batch_size = 16,
         text_maxlen = 77,
-        build_strongly_typed=False
+        build_strongly_typed=False,
+        weight_streaming=False,
+        weight_streaming_budget_percentage=None,
     ):
         super(FluxTransformerModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, int8=int8, fp8=fp8, bf16=bf16, max_batch_size=max_batch_size, text_maxlen=text_maxlen)
         self.subfolder = 'transformer'
         self.config = FluxTransformer2DModel.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
         self.build_strongly_typed = build_strongly_typed
+        self.weight_streaming = weight_streaming
+        self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
 
     def get_model(self, torch_inference=''):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
@@ -1653,33 +1671,37 @@ class FluxTransformerModel(BaseModel):
        return ['latent']
 
     def get_dynamic_axes(self):
-        return {
+        dynamic_axes = {
             'hidden_states': {0: 'B', 1: 'latent_dim'},
             'encoder_hidden_states': {0: 'B'},
             'pooled_projections': {0: 'B'},
             'timestep': {0: 'B'},
             'img_ids': {0: 'latent_dim'},
-            'guidance': {0: 'B'},
         }
+        if self.config['guidance_embeds']:
+            dynamic_axes['guidance'] = {0: 'B'}
+        return dynamic_axes
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         min_batch, max_batch, min_image_height, max_image_height, min_image_width, max_image_width, min_latent_height, max_latent_height, min_latent_width, max_latent_width = \
             self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
-        return {
+        input_profile = {
             'hidden_states': [(min_batch, (min_latent_height // 2) * (min_latent_width // 2), self.config['in_channels']), (batch_size, (latent_height // 2) * (latent_width // 2), self.config['in_channels']), (max_batch, (max_latent_height // 2) * (max_latent_width // 2), self.config['in_channels'])],
             'encoder_hidden_states': [(min_batch, self.text_maxlen, self.config['joint_attention_dim']), (batch_size, self.text_maxlen, self.config['joint_attention_dim']), (max_batch, self.text_maxlen, self.config['joint_attention_dim'])],
             'pooled_projections': [(min_batch, self.config['pooled_projection_dim']), (batch_size, self.config['pooled_projection_dim']), (max_batch, self.config['pooled_projection_dim'])],
             'timestep': [(min_batch,), (batch_size,), (max_batch,)],
             'img_ids': [((min_latent_height // 2) * (min_latent_width // 2), 3), ((latent_height // 2) * (latent_width // 2), 3), ((max_latent_height // 2) * (max_latent_width // 2), 3)],
             'txt_ids': [(self.text_maxlen, 3), (self.text_maxlen, 3), (self.text_maxlen, 3)],
-            'guidance': [(min_batch,), (batch_size,), (max_batch,)],
         }
+        if self.config['guidance_embeds']:
+            input_profile['guidance'] = [(min_batch,), (batch_size,), (max_batch,)]
+        return input_profile
 
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
-        return {
+        shape_dict = {
             'hidden_states': (batch_size, (latent_height // 2) * (latent_width // 2), self.config['in_channels']),
             'encoder_hidden_states': (batch_size, self.text_maxlen, self.config['joint_attention_dim']),
             'pooled_projections': (batch_size, self.config['pooled_projection_dim']),
@@ -1687,8 +1709,11 @@ class FluxTransformerModel(BaseModel):
             'img_ids': ((latent_height // 2) * (latent_width // 2), 3),
             'txt_ids': (self.text_maxlen, 3),
             'latent': (batch_size, (latent_height // 2) * (latent_width // 2), self.config['in_channels']),
-            'guidance': (batch_size,),
         }
+        if self.config['guidance_embeds']:
+            shape_dict['guidance'] = (batch_size,)
+        return shape_dict
+
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
@@ -1696,17 +1721,19 @@ class FluxTransformerModel(BaseModel):
         assert not (self.fp16 and self.bf16), "fp16 and bf16 cannot be enabled simultaneously"
         tensor_dtype = torch.bfloat16 if self.bf16 else (torch.float16 if self.fp16 else torch.float32)
 
-        return (
+        sample_input = (
             torch.randn(batch_size, (latent_height // 2) * (latent_width // 2), self.config['in_channels'], dtype=tensor_dtype, device=self.device),
             torch.randn(batch_size, self.text_maxlen, self.config['joint_attention_dim'], dtype=tensor_dtype, device=self.device),
             torch.randn(batch_size, self.config['pooled_projection_dim'], dtype=tensor_dtype, device=self.device),
             torch.tensor([1.]*batch_size, dtype=tensor_dtype, device=self.device),
             torch.randn((latent_height // 2) * (latent_width // 2), 3, dtype=dtype, device=self.device),
             torch.randn(self.text_maxlen, 3, dtype=dtype, device=self.device),
-            {
-                'guidance': torch.tensor([1.]*batch_size, dtype=dtype, device=self.device),
-            }
+            { }
         )
+        if self.config['guidance_embeds']:
+            sample_input[-1]['guidance'] = torch.tensor([1.]*batch_size, dtype=dtype, device=self.device)
+        return sample_input
+
     def optimize(self, onnx_graph):
         if self.fp8:
             return super().optimize(onnx_graph, modify_fp8_graph=True, is_fp16_io=False)

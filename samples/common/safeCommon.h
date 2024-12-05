@@ -45,17 +45,20 @@
 
 using namespace nvinfer1;
 
-#undef CHECK
-#define CHECK(status)                                                                                                  \
+#undef CHECK_WITH_STREAM
+#define CHECK_WITH_STREAM(status, stream)                                                                                   \
     do                                                                                                                 \
     {                                                                                                                  \
-        auto ret = (status);                                                                                           \
-        if (ret != 0)                                                                                                  \
+        if ((status) != cudaSuccess)                                                                                   \
         {                                                                                                              \
-            std::cerr << "Cuda failure: " << ret << std::endl;                                                         \
+            stream << "Cuda failure at " << __FILE__ << ":" << __LINE__ << ": " << cudaGetErrorString(status)          \
+                   << std::endl;                                                                                       \
             exit(EXIT_FAILURE);                                                                                        \
         }                                                                                                              \
     } while (0)
+
+#undef CHECK
+#define CHECK(status) CHECK_WITH_STREAM(status, std::cerr)
 
 #undef SAFE_ASSERT
 #define SAFE_ASSERT(condition)                                                                                         \
@@ -68,7 +71,7 @@ using namespace nvinfer1;
         }                                                                                                              \
     } while (0)
 
-#define LWE_CALL(api_call, recorder)                                                                                   \
+#define SAFE_API_CALL(api_call, recorder)                                                                              \
     do                                                                                                                 \
     {                                                                                                                  \
         const ErrorCode ret = (api_call);                                                                              \
@@ -77,7 +80,7 @@ using namespace nvinfer1;
             std::cerr << "LWE Error: [" << #api_call << "]: " << toString(ret);                                        \
             throw ret;                                                                                                 \
         }                                                                                                              \
-        std::cout << "LWE:[" << #api_call << "]: PASSED";                                                              \
+        std::cout << "SAFE API:[" << #api_call << "]: PASSED" << std::endl;                                            \
     } while (0)
 
 #define CUDA_CALL(cuda_api_call, recorder)                                                                             \
@@ -86,10 +89,10 @@ using namespace nvinfer1;
         cudaError_t error = (cuda_api_call);                                                                           \
         if (error != cudaSuccess)                                                                                      \
         {                                                                                                              \
-            std::cerr << "CUDA Error: [" << #cuda_api_call << "]: " << cudaGetErrorString(error);                      \
+            std::cerr << "CUDA Error: [" << #cuda_api_call << "]: " << cudaGetErrorString(error) << std::endl;         \
             throw ErrorCode::kFAILED_EXECUTION;                                                                        \
         }                                                                                                              \
-        std::cout << "CUDA:[" << #cuda_api_call << "]: PASSED";                                                        \
+        std::cout << "CUDA:[" << #cuda_api_call << "]: PASSED" << std::endl;                                           \
     } while (0)
 
 inline std::string toString(ErrorCode ec)
@@ -231,8 +234,8 @@ inline int64_t volume(nvinfer1::Dims const& d)
 template <typename T1, typename T2>
 inline T1 roundUp(T1 m, T2 n)
 {
-    static_assert(std::is_integral<T1>::value && std::is_integral<T2>::value, "arguments must be integers");
-    static_assert(std::is_signed<T1>::value == std::is_signed<T2>::value, "mixed signedness not allowed");
+    static_assert(std::is_integral_v<T1> && std::is_integral_v<T2>, "arguments must be integers");
+    static_assert(std::is_signed_v<T1> == std::is_signed_v<T2>, "mixed signedness not allowed");
     static_assert(sizeof(T1) >= sizeof(T2), "first type must be as least as wide as second type");
     return ((m + n - 1) / n) * n;
 }
@@ -247,20 +250,15 @@ inline int64_t volume(nvinfer1::Dims dims, int32_t vecDim, int32_t comps, int32_
     return samplesCommon::volume(dims) * std::max(batch, 1);
 }
 
+#if !TRT_WINML
 inline int32_t getSMVersion()
 {
-#if 0
-    // Use default value for 4090
-    int32_t major{8};
-    int32_t minor{9};
-#else
     int32_t major{};
     int32_t minor{};
     int32_t deviceIndex{};
     CHECK(cudaGetDevice(&deviceIndex));
     CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
     CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
-#endif
     return ((major << 8) | minor);
 }
 
@@ -269,6 +267,7 @@ inline bool isSMSafe()
     const int32_t smVersion = getSMVersion();
     return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807;
 }
+#endif
 
 inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
 {

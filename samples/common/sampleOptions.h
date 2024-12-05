@@ -18,6 +18,7 @@
 #ifndef TRT_SAMPLE_OPTIONS_H
 #define TRT_SAMPLE_OPTIONS_H
 
+
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -232,6 +233,7 @@ public:
     bool skipInference{false};
     bool save{false};
     bool load{false};
+    bool asyncFileReader{false};
     bool refittable{false};
     bool stripWeights{false};
     bool versionCompatible{false};
@@ -399,7 +401,6 @@ public:
     void parse(Arguments& arguments) override;
     static void help(std::ostream& out);
 };
-
 
 Arguments argsToArgumentsMap(int32_t argc, char* argv[]);
 

@@ -25,6 +25,7 @@
 #include "NvInferSerialize.h"
 #endif
 
+
 #include "infer/pyGraphDoc.h"
 
 // clang-format off
@@ -255,6 +256,7 @@ namespace tensorrt
         };
 
 
+
     } /* lambdas */
 
     void bindGraph(py::module& m)
@@ -308,6 +310,8 @@ namespace tensorrt
             .value("REVERSE_SEQUENCE", LayerType::kREVERSE_SEQUENCE, LayerTypeDoc::REVERSE_SEQUENCE)
             .value("NORMALIZATION", LayerType::kNORMALIZATION, LayerTypeDoc::NORMALIZATION)
             .value("PLUGIN_V3", LayerType::kPLUGIN_V3, LayerTypeDoc::PLUGIN_V3)
+            .value("SQUEEZE", LayerType::kSQUEEZE, LayerTypeDoc::SQUEEZE)
+            .value("UNSQUEEZE", LayerType::kUNSQUEEZE, LayerTypeDoc::UNSQUEEZE)
 
         ; // LayerType
 
@@ -346,6 +350,7 @@ namespace tensorrt
             .def("reset_dynamic_range", utils::deprecateMember(&ITensor::resetDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), ITensorDoc::reset_dynamic_range)
             .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
+
         ;
 
         py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr, py::module_local())
@@ -828,6 +833,13 @@ namespace tensorrt
             .def_property("num_groups", &INormalizationLayer::getNbGroups, &INormalizationLayer::setNbGroups)
             .def_property("compute_precision", &INormalizationLayer::getComputePrecision, &INormalizationLayer::setComputePrecision)
         ;
+        py::class_<ISqueezeLayer, ILayer, std::unique_ptr<ISqueezeLayer, py::nodelete>>(m, "ISqueezeLayer", ISqueezeLayerDoc::descr, py::module_local())
+            .def("set_input", &ISqueezeLayer::setInput, "index"_a, "tensor"_a, ISqueezeLayerDoc::set_input)
+        ;
+        py::class_<IUnsqueezeLayer, ILayer, std::unique_ptr<IUnsqueezeLayer, py::nodelete>>(m, "IUnsqueezeLayer", IUnsqueezeLayerDoc::descr, py::module_local())
+            .def("set_input", &IUnsqueezeLayer::setInput, "index"_a, "tensor"_a, IUnsqueezeLayerDoc::set_input)
+        ;
+
 
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
@@ -968,6 +980,9 @@ namespace tensorrt
             .def("mark_debug", &INetworkDefinition::markDebug, "tensor"_a, INetworkDefinitionDoc::mark_debug)
             .def("unmark_debug", &INetworkDefinition::unmarkDebug, "tensor"_a, INetworkDefinitionDoc::unmark_debug)
             .def("is_debug_tensor", &INetworkDefinition::isDebugTensor, "tensor"_a, INetworkDefinitionDoc::is_debug_tensor)
+            .def("add_squeeze", &INetworkDefinition::addSqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
+            .def("add_unsqueeze", &INetworkDefinition::addUnsqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_unsqueeze, py::return_value_policy::reference_internal)
+
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization
             .def("serialize", lambdas::network_serialize, INetworkDefinitionDoc::serialize)

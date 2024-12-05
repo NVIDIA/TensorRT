@@ -32,9 +32,9 @@ using namespace nvinfer1;
 
 // template specialization for double/float
 template <typename TDataType,
-    typename std::enable_if<std::is_same<std::decay_t<TDataType>, double>::value
-            || std::is_same<std::decay_t<TDataType>, float>::value,
-        TDataType>::type* dummy
+    typename std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, double>
+            || std::is_same_v<std::decay_t<TDataType>, float>,
+        TDataType>* dummy
     = nullptr>
 __forceinline__ __device__ void compute_attention(
     TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
@@ -44,9 +44,9 @@ __forceinline__ __device__ void compute_attention(
 
 // template specialization for half
 template <typename TDataType,
-    typename std::enable_if<std::is_same<std::decay_t<TDataType>, __half>::value
-            || std::is_same<std::decay_t<TDataType>, half>::value,
-        TDataType>::type* dummy
+    typename std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, __half>
+            || std::is_same_v<std::decay_t<TDataType>, half>,
+        TDataType>* dummy
     = nullptr>
 __forceinline__ __device__ void compute_attention(
     TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
@@ -62,9 +62,9 @@ __forceinline__ __device__ void compute_attention(
 
 // template specialization for int8
 template <typename TDataType,
-    typename std::enable_if<std::is_same<std::decay_t<TDataType>, int8_t>::value
-            || std::is_same<std::decay_t<TDataType>, uint8_t>::value,
-        TDataType>::type* dummy
+    typename std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, int8_t>
+            || std::is_same_v<std::decay_t<TDataType>, uint8_t>,
+        TDataType>* dummy
     = nullptr>
 __forceinline__ __device__ void compute_attention(
     TDataType& res, const TDataType& res0, const TDataType& res1, const TDataType& res2, const TDataType& factor)
@@ -222,12 +222,12 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
 #if __cplusplus >= 201703L
         // C++ 17 has more convenient `if constexpr` for conditional implementation at compile time; before C++ 17,
         // switch to template specialization
-        if constexpr (std::is_same<TDataType, double>::value || std::is_same<TDataType, float>::value)
+        if constexpr (std::is_same_v<TDataType, double> || std::is_same_v<TDataType, float>)
         {
             // double, float32
             res = (res0 + res1 + T[threadIdx.x][ty + threadIdx.y]) * factor;
         }
-        else if constexpr (std::is_same<TDataType, __half>::value || std::is_same<TDataType, half>::value)
+        else if constexpr (std::is_same_v<TDataType, __half> || std::is_same_v<TDataType, half>)
         {
             // fp16
 #if __CUDA_ARCH__ >= 530
@@ -240,7 +240,7 @@ __global__ void GatherAddGatherTransposeAddMul_fused(TDataType const* data0, TDa
                 * __half2float(factor));
 #endif
         }
-        else if constexpr (std::is_same<TDataType, int8_t>::value || std::is_same<TDataType, uint8_t>::value)
+        else if constexpr (std::is_same_v<TDataType, int8_t> || std::is_same_v<TDataType, uint8_t>)
         {
             // int8_t
             res = (res0 + res1 + T[threadIdx.x][ty + threadIdx.y]) * factor;

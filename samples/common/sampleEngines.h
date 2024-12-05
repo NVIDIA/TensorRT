@@ -80,6 +80,10 @@ public:
         , mTempfileControls(tempfileControls)
         , mLeanDLLPath(leanDLLPath)
     {
+        // Only one of these is relevant for any given trtexec call.
+        // Enabled using  --asyncFileReader flag.
+        mAsyncFileReader = std::make_unique<samplesCommon::AsyncStreamReader>();
+       // Enabled using --load flag.
         mFileReader = std::make_unique<samplesCommon::FileStreamReader>();
     }
 
@@ -110,6 +114,8 @@ public:
     {
         ASSERT((!mFileReader || !mFileReader->isOpen())
             && "Attempting to access the glob when there is an open file reader!");
+        ASSERT((!mAsyncFileReader || !mAsyncFileReader->isOpen())
+            && "Attempting to access the glob when there is an open async file reader!");
         if (!mEngineBlob.empty())
         {
             return EngineBlob{const_cast<void*>(static_cast<void const*>(mEngineBlob.data())), mEngineBlob.size()};
@@ -159,6 +165,17 @@ public:
         return *mFileReader;
     }
 
+    //!
+    //! \brief Get the file stream reader used for deserialization
+    //!
+    //! when IStreamReader is eventually deprecated.
+    //!
+    samplesCommon::AsyncStreamReader& getAsyncFileReader()
+    {
+        ASSERT(mAsyncFileReader);
+        return *mAsyncFileReader;
+    }
+
 
     //!
     //! \brief Get if safe mode is enabled.
@@ -179,6 +196,8 @@ private:
     int32_t mDLACore{-1};
     std::vector<uint8_t> mEngineBlob;
     std::unique_ptr<samplesCommon::FileStreamReader> mFileReader;
+    std::unique_ptr<samplesCommon::AsyncStreamReader> mAsyncFileReader;
+
 
     // Directly use the host memory of a serialized engine instead of duplicating the engine in CPU memory.
     std::unique_ptr<nvinfer1::IHostMemory> mEngineBlobHostMemory;

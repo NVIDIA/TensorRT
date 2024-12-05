@@ -18,8 +18,8 @@
 
 from setuptools import setup
 
-module_name = "##TENSORRT_MODULE##-cu##CUDA_MAJOR##_libs"
-package_name = "##TENSORRT_MODULE##_libs"
+distribution_package_name = "##TENSORRT_MODULE##_cu##CUDA_MAJOR##_libs"
+import_package_name = "##TENSORRT_MODULE##_libs"
 
 
 def get_requirements():
@@ -28,7 +28,7 @@ def get_requirements():
 
 
 setup(
-    name=module_name,
+    name=distribution_package_name,
     version="##TENSORRT_PYTHON_VERSION##",
     description="TensorRT Libraries",
     long_description="TensorRT Libraries",
@@ -39,9 +39,9 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[package_name],
+    packages=[import_package_name],
     install_requires=get_requirements(),
-    package_data={package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
+    package_data={import_package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

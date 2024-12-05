@@ -511,13 +511,6 @@ sample::Logger::TestResult SampleINT8API::build()
         return sample::Logger::TestResult::kFAILED;
     }
 
-    if (!builder->platformHasFastInt8())
-    {
-        sample::gLogError << "Platform does not support INT8 inference. sampleINT8API can only run in INT8 Mode."
-                          << std::endl;
-        return sample::Logger::TestResult::kWAIVED;
-    }
-
     auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {

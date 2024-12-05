@@ -1,9 +1,9 @@
+apex==0.9.10dev
 accelerate
 colored
 controlnet_aux==0.0.6
 cuda-python
-# TODO: Pin Diffusers version after the next release
-git+https://github.com/huggingface/diffusers.git # Install from source for the latest changes in main
+diffusers==0.31.0
 ftfy
 matplotlib
 nvtx

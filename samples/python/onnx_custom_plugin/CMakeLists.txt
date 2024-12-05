@@ -76,7 +76,7 @@ add_library(customHardmaxPlugin MODULE
 )
 
 # Use C++11
-target_compile_features(customHardmaxPlugin PUBLIC cxx_std_11)
+target_compile_features(customHardmaxPlugin PUBLIC cxx_std_17)
 
 # Link TensorRT's nvinfer lib
 target_link_libraries(customHardmaxPlugin PRIVATE ${NVINFER_LIB})

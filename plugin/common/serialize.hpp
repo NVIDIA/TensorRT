@@ -41,8 +41,7 @@ struct Serializer
 };
 
 template <typename T>
-struct Serializer<T,
-    typename std::enable_if<std::is_arithmetic<T>::value || std::is_enum<T>::value || std::is_pod<T>::value>::type>
+struct Serializer<T, typename std::enable_if_t<std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_pod_v<T>>>
 {
     static size_t serialized_size(T const&)
     {
@@ -86,7 +85,7 @@ struct Serializer<const char*>
 
 template <typename T>
 struct Serializer<std::vector<T>,
-    typename std::enable_if<std::is_arithmetic<T>::value || std::is_enum<T>::value || std::is_pod<T>::value>::type>
+    typename std::enable_if_t<std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_pod_v<T>>>
 {
     static size_t serialized_size(std::vector<T> const& value)
     {

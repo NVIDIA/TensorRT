@@ -206,6 +206,8 @@ extern unsigned char cubin_fmha_v2_fp16_96_64_sm90_cu_cubin[];
 extern unsigned char cubin_fmha_v2_fp16_64_64_sm90_cu_cubin[];
 #endif // defined(ENABLE_SM90)
 
+
+
 #if defined(ENABLE_SM72)
 extern uint32_t fused_multihead_attention_v2_int8_128_64_kernel_cubin_len;
 extern uint32_t fused_multihead_attention_v2_int8_192_64_kernel_cubin_len;
@@ -312,9 +314,13 @@ extern uint32_t cubin_fmha_v2_fp16_96_64_sm90_cu_cubin_len;
 extern uint32_t cubin_fmha_v2_fp16_64_64_sm90_cu_cubin_len;
 #endif // defined(ENABLE_SM90)
 
-#if !(defined(ENABLE_SM72) || defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86) || defined(ENABLE_SM87) || defined(ENABLE_SM89) || defined(ENABLE_SM90))
-#error This file can only be included one of sm 72, 75, 80, 86, 87, 89, or 90 are defined.
+
+
+#if !(defined(ENABLE_SM72) || defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86)                  \
+        || defined(ENABLE_SM87) || defined(ENABLE_SM89) || defined(ENABLE_SM90))
+#error This file can only be included if one of sm 72, 75, 80, 86, 87, 89 or 90 is defined.
 #endif
+
 static const struct FusedMultiHeadAttentionKernelMetaInfoV2
 {
     Data_type mDataType;
@@ -802,6 +808,8 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV2
     {DATA_TYPE_FP16, 64, 64, kSM_90, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin, cubin_fmha_v2_fp16_64_64_sm90_cu_cubin_len,
         "fmha_v2_fp16_64_64_sm90_kernel_nl", 20480, 128, 16, false},
 #endif // defined(ENABLE_SM90)
+
+
 };
 
 class FusedMultiHeadAttentionXMMAKernelV2
@@ -892,6 +900,7 @@ public:
                       {kSM_90, bert::DATA_TYPE_INT8, 256, 8},
                       {kSM_90, bert::DATA_TYPE_INT8, 384, 8},
 #endif
+
                   };
             for (uint32_t i = 0U; i < sizeof(unrollList) / sizeof(unrollList[0]); ++i)
             {
@@ -937,6 +946,7 @@ public:
 #if defined(ENABLE_SM90)
                << "90 "
 #endif
+
                << "\n";
         PLUGIN_VALIDATE(findIter != mFunctions.end(), errMsg.str().c_str());
 

@@ -21,7 +21,7 @@ ARG OS_VERSION=22.04
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.6.0.26
+ENV TRT_VERSION 10.7.0.23
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG uid=1000
@@ -59,10 +59,10 @@ RUN pip3 install setuptools>=41.0.0
 
 # Install Cmake
 RUN cd /tmp && \
-    wget https://github.com/Kitware/CMake/releases/download/v3.14.4/cmake-3.14.4-Linux-x86_64.sh && \
-    chmod +x cmake-3.14.4-Linux-x86_64.sh && \
-    ./cmake-3.14.4-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
-    rm ./cmake-3.14.4-Linux-x86_64.sh
+    wget https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-Linux-x86_64.sh && \
+    chmod +x cmake-3.27.9-Linux-x86_64.sh && \
+    ./cmake-3.27.9-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
+    rm ./cmake-3.27.9-Linux-x86_64.sh
 
 # Skip installing PyPI packages and NGC client on cross-build container
 

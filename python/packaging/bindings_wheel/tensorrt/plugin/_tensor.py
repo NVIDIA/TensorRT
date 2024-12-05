@@ -130,7 +130,7 @@ class ShapeExpr:
                 "Not accessible for non-constant shape expressions. Check is_constant to determine accessibility."
             )
         return self._expr.get_constant_value()
-    
+
     # Evaluate the underlying trt.IDimensionExpr, if so done lazily
     @property
     def _expr(self):
@@ -142,7 +142,7 @@ class SizeTensorShapeExpr(ShapeExpr):
     Extends :class:`ShapeExpr`
 
     A shape expression that represent a size tensor
-        
+
     """
     def __init__(self, size_tensor_desc: "SizeTensorDesc"):
         """
@@ -155,7 +155,7 @@ class SizeTensorShapeExpr(ShapeExpr):
 
     def _op(self, op: trt.DimensionOperation, other: Union[int, "ShapeExpr"]):
         raise ValueError("It is not permitted to perform binary operations on size tensor expressions") # TRT limitation
-    
+
     @property
     def is_constant(self):
         if self._is_dummy:
@@ -163,7 +163,7 @@ class SizeTensorShapeExpr(ShapeExpr):
                 "Not accessible for fake 'ShapeExpr's. Check is_fake to determine accessibility."
             )
         return False
-    
+
     @property
     def _expr(self):
         if self._dim_expr is not None:
@@ -171,7 +171,7 @@ class SizeTensorShapeExpr(ShapeExpr):
 
         self._dim_expr = super()._exprBuilder.declare_size_tensor(self._size_tensor_desc.index, self._size_tensor_desc.opt._expr, self._size_tensor_desc.upper_bound._expr)
         return self._dim_expr
-    
+
     def __repr__(self):
         return f"ShapeExpr[is_size_tensor = True, id={id(self)}]"
 
@@ -237,16 +237,21 @@ class Shape:
     Numerical representation of a tensor shape
     """
     def __init__(
-        self, tensor_desc: Union[int, trt.DynamicPluginTensorDesc, trt.PluginTensorDesc]
+        self, tensor_desc: Union[Tuple[int], trt.DynamicPluginTensorDesc, trt.PluginTensorDesc]
     ):
-        self._desc = tensor_desc
         self._is_dynamic = None  # set lazily
         if isinstance(tensor_desc, trt.DynamicPluginTensorDesc):
             self._length = len(tensor_desc.desc.dims)
             self._shapes = tensor_desc.desc.dims
+            self._desc = tensor_desc
         elif isinstance(tensor_desc, trt.PluginTensorDesc):
             self._length = len(tensor_desc.dims)
             self._shapes = tensor_desc.dims
+        elif isinstance(tensor_desc, tuple):
+            self._shapes = trt.Dims(tensor_desc)
+            self._length = len(self._shapes)
+        else:
+            raise ValueError("Unsupported type used for constructing trt.plugin.Shape! tensor_desc must be a Tuple[int], trt.DynamicPluginTensorDesc, or trt.PluginTensorDesc")
 
     def numel(self) -> int:
         """
@@ -293,6 +298,10 @@ class Shape:
         """
         if not self.is_dynamic:
             raise ValueError("opt property is only accessible if is_dynamic is true")
+        if not hasattr(self, "_desc"):
+            raise AttributeError(
+            "Shape object has at least one dynamic dimension, but no information is available on 'opt' property."
+            )
         return tuple(self._desc.opt)
 
     @property
@@ -302,6 +311,10 @@ class Shape:
         """
         if not self.is_dynamic:
             raise ValueError("min property is only accessible if is_dynamic is true")
+        if not hasattr(self, "_desc"):
+            raise AttributeError(
+            "Shape object has at least one dynamic dimension, but no information is available on 'min' property."
+            )
         return tuple(self._desc.min)
 
     @property
@@ -311,12 +324,16 @@ class Shape:
         """
         if not self.is_dynamic:
             raise ValueError("max property is only accessible if is_dynamic is true")
+        if not hasattr(self, "_desc"):
+            raise AttributeError(
+            "Shape object has at least one dynamic dimension, but no information is available on 'max' property."
+            )
         return tuple(self._desc.max)
 
     def __setitem__(self, index, val):
         if index >= self._length:
             raise IndexError("Index out of range")
-        self._shapes.desc[index] = val
+        self._shapes[index] = val
 
 
 # Descriptor for a tensor
@@ -344,7 +361,7 @@ class TensorDesc:
         .. code-block:: python
             :linenos:
             :caption: Creates a TensorDesc from shape expression of another TensorDesc
-            
+
             tensor = trt.from_shape_expr(other.shape_expr, dtype=trt.float32)
         """
 
@@ -363,7 +380,7 @@ class TensorDesc:
     def numel(self) -> int:
         """
         Returns:
-            Returns an int with the number of elements of the tensor. 
+            Returns an int with the number of elements of the tensor.
 
         .. warning::
             Should only be called when TensorDesc.has_shape is true. If a symbolic expression for the number of elements is required, query TensorDesc.shape_expr.numel().
@@ -373,14 +390,14 @@ class TensorDesc:
                 "TensorDesc has no shape information available at this stage. Inspect TensorDesc.has_shape to determine availability."
             )
         return int(np.prod(self.shape))
-    
+
     @property
     def ndim(self) -> int:
         """
         Number of dimensions
         """
         return len(self._shape_expr)
-    
+
     @property
     def is_size_tensor(self):
         return False
@@ -389,12 +406,12 @@ class TensorDesc:
     def like(self) -> "TensorDesc":
         """
         Returns:
-            Returns a TensorDesc which has identical properties to this tensor, and is mutable. 
+            Returns a TensorDesc which has identical properties to this tensor, and is mutable.
 
         .. code-block:: python
             :linenos:
             :caption: Communicate that output tensor has identical properties to the input tensor
-            
+
             @tensorrt.plugin.register("my::plugin")
             def _(inp: tensorrt.plugin.TensorDesc) -> tensorrt.plugin.TensorDesc:
                 return inp.like()
@@ -414,7 +431,7 @@ class TensorDesc:
         .. code-block:: python
             :linenos:
             :caption: Communicate that output tensor has identical properties to the input tensor
-            
+
             @tensorrt.plugin.register("my::plugin")
             def _(inp: tensorrt.plugin.TensorDesc) -> tensorrt.plugin.TensorDesc:
                 return inp.aliased()
@@ -438,7 +455,7 @@ class TensorDesc:
             raise ValueError(
                 "TensorDesc has no shape information available at this stage. Inspect TensorDesc.has_shape to determine availability."
             )
-        
+
     def _validate_not_immutable(self):
         if hasattr(self, "_immutable") and self._immutable:
             raise ValueError("Cannot modify immutable TensorDesc")
@@ -446,21 +463,21 @@ class TensorDesc:
     @property
     def shape_expr(self) -> ShapeExprs:
         """
-        Symbolic expressions for the tensor shape. 
+        Symbolic expressions for the tensor shape.
         """
         return self._shape_expr
 
     @property
     def dtype(self) -> trt.DataType:
         """
-        Data type of the tensor. 
+        Data type of the tensor.
         """
         return self._dtype
-    
+
     @property
     def shape(self) -> Shape:
         """
-        The (concrete) shape of the tensor. 
+        The (concrete) shape of the tensor.
 
         .. warning::
             Only accessible when TensorDesc.has_shape is true.
@@ -471,7 +488,7 @@ class TensorDesc:
     @property
     def format(self) -> trt.TensorFormat:
         """
-        The format of the tensor. 
+        The format of the tensor.
 
         .. warning::
             Only accessible when TensorDesc.has_shape is true.
@@ -482,15 +499,15 @@ class TensorDesc:
     @property
     def scale(self) -> float:
         """
-        Scale for INT8 data type. 
+        Scale for INT8 data type.
 
         .. warning::
             Only accessible when TensorDesc.has_shape is true.
         """
         self._validate_has_shape()
         return self._scale
-    
-    
+
+
     @shape_expr.setter
     def shape_expr(self, value):
         self._shape_expr = value
@@ -498,7 +515,7 @@ class TensorDesc:
     @dtype.setter
     def dtype(self, value):
         self._dtype = value
-        
+
     @shape.setter
     def shape(self, value):
         self._validate_not_immutable()
@@ -571,11 +588,11 @@ class SizeTensorDesc(TensorDesc):
         self._upper_bound = upper_bound
         self._index = None
         self._expr = SizeTensorShapeExpr(self)
-    
+
     @property
     def is_size_tensor(self):
         return True
-    
+
     @property
     def opt(self) -> ShapeExpr:
         """
@@ -596,7 +613,7 @@ class SizeTensorDesc(TensorDesc):
         Output index at which this size tensor resides
         """
         return self._index
-    
+
     def _set_index(self, idx: int):
         self._index = idx
 
@@ -637,21 +654,21 @@ class Tensor:
         Number of dimensions
         """
         return len(self._shape)
-    
+
     @property
     def data_ptr(self) -> int:
         """
         Pointer to the data buffer of this tensor
         """
         return self._data_ptr
-    
+
     @property
     def dtype(self) -> trt.DataType:
         """
-        Data type of the tensor. 
+        Data type of the tensor.
         """
         return self._dtype
-    
+
     @property
     def shape(self) -> Shape:
         """
@@ -672,7 +689,7 @@ class Tensor:
         Scale for INT8 data type.
         """
         return self._scale
-    
+
     @property
     def strides(self) -> Tuple[int]:
         """
@@ -683,11 +700,11 @@ class Tensor:
     @data_ptr.setter
     def data_ptr(self, value):
         self._data_ptr = value
-    
+
     @dtype.setter
     def dtype(self, value):
         self._dtype = value
-        
+
     @shape.setter
     def shape(self, value):
         self._shape = value

@@ -21,4 +21,6 @@ SET(SAMPLE_SOURCES
 
 set(SAMPLE_PARSERS "onnx")
 
+set(CUDA_LIBS_REQUIRED True)
+
 include(../CMakeSamplesTemplate.txt)

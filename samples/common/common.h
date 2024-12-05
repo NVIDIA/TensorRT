@@ -96,7 +96,7 @@ template <typename T, typename T_>
 OBJ_GUARD(T)
 makeObjGuard(T_* t)
 {
-    CHECK(!(std::is_base_of<T, T_>::value || std::is_same<T, T_>::value));
+    static_assert(std::is_base_of_v<T, T_> || std::is_same_v<T, T_>);
     auto deleter = [](T* t) { delete t; };
     return std::unique_ptr<T, decltype(deleter)>{static_cast<T*>(t), deleter};
 }
@@ -207,7 +207,7 @@ using nvinfer1::utils::buildTimingCacheFromFile;
 using nvinfer1::utils::saveTimingCacheFile;
 using nvinfer1::utils::updateTimingCacheFile;
 // Swaps endianness of an integral type.
-template <typename T, typename std::enable_if<std::is_integral<T>::value, int>::type = 0>
+template <typename T, typename std::enable_if_t<std::is_integral_v<T>, int> = 0>
 inline T swapEndianness(const T& value)
 {
     uint8_t bytes[sizeof(T)];
@@ -910,12 +910,6 @@ inline bool isDataTypeSupported(nvinfer1::DataType dataType)
 {
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(createBuilder());
     if (!builder)
-    {
-        return false;
-    }
-
-    if ((dataType == nvinfer1::DataType::kINT8 && !builder->platformHasFastInt8())
-        || (dataType == nvinfer1::DataType::kHALF && !builder->platformHasFastFp16()))
     {
         return false;
     }

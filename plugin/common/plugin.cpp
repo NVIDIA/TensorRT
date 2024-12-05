@@ -27,7 +27,7 @@ namespace pluginInternal
 // when not needed, instead of on process exit.
 // Objects of this class shall always be declared static / global, and shall never own cudnn/cublas handle
 // resources.
-template <typename T_>
+template <typename T>
 class PerContextPluginHandleSingletonCreator
 {
 public:
@@ -35,17 +35,17 @@ public:
     // It forces separation of memory for T and memory for control blocks.
     // So when T is released, but we still have observer weak_ptr in mObservers, the T mem block can be released.
     // creator itself must not own cudnn/cublas handle resources. Only the object it creates can.
-    PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T_>()> creator)
+    PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T>()> creator)
         : mCreator{std::move(creator)} {};
 
     // \param executionContextIdentifier Unique pointer to identify contexts having overlapping lifetime.
-    std::shared_ptr<T_> operator()(void* executionContextIdentifier)
+    std::shared_ptr<T> operator()(void* executionContextIdentifier)
     {
         std::lock_guard<std::mutex> lk{mMutex};
-        std::shared_ptr<T_> result = mObservers[executionContextIdentifier].lock();
+        std::shared_ptr<T> result = mObservers[executionContextIdentifier].lock();
         if (result == nullptr)
         {
-            auto deleter = [this, executionContextIdentifier](T_* obj) {
+            auto deleter = [this, executionContextIdentifier](T* obj) {
                 if (obj == nullptr)
                 {
                     return;
@@ -53,7 +53,7 @@ public:
                 delete obj;
                 // Clears observer to avoid growth of mObservers, in case users create/destroy
                 // plugin handle contexts frequently.
-                std::shared_ptr<T_> observedObjHolder;
+                std::shared_ptr<T> observedObjHolder;
                 // The destructor of observedObjHolder may attempt to acquire a lock on mMutex.
                 // To avoid deadlock, it's critical to release the lock here held by lk first,
                 // before destroying observedObjHolder. Hence observedObjHolder must be declared
@@ -71,7 +71,7 @@ public:
                 }
             };
             // Create the resource and register with an observer.
-            result = std::shared_ptr<T_>{mCreator().release(), std::move(deleter)};
+            result = std::shared_ptr<T>{mCreator().release(), std::move(deleter)};
             mObservers.at(executionContextIdentifier) = result;
         }
 
@@ -79,10 +79,10 @@ public:
     };
 
 private:
-    std::function<std::unique_ptr<T_>()> mCreator;
+    std::function<std::unique_ptr<T>()> mCreator;
     mutable std::mutex mMutex;
     // cudnn/cublas handle resources are per-context.
-    std::unordered_map</*contextIdentifier*/ void*, std::weak_ptr<T_>> mObservers;
+    std::unordered_map</*contextIdentifier*/ void*, std::weak_ptr<T>> mObservers;
 }; // class PerContextPluginHandleSingletonCreator
 
 std::unique_ptr<CudnnWrapper> createPluginCudnnWrapperImpl()

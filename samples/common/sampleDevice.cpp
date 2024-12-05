@@ -22,15 +22,6 @@
 namespace sample
 {
 
-void cudaCheck(cudaError_t ret, std::ostream& err)
-{
-    if (ret != cudaSuccess)
-    {
-        err << "Cuda failure: " << cudaGetErrorString(ret) << std::endl;
-        exit(EXIT_FAILURE);
-    }
-}
-
 #if !TRT_WINML
 // Construct GPU UUID string in the same format as nvidia-smi does.
 std::string getUuidString(cudaUUID_t uuid)
@@ -59,7 +50,7 @@ void setCudaDevice(int32_t device, std::ostream& os)
 
     // Get the number of visible GPUs.
     int32_t nbDevices{-1};
-    cudaCheck(cudaGetDeviceCount(&nbDevices));
+    CHECK(cudaGetDeviceCount(&nbDevices));
 
     if (nbDevices <= 0)
     {
@@ -73,7 +64,7 @@ void setCudaDevice(int32_t device, std::ostream& os)
     for (int32_t deviceIdx = 0; deviceIdx < nbDevices; ++deviceIdx)
     {
         cudaDeviceProp tempProperties;
-        cudaCheck(cudaGetDeviceProperties(&tempProperties, deviceIdx));
+        CHECK(cudaGetDeviceProperties(&tempProperties, deviceIdx));
 
         // clang-format off
         os << "  Device " << deviceIdx << ": \"" << tempProperties.name << "\" UUID: "
@@ -95,7 +86,7 @@ void setCudaDevice(int32_t device, std::ostream& os)
     }
 
     // Set to the corresponding GPU.
-    cudaCheck(cudaSetDevice(device));
+    CHECK(cudaSetDevice(device));
 
     // clang-format off
     os << "Selected Device: "      << properties.name                                               << std::endl;
@@ -118,14 +109,14 @@ void setCudaDevice(int32_t device, std::ostream& os)
 int32_t getCudaDriverVersion()
 {
     int32_t version{-1};
-    cudaCheck(cudaDriverGetVersion(&version));
+    CHECK(cudaDriverGetVersion(&version));
     return version;
 }
 
 int32_t getCudaRuntimeVersion()
 {
     int32_t version{-1};
-    cudaCheck(cudaRuntimeGetVersion(&version));
+    CHECK(cudaRuntimeGetVersion(&version));
     return version;
 }
 #endif

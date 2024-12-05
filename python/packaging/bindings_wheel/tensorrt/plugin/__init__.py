@@ -18,7 +18,7 @@
 import tensorrt as trt
 
 logger = trt.Logger()
-logger.log(trt.Logger.WARNING, "Functionality provided through tensorrt.plugin module is experimental in TensorRT 10.6.")
+logger.log(trt.Logger.WARNING, "Functionality provided through tensorrt.plugin module is experimental.")
 
 # export.public_api() will expose things here. To make sure that happens, we just need to
 # import all the submodules so that the decorator is actually executed (__discover_modules() below).

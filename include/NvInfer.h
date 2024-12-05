@@ -103,6 +103,8 @@ enum class LayerType : int32_t
     kREVERSE_SEQUENCE = 44,   //!< Reverse sequence layer
     kNORMALIZATION = 45,      //!< Normalization layer
     kPLUGIN_V3 = 46,          //!< PluginV3 layer.
+    kSQUEEZE = 47,            //!< Squeeze Layer.
+    kUNSQUEEZE = 48,          //!< Unsqueeze Layer.
 };
 
 //!
@@ -113,7 +115,7 @@ enum class LayerType : int32_t
 template <>
 constexpr inline int32_t EnumMax<LayerType>() noexcept
 {
-    return 47;
+    return 49;
 }
 
 //!
@@ -185,6 +187,7 @@ public:
     //!
     //! For a network input, the name is assigned by the application. For tensors which are layer outputs,
     //! a default name is assigned consisting of the layer name followed by the index of the output in brackets.
+    //! Each input and output tensor must have a unique name.
     //!
     //! This method copies the name string.
     //!
@@ -373,7 +376,7 @@ public:
     //!
     //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     //!
-    bool dynamicRangeIsSet() const noexcept
+    TRT_DEPRECATED bool dynamicRangeIsSet() const noexcept
     {
         return mImpl->dynamicRangeIsSet();
     }
@@ -5334,11 +5337,12 @@ protected:
 //! The \p zeroPt tensor is optional, and if not set, will be assumed to be zero. Its data type must match the
 //! output data type. \p zeroPt must only contain zero-valued coefficients, because only symmetric quantization is
 //! supported.
-//! The \p scale value must be a scalar for per-tensor quantization, a 1-D tensor for per-channel quantization, or a
-//! 2-D tensor for block quantization (supported for DataType::kINT4 only). All \p scale coefficients must have
-//! positive values. The size of the 1-D \p scale tensor must match the size of the quantization axis. For block
-//! quantization, the shape of \p scale tensor must match the shape of the input, except for one dimension in which
-//! blocking occurs. The size of \p zeroPt must match the size of \p scale.
+//! The \p scale value must be a scalar for per-tensor quantization, a 1D tensor for per-channel quantization, or the
+//! same rank as the input tensor for block quantization (supported for DataType::kINT4 only). All \p scale
+//! coefficients must have positive values. The size of the 1D \p scale tensor must match the size of the quantization
+//! axis. For block quantization, the shape of \p scale tensor must match the shape of the input, except for one
+//! dimension (the last or second to last dimension) in which blocking occurs.
+//! The size of \p zeroPt must match the size of \p scale.
 //!
 //! The subgraph which terminates with the \p scale tensor must be a build-time constant. The same restrictions apply
 //! to the \p zeroPt.
@@ -5369,8 +5373,8 @@ protected:
 //!                 For each s in S:
 //!                     output[k,c,r,s] = clamp(round(\p input[k,c,r,s] / \p scale[k]) + \p zeroPt[k])
 //!
-//! Block quantization is supported only for 2-D weight inputs of DataType::kINT4. As an example of blocked
-//! operation, imagine a 2-D RS weights input, R (dimension 0) as the blocking axis and B as the block size.
+//! Block quantization is supported only for weight inputs of DataType::kINT4. As an example of blocked
+//! operation, imagine a 2D RS weights input, R (dimension 0) as the blocking axis and B as the block size.
 //! The scale is a 2D array of coefficients, with dimensions (R//B, S).
 //!     For each r in R:
 //!         For each s in S:
@@ -5405,7 +5409,7 @@ public:
     //!
     //! Set the index of the quantization axis (with reference to the input tensor's dimensions).
     //! The axis must be a valid axis if the scale tensor has more than one coefficient.
-    //! The axis value will be ignored if the scale tensor has exactly one coefficient (per-tensor quantization).
+    //! The axis value is used only for per-axis (per-channel) quantization.
     //!
     void setAxis(int32_t axis) noexcept
     {
@@ -5461,11 +5465,12 @@ protected:
 //! The \p zeroPt tensor is optional, and if not set, will be assumed to be zero. Its data type must be identical to
 //! the input's data type. \p zeroPt must only contain zero-valued coefficients, because only symmetric quantization is
 //! supported.
-//! The \p scale value must be either a scalar for per-tensor quantization, a 1-D tensor for per-channel quantization,
-//! or a 2-D tensor for block quantization (supported for DataType::kINT4 only). All \p scale coefficients must have
-//! positive values. The size of the 1-D \p scale tensor must match the size of the quantization axis. For block
-//! quantization, the shape of \p scale tensor must match the shape of the input, except for one dimension in which
-//! blocking occurs. The size of \p zeroPt must match the size of \p scale.
+//! The \p scale value must be a scalar for per-tensor quantization, a 1D tensor for per-channel quantization, or the
+//! same rank as the input tensor for block quantization (supported for DataType::kINT4 only). All \p scale
+//! coefficients must have positive values. The size of the 1D \p scale tensor must match the size of the quantization
+//! axis. For block quantization, the shape of \p scale tensor must match the shape of the input, except for one
+//! dimension (the last or second to last dimension) in which blocking occurs.
+//! The size of \p zeroPt must match the size of \p scale.
 //!
 //! The subgraph which terminates with the \p scale tensor must be a build-time constant.  The same restrictions apply
 //! to the \p zeroPt.
@@ -5498,9 +5503,9 @@ protected:
 //!                 For each s in S:
 //!                     output[k,c,r,s] = (\p input[k,c,r,s] - \p zeroPt[k]) * \p scale[k]
 //!
-//! Block dequantization is supported only for 2-D input tensors with DataType::kINT4 that are rooted at an
-//! IConstantLayer (i.e. weights). As an example of blocked operation, imagine a 2-D RS weights input with R
-//! (dimension 0) as the blocking axis and B as the block size. The scale is a 2-D array of coefficients, with
+//! Block dequantization is supported only for input tensors with DataType::kINT4 that are rooted at an
+//! IConstantLayer (i.e. weights). As an example of blocked operation, imagine a 2D RS weights input with R
+//! (dimension 0) as the blocking axis and B as the block size. The scale is a 2D array of coefficients, with
 //! dimensions (R//B, S).
 //! For each r in R:
 //!     For each s in S:
@@ -6261,6 +6266,65 @@ protected:
 };
 
 //!
+//! \class ISqueezeLayer
+//!
+//! \brief Layer that represents a squeeze operation, removing unit dimensions of the input tensor
+//! on a set of axes.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class ISqueezeLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Append or replace an input of this layer with a specific tensor
+    //!
+    //! \param index The index of the input to modify.
+    //! \param tensor The new input tensor.
+    //!
+    //! For a Squeeze layer, the values 0-1 are valid for index.
+    //! The indices are as follows:
+    //!
+    //! - 0: Input data tensor.
+    //! - 1: The axes to remove. Must resolvable to a constant Int32 or Int64 1D shape tensor.
+    //!
+    using ILayer::setInput;
+
+protected:
+    apiv::VSqueezeLayer* mImpl;
+    virtual ~ISqueezeLayer() noexcept = default;
+};
+
+//!
+//! \class IUnsqueezeLayer
+//!
+//! \brief Layer that represents an unsqueeze operation, which reshapes the input tensor by inserting unit-length dimensions at specified axes of the output.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IUnsqueezeLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Append or replace an input of this layer with a specific tensor
+    //!
+    //! \param index The index of the input to modify.
+    //! \param tensor The new input tensor.
+    //!
+    //! For an Unsqueeze layer, the values 0-1 are valid for index.
+    //! The indices are as follows:
+    //!
+    //! - 0: Input data tensor.
+    //! - 1: The output axes at which unit-length dimensions are inserted. Must resolvable to a constant Int32 or Int64 1D shape tensor.
+    //!
+    using ILayer::setInput;
+
+protected:
+    apiv::VUnsqueezeLayer* mImpl;
+    virtual ~IUnsqueezeLayer() noexcept = default;
+};
+
+//!
 //! \class INetworkDefinition
 //!
 //! \brief A network definition for input to the builder.
@@ -6285,8 +6349,8 @@ public:
     //!
     //! \brief Add an input tensor to the network.
     //!
-    //! The name of the input tensor is used to find the index into the buffer array for an engine built from
-    //! the network. The volume must be less than 2^31 elements.
+    //! Each input and output tensor must have a unique name.
+    //! The volume must be less than 2^31 elements.
     //!
     //! For networks with wildcard dimensions, the volume
     //! is based on the maxima specified by an IOptimizationProfile.Dimensions are normally non-negative integers. The
@@ -7636,6 +7700,46 @@ public:
         return mImpl->areWeightsMarkedRefittable(name);
     }
 
+    //!
+    //! \brief Add a squeeze layer to the network.
+    //!
+    //! \param input The input tensor to the layer.
+    //! \param axes The axes to remove unit dimensions on.
+    //!
+    //! \see ISqueezeLayer
+    //!
+    //! Axes must be resolvable to a constant Int32 or Int64 1D shape tensor.
+    //! Values in axes must be unique and in the range of [-r, r-1], where r is the rank of the input tensor.
+    //! For each axis value, the corresponding dimension in the input tensor must be one.
+    //!
+    //! \return The new Squeeze layer, or nullptr if it could not be created.
+    //!
+    ISqueezeLayer* addSqueeze(ITensor& input, ITensor& axes) noexcept
+    {
+        return mImpl->addSqueeze(input, axes);
+    }
+
+    //!
+    //! \brief Add an unsqueeze layer to the network.
+    //!
+    //! \param input The input tensor to the layer.
+    //! \param axes The axes to add unit dimensions.
+    //!
+    //! \see IUnsqueezeLauyer
+    //!
+    //! Axes must be resolvable to a constant Int32 or Int64 shape tensor.
+    //! Values in axes must be unique and in the range of [-r_final, r_final-1], where r_final
+    //! is the sum of rank(input) and len(axes).
+    //!
+    //! r_final must be less than Dims::MAX_DIMS.
+    //!
+    //! \return The new Unsqueeze layer, or nullptr if it could not be created
+    //!
+    IUnsqueezeLayer* addUnsqueeze(ITensor& input, ITensor& axes) noexcept
+    {
+        return mImpl->addUnsqueeze(input, axes);
+    }
+
 protected:
     apiv::VNetworkDefinition* mImpl;
 };
@@ -8228,7 +8332,7 @@ enum class QuantizationFlag : int32_t
     //! Run int8 calibration pass before layer fusion. Only valid for IInt8LegacyCalibrator and
     //! IInt8EntropyCalibrator. The builder always runs the int8 calibration pass before layer fusion for
     //! IInt8MinMaxCalibrator and IInt8EntropyCalibrator2. Disabled by default.
-    kCALIBRATE_BEFORE_FUSION = 0
+    kCALIBRATE_BEFORE_FUSION TRT_DEPRECATED_ENUM = 0
 };
 
 //!
@@ -8345,7 +8449,8 @@ enum class BuilderFlag : int32_t
     //! Require that no reformats be inserted between a layer and a network I/O tensor
     //! for which ITensor::setAllowedFormats was called.
     //! Build fails if a reformat is required for functional correctness.
-    kDIRECT_IO = 11,
+    //! \deprecated Deprecated in TensorRT 10.7. Unneeded API.
+    kDIRECT_IO TRT_DEPRECATED_ENUM = 11,
 
     //! Fail if IAlgorithmSelector::selectAlgorithms returns an empty set of algorithms.
     kREJECT_EMPTY_ALGORITHMS = 12,

@@ -357,8 +357,8 @@ bool getOption(Arguments& arguments, const std::string& option, T& value)
 //! Check if input option exists in input arguments.
 //! If it does: set its value, erase the argument and return true.
 //! If it does not: return false.
-template <typename T_>
-bool getAndDelOption(Arguments& arguments, const std::string& option, T_& value)
+template <typename T>
+bool getAndDelOption(Arguments& arguments, const std::string& option, T& value)
 {
     bool found = getOption(arguments, option, value);
     if (found)
@@ -373,13 +373,13 @@ bool getAndDelOption(Arguments& arguments, const std::string& option, T_& value)
 //! Check if input option exists in input arguments.
 //! If it does: set its value and position, erase the argument and return true.
 //! If it does not: return false.
-template <typename T_>
-bool getAndDelOptionWithPosition(Arguments& arguments, std::string const& option, T_& value, int32_t& pos)
+template <typename T>
+bool getAndDelOptionWithPosition(Arguments& arguments, std::string const& option, T& value, int32_t& pos)
 {
     auto const match = arguments.find(option);
     if (match != arguments.end())
     {
-        value = stringToValue<T_>(match->second.first);
+        value = stringToValue<T>(match->second.first);
         pos = match->second.second;
         arguments.erase(match);
         return true;
@@ -391,8 +391,8 @@ bool getAndDelOptionWithPosition(Arguments& arguments, std::string const& option
 //! Check if input option exists in input arguments behind the position spcecified by pos.
 //! If it does: set its value, erase the argument and return true.
 //! If it does not: return false.
-template <typename T_>
-bool getAndDelOptionBehind(Arguments& arguments, std::string const& option, int32_t pos, T_& value)
+template <typename T>
+bool getAndDelOptionBehind(Arguments& arguments, std::string const& option, int32_t pos, T& value)
 {
     auto const match = arguments.equal_range(option);
     if (match.first == match.second)
@@ -403,7 +403,7 @@ bool getAndDelOptionBehind(Arguments& arguments, std::string const& option, int3
     {
         if (i->second.second - pos == 1)
         {
-            value = stringToValue<T_>(i->second.first);
+            value = stringToValue<T>(i->second.first);
             arguments.erase(i);
             return true;
         }
@@ -1185,7 +1185,9 @@ void BuildOptions::parse(Arguments& arguments)
         fp16 = true;
 
         // BF16 only supported on Ampere+
+#if !TRT_WINML
         if (samplesCommon::getSMVersion() >= 0x0800)
+#endif
         {
             bf16 = true;
         }
@@ -1248,6 +1250,19 @@ void BuildOptions::parse(Arguments& arguments)
         disableAndLog(int4, "int4", "kINT4");
     }
 
+    // Print a message to tell users that --noTF32 can be added to improve accuracy with performance cost.
+#if !TRT_WINML
+    if (samplesCommon::getSMVersion() >= 0x0800)
+#endif
+    {
+        if (!(stronglyTyped || fp16 || bf16 || int8 || fp8 || int4))
+        {
+            sample::gLogInfo << "TF32 is enabled by default. Add --noTF32 flag to further improve accuracy with some "
+                            << "performance cost."
+                            << std::endl;
+        }
+    }
+
     if (fp8 && int8)
     {
         throw std::invalid_argument("Invalid usage, fp8 and int8 aren't allowed to be enabled together.");
@@ -1257,7 +1272,10 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--allowGPUFallback", allowGPUFallback);
     getAndDelOption(arguments, "--restricted", restricted);
     getAndDelOption(arguments, "--skipInference", skipInference);
-    getAndDelOption(arguments, "--directIO", directIO);
+    if (getAndDelOption(arguments, "--directIO", directIO))
+    {
+        sample::gLogWarning << "--directIO flag has been deprecated" << std::endl;
+    }
 
     std::string precisionConstraintsString;
     getAndDelOption(arguments, "--precisionConstraints", precisionConstraintsString);
@@ -1348,6 +1366,7 @@ void BuildOptions::parse(Arguments& arguments)
     {
         load = true;
     }
+    getAndDelOption(arguments, "--asyncFileReader", asyncFileReader);
     getAndDelOption(arguments, "--getPlanVersionOnly", getPlanVersionOnly);
 
     if (getAndDelOption(arguments, "--saveEngine", engine))
@@ -2496,7 +2515,7 @@ void BuildOptions::help(std::ostream& os)
           "  --int4                             Enable int4 precision, in addition to fp32 (default = disabled)"                                     "\n"
           "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
           "  --stronglyTyped                    Create a strongly typed network. (default = disabled)"                                              "\n"
-          "  --directIO                         Avoid reformatting at network boundaries. (default = disabled)"                                     "\n"
+          "  --directIO                         [Deprecated] Avoid reformatting at network boundaries. (default = disabled)"                        "\n"
           "  --precisionConstraints=spec        Control precision constraint setting. (default = none)"                                             "\n"
           R"(                                       Precision Constraints: spec ::= "none" | "obey" | "prefer")"                                    "\n"
           "                                         none = no constraints"                                                                          "\n"
@@ -2535,6 +2554,7 @@ void BuildOptions::help(std::ostream& os)
           "  --restricted                       Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
           "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
           "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
+          "  --asyncFileReader=<file>           Load a serialized engine using async stream reader"                                                                           "\n"
           "  --getPlanVersionOnly               Print TensorRT version when loaded plan was created. Works without deserialization of the plan."    "\n"
           "                                     Use together with --loadEngine. Supported only for engines created with 8.6 and forward."           "\n"
           "  --tacticSources=tactics            Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             "\n"

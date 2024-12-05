@@ -63,12 +63,18 @@ class FluxPipeline(DiffusionPipeline):
         max_sequence_length=512,
         bf16=False,
         low_vram=False,
+        torch_fallback=None,
+        weight_streaming=False,
+        t5_weight_streaming_budget_percentage=None,
+        transformer_weight_streaming_budget_percentage=None,
         **kwargs
     ):
         """
         Initializes the Flux pipeline.
 
         Args:
+            version (`str`, defaults to `flux.1-dev`)
+                Version of the underlying Flux model.
             guidance_scale (`float`, defaults to 3.5):
                 Guidance scale is enabled by setting as > 1.
                 Higher guidance scale encourages to generate images that are closely linked to the text prompt, usually at the expense of lower image quality.
@@ -76,8 +82,14 @@ class FluxPipeline(DiffusionPipeline):
                 Maximum sequence length to use with the `prompt`.
             bf16 (`bool`, defaults to False):
                 Whether to run the pipeline in BFloat16 precision.
+            weight_streaming (`bool`, defaults to False):
+                Whether to enable weight streaming during TensorRT engine build.
+            t5_weight_streaming_budget_percentage (`int`, defaults to None):
+                Weight streaming budget as a percentage of the size of total streamable weights for the T5 model.
+            transformer_weight_streaming_budget_percentage (`int`, defaults to None):
+                Weight streaming budget as a percentage of the size of total streamable weights for the transformer model.
         """
-        super().__init__(version=version, pipeline_type=pipeline_type, **kwargs)
+        super().__init__(version=version, pipeline_type=pipeline_type, weight_streaming=weight_streaming, text_encoder_weight_streaming_budget_percentage=t5_weight_streaming_budget_percentage, denoiser_weight_streaming_budget_percentage=transformer_weight_streaming_budget_percentage, **kwargs)
         self.guidance_scale = guidance_scale
         self.max_sequence_length = max_sequence_length
         self.bf16=bf16
@@ -85,6 +97,14 @@ class FluxPipeline(DiffusionPipeline):
 
         # Pipeline type
         self.stages = ["clip", "t5", "transformer", "vae"]
+
+        if torch_fallback:
+            assert type(torch_fallback) is list
+            for model_name in torch_fallback:
+                if model_name not in self.stages:
+                    raise ValueError(f'Model "{model_name}" set in --torch-fallback does not exist')
+                self.config[model_name.replace('-','_')+'_torch_fallback'] = True
+                print(f'[I] Setting torch_fallback for {model_name} model.')
 
     def _initialize_models(self, framework_model_dir, int8, fp8):
         # Load text tokenizer(s)
@@ -129,11 +149,14 @@ class FluxPipeline(DiffusionPipeline):
             # Known accuracy issues with FP16
             self.models["t5"] = T5Model(
                 **models_args,
-                fp16=False,
+                fp16=self.fp16,
                 tf32=self.tf32,
                 bf16=self.bf16,
                 subfolder="text_encoder_2",
                 text_maxlen=self.max_sequence_length,
+                build_strongly_typed=True if self.fp16 else False,
+                weight_streaming=self.weight_streaming,
+                weight_streaming_budget_percentage=self.text_encoder_weight_streaming_budget_percentage,
             )
 
         if "transformer" in self.stages:
@@ -146,11 +169,14 @@ class FluxPipeline(DiffusionPipeline):
                 tf32=self.tf32,
                 text_maxlen=self.max_sequence_length,
                 build_strongly_typed=True,
+                weight_streaming=self.weight_streaming,
+                weight_streaming_budget_percentage=self.denoiser_weight_streaming_budget_percentage,
             )
 
         if "vae" in self.stages:
             # Accuracy issues with FP16
-            self.models["vae"] = VAEModel(**models_args, fp16=False, tf32=self.tf32, bf16=self.bf16)
+            # WAR: VAE fallback to FP32 in BF16 pipeline. TRT support will be added in a future release
+            self.models["vae"] = VAEModel(**models_args, fp16=False, tf32=self.tf32, bf16=False)
 
         self.vae_scale_factor = (
             2 ** (len(self.models["vae"].config["block_out_channels"]))
@@ -361,6 +387,8 @@ class FluxPipeline(DiffusionPipeline):
 
     def decode_latent(self, latents, decoder="vae"):
         self.profile_start(decoder, color="red")
+        cast_to = torch.float16 if self.models[decoder].fp16 else torch.bfloat16 if self.models[decoder].bf16 else torch.float32
+        latents = latents.to(dtype=cast_to)
         if self.torch_inference or self.torch_fallback[decoder]:
             images = self.torch_models[decoder](latents, return_dict=False)[0]
         else:
@@ -465,19 +493,29 @@ class FluxPipeline(DiffusionPipeline):
                     if not ctx.low_vram:
                         return
                     for model_name in ctx.model_names:
-                        # creating engine object (load from plan file)
-                        self.engine[model_name].load()
-                        # creating context
-                        self.engine[model_name].activate(device_memory=self.shared_device_memory)  
-                        # creating input and output buffer
-                        self.engine[model_name].allocate_buffers(shape_dict=self.shape_dicts[model_name], device=self.device)  
+                        if not self.torch_fallback[model_name]:
+                            # creating engine object (load from plan file)
+                            self.engine[model_name].load()
+                            # creating context
+                            self.engine[model_name].activate(device_memory=self.shared_device_memory)
+                            # creating input and output buffer
+                            self.engine[model_name].allocate_buffers(shape_dict=self.shape_dicts[model_name], device=self.device)
+                        else:
+                            print(f"[I] Reloading torch model {model_name} from cpu.")
+                            self.torch_models[model_name] = self.torch_models[model_name].to('cuda')
+
                 def __exit__(ctx, exc_type, exc_val, exc_tb):
                     if not ctx.low_vram:
                         return
                     for model_name in ctx.model_names:
-                        self.engine[model_name].deallocate_buffers()
-                        self.engine[model_name].deactivate()
-                        self.engine[model_name].unload()
+                        if not self.torch_fallback[model_name]:
+                            self.engine[model_name].deallocate_buffers()
+                            self.engine[model_name].deactivate()
+                            self.engine[model_name].unload()
+                        else:
+                            print(f"[I] Offloading torch model {model_name} to cpu.")
+                            self.torch_models[model_name] = self.torch_models[model_name].to('cpu')
+                            torch.cuda.empty_cache()
 
             # CLIP and T5 text encoder(s)
 

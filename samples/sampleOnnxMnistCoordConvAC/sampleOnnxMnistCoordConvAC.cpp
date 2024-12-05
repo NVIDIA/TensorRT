@@ -113,9 +113,7 @@ private:
 //!
 bool SampleOnnxMnistCoordConvAC::build()
 {
-#if !TRT_WINML
     initLibNvInferPlugins(&sample::gLogger, "");
-#endif
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {

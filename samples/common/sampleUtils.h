@@ -62,10 +62,10 @@ using samplesCommon::volume;
 
 nvinfer1::Dims toDims(std::vector<int32_t> const& vec);
 
-template <typename T, typename std::enable_if<std::is_integral<T>::value, bool>::type = true>
+template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool> = true>
 void fillBuffer(void* buffer, int64_t volume, T min, T max);
 
-template <typename T, typename std::enable_if<!std::is_integral<T>::value, int32_t>::type = 0>
+template <typename T, typename std::enable_if_t<!std::is_integral_v<T>, int32_t> = 0>
 void fillBuffer(void* buffer, int64_t volume, T min, T max);
 
 template <typename T>

@@ -43,10 +43,7 @@ Specifically, this sample performs the following steps:
 
 ### Configuring the builder to use INT8 without the INT8 calibrator
 
-1.  Ensure that INT8 inference is supported on the platform:
-	`if (!builder->platformHasFastInt8()) return false;`
-
-2.  Enable INT8 mode by setting the builder flag:
+1.  Enable INT8 mode by setting the builder flag:
 	`builder->setFlag(BuilderFlag::kINT8);`
 
 	You can choose not to provide the INT8 calibrator.
@@ -54,7 +51,7 @@ Specifically, this sample performs the following steps:
 
 	If you want to provide the calibrator, manual dynamic range will override calibration generate dynamic range/scale. See sampleINT8 on how to setup INT8 calibrator.
 
-3.  Optionally and for debugging purposes, the following flag configures the builder to choose type conforming layer implementation, if one exists.
+2.  Optionally and for debugging purposes, the following flag configures the builder to choose type conforming layer implementation, if one exists.
 
 	`builder->setStrictTypeConstraints(true);`
 

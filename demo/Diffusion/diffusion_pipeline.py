@@ -81,7 +81,8 @@ class DiffusionPipeline(ABC):
         "svd-xt-1.1",
         "sd3",
         "cascade",
-        "flux.1-dev"
+        "flux.1-dev",
+        "flux.1-schnell"
     )
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
@@ -95,7 +96,8 @@ class DiffusionPipeline(ABC):
         "xl-turbo": "EulerA",
         "svd-xt-1.1": "Euler",
         "cascade": "DDPMWuerstchen",
-        "flux.1-dev": "FlowMatchEuler"
+        "flux.1-dev": "FlowMatchEuler",
+        "flux.1-schnell": "FlowMatchEuler"
     }
 
     def __init__(
@@ -117,6 +119,9 @@ class DiffusionPipeline(ABC):
         framework_model_dir='pytorch_model',
         return_latents=False,
         torch_inference='',
+        weight_streaming=False,
+        text_encoder_weight_streaming_budget_percentage=None,
+        denoiser_weight_streaming_budget_percentage=None,
     ):
         """
         Initializes the Diffusion pipeline.
@@ -157,6 +162,12 @@ class DiffusionPipeline(ABC):
                 Skip decoding the image and return latents instead.
             torch_inference (str):
                 Run inference with PyTorch (using specified compilation mode) instead of TensorRT.
+            weight_streaming (`bool`, defaults to False):
+                Whether to enable weight streaming during TensorRT engine build.
+            text_encoder_ws_budget_percentage (`int`, defaults to None):
+                Weight streaming budget as a percentage of the size of total streamable weights for the text encoder model.
+            denoiser_weight_streaming_budget_percentage (`int`, defaults to None):
+                Weight streaming budget as a percentage of the size of total streamable weights for the denoiser model.
         """
         self.denoising_steps = denoising_steps
         self.max_batch_size = max_batch_size
@@ -176,6 +187,10 @@ class DiffusionPipeline(ABC):
         self.version = version
         self.pipeline_type = pipeline_type
         self.return_latents = return_latents
+
+        self.weight_streaming = weight_streaming
+        self.text_encoder_weight_streaming_budget_percentage = text_encoder_weight_streaming_budget_percentage
+        self.denoiser_weight_streaming_budget_percentage = denoiser_weight_streaming_budget_percentage
 
         if not scheduler:
             scheduler = 'UniPC' if self.pipeline_type.is_controlnet() else self.SCHEDULER_DEFAULTS.get(version, 'DDIM')
@@ -332,9 +347,9 @@ class DiffusionPipeline(ABC):
                     config['use_int8'] = True
                     config['model_suffix'] += f"-int8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
             elif fp8:
-                assert self.pipeline_type.is_sd_xl() or self.version in ["1.5", "2.1", "2.1-base", "flux.1-dev"], "fp8 quantization only supported for SDXL, SD1.5, SD2.1 and FLUX pipeline"
+                assert self.pipeline_type.is_sd_xl() or self.version in ["1.5", "2.1", "2.1-base", "flux.1-dev", "flux.1-schnell"], "fp8 quantization only supported for SDXL, SD1.5, SD2.1 and FLUX pipeline"
                 if (self.pipeline_type.is_sd_xl() and model_name == 'unetxl') or \
-                    (self.version == "flux.1-dev" and model_name == 'transformer') or \
+                    ((self.version in ("flux.1-dev", "flux.1-schnell")) and model_name == 'transformer') or \
                     (model_name == 'unet'):
                     config['use_fp8'] = True
                     config['model_suffix'] += f"-fp8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
@@ -360,8 +375,8 @@ class DiffusionPipeline(ABC):
             for i_th, prompts in enumerate(calibration_prompts):
                 if i_th >= kwargs["calib_size"]:
                     return
-                if kwargs["model_id"] == "flux.1-dev":
-
+                if kwargs["model_id"] in ("flux.1-dev", "flux.1-schnell"):
+                    max_seq_len = 512 if kwargs["model_id"] == "flux.1-dev" else 256
                     height = kwargs.get("height", 1024)
                     width = kwargs.get("width", 1024)
                     pipeline(
@@ -371,7 +386,7 @@ class DiffusionPipeline(ABC):
                         height=height,
                         width=width,
                         guidance_scale=3.5,
-                        max_sequence_length=512
+                        max_sequence_length=max_seq_len
                     ).images
                 else:
                     pipeline(
@@ -384,7 +399,7 @@ class DiffusionPipeline(ABC):
                     ).images
 
         def forward_loop(model):
-            if self.version not in ["sd3", "flux.1-dev"]:
+            if self.version not in ("sd3", "flux.1-dev", "flux.1-schnell"):
                 pipeline.unet = model
             else:
                 pipeline.transformer = model
@@ -408,7 +423,7 @@ class DiffusionPipeline(ABC):
                 self.denoising_steps
             )
         elif model_config['use_fp8']:
-            if self.version == "flux.1-dev":
+            if self.version in ("flux.1-dev", "flux.1-schnell"):
                 quant_config = SD_FP8_BF16_DEFAULT_CONFIG
             elif self.version == "2.1":
                 quant_config = SD_FP8_FP32_DEFAULT_CONFIG
@@ -416,14 +431,14 @@ class DiffusionPipeline(ABC):
                 quant_config = SD_FP8_FP16_DEFAULT_CONFIG
 
         check_lora(model)
-        if self.version == "flux.1-dev":
+        if self.version in ("flux.1-dev", "flux.1-schnell"):
             set_quant_precision(quant_config, "BFloat16")
         mtq.quantize(model, quant_config, forward_loop)
         mto.save(model, model_config['state_dict_path'])
 
     def _get_quantized_model(self, obj, model_config, quantization_level, quantization_percentile, quantization_alpha, calibration_size, calib_batch_size, **kwargs):
         pipeline = obj.get_pipeline()
-        model = pipeline.unet if self.version not in ["sd3", "flux.1-dev"] else pipeline.transformer
+        model = pipeline.unet if self.version not in ("sd3", "flux.1-dev", "flux.1-schnell") else pipeline.transformer
         if model_config['use_fp8'] and quantization_level == 4.0:
             set_fmha(model)
 
@@ -434,7 +449,7 @@ class DiffusionPipeline(ABC):
 
         if not os.path.exists(model_config['onnx_path']):
             quantize_lvl(model, quantization_level)
-            if self.version in ["flux.1-dev"]:
+            if self.version in ("flux.1-dev", "flux.1-schnell"):
                 mtq.disable_quantizer(model, filter_func_no_proj_out)
             else:
                 mtq.disable_quantizer(model, filter_func)
@@ -469,6 +484,7 @@ class DiffusionPipeline(ABC):
         tf32amp = obj.tf32
         bf16amp = False if (model_config['use_fp8'] or getattr(obj, 'build_strongly_typed', False)) else obj.bf16
         strongly_typed = True if (model_config['use_fp8'] or getattr(obj, 'build_strongly_typed', False)) else False
+        weight_streaming = getattr(obj, 'weight_streaming', False)
         extra_build_args = {'verbose': self.verbose}
         extra_build_args['builder_optimization_level'] = optimization_level
         if model_config['use_int8']:
@@ -487,6 +503,7 @@ class DiffusionPipeline(ABC):
             enable_all_tactics=enable_all_tactics,
             timing_cache=timing_cache,
             update_output_names=update_output_names,
+            weight_streaming=weight_streaming,
             **extra_build_args)
 
     def _refit_engine(self, obj, model_name, model_config):
@@ -511,6 +528,9 @@ class DiffusionPipeline(ABC):
         for model_name, obj in self.models.items():
             if self.torch_fallback[model_name]:
                 self.torch_models[model_name] = obj.get_model(torch_inference=self.torch_inference)
+                if self.low_vram:
+                    self.torch_models[model_name] = self.torch_models[model_name].to('cpu')
+                    torch.cuda.empty_cache()
 
     def load_engines(
         self,
@@ -619,7 +639,9 @@ class DiffusionPipeline(ABC):
             # For non low_vram case, the engines will remain in GPU memory from now on.
             assert self.engine[model_name].engine is None
             if not self.low_vram:
-                self.engine[model_name].load()
+                weight_streaming = getattr(obj, 'weight_streaming', False)
+                weight_streaming_budget_percentage = getattr(obj, 'weight_streaming_budget_percentage', None)
+                self.engine[model_name].load(weight_streaming, weight_streaming_budget_percentage)
             
             if model_config['do_engine_refit'] and self.lora_loader:
                 # For low_vram, using on-demand load and unload for refit.

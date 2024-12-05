@@ -109,7 +109,7 @@ constexpr auto deprecate(RetVal (*func)(Args...), const char* useInstead) -> Dep
 template <bool isConst, typename RetVal, typename Cls, typename... Args>
 struct DeprecatedMemberFunc
 {
-    using Func = typename std::conditional<isConst, RetVal (Cls::*)(Args...) const, RetVal (Cls::*)(Args...)>::type;
+    using Func = typename std::conditional_t<isConst, RetVal (Cls::*)(Args...) const, RetVal (Cls::*)(Args...)>;
 
     RetVal operator()(Cls& self, Args... args) const
     {

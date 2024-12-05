@@ -340,11 +340,11 @@ char const* ReorgPluginCreator<TPluginClass>::getPluginName() const noexcept
 template <class TPluginClass>
 char const* ReorgPluginCreator<TPluginClass>::getPluginVersion() const noexcept
 {
-    if (std::is_same<TPluginClass, ReorgStatic>::value)
+    if (std::is_same_v<TPluginClass, ReorgStatic>)
     {
         return kREORG_PLUGIN_STATIC_VERSION;
     }
-    else if (std::is_same<TPluginClass, ReorgDynamic>::value)
+    else if (std::is_same_v<TPluginClass, ReorgDynamic>)
     {
         return kREORG_PLUGIN_DYNAMIC_VERSION;
     }

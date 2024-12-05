@@ -388,6 +388,8 @@ extern unsigned char cubin_fmha_v1_fp16_96_64_sm90_cu_cubin[];
 extern unsigned char cubin_fmha_v1_fp16_64_64_sm90_cu_cubin[];
 #endif // defined(ENABLE_SM90)
 
+
+
 #if defined(ENABLE_SM75)
 extern uint32_t fused_multihead_attention_fp16_64_64_kernel_sm75_cu_o_len;
 extern uint32_t fused_multihead_attention_fp16_96_64_kernel_sm75_cu_o_len;
@@ -432,11 +434,13 @@ extern uint32_t cubin_fmha_v1_fp16_96_64_sm90_cu_cubin_len;
 extern uint32_t cubin_fmha_v1_fp16_64_64_sm90_cu_cubin_len;
 #endif // defined(ENABLE_SM90)
 
-#if !(defined(ENABLE_SM72) || defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86)                     \
-    || defined(ENABLE_SM87) || defined(ENABLE_SM89) || defined(ENABLE_SM90))
-// TRT-17573: Remove SM72 support from this file by factoring out the common logic required by the
+
+
+#if !(defined(ENABLE_SM72) || defined(ENABLE_SM75) || defined(ENABLE_SM80) || defined(ENABLE_SM86)                  \
+        || defined(ENABLE_SM87) || defined(ENABLE_SM89) || defined(ENABLE_SM90))
+
 // V2 headers into a separate header.
-#error This file can only be included one of sm 72, 75, 80, 86, 87, 89, or 90 are defined.
+#error This file can only be included if one of sm 72, 75, 80, 86, 87, 89 or 90 is defined.
 #endif
 static const struct FusedMultiHeadAttentionKernelMetaInfoV1
 {
@@ -552,6 +556,7 @@ static const struct FusedMultiHeadAttentionKernelMetaInfoV1
     {DATA_TYPE_FP16, 64, 64, kSM_90, cubin_fmha_v1_fp16_64_64_sm90_cu_cubin, cubin_fmha_v1_fp16_64_64_sm90_cu_cubin_len,
         "fmha_v1_fp16_64_64_sm90_kernel", 32768, 128},
 #endif // defined(ENABLE_SM90)
+
 };
 
 using FusedMultiHeadAttentionXMMAKernel
