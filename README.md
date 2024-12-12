@@ -13,6 +13,14 @@ Will be clean up only for samples modifying, building, running and studying.
 3. Tensorrt: 10.5.0
 
 # CMD
-```
+```shell 
 clear && rm -rf build && mkdir build && cd build && cmake .. && make -j 20 && cd ..
+```
+
+# Excute
+```shell
+# e.g. sample_onnx_mnist  in root path
+./build/sample_onnx_mnist -d ../data/tensorrt-sample-data/mnist/
+# e.g. tbd
+
 ```
