@@ -14,7 +14,7 @@
 4. Draw an SVG graph from an engine.
 
 ```
-usage: process_engine.py [-h] [--print_only] [--build_engine] [--profile_engine] [--draw_engine] input outdir [trtexec [trtexec ...]]
+usage: process_engine.py [-h] [--print-only] [--build-engine] [--profile-ngine] [--draw-engine] input outdir [trtexec [trtexec ...]]
 
 Utility to build and profile TensorRT engines
 
@@ -25,10 +25,10 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  --print_only          print the command-line and exit
-  --build_engine, -b    build the engine
-  --profile_engine, -p  engine the engine
-  --draw_engine, -d     draw the engine
+  --print-only          print the command-line and exit
+  --build-engine, -b    build the engine
+  --profile-engine, -p  engine the engine
+  --draw-engine, -d     draw the engine
 ```
 
 The script can run the entire ONNX to JSON files pipeline, or it can execute a single sub-command. For example, the following command line builds and profiles an engine from the ONNX model stored in a file named `my_onnx.onnx`:
