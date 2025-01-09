@@ -1,0 +1,20 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [    
+        {
+        "name": "C++ Launch",
+        "type": "cppdbg",
+        "request": "launch",
+        "program": "/home/zqi/sbx/tensorrt-github-samples/build/sample_onnx_mnist_debug",
+        "args": ["-d", "/home/zqi/sbx/data/tensorrt-sample-data/mnist/", "--fp16"],
+        "environment": [{ "name": "config", "value": "Debug" }],
+        "MIMode": "gdb",
+        "miDebuggerPath": "/usr/bin/gdb", 
+        "cwd": "${workspaceFolder}"
+        }
+    ]
+
+}
