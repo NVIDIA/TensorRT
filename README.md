@@ -14,7 +14,10 @@ Will be clean up only for samples modifying, building, running and studying.
 
 # CMD
 ```shell 
+# release
 clear && rm -rf build && mkdir build && cd build && cmake .. && make -j 20 && cd ..
+# debug 
+clear && rm -rf build && mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Debug && make -j 20 && cd ..
 ```
 
 # Excute
@@ -23,4 +26,14 @@ clear && rm -rf build && mkdir build && cd build && cmake .. && make -j 20 && cd
 ./build/sample_onnx_mnist -d ../data/tensorrt-sample-data/mnist/
 # e.g. tbd
 
+```
+
+# 注意事项
+```shell
+# 1. data从/usr/src/tensorrt/data/中copy到自己的文件夹：~/sbx/data
+# 2. 需要注意使用原生的环境编译，conda环境需要deactivate
+https://stackoverflow.com/questions/54429210/how-do-i-prevent-conda-from-activating-the-base-environment-by-default
+# 3. 直接在目录下make 得到的结果在../bin/中
+# 4. 执行如下命令：
+./build/sample_onnx_mnist -d ../data/tensorrt-sample-data/mnist/ --fp16
 ```
