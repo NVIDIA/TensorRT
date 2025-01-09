@@ -9,3 +9,4 @@ bin/
 *.vcxproj
 externals/
 **/.DS_Store
+save

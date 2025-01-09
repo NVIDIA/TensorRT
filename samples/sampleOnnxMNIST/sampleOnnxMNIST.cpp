@@ -33,6 +33,7 @@
 #include "common.h"
 #include "logger.h"
 #include "parserOnnxConfig.h"
+#include "sampleEngines.h"
 
 #include "NvInfer.h"
 #include <cuda_runtime_api.h>
@@ -46,6 +47,12 @@ using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_onnx_mnist";
 
+struct sampleOnnxMNISTParams : samplesCommon::OnnxSampleParams
+{
+    std::string saveEngine;
+    std::string loadEngine;
+};
+
 //! \brief  The SampleOnnxMNIST class implements the ONNX MNIST sample
 //!
 //! \details It creates the network using an ONNX model
@@ -53,7 +60,7 @@ const std::string gSampleName = "TensorRT.sample_onnx_mnist";
 class SampleOnnxMNIST
 {
 public:
-    SampleOnnxMNIST(const samplesCommon::OnnxSampleParams& params)
+    SampleOnnxMNIST(const sampleOnnxMNISTParams& params)
         : mParams(params)
         , mRuntime(nullptr)
         , mEngine(nullptr)
@@ -71,7 +78,7 @@ public:
     bool infer();
 
 private:
-    samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
+    sampleOnnxMNISTParams mParams; //!< The parameters for the sample.
 
     nvinfer1::Dims mInputDims;  //!< The dimensions of the input to the network.
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
@@ -108,6 +115,7 @@ private:
 //!
 bool SampleOnnxMNIST::build()
 {
+    // zqi tbd: builder的指针成员mImpl什么时候初始化的？//GPT: builder 的 mImpl 成员是在 createInferBuilder_INTERNAL 函数内部初始化的
     auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
@@ -125,9 +133,9 @@ bool SampleOnnxMNIST::build()
     {
         return false;
     }
-
+    
     auto parser
-        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger())); // zqi: 关联 network和parser：https://github.com/onnx/onnx-tensorrt/blob/9c69a24bc2e20c8a511a4e6b06fd49639ec5300a/NvOnnxParser.cpp
     if (!parser)
     {
         return false;
@@ -149,7 +157,8 @@ bool SampleOnnxMNIST::build()
     }
     config->setProfileStream(*profileStream);
 
-    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    // 生成了一个序列化的推理引擎数据，通常会被写入文件或传递给其他组件进行进一步处理或执行推理
+    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)}; 
     if (!plan)
     {
         return false;
@@ -172,6 +181,13 @@ bool SampleOnnxMNIST::build()
     if (!mEngine)
     {
         return false;
+    }
+
+    // 使用 saveEngine 函数保存序列化的引擎
+    std::ofstream errStream;  // 错误输出流（可以用 std::cerr 也可以用文件流）
+    std::string engineFileName = mParams.saveEngine; //"sampleMNIST.engine";  // 设置你想保存的文件名
+    if (!sample::saveEngine(*mEngine, engineFileName, std::cerr)) {
+        return false;  // 保存失败，返回 false
     }
 
     ASSERT(network->getNbInputs() == 1);
@@ -353,9 +369,9 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 //!
 //! \brief Initializes members of the params struct using the command line args
 //!
-samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args& args)
+sampleOnnxMNISTParams initializeSampleParams(const samplesCommon::Args& args)
 {
-    samplesCommon::OnnxSampleParams params;
+    sampleOnnxMNISTParams params;
     if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths
     {
         params.dataDirs.push_back("data/mnist/");
@@ -373,6 +389,8 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.fp16 = args.runInFp16;
     params.bf16 = args.runInBf16;
     params.timingCacheFile = args.timingCacheFile;
+    params.saveEngine = args.saveEngine;
+    std::cout << "save Engine path: " << params.saveEngine << std::endl;
 
     return params;
 }

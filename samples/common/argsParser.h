@@ -92,7 +92,7 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
                 {"useDLACore", required_argument, 0, 'u'}, {"batch", required_argument, 0, 'b'},
                 {"timingCacheFile", required_argument, 0, 't'}, {nullptr, 0, nullptr, 0}};
         int32_t option_index = 0;
-        arg = getopt_long(argc, argv, "hd:iu", long_options, &option_index);
+        arg = getopt_long(argc, argv, "hd:iu:o:s:", long_options, &option_index);
         if (arg == -1)
         {
             break;
@@ -103,7 +103,8 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
         case 'h': args.help = true; return true;
         case 'd':
             if (optarg)
-            {
+            {   
+                std::cerr << "INFO: --datadir is valid" << std::endl;
                 args.dataDirs.push_back(optarg);
             }
             else
@@ -116,12 +117,14 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
             if (optarg)
             {
                 args.saveEngine = optarg;
+                std::cout << "parseArgs: save engine: " << args.saveEngine << std::endl;
             }
             break;
         case 'o':
             if (optarg)
             {
                 args.loadEngine = optarg;
+                std::cerr << "INFO: --datadir is valid" << optarg << std::endl;
             }
             break;
         case 'i': args.runInInt8 = true; break;

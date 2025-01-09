@@ -38,7 +38,7 @@ https://stackoverflow.com/questions/54429210/how-do-i-prevent-conda-from-activat
 ./build/sample_onnx_mnist -d ../data/tensorrt-sample-data/mnist/ --fp16
 # 5. 如何ssh遇到如下问题:
 ssh: connect to host github.com port 22: Connection refused
-Try this:
+Try this: https://stackoverflow.com/questions/7953806/github-ssh-via-public-wifi-port-22-blocked/45473512#45473512
 $ vim ~/.ssh/config and Add
 Host github.com
   Hostname ssh.github.com

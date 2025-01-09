@@ -16,6 +16,11 @@
 #
 SET(SAMPLE_SOURCES
     sampleOnnxMNIST.cpp
+    ../common/sampleEngines.cpp # original 
+    ../common/sampleDevice.cpp  # below are save engine needed 
+    ../common/sampleOptions.cpp
+    ../common/sampleUtils.cpp
+    ../common/bfloat16.cpp
 )
 
 set(SAMPLE_PARSERS "onnx")

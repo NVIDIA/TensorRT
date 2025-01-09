@@ -38,20 +38,20 @@ set(RUNTIME_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for run
 set(LIBRARY_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for library target files")
 set(ARCHIVE_OUTPUT_DIRECTORY ${TRT_OUT_DIR} CACHE PATH "Output directory for archive target files")
 
-# set(STATIC_LIB_EXT "a")
+set(STATIC_LIB_EXT "a")
 
-# # Get tensorrt version info
-# file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
+# Get tensorrt version info
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
 
-# foreach(TYPE MAJOR MINOR PATCH BUILD)
-#     string(REGEX MATCH "NV_TENSORRT_${TYPE} [0-9]+" TRT_TYPE_STRING ${VERSION_STRINGS})
-#     string(REGEX MATCH "[0-9]+" TRT_${TYPE} ${TRT_TYPE_STRING})
-# endforeach(TYPE)
+foreach(TYPE MAJOR MINOR PATCH BUILD)
+    string(REGEX MATCH "NV_TENSORRT_${TYPE} [0-9]+" TRT_TYPE_STRING ${VERSION_STRINGS})
+    string(REGEX MATCH "[0-9]+" TRT_${TYPE} ${TRT_TYPE_STRING})
+endforeach(TYPE)
 
-# set(TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "TensorRT project version")
-# set(ONNX2TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "ONNX2TRT project version")
-# set(TRT_SOVERSION "${TRT_MAJOR}" CACHE STRING "TensorRT library so version")
-# message(STATUS "Building for TensorRT version: ${TRT_VERSION}, library version: ${TRT_SOVERSION}")
+set(TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "TensorRT project version")
+set(ONNX2TRT_VERSION "${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}" CACHE STRING "ONNX2TRT project version")
+set(TRT_SOVERSION "${TRT_MAJOR}" CACHE STRING "TensorRT library so version")
+message(STATUS "Building for TensorRT version: ${TRT_VERSION}, library version: ${TRT_SOVERSION}")
 
 # Set g++ cmake flag
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -63,12 +63,11 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 # Set project info : languages c++ and cuda
-project(TensorRT_zqi)
-# project(TensorRT
-#         LANGUAGES CXX CUDA
-#         VERSION ${TRT_VERSION}
-#         DESCRIPTION "TensorRT is a C++ library that facilitates high-performance inference on NVIDIA GPUs and deep learning accelerators."
-#         HOMEPAGE_URL "https://github.com/NVIDIA/TensorRT")
+project(TensorRT
+        LANGUAGES CXX CUDA
+        VERSION ${TRT_VERSION}
+        DESCRIPTION "TensorRT is a C++ library that facilitates high-performance inference on NVIDIA GPUs and deep learning accelerators."
+        HOMEPAGE_URL "https://github.com/NVIDIA/TensorRT")
 
 # Set cmake install path ../bin/
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -125,8 +124,8 @@ include_directories(
 )
 
 set(nvinfer_lib_name "nvinfer")
-# set(nvinfer_plugin_lib_name "nvinfer_plugin")
-# set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
+set(nvinfer_plugin_lib_name "nvinfer_plugin")
+set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
 set(nvonnxparser_lib_name "nvonnxparser")
 
 find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED ${TRT_LIB_DIR})
