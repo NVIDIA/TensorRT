@@ -36,4 +36,11 @@ https://stackoverflow.com/questions/54429210/how-do-i-prevent-conda-from-activat
 # 3. 直接在目录下make 得到的结果在../bin/中
 # 4. 执行如下命令：
 ./build/sample_onnx_mnist -d ../data/tensorrt-sample-data/mnist/ --fp16
+# 5. 如何ssh遇到如下问题:
+ssh: connect to host github.com port 22: Connection refused
+Try this:
+$ vim ~/.ssh/config and Add
+Host github.com
+  Hostname ssh.github.com
+  Port 443
 ```
