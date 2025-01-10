@@ -1316,6 +1316,20 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
 
     std::vector<uint8_t> engineBlob(fsize);
     engineFile.read(reinterpret_cast<char*>(engineBlob.data()), fsize);
+
+    // Step 1: Initialize TensorRT runtime
+    // std::shared_ptr<IRuntime> runtime = std::shared_ptr<IRuntime>(createInferRuntime(sample::gLogger), samplesCommon::InferDeleter());
+    // if (!runtime) {
+    //     std::cerr << "Failed to create TensorRT runtime!" << std::endl;
+    //     return false;
+    // }
+    // // Step 3: Deserialize the engine
+    // std::shared_ptr<ICudaEngine> engine = std::shared_ptr<ICudaEngine>(runtime->deserializeCudaEngine(engineBlob.data(), fsize), samplesCommon::InferDeleter());
+    // if (!engine) {
+    //     std::cerr << "Failed to deserialize the engine!" << std::endl;
+    //     return false;
+    // }
+
     SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error loading engine file: " << filepath);
     auto const tEnd = std::chrono::high_resolution_clock::now();
     float const loadTime = std::chrono::duration<float>(tEnd - tBegin).count();
@@ -1323,7 +1337,10 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
     sample::gLogInfo << "Loaded engine with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
 
     env.engine.setBlob(std::move(engineBlob));
-
+    // if (env.engine.release() == nullptr) {
+    //     err << "Engine is not initialized after setting blob." << std::endl;
+    //     return false;
+    // }
     return true;
 }
 
@@ -1386,8 +1403,120 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
 ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream& err)
 {
     BuildEnvironment env(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
-    return loadEngineToBuildEnv(engine, env, err) ? env.engine.release() : nullptr;
+    // return loadEngineToBuildEnv(engine, env, err) ? env.engine.release() : nullptr;
+    if(loadEngineToBuildEnv(engine, env, err) == true)
+    {
+        return env.engine.release();
+    }
+    else
+    {   
+        return nullptr;
+    }
 }
+
+ICudaEngine* loadEngine(std::string const& engine, std::shared_ptr<ICudaEngine> ds_engine, int32_t DLACore, std::ostream& err)
+{
+    BuildEnvironment env(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
+    loadEngineToBuildEnv(engine, env, err);
+    env.engine.release();
+}
+
+
+std::shared_ptr<ICudaEngine> loadEngineV1(std::string const& enginePath, int32_t DLACore, std::ostream& err)
+{
+    auto const tBegin = std::chrono::high_resolution_clock::now();
+    std::ifstream engineFile(enginePath, std::ios::binary);
+    // SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error opening engine file: " << enginePath);
+    // SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error opening engine file: " << filepath);
+    engineFile.seekg(0, std::ifstream::end);
+    int64_t fsize = engineFile.tellg();
+    engineFile.seekg(0, std::ifstream::beg);
+
+    std::vector<uint8_t> engineBlob(fsize);
+    engineFile.read(reinterpret_cast<char*>(engineBlob.data()), fsize);
+
+    // Step 1: Initialize TensorRT runtime
+    std::shared_ptr<IRuntime> runtime = std::shared_ptr<IRuntime>(createInferRuntime(sample::gLogger), samplesCommon::InferDeleter());
+    if (!runtime) {
+        std::cerr << "Failed to create TensorRT runtime!" << std::endl;
+        return nullptr;
+    }
+    // Step 3: Deserialize the engine
+    // std::shared_ptr<ICudaEngine> ds_engine = std::make_shared<ICudaEngine>(runtime->deserializeCudaEngine(engineBlob.data(), fsize), samplesCommon::InferDeleter());
+    std::shared_ptr<ICudaEngine> ds_engine = std::shared_ptr<ICudaEngine>(runtime->deserializeCudaEngine(engineBlob.data(), fsize), samplesCommon::InferDeleter());
+    return ds_engine;
+    // return std::make_shared<ICudaEngine>(runtime->deserializeCudaEngine(engineBlob.data(), fsize), samplesCommon::InferDeleter());
+    // if (!ds_engine) {
+    //     std::cerr << "Failed to deserialize the engine!" << std::endl;
+    //     return nullptr;
+    // }
+    // return ds_engine;
+    // SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error loading engine file: " << filepath);
+    // auto const tEnd = std::chrono::high_resolution_clock::now();
+    // float const loadTime = std::chrono::duration<float>(tEnd - tBegin).count();
+    // sample::gLogInfo << "Engine loaded in " << loadTime << " sec." << std::endl;
+    // sample::gLogInfo << "Loaded engine with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
+
+    // env.engine.setBlob(std::move(engineBlob));
+    // if (env.engine.release() == nullptr) {
+    //     err << "Engine is not initialized after setting blob." << std::endl;
+    //     return false;
+    // }
+    // return true;
+}
+
+ICudaEngine* loadEngineV2(const std::string& engine, int32_t DLACore, std::ostream& err)
+{
+    std::ifstream engineFile(engine, std::ios::binary);
+    if (!engineFile)
+    {
+        err << "Error opening engine file: " << engine << std::endl;
+        return nullptr;
+    }
+
+    engineFile.seekg(0, engineFile.end);
+    long int fsize = engineFile.tellg();
+    engineFile.seekg(0, engineFile.beg);
+
+    std::vector<char> engineData(fsize);
+    engineFile.read(engineData.data(), fsize);
+    if (!engineFile)
+    {
+        err << "Error loading engine file: " << engine << std::endl;
+        return nullptr;
+    }
+
+    TrtUniquePtr<IRuntime> runtime{createInferRuntime(gLogger.getTRTLogger())};
+    if (DLACore != -1)
+    {
+        runtime->setDLACore(DLACore);
+    }
+
+    return runtime->deserializeCudaEngine(engineData.data(), fsize);
+}
+
+
+TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(const std::string& enginePath, int32_t DLACore, std::ostream& err)
+{
+    TrtUniquePtr<nvinfer1::ICudaEngine> engine;
+    if (true)
+    {
+        engine.reset(loadEngineV2(enginePath, -1, err));
+    }
+    else
+    {
+
+    }
+    if (!engine)
+    {
+        err << "Engine creation failed" << std::endl;
+        return nullptr;
+    }
+
+    return engine;
+}
+
+
 
 bool saveEngine(const ICudaEngine& engine, std::string const& fileName, std::ostream& err)
 {

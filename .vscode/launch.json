@@ -9,7 +9,7 @@
         "type": "cppdbg",
         "request": "launch",
         "program": "/home/zqi/sbx/tensorrt-github-samples/build/sample_onnx_mnist_debug",
-        "args": ["-d", "/home/zqi/sbx/data/tensorrt-sample-data/mnist/", "--fp16", "--saveEngine", "/home/zqi/sbx/tensorrt-github-samples/save/mnist.engine"],
+        "args": ["-d", "/home/zqi/sbx/data/tensorrt-sample-data/mnist/", "--fp16", "--loadEngine", "/home/zqi/sbx/tensorrt-github-samples/save/mnist.engine"],
         "environment": [{ "name": "config", "value": "Debug" }],
         "MIMode": "gdb",
         "miDebuggerPath": "/usr/bin/gdb", 

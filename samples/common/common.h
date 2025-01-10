@@ -934,4 +934,17 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
     return os << ")";
 }
 
+template <typename T>
+struct TrtDestroyer
+{
+    void operator()(T* t)
+    {
+        delete t;
+    }
+};
+
+template <typename T>
+using TrtUniquePtr = std::unique_ptr<T, TrtDestroyer<T>>;
+
+
 #endif // TENSORRT_COMMON_H

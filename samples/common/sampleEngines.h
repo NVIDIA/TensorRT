@@ -203,8 +203,8 @@ private:
 
     //! If mIsSafe is false, this points to the deserialized std engine
     std::unique_ptr<nvinfer1::ICudaEngine> mEngine{};
-
     //!@}
+
 };
 
 struct BuildEnvironment
@@ -262,6 +262,14 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine);
 nvinfer1::ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream& err);
 
 //!
+//! \brief Load a serialized engine
+//!
+//! \return Pointer to the engine loaded or nullptr if the operation failed
+//!
+std::shared_ptr<ICudaEngine> loadEngineV1(std::string const& engine, int32_t DLACore, std::ostream& err);
+
+
+//!
 //! \brief Save an engine into a file
 //!
 //! \return boolean Return true if the engine was successfully saved
@@ -316,6 +324,10 @@ bool hasSafeRuntime();
 bool loadStreamingEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
 
 bool loadEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
+
+TrtUniquePtr<nvinfer1::ICudaEngine> getEngine(const std::string& enginePath, int32_t DLACore, std::ostream& err);
+ICudaEngine* loadEngineV2(const std::string& engine, int32_t DLACore, std::ostream& err);
+
 } // namespace sample
 
 #endif // TRT_SAMPLE_ENGINES_H

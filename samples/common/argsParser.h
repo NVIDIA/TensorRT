@@ -104,7 +104,6 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
         case 'd':
             if (optarg)
             {   
-                std::cerr << "INFO: --datadir is valid" << std::endl;
                 args.dataDirs.push_back(optarg);
             }
             else
@@ -117,14 +116,12 @@ inline bool parseArgs(Args& args, int32_t argc, char* argv[])
             if (optarg)
             {
                 args.saveEngine = optarg;
-                std::cout << "parseArgs: save engine: " << args.saveEngine << std::endl;
             }
             break;
         case 'o':
             if (optarg)
             {
                 args.loadEngine = optarg;
-                std::cerr << "INFO: --datadir is valid" << optarg << std::endl;
             }
             break;
         case 'i': args.runInInt8 = true; break;

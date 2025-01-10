@@ -3079,7 +3079,7 @@ public:
     //! at build time via setTacticSources() in IBuilderConfig. Sources
     //! set by the latter but not returned by \ref ICudaEngine::getTacticSources
     //! do not reduce overall engine execution time, and can be removed from
-    //! future builds to reduce build time.
+    //! future builds to reduce build time. 
     //!
     //! \see IBuilderConfig::setTacticSources()
     //!

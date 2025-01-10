@@ -73,16 +73,6 @@ public:
     bool load();
 
     //!
-    //! \brief Function load the network engine v2
-    //!
-    bool loadV2();
-
-    //!
-    //! \brief Function load the network engine v2
-    //!
-    bool loadV3();
-
-    //!
     //! \brief Function builds the network engine
     //!
     bool build();
@@ -320,11 +310,9 @@ bool SampleOnnxMNIST::infer()
 //!
 bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 {
-    // const int inputH = mInputDims.d[2];
-    // const int inputW = mInputDims.d[3];
-    const int inputH = 28;
-    const int inputW = 28;
-    
+    const int inputH = mInputDims.d[2];
+    const int inputW = mInputDims.d[3];
+
     // Read a random digit file
     srand(unsigned(time(nullptr)));
     std::vector<uint8_t> fileData(inputH * inputW);
@@ -355,8 +343,7 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 //!
 bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
-    // const int outputSize = mOutputDims.d[1];
-    const int outputSize = 10;
+    const int outputSize = mOutputDims.d[1];
     float* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
     float val{0.0F};
     int idx{0};
@@ -433,14 +420,9 @@ sampleOnnxMNISTParams initializeSampleParams(const samplesCommon::Args& args)
 //!
 bool SampleOnnxMNIST::load()
 {
-    // TrtUniquePtr<nvinfer1::ICudaEngine> unique_engine = 
+    // mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(sample::loadEngine(mParams.loadEngine, mParams.dlaCore, std::cerr));
     mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        sample::getEngine(mParams.loadEngine, -1, std::cerr).release(), TrtDestroyer<nvinfer1::ICudaEngine>());
-    // mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-    //     sample::loadEngine(mParams.loadEngine, -1, std::cerr), samplesCommon::InferDeleter());
-    // mEngine = sample::loadEngineV1(mParams.loadEngine, mParams.dlaCore, std::cerr);
-    // nvinfer1::ICudaEngine *loadedEngine = sample::loadEngine(mParams.loadEngine, -1, std::cerr);
-    // mEngine.reset(loadedEngine, samplesCommon::InferDeleter());
+        sample::loadEngineV1(mParams.loadEngine, -1, std::cerr), samplesCommon::InferDeleter());
     if (!mEngine) 
     {
         std::cout << "load engine failed" << std::endl;
@@ -450,76 +432,6 @@ bool SampleOnnxMNIST::load()
     {
         return true;
     }
-}
-
-
-bool SampleOnnxMNIST::loadV2()
-{
-    auto enginePath = mParams.loadEngine;
-    std::ifstream engineFile(enginePath, std::ios::binary);
-    if (!engineFile)
-    {
-        std::cerr << "Error opening engine file: " << enginePath << std::endl;
-        return false;
-    }
-
-    engineFile.seekg(0, engineFile.end);
-    long int fsize = engineFile.tellg();
-    engineFile.seekg(0, engineFile.beg);
-
-    std::vector<char> engineData(fsize);
-    engineFile.read(engineData.data(), fsize);
-    if (!engineFile)
-    {
-        std::cerr << "Error loading engine file: " << enginePath << std::endl;
-        return false;
-    }
-
-    TrtUniquePtr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    int DLACore = -1;
-    if (DLACore != -1)
-    {
-        runtime->setDLACore(DLACore);
-    }
-
-    mEngine.reset(runtime->deserializeCudaEngine(engineData.data(), fsize));
-
-    return true;
-}
-
-bool SampleOnnxMNIST::loadV3()
-{
-    auto enginePath = mParams.loadEngine;
-    std::ifstream engineFile(enginePath, std::ios::binary);
-    if (!engineFile)
-    {
-        std::cerr << "Error opening engine file: " << enginePath << std::endl;
-        return false;
-    }
-
-    engineFile.seekg(0, engineFile.end);
-    long int fsize = engineFile.tellg();
-    engineFile.seekg(0, engineFile.beg);
-
-    std::vector<char> engineData(fsize);
-    engineFile.read(engineData.data(), fsize);
-    if (!engineFile)
-    {
-        std::cerr << "Error loading engine file: " << enginePath << std::endl;
-        return false;
-    }
-
-    mRuntime.reset(createInferRuntime(sample::gLogger.getTRTLogger()));
-    // std::shared_ptr<IRuntime> runtime{createInferRuntime(sample::gLogger.getTRTLogger())};
-    int DLACore = -1;
-    if (DLACore != -1)
-    {
-        mRuntime->setDLACore(DLACore);
-    }
-
-    mEngine.reset(mRuntime->deserializeCudaEngine(engineData.data(), fsize));
-
-    return true;
 }
 
 //!
@@ -545,50 +457,140 @@ void printHelpInfo()
               << "created." << std::endl;
 }
 
+// void example()
+// {
+//     // Create and save engine
+//     std::string precision = "fp16";
+//     std::string name_engine = "mnist.engine";
+//     bool create_engine = true;
+//     if (create_engine)
+//     {
+//         // Create engine
+//         std::shared_ptr<nvinfer1::ICudaEngine> mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(builder->buildCudaEngine(*network), samplesCommon::InferDeleter());
+//         if (!mEngine)
+//         {
+//             return false;
+//         }
+
+//         // Save engine
+//         sample::gLogInfo << "Saving engine : " << name_engine << std::endl;
+//         nvinfer1::IHostMemory *serializedModel = mEngine->serialize();
+//         std::ofstream ofs(name_engine, std::ios::out | std::ios::binary);
+//         ofs.write((char*)(serializedModel ->data()), serializedModel ->size());
+//         ofs.close();
+//     }
+//     // load the engine
+//     else
+//     {
+//         // cout << "Loading TensorRT engine from plan file..." << endl;
+//         sample::gLogInfo << "Loading TensorRT engine from plan file " << name_engine << std::endl;
+
+//         std::ifstream planFile(name_engine);
+
+//         if (!planFile.is_open())
+//         {
+//             sample::gLogError << "Could not open plan file: " << name_engine << std::endl;
+//             return false;
+//         }
+
+//         std::stringstream planBuffer;
+//         planBuffer << planFile.rdbuf();
+//         std::string plan = planBuffer.str();
+//         IRuntime *runtime = createInferRuntime(gLogger);
+//         ICudaEngine *engine = runtime->deserializeCudaEngine((void*)plan.data(), plan.size(), nullptr);
+
+//         mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(engine, samplesCommon::InferDeleter());
+//     }
+// }
+
+
+
+// Logger class for TensorRT messages
+class Logger : public nvinfer1::ILogger {
+    void log(Severity severity, const char* msg) noexcept override {
+        if (severity != Severity::kINFO) {
+            std::cout << msg << std::endl;
+        }
+    }
+} gLogger;
+
+// Helper function to serialize and save the engine to a file.
+bool saveEngine(const std::string& filePath, nvinfer1::ICudaEngine* engine) {
+    // Serialize the engine
+    nvinfer1::IHostMemory* serializedEngine = engine->serialize();
+    if (serializedEngine == nullptr) {
+        std::cerr << "Failed to serialize the engine!" << std::endl;
+        return false;
+    }
+
+    // Write the serialized engine to a file
+    std::ofstream p(filePath, std::ios::binary);
+    if (!p) {
+        std::cerr << "Could not open plan output file" << std::endl;
+        return false;
+    }
+    p.write(static_cast<char*>(serializedEngine->data()), serializedEngine->size());
+    p.close();
+
+    // Clean up
+    // serializedEngine->destroy();
+    return true;
+}
+
 
 int main(int argc, char** argv)
 {
-    samplesCommon::Args args;
-    bool argsOK = samplesCommon::parseArgs(args, argc, argv);
-    if (!argsOK)
-    {
-        sample::gLogError << "Invalid arguments" << std::endl;
-        printHelpInfo();
-        return EXIT_FAILURE;
+    std::string onnxpath = "/home/zqi/sbx/data/tensorrt-sample-data/mnist/mnist.onnx";
+// Initialize the TensorRT library with the logger
+    nvinfer1::IBuilder* builder = nvinfer1::createInferBuilder(gLogger);
+    nvinfer1::INetworkDefinition* network = builder->createNetworkV2(0U);
+
+    // Parse ONNX model
+    nvonnxparser::IParser* parser = nvonnxparser::createParser(*network, gLogger);
+    std::ifstream modelStream(onnxpath, std::ios::binary);
+    if (!modelStream.good()) {
+        std::cerr << "read onnx failed" << std::endl;
+        return -1;
     }
-    if (args.help)
-    {
-        printHelpInfo();
-        return EXIT_SUCCESS;
-    }
+    std::vector<char> modelData((std::istreambuf_iterator<char>(modelStream)), std::istreambuf_iterator<char>());
+    parser->parseFromFile(modelData.data(), modelData.size());
 
-    auto sampleTest = sample::gLogger.defineTest(gSampleName, argc, argv);
+    // Check for errors during parsing
+    if (!parser->getNbErrors()) {
+        // Configure the builder and build the engine
+        // builder->getMaxDLABatchSize(-1); // Set your batch size here
+        nvinfer1::IBuilderConfig* config = builder->createBuilderConfig();
+        // config->setMaxWorkspaceSize(1 << 30); // 1GB max workspace size
+        
+        // Enable FP16 precision if available
+        // Uncomment the following line if you have a GPU that supports it
+        // config->setFlag(nvinfer1::BuilderFlag::kFP16);
 
-    sample::gLogger.reportTestStart(sampleTest);
-
-    SampleOnnxMNIST sample(initializeSampleParams(args));
-
-    sample::gLogInfo << "Building and running a GPU inference engine for Onnx MNIST" << std::endl;
-    if (sample.checkEngineLoad())
-    {
-        std::cout << "Engine load path is set" << std::endl;
-        if(!sample.loadV3())
-        {
-            return sample::gLogger.reportFail(sampleTest);
+        // Build the engine
+        nvinfer1::ICudaEngine* engine = builder->buildCudaEngine(*network, *config);
+        
+        if (engine != nullptr) {
+            // Save the engine to a file
+            if (!saveEngine("mnist.engine", engine)) {
+                std::cerr << "Failed to save the engine!" << std::endl;
+                return -1;
+            }
+            
+            // Clean up
+            engine->destroy();
+        } else {
+            std::cerr << "Failed to create engine!" << std::endl;
+            return -1;
         }
-    }
-    else
-    {
-        if (!sample.build())
-        {
-            return sample::gLogger.reportFail(sampleTest);
-        }
+    } else {
+        std::cerr << "Failed to parse ONNX model!" << std::endl;
+        return -1;
     }
 
-    if (!sample.infer())
-    {
-        return sample::gLogger.reportFail(sampleTest);
-    }
+    // Clean up
+    parser->destroy();
+    network->destroy();
+    builder->destroy();
 
-    return sample::gLogger.reportPass(sampleTest);
+    return 0;
 }
