@@ -175,6 +175,12 @@ inline std::string locateFile(
     return filepath;
 }
 
+// 定义几个字符串变量来存储 PGM 文件头部的信息：
+// magic: PGM 文件的魔数（通常是 "P5" 表示二进制格式的灰度图像）。
+// w, h: 图像的宽度和高度。
+// max: 灰度的最大值（即每个像素的最大可能亮度值）。
+// 使用流提取操作符 (>>) 依次读取这些头部信息。请注意，这种方式假设文件头是以空白字符分隔的文本数据。
+// 调用 seekg 方法将文件读取位置向前移动 1 个字节。这一步是为了跳过 PGM 文件头后的换行符或其他非图像数据
 inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int32_t inH, int32_t inW)
 {
     std::ifstream infile(fileName, std::ifstream::binary);
@@ -182,6 +188,8 @@ inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int32_t in
     std::string magic, w, h, max;
     infile >> magic >> w >> h >> max;
     infile.seekg(1, infile.cur);
+    // 使用 read 方法从文件中读取图像数据到提供的 buffer 中。
+    // 这里假定图像数据是连续的，并且其大小正好等于 inH * inW 字节（即图像的宽度乘以高度）
     infile.read(reinterpret_cast<char*>(buffer), inH * inW);
 }
 

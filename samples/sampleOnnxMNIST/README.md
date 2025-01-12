@@ -101,7 +101,7 @@ Download the sample data from the [TensorRT release tarball](https://developer.n
 
 2.  Run the sample to build and run the MNIST engine from the ONNX model.
 	```
-	./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+	./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16] 
 	```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
