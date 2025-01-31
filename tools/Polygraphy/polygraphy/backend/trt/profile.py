@@ -18,6 +18,7 @@ from polygraphy import constants, mod, util
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.common.interface import TypedDict
 from polygraphy.logger import G_LOGGER, LogMode
+from fnmatch import fnmatch
 
 
 @mod.export()
@@ -112,7 +113,7 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
         for idx in range(network.num_inputs):
             inp = network.get_input(idx)
 
-            if inp.name in self:
+            if any(fnmatch(inp.name, wc) for wc in self):
                 continue
 
             with G_LOGGER.verbosity(G_LOGGER.CRITICAL):  # WAR for spam from TRT
@@ -161,19 +162,24 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
         """
         trt_profile = builder.create_optimization_profile()
         unused_keys = set(self.keys())
-        available_inputs = set()
+        inp_names = [network.get_input(idx).name for idx in range(network.num_inputs)]
+        name_to_key, unmatched_inps = util.match_keys(unused_keys, inp_names)
+        if unmatched_inps:
+            G_LOGGER.critical(
+                f"Invalid inputs were provided to the optimization profile: {set(unmatched_inps)}\n"
+                f"Note: Inputs available in the TensorRT network are: {set(inp_names)}"
+            )
+
         for idx in range(network.num_inputs):
             inp = network.get_input(idx)
-            if inp.name in unused_keys:
-                unused_keys.remove(inp.name)
-            available_inputs.add(inp.name)
+            key = name_to_key[inp.name] if inp.name in name_to_key else None
 
             with G_LOGGER.verbosity():  # WAR for spam from TRT
                 is_shape_tensor = inp.is_shape_tensor
 
             if is_shape_tensor:
-                if inp.name in self:
-                    shapes = self[inp.name]
+                if key:
+                    shapes = self[key]
                     trt_profile.set_shape_input(
                         inp.name, shapes.min, shapes.opt, shapes.max
                     )
@@ -186,17 +192,11 @@ class Profile(TypedDict(lambda: str, lambda: ShapeTuple)):
                         mode=LogMode.ONCE,
                     )
             else:
-                shapes = self[inp.name]
+                shapes = self[key if key else inp.name]
                 trt_profile.set_shape(inp.name, shapes.min, shapes.opt, shapes.max)
                 G_LOGGER.verbose(
                     f"{trt_util.str_from_tensor(inp, is_shape_tensor)} | Setting input tensor shapes to: {shapes}"
                 )
-
-        if unused_keys:
-            G_LOGGER.critical(
-                f"Invalid inputs were provided to the optimization profile: {unused_keys}\n"
-                f"Note: Inputs available in the TensorRT network are: {available_inputs}"
-            )
 
         return trt_util.check_profile(trt_profile)
 

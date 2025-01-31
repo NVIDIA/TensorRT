@@ -96,7 +96,7 @@ public:
     // end IPluginV3Build Methods
 
     // IPluginV3Runtime Methods
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t onShapeChange(
         PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;

@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-SET(SAMPLE_SOURCES
-    sampleDynamicReshape.cpp
-)
+set(SAMPLE_SOURCES sampleDynamicReshape.cpp)
 set(SAMPLE_PARSERS "onnx")
 include(../CMakeSamplesTemplate.txt)

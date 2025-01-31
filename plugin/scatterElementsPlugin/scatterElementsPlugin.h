@@ -47,7 +47,7 @@ public:
     // IPluginV3 Methods
     IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
 
-    ScatterElementsPluginV3* clone() noexcept;
+    ScatterElementsPluginV3* clone() noexcept override;
     // end IPluginV3 Methods
 
     // IPluginV3Core Methods

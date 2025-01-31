@@ -17,6 +17,7 @@
 
 // This file contains all bindings related to TensorRT INetworkDefinition.
 #include "ForwardDeclarations.h"
+#include "impl/plugin.h"
 #include "utils.h"
 #include <pybind11/stl.h>
 #include <tuple>
@@ -116,13 +117,20 @@ namespace tensorrt
             return self.addPluginV3(inputs.data(), inputs.size(), shapeInputs.data(), shapeInputs.size(), plugin);
         };
 
-        static const auto add_plugin = [] (INetworkDefinition& self, std::tuple<std::vector<ITensor*> const&, std::vector<ITensor*> const&, IPluginV3&> tupleInput)
+        static const auto add_plugin = [] (INetworkDefinition& self, py::tuple pyTuple)
         {
+            auto const tupleInput = pyTuple.cast<std::tuple<std::vector<ITensor*>, std::vector<ITensor*>, IPluginV3*>>();
             std::vector<ITensor*> const& inputs = std::get<0>(tupleInput);
             std::vector<ITensor*> const& shapeInputs = std::get<1>(tupleInput);
-            IPluginV3& plugin = std::get<2>(tupleInput);
-            return self.addPluginV3(inputs.data(), inputs.size(), shapeInputs.data(), shapeInputs.size(), plugin);
+            IPluginV3* plugin = std::get<2>(tupleInput);
+            return self.addPluginV3(inputs.data(), inputs.size(), shapeInputs.data(), shapeInputs.size(), *plugin);
         };
+
+        static const auto add_plugin_default_func = [] (INetworkDefinition& self, py::function func)
+        {
+            return add_plugin(self, func());
+        };
+
 
         static const auto add_convolution_nd = [](INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
@@ -152,6 +160,10 @@ namespace tensorrt
         static const auto add_dequantize = [](INetworkDefinition& self, ITensor& input, ITensor& scale)
         {
             return self.addDequantize(input, scale);
+        };
+        static const auto add_dynamic_quantize = [](INetworkDefinition& self, ITensor& input, int32_t axis, int32_t block_size, DataType output_type, DataType scale_type)
+        {
+            return self.addDynamicQuantize(input, axis, block_size, output_type, scale_type);
         };
 
         static const auto add_scatter = [](INetworkDefinition& self, ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode)
@@ -259,6 +271,12 @@ namespace tensorrt
 
     } /* lambdas */
 
+    static void cumulative_layer_set_operation(ICumulativeLayer& self, CumulativeOperation op)
+    {
+        bool const status = self.setOperation(op);
+        PY_ASSERT_RUNTIME_ERROR(status, "Failed to set CumulativeLayer's CumulativeOperation");
+    }
+
     void bindGraph(py::module& m)
     {
         // Bind to a Python enum called LayerType.
@@ -312,6 +330,8 @@ namespace tensorrt
             .value("PLUGIN_V3", LayerType::kPLUGIN_V3, LayerTypeDoc::PLUGIN_V3)
             .value("SQUEEZE", LayerType::kSQUEEZE, LayerTypeDoc::SQUEEZE)
             .value("UNSQUEEZE", LayerType::kUNSQUEEZE, LayerTypeDoc::UNSQUEEZE)
+            .value("CUMULATIVE", LayerType::kCUMULATIVE, LayerTypeDoc::CUMULATIVE)
+            .value("DYNAMIC_QUANTIZE", LayerType::kDYNAMIC_QUANTIZE, LayerTypeDoc::DYNAMIC_QUANTIZE)
 
         ; // LayerType
 
@@ -466,6 +486,12 @@ namespace tensorrt
         py::class_<IDequantizeLayer, ILayer, std::unique_ptr<IDequantizeLayer, py::nodelete>>(m, "IDequantizeLayer", IDequantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IDequantizeLayer::getAxis, &IDequantizeLayer::setAxis)
             .def_property("to_type", &IDequantizeLayer::getToType, &IDequantizeLayer::setToType)
+        ;
+        py::class_<IDynamicQuantizeLayer, ILayer, std::unique_ptr<IDynamicQuantizeLayer, py::nodelete>>(m, "IDynamicQuantizeLayer", IDynamicQuantizeLayerDoc::descr, py::module_local())
+            .def_property("axis", &IDynamicQuantizeLayer::getAxis, &IDynamicQuantizeLayer::setAxis)
+            .def_property("block_size", &IDynamicQuantizeLayer::getBlockSize, &IDynamicQuantizeLayer::setBlockSize)
+            .def_property("to_type", &IDynamicQuantizeLayer::getToType, &IDynamicQuantizeLayer::setToType)
+            .def_property("scale_type", &IDynamicQuantizeLayer::getScaleType, &IDynamicQuantizeLayer::setScaleType)
         ;
         py::class_<ISoftMaxLayer, ILayer, std::unique_ptr<ISoftMaxLayer, py::nodelete>>(m, "ISoftMaxLayer", ISoftMaxLayerDoc::descr, py::module_local())
             .def_property("axes", &ISoftMaxLayer::getAxes, &ISoftMaxLayer::setAxes)
@@ -842,6 +868,16 @@ namespace tensorrt
 
 
 
+        py::enum_<CumulativeOperation>(m, "CumulativeOperation", CumulativeOperationDoc::descr, py::module_local())
+            .value("SUM", CumulativeOperation::kSUM, CumulativeOperationDoc::SUM)
+        ;
+
+        py::class_<ICumulativeLayer, ILayer, std::unique_ptr<ICumulativeLayer, py::nodelete>>(m, "ICumulativeLayer", ICumulativeLayerDoc::descr, py::module_local())
+            .def_property("op", &ICumulativeLayer::getOperation, &cumulative_layer_set_operation)
+            .def_property("exclusive", &ICumulativeLayer::getExclusive, &ICumulativeLayer::setExclusive)
+            .def_property("reverse", &ICumulativeLayer::getReverse, &ICumulativeLayer::setReverse)
+        ;
+
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
         // Additionally, we use reference_internal so that pybind11 does not free layers when they go out of scope.
         py::class_<INetworkDefinition>(m, "INetworkDefinition", INetworkDefinitionDoc::descr, py::module_local())
@@ -917,8 +953,9 @@ namespace tensorrt
                 INetworkDefinitionDoc::add_plugin_v2, py::return_value_policy::reference_internal)
             .def("add_plugin_v3",  lambdas::add_plugin_v3, "inputs"_a, "shape_inputs"_a, "plugin"_a,
                 INetworkDefinitionDoc::add_plugin_v3, py::return_value_policy::reference_internal)
-            .def("add_plugin",  lambdas::add_plugin, "tuple"_a,
-                INetworkDefinitionDoc::add_plugin, py::return_value_policy::reference_internal)
+            .def("add_plugin", lambdas::add_plugin, "tuple"_a,
+                INetworkDefinitionDoc::add_plugin_v3, py::return_value_policy::reference_internal)
+            .def("add_plugin", lambdas::add_plugin_default_func, "func"_a, py::return_value_policy::reference_internal)
             .def("add_parametric_relu", &INetworkDefinition::addParametricReLU, "input"_a,
                 "slopes"_a, INetworkDefinitionDoc::add_parametric_relu, py::return_value_policy::reference_internal)
             .def("add_resize", &INetworkDefinition::addResize, "input"_a, INetworkDefinitionDoc::add_resize,
@@ -946,6 +983,8 @@ namespace tensorrt
                 INetworkDefinitionDoc::add_quantize, py::return_value_policy::reference_internal)
             .def("add_dequantize", static_cast<IDequantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&, DataType)>(&INetworkDefinition::addDequantize), "input"_a, "scale"_a, "output_type"_a,
                 INetworkDefinitionDoc::add_dequantize, py::return_value_policy::reference_internal)
+            .def("add_dynamic_quantize",  static_cast<IDynamicQuantizeLayer* (INetworkDefinition::*)(ITensor&, int32_t, int32_t, DataType, DataType)>(&INetworkDefinition::addDynamicQuantize), "input"_a, "axis"_a, "block_size"_a, "output_type"_a, "scale_type"_a,
+                INetworkDefinitionDoc::add_dynamic_quantize, py::return_value_policy::reference_internal)
             .def("add_if_conditional", &INetworkDefinition::addIfConditional, INetworkDefinitionDoc::add_if_conditional,
                 py::return_value_policy::reference_internal)
             .def("add_einsum", lambdas::add_einsum, "inputs"_a, "equation"_a, INetworkDefinitionDoc::add_einsum,
@@ -958,6 +997,8 @@ namespace tensorrt
                 py::return_value_policy::reference_internal)
             .def("add_normalization", &INetworkDefinition::addNormalization, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization,
                 py::return_value_policy::reference_internal)
+            .def("add_cumulative", &INetworkDefinition::addCumulative, "input"_a, "axis"_a, "op"_a, "exclusive"_a, "reverse"_a,
+                INetworkDefinitionDoc::add_cumulative, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)

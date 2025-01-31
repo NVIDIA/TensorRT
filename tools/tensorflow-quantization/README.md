@@ -1,3 +1,5 @@
+**Note: Tensorflow Quantization development has transitioned to the [TensorRT Model Optimizer](https://github.com/NVIDIA/TensorRT-Model-Optimizer). All developers are encouraged to use the TensorRT Model Optimizer to benefit from the latest advancements on quantization and compression. While the Tensorflow Quantization code will remain available, it will no longer receive further development.**
+
 # <span style="color:green"> **NVIDIA TensorFlow 2.x Quantization** </span>
 
 This TensorFlow 2.x Quantization toolkit quantizes (inserts Q/DQ nodes) TensorFlow 2.x Keras models for Quantization-Aware Training (QAT).

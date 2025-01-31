@@ -26,6 +26,7 @@ from models import (
     T5Model,
     FluxTransformerModel,
     VAEModel,
+    VAEEncoderModel,
 )
 import tensorrt as trt
 import time
@@ -35,6 +36,7 @@ from utilities import (
     TRT_LOGGER,
 )
 from diffusion_pipeline import DiffusionPipeline
+from diffusers.image_processor import VaeImageProcessor
 
 
 def calculate_shift(
@@ -62,12 +64,14 @@ class FluxPipeline(DiffusionPipeline):
         guidance_scale=3.5,
         max_sequence_length=512,
         bf16=False,
+        calibration_dataset=None,
         low_vram=False,
         torch_fallback=None,
         weight_streaming=False,
         t5_weight_streaming_budget_percentage=None,
         transformer_weight_streaming_budget_percentage=None,
-        **kwargs
+        force_weakly_typed_t5=False, # NVBug 5071425
+        **kwargs,
     ):
         """
         Initializes the Flux pipeline.
@@ -93,10 +97,14 @@ class FluxPipeline(DiffusionPipeline):
         self.guidance_scale = guidance_scale
         self.max_sequence_length = max_sequence_length
         self.bf16=bf16
+        self.calibration_dataset = calibration_dataset  # Currently supported for Flux ControlNet pipelines only
         self.low_vram = low_vram
+        self.force_weakly_typed_t5 = force_weakly_typed_t5
 
         # Pipeline type
         self.stages = ["clip", "t5", "transformer", "vae"]
+        if self.pipeline_type.is_img2img():
+            self.stages += ["vae_encoder"]
 
         if torch_fallback:
             assert type(torch_fallback) is list
@@ -109,7 +117,7 @@ class FluxPipeline(DiffusionPipeline):
     def _initialize_models(self, framework_model_dir, int8, fp8):
         # Load text tokenizer(s)
         self.tokenizer = make_tokenizer(
-            self.version, self.pipeline_type, self.hf_token, framework_model_dir
+            self.version, self.pipeline_type, self.hf_token, framework_model_dir,
         )
         self.tokenizer2 = make_tokenizer(
             self.version,
@@ -154,7 +162,7 @@ class FluxPipeline(DiffusionPipeline):
                 bf16=self.bf16,
                 subfolder="text_encoder_2",
                 text_maxlen=self.max_sequence_length,
-                build_strongly_typed=True if self.fp16 else False,
+                build_strongly_typed=False if self.force_weakly_typed_t5 and self.fp16 else True,
                 weight_streaming=self.weight_streaming,
                 weight_streaming_budget_percentage=self.text_encoder_weight_streaming_budget_percentage,
             )
@@ -175,14 +183,71 @@ class FluxPipeline(DiffusionPipeline):
 
         if "vae" in self.stages:
             # Accuracy issues with FP16
-            # WAR: VAE fallback to FP32 in BF16 pipeline. TRT support will be added in a future release
-            self.models["vae"] = VAEModel(**models_args, fp16=False, tf32=self.tf32, bf16=False)
+            self.models["vae"] = VAEModel(**models_args, fp16=False, tf32=self.tf32, bf16=True if int8 or fp8 else self.bf16)
 
         self.vae_scale_factor = (
             2 ** (len(self.models["vae"].config["block_out_channels"]))
             if "vae" in self.stages and self.models["vae"] is not None
             else 16
         )
+
+        if 'vae_encoder' in self.stages:
+            # WAR: VAE Encoder fallback to FP32 in BF16 TRT pipeline. TRT support will be added in a future release
+            self.models['vae_encoder'] = VAEEncoderModel(**models_args, fp16=False, tf32=self.tf32, bf16=self.bf16 if self.torch_inference else False)
+            self.vae_latent_channels = (
+                self.models["vae"].config["latent_channels"] if "vae" in self.stages and self.models["vae"] is not None else 16
+            )
+            self.image_processor = VaeImageProcessor(
+                vae_scale_factor=self.vae_scale_factor * 2, vae_latent_channels=self.vae_latent_channels
+            )
+
+    def encode_image(self, input_image, encoder="vae_encoder"):
+        self.profile_start(encoder, color='red')
+        cast_to = torch.float16 if self.models[encoder].fp16 else torch.bfloat16 if self.models[encoder].bf16 else torch.float32
+        input_image = input_image.to(dtype=cast_to)
+        if self.torch_inference or self.torch_fallback[encoder]:
+            image_latents = self.torch_models[encoder](input_image)
+        else:
+            image_latents = self.run_engine(encoder, {'images': input_image})['latent']
+
+        image_latents = self.models[encoder].config["scaling_factor"] * (image_latents - self.models[encoder].config["shift_factor"])
+        self.profile_stop(encoder)
+        return image_latents
+
+    # Copied from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/flux/pipeline_flux_controlnet.py#L546
+    def prepare_image(
+        self,
+        image,
+        width,
+        height,
+        batch_size,
+        num_images_per_prompt,
+        device,
+        dtype,
+        do_classifier_free_guidance=False,
+        guess_mode=False,
+    ):
+        if isinstance(image, torch.Tensor):
+            pass
+        else:
+            image = self.image_processor.preprocess(image, height=height, width=width)
+
+        image_batch_size = image.shape[0]
+
+        if image_batch_size == 1:
+            repeat_by = batch_size
+        else:
+            # image batch size is the same as prompt batch size
+            repeat_by = num_images_per_prompt
+
+        image = image.repeat_interleave(repeat_by, dim=0)
+
+        image = image.to(device=device, dtype=dtype)
+
+        if do_classifier_free_guidance and not guess_mode:
+            image = torch.cat([image] * 2)
+
+        return image
 
     # Copied from https://github.com/huggingface/diffusers/blob/v0.30.1/src/diffusers/pipelines/flux/pipeline_flux.py#L436
     @staticmethod
@@ -250,6 +315,8 @@ class FluxPipeline(DiffusionPipeline):
         num_channels_latents,
         latent_height,
         latent_width,
+        latent_timestep=None,
+        image_latents=None,
         latents_dtype=torch.float32,
     ):
         latents_dtype = latents_dtype  # text_embeddings.dtype
@@ -261,6 +328,10 @@ class FluxPipeline(DiffusionPipeline):
             generator=self.generator,
         )
 
+        if image_latents is not None:
+            image_latents = torch.cat([image_latents], dim=0).to(latents_dtype)
+            latents = self.scheduler.scale_noise(image_latents, latent_timestep, latents)
+
         latents = self._pack_latents(
             latents, batch_size, num_channels_latents, latent_height, latent_width
         )
@@ -270,6 +341,18 @@ class FluxPipeline(DiffusionPipeline):
         )
 
         return latents, latent_image_ids
+
+    # Copied from https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/flux/pipeline_flux_img2img.py#L416C1
+    def get_timesteps(self, num_inference_steps, strength):
+        # get the original timestep using init_timestep
+        init_timestep = min(num_inference_steps * strength, num_inference_steps)
+
+        t_start = int(max(num_inference_steps - init_timestep, 0))
+        timesteps = self.scheduler.timesteps[t_start * self.scheduler.order :]
+        if hasattr(self.scheduler, "set_begin_index"):
+            self.scheduler.set_begin_index(t_start * self.scheduler.order)
+
+        return timesteps, num_inference_steps - t_start
 
     def encode_prompt(
         self, prompt, encoder="clip", max_sequence_length=None, pooled_output=False
@@ -347,10 +430,12 @@ class FluxPipeline(DiffusionPipeline):
         latent_image_ids,
         denoiser="transformer",
         guidance=None,
+        control_latent=None
     ):
         do_autocast = self.torch_inference != "" and self.models[denoiser].fp16
         with torch.autocast("cuda", enabled=do_autocast):
             self.profile_start(denoiser, color="blue")
+
             # handle guidance
             if self.models[denoiser].config["guidance_embeds"] and guidance is None:
                 guidance = torch.full(
@@ -359,15 +444,17 @@ class FluxPipeline(DiffusionPipeline):
                 guidance = guidance.expand(latents.shape[0])
 
             for step_index, timestep in enumerate(timesteps):
+                # Prepare latents
+                latents_input = latents if control_latent is None else torch.cat((latents, control_latent), dim=-1)
                 # prepare inputs
-                timestep_inp = timestep.expand(latents.shape[0]).to(latents.dtype)
+                timestep_inp = timestep.expand(latents.shape[0]).to(latents_input.dtype)
                 params = {
-                    "hidden_states": latents,
+                    "hidden_states": latents_input,
                     "timestep": timestep_inp / 1000,
                     "pooled_projections": pooled_embeddings,
                     "encoder_hidden_states": text_embeddings,
-                    "txt_ids": text_ids,
-                    "img_ids": latent_image_ids,
+                    "txt_ids": text_ids.float(),
+                    "img_ids": latent_image_ids.float(),
                 }
                 if guidance is not None:
                     params.update({"guidance": guidance})
@@ -416,6 +503,15 @@ class FluxPipeline(DiffusionPipeline):
                 ],
             )
         )
+        if "vae_encoder" in self.stages:
+            print(
+                "| {:^15} | {:>9.2f} ms |".format(
+                    "VAE-Enc",
+                    cudart.cudaEventElapsedTime(
+                        self.events["vae_encoder"][0], self.events["vae_encoder"][1]
+                    )[1],
+                )
+            )
         print(
             "| {:^15} | {:>9.2f} ms |".format(
                 "Transformer x " + str(denoising_steps),
@@ -443,6 +539,9 @@ class FluxPipeline(DiffusionPipeline):
         prompt2,
         image_height,
         image_width,
+        input_image=None,
+        image_strength=1.0,
+        control_image=None,
         warmup=False,
         save_image=True,
     ):
@@ -458,6 +557,16 @@ class FluxPipeline(DiffusionPipeline):
                 Height (in pixels) of the image to be generated. Must be a multiple of 8.
             image_width (int):
                 Width (in pixels) of the image to be generated. Must be a multiple of 8.
+            input_image (PIL.Image.Image):
+                `Image` representing an image batch to be used as the starting point.
+            image_strength (`float`, *optional*, defaults to 1.0):
+                Indicates extent to transform the reference `image`. Must be between 0 and 1. `image` is used as a
+                starting point and more noise is added the higher the `strength`. The number of denoising steps depends
+                on the amount of noise initially added. When `strength` is 1, added noise is maximum and the denoising
+                process runs for the full number of iterations specified in `num_inference_steps`. A value of 1
+                essentially ignores `image`.
+            control_image (PIL.Image.Image):
+                The ControlNet input condition to provide guidance to the `transformer` for generation.
             warmup (bool):
                 Indicate if this is a warmup run.
             save_image (bool):
@@ -471,19 +580,11 @@ class FluxPipeline(DiffusionPipeline):
         latent_width = 2 * (int(image_width) // self.vae_scale_factor)
 
         num_inference_steps = self.denoising_steps
+        latent_kwargs = {}
 
         with torch.inference_mode(), trt.Runtime(TRT_LOGGER):
             torch.cuda.synchronize()
             e2e_tic = time.perf_counter()
-
-            # Initialize latents
-            latents, latent_image_ids = self.initialize_latents(
-                batch_size=batch_size,
-                num_channels_latents=self.models["transformer"].config["in_channels"]
-                // 4,
-                latent_height=latent_height,
-                latent_width=latent_width,
-                latents_dtype=torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32)
 
             class LoadModelContext:
                 def __init__(ctx, model_names, low_vram=False):
@@ -496,6 +597,9 @@ class FluxPipeline(DiffusionPipeline):
                         if not self.torch_fallback[model_name]:
                             # creating engine object (load from plan file)
                             self.engine[model_name].load()
+                            # allocate device memory
+                            _, shared_device_memory = cudart.cudaMalloc(self.device_memory_sizes[model_name])
+                            self.shared_device_memory = shared_device_memory
                             # creating context
                             self.engine[model_name].activate(device_memory=self.shared_device_memory)
                             # creating input and output buffer
@@ -512,13 +616,41 @@ class FluxPipeline(DiffusionPipeline):
                             self.engine[model_name].deallocate_buffers()
                             self.engine[model_name].deactivate()
                             self.engine[model_name].unload()
+                            cudart.cudaFree(self.shared_device_memory)
                         else:
                             print(f"[I] Offloading torch model {model_name} to cpu.")
                             self.torch_models[model_name] = self.torch_models[model_name].to('cpu')
                             torch.cuda.empty_cache()
 
-            # CLIP and T5 text encoder(s)
+            num_channels_latents = self.models["transformer"].config["in_channels"] // 4
+            if control_image:
+                num_channels_latents = self.models["transformer"].config["in_channels"] // 8
 
+                # Prepare control latents
+                control_image = self.prepare_image(
+                    image=control_image,
+                    width=image_width,
+                    height=image_height,
+                    batch_size=batch_size,
+                    num_images_per_prompt=1,
+                    device=self.device,
+                    dtype=torch.float16 if self.models["vae"].fp16 else torch.bfloat16 if self.models["vae"].bf16 else torch.float32,
+                )
+
+                if control_image.ndim == 4:
+                    with LoadModelContext(["vae_encoder"], low_vram=self.low_vram):
+                        control_image = self.encode_image(control_image)
+
+                    height_control_image, width_control_image = control_image.shape[2:]
+                    control_image = self._pack_latents(
+                        control_image,
+                        batch_size,
+                        num_channels_latents,
+                        height_control_image,
+                        width_control_image,
+                    )
+
+            # CLIP and T5 text encoder(s)
             with LoadModelContext(["clip","t5"], low_vram=self.low_vram):
                 pooled_embeddings = self.encode_prompt(prompt, pooled_output=True)
                 text_embeddings = self.encode_prompt(
@@ -530,7 +662,7 @@ class FluxPipeline(DiffusionPipeline):
 
             # Prepare timesteps
             sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
-            image_seq_len = latents.shape[1]
+            image_seq_len = (latent_height // 2) * (latent_width // 2)
             mu = calculate_shift(
                 image_seq_len,
                 self.scheduler.config.base_image_seq_len,
@@ -556,6 +688,32 @@ class FluxPipeline(DiffusionPipeline):
             timesteps = self.scheduler.timesteps.to(self.device)
             num_inference_steps = len(timesteps)
 
+            # Pre-process input image and timestep for the img2img pipeline
+            if input_image:
+                input_image = self.image_processor.preprocess(input_image, height=image_height, width=image_width).to(self.device)
+                with LoadModelContext(["vae_encoder"], low_vram=self.low_vram):
+                    image_latents = self.encode_image(input_image)
+
+                timesteps, num_inference_steps = self.get_timesteps(self.denoising_steps, image_strength)
+                if num_inference_steps < 1:
+                    raise ValueError(
+                        f"After adjusting the num_inference_steps by strength parameter: {image_strength}, the number of pipeline"
+                        f"steps is {num_inference_steps} which is < 1 and not appropriate for this pipeline."
+                    )
+                latent_timestep = timesteps[:1].repeat(batch_size)
+
+                latent_kwargs.update({"image_latents": image_latents, "latent_timestep": latent_timestep})
+
+            # Initialize latents
+            latents, latent_image_ids = self.initialize_latents(
+                batch_size=batch_size,
+                num_channels_latents=num_channels_latents,
+                latent_height=latent_height,
+                latent_width=latent_width,
+                latents_dtype=torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32,
+                **latent_kwargs
+            )
+
             # DiT denoiser
             with LoadModelContext(["transformer"], low_vram=self.low_vram):
                 latents = self.denoise_latent(
@@ -565,6 +723,7 @@ class FluxPipeline(DiffusionPipeline):
                     pooled_embeddings,
                     text_ids,
                     latent_image_ids,
+                    control_latent=control_image
                 )
 
             # VAE decode latent

@@ -3,6 +3,35 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.49.18 (2025-01-07)
+### Added
+- Added `BufferFromEngine` that serializes an engine without making an extra copy of the serialized engine.
+
+### Changed
+- Changed `SaveEngine` to use `BufferFromEngine` instead of `BytesFromEngine` to save memory.
+
+
+## v0.49.17 (2024-12-06)
+### Added
+- Added TensorRT 10.8 tiling optimization api
+
+
+## v0.49.16 (2024-11-21)
+### Added
+- Print a message to tell users that TF32 can be enabled to improve perf with
+    minor accuracy differences.
+
+### Fixed
+- Fixed a bug where the `inspect model` would not display the data type
+    correctly for `bfloat16` tensors in TensorRT engines.
+- Fixed a bug where `FormattedArray` would not work correctly for sub-byte types.
+
+
+## v0.49.15 (2024-11-13)
+### Changed
+- Deprecated the classes and functions in algorithm_selector.py as we deprecated Algorithm Selector in TensorRT 10.8.
+
+
 ## v0.49.14 (2024-09-10)
 ### Added
 - Added `DataType.FLOAT4` for 4-bit floats (E2M1).

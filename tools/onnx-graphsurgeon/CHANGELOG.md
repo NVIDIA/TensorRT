@@ -2,6 +2,20 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.5.5 (2025-01-22)
+### Added
+- Added support for defining `gs.Constant` with numpy arrays constructed using `ml_dtypes`, which allows for various ML-specific data types such as 8-bit floating points, microscaling sub-byte floating points, and narrow integer encodings. 
+
+
+### Fixed
+- Fixed a bug in `onnx_exporter.py` where the name of a `gs.Constant` with `LazyValues` was not correctly exported to `onnx.TensorProto`.
+
+
+## v0.5.4 (2024-11-13)
+### Fixed
+- Improved performance of converting tensors to data types unsupported by NumPy, such as BFloat16.
+
+
 ## v0.5.3 (2024-10-14)
 ### Added
 - Added `export_dtype` field to `gs.Constant` to allow numpy-unsupported dtypes such as BFloat16.

@@ -391,7 +391,7 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
                     case DataType::kBF16:
                     case DataType::kINT4:
                     case DataType::kINT64:
-                        ASSERT(false && "Unsupported data type");
+                    case nvinfer1::DataType::kFP4: ASSERT(false && "Unsupported data type");
                     }
                     max = std::max(max, std::abs(val));
                 }

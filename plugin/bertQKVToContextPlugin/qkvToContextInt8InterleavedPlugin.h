@@ -37,6 +37,8 @@ static constexpr int32_t kSM_AMPERE_10X = 86;
 static constexpr int32_t kSM_AMPERE_10B = 87;
 static constexpr int32_t kSM_ADA_10X = 89;
 static constexpr int32_t kSM_HOPPER_100 = 90;
+static constexpr int32_t kSM_BLACKWELL_100 = 100;
+static constexpr int32_t kSM_BLACKWELL_120 = 120;
 
 class QKVToContextInterleavedPlugin : public IPluginV3,
                                       public IPluginV3OneCore,
@@ -87,7 +89,7 @@ public:
     // end IPluginV3Build Methods
 
     // IPluginV3Runtime Methods
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t onShapeChange(
         PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;

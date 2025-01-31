@@ -1,5 +1,28 @@
 # TensorRT OSS Release Changelog
 
+## 10.8.0 GA - 2025-1-31
+Key Features and Updates:
+
+- Demo changes
+  - demoDiffusion
+    - Added [Image-to-Image](demo/Diffusion#generate-an-image-guided-by-an-initial-image-and-a-text-prompt-using-flux) support for Flux-1.dev and Flux.1-schnell pipelines.
+    - Added [ControlNet](demo/Diffusion#generate-an-image-guided-by-a-text-prompt-and-a-control-image-using-flux-controlnet) support for [FLUX.1-Canny-dev](https://huggingface.co/black-forest-labs/FLUX.1-Canny-dev) and [FLUX.1-Depth-dev](https://huggingface.co/black-forest-labs/FLUX.1-Depth-dev) pipelines. Native FP8 quantization is also supported for these pipelines.
+    - Added support for ONNX model export only mode. See [--onnx-export-only](demo/Diffusion#https://gitlab-master.nvidia.com/TensorRT/Public/oss/-/tree/release/10.8/demo/Diffusion?ref_type=heads#use-separate-directories-for-individual-onnx-models).
+- Plugin changes
+  - Added SM 100 and SM 120 support to bertQKVToContextPlugin. This enables demo/BERT on Blackwell GPUs.
+- Sample changes
+  - Added a new `sampleEditableTimingCache` to demonstrate how to build an engine with the desired tactics by modifying the timing cache.
+  - Deleted the `sampleAlgorithmSelector` sample.
+  - Fixed `sampleOnnxMNIST` by updating the correct INT8 dynamic range.
+- Parser changes
+  - Added support for `FLOAT4E2M1` types for quantized networks.
+  - Added support for dynamic axes and improved performance of `CumSum` operations.
+  - Fixed the import of local functions when their input tensor names aliased one from an outside scope.
+  - Added support for `Pow` ops with integer-typed exponent values.
+- Fixed issues
+  - Fixed segmentation of boolean constant nodes -  [4224](https://github.com/NVIDIA/TensorRT/issues/4224).
+  - Fixed accuracy issue when multiple optimization profiles were defined [4250](https://github.com/NVIDIA/TensorRT/issues/4250).
+
 ## 10.7.0 GA - 2024-12-4
 Key Feature and Updates:
 

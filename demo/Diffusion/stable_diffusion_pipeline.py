@@ -344,7 +344,7 @@ class StableDiffusionPipeline:
         vae_fp16 = not self.pipeline_type.is_sd_xl()
 
         if 'vae' in self.stages:
-            self.models['vae'] = VAEModel(**models_args, fp16=vae_fp16)
+            self.models['vae'] = VAEModel(**models_args, fp16=vae_fp16, tf32=True)
 
         if 'vae_encoder' in self.stages:
             self.models['vae_encoder'] = VAEEncoderModel(**models_args, fp16=vae_fp16)
@@ -519,7 +519,7 @@ class StableDiffusionPipeline:
 
                     print(f"[I] Generating quantized ONNX model: {onnx_opt_path[model_name]}")
                     if not os.path.exists(onnx_path[model_name]):
-                        quantize_lvl(model, quantization_level)
+                        quantize_lvl(self.version, model, quantization_level)
                         mtq.disable_quantizer(model, filter_func)
                         if use_fp8[model_name]:
                             generate_fp8_scales(model)
@@ -541,6 +541,8 @@ class StableDiffusionPipeline:
                 update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
                 fp16amp = obj.fp16 if not use_fp8[model_name] else False
                 bf16amp = obj.bf16 if not use_fp8[model_name] else False
+                # TF32 can be enabled for all precisions (including INT8/FP8)
+                tf32amp = obj.tf32
                 strongly_typed = False if not use_fp8[model_name] else True
                 extra_build_args = {'verbose': self.verbose}
                 extra_build_args['builder_optimization_level'] = optimization_level
@@ -551,6 +553,7 @@ class StableDiffusionPipeline:
                     strongly_typed=strongly_typed,
                     fp16=fp16amp,
                     bf16=bf16amp,
+                    tf32=tf32amp,
                     input_profile=obj.get_input_profile(
                         opt_batch_size, opt_image_height, opt_image_width,
                         static_batch=static_batch, static_shape=static_shape
@@ -818,6 +821,8 @@ class StableDiffusionPipeline:
 
     def encode_image(self, input_image):
         self.profile_start('vae_encoder', color='red')
+        cast_to = torch.float16 if self.models['vae_encoder'].fp16 else torch.bfloat16 if self.models['vae_encoder'].bf16 else torch.float32
+        input_image = input_image.to(dtype=cast_to)
         if self.torch_inference:
             image_latents = self.torch_models['vae_encoder'](input_image)
         else:

@@ -102,6 +102,12 @@ int32_t stringToValue<int32_t>(const std::string& option)
 }
 
 template <>
+int64_t stringToValue<int64_t>(const std::string& option)
+{
+    return std::stoi(option);
+}
+
+template <>
 size_t stringToValue<size_t>(const std::string& option)
 {
     return std::stoi(option) * getUnitMultiplier(option);
@@ -1232,6 +1238,14 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--fp8", fp8);
     getAndDelOption(arguments, "--int4", int4);
     getAndDelOption(arguments, "--stronglyTyped", stronglyTyped);
+
+    if (best && stronglyTyped)
+    {
+        throw std::invalid_argument(
+            "--best and --stronglyTyped cannot be both set. --best enables implicit precisions, while "
+            "--stronglyTyped enforces explicit precisions.");
+    }
+
     if (stronglyTyped)
     {
         auto disableAndLog = [](bool& flag, std::string mode, std::string type) {
@@ -1580,6 +1594,9 @@ void BuildOptions::parse(Arguments& arguments)
 
     // Don't delete the option because the inference option parser requires it
     getOption(arguments, "--allowWeightStreaming", allowWeightStreaming);
+
+    getAndDelOption(arguments, "--tilingOptimizationLevel", tilingOptimizationLevel);
+    getAndDelOption(arguments, "--l2LimitForTiling", l2LimitForTiling);
 }
 
 void SystemOptions::parse(Arguments& arguments)
@@ -1981,6 +1998,11 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
     case nvinfer1::DataType::kINT4:
     {
         os << "int4";
+        break;
+    }
+    case nvinfer1::DataType::kFP4:
+    {
+        os << "fp4";
         break;
     }
     }
@@ -2576,7 +2598,7 @@ void BuildOptions::help(std::ostream& os)
           R"(                                                     flag     ::= "aliasedPluginIO1003")"                                              "\n"
           R"(                                                                  |"profileSharing0806")"                                              "\n"
           "  --builderOptimizationLevel         Set the builder optimization level. (default is 3)"                                                 "\n"
-          "                                     Higher level allows TensorRT to spend more building time for more optimization options."            "\n"
+          "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
           "                                     Valid values include integers from 0 to the maximum optimization level, which is currently 5."      "\n"
           "  --maxTactics                       Set the maximum number of tactics to time when there is a choice of tactics. (default is -1)"       "\n"
           "                                     Larger number of tactics allow TensorRT to spend more building time on evaluating tactics."         "\n"
@@ -2611,6 +2633,10 @@ void BuildOptions::help(std::ostream& os)
           "  --allowWeightStreaming             Enable a weight streaming engine. Must be specified with --stronglyTyped. TensorRT will disable"    "\n"
           "                                     weight streaming at runtime unless --weightStreamingBudget is specified."                           "\n"
           "  --markDebug                        Specify list of names of tensors to be marked as debug tensors. Separate names with a comma"        "\n"
+          "  --tilingOptimizationLevel          Set the tiling optimization level. (default is 0)"                                                  "\n"
+          "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
+          "                                     Valid values include integers from 0 to the maximum tiling optimization level(4)."                  "\n"
+          "  --l2LimitForTiling                 Set the L2 cache usage limit for tiling optimization(default is -1)"                                      "\n"
           ;
     // clang-format on
     os << std::flush;

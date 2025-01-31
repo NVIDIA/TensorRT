@@ -138,7 +138,7 @@ public:
     ~EmbLayerNormVarSeqlenPluginHFace() override;
 
     // IPluginV3Runtime overrides
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t onShapeChange(
         PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
@@ -168,7 +168,7 @@ public:
     ~EmbLayerNormVarSeqlenPluginMTron() override;
 
     // IPluginV3Runtime overrides
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t onShapeChange(
         PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;

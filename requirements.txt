@@ -1,5 +1,6 @@
 onnx>=1.14.0
-tensorflow[and-cuda]==2.12.0; (platform_machine=="x86_64" and sys.platform=="linux" and python_version>="3.7")
+tensorflow[and-cuda]==2.12.0; (python_version<"3.12" and platform_machine=="x86_64" and sys.platform=="linux" and python_version>="3.7")
+tensorflow[and-cuda]==2.18.0; (python_version>="3.12" and platform_machine=="x86_64" and sys.platform=="linux")
 onnxruntime==1.8.1; python_version<"3.10"
 onnxruntime==1.12.1; python_version=="3.10"
 -f https://download.pytorch.org/whl/cu113/torch_stable.html

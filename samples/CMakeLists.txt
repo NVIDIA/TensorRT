@@ -18,9 +18,9 @@
 add_custom_target(samples)
 
 set(OPENSOURCE_SAMPLES_LIST
-    sampleAlgorithmSelector
     sampleCharRNN
     sampleDynamicReshape
+    sampleEditableTimingCache
     sampleINT8API
     sampleNonZeroPlugin
     sampleOnnxMNIST

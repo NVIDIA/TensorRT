@@ -28,6 +28,11 @@
 
 typedef uint16_t half_type;
 
+namespace
+{
+constexpr char const* gInstancePluginFullNameV3{"InstanceNormalization_TRT, version:3"};
+} // namespace
+
 namespace nvinfer1
 {
 namespace plugin
@@ -106,7 +111,8 @@ private:
     float* mDeviceScale{nullptr};
     float* mDeviceBias{nullptr};
     nvinfer1::pluginInternal::cudnnHandle_t mCudnnHandle{nullptr};
-    nvinfer1::pluginInternal::CudnnWrapper& mCudnnWrapper = nvinfer1::pluginInternal::getCudnnWrapper();
+    nvinfer1::pluginInternal::CudnnWrapper& mCudnnWrapper
+        = nvinfer1::pluginInternal::getCudnnWrapper(gInstancePluginFullNameV3);
 
     nvinfer1::pluginInternal::cudnnTensorDescriptor_t mXDescriptor{nullptr};
     nvinfer1::pluginInternal::cudnnTensorDescriptor_t mYDescriptor{nullptr};

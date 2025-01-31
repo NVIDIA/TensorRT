@@ -454,6 +454,22 @@ class TestCreateConfig:
         with loader(builder, network) as config:
             assert config.progress_monitor == progress_monitor
 
+    if mod.version(trt.__version__) >= mod.version("10.8"):
+        @pytest.mark.parametrize(
+            "level, expected",
+            [
+                ("none", trt.TilingOptimizationLevelLevel.NONE),
+                ("fast", trt.TilingOptimizationLevel.FAST),
+                ("moderate", trt.TilingOptimizationLevel.MODERATE),
+                ("full", trt.TilingOptimizationLevel.FULL),
+            ],
+        )
+        def test_tiling_optimization_level(self, identity_builder_network, level):
+            builder, network = identity_builder_network
+            loader = CreateConfig(tiling_optimization_level=level)
+            with loader(builder, network) as config:
+                assert config.tiling_optimization_level == level
+
 
 class TestPostprocessConfig:
     def test_with_config(self, identity_builder_network):

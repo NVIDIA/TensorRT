@@ -14,15 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-SET(SAMPLE_SOURCES
-    sampleIOFormats.cpp
-    ../common/sampleDevice.cpp
-    ../common/sampleEngines.cpp
-    ../common/sampleOptions.cpp
-    ../common/sampleUtils.cpp
-    ../common/bfloat16.cpp
-)
+set(SAMPLE_SOURCES sampleIOFormats.cpp ../common/sampleDevice.cpp ../common/sampleEngines.cpp
+                   ../common/sampleOptions.cpp ../common/sampleUtils.cpp ../common/bfloat16.cpp)
 
-SET(SAMPLE_PARSERS "onnx")
+set(SAMPLE_PARSERS "onnx")
 
 include(../CMakeSamplesTemplate.txt)

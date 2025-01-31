@@ -223,6 +223,8 @@ To view the available parameters for each script, you can use the help flag (`-h
 **Note:** In the builder scripts (`builder.py` and `builder_varseqlen.py`), the options `--use-deprecated-plugins` and `--use-v3-plugins` toggle the underlying implementation of the plugins used in demoBERT. They are mutually exclusive, and enabling either should not affect functionality, or performance. The `--use-deprecated-plugins` uses plugin versions that inherit from `IPluginV2DynamicExt`, while `--use-v3-plugins` uses plugin versions that inherit from `IPluginV3` classes.
 If unspecified, `--use-deprecated-plugins` is used by default.
 
+**Additional Note:** Using `--use-v3-plugins` is not recommended on Blackwell platforms (See [Platform support section](#hardware-platform-support)). Prefer the default path instead (`--use-deprecated-plugins`).
+
 ### TensorRT inference process
 
 As mentioned in the [Quick Start Guide](#quick-start-guide), two options are provided for running inference:
@@ -675,3 +677,19 @@ Results were obtained by running `scripts/inference_benchmark.sh --gpu Ampere` o
 | 384 | 64 | 36.62 | 36.71 | 36.12 |
 | 384 | 128 | 79.88 | 80.18 | 77.33 |
 
+
+## Hardware Platform Support
+
+The scripts call TensorRT Plugins underneath, whose kernel optimizations depend on the NVIDIA GPU Architecture.
+The compute capability of an NVIDIA GPU can be found out using the `nvidia-smi` commandline utility. One can execute the following command in the terminal to find out the compute capability of the GPU.
+
+```bash
+nvidia-smi --query-gpu=compute_cap --format=csv
+```
+
+
+Currently, this demo is supported on the following compute capabilities. This list is subject to change as new architectures are released.
+- Volta architecture - 7.2, 7.5
+- Ampere architecture - 8.0, 8.6, 8.7, 8.9
+- Hopper architecture - 9.0 (since October 2022)
+- Blackwell architecture - 10.0, 12.0 (since Jan 2025). Not recommended with `--use-v3-plugins` option.

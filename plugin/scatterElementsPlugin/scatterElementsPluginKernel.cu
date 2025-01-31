@@ -81,6 +81,7 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kFP8: return 1;
     case nvinfer1::DataType::kINT4:
+    case nvinfer1::DataType::kFP4:
         PLUGIN_FAIL("Unsupported data type");
     }
     return 0;
@@ -146,6 +147,7 @@ void runScatterElementsKernel(void* outDataPtr, void const* dataDataPtr, void co
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kINT4:
     case nvinfer1::DataType::kFP8:
+    case nvinfer1::DataType::kFP4:
       std::ostringstream stream;
       stream << "Unsupported data type:" << (int)outDesc.type << std::endl;
       PLUGIN_FAIL(stream.str().c_str());

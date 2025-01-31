@@ -25,6 +25,9 @@ import numpy as np
 import pytest
 
 from polygraphy import util
+from polygraphy.backend.trt import engine_from_network, network_from_onnx_bytes
+from polygraphy.util import util as util_internal  # For accessing and testing private functions in util.py
+from tests.models.meta import ONNX_MODELS
 
 VOLUME_CASES = [
     ((1, 1, 1), 1),
@@ -307,3 +310,111 @@ def test_check_called_by():
         outfile.seek(0)
         out = outfile.read()
         assert warn_msg in out
+
+
+class TestGetNumBytes:
+    def test_should_get_given_str(self) -> None:
+        """Test that _get_num_bytes returns the correct number of bytes when given `str`."""
+        # Precondition.
+        contents = "hello"
+
+        # Under test.
+        num_bytes = util_internal._get_num_bytes(contents)
+
+        # Postcondition.
+        assert num_bytes == len("hello")
+
+    def test_should_get_given_bytes(self) -> None:
+        """Test that _get_num_bytes returns the correct number of bytes when given `bytes`."""
+        # Precondition.
+        contents = bytes(b"hello")
+
+        # Under test.
+        num_bytes = util_internal._get_num_bytes(contents)
+
+        # Postcondition.
+        assert num_bytes == len("hello")
+
+    def test_should_get_given_IHostMemory(self) -> None:
+        """Test that _get_num_bytes returns the correct number of bytes when given `IHostMemory`."""
+        # Precondition.
+        contents = engine_from_network(network_from_onnx_bytes(ONNX_MODELS["identity"].loader)).serialize()
+
+        # Under test.
+        num_bytes = util_internal._get_num_bytes(contents)
+
+        # Postcondition.
+        assert num_bytes == len(memoryview(contents))
+
+    def test_should_raise_error_given_invalid_type(self) -> None:
+        """Test that _get_num_bytes raises an error when given an invalid type."""
+        # Precondition.
+        invalid_contents = 123
+
+        # Under test and postcondition.
+        with pytest.raises(
+            TypeError, match=f"`contents` is {invalid_contents}, which is not bytes-like. Cannot get number of bytes."
+        ):
+            util_internal._get_num_bytes(invalid_contents)
+
+
+class TestSaveFile:
+    def test_should_save_str_to_path(self) -> None:
+        """Test that `save_file` should save a string to a path."""
+        # Precondition.
+        contents = "hello"
+        with util.NamedTemporaryFile("w+") as f:
+            dest = f.name
+
+            # Under test.
+            util.save_file(contents, dest, mode="w+")
+
+            # Postcondition.
+            f.seek(0)
+            written_contents = f.read()
+            assert contents == written_contents
+
+    def test_should_save_str_to_file_like(self) -> None:
+        """Test that `save_file` should save a string to a file-like object."""
+        # Precondition.
+        contents = "hello"
+        with util.NamedTemporaryFile("w+") as f:
+            dest = f
+
+            # Under test.
+            util.save_file(contents, dest, mode="w+")
+
+            # Postcondition.
+            f.seek(0)
+            written_contents = f.read()
+            assert contents == written_contents
+
+    def test_should_save_bytes_to_path(self) -> None:
+        """Test that `save_file` should save bytes to a path."""
+        # Precondition.
+        contents = b"hello"
+        with util.NamedTemporaryFile("wb+") as f:
+            dest = f.name
+
+            # Under test.
+            util.save_file(contents, dest, mode="wb+")
+
+            # Postcondition.
+            f.seek(0)
+            written_contents = f.read()
+            assert contents == written_contents
+
+    def test_should_save_IHostMemory_to_path(self) -> None:
+        """Test that `save_file` should save an `IHostMemory` to a path."""
+        # Precondition.
+        contents = engine_from_network(network_from_onnx_bytes(ONNX_MODELS["identity"].loader)).serialize()
+        with util.NamedTemporaryFile("wb+") as f:
+            dest = f.name
+
+            # Under test.
+            util.save_file(contents, dest, mode="wb+")
+
+            # Postcondition.
+            f.seek(0)
+            written_contents = f.read()
+            assert bytes(contents) == written_contents

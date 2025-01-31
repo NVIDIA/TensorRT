@@ -31,6 +31,8 @@
 
 namespace nvinfer1
 {
+
+
 namespace v_1_0
 {
 
@@ -162,6 +164,7 @@ public:
     }
 };
 
+
 class IPluginV3QuickRuntime : public IPluginCapability
 {
 public:
@@ -252,7 +255,7 @@ protected:
 //!
 //! \class IPluginV3QuickCore
 //!
-//! \brief Provides core capability (`IPluginCapability::kCORE` for quickly-deployable TRT plugins)
+//! \brief Provides core capability (`IPluginCapability::kCORE`) for quickly-deployable TRT plugins
 //!
 //! \warning This class is strictly for the purpose of supporting quickly-deployable TRT Python plugins and is not part
 //! of the public TensorRT C++ API. Users must not inherit from this class.
@@ -262,15 +265,18 @@ using IPluginV3QuickCore = v_1_0::IPluginV3QuickCore;
 //!
 //! \class IPluginV3QuickBuild
 //!
-//! \brief Provides build capability (`IPluginCapability::kBUILD` for quickly-deployable TRT plugins)
+//! \brief Provides build capability (`IPluginCapability::kBUILD`) for quickly-deployable TRT plugins
 //!
 //! \warning This class is strictly for the purpose of supporting quickly-deployable TRT Python plugins and is not part
 //! of the public TensorRT C++ API. Users must not inherit from this class.
 //!
 using IPluginV3QuickBuild = v_1_0::IPluginV3QuickBuild;
 
+
 //!
 //! \class IPluginV3QuickRuntime
+//!
+//! \brief Provides runtime capability (`IPluginCapability::kRUNTIME`) for JIT quickly-deployable TRT plugins
 //!
 //! \warning This class is strictly for the purpose of supporting quickly-deployable TRT Python plugins and is not part
 //! of the public TensorRT C++ API. Users must not inherit from this class.

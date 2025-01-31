@@ -17,6 +17,7 @@
 from polygraphy import mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.logger import G_LOGGER
+import os
 
 onnxrt = mod.lazy_import("onnxruntime")
 
@@ -67,4 +68,10 @@ class SessionFromOnnx(BaseLoader):
         G_LOGGER.start(
             f"Creating ONNX-Runtime Inference Session with providers: {providers}"
         )
-        return onnxrt.InferenceSession(model_bytes, providers=providers)
+        # ONNX Runtime tried to bind each thread to a logical CPU, but not all assigned cpu cores are available on some platforms. 
+        # Set the number of threads within each operator and between operators the number of usable CPUs to avoid crash in onnxruntime on those platforms.
+        options = onnxrt.SessionOptions()
+        process_cpu_count = len(os.sched_getaffinity(0))
+        options.intra_op_num_threads = process_cpu_count
+        options.inter_op_num_threads = process_cpu_count
+        return onnxrt.InferenceSession(model_bytes, providers=providers, sess_options=options)

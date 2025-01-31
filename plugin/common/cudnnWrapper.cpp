@@ -17,6 +17,7 @@
 
 #include "cudnnWrapper.h"
 #include "common/checkMacrosPlugin.h"
+#include "common/plugin.h"
 
 namespace nvinfer1
 {
@@ -43,8 +44,8 @@ auto const kCUDNN_PLUGIN_LIBNAME = std::string("libcudnn.so.") + std::to_string(
 #endif
 
 // If tryLoadingCudnn failed, the CudnnWrapper object won't be created.
-CudnnWrapper::CudnnWrapper(bool initHandle)
-    : mLibrary(tryLoadingCudnn())
+CudnnWrapper::CudnnWrapper(bool initHandle, char const* callerPluginName)
+    : mLibrary(tryLoadingCudnn(callerPluginName))
 {
     auto load_sym = [](void* handle, char const* name) {
         void* ret = dllGetSym(handle, name);
@@ -53,17 +54,18 @@ CudnnWrapper::CudnnWrapper(bool initHandle)
         return ret;
     };
 
-    *(void**) (&_cudnnCreate) = load_sym(mLibrary, "cudnnCreate");
-    *(void**) (&_cudnnDestroy) = load_sym(mLibrary, "cudnnDestroy");
-    *(void**) (&_cudnnCreateTensorDescriptor) = load_sym(mLibrary, "cudnnCreateTensorDescriptor");
-    *(void**) (&_cudnnDestroyTensorDescriptor) = load_sym(mLibrary, "cudnnDestroyTensorDescriptor");
-    *(void**) (&_cudnnSetStream) = load_sym(mLibrary, "cudnnSetStream");
-    *(void**) (&_cudnnBatchNormalizationForwardTraining) = load_sym(mLibrary, "cudnnBatchNormalizationForwardTraining");
-    *(void**) (&_cudnnSetTensor4dDescriptor) = load_sym(mLibrary, "cudnnSetTensor4dDescriptor");
-    *(void**) (&_cudnnSetTensorNdDescriptor) = load_sym(mLibrary, "cudnnSetTensorNdDescriptor");
-    *(void**) (&_cudnnSetTensorNdDescriptorEx) = load_sym(mLibrary, "cudnnSetTensorNdDescriptorEx");
-    *(void**) (&_cudnnDeriveBNTensorDescriptor) = load_sym(mLibrary, "cudnnDeriveBNTensorDescriptor");
-    *(void**) (&_cudnnGetErrorString) = load_sym(mLibrary, "cudnnGetErrorString");
+    *reinterpret_cast<void**>(&_cudnnCreate) = load_sym(mLibrary, "cudnnCreate");
+    *reinterpret_cast<void**>(&_cudnnDestroy) = load_sym(mLibrary, "cudnnDestroy");
+    *reinterpret_cast<void**>(&_cudnnCreateTensorDescriptor) = load_sym(mLibrary, "cudnnCreateTensorDescriptor");
+    *reinterpret_cast<void**>(&_cudnnDestroyTensorDescriptor) = load_sym(mLibrary, "cudnnDestroyTensorDescriptor");
+    *reinterpret_cast<void**>(&_cudnnSetStream) = load_sym(mLibrary, "cudnnSetStream");
+    *reinterpret_cast<void**>(&_cudnnBatchNormalizationForwardTraining)
+        = load_sym(mLibrary, "cudnnBatchNormalizationForwardTraining");
+    *reinterpret_cast<void**>(&_cudnnSetTensor4dDescriptor) = load_sym(mLibrary, "cudnnSetTensor4dDescriptor");
+    *reinterpret_cast<void**>(&_cudnnSetTensorNdDescriptor) = load_sym(mLibrary, "cudnnSetTensorNdDescriptor");
+    *reinterpret_cast<void**>(&_cudnnSetTensorNdDescriptorEx) = load_sym(mLibrary, "cudnnSetTensorNdDescriptorEx");
+    *reinterpret_cast<void**>(&_cudnnDeriveBNTensorDescriptor) = load_sym(mLibrary, "cudnnDeriveBNTensorDescriptor");
+    *reinterpret_cast<void**>(&_cudnnGetErrorString) = load_sym(mLibrary, "cudnnGetErrorString");
 
     if (initHandle)
     {
@@ -83,8 +85,15 @@ CudnnWrapper::~CudnnWrapper()
     dllClose(mLibrary);
 }
 
-void* CudnnWrapper::tryLoadingCudnn()
+void* CudnnWrapper::tryLoadingCudnn(char const* callerPluginName)
 {
+#if CUDA_GE_12_7 && CUDNN_MAJOR == 8
+    static constexpr int32_t kSM_BLACKWELL_100 = 100;
+
+    std::string errorMsgCudnnSupport
+    = "At least one plugin (" + std::string(callerPluginName) + ") that requires cuDNN is being used. TensorRT does not provide cuDNN support for Blackwell (compute capability: 10.0) and later architectures. Detected compute capability: " + std::to_string(nvinfer1::plugin::getSMVersion() / 10) + "." + std::to_string(nvinfer1::plugin::getSMVersion() % 10) + ". Please run on a platform with compute capability < 10.0, or use an alternative to " + std::string(callerPluginName) + ".";
+    PLUGIN_VALIDATE(nvinfer1::plugin::getSMVersion() < kSM_BLACKWELL_100, errorMsgCudnnSupport.c_str());
+#endif // CUDA_GE_12_7 && CUDNN_MAJOR == 8
     void* cudnnLib = dllOpen(kCUDNN_PLUGIN_LIBNAME.c_str());
     std::string errorMsg = "Failed to load " + kCUDNN_PLUGIN_LIBNAME + ".";
     PLUGIN_VALIDATE(cudnnLib != nullptr, errorMsg.c_str());
@@ -166,10 +175,10 @@ char const* CudnnWrapper::cudnnGetErrorString(cudnnStatus_t status)
     return (*_cudnnGetErrorString)(status);
 }
 
-CudnnWrapper& getCudnnWrapper()
+CudnnWrapper& getCudnnWrapper(char const* callerPluginName)
 {
-    // Initialize a global cublasWrapper instance to be used to call cublas functions.
-    static CudnnWrapper sGCudnnWrapper;
+    // Initialize a global cublasWrapper instance to be used to call cudnn functions.
+    static CudnnWrapper sGCudnnWrapper{/*initHandle*/ false, callerPluginName};
     return sGCudnnWrapper;
 }
 

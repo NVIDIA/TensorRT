@@ -38,6 +38,7 @@ namespace sample
 constexpr int32_t defaultAvgTiming{8};
 constexpr int32_t defaultMaxAuxStreams{-1};
 constexpr int32_t defaultBuilderOptimizationLevel{-1};
+constexpr int32_t defaultTilingOptimizationLevel{static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kNONE)};
 constexpr int32_t defaultMaxTactics{-1};
 
 // System default params
@@ -270,6 +271,9 @@ public:
     bool getPlanVersionOnly{false};
 
     bool allowWeightStreaming{false};
+
+    int32_t tilingOptimizationLevel{defaultTilingOptimizationLevel};
+    int64_t l2LimitForTiling{-1};
 
     void parse(Arguments& arguments) override;
 

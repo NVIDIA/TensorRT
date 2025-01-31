@@ -71,9 +71,11 @@ class IConditionLayer;
 class IConstantLayer;
 class IConvolutionLayer;
 class ICudaEngine;
+class ICumulativeLayer;
 class IDeconvolutionLayer;
 class IDequantizeLayer;
 class IDimensionExpr;
+class IDynamicQuantizeLayer;
 class IEinsumLayer;
 class IElementWiseLayer;
 class IEngineInspector;
@@ -146,6 +148,15 @@ class ISliceLayer;
 class ISoftMaxLayer;
 class ISqueezeLayer;
 class ITensor;
+
+namespace v_1_0
+{
+struct TimingCacheKey;
+struct TimingCacheValue;
+} // namespace v_1_0
+using TimingCacheKey = v_1_0::TimingCacheKey;
+using TimingCacheValue = v_1_0::TimingCacheValue;
+
 class ITimingCache;
 class ITopKLayer;
 class ITripLimitLayer;
@@ -158,6 +169,7 @@ enum class ActivationType : int32_t;
 enum class BoundingBoxFormat : int32_t;
 enum class BuilderFlag : int32_t;
 enum class CalibrationAlgoType : int32_t;
+enum class CumulativeOperation : int32_t;
 enum class DeviceType : int32_t;
 enum class DimensionOperation : int32_t;
 enum class ElementWiseOperation : int32_t;
@@ -194,6 +206,7 @@ enum class PreviewFeature : int32_t;
 enum class HardwareCompatibilityLevel : int32_t;
 enum class ExecutionContextAllocationStrategy : int32_t;
 enum class RuntimePlatform : int32_t;
+enum class TilingOptimizationLevel : int32_t;
 
 using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
@@ -928,6 +941,18 @@ public:
     virtual void setToType(DataType toType) noexcept = 0;
 };
 
+class VDynamicQuantizeLayer : public VRoot
+{
+public:
+    virtual int32_t getAxis() const noexcept = 0;
+    virtual void setAxis(int32_t axis) noexcept = 0;
+    virtual int32_t getBlockSize() const noexcept = 0;
+    virtual void setBlockSize(int32_t axis) noexcept = 0;
+    virtual DataType getScaleType() const noexcept = 0;
+    virtual void setScaleType(DataType axis) noexcept = 0;
+    virtual DataType getToType() const noexcept = 0;
+    virtual void setToType(DataType toType) noexcept = 0;
+};
 
 class VScatterLayer : public VRoot
 {
@@ -1002,6 +1027,17 @@ class VSqueezeLayer : public VRoot
 class VUnsqueezeLayer : public VRoot
 {
 };
+
+class VCumulativeLayer : public VRoot
+{
+public:
+    virtual bool setOperation(CumulativeOperation op) noexcept = 0;
+    virtual CumulativeOperation getOperation() const noexcept = 0;
+    virtual void setExclusive(bool exclusive) noexcept = 0;
+    virtual bool getExclusive() const noexcept = 0;
+    virtual void setReverse(bool reverse) noexcept = 0;
+    virtual bool getReverse() const noexcept = 0;
+}; // class VCumulativeLayer
 
 class VNetworkDefinition : public VRoot
 {
@@ -1078,6 +1114,8 @@ public:
     virtual INormalizationLayer* addNormalization(
         ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept = 0;
     virtual ICastLayer* addCast(ITensor& input, DataType toType) noexcept = 0;
+    virtual ICumulativeLayer* addCumulative(
+        ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept = 0;
     virtual IBuilder& getBuilder() const noexcept = 0;
     virtual NetworkDefinitionCreationFlags getFlags() const noexcept = 0;
     virtual bool getFlag(NetworkDefinitionCreationFlag networkDefinitionCreationFlag) const noexcept = 0;
@@ -1092,6 +1130,9 @@ public:
     virtual bool areWeightsMarkedRefittable(char const* name) const noexcept = 0;
     virtual ISqueezeLayer* addSqueeze(ITensor& input, ITensor& axes) noexcept = 0;
     virtual IUnsqueezeLayer* addUnsqueeze(ITensor& input, ITensor& axes) noexcept = 0;
+    virtual IDynamicQuantizeLayer* addDynamicQuantize(
+        ITensor& input, int32_t axis, int32_t blockSize, DataType toType, DataType scaleType) noexcept
+        = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot
@@ -1134,6 +1175,9 @@ public:
     virtual nvinfer1::IHostMemory* serialize() const noexcept = 0;
     virtual bool combine(ITimingCache const& inputCache, bool ignoreMismatch) noexcept = 0;
     virtual bool reset() noexcept = 0;
+    virtual int64_t queryKeys(TimingCacheKey* keyBuffer, int64_t capacity) const noexcept = 0;
+    virtual TimingCacheValue query(TimingCacheKey const& key) const noexcept = 0;
+    virtual bool update(TimingCacheKey const& key, TimingCacheValue const& value) noexcept = 0;
 };
 
 class VBuilderConfig : public VRoot
@@ -1199,6 +1243,10 @@ public:
     virtual RuntimePlatform getRuntimePlatform() const noexcept = 0;
     virtual void setMaxNbTactics(int32_t maxTactics) noexcept = 0;
     virtual int32_t getMaxNbTactics() const noexcept = 0;
+    virtual bool setTilingOptimizationLevel(TilingOptimizationLevel level) noexcept = 0;
+    virtual TilingOptimizationLevel getTilingOptimizationLevel() const noexcept = 0;
+    virtual bool setL2LimitForTiling(int64_t size) noexcept = 0;
+    virtual int64_t getL2LimitForTiling() const noexcept = 0;
 };
 
 class VSerializationConfig : public VRoot

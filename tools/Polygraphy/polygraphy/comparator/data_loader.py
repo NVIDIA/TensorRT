@@ -341,6 +341,23 @@ class DataLoader:
             self.input_metadata = self.user_input_metadata
 
         buffers = OrderedDict()
+        # Expand wildcards to inputs in user_input_metadata
+        inp_to_user_inp, unmatched_user_inps = util.match_keys(list(self.user_input_metadata), list(self.input_metadata))
+        # Warn about unused metadata
+        if unmatched_user_inps:
+            for name in unmatched_user_inps:
+                if util.contains_wildcard(name):
+                    msg = f"Input tensor wildcard: {name} | Metadata was provided, but none of the matched inputs exist in one or more runners."
+                    G_LOGGER.warning(msg)
+                else:
+                    msg = f"Input tensor: {name} | Metadata was provided, but the input does not exist in one or more runners."
+                    close_match = util.find_str_in_iterable(
+                        name, self.input_metadata.keys()
+                    )
+                    if close_match:
+                        msg += f"\nMaybe you meant to set: {close_match}?"
+                    G_LOGGER.warning(msg)
+
         for name, (dtype, shape) in self.input_metadata.items():
             try:
                 dtype = (
@@ -355,8 +372,8 @@ class DataLoader:
                     f"Could not convert data type: {dtype} to {self.data_loader_backend_module}, so the default data loader cannot generate a {self.data_loader_backend_module} array for input: {name}. "
                     f"Please use a custom data loader to provide inputs. "
                 )
-            if name in self.user_input_metadata:
-                user_dtype, user_shape = self.user_input_metadata[name]
+            if name in inp_to_user_inp:
+                user_dtype, user_shape = self.user_input_metadata[inp_to_user_inp[name]]
 
                 dtype = util.default(user_dtype, dtype)
                 dtype = (
@@ -385,17 +402,6 @@ class DataLoader:
 
             static_shape = get_static_shape(name, shape)
             buffers[name] = generate_buffer(name, dtype, shape=static_shape)
-
-        # Warn about unused metadata
-        for name in self.user_input_metadata.keys():
-            if name not in self.input_metadata:
-                msg = f"Input tensor: {name} | Metadata was provided, but the input does not exist in one or more runners."
-                close_match = util.find_str_in_iterable(
-                    name, self.input_metadata.keys()
-                )
-                if close_match:
-                    msg += f"\nMaybe you meant to set: {close_match}?"
-                G_LOGGER.warning(msg)
 
         # Warn about unused val_range
         if not isinstance(self.val_range, tuple):

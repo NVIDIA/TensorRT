@@ -14,12 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
+
 import ctypes
 import time
+from typing import Callable, Union
 
 from polygraphy import constants, mod, util
 from polygraphy.backend.base import BaseLoader
-from polygraphy.backend.trt import util as trt_util, FileReader
+from polygraphy.backend.trt import FileReader
+from polygraphy.backend.trt import util as trt_util
 from polygraphy.backend.trt.config import CreateConfig
 from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
@@ -758,16 +762,17 @@ class EngineFromPath(BaseLoader):
 @mod.export(funcify=True)
 class BytesFromEngine(BaseLoader):
     """
-    Functor that serializes an engine.
+    Functor that serializes an engine to bytes.
+
+    Returned bytes copy the serialized engine's memory. Use BufferFromEngine to directly reference the memory.
     """
 
     def __init__(self, engine):
         """
-        Serializes an engine.
+        Serializes an engine to bytes.
 
         Args:
-            engine (Union[trt.ICudaEngine, Callable() -> trt.ICudaEngine]):
-                    An engine or a callable that returns one.
+            engine (Union[trt.ICudaEngine, Callable() -> trt.ICudaEngine]): An engine or a callable that returns one.
         """
         self._engine = engine
 
@@ -775,10 +780,37 @@ class BytesFromEngine(BaseLoader):
     def call_impl(self):
         """
         Returns:
-            bytes: The serialized engine.
+            bytes: The serialized engine copied to bytes.
         """
         engine, _ = util.invoke_if_callable(self._engine)
         return bytes(engine.serialize())
+
+
+@mod.export(funcify=True)
+class BufferFromEngine(BaseLoader):
+    """
+    Functor that serializes an engine to a buffer.
+
+    Returned buffer directly references the serialized engine's memory and does not copy it.
+    """
+
+    def __init__(self, engine: Union[trt.ICudaEngine, Callable[[], trt.ICudaEngine]]) -> None:
+        """
+        Serializes an engine to a memoryview.
+
+        Args:
+            engine (Union[trt.ICudaEngine, Callable() -> trt.ICudaEngine]): An engine or a callable that returns one.
+        """
+        self._engine = engine
+
+    @util.check_called_by("__call__")
+    def call_impl(self) -> trt.IHostMemory:
+        """
+        Returns:
+            IHostMemory: The serialized engine as a buffer.
+        """
+        engine, _ = util.invoke_if_callable(self._engine)
+        return engine.serialize()
 
 
 @mod.export(funcify=True)
@@ -808,9 +840,7 @@ class SaveEngine(BaseLoader):
         """
         engine, _ = util.invoke_if_callable(self._engine)
 
-        util.save_file(
-            contents=bytes_from_engine(engine), dest=self.path, description="engine"
-        )
+        util.save_file(contents=buffer_from_engine(engine), dest=self.path, description="engine")
         return engine
 
 

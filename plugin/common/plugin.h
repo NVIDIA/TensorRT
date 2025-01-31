@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -79,7 +79,8 @@ protected:
     std::string mNamespace;
 };
 
-std::shared_ptr<nvinfer1::pluginInternal::CudnnWrapper> createPluginCudnnWrapper(void* executionContextIdentifier);
+std::shared_ptr<nvinfer1::pluginInternal::CudnnWrapper> createPluginCudnnWrapper(
+    void* executionContextIdentifier, char const* callerPluginName);
 std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> createPluginCublasWrapper(void* executionContextIdentifier);
 } // namespace pluginInternal
 
@@ -109,6 +110,39 @@ OutType read(BufferType const*& buffer)
 inline int32_t getTrtSMVersionDec(int32_t majorVersion, int32_t minorVersion)
 {
     return majorVersion * 10 + minorVersion;
+}
+
+//! Represents the compute capability of a device.
+//! This pertains to virtual architectures represented by the intermediate PTX format.
+//! This is distinct from the SM version.
+//! See https://forums.developer.nvidia.com/t/how-should-i-use-correctly-the-sm-xx-and-compute-xx/219160
+struct ComputeCapability
+{
+    int32_t major{};
+    int32_t minor{};
+
+    //! \return the compute capability of the CUDA device with the given \p deviceIndex.
+    [[nodiscard]] static ComputeCapability forDevice(int32_t deviceIndex)
+    {
+        int32_t major{0};
+        int32_t minor{0};
+        PLUGIN_CUASSERT(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
+        PLUGIN_CUASSERT(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
+        // Map 12.1 to 12.0 due to known limitations in TensorRT.
+        if (major == 12 && minor == 1)
+        {
+            minor = 0;
+        }
+        return {major, minor};
+    }
+};
+
+inline int32_t getSMVersion()
+{
+    int32_t device{-1};
+    PLUGIN_CHECK_CUDA(cudaGetDevice(&device));
+    auto const cc = ComputeCapability::forDevice(device);
+    return getTrtSMVersionDec(cc.major, cc.minor);
 }
 
 // Check that all required field names are present in the PluginFieldCollection.

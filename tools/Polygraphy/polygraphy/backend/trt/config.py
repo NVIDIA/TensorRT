@@ -67,6 +67,7 @@ class CreateConfig(BaseLoader):
         progress_monitor=None,
         weight_streaming=None,
         runtime_platform=None,
+        tiling_optimization_level=None,
     ):
         """
         Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
@@ -199,6 +200,9 @@ class CreateConfig(BaseLoader):
                     Describes the intended runtime platform (operating system and CPU architecture) for the execution of the TensorRT engine. 
                     TensorRT provides support for cross-platform engine compatibility when the target runtime platform is different from the build platform.
                     Defaults to TensorRT's default runtime platform.
+            tiling_optimization_level (trt.TilingOptimizationLevel):
+                    The tiling optimization level. Setting a higher optimization level allows TensorRT to spend more building time for more tiling strategies.
+                    Defaults to TensorRT's default tiling optimization level. Refer to the TensorRT API documentation for details.
         """
         self.tf32 = util.default(tf32, False)
         self.fp16 = util.default(fp16, False)
@@ -235,11 +239,18 @@ class CreateConfig(BaseLoader):
         self.progress_monitor = progress_monitor
         self.weight_streaming = weight_streaming
         self.runtime_platform = runtime_platform
+        self.tiling_optimization_level = tiling_optimization_level
 
         if self.calibrator is not None and not self.int8:
             G_LOGGER.warning(
                 "A calibrator was provided to `CreateConfig`, but int8 mode was not enabled. "
                 "Did you mean to set `int8=True` to enable building with int8 precision?"
+            )
+
+        # Print a message to tell users that TF32 can be enabled to improve perf with minor accuracy differences.
+        if not self.tf32:
+            G_LOGGER.info(
+                "TF32 is disabled by default. Turn on TF32 for better performance with minor accuracy differences."
             )
 
     @util.check_called_by("__call__")
@@ -518,6 +529,13 @@ class CreateConfig(BaseLoader):
                 config.runtime_platform = self.runtime_platform
 
             try_run(set_runtime_platform, "runtime_platform")
+
+        if self.tiling_optimization_level is not None:
+
+            def set_tiling_optimization_level():
+                config.tiling_optimization_level = self.tiling_optimization_level
+
+            try_run(set_tiling_optimization_level, "tiling_optimization_level")
 
         return config
 

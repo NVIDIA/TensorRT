@@ -1026,6 +1026,7 @@ constexpr char const* GPU_FALLBACK
 constexpr char const* REFIT = R"trtdoc(Enable building a refittable engine)trtdoc";
 constexpr char const* DISABLE_TIMING_CACHE
     = R"trtdoc(Disable reuse of timing information across identical layers.)trtdoc";
+constexpr char const* EDITABLE_TIMING_CACHE = R"trtdoc(Enable the editable timing cache.)trtdoc";
 constexpr char const* TF32
     = R"trtdoc(Allow (but not require) computations on tensors of type DataType.FLOAT to use TF32. TF32 computes inner products by rounding the inputs to 10-bit mantissas before multiplying, but accumulates the sum using 23-bit mantissas. Enabled by default.)trtdoc";
 constexpr char const* SPARSE_WEIGHTS
@@ -1040,7 +1041,7 @@ constexpr char const* DIRECT_IO
     = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ``ITensor.allowed_formats`` was set. Build fails if a reformat is required for functional correctness.
                [DEPRECATED] Deprecated in TensorRT 10.7.))trtdoc";
 constexpr char const* REJECT_EMPTY_ALGORITHMS
-    = R"trtdoc(Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
+    = R"trtdoc([DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead. Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
 constexpr char const* VERSION_COMPATIBLE
     = R"trtdoc(Restrict to lean runtime operators to provide version forward compatibility for the plan files.)trtdoc";
 constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
@@ -1063,6 +1064,7 @@ constexpr char const* WEIGHT_STREAMING
 constexpr char const* INT4 = R"trtdoc(Enable plugins with INT4 input/output)trtdoc";
 constexpr char const* STRICT_NANS
     = R"trtdoc(Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are not true when x is a NaN or Inf, and thus might hide propagation or generation of NaNs.)trtdoc";
+constexpr char const* FP4 = R"trtdoc(Enable plugins with FP4 input/output)trtdoc";
 constexpr char const* MONITOR_MEMORY = R"trtdoc(Enable memory monitor during build time.)trtdoc";
 } // namespace BuilderFlagDoc
 
@@ -1072,7 +1074,7 @@ constexpr char const* descr = R"trtdoc(The type for memory pools used by TensorR
 constexpr char const* WORKSPACE = R"trtdoc(
     WORKSPACE is used by TensorRT to store intermediate buffers within an operation.
     This defaults to max device memory. Set to a smaller value to restrict tactics that use over the threshold en masse.
-    For more targeted removal of tactics use the IAlgorithmSelector interface.
+    For more targeted removal of tactics use the IAlgorithmSelector interface ([DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead).
 )trtdoc";
 constexpr char const* DLA_MANAGED_SRAM = R"trtdoc(
     DLA_MANAGED_SRAM is a fast software managed RAM used by DLA to communicate within a layer.
@@ -1169,6 +1171,25 @@ constexpr char const* WINDOWS_AMD64 = R"trtdoc(
     Designates the target platform for engine execution as Windows AMD64 system. Currently this flag can only be enabled when building engines on Linux AMD64 platforms.
 )trtdoc";
 } // namespace RuntimePlatformDoc
+
+namespace TilingOptimizationLevelDoc
+{
+constexpr char const* descr = R"trtdoc(
+    Describes the optimization level of tiling strategies. A higher level allows TensorRT to spend more time searching for better tiling strategy.
+)trtdoc";
+constexpr char const* NONE = R"trtdoc(
+    Do not apply any tiling strategy.
+)trtdoc";
+constexpr char const* FAST = R"trtdoc(
+    Use a fast algorithm and heuristic based strategy. Slightly increases engine build time.
+)trtdoc";
+constexpr char const* MODERATE = R"trtdoc(
+    Increase search space and use a mixed heuristic/profiling strategy. Moderately increases engine build time.
+)trtdoc";
+constexpr char const* FULL = R"trtdoc(
+    Increase search space even wider. Significantly increases engine build time.
+)trtdoc";
+} // namespace TilingOptimizationLevelDoc
 
 namespace NetworkDefinitionCreationFlagDoc
 {
@@ -1300,6 +1321,34 @@ constexpr char const* ONELINE = R"trtdoc(Print layer information in one line per
 constexpr char const* JSON = R"trtdoc(Print layer information in JSON format.)trtdoc";
 } // namespace LayerInformationFormatDoc
 
+namespace TimingCacheKeyDoc
+{
+constexpr char const* descr = R"trtdoc(
+        The key to retrieve timing cache entries.
+    )trtdoc";
+
+constexpr char const* parse = R"trtdoc(
+        Parse the text into a `TimingCacheKey` object.
+
+        :arg text: The input text.
+
+        :returns: A `TimingCacheKey` object.
+    )trtdoc";
+
+constexpr char const* convertTimingCacheKeyToString = R"trtdoc(
+        Convert a `TimingCacheKey` object into text.
+
+        :returns: A `str` object.
+    )trtdoc";
+} // namespace TimingCacheKeyDoc
+
+namespace TimingCacheValueDoc
+{
+constexpr char const* descr = R"trtdoc(
+        The values in the cache entry.
+    )trtdoc";
+}
+
 namespace ITimingCacheDoc
 {
 constexpr char const* descr = R"trtdoc(
@@ -1331,6 +1380,42 @@ constexpr char const* reset = R"trtdoc(
 
         :returns: A `bool` indicating whether the reset operation is done successfully.
     )trtdoc";
+
+constexpr char const* queryKeys = R"trtdoc(
+    Query cache keys from Timing Cache.
+
+    If an error occurs, a RuntimeError will be raised.
+
+    :returns A list containing the cache keys.
+    )trtdoc";
+
+constexpr char const* query = R"trtdoc(
+        Query value in a cache entry.
+
+        If the key exists, write the value out, otherwise return an invalid value.
+
+        :arg key: The query key.
+        :cache cache: value if the key exists, otherwise an invalid value.
+
+        :returns A :class:`TimingCacheValue` object.
+    )trtdoc";
+
+constexpr char const* update = R"trtdoc(
+        Update values in a cache entry.
+
+        Update the value of the given cache key. If the key does not exist, return False.
+        If the key exists and the new tactic timing is NaN, delete the cache entry and
+        return True. If tactic timing is not NaN and the new value is valid, override the
+        cache value and return True. False is returned when the new value is invalid.
+        If this layer cannot use the new tactic, build errors will be reported when
+        building the next engine.
+
+        :arg key: The key to the entry to be updated.
+        :arg value: New cache value.
+
+        :returns True if update succeeds, otherwise False.
+    )trtdoc";
+
 } // namespace ITimingCacheDoc
 
 namespace IBuilderConfigDoc
@@ -1346,13 +1431,15 @@ constexpr char const* descr = R"trtdoc(
         :ivar DLA_core: :class:`int` The DLA core that the engine executes on. Must be between 0 and N-1 where N is the number of available DLA cores.
         :ivar profiling_verbosity: Profiling verbosity in NVTX annotations.
         :ivar engine_capability: The desired engine capability. See :class:`EngineCapability` for details.
-        :ivar algorithm_selector: The :class:`IAlgorithmSelector` to use.
+        :ivar algorithm_selector: [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead. The :class:`IAlgorithmSelector` to use.
         :ivar builder_optimization_level: The builder optimization level which TensorRT should build the engine at. Setting a higher optimization level allows TensorRT to spend longer engine building time searching for more optimization options. The resulting engine may have better performance compared to an engine built with a lower optimization level. The default optimization level is 3. Valid values include integers from 0 to the maximum optimization level, which is currently 5. Setting it to be greater than the maximum level results in identical behavior to the maximum level.
         :ivar max_num_tactics: The maximum number of tactics to time when there is a choice of tactics. Setting a larger number allows TensorRT to spend longer engine building time searching for more optimization options. The resulting engine may have better performance compared to an engine built with a smaller number of tactics. Valid values include integers from -1 to the maximum 32-bit integer. Default value -1 indicates that TensorRT can decide the number of tactics based on its own heuristic.
         :ivar hardware_compatibility_level: Hardware compatibility allows an engine compatible with GPU architectures other than that of the GPU on which the engine was built.
         :ivar plugins_to_serialize: The plugin libraries to be serialized with forward-compatible engines.
         :ivar max_aux_streams: The maximum number of auxiliary streams that TRT is allowed to use. If the network contains operators that can run in parallel, TRT can execute them using auxiliary streams in addition to the one provided to the IExecutionContext::enqueueV3() call. The default maximum number of auxiliary streams is determined by the heuristics in TensorRT on whether enabling multi-stream would improve the performance. This behavior can be overridden by calling this API to set the maximum number of auxiliary streams explicitly. Set this to 0 to enforce single-stream inference. The resulting engine may use fewer auxiliary streams than the maximum if the network does not contain enough parallelism or if TensorRT determines that using more auxiliary streams does not help improve the performance. Allowing more auxiliary streams does not always give better performance since there will be synchronizations overhead between streams. Using CUDA graphs at runtime can help reduce the overhead caused by cross-stream synchronizations. Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not be able to be reused.
         :ivar progress_monitor: The :class:`IProgressMonitor` to use.
+        :ivar tiling_optimization_level: The optimization level of tiling strategies. A Higher level allows TensorRT to spend more time searching for better optimization strategy.
+        :ivar l2_limit_for_tiling: The target L2 cache usage for tiling optimization.
 
         Below are the descriptions about each builder optimization level:
 

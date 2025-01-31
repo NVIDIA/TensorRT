@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.7 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.8 --single-branch
 cd TensorRT
 ```
 
@@ -48,7 +48,7 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.7.0.23
+tensorrt            10.8.0.31
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -91,7 +91,7 @@ Run the below command to generate an image with SD1.5 or SD2.1 in INT8
 python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --int8
 ```
 
-Run the below command to generate an image with SD1.5 or SD2.1 in FP8. (FP8 is only supppoted on Hopper.)
+Run the below command to generate an image with SD1.5 or SD2.1 in FP8. (FP8 is only supported on Hopper and Ada.)
 
 ```bash
 python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8
@@ -160,13 +160,13 @@ Run the below command to generate an image with Stable Diffusion XL in INT8
 python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --int8
 ```
 
-Run the below command to generate an image with Stable Diffusion XL in FP8. (FP8 is only supppoted on Hopper.)
+Run the below command to generate an image with Stable Diffusion XL in FP8. (FP8 is only supported on Hopper and Ada.)
 
 ```bash
 python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --fp8
 ```
 
-> Note that INT8 & FP8 quantization is only supported for SDXL, SD1.5, SD2.1 and SD2.1-base, and won't work with LoRA weights. FP8 quantization is only supported on Hopper. Some prompts may produce better inputs with fewer denoising steps (e.g. `--denoising-steps 20`) but this will repeat the calibration, ONNX export, and engine building processes for the U-Net.
+> Note that INT8 & FP8 quantization is only supported for SDXL, SD1.5, SD2.1 and SD2.1-base, and won't work with LoRA weights. FP8 quantization is only supported on Hopper and Ada. Some prompts may produce better inputs with fewer denoising steps (e.g. `--denoising-steps 20`) but this will repeat the calibration, ONNX export, and engine building processes for the U-Net.
 
 For step-by-step tutorials to run INT8 & FP8 inference on stable diffusion models, please refer to examples in [TensorRT ModelOpt diffusers sample](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/diffusers).
 
@@ -270,7 +270,7 @@ Run the below command to generate an image with FLUX.1 Dev in BF16.
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16
 ```
 
-Run the below command to generate an image with FLUX.1 Dev in FP8. (FP8 is suppported on Hopper and Ada.)
+Run the below command to generate an image with FLUX.1 Dev in FP8. (FP8 is only supported on Hopper and Ada.)
 
 ```bash
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8
@@ -288,13 +288,76 @@ Run the below command to generate an image with FLUX.1 Schnell in BF16.
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --bf16
 ```
 
-Run the below command to generate an image with FLUX.1 Schnell in FP8. (FP8 is suppported on Hopper and Ada.)
+Run the below command to generate an image with FLUX.1 Schnell in FP8. (FP8 is only supported on Hopper and Ada.)
 
 ```bash
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp8
 ```
 
 NOTE: Running the FLUX.1 Dev or FLUX.1 Schnell pipeline requires 48GB or 24GB of GPU memory or higher, respectively.
+
+### Generate an image guided by an initial image and a text prompt using Flux
+
+```bash
+wget "https://miro.medium.com/v2/resize:fit:640/format:webp/1*iD8mUonHMgnlP0qrSx3qPg.png" -O yellow.png
+
+python3 demo_img2img_flux.py "A home with 2 floors and windows. The front door is purple" --hf-token=$HF_TOKEN --input-image yellow.png --image-strength 0.95 --bf16
+```
+
+### Generate an image guided by a text prompt and a control image using Flux ControlNet
+
+Download the control image below
+```bash
+wget https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/robot.png
+```
+
+Run the Depth ControlNet pipeline
+
+```bash
+python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --bf16 --denoising-steps 30 --onnx-dir onnx_depth/ --engine-dir engine_depth/
+```
+
+Run the Canny ControlNet pipeline
+
+```bash
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --bf16 --onnx-dir onnx_canny/ --engine-dir engine_canny/
+```
+
+### Generate an image guided by a text prompt and a control image using Flux ControlNet in FP8
+
+FP8 ControlNet pipelines require downloading a calibration dataset and providing the path. You can use the datasets provided by Black Forest Labs here: [depth](https://drive.google.com/file/d/1DFfhOSrTlKfvBFLcD2vAALwwH4jSGdGk/view) | [canny](https://drive.google.com/file/d/1dRoxOL-vy3tSAesyqBSJoUWsbkMwv3en/view)
+
+You can use the `--calibraton-dataset` flag to specify the path, which is set to `./{depth/canny}-eval/benchmark` by default if not provided. Note that the dataset should have `inputs/` and `prompts/` underneath the provided path, matching the format of the BFL dataset.
+
+Run the Depth ControlNet pipeline in FP8. (FP8 is only supported on Hopper and Ada.)
+
+```bash
+python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --onnx-dir onnx_depth/ --engine-dir engine_depth/
+```
+
+Run the Canny ControlNet pipeline in FP8 using a custom dataset path. (FP8 is only supported on Hopper and Ada.)
+
+```bash
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --onnx-dir onnx_canny/ --engine-dir engine_canny/ --calibration-dataset {custom/dataset/path}
+```
+
+### Exporting ONNX models without running TRT build or inference.
+This is useful for exporting ONNX files using a device with a larger vram and building TRT engines on another device.
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --onnx-export-only
+```
+
+### Use separate directories for individual ONNX models
+The directories specified in `--model-onnx-dirs` will override the directory set in `--onnx-dir`. Unspecified models will continue to use the directory set in `--onnx-dir`.
+Suppose the model storage locations are as following:
+* transformer model ONNX files are saved at `./onnx_folder_1/transformer` and `./onnx_folder_1/transformer.opt`. 
+* vae model ONNX files are saved in `./onnx_folder_2/vae` and `./onnx_folder_2/vae.opt`.
+* Other models (t5 and clip) are still under `./onnx/`.
+
+The corresponding command to run the pipeline:
+```bash
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --onnx-dir=onnx --model-onnx-dirs=transformer:onnx_folder_1,vae:onnx_folder_2
+```
 
 ## Configuration options
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.

@@ -107,7 +107,7 @@ using cudnnTensorDescriptor_t = struct cudnnTensorStruct*;
 class CudnnWrapper
 {
 public:
-    CudnnWrapper(bool initHandle = false);
+    explicit CudnnWrapper(bool initHandle = false, char const* callerPluginName = nullptr);
     ~CudnnWrapper();
 
     cudnnContext* getCudnnHandle();
@@ -139,7 +139,7 @@ public:
 private:
     void* mLibrary{nullptr};
     cudnnContext* mHandle{nullptr};
-    void* tryLoadingCudnn();
+    void* tryLoadingCudnn(char const*);
 
     cudnnStatus_t (*_cudnnCreate)(cudnnContext**);
     cudnnStatus_t (*_cudnnDestroy)(cudnnContext*);
@@ -160,7 +160,7 @@ private:
     char const* (*_cudnnGetErrorString)(cudnnStatus_t status);
 };
 
-CudnnWrapper& getCudnnWrapper();
+CudnnWrapper& getCudnnWrapper(char const* callerPluginName);
 
 } // namespace pluginInternal
 } // namespace nvinfer1

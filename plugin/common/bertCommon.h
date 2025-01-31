@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,6 +62,8 @@ constexpr int32_t kSM_86 = 86;
 constexpr int32_t kSM_87 = 87;
 constexpr int32_t kSM_89 = 89;
 constexpr int32_t kSM_90 = 90;
+constexpr int32_t kSM_100 = 100;
+constexpr int32_t kSM_120 = 120;
 
 // For full mask mode, we must produce the compressed mask format expected by the fused attention path. Currently, only
 // two sequence lengths are supported. We hard code the sizes here.
@@ -93,28 +95,27 @@ struct CudaDeleter
         PLUGIN_CUASSERT(cudaFree(buf));
     }
 };
+
 } // namespace pluginInternal
 namespace plugin
 {
+
 namespace bert
 {
 
-inline int32_t getSMVersion()
+//! \brief Checks if the first argument matches any of the list items.
+//! \return True if v is a member of list.
+template <typename TElem, typename Container = std::initializer_list<TElem>>
+bool elem(TElem const& v, Container const& list)
 {
-    int32_t device{-1};
-    PLUGIN_CHECK(cudaGetDevice(&device));
-    cudaDeviceProp props;
-    PLUGIN_CHECK(cudaGetDeviceProperties(&props, device));
-    return nvinfer1::plugin::getTrtSMVersionDec(props.major, props.minor);
+    return std::any_of(std::begin(list), std::end(list), [&v](TElem const& t) { return t == v; });
 }
 
 inline int32_t getMHAMaskPackedSize(int32_t smVersion, nvinfer1::DataType dataType, int32_t sequenceLength)
 {
     // this code must match EmbLayerNormPluginDynamic::getOutputDimensions in embLayerNormPlugin.cpp
     int32_t packedSize = unfusedMaskSize;
-    bool isSmOK = (smVersion == kSM_75 || smVersion == kSM_80 || smVersion == kSM_86 || smVersion == kSM_87
-        || smVersion == kSM_89 || smVersion == kSM_90
-        );
+    bool const isSmOK = elem(smVersion, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120});
     bool isPrecisionOK = (dataType == nvinfer1::DataType::kINT8 || dataType == nvinfer1::DataType::kHALF);
     if (isSmOK && isPrecisionOK)
     {
@@ -152,7 +153,7 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kFP8: return 1;
     case nvinfer1::DataType::kINT4:
-        PLUGIN_FAIL("Element size is not implemented for sub-byte data-types");
+    case nvinfer1::DataType::kFP4: PLUGIN_FAIL("Element size is not implemented for sub-byte data-types");
     }
     return 0;
 }

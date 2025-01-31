@@ -90,17 +90,6 @@
 
 #define CHECK_RETURN(status, val) CHECK_RETURN_W_MSG(status, val, "")
 
-#define OBJ_GUARD(A) std::unique_ptr<A, void (*)(A * t)>
-
-template <typename T, typename T_>
-OBJ_GUARD(T)
-makeObjGuard(T_* t)
-{
-    static_assert(std::is_base_of_v<T, T_> || std::is_same_v<T, T_>);
-    auto deleter = [](T* t) { delete t; };
-    return std::unique_ptr<T, decltype(deleter)>{static_cast<T*>(t), deleter};
-}
-
 constexpr long double operator"" _GiB(long double val)
 {
     return val * (1 << 30);
@@ -551,7 +540,7 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kFP8: return 1;
     case nvinfer1::DataType::kINT4:
-        ASSERT(false && "Element size is not implemented for sub-byte data-types");
+    case nvinfer1::DataType::kFP4: ASSERT(false && "Element size is not implemented for sub-byte data-types");
     }
     return 0;
 }

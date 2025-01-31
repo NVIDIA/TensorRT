@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -394,7 +394,9 @@ bool SampleIOFormats::build(int32_t dataWidth)
         config->setFlag(BuilderFlag::kINT8);
         network->getInput(0)->setType(DataType::kINT8);
         network->getOutput(0)->setType(DataType::kINT8);
-        samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
+        network->getInput(0)->setDynamicRange(-1.0F, 1.0F);
+        constexpr float kTENSOR_DYNAMIC_RANGE = 4.0F;
+        samplesCommon::setAllDynamicRanges(network.get(), kTENSOR_DYNAMIC_RANGE, kTENSOR_DYNAMIC_RANGE);
     }
     if (dataWidth == 2)
     {

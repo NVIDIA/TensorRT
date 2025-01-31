@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -925,9 +925,8 @@ public:
         , sm(mhaInterface->mSm)
         , xmmaKernel(getXMMAKernelsV2(DATA_TYPE_FP16, sm))
     {
-        assert((sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90
-        )
-            && "Unsupported architecture");
+        assert(elem(sm, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120})
+               && "Unsupported architecture.");
         params.clear();
     }
 
@@ -952,7 +951,7 @@ public:
 
         // [MLPINF-1894] HGMMA has a different warp group.
         // TODO: add S==64/96/512 HGMMA support for sm==90
-        if (sm == kSM_90 && (S == 128 || S == 256 || S == 384))
+        if (sm == kSM_90 && elem(S, {128, 256, 384}))
         {
             warps_m = 4;
             warps_n = 1;
@@ -1097,9 +1096,8 @@ public:
         , xmmas_n(0U)
         , threads_per_cta(1U)
     {
-        assert((sm == kSM_75 || sm == kSM_80 || sm == kSM_86 || sm == kSM_87 || sm == kSM_89 || sm == kSM_90
-        )
-            && "Unsupported architecture");
+        assert(elem(sm, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120})
+               && "Unsupported architecture.");
         params.clear();
     }
 
@@ -1121,7 +1119,7 @@ public:
 
         // [MLPINF-1894] IGMMA has a different warp group.
         // TODO: add S==64/96 IGMMA support for sm==90
-        if (sm == kSM_90 && (S == 128 || S == 192 || S == 256 || S == 384 || S == 512))
+        if (sm == kSM_90 && elem(S, {128, 192, 256, 384, 512}))
         {
             if (S == 512)
             {

@@ -762,6 +762,7 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                             def dtype_from_fmt_dtype(contents):
                                 contents = contents.upper()
                                 mapping = {
+                                    "BFLOAT16": DataType.BFLOAT16,
                                     "FLOAT": DataType.FLOAT32,
                                     "FP32": DataType.FLOAT32,
                                     "FP16": DataType.FLOAT16,

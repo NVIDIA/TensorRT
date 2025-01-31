@@ -301,7 +301,7 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
                             TRT_FP8QuantizeLinear and TRT_FP8DequantizeLinear operations in UNetSpatioTemporalConditionModel for svd
                             cause issues. Inputs on different devices (CUDA vs CPU) may contribute to the problem.
                         """
-                        quantize_lvl(model, quantization_level, enable_conv_3d=False)
+                        quantize_lvl(self.version, model, quantization_level, enable_conv_3d=False)
                         mtq.disable_quantizer(model, filter_func)
                         if use_fp8[model_name]:
                             generate_fp8_scales(model)

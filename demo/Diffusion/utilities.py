@@ -16,19 +16,25 @@
 # limitations under the License.
 #
 
+import gc
+import os
+import random
+import types
 import warnings
-from importlib import import_module
 from collections import OrderedDict
+from enum import Enum, auto
+from importlib import import_module
+from io import BytesIO
+
+import numpy as np
+import onnx
+import requests
+import tensorrt as trt
+import torch
 from cuda import cudart
 from diffusers.models.lora import LoRACompatibleConv, LoRACompatibleLinear
 from diffusers.utils import load_image
-from enum import Enum, auto
-import gc
-from io import BytesIO
-import numpy as np
-import onnx
 from onnx import numpy_helper
-import os
 from PIL import Image
 from polygraphy.backend.common import bytes_from_path
 from polygraphy.backend.trt import (
@@ -38,15 +44,9 @@ from polygraphy.backend.trt import (
     engine_from_bytes,
     engine_from_network,
     network_from_onnx_path,
-    save_engine
+    save_engine,
 )
 from polygraphy.logger import G_LOGGER
-import random
-import requests
-import tensorrt as trt
-import torch
-import types
-import gc
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
@@ -303,6 +303,7 @@ class Engine():
             int8 = False
             fp8 = False
 
+        print(f"Strongly typed mode is {strongly_typed} for {onnx_path}")
         network = network_from_onnx_path(
             onnx_path,
             flags=flags,
@@ -344,7 +345,7 @@ class Engine():
                 warnings.warn(f"Weight streaming budget is not set for {self.engine_path}. Weights will not be streamed.")
             else:
                 self.engine.weight_streaming_budget_v2 = int(weight_streaming_budget_percentage / 100 * self.engine.streamable_weights_size)
-    
+
     def unload(self):
         if self.engine is not None:
             print(f"Unloading TensorRT engine: {self.engine_path}")
@@ -376,6 +377,7 @@ class Engine():
                 shape = shape_dict[name]
             else:
                 shape = self.engine.get_tensor_shape(name)
+                print(f"[W]: {self.engine_path}: Could not find '{name}' in shape dict {shape_dict}.  Using shape {shape} inferred from the engine.")
             if self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT:
                 self.context.set_input_shape(name, shape)
             dtype=trt_to_torch_dtype_dict[self.engine.get_tensor_dtype(name)]
@@ -403,7 +405,7 @@ class Engine():
                 # do inference before CUDA graph capture
                 noerror = self.context.execute_async_v3(stream)
                 if not noerror:
-                    raise ValueError(f"ERROR: inference failed.")
+                    raise ValueError("ERROR: inference failed.")
                 # capture cuda graph
                 CUASSERT(cudart.cudaStreamBeginCapture(stream, cudart.cudaStreamCaptureMode.cudaStreamCaptureModeGlobal))
                 self.context.execute_async_v3(stream)
@@ -412,7 +414,7 @@ class Engine():
         else:
             noerror = self.context.execute_async_v3(stream)
             if not noerror:
-                raise ValueError(f"ERROR: inference failed.")
+                raise ValueError("ERROR: inference failed.")
 
         return self.tensors
 
@@ -627,7 +629,7 @@ def get_refit_weights(state_dict, onnx_opt_path, weight_name_mapping, weight_sha
     return refit_weights, updated_weight_names
 
 def load_calib_prompts(batch_size, calib_data_path):
-    with open(calib_data_path, "r") as file:
+    with open(calib_data_path, "r", encoding="utf-8") as file:
         lst = [line.rstrip("\n") for line in file]
     return [lst[i : i + batch_size] for i in range(0, len(lst), batch_size)]
 
@@ -713,7 +715,7 @@ def process_pipeline_args(args):
         raise ValueError(f"Batch size {args.batch_size} is larger than allowed {max_batch_size}.")
 
     if args.use_cuda_graph and (not args.build_static_batch or args.build_dynamic_shape):
-        raise ValueError(f"Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
+        raise ValueError("Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
 
     if args.optimization_level is None:
         if args.int8 or args.fp8:
@@ -725,13 +727,13 @@ def process_pipeline_args(args):
         raise ValueError(f"Optimization level {args.optimization_level} not valid.  Valid values are: {VALID_OPTIMIZATION_LEVELS}")
 
     if args.int8 and not any(args.version.startswith(prefix) for prefix in ['xl', '1.4', '1.5', '2.1']):
-        raise ValueError(f"int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
+        raise ValueError("int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
 
     if args.fp8 and not any(args.version.startswith(prefix) for prefix in ('xl', '1.4', '1.5', '2.1', 'flux.1-dev', 'flux.1-schnell')):
-        raise ValueError(f"fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1 and FLUX pipelines.")
+        raise ValueError("fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1 and FLUX pipelines.")
 
     if args.fp8 and args.int8:
-        raise ValueError(f"Cannot apply both int8 and fp8 quantization, please choose only one.")
+        raise ValueError("Cannot apply both int8 and fp8 quantization, please choose only one.")
 
     if args.fp8:
         device_info = torch.cuda.get_device_properties(0)
@@ -745,12 +747,12 @@ def process_pipeline_args(args):
             print(f"The default quantization level has been set to {level} for {dtype_str}.")
 
         if args.fp8:
-            override_quant_level(3.0 if args.version in ("1.4", "1.5", "flux.1-dev", "flux.1-schnell") else 4.0, "FP8")
+            override_quant_level(3.0 if args.version in ("1.4", "1.5") else 4.0, "FP8")
         elif args.int8:
             override_quant_level(3.0, "INT8")
 
     if args.lora_path and not any(args.version.startswith(prefix) for prefix in ('1.5', '2.1', 'xl')):
-        raise ValueError(f"LoRA adapter support is only supported for SD1.5, SD2.1 and SDXL pipelines")
+        raise ValueError("LoRA adapter support is only supported for SD1.5, SD2.1 and SDXL pipelines")
 
     if args.lora_weight:
         for weight in (weight for weight in args.lora_weight if not 0 <= weight <= 1):
@@ -796,3 +798,4 @@ def process_pipeline_args(args):
     args_run_demo = (args.prompt, args.negative_prompt, args.height, args.width, args.batch_size, args.batch_count, args.num_warmup_runs, args.use_cuda_graph)
 
     return kwargs_init_pipeline, kwargs_load_engine, args_run_demo
+

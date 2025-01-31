@@ -136,7 +136,7 @@ public:
     ~SkipLayerNormInterleavedPluginHFace() override;
 
     // IPluginV3Runtime overrides
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
@@ -161,7 +161,7 @@ public:
     ~SkipLayerNormInterleavedPluginMTron() override;
 
     // IPluginV3Runtime overrides
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;

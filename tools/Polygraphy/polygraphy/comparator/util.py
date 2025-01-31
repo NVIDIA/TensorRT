@@ -152,7 +152,7 @@ def str_output_stats(output, runner_name=None):
         if output.dtype == bool:
             ret += "\n"
         else:
-            ret += f", p90={compute_quantile(output, 0.9):.5g}, p95={compute_quantile(output, 0.9):.5g}, p99={compute_quantile(output, 0.99):.5g}\n"
+            ret += f", p90={compute_quantile(output, 0.9):.5g}, p95={compute_quantile(output, 0.95):.5g}, p99={compute_quantile(output, 0.99):.5g}\n"
     except Exception as err:
         G_LOGGER.verbose(f"Could not generate statistics.\nNote: Error was: {err}")
         ret += "<Error while computing statistics>"

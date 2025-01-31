@@ -19,7 +19,7 @@
 from setuptools import setup
 
 distribution_package_name = "##TENSORRT_MODULE##"
-
+plugin_import_package_name = f"{distribution_package_name}.plugin"
 
 setup(
     name=distribution_package_name,
@@ -33,7 +33,7 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[],
+    packages=[plugin_import_package_name],
     install_requires=[
         "##TENSORRT_MODULE##_cu##CUDA_MAJOR##==##TENSORRT_PYTHON_VERSION##"
     ],
