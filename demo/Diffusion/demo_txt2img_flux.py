@@ -222,6 +222,7 @@ if __name__ == "__main__":
         args.onnx_dir,
         onnx_export_only=args.onnx_export_only,
         model_onnx_dirs=args.model_onnx_dirs,
+        fp4=args.fp4,
         **kwargs_load_engine
     )
 

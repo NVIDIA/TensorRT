@@ -16,7 +16,7 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:24.10-py3 /bin/bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.01-py3 /bin/bash
 ```
 
 NOTE: The demo supports CUDA>=11.8
@@ -48,7 +48,7 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.8.0.31
+tensorrt            10.8.0.43
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -256,101 +256,167 @@ python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a
 
 > NOTE: The denoising steps and guidance scale for the Prior and Decoder models are configured using --prior-denoising-steps, --prior-guidance-scale, --decoder-denoising-steps, and --decoder-guidance-scale respectively.
 
-### Generate an image guided by a text prompt using Flux
+### Generating Images with Flux
 
-Run the below command to generate an image with FLUX.1 Dev in FP16.
+#### Download Pre-exported Models (Recommended for GPUs with <48GB VRAM)
+
+Install Git LFS:
 
 ```bash
+sudo apt-get install git-lfs
+```
+
+Download ONNX models for the desired pipeline and precision:
+
+```bash
+# login to huggingface-cli using the $HF_TOKEN
+git config --global credential.helper store # set the 'store' credential helper as default
+huggingface-cli login --token $HF_TOKEN --add-to-git-credential
+
+# Example for flux.1-dev BF16 pipeline. Models will be downloaded to ./onnx-flux-dev after the script is run.
+./scripts/download_flux_onnx_models.sh --version "flux.1-dev" --precision "bf16"
+
+# View supported configurations
+./scripts/download_flux_onnx_models.sh --help
+```
+
+#### 1. Generate an Image from a Text Prompt
+
+##### Run Flux.1-Dev
+
+```bash
+# FP16 (requires >48GB VRAM for native export)
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN
+
+# BF16
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16 --onnx-dir onnx-flux-dev/ --model-onnx-dirs=transformer:onnx-flux-dev/transformer_bf16/ --engine-dir engine-flux-dev/bf16
+
+# FP8
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8 --onnx-dir onnx-flux-dev/ --model-onnx-dirs=transformer:onnx-flux-dev/transformer_fp8/ --engine-dir engine-flux-dev/fp8 --build-static-batch
+
+# FP4
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp4 --onnx-dir onnx-flux-dev/ --model-onnx-dirs=transformer:onnx-flux-dev/transformer_fp4/ --engine-dir engine-flux-dev/fp4
 ```
 
-Run the below command to generate an image with FLUX.1 Dev in BF16.
+##### Run Flux.1-Schnell
+
 
 ```bash
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16
-```
-
-Run the below command to generate an image with FLUX.1 Dev in FP8. (FP8 is only supported on Hopper and Ada.)
-
-```bash
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8
-```
-
-Run the below command to generate an image with FLUX.1 Schnell in FP16.
-
-```bash
+# FP16 (requires >48GB VRAM for native export)
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell"
+
+# BF16
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --bf16 --onnx-dir onnx-flux-schnell/ --model-onnx-dirs=transformer:onnx-flux-schnell/transformer_bf16 --engine-dir engine-flux-schnell/bf16
+
+# FP8
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp8 --onnx-dir onnx-flux-schnell/ --model-onnx-dirs=transformer:onnx-flux-schnell/transformer_fp8 --engine-dir engine-flux-schnell/fp8 --build-static-batch
+
+# FP4
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp4 --onnx-dir onnx-flux-schnell/ --model-onnx-dirs=transformer:onnx-flux-schnell/transformer_fp4 --engine-dir engine-flux-schnell/fp4
 ```
 
-Run the below command to generate an image with FLUX.1 Schnell in BF16.
+---
 
-```bash
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --bf16
-```
+#### 2. Generate an Image from an Initial Image + Text Prompt
 
-Run the below command to generate an image with FLUX.1 Schnell in FP8. (FP8 is only supported on Hopper and Ada.)
-
-```bash
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp8
-```
-
-NOTE: Running the FLUX.1 Dev or FLUX.1 Schnell pipeline requires 48GB or 24GB of GPU memory or higher, respectively.
-
-### Generate an image guided by an initial image and a text prompt using Flux
+Download an example input image:
 
 ```bash
 wget "https://miro.medium.com/v2/resize:fit:640/format:webp/1*iD8mUonHMgnlP0qrSx3qPg.png" -O yellow.png
-
-python3 demo_img2img_flux.py "A home with 2 floors and windows. The front door is purple" --hf-token=$HF_TOKEN --input-image yellow.png --image-strength 0.95 --bf16
 ```
 
-### Generate an image guided by a text prompt and a control image using Flux ControlNet
+Run the image-to-image pipeline:
 
-Download the control image below
+```bash
+python3 demo_img2img_flux.py "A home with 2 floors and windows. The front door is purple" --hf-token=$HF_TOKEN --input-image yellow.png --image-strength 0.95 --bf16 --onnx-dir onnx-flux-dev/bf16 --engine-dir engine-flux-dev/
+```
+
+---
+
+#### 3. Generate an Image Using Flux ControlNet
+
+##### Download the Control Image
+
 ```bash
 wget https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/robot.png
 ```
 
-Run the Depth ControlNet pipeline
-
-```bash
-python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --bf16 --denoising-steps 30 --onnx-dir onnx_depth/ --engine-dir engine_depth/
-```
-
-Run the Canny ControlNet pipeline
-
-```bash
-python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --bf16 --onnx-dir onnx_canny/ --engine-dir engine_canny/
-```
-
-### Generate an image guided by a text prompt and a control image using Flux ControlNet in FP8
+##### Calibration Data for native ONNX export (FP8 Pipeline)
 
 FP8 ControlNet pipelines require downloading a calibration dataset and providing the path. You can use the datasets provided by Black Forest Labs here: [depth](https://drive.google.com/file/d/1DFfhOSrTlKfvBFLcD2vAALwwH4jSGdGk/view) | [canny](https://drive.google.com/file/d/1dRoxOL-vy3tSAesyqBSJoUWsbkMwv3en/view)
 
 You can use the `--calibraton-dataset` flag to specify the path, which is set to `./{depth/canny}-eval/benchmark` by default if not provided. Note that the dataset should have `inputs/` and `prompts/` underneath the provided path, matching the format of the BFL dataset.
 
-Run the Depth ControlNet pipeline in FP8. (FP8 is only supported on Hopper and Ada.)
+##### Depth ControlNet
 
 ```bash
-python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --onnx-dir onnx_depth/ --engine-dir engine_depth/
+# BF16
+python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --bf16 --denoising-steps 30 --onnx-dir onnx-flux-dev-depth/ --model-onnx-dirs=transformer:onnx-flux-dev-depth/transformer_bf16 --engine-dir engine-flux-dev-depth/bf16
+
+# FP8 using pre-exported ONNX models
+python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --onnx-dir onnx-flux-dev-depth/ --model-onnx-dirs=transformer:onnx-flux-dev-depth/transformer_fp8 --engine-dir engine-flux-dev-depth/fp8 --build-static-batch
+
+# FP8 using native ONNX export
+rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30
+
+# FP4
+python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp4 --denoising-steps 30 --onnx-dir onnx-flux-dev-depth/ --model-onnx-dirs=transformer:onnx-flux-dev-depth/transformer_fp4 --engine-dir engine-flux-dev-depth/fp4
 ```
 
-Run the Canny ControlNet pipeline in FP8 using a custom dataset path. (FP8 is only supported on Hopper and Ada.)
+##### Canny ControlNet
 
 ```bash
-python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --onnx-dir onnx_canny/ --engine-dir engine_canny/ --calibration-dataset {custom/dataset/path}
+# BF16
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --bf16 --onnx-dir onnx-flux-dev-canny/ --model-onnx-dirs=transformer:onnx-flux-dev-canny/transformer_bf16 --engine-dir engine-flux-dev-canny/bf16
+
+# FP8 using pre-exported ONNX models
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --onnx-dir onnx-flux-dev-canny/ --model-onnx-dirs=transformer:onnx-flux-dev-canny/transformer_fp8 --engine-dir engine-flux-dev-canny/fp8 --build-static-batch
+
+# FP8 using native ONNX export
+rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --calibration-dataset {custom/dataset/path}
+
+# FP4
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp4 --onnx-dir onnx-flux-dev-canny/ --model-onnx-dirs=transformer:onnx-flux-dev-canny/transformer_fp4 --engine-dir engine-flux-dev-canny/fp4
 ```
 
-### Exporting ONNX models without running TRT build or inference.
-This is useful for exporting ONNX files using a device with a larger vram and building TRT engines on another device.
+---
+
+#### 4. Export ONNX Models Only (Skip Inference)
+
+Use the `--onnx-export-only` flag to export ONNX models on a higher-VRAM device. The exported ONNX models can be used on a device with lower VRAM for the engine build and inference steps.
+
 ```bash
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --onnx-export-only
 ```
 
+---
+
+#### 5. Running Flux on GPUs with Limited Memory
+
+##### Optimization Flags
+
+- `--low-vram`: Enables model-offloading for reduced VRAM usage.
+- `--ws`: Enables weight streaming in TensorRT engines.
+- `--t5-ws-percentage` and `--transformer-ws-percentage`: Set runtime weight streaming budgets.
+- `--build-static-batch`: Build all engines using static dimensions to lower the required activation memory. This will limit inference to the specified spatial dimensions.
+
+##### FLUX VRAM Requirements Table
+
+Memory usage captured below excludes the ONNX export step, and assumes use of the `--build-static-batch` flag to reduce activation VRAM usage. Users can either use [pre-exported ONNX models](README.md#download-pre-exported-models-recommended-for-48gb-vram) or export the models separately on a higher-VRAM device using [--onnx-export-only](README.md#4-export-onnx-models-only-skip-inference).
+
+| Precision | Default VRAM Usage | With `--low-vram` |
+| --------- | ------------------ | ----------------- |
+| FP16      | 39.3 GB            | 23.9 GB           |
+| BF16      | 35.7 GB            | 23.9 GB           |
+| FP8       | 24.6 GB            | 14.9 GB           |
+| FP4       | 21.67 GB           | 11.1 GB           |
+
+NOTE: The FP8 and FP4 Pipelines are supported on Hopper/Ada/Blackwell devices only. The FP4 pipeline is most performant on Blackwell devices.
+
 ### Use separate directories for individual ONNX models
 The directories specified in `--model-onnx-dirs` will override the directory set in `--onnx-dir`. Unspecified models will continue to use the directory set in `--onnx-dir`.
 Suppose the model storage locations are as following:
-* transformer model ONNX files are saved at `./onnx_folder_1/transformer` and `./onnx_folder_1/transformer.opt`. 
+* transformer model ONNX files are saved at `./onnx_folder_1/transformer` and `./onnx_folder_1/transformer.opt`.
 * vae model ONNX files are saved in `./onnx_folder_2/vae` and `./onnx_folder_2/vae.opt`.
 * Other models (t5 and clip) are still under `./onnx/`.
 

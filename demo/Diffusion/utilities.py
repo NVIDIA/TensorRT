@@ -661,7 +661,7 @@ class PercentileAmaxes:
 
 def add_arguments(parser):
     # Stable Diffusion configuration
-    parser.add_argument('--version', type=str, default="1.5", choices=("1.4", "1.5", "dreamshaper-7", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0", "xl-turbo", "svd-xt-1.1", "sd3", "cascade", "flux.1-dev", "flux.1-schnell"), help="Version of Stable Diffusion")
+    parser.add_argument('--version', type=str, default="1.5", choices=("1.4", "1.5", "dreamshaper-7", "2.0-base", "2.0", "2.1-base", "2.1", "xl-1.0", "xl-turbo", "svd-xt-1.1", "sd3", "cascade", "flux.1-dev", "flux.1-schnell", "flux.1-dev-canny", "flux.1-dev-depth"), help="Version of Stable Diffusion")
     parser.add_argument('prompt', nargs = '*', help="Text prompt(s) to guide image generation")
     parser.add_argument('--negative-prompt', nargs = '*', default=[''], help="The negative prompt(s) to guide the image generation.")
     parser.add_argument('--batch-size', type=int, default=1, choices=[1, 2, 4], help="Batch size (repeat prompt)")
@@ -686,6 +686,7 @@ def add_arguments(parser):
     parser.add_argument('--engine-dir', default='engine', help="Output directory for TensorRT engines")
     parser.add_argument('--int8', action='store_true', help="Apply int8 quantization.")
     parser.add_argument('--fp8', action='store_true', help="Apply fp8 quantization.")
+    parser.add_argument('--fp4', action='store_true', help="Apply fp4 quantization.")
     parser.add_argument('--quantization-level', type=float, default=0.0, choices=[0.0, 1.0, 2.0, 2.5, 3.0, 4.0], help="int8/fp8 quantization level, 1: CNN, 2: CNN + FFN, 2.5: CNN + FFN + QKV, 3: CNN + Almost all Linear (Including FFN, QKV, Proj and others), 4: CNN + Almost all Linear + fMHA, 0: Default to 2.5 for int8 and 4.0 for fp8.")
     parser.add_argument('--optimization-level', type=int, default=None, help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {VALID_OPTIMIZATION_LEVELS}.")
     parser.add_argument('--build-static-batch', action='store_true', help="Build TensorRT engines with fixed batch size.")
@@ -750,6 +751,10 @@ def process_pipeline_args(args):
             override_quant_level(3.0 if args.version in ("1.4", "1.5") else 4.0, "FP8")
         elif args.int8:
             override_quant_level(3.0, "INT8")
+
+    if args.fp4:
+        # FP4 precision is only supported for Flux Pipelines
+        assert args.version.startswith("flux"), "FP4 precision is only supported for Flux pipelines"
 
     if args.lora_path and not any(args.version.startswith(prefix) for prefix in ('1.5', '2.1', 'xl')):
         raise ValueError("LoRA adapter support is only supported for SD1.5, SD2.1 and SDXL pipelines")

@@ -8,6 +8,7 @@ Key Features and Updates:
     - Added [Image-to-Image](demo/Diffusion#generate-an-image-guided-by-an-initial-image-and-a-text-prompt-using-flux) support for Flux-1.dev and Flux.1-schnell pipelines.
     - Added [ControlNet](demo/Diffusion#generate-an-image-guided-by-a-text-prompt-and-a-control-image-using-flux-controlnet) support for [FLUX.1-Canny-dev](https://huggingface.co/black-forest-labs/FLUX.1-Canny-dev) and [FLUX.1-Depth-dev](https://huggingface.co/black-forest-labs/FLUX.1-Depth-dev) pipelines. Native FP8 quantization is also supported for these pipelines.
     - Added support for ONNX model export only mode. See [--onnx-export-only](demo/Diffusion#https://gitlab-master.nvidia.com/TensorRT/Public/oss/-/tree/release/10.8/demo/Diffusion?ref_type=heads#use-separate-directories-for-individual-onnx-models).
+    - Added FP16, BF16, FP8, and FP4 support for all Flux Pipelines.
 - Plugin changes
   - Added SM 100 and SM 120 support to bertQKVToContextPlugin. This enables demo/BERT on Blackwell GPUs.
 - Sample changes

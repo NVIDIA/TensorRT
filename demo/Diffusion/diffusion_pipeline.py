@@ -338,7 +338,7 @@ class DiffusionPipeline(ABC):
             return '-' + '-'.join([str(md5(path.encode('utf-8')).hexdigest()) + '-' + ('%.2f' % self.lora_weights[path]) + '-' + ('%.2f' % self.lora_loader.scale) for path in sorted(self.lora_loader.paths)])
         return ''
 
-    def _prepare_model_configs(self, default_onnx_dir, model_onnx_dirs, engine_dir, enable_refit, int8, fp8, quantization_level, quantization_percentile, quantization_alpha, calibration_size):
+    def _prepare_model_configs(self, default_onnx_dir, model_onnx_dirs, engine_dir, enable_refit, int8, fp8, fp4, quantization_level, quantization_percentile, quantization_alpha, calibration_size):
         model_names = self.models.keys()
         lora_suffix = self._get_lora_suffix()
         self.torch_fallback = dict(zip(model_names, [self.torch_inference or self.config.get(model_name.replace('-','_')+'_torch_fallback', False) for model_name in model_names]))
@@ -356,6 +356,7 @@ class DiffusionPipeline(ABC):
                 'do_lora_merge': not enable_refit and self.lora_loader and model_name.startswith('unet'),
                 'use_int8': False,
                 'use_fp8': False,
+                'use_fp4': False,
             }
             config['model_suffix'] = lora_suffix if config['do_lora_merge'] else ''
 
@@ -372,6 +373,8 @@ class DiffusionPipeline(ABC):
                     (model_name == 'unet'):
                     config['use_fp8'] = True
                     config['model_suffix'] += f"-fp8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
+            elif fp4:
+                config['use_fp4'] = True
 
             config['onnx_path'] = self._get_onnx_path(model_name, onnx_dir, opt=False, suffix=config['model_suffix'])
             config['onnx_opt_path'] = self._get_onnx_path(model_name, onnx_dir, suffix=config['model_suffix'])
@@ -525,6 +528,13 @@ class DiffusionPipeline(ABC):
         do_export_onnx = (not os.path.exists(model_config['engine_path']) or onnx_export_only) and not os.path.exists(model_config['onnx_opt_path'])
         do_export_weights_map = model_config['weights_map_path'] and not os.path.exists(model_config['weights_map_path'])
 
+        if self.version.startswith("flux.1") and model_config['use_fp4']:
+            # Native export not supported for FP4. Ensure ONNX models exist in the provided directory
+            assert not do_export_onnx, f"No ONNX model found in {model_config['onnx_opt_path']}. Please download the ONNX models as recommended in the README.md"
+        if self.version in ["flux.1-dev-canny", "flux.1-dev-depth"] and model_config['use_fp8'] and not self.calibration_dataset:
+            # Native export of FP8 model requires calibration data. Ensure ONNX models exist in the provided directory
+            assert not do_export_onnx, f"No ONNX model found in {model_config['onnx_opt_path']}. Please download the ONNX models as recommended in the README.md."
+
         if do_export_onnx or do_export_weights_map:
             if not model_config['use_int8'] and not model_config['use_fp8']:
                 obj.export_onnx(model_config['onnx_path'], model_config['onnx_opt_path'], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=model_config['do_lora_merge'], static_shape=static_shape, lora_loader=self.lora_loader)
@@ -610,6 +620,7 @@ class DiffusionPipeline(ABC):
         timing_cache=None,
         int8=False,
         fp8=False,
+        fp4=False,
         quantization_level=2.5,
         quantization_percentile=1.0,
         quantization_alpha=0.8,
@@ -672,9 +683,9 @@ class DiffusionPipeline(ABC):
                 Set onnx dir for each model separately, if not set, use default path in onnx_dir
         """
         self._create_directories(engine_dir, onnx_dir)
-        self._initialize_models(framework_model_dir, int8, fp8)
+        self._initialize_models(framework_model_dir, int8, fp8, fp4)
 
-        model_configs = self._prepare_model_configs(onnx_dir, model_onnx_dirs, engine_dir, enable_refit, int8, fp8, quantization_level, quantization_percentile, quantization_alpha, calibration_size)
+        model_configs = self._prepare_model_configs(onnx_dir, model_onnx_dirs, engine_dir, enable_refit, int8, fp8, fp4, quantization_level, quantization_percentile, quantization_alpha, calibration_size)
 
         # Export models to ONNX
         for model_name, obj in self.models.items():

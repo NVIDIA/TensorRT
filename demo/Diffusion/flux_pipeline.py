@@ -114,7 +114,7 @@ class FluxPipeline(DiffusionPipeline):
                 self.config[model_name.replace('-','_')+'_torch_fallback'] = True
                 print(f'[I] Setting torch_fallback for {model_name} model.')
 
-    def _initialize_models(self, framework_model_dir, int8, fp8):
+    def _initialize_models(self, framework_model_dir, int8, fp8, fp4):
         # Load text tokenizer(s)
         self.tokenizer = make_tokenizer(
             self.version, self.pipeline_type, self.hf_token, framework_model_dir,
@@ -139,7 +139,7 @@ class FluxPipeline(DiffusionPipeline):
             "max_batch_size": self.max_batch_size,
         }
 
-        self.bf16 = True if int8 or fp8 else self.bf16
+        self.bf16 = True if int8 or fp8 or fp4 else self.bf16
         self.fp16 = True if not self.bf16 else False
         self.tf32 = True
         if "clip" in self.stages:

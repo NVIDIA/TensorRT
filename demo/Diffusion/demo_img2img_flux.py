@@ -229,9 +229,12 @@ def process_demo_args(args):
             print(f"[W] Calibration dataset path not provided, setting default path to {args.calibration_dataset}.")
 
         if not os.path.exists(args.calibration_dataset):
-            raise ValueError(
-                f"Could not find calibration dataset at {args.calibration_dataset}. Please follow instructions in README to download calibration dataset and provide the path."
+            print(
+                f"[W] Could not find the calibration dataset at {args.calibration_dataset}, and will fallback to using pre-exported ONNX models. Please follow the instructions in README to download calibration dataset and provide the path if pre-exported ONNX models are not provided either."
             )
+
+    if args.fp4 and not controlnet_type:
+        raise ValueError("--fp4 is currently not supported for Flux img2img pipelines.")
 
     args_run_demo = (
         prompt,
@@ -274,6 +277,7 @@ if __name__ == "__main__":
         args.onnx_dir,
         onnx_export_only=args.onnx_export_only,
         model_onnx_dirs=args.model_onnx_dirs,
+        fp4=args.fp4,
         **kwargs_load_engine,
     )
 
