@@ -16,6 +16,7 @@
  */
 
 #include "common/plugin.h"
+#include <variant>
 
 namespace nvinfer1
 {
@@ -35,11 +36,19 @@ public:
     // It forces separation of memory for T and memory for control blocks.
     // So when T is released, but we still have observer weak_ptr in mObservers, the T mem block can be released.
     // creator itself must not own cudnn/cublas handle resources. Only the object it creates can.
-    PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T>()> creator)
-        : mCreator{std::move(creator)} {};
+    PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T>()> cublasCreator)
+        : mCreator(std::move(cublasCreator))
+    {
+    }
+
+    PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T>(char const*)> cudnnCreator)
+        : mCreator(std::move(cudnnCreator))
+    {
+    }
 
     // \param executionContextIdentifier Unique pointer to identify contexts having overlapping lifetime.
-    std::shared_ptr<T> operator()(void* executionContextIdentifier)
+    // \param callerPluginName Optional name of the plugin that invokes this creator
+    std::shared_ptr<T> operator()(void* executionContextIdentifier, char const* callerPluginName = nullptr)
     {
         std::lock_guard<std::mutex> lk{mMutex};
         std::shared_ptr<T> result = mObservers[executionContextIdentifier].lock();
@@ -64,14 +73,31 @@ public:
                 // stale from the fact that obj is destroyed, because shared_ptr ref-count
                 // checking and observer removing are not in one atomic operation, and the
                 // observer may be changed to observe another instance.
-                observedObjHolder = mObservers.at(executionContextIdentifier).lock();
-                if (observedObjHolder == nullptr)
+                auto it = mObservers.find(executionContextIdentifier);
+                if (it != mObservers.end())
                 {
-                    mObservers.erase(executionContextIdentifier);
+                    observedObjHolder = it->second.lock();
+                    if (observedObjHolder == nullptr)
+                    {
+                        mObservers.erase(executionContextIdentifier);
+                    }
                 }
             };
-            // Create the resource and register with an observer.
-            result = std::shared_ptr<T>{mCreator().release(), std::move(deleter)};
+            if (std::holds_alternative<std::function<std::unique_ptr<T>()>>(mCreator))
+            {
+                auto concreteCreator = std::get<std::function<std::unique_ptr<T>()>>(mCreator);
+                result = std::shared_ptr<T>{concreteCreator().release(), std::move(deleter)};
+            }
+            else if (std::holds_alternative<std::function<std::unique_ptr<T>(char const*)>>(mCreator))
+            {
+                auto concreteCreator = std::get<std::function<std::unique_ptr<T>(char const*)>>(mCreator);
+                result = std::shared_ptr<T>{concreteCreator(callerPluginName).release(), std::move(deleter)};
+            }
+            else
+            {
+                PLUGIN_ERROR("Unsupported cuDNN/cuBLAS wrapper creator type!");
+            }
+            // Update the per-context observer with the new resource
             mObservers.at(executionContextIdentifier) = result;
         }
 
@@ -79,15 +105,19 @@ public:
     };
 
 private:
-    std::function<std::unique_ptr<T>()> mCreator;
+    std::variant<
+        /* createPluginCublasWrapperImpl */ std::function<std::unique_ptr<T>()>,
+        /* createPluginCudnnWrapperImpl */ std::function<std::unique_ptr<T>(char const*)>>
+        mCreator;
     mutable std::mutex mMutex;
     // cudnn/cublas handle resources are per-context.
     std::unordered_map</*contextIdentifier*/ void*, std::weak_ptr<T>> mObservers;
 }; // class PerContextPluginHandleSingletonCreator
 
-std::unique_ptr<CudnnWrapper> createPluginCudnnWrapperImpl()
+std::unique_ptr<CudnnWrapper> createPluginCudnnWrapperImpl(char const* callerPluginName)
 {
-    return std::make_unique<CudnnWrapper>(/*initHandle*/ true);
+    // callerPluginName is used to enrich downstream cudnn error message with caller plugin info
+    return std::make_unique<CudnnWrapper>(/*initHandle*/ true, callerPluginName);
 }
 
 std::unique_ptr<CublasWrapper> createPluginCublasWrapperImpl()
@@ -100,9 +130,9 @@ static PerContextPluginHandleSingletonCreator<CudnnWrapper> gCreatePluginCudnnHa
 static PerContextPluginHandleSingletonCreator<CublasWrapper> gCreatePluginCublasHandleWrapper(
     createPluginCublasWrapperImpl);
 
-std::shared_ptr<CudnnWrapper> createPluginCudnnWrapper(void* executionContextIdentifier)
+std::shared_ptr<CudnnWrapper> createPluginCudnnWrapper(void* executionContextIdentifier, char const* callerPluginName)
 {
-    return gCreatePluginCudnnHandleWrapper(executionContextIdentifier);
+    return gCreatePluginCudnnHandleWrapper(executionContextIdentifier, callerPluginName);
 }
 
 std::shared_ptr<CublasWrapper> createPluginCublasWrapper(void* executionContextIdentifier)

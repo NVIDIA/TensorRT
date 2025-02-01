@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,7 +77,7 @@ using namespace nvinfer1;
         const ErrorCode ret = (api_call);                                                                              \
         if (ret != ErrorCode::kSUCCESS)                                                                                \
         {                                                                                                              \
-            std::cerr << "LWE Error: [" << #api_call << "]: " << toString(ret);                                        \
+            std::cerr << "SAFE API Error: [" << #api_call << "]: " << toString(ret) << std::endl;                      \
             throw ret;                                                                                                 \
         }                                                                                                              \
         std::cout << "SAFE API:[" << #api_call << "]: PASSED" << std::endl;                                            \
@@ -214,7 +214,7 @@ inline uint32_t elementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kFP8: return 1;
     case nvinfer1::DataType::kINT4:
-        SAFE_ASSERT(false && "Element size is not implemented for sub-byte data-types");
+    case nvinfer1::DataType::kFP4: SAFE_ASSERT(false && "Element size is not implemented for sub-byte data-types");
     }
     return 0;
 }
@@ -251,15 +251,38 @@ inline int64_t volume(nvinfer1::Dims dims, int32_t vecDim, int32_t comps, int32_
 }
 
 #if !TRT_WINML
-inline int32_t getSMVersion()
+//! Represents the compute capability of a device.
+//! This pertains to virtual architectures represented by the intermediate PTX format.
+//! This is distinct from the SM version.
+//! See https://forums.developer.nvidia.com/t/how-should-i-use-correctly-the-sm-xx-and-compute-xx/219160
+struct ComputeCapability
 {
     int32_t major{};
     int32_t minor{};
+
+    //! \return the compute capability of the CUDA device with the given \p deviceIndex.
+    [[nodiscard]] static ComputeCapability forDevice(int32_t deviceIndex)
+    {
+        int32_t major{0};
+        int32_t minor{0};
+        CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
+        CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
+        // Map 12.1 to 12.0 due to known limitations in TensorRT.
+        if (major == 12 && minor == 1)
+        {
+            minor = 0;
+        }
+        return {major, minor};
+    }
+};
+
+inline int32_t getSMVersion()
+{
     int32_t deviceIndex{};
     CHECK(cudaGetDevice(&deviceIndex));
-    CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
-    CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
-    return ((major << 8) | minor);
+
+    auto const cc = ComputeCapability::forDevice(deviceIndex);
+    return ((cc.major << 8) | cc.minor);
 }
 
 inline bool isSMSafe()

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -105,6 +105,8 @@ enum class LayerType : int32_t
     kPLUGIN_V3 = 46,          //!< PluginV3 layer.
     kSQUEEZE = 47,            //!< Squeeze Layer.
     kUNSQUEEZE = 48,          //!< Unsqueeze Layer.
+    kCUMULATIVE = 49,         //!< Cumulative layer.
+    kDYNAMIC_QUANTIZE = 50    //!< Dynamic Quantize layer.
 };
 
 //!
@@ -115,7 +117,7 @@ enum class LayerType : int32_t
 template <>
 constexpr inline int32_t EnumMax<LayerType>() noexcept
 {
-    return 49;
+    return 51;
 }
 
 //!
@@ -2693,7 +2695,9 @@ protected:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IPluginV2Layer : public ILayer
+//! \deprecated Deprecated in TensorRT 10.8. Superseded by IPluginV3Layer.
+//!
+class TRT_DEPRECATED IPluginV2Layer : public ILayer
 {
 public:
     //!
@@ -5580,6 +5584,144 @@ protected:
     apiv::VDequantizeLayer* mImpl;
 };
 
+//!
+//! \class IDynamicQuantizeLayer
+//!
+//! \brief A network layer to perform dynamic quantization.
+//!
+//! This layer accepts a floating-point input tensor and computes the block scale factors needed to
+//! quantize the input’s data. It outputs the quantized tensor as its first output and
+//! the scale factors as its second output.
+//!
+//! Use ILayer::setInput to add an input for the double-quantization scale factor.
+//!
+//! \note Only symmetric quantization is supported.
+//! \note The input tensor for this layer must not be a scalar.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the
+//! API and ABI.
+//!
+class IDynamicQuantizeLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Append or replace an input of this layer with a specific tensor
+    //!
+    //! \param index the index of the input to modify.
+    //! \param tensor the new input tensor
+    //!
+    //! Input 0 is the input activation tensor.
+    //! Input 1 is the double-quantization scale factor. This scale is used to quantize the
+    //! dynamically computed high-precision scale factors that are used to quantize the
+    //! activation data. Currently this input must be a positive scalar (a 0D tensor).
+    //!
+    using ILayer::setInput;
+
+    //!
+    //! \brief Set DynamicQuantizeLayer’s quantized output type.
+    //!
+    //! \param toType The data type of the quantized output tensor.
+    //!
+    //! Set the type of the dynamic quantization layer’s quantized output. Currently the only valid
+    //! value is DataType::kFP4. If the network is strongly typed, setToType must be used to set
+    //! the output type, and use of setOutputType is an error. Otherwise, types passed to setOutputType
+    //! and setToType must be the same.
+    //!
+    //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
+    //!
+    void setToType(DataType toType) noexcept
+    {
+        mImpl->setToType(toType);
+    }
+
+    //!
+    //! \brief Return DynamicQuantizeLayer’s quantized output type.
+    //!
+    //! \return toType parameter set during layer creation or by setToType().
+    //!
+    //! The return value is the type of the quantized output tensor.
+    //! The default value is DataType::kFP4.
+    //!
+    DataType getToType() const noexcept
+    {
+        return mImpl->getToType();
+    }
+
+    //!
+    //! \brief Set the data type of the scale factors used to quantize the data.
+    //!
+    //! \param scaleType The scale factors data type.
+    //!
+    //! Set the scale-factors type. Currently the only valid value is DataType::kFP8.
+    //!
+    void setScaleType(DataType scaleType) noexcept
+    {
+        mImpl->setScaleType(scaleType);
+    }
+
+    //!
+    //! \brief Return the scale factors data type.
+    //!
+    //! \return scaleType parameter set during layer creation or by setScaleType().
+    //!
+    //! The return value is the type of the scale factors used to quantize the dynamic data.
+    //! The default value is DataType::kFP8.
+    //!
+    DataType getScaleType() const noexcept
+    {
+        return mImpl->getScaleType();
+    }
+
+    //!
+    //! \brief Set the axis along which block quantization occurs.
+    //!
+    //! The axis must be the last dimension or second to last dimension.
+    //! The input's shape along the axis must be constant.
+    //!
+    //! \see getAxis()
+    //!
+    void setAxis(int32_t axis) noexcept
+    {
+        mImpl->setAxis(axis);
+    }
+
+    //!
+    //! \brief Get the axis along which blocking occurs.
+    //!
+    //! \see setAxis()
+    //!
+    int32_t getAxis() const noexcept
+    {
+        return mImpl->getAxis();
+    }
+
+    //!
+    //! \brief Set the size of the quantization block.
+    //!
+    //! Note: The block size must divide the input in the blocked axis without remainder.
+    //! Currently only 16-element blocks are supported.
+    //!
+    //! \see getBlockSize()
+    //!
+    void setBlockSize(int32_t size) noexcept
+    {
+        mImpl->setBlockSize(size);
+    }
+
+    //!
+    //! \brief Get the size of the quantization block.
+    //!
+    //! \see setBlockSize()
+    //!
+    int32_t getBlockSize() const noexcept
+    {
+        return mImpl->getBlockSize();
+    }
+
+protected:
+    virtual ~IDynamicQuantizeLayer() noexcept = default;
+    apiv::VDynamicQuantizeLayer* mImpl;
+};
 
 //!
 //! \class IEinsumLayer
@@ -6325,6 +6467,147 @@ protected:
 };
 
 //!
+//! \enum CumulativeOperation
+//!
+//! \brief Enumerates the cumulative operations that may be performed by a Cumulative layer.
+//!
+//! The table shows the initial value of each Cumulative operation.
+//!
+//! Operation | kFLOAT, kHALF, kBF16 | kINT32, kINT64 |
+//! --------- | -------------------- | -------------- |
+//! kSUM      | +0.0                 | 0              |
+//!
+enum class CumulativeOperation : int32_t
+{
+    kSUM = 0, //!< Calculate cumulative sum.
+};
+
+namespace impl
+{
+
+//!
+//! \brief Maximum number of elements in CumulativeOperation enum.
+//!
+//! \see CumulativeOperation
+//!
+template <>
+struct EnumMaxImpl<CumulativeOperation>
+{
+    static constexpr int32_t kVALUE = 1;
+};
+
+} // namespace impl
+
+//!
+//! \class ICumulativeLayer
+//!
+//! \brief Layer that represents a cumulative operation across a tensor.
+//!
+//! It computes successive reductions across an axis of a tensor. The output
+//! always has the same shape as the input.
+//!
+//! If the reduction operation is summation, then this is also known as
+//! prefix-sum or cumulative sum.
+//!
+//! The operation has forward vs. reverse variants, and inclusive vs. exclusive variants.
+//!
+//! For example, let the input be a vector x of length n and the output be vector y.
+//! Then y[j] = sum(x[...]) where ... denotes a sequence of indices from this table:
+//!
+//!           | forward   | reverse
+//! ----------|-----------| ---------
+//! inclusive | 0..j      |   j..n-1
+//! exclusive | 0..j-1    | j+1..n-1
+//!
+//! For multidimensional tensors, the reductions apply across a specified axis. For
+//! example, given a 2D input, a forward inclusive cumulative operation across axis 0 generates
+//! cumulative sums within each column.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class ICumulativeLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Set the cumulative operation for the layer.
+    //!
+    //! \param op The reduction operation to be performed
+    //!
+    //! \return Whether \p op is valid and the operation successfully set
+    //!
+    //! \see getOperation(), CumulativeOperation
+    //!
+    bool setOperation(CumulativeOperation op) noexcept
+    {
+        return mImpl->setOperation(op);
+    }
+
+    //!
+    //! \brief Get the cumulative operation for the layer.
+    //!
+    //! \return The reduction operation to be performed
+    //!
+    //! \see setOperation(), CumulativeOperation
+    //!
+    CumulativeOperation getOperation() const noexcept
+    {
+        return mImpl->getOperation();
+    }
+
+    //!
+    //! \brief Set whether it is an exclusive accumulation or inclusive accumulation.
+    //!
+    //! \param exclusive Whether the operation will exclude the element at the current index
+    //!
+    //! \see getExclusive
+    //!
+    void setExclusive(bool exclusive) noexcept
+    {
+        mImpl->setExclusive(exclusive);
+    }
+
+    //!
+    //! \brief Get whether it is exclusive accumulation or inclusive accumulation.
+    //!
+    //! \return Whether the operation will exclude the element at the current index
+    //!
+    //! \see setExclusive
+    //!
+    bool getExclusive() const noexcept
+    {
+        return mImpl->getExclusive();
+    }
+
+    //!
+    //! \brief Specify whether the cumulative operation should be applied backward.
+    //!
+    //! \param reverse Whether the cumulative will run in the reverse direction from the last element
+    //!
+    //! \see getReverse
+    //!
+    void setReverse(bool reverse) noexcept
+    {
+        mImpl->setReverse(reverse);
+    }
+
+    //!
+    //! \brief Get the boolean that specifies whether the cumulative operation should be applied backward.
+    //!
+    //! \return Whether the cumulative will run in the reverse direction from the last element
+    //!
+    //! \see setReverse
+    //!
+    bool getReverse() const noexcept
+    {
+        return mImpl->getReverse();
+    }
+
+protected:
+    apiv::VCumulativeLayer* mImpl;
+    virtual ~ICumulativeLayer() noexcept = default;
+};
+
+//!
 //! \class INetworkDefinition
 //!
 //! \brief A network definition for input to the builder.
@@ -6944,7 +7227,9 @@ public:
     //!
     //! \return The new plugin layer, or nullptr if it could not be created.
     //!
-    IPluginV2Layer* addPluginV2(ITensor* const* inputs, int32_t nbInputs, IPluginV2& plugin) noexcept
+    //! \deprecated Deprecated in TensorRT 10.8. Superseded by addPluginV3.
+    //!
+    TRT_DEPRECATED IPluginV2Layer* addPluginV2(ITensor* const* inputs, int32_t nbInputs, IPluginV2& plugin) noexcept
     {
         return mImpl->addPluginV2(inputs, nbInputs, plugin);
     }
@@ -7556,6 +7841,32 @@ public:
         return mImpl->addQuantizeV2(input, scale, outputType);
     }
 
+    //!
+    //! \brief Add a dynamic quantization layer to the network.
+    //!
+    //! This layer performs dynamic block quantization of its input tensor and outputs the
+    //! quantized data and the computed block scale-factors.
+    //! The block size is currently limited to 16 and the size of the blocked axis must be divisible by 16.
+    //!
+    //! \param input The input tensor to be quantized. Its data type must be one of DataType::kFLOAT,
+    //! DataType::kHALF, or DataType::kBF16. Currently only 2D and 3D inputs are supported.
+    //! \param axis The axis that is sliced into blocks. The axis must be the last or second to last dimension.
+    //! \param blockSize The number of elements that are quantized using a shared scale factor.
+    //! Currently only blocks of 16 elements are supported.
+    //!
+    //! \p outputType The data type of the quantized output tensor, must be DataType::kFP4. Future calls to set output
+    //! type using setToType or setOutputType must be consistent.
+    //! \p scaleType The data type of the scale factor used for quantizing the input data, must be DataType::kFP8.
+    //!
+    //! \return The new dynamic quantization layer, or nullptr if it could not be created.
+    //!
+    //! \see IDynamicQuantizeLayer
+    //!
+    IDynamicQuantizeLayer* addDynamicQuantize(
+        ITensor& input, int32_t axis, int32_t blockSize, DataType outputType, DataType scaleType) noexcept
+    {
+        return mImpl->addDynamicQuantize(input, axis, blockSize, outputType, scaleType);
+    }
 
     //!
     //! \brief Add an Einsum layer to the network.
@@ -7649,6 +7960,28 @@ public:
     INormalizationLayer* addNormalization(ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept
     {
         return mImpl->addNormalization(input, scale, bias, axesMask);
+    }
+
+    //!
+    //! \brief Add a cumulative layer to the network.
+    //!
+    //! \param input The input tensor to the layer.
+    //! \param axis The axis tensor to apply the cumulative operation on. Currently, it must be a build-time constant 0D
+    //! shape tensor and must be in the range [-rank(input), rank(input)-1]. Negative value means counting dimensions
+    //! from the back. \param operation The reduction operation to perform. \param exclusive The boolean that specifies
+    //! whether it is an exclusive cumulative or inclusive cumulative. \param reverse The boolean that specifies whether
+    //! the cumulative operation should be applied backward.
+    //!
+    //! The cumulative layer works by performing the specified cumulative \p operation to the tensor \p input
+    //! on the axis specified by \p axis.
+    //!
+    //! \see ICumulativeLayer
+    //!
+    //! \return The new cumulative layer, or nullptr if it could not be created.
+    //!
+    ICumulativeLayer* addCumulative(ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept
+    {
+        return mImpl->addCumulative(input, axis, operation, exclusive, reverse);
     }
 
     //!
@@ -8056,7 +8389,9 @@ using IInt8LegacyCalibrator = v_1_0::IInt8LegacyCalibrator;
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IAlgorithmIOInfo : public INoCopy
+//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
+//!
+class TRT_DEPRECATED IAlgorithmIOInfo : public INoCopy
 {
 public:
     //!
@@ -8117,7 +8452,9 @@ protected:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IAlgorithmVariant : public INoCopy
+//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
+//!
+class TRT_DEPRECATED IAlgorithmVariant : public INoCopy
 {
 public:
     //!
@@ -8149,7 +8486,9 @@ protected:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IAlgorithmContext : public INoCopy
+//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
+//!
+class TRT_DEPRECATED IAlgorithmContext : public INoCopy
 {
 public:
     //!
@@ -8206,7 +8545,9 @@ protected:
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
-class IAlgorithm : public INoCopy
+//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
+//!
+class TRT_DEPRECATED IAlgorithm : public INoCopy
 {
 public:
     //!
@@ -8254,7 +8595,7 @@ protected:
 
 namespace v_1_0
 {
-class IAlgorithmSelector : public IVersionedInterface
+class TRT_DEPRECATED IAlgorithmSelector : public IVersionedInterface
 {
 public:
     //!
@@ -8307,6 +8648,8 @@ public:
 //!       For example, an algorithm might be implementing a conglomeration of multiple ILayers in INetworkDefinition.
 //! \note To ensure compatibility of source code with future versions of TensorRT, use IAlgorithmSelector, not
 //!       v_1_0::IAlgorithmSelector
+//!
+//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
 //!
 using IAlgorithmSelector = v_1_0::IAlgorithmSelector;
 
@@ -8552,6 +8895,11 @@ enum class BuilderFlag : int32_t
     //! Enable memory monitor during build time.
     kMONITOR_MEMORY = 25,
 
+    //! Enable plugins with FP4 input/output.
+    kFP4 = 26,
+
+    //! Enable editable timing cache.
+    kEDITABLE_TIMING_CACHE = 27,
 };
 
 //!
@@ -8562,8 +8910,45 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 26;
+    return 28;
 }
+
+namespace v_1_0
+{
+//!
+//! \struct TimingCacheKey
+//!
+//! \brief The key to retrieve timing cache entries.
+//!
+//! TimingCacheKey has two types of representation: binary and string. The conversion rule from binary to string is:
+//! 1) Convert each uint8_t element in binary key into two hexadecimal ascii chars, e.g. 0xab -> "ab"
+//! 2) Concat the ascii chars of all elements in sequence. The result should have exact 32 chars
+//! 3) Add prefix "0x" to the string produced in step 2.
+//!
+//! \see ITimingCache::query(), ITimingCache::update()
+//!
+struct TimingCacheKey
+{
+    uint8_t data[16];
+};
+
+//!
+//! \struct Value
+//!
+//! \brief The values in the cache entry.
+//!
+//! \see ITimingCache::query(), ITimingCache::update()
+//!
+struct TimingCacheValue
+{
+    //! Hash of the selected tactic.
+    uint64_t tacticHash;
+    //! Timing of this tactic in milliseconds. Negative numbers and NaN are invalid values.
+    float timingMSec;
+    //! UINT64_MAX represents the invalid tactic hash.
+    static constexpr uint64_t kINVALID_TACTIC_HASH = UINT64_MAX;
+};
+} // namespace v_1_0
 
 //!
 //! \class ITimingCache
@@ -8573,8 +8958,8 @@ constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 //! The timing cache is created or initialized by IBuilderConfig. It can be shared across builder instances
 //! to reduce the builder wallclock time.
 //!
-//! \warning It is a known issue that the same timing cache doesn't guarantee stable engine build reproducibility
-//!          at optimization level 4 and higher. This issue will be fixed by 2024.
+//! \warning It is a known issue that the same timing cache may not guarantee stable engine build reproducibility
+//!          in all cases.
 //!
 //! \see IBuilderConfig
 //!
@@ -8629,6 +9014,64 @@ public:
     bool reset() noexcept
     {
         return mImpl->reset();
+    }
+
+    //!
+    //! \brief Query cache keys from Timing Cache.
+    //!
+    //! This function queries the entry count and writes the keys out.
+    //!
+    //! \param keyBuffer The buffer to store keys.
+    //! \param capacity The capacity of the buffer.
+    //!
+    //! \return The count of entries in the cache and fill keys if keyBuffer is non-null.
+    //!         If an error occurrs, -1 will be returned.
+    //!
+    //! Query the count of entries in the cache and write out cache keys if keyBuffer is provided.
+    //! Any key entries exceeding the capacity of the keyBuffer will not be copied.
+    //!
+    int64_t queryKeys(TimingCacheKey* keyBuffer, int64_t capacity) const noexcept
+    {
+        return mImpl->queryKeys(keyBuffer, capacity);
+    }
+
+    //!
+    //! \brief Query value in a cache entry.
+    //!
+    //! The function queries the value in a specific cache entry.
+    //!
+    //! \param key The query key.
+    //!
+    //! \return Cache value if the key exists, otherwise an invalid value.
+    //!
+    //! Query the value of the given cache key. If the key exists, write the value out,
+    //! otherwise return an invalid value.
+    //!
+    TimingCacheValue query(TimingCacheKey const& key) const noexcept
+    {
+        return mImpl->query(key);
+    }
+
+    //!
+    //! \brief Update values in a cache entry.
+    //!
+    //! The function updates the value in a specific cache entry.
+    //!
+    //! \param key The key to the entry to be updated.
+    //! \param value New cache value.
+    //!
+    //! \return True if update succeeds, otherwise false.
+    //!
+    //! Update the value of the given cache key. If the key does not exist, return false.
+    //! If the key exists and the new tactic timing is NaN, delete the cache entry and
+    //! return true. If tactic timing is not NaN and the new value is valid, override the
+    //! cache value and return true. False is returned when the new value is invalid.
+    //! If this layer cannot use the new tactic, build errors will be reported when
+    //! building the next engine.
+    //!
+    bool update(TimingCacheKey const& key, TimingCacheValue const& value) noexcept
+    {
+        return mImpl->update(key, value);
     }
 
 protected:
@@ -8785,6 +9228,45 @@ template <>
 struct EnumMaxImpl<HardwareCompatibilityLevel>
 {
     static constexpr int32_t kVALUE = 2;
+};
+} // namespace impl
+
+//!
+//! \enum TilingOptimizationLevel
+//!
+//! \brief Define the optimization levels for Tiling
+//!
+//! TensorRT will try tiling optimization for on-chip caching if non-zero level is set.
+//! This level determines how much effort TensorRT would take to find a better solution for performance.
+//!
+enum class TilingOptimizationLevel : int32_t
+{
+    //! Do not apply any tiling strategy.
+    kNONE = 0,
+
+    //! Use a fast algorithm and heuristic based strategy. Slightly increases engine build time.
+    kFAST = 1,
+
+    //! Increase search space and use a mixed heuristic/profiling strategy.
+    //! Moderately increases engine build time.
+    kMODERATE = 2,
+
+    //! Increase search space even wider. Significantly increases engine build time.
+    kFULL = 3
+
+};
+
+namespace impl
+{
+//!
+//! Maximum number of elements in HardwareCompatibilityLevel enum.
+//!
+//! \see HardwareCompatibilityLevel
+//!
+template <>
+struct EnumMaxImpl<TilingOptimizationLevel>
+{
+    static constexpr int32_t kVALUE = 4;
 };
 } // namespace impl
 
@@ -9224,7 +9706,10 @@ public:
     //! \brief Set Algorithm Selector.
     //!
     //! \param selector The algorithm selector to be set in the build config.
-    void setAlgorithmSelector(IAlgorithmSelector* selector) noexcept
+    //!
+    //! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
+    //!
+    TRT_DEPRECATED void setAlgorithmSelector(IAlgorithmSelector* selector) noexcept
     {
         mImpl->setAlgorithmSelector(selector);
     }
@@ -9232,7 +9717,9 @@ public:
     //!
     //! \brief Get Algorithm Selector.
     //!
-    IAlgorithmSelector* getAlgorithmSelector() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
+    //!
+    TRT_DEPRECATED IAlgorithmSelector* getAlgorithmSelector() const noexcept
     {
         return mImpl->getAlgorithmSelector();
     }
@@ -9732,6 +10219,62 @@ public:
         return mImpl->getMaxNbTactics();
     }
 
+    //!
+    //! \brief Set the Tiling optimization level.
+    //!
+    //! Tiling allows TensorRT to try an on-chip caching strategy.
+    //!
+    //! The default getTilingOptimizationLevel is TilingOptimizationLevel::kNONE.
+    //!
+    //! \param level The level of Tiling optimization.
+    //!
+    //! \return True if successful, false otherwise
+    //!
+    bool setTilingOptimizationLevel(TilingOptimizationLevel level) noexcept
+    {
+        return mImpl->setTilingOptimizationLevel(level);
+    }
+
+    //!
+    //! \brief Get the Tiling optimization level.
+    //!
+    //! \return TilingOptimizationLevel The level of Tiling optimization.
+    //!
+    //! \see setTilingOptimizationLevel()
+    //!
+    TilingOptimizationLevel getTilingOptimizationLevel() const noexcept
+    {
+        return mImpl->getTilingOptimizationLevel();
+    }
+
+    //!
+    //! \brief Set the L2 cache usage limit for Tiling optimization.
+    //!
+    //! Parameter for tiling optimization. This API only takes effect when TilingOptimizationLevel is not kNONE.
+    //! \note If setL2LimitForTiling() has not been called, TensorRT would choose a default value between 0 and L2
+    //! capacity size.
+    //!
+    //! \param size The size of the L2 cache usage limit for Tiling optimization.
+    //!
+    //! \return True if successful, false otherwise
+    //!
+    bool setL2LimitForTiling(int64_t size) noexcept
+    {
+        return mImpl->setL2LimitForTiling(size);
+    }
+
+    //!
+    //! \brief Get the L2 cache usage limit for tiling optimization.
+    //!
+    //! \return L2 cache usage limit for tiling optimization.
+    //!
+    //! \see setL2LimitForTiling()
+    //!
+    int64_t getL2LimitForTiling() const noexcept
+    {
+        return mImpl->getL2LimitForTiling();
+    }
+
 protected:
     apiv::VBuilderConfig* mImpl;
 };
@@ -9852,7 +10395,7 @@ public:
     //!
     //! \see IBuilderConfig
     //!
-    nvinfer1::IBuilderConfig* createBuilderConfig() noexcept
+    [[nodiscard]] nvinfer1::IBuilderConfig* createBuilderConfig() noexcept
     {
         return mImpl->createBuilderConfig();
     }
@@ -9874,7 +10417,7 @@ public:
     //!
     //! \see INetworkDefinition, NetworkDefinitionCreationFlags
     //!
-    nvinfer1::INetworkDefinition* createNetworkV2(NetworkDefinitionCreationFlags flags) noexcept
+    [[nodiscard]] nvinfer1::INetworkDefinition* createNetworkV2(NetworkDefinitionCreationFlags flags) noexcept
     {
         return mImpl->createNetworkV2(flags);
     }
@@ -9889,7 +10432,7 @@ public:
     //!
     //! \see IOptimizationProfile
     //!
-    nvinfer1::IOptimizationProfile* createOptimizationProfile() noexcept
+    [[nodiscard]] nvinfer1::IOptimizationProfile* createOptimizationProfile() noexcept
     {
         return mImpl->createOptimizationProfile();
     }

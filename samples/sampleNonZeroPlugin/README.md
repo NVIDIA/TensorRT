@@ -177,4 +177,4 @@ This is the first version of this `README.md` file.
 
 # Known issues
 
-There are no known issues in this sample.
+Windows users building this sample with Visual Studio with a CUDA version different from the TensorRT package will need to retarget the project to build against the installed CUDA version through the `Build Dependencies -> Build Customization` menu.

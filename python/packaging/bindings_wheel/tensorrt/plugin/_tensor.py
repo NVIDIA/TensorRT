@@ -136,6 +136,12 @@ class ShapeExpr:
     def _expr(self):
         return self._dim_expr
 
+    def _clone(self):
+        ret = ShapeExpr(self + 0)
+        ret._is_dummy = self._is_dummy
+        ret._is_size_tensor = self._is_size_tensor
+        return ret
+
 @public_api()
 class SizeTensorShapeExpr(ShapeExpr):
     """
@@ -229,6 +235,10 @@ class ShapeExprs:
     def __repr__(self):
         return f"ShapeExprs[{', '.join([s.__repr__() for s in self._shapes])}]"
 
+    def _clone(self):
+        ret = ShapeExprs.from_tuple((e._clone() for e in self._shapes))
+        ret._is_dummy = self._is_dummy
+        return ret
 
 # Numerical representation of a tensor shape
 @public_api()
@@ -250,6 +260,9 @@ class Shape:
         elif isinstance(tensor_desc, tuple):
             self._shapes = trt.Dims(tensor_desc)
             self._length = len(self._shapes)
+        elif tensor_desc is None:
+            self._length = 0
+            self._shapes = trt.Dims(0)
         else:
             raise ValueError("Unsupported type used for constructing trt.plugin.Shape! tensor_desc must be a Tuple[int], trt.DynamicPluginTensorDesc, or trt.PluginTensorDesc")
 
@@ -335,6 +348,10 @@ class Shape:
             raise IndexError("Index out of range")
         self._shapes[index] = val
 
+    def _clone(self):
+        ret = Shape()
+        ret.__dict__.update(self.__dict__)
+        return ret
 
 # Descriptor for a tensor
 # A `TensorDesc` never contains nor refers to any tensor data.
@@ -416,8 +433,7 @@ class TensorDesc:
             def _(inp: tensorrt.plugin.TensorDesc) -> tensorrt.plugin.TensorDesc:
                 return inp.like()
         """
-        cloned = TensorDesc()
-        cloned.__dict__.update(self.__dict__)
+        cloned = self._clone()
         cloned._immutable = False
         return cloned
 
@@ -436,10 +452,19 @@ class TensorDesc:
             def _(inp: tensorrt.plugin.TensorDesc) -> tensorrt.plugin.TensorDesc:
                 return inp.aliased()
         """
+        cloned = self._clone()
+        cloned._immutable = False
+        cloned._aliased_to = self
+        cloned._immutable = True
+        return cloned
+
+    def _clone(self) -> "TensorDesc":
         cloned = TensorDesc()
         cloned.__dict__.update(self.__dict__)
         cloned._immutable = False
-        cloned._aliased_to = self
+        cloned._shape_expr = self._shape_expr._clone()
+        if self._shape is not None:
+            cloned._shape = self._shape._clone()
         cloned._immutable = True
         return cloned
 

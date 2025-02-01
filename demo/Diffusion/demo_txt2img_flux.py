@@ -16,7 +16,7 @@
 #
 
 import argparse
-
+import torch
 from cuda import cudart
 
 from flux_pipeline import FluxPipeline
@@ -26,7 +26,6 @@ from utilities import (
     process_pipeline_args,
     VALID_OPTIMIZATION_LEVELS,
 )
-
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -112,6 +111,32 @@ def parse_args():
         default=None,
         help="Set runtime weight streaming budget as the percentage of the size of streamable weights for the transformer model. This argument only takes effect when --ws is set. 0 streams the most weights and 100 or None streams no weights."
     )
+
+    parser.add_argument(
+        "--onnx-export-only",
+        action='store_true',
+        help="If set, only performs the export of models to ONNX, skipping engine build and inference."
+    )
+
+    def _parse_kv_pairs(s: str):
+        """Parse a string of key-value pairs into a dictionary.
+        Expected format: key1:value1,key2:value2,...
+        """
+        result = {}
+        # Split by comma to get each pair
+        pairs = s.split(',')
+        for pair in pairs:
+            # Split by ':' to separate key and value
+            key, value = pair.split(':', 1)
+            result[key] = value
+        return result
+
+    parser.add_argument(
+        "--model-onnx-dirs",
+        type=_parse_kv_pairs,
+        help="Set directories for individual ONNX models. For example: --model-onnx-dirs=transformer:/path/to/transformer,vae:/path/to/vae,t5:/path/to/t5,clip:/path/to/clip"
+    )
+
     return parser.parse_args()
 
 
@@ -172,6 +197,11 @@ if __name__ == "__main__":
     kwargs_init_pipeline, kwargs_load_engine, _ = process_pipeline_args(args)
     args_run_demo = process_demo_args(args)
 
+    device_info = torch.cuda.get_device_properties(0)
+    version = device_info.major * 10 + device_info.minor
+    force_weakly_typed_t5 = True if version == 100 else False
+    print("[I] Using weakly typed for T5 engine on SM100 if FLUX pipeline is running in fp16")
+
     # Initialize demo
     demo = FluxPipeline(
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
@@ -182,16 +212,34 @@ if __name__ == "__main__":
         weight_streaming=args.ws,
         t5_weight_streaming_budget_percentage=args.t5_ws_percentage,
         transformer_weight_streaming_budget_percentage=args.transformer_ws_percentage,
+        force_weakly_typed_t5=force_weakly_typed_t5,
         **kwargs_init_pipeline)
 
     # Load TensorRT engines and pytorch modules
     demo.load_engines(
-        args.engine_dir, args.framework_model_dir, args.onnx_dir, **kwargs_load_engine
+        args.engine_dir,
+        args.framework_model_dir,
+        args.onnx_dir,
+        onnx_export_only=args.onnx_export_only,
+        model_onnx_dirs=args.model_onnx_dirs,
+        fp4=args.fp4,
+        **kwargs_load_engine
     )
 
-    # Load resources
-    _, shared_device_memory = cudart.cudaMalloc(demo.calculate_max_device_memory())
-    demo.activate_engines(shared_device_memory)
+    if args.onnx_export_only:
+        print("[I] ONNX export finished")
+        demo.teardown()
+        exit(0)
+
+
+    # Since VAE and VAE_encoder require by far the largest device memories, in low-vram mode
+    # we allocate the required device memory individually before each model is run.
+    if demo.low_vram:
+        demo.device_memory_sizes = demo.get_device_memory_sizes()
+    else:
+        _, shared_device_memory = cudart.cudaMalloc(demo.calculate_max_device_memory())
+        demo.activate_engines(shared_device_memory)
+
     demo.load_resources(args.height, args.width, args.batch_size, args.seed)
 
     # Run inference

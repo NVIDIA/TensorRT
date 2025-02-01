@@ -277,6 +277,7 @@ def get_base_selector_type():
     return BaseSelector
 
 
+@mod.deprecate(remove_in="0.50.0", use_instead=None)
 @mod.export()
 def TacticRecorder(record):
     """
@@ -320,7 +321,7 @@ def TacticRecorder(record):
 
     return TacticRecorderClass()
 
-
+@mod.deprecate(remove_in="0.50.0", use_instead=None)
 @mod.export()
 def TacticReplayer(replay):
     """

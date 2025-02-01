@@ -37,6 +37,8 @@ static constexpr int32_t kSM_AMPERE_10X = 86;
 static constexpr int32_t kSM_AMPERE_10B = 87;
 static constexpr int32_t kSM_ADA_10X = 89;
 static constexpr int32_t kSM_HOPPER_100 = 90;
+static constexpr int32_t kSM_BLACKWELL_100 = 100;
+static constexpr int32_t kSM_BLACKWELL_120 = 120;
 
 class QKVToContextInterleavedPluginLegacy : public nvinfer1::IPluginV2DynamicExt
 {

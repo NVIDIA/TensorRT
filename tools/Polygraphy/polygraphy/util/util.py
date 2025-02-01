@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
+
 import copy
 import functools
 import glob
@@ -24,11 +26,14 @@ import sys
 import tempfile
 import zlib
 from collections import OrderedDict
+from typing import Union
+from fnmatch import fnmatch
 
 from polygraphy import constants, mod
 from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
+trt = mod.lazy_import("tensorrt")
 
 # These modules are not cross-platform so any usage should be guarded
 fcntl = mod.lazy_import("fcntl")
@@ -546,18 +551,26 @@ def load_file(src, mode="rb", description=None):
             return f.read()
 
 
+def _get_num_bytes(contents: Union[str, bytes, trt.IHostMemory]) -> int:
+    """Return the number of bytes in `contents`."""
+    if isinstance(contents, str):
+        return len(contents.encode())
+    else:
+        try:
+            memory_view = memoryview(contents)
+        except Exception:
+            raise TypeError(f"`contents` is {contents}, which is not bytes-like. Cannot get number of bytes.")
+        return len(memory_view)
+
+
 @mod.export()
 def save_file(contents, dest, mode="wb", description=None):
     """
     Writes text or binary data to the specified destination path or file-like object.
 
     Args:
-        contents (bytes):
-                A bytes-like object that can be written to disk.
-        dest (Union[str, file-like]):
-                The path or file-like object to write to.
-
-
+        contents (Union[str, bytes, trt.IHostMemory]): A bytes-like object that can be written to disk.
+        dest (Union[str, file-like]): The path or file-like object to write to.
         mode (str): The mode to use when writing. Defaults to "wb".
         description (str): A description of what is being written.
 
@@ -575,10 +588,14 @@ def save_file(contents, dest, mode="wb", description=None):
         bytes_written = dest.write(contents)
         dest.flush()
         os.fsync(dest.fileno())
+
+        # Check that the entire file was written **only if** number of content bytes is retrieved successfully.
         try:
-            content_bytes = len(contents.encode())
-        except:
-            pass
+            content_bytes = _get_num_bytes(contents)
+        except Exception:
+            G_LOGGER.warning(
+                "Failed to retrieve number of content bytes. Could not check whether the entire file was written."
+            )
         else:
             if bytes_written != content_bytes:
                 G_LOGGER.warning(
@@ -1070,3 +1087,41 @@ def try_getattr(obj, attr, default=None):
     if hasattr(obj, attr):
         return getattr(obj, attr)
     return default
+
+@mod.export()
+def contains_wildcard(target):
+    """
+    Check if target contains wildcard characters.
+    This function only checks if a target contains any of the supported wildcard characters, and does not ensures
+    it's a valid wildcard
+
+    Args:
+        target:
+    """
+    return any(ch in target for ch in "*?[]!")
+
+@mod.export()
+def match_keys(keys, targets):
+    """
+    Matching targets to keys, all matched targets will be return as a dict of the corresponding keys. The keys 
+    are allowed to contain wildcards
+
+    Args:
+        keys (iterable): Contains normal string names and wildcards
+        targets (iterable): Targets list for matching
+    
+    Returns:
+        Tuple[dict, list]:
+                A tuple including matched target to key dict and unmatched keys list
+    """
+    matched_keys = list()
+    target_to_key = dict()
+    for key in keys:
+        for target in targets:
+            if fnmatch(target, key):
+                matched_keys.append(key)
+                target_to_key[target] = key
+
+    
+    return target_to_key, [name for name in keys if name not in matched_keys]
+

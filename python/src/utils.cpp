@@ -45,7 +45,7 @@ size_t size(nvinfer1::DataType type)
     case nvinfer1::DataType::kFP8: return 1;
     case nvinfer1::DataType::kBF16: return 2;
     case nvinfer1::DataType::kINT4:
-        break; // TRT-22011 - need to address sub-byte element size
+    case nvinfer1::DataType::kFP4: break; // TRT-22011 - need to address sub-byte element size
     }
     return -1;
 }
@@ -66,7 +66,7 @@ std::unique_ptr<py::dtype> nptype(nvinfer1::DataType type)
     case nvinfer1::DataType::kFP8:
     case nvinfer1::DataType::kBF16:
     case nvinfer1::DataType::kINT4:
-        return nullptr;
+    case nvinfer1::DataType::kFP4: return nullptr;
     }
     return nullptr;
 }

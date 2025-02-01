@@ -72,6 +72,10 @@ documentation.
 
 
 ## Changelog
+
+Jan 2025
+Added precompiled kernel cubins for gb100 (compute capability 10.0) and gb20x (compute capability 12.0) platforms.
+
 Aug 2024
 Ported v3 variant (IPluginV2 design) to v6 (IpluginV3 design), but preserves identical attributes and I/O to v3.
 Ported v2 variant (IPluginV2 design) to v5 (IpluginV3 design), but preserves identical attributes and I/O to v2.

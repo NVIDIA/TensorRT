@@ -1,17 +1,17 @@
-# Quickly Deployable TRT Python Plugins [Experimental in TensorRT 10.6]
+# Quickly Deployable TensorRT Python Plugins [Experimental]
 
-This is a sample to showcase quickly deployable Python-based plugin definitions (QDPs) in TRT. QDPs are able to support a large majority of use cases for adding custom operators to TRT, and will be the recommended option when it becomes a stable feature in TRT 10.7.
+This is a sample to showcase quickly deployable Python-based plugin definitions (QDPs) in TRT. QDPs are able to support a large majority of use cases for adding custom operators to TRT, and will be the recommended option when it becomes a stable feature.
 
-## Introduction
+# Introduction
 
 While the regular TRT plugin interfaces are powerful in the flexibility and tunability they provide, for the vast majority of use cases, users will benefit from the simplicity offered by the QDP workflow.
  - The `tensorrt.plugin` module provides many intuitive APIs that drastically reduces the amount of boilerplate required to implement a plugin
  - The concept of plugin registration, plugin creators and the plugin registry is abstracted away
- - The stateless nature of QDPs all but eliminates the complications of having to comply with a predefined plugin lifecycle 
+ - The stateless nature of QDPs all but eliminates the complications of having to comply with a predefined plugin lifecycle
 
 This sample contains several mini-samples that demonstrate a few common use cases.
 
-## Setting Up The Environment
+# Setting Up The Environment
 
 To build and install the bindings, follow the instructions in `$TRT_OSSPATH/python/README.md`.
 
@@ -23,12 +23,12 @@ pip3 install -r requirements.txt
 
 # Implementing a quickly deployable Python plugin
 
-QDP definitions consist of a set of decorated functions that define properties and behaviors of the plugin. 
- - `@tensorrt.plugin.register`: Returns shape and type characteristics of output tensors, and any attributes the plugin needs to function. 
+QDP definitions consist of a set of decorated functions that define properties and behaviors of the plugin.
+ - `@tensorrt.plugin.register`: Returns shape and type characteristics of output tensors, and any attributes the plugin needs to function.
  - `@tensorrt.plugin.impl`: Performs the plugin computation
  - (Optional) `@tensorrt.plugin.autotune`: Defines the different data types and formats (tensor layouts) supported by the plugin's IO and any tactics supported by the plugin. Defining this function allows TensorRT to "tune" the plugin during the engine build to find the most performant type/format and tactic combination on the target system.
 
-The specifics of these functions will become clear through the following mini-samples. 
+The specifics of these functions will become clear through the following mini-samples.
 
 # A Simple Plugin: Elementwise-Add
 
@@ -44,9 +44,9 @@ def add_plugin_desc(inp0: trtp.TensorDesc, block_size: int) -> trtp.TensorDesc:
 
 The argument "sample::elemwise_add_plugin" defines the namespace ("sample") and name ("elemwise_add_plugin") of the plugin. Input arguments to the decorated function (`plugin_desc`) annotated with `trt.plugin.TensorDesc` denote the input tensors; all others are interpreted as plugin attributes (see the [TRT API Reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/tensorrt.plugin/trt_plugin_register.html) for a full list of allowed attribute types). The output signature is a `trt.plugin.TensorDesc` describing the output. `inp0.like()` returns a tensor descriptor with identical shape and type characteristics to `inp0`.
 
-The computation function, decorated with `trt.plugin.impl`, receives `trt.plugin.Tensor`s for each input and output. In contrast to `TensorDesc`s, a `Tensor` references an underlying data buffer, directly accessible through `Tensor.data_ptr`. When working with Torch and OpenAI Triton kernels, it is easier to use `torch.as_tensor()` to zero-copy construct a `torch.Tensor` corresponding to the `trt.plugin.Tensor`. 
+The computation function, decorated with `trt.plugin.impl`, receives `trt.plugin.Tensor`s for each input and output. In contrast to `TensorDesc`s, a `Tensor` references an underlying data buffer, directly accessible through `Tensor.data_ptr`. When working with Torch and OpenAI Triton kernels, it is easier to use `torch.as_tensor()` to zero-copy construct a `torch.Tensor` corresponding to the `trt.plugin.Tensor`.
 
-This sample also showcases the effect of omitting/defining a `trt.plugin.autotune` function, which must return a list of `trt.plugin.AutoTuneCombination`s. In this case, we define a single combination `AutoTuneCombination("FP32|FP16, FP32|FP16")`; this indicates that the input and output must be either both FP32 or both FP16. See the TRT API Reference for a detailed description of the grammar underlying `AutoTuneCombination`s. 
+This sample also showcases the effect of omitting/defining a `trt.plugin.autotune` function, which must return a list of `trt.plugin.AutoTuneCombination`s. In this case, we define a single combination `AutoTuneCombination("FP32|FP16, FP32|FP16")`; this indicates that the input and output must be either both FP32 or both FP16. See the TRT API Reference for a detailed description of the grammar underlying `AutoTuneCombination`s.
 
 ## Running the sample
 
@@ -100,7 +100,7 @@ Non-zero is an operation where the indices of the non-zero elements of the input
 
 To handle DDS, the extent of each data-dependent output dimension must be expressed in terms of a *_size tensor_*, which is a scalar that communicates to TRT an upper-bound and an autotune value for that dimension, in terms of the input shapes. The TRT engine build may be optimized for the autotune value, but the extent of that dimension may stretch up to the upper-bound at runtime.
 
-In this sample, we consider a 2D input tensor `inp0`; the output will be an $N x 2$ tensor (a set of $N$ 2D indices), where $N$ is the number of non-zero indices. At maximum, all elements could be non-zero, and so the upper-bound could be expressed as `upper_bound = inp0.shape_expr[0] * inp0.shape_expr[1]`. Note that `trt.plugin.TensorDesc.shape_expr` returns symbolic shape expressions for that tensor. Arithmetic operations on shape expressions are supported through standard Python binary operators (see [TRT Python API reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/tensorrt.plugin/Shape/ShapeExpr.html) for full list of supported operations). 
+In this sample, we consider a 2D input tensor `inp0`; the output will be an $N x 2$ tensor (a set of $N$ 2D indices), where $N$ is the number of non-zero indices. At maximum, all elements could be non-zero, and so the upper-bound could be expressed as `upper_bound = inp0.shape_expr[0] * inp0.shape_expr[1]`. Note that `trt.plugin.TensorDesc.shape_expr` returns symbolic shape expressions for that tensor. Arithmetic operations on shape expressions are supported through standard Python binary operators (see [TRT Python API reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/tensorrt.plugin/Shape/ShapeExpr.html) for full list of supported operations).
 
 On average, we can expect half of the input to be filled with zero, so a size tensor can be constructed with that as the autotune value:
 ```python
@@ -131,7 +131,9 @@ python3 qdp_runner.py non_zero [-v]
 
 # Using multiple tactics and ONNX: Cirular padding
 
-This sample contains a circular padding plugin, which is useful for ops like circular convolution. 
+This sample contains a circular padding plugin, which is useful for ops like circular convolution. It is equivalent to PyTorch's [torch.nn.CircularPad2d](https://pytorch.org/docs/stable/generated/torch.nn.CircularPad2d.html#torch.nn.CircularPad2d).
+
+Refer [this section about circular padding plugin](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/pluginGuide.html#example-circular-padding-plugin) in the Python plugin guide for more info.
 
 ## ONNX model with a plugin
 
@@ -177,7 +179,7 @@ def circ_pad_plugin_autotune(inp0: trtp.TensorDesc, pads: npt.NDArray[np.int32],
     return [c]
 ```
 
-Note that we're using another way of constructing a `trt.plugin.AutoTuneCombination` here -- namely, through `pos(...)` to populate the type/format information and `tactics(...)` to specify the tactics. In this sample, we use an OpenAI Triton kernel and `torch.nn.functional.pad` as two methods to compute the circular padding. 
+Note that we're using another way of constructing a `trt.plugin.AutoTuneCombination` here -- namely, through `pos(...)` to populate the type/format information and `tactics(...)` to specify the tactics. In this sample, we use an OpenAI Triton kernel and `torch.nn.functional.pad` as two methods to compute the circular padding.
 
 ## Loading and running a TRT engine containing a plugin
 
@@ -201,6 +203,10 @@ options:
 ```
 
 # Additional resources
+
+
+**Python Plugin Guide**
+- [pluginGuide.md](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/pluginGuide.html)
 
 **`tensorrt.plugin` API reference**
 - [`tensorrt.plugin` module API reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/tensorrt.plugin/index.html)

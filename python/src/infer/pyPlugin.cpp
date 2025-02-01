@@ -997,6 +997,11 @@ protected:
     {
     }
 
+    PyIPluginV3OneBuildBaseImpl(T const* build)
+        : mBuild{const_cast<T*>(build)}
+    {
+    }
+
 public:
     APILanguage getAPILanguage() const noexcept final
     {
@@ -1513,14 +1518,25 @@ private:
     std::optional<std::string> mPluginVersion;
 };
 
-class PyIPluginV3QuickBuildImpl : public IPluginV3QuickBuild
+template <class T>
+class PyIPluginV3QuickBuildBaseImpl : public T
 {
-public:
-    using IPluginV3QuickBuild::IPluginV3QuickBuild;
-    PyIPluginV3QuickBuildImpl() = default;
-    PyIPluginV3QuickBuildImpl(const IPluginV3QuickBuild& a){};
+private:
+    T* mBuild{nullptr};
 
-    APILanguage getAPILanguage() const noexcept final
+protected:
+    PyIPluginV3QuickBuildBaseImpl(T* build)
+        : mBuild{build}
+    {
+    }
+
+    PyIPluginV3QuickBuildBaseImpl(T const* build)
+        : mBuild{const_cast<T*>(build)}
+    {
+    }
+
+public:
+    APILanguage getAPILanguage() const noexcept
     {
         return APILanguage::kPYTHON;
     }
@@ -1530,13 +1546,29 @@ public:
         try
         {
             py::gil_scoped_acquire gil{};
-            if (!mNbOutputs.has_value())
+
+            try
             {
-                utils::throwPyError(PyExc_AttributeError, "num_outputs not initialized");
+                py::function pyNbTactics = py::get_override(static_cast<T const*>(mBuild), "get_num_outputs");
+
+                if (!pyNbTactics)
+                {
+                    // if no implementation is provided for get_num_outputs(), communicate that no custom tactics are
+                    // used by the plugin
+                    return 0;
+                }
+
+                py::object pyResult = pyNbTactics();
+                return pyResult.cast<int32_t>();
+                ;
             }
-            return mNbOutputs.value();
+            PLUGIN_API_CATCH_CAST("get_num_outputs", "int32_t")
+            catch (py::error_already_set& e)
+            {
+                std::cerr << "[ERROR] Exception thrown from get_num_outputs() " << e.what() << std::endl;
+            }
         }
-        PLUGIN_API_CATCH("num_outputs")
+        PLUGIN_API_CATCH("get_num_outputs")
         return -1;
     }
 
@@ -1548,8 +1580,7 @@ public:
 
             try
             {
-                py::function pyGetValidTactics
-                    = py::get_override(static_cast<IPluginV3QuickBuild const*>(this), "get_valid_tactics");
+                py::function pyGetValidTactics = py::get_override(static_cast<T const*>(mBuild), "get_valid_tactics");
 
                 if (!pyGetValidTactics)
                 {
@@ -1620,8 +1651,7 @@ public:
         {
             py::gil_scoped_acquire gil{};
 
-            py::function pyConfigurePlugin
-                = utils::getOverride(static_cast<IPluginV3QuickBuild*>(this), "configure_plugin");
+            py::function pyConfigurePlugin = utils::getOverride(static_cast<T*>(mBuild), "configure_plugin");
 
             if (!pyConfigurePlugin)
             {
@@ -1655,7 +1685,7 @@ public:
             py::gil_scoped_acquire gil{};
 
             py::function pySupportsFormatCombination
-                = utils::getOverride(static_cast<IPluginV3QuickBuild*>(this), "get_supported_format_combinations");
+                = utils::getOverride(static_cast<T*>(mBuild), "get_supported_format_combinations");
             if (!pySupportsFormatCombination)
             {
                 utils::throwPyError(
@@ -1694,7 +1724,7 @@ public:
         py::gil_scoped_acquire gil{};
 
         py::function pySupportsFormatCombination
-            = utils::getOverride(static_cast<IPluginV3QuickBuild*>(this), "get_supported_format_combinations");
+            = utils::getOverride(static_cast<T*>(mBuild), "get_supported_format_combinations");
         if (!pySupportsFormatCombination)
         {
             utils::throwPyError(
@@ -1744,7 +1774,7 @@ public:
             py::gil_scoped_acquire gil{};
 
             py::function pyGetOutputDataTypes
-                = utils::getOverride(static_cast<IPluginV3QuickBuild const*>(this), "get_output_data_types");
+                = utils::getOverride(static_cast<T const*>(mBuild), "get_output_data_types");
             if (!pyGetOutputDataTypes)
             {
                 utils::throwPyError(PyExc_RuntimeError, "no implementation provided for get_output_data_types()");
@@ -1786,8 +1816,7 @@ public:
         {
             py::gil_scoped_acquire gil{};
 
-            py::function pyGetOutputShapes
-                = utils::getOverride(static_cast<IPluginV3QuickBuild*>(this), "get_output_shapes");
+            py::function pyGetOutputShapes = utils::getOverride(static_cast<T*>(mBuild), "get_output_shapes");
             if (!pyGetOutputShapes)
             {
                 utils::throwPyError(PyExc_RuntimeError, "no implementation provided for get_output_shapes()");
@@ -1828,8 +1857,7 @@ public:
         {
             py::gil_scoped_acquire gil{};
 
-            py::function pyGetAliasedInput
-                = py::get_override(static_cast<IPluginV3QuickBuild*>(this), "get_aliased_input");
+            py::function pyGetAliasedInput = py::get_override(static_cast<T*>(mBuild), "get_aliased_input");
 
             if (!pyGetAliasedInput)
             {
@@ -1856,13 +1884,24 @@ public:
         try
         {
             py::gil_scoped_acquire gil{};
-            if (!mTimingCachedId.has_value())
+            py::function pyGetTimingCacheID = py::get_override(static_cast<T*>(mBuild), "get_timing_cache_id");
+
+            if (!pyGetTimingCacheID)
             {
                 return nullptr;
             }
-            return mTimingCachedId.value().c_str();
+
+            py::object pyResult = pyGetTimingCacheID();
+
+            try
+            {
+                mTimingCachedId = pyResult.cast<std::string>();
+                return mTimingCachedId.c_str();
+            }
+            PLUGIN_API_CATCH_CAST("get_timing_cache_id", "std::string")
+            return nullptr;
         }
-        PLUGIN_API_CATCH("timing_cache_id")
+        PLUGIN_API_CATCH("get_timing_cache_id")
         return nullptr;
     }
 
@@ -1871,38 +1910,46 @@ public:
         try
         {
             py::gil_scoped_acquire gil{};
-            if (!mMetadataString.has_value())
+            py::function pyGetMetadataString = py::get_override(static_cast<T*>(mBuild), "get_metadata_string");
+
+            if (!pyGetMetadataString)
             {
                 return nullptr;
             }
-            return mMetadataString.value().c_str();
+
+            py::object pyResult = pyGetMetadataString();
+
+            try
+            {
+                mMetadataString = pyResult.cast<std::string>();
+                return mMetadataString.c_str();
+            }
+            PLUGIN_API_CATCH_CAST("get_metadata_string", "std::string")
+            return nullptr;
         }
         PLUGIN_API_CATCH("metadata_string")
         return nullptr;
     }
 
-    void setNbOutputs(int32_t nbOutputs)
-    {
-        mNbOutputs = nbOutputs;
-    }
-
-    void setTimingCachedId(std::string timingCachedId)
-    {
-        mTimingCachedId = std::move(timingCachedId);
-    }
-
-    void setMetadataString(std::string metadataString)
-    {
-        mMetadataString = std::move(metadataString);
-    }
-
 private:
-    std::optional<int32_t> mNbOutputs{};
-    std::optional<std::string> mTimingCachedId{};
-    std::optional<std::string> mMetadataString{};
+    std::string mTimingCachedId{};
+    std::string mMetadataString{};
     std::optional<std::vector<int32_t>> mTactics;
     std::optional<std::vector<PluginTensorDesc>> mSupportedFormatCombinations{};
 };
+
+class PyIPluginV3QuickBuildImpl : public PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickBuild>
+{
+public:
+    PyIPluginV3QuickBuildImpl()
+        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickBuild>(this)
+    {
+    }
+
+    PyIPluginV3QuickBuildImpl(IPluginV3QuickBuild const& a)
+        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickBuild>(&a){};
+};
+
 
 class PyIPluginV3QuickRuntimeImpl : public IPluginV3QuickRuntime
 {
@@ -2543,7 +2590,6 @@ public:
 
             std::string nameString{name};
             std::string namespaceString{nspace};
-
             py::handle handle = pyCreatePlugin(nameString, namespaceString, fc, phase).release();
             try
             {
@@ -2597,6 +2643,7 @@ private:
     std::optional<std::string> mName;
     std::optional<std::string> mPluginVersion;
 };
+
 
 namespace
 {
@@ -2966,15 +3013,6 @@ static const auto IPluginV3_set_num_outputs = [](IPluginV3OneBuild& self, int32_
     utils::throwPyError(PyExc_AttributeError, "Can't set attribute: num_outputs is read-only for C++ plugins");
 };
 
-static const auto IPluginV3_quick_set_num_outputs = [](IPluginV3QuickBuild& self, int32_t numOutputs) {
-    if (isPython(self))
-    {
-        auto plugin = static_cast<PyIPluginV3QuickBuildImpl*>(&self);
-        plugin->setNbOutputs(numOutputs);
-        return;
-    }
-    utils::throwPyError(PyExc_AttributeError, "Can't set attribute: num_outputs is read-only for C++ plugins");
-};
 
 } // namespace lambdas
 
@@ -3256,7 +3294,7 @@ void bindPlugin(py::module& m)
         .value("INT64", PluginFieldType::kINT64)
         .value("FP8", PluginFieldType::kFP8)
         .value("INT4", PluginFieldType::kINT4)
-        ;
+        .value("FP4", PluginFieldType::kFP4);
 
     py::class_<PluginField>(m, "PluginField", PluginFieldDoc::descr, py::module_local())
         .def(py::init(lambdas::plugin_field_default_constructor), "name"_a = "", py::keep_alive<1, 2>{})
@@ -3284,6 +3322,7 @@ void bindPlugin(py::module& m)
                 case PluginFieldType::kBF16:
                 case PluginFieldType::kDIMS:
                 case PluginFieldType::kFP8:
+                case PluginFieldType::kFP4:
                     utils::throwPyError(
                         PyExc_AttributeError, "No known conversion for returning data from PluginField");
                     break;
@@ -3458,12 +3497,8 @@ void bindPlugin(py::module& m)
     py::class_<IPluginV3QuickBuild, IPluginCapability, IVersionedInterface, PyIPluginV3QuickBuildImpl,
         std::unique_ptr<IPluginV3QuickBuild>>(m, "IPluginV3QuickBuild", py::module_local())
         .def(py::init<>())
-        .def(py::init<const IPluginV3QuickBuild&>())
-        .def_property("num_outputs", &IPluginV3QuickBuild::getNbOutputs, lambdas::IPluginV3_quick_set_num_outputs)
-        .def_property("metadata_string", &IPluginV3QuickBuild::getMetadataString,
-            py::cpp_function(lambdas::IPluginV3_get_metadata_string, py::keep_alive<1, 2>{}))
-        .def_property("timing_cache_id", &IPluginV3QuickBuild::getTimingCacheID,
-            py::cpp_function(lambdas::IPluginV3_get_timing_cache_id, py::keep_alive<1, 2>{}));
+        .def(py::init<const IPluginV3QuickBuild&>());
+
 
     py::class_<IPluginV3QuickRuntime, IPluginCapability, IVersionedInterface, PyIPluginV3QuickRuntimeImpl,
         std::unique_ptr<IPluginV3QuickRuntime>>(m, "IPluginV3QuickRuntime", py::module_local())
@@ -3618,6 +3653,7 @@ void bindPlugin(py::module& m)
     py::enum_<TensorRTPhase>(m, "TensorRTPhase", py::arithmetic{}, TensorRTPhaseDoc::descr, py::module_local())
         .value("BUILD", TensorRTPhase::kBUILD)
         .value("RUNTIME", TensorRTPhase::kRUNTIME);
+
 
 #if EXPORT_ALL_BINDINGS
     m.def("get_builder_plugin_registry", &getBuilderPluginRegistry, py::return_value_policy::reference,

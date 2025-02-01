@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
+
 import sys
 
 import pytest
@@ -33,6 +35,7 @@ from polygraphy.backend.trt import (
     NetworkFromOnnxBytes,
     Profile,
     SaveEngine,
+    buffer_from_engine,
     bytes_from_engine,
     create_config,
     create_network,
@@ -551,14 +554,47 @@ class TestBytesFromEngine:
             assert isinstance(serialized_engine, bytes)
 
 
+class TestBufferFromEngine:
+
+    def test_should_return_IHostMemory(self, identity_engine: trt.ICudaEngine) -> None:
+        # Precondition.
+        engine = identity_engine
+
+        # Under test.
+        buffer = buffer_from_engine(engine)
+
+        # Postcondition.
+        assert isinstance(buffer, trt.IHostMemory)
+
+    def test_should_content_match_engine(self, identity_engine: trt.ICudaEngine) -> None:
+        """Test that `BufferFromEngine` returns a buffer with the same content as the engine."""
+        # Precondition.
+        engine = identity_engine
+
+        # Under test.
+        buffer = buffer_from_engine(engine)
+
+        # Postcondition.
+        assert bytes(buffer) == bytes(engine.serialize())
+
+
 class TestSaveEngine:
-    def test_save_engine(self, identity_network):
-        with util.NamedTemporaryFile() as outpath:
-            engine_loader = SaveEngine(
-                EngineFromNetwork(identity_network), path=outpath.name
-            )
-            with engine_loader():
-                assert is_file_non_empty(outpath.name)
+
+    def test_should_write_serialized_engine_to_file(self, identity_network: trt.ICudaEngine) -> None:
+        # Precondition.
+        with util.NamedTemporaryFile(mode="wb+") as out_file:
+            name = out_file.name
+            engine = engine_from_network(identity_network)
+
+            # Under test.
+            save_engine = SaveEngine(engine, path=out_file)
+            save_engine()
+            out_file.flush()
+
+            # Postcondition.
+            assert is_file_non_empty(out_file.name)
+            out_file.seek(0)
+            assert bytes(engine.serialize()) == bytes(out_file.read())
 
 
 class TestOnnxLikeFromNetwork:

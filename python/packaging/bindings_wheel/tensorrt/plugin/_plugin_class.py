@@ -69,6 +69,9 @@ class _TemplatePlugin(
     def get_capability_interface(self, type):
         return self
 
+    def get_num_outputs(self):
+        return self.num_outputs
+
     def get_output_data_types(self, input_types, ranks):
         self.input_types = input_types
 

@@ -287,7 +287,7 @@ class IExprBuilder : public INoCopy
 {
 public:
     //!
-    //! \brief Return pointer to IDimensionExp for given value.
+    //! \brief Return pointer to IDimensionExpr for given value.
     //!
     IDimensionExpr const* constant(int64_t value) noexcept
     {
@@ -297,7 +297,7 @@ public:
     //!
     //! \brief Get the operation.
     //!
-    //! Return pointer to IDimensionExp that represents the given operation applied to first and second.
+    //! Return pointer to IDimensionExpr that represents the given operation applied to first and second.
     //! Returns nullptr if op is not a valid DimensionOperation.
     //!
     IDimensionExpr const* operation(
@@ -981,7 +981,7 @@ public:
     //!
     //! For each format combination provided through configurePlugin(), up to a maximum of getFormatCombinationLimit(),
     //! the plugin will be timed for each tactic advertised through this method for that format combination. i.e. The
-    //! plugin will be timed \f$N = sum_{i=0}^{i<getFormatCombinationLimit()} (T(f[i]))\f$ times. If \f$N = 1\f$, the
+    //! plugin will be timed \f$N = \sum_{i=0}^{i<getFormatCombinationLimit()} (T(f[i]))\f$ times. If \f$N = 1\f$, the
     //! plugin may not be timed. In peudocode, the timing protocol appears as the following:
     //!
     //! counter = 0
@@ -1476,7 +1476,7 @@ enum class TensorFormat : int32_t
     //! Vector-minor format with 16 scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This requires FP16 or INT8 and at least three dimensions.
+    //! This requires FP16, INT8 or FP8 and at least three dimensions.
     kHWC16 = 11,
 
     //! Vector-minor format with one scalar per vector.

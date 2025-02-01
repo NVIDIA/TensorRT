@@ -22,7 +22,6 @@
 namespace sample
 {
 
-#if !TRT_WINML
 // Construct GPU UUID string in the same format as nvidia-smi does.
 std::string getUuidString(cudaUUID_t uuid)
 {
@@ -106,6 +105,7 @@ void setCudaDevice(int32_t device, std::ostream& os)
     // clang-format on
 }
 
+#if !TRT_WINML
 int32_t getCudaDriverVersion()
 {
     int32_t version{-1};

@@ -108,7 +108,7 @@ public:
     // end IPluginV3Build Methods
 
     // IPluginV3Runtime Methods
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t onShapeChange(
         PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
@@ -121,9 +121,11 @@ public:
     PluginFieldCollection const* getFieldsToSerialize() noexcept override;
     // end IPluginV3Runtime Methods
 
+    // setter for mCublasWrapper and mCublasHandle
+    void setCublasResources(std::shared_ptr<CublasWrapper>);
+
 protected:
     void createMHARunner();
-    void setCublasHandle(cublasContext*);
 
 private:
     const std::string mLayerName;
@@ -145,7 +147,7 @@ private:
     int32_t mHasUnfusedDispatcher{};
     nvinfer1::DataType mType{};
     float mDqProbs{};
-    nvinfer1::pluginInternal::cublasHandle_t mCublas{};
+    nvinfer1::pluginInternal::cublasHandle_t mCublasHandle{};
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 
@@ -234,7 +236,7 @@ public:
     // end IPluginV3Build Methods
 
     // IPluginV3Runtime Methods
-    IPluginV3* clone() noexcept;
+    IPluginV3* clone() noexcept override;
 
     int32_t onShapeChange(
         PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
@@ -246,9 +248,11 @@ public:
 
     PluginFieldCollection const* getFieldsToSerialize() noexcept override;
 
+    // setter for mCublasWrapper and mCublasHandle
+    void setCublasResources(std::shared_ptr<CublasWrapper>);
+
 protected:
     void createMHARunner();
-    void setCublasHandle(cublasContext*);
 
 private:
     const std::string mLayerName;
@@ -272,7 +276,7 @@ private:
     int32_t mHdim{};
     int32_t mUseVarSeqlen{};
     int32_t mUseInt8ScaleMax{true};
-    nvinfer1::pluginInternal::cublasHandle_t mCublas{};
+    nvinfer1::pluginInternal::cublasHandle_t mCublasHandle{};
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -175,9 +175,9 @@ bool QKVToContextPluginDynamicLegacy::supportsFormatCombination(
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Xavier, Turing and Ampere
     if (mType == DataType::kINT8)
     {
-        if (mSM != kSM_75 && mSM != kSM_80 && mSM != kSM_86 && mSM != kSM_87 && mSM != kSM_89 && mSM != kSM_90)
+        if (!elem(mSM, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120}))
         {
-            gLogError << "INT8 IO is only supported on Turing, Ampere and Hopper for plugin "
+            gLogError << "INT8 IO is only supported on Turing, Ampere, Hopper and Blackwell for plugin "
                       << kQKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
             return false;
         }
@@ -617,8 +617,7 @@ QKVToContextVarSeqlenPluginLegacy::QKVToContextVarSeqlenPluginLegacy(std::string
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        bool isSMSupported =
-            mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75;
+        bool isSMSupported = elem(mSM, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120});
         PLUGIN_ASSERT(isSMSupported && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
@@ -726,14 +725,12 @@ bool QKVToContextVarSeqlenPluginLegacy::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     // we only support variable sequence and int8 IO in fused mha runner, and we only support fused mha runner on
-    // Turing, Ampere and Hopper
-    bool const hasV2Kernels
-        = (
-            mSM == kSM_90 || mSM == kSM_89 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75);
-    PLUGIN_ASSERT(
-        (mType != DataType::kINT8 || hasV2Kernels) && "INT8 IO is only supported on Xavier, Turing, Ampere and Hopper");
-    PLUGIN_ASSERT(
-        (!mUseVarSeqlen || hasV2Kernels) && "Variable sequence is only supported on Xavier, Turing, Ampere and Hopper");
+    // Turing, Ampere, Hopper and Blackwell
+    bool const hasV2Kernels = elem(mSM, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120});
+    PLUGIN_ASSERT((mType != DataType::kINT8 || hasV2Kernels)
+        && "INT8 IO is only supported on Xavier, Turing, Ampere, Hopper and Blackwell!");
+    PLUGIN_ASSERT((!mUseVarSeqlen || hasV2Kernels)
+        && "Variable sequence is only supported on Xavier, Turing, Ampere, Hopper and Blackwell!");
 
     PLUGIN_ASSERT(pos >= 0);
     PLUGIN_ASSERT(pos < 2 + mHasImask + 2 * mUseVarSeqlen);

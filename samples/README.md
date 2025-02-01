@@ -12,9 +12,9 @@
 ### 2. TensorRT API Samples
 | Sample | Language | Format | Description |
 |---|---|---|---|
-| [sampleAlgorithmSelector](sampleAlgorithmSelector) | C++ | ONNX | Algorithm Selection API usage |
 | [sampleCharRNN](sampleCharRNN) | C++ | INetwork | Building An RNN Network Layer By Layer |
 | [sampleDynamicReshape](sampleDynamicReshape) | C++ | ONNX | Digit Recognition With Dynamic Shapes In TensorRT |
+| [sampleEditableTimingCache](sampleEditableTimingCache) | C++ | INetwork | Create a deterministic build using editable timing cache |
 | [sampleINT8API](sampleINT8API) | C++ | ONNX | Performing Inference In INT8 Precision |
 | [sampleNamedDimensions](sampleNamedDimensions) | C++ | ONNX | Working with named input dimensions |
 | [sampleNonZeroPlugin](sampleNonZeroPlugin) | C++ | INetwork | Adding plugin with data-dependent output shapes |

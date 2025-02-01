@@ -14,10 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-SET(SAMPLE_SOURCES
-    sampleNonZeroPlugin.cpp
-    nonZeroKernel.cu
-)
+set(SAMPLE_SOURCES sampleNonZeroPlugin.cpp nonZeroKernel.cu)
 
 set(SAMPLE_PARSERS "onnx")
 

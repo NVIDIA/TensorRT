@@ -74,6 +74,8 @@ constexpr char const* NORMALIZATION = R"trtdoc(Normalization layer)trtdoc";
 constexpr const char* PLUGIN_V3 = R"trtdoc(PluginV3 layer)trtdoc";
 constexpr const char* SQUEEZE = R"trtdoc(Squeeze layer)trtdoc";
 constexpr const char* UNSQUEEZE = R"trtdoc(Unsqueeze layer)trtdoc";
+constexpr const char* CUMULATIVE = R"trtdoc(Cumulative layer)trtdoc";
+constexpr const char* DYNAMIC_QUANTIZE = R"trtdoc(DynamicQuantize layer)trtdoc";
 } // namespace LayerTypeDoc
 
 namespace TensorFormatDoc
@@ -170,7 +172,7 @@ constexpr const char* DLA_HWC4 = R"trtdoc(
 )trtdoc";
 
 constexpr const char* HWC16 = R"trtdoc(
-    Sixteen channel format where C is padded to a multiple of 16. This format is bound to FP16 and INT8. It is only available for dimensions >= 3.
+    Sixteen channel format where C is padded to a multiple of 16. This format is bound to FP16/INT8/FP8. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to the array with dimensions [N][H][W][(C+15)/16*16], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][h][w][c].
 )trtdoc";
@@ -1658,6 +1660,25 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 } // namespace IDequantizeLayerDoc
 
+namespace IDynamicQuantizeLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A DynamicQuantize layer in an :class:`INetworkDefinition` .
+
+    This layer performs dynamic block quantization of its input tensor and outputs the quantized data and the computed block scale-factors.
+    The block size is currently limited to 16 and the size of the blocked axis must be divisible by 16.
+
+    The first input (index 0) is the tensor to be quantized. Its data type must be one of DataType::kFLOAT,
+    DataType::kHALF, or DataType::kBF16. Currently only 2D and 3D inputs are supported.
+
+    The second input (index 1) is the double quantization scale factor. It is a scalar scale factor used to quantize the computed block scales-factors.
+
+    :ivar axis: :class:`int` The axis that is sliced into blocks. The axis must be the last dimension or the second to last dimension.
+    :ivar block_size: :class:`int` The number of elements that are quantized using a shared scale factor. Currently only blocks of 16 elements are supported.
+    :ivar output_type: :class:`DataType` The data type of the quantized output tensor, must be DataType::kFP4.
+    :ivar scale_type: :class:`DataType` The data type of the scale factor used for quantizing the input data, must be DataType::kFP8.
+)trtdoc";
+} // namespace IDynamicQuantizeLayerDoc
 
 namespace IIfConditionalBoundaryLayerDoc
 {
@@ -1890,6 +1911,46 @@ constexpr const char* set_input = R"trtdoc(
 
 
 
+namespace CumulativeOperationDoc
+{
+constexpr const char* descr = R"trtdoc(The cumulative operations that may be performed by a Cumulative layer)trtdoc";
+constexpr const char* SUM = R"trtdoc()trtdoc";
+} // namespace CumulativeOperationDoc
+
+namespace ICumulativeLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A cumulative layer in an :class:`INetworkDefinition` .
+
+    This layer represents a cumulative operation across a tensor.
+
+    It computes successive reductions across an axis of a tensor. The output
+    always has the same shape as the input.
+
+    If the reduction operation is summation, then this is also known as
+    prefix-sum or cumulative sum.
+
+    The operation has forward vs. reverse variants, and inclusive vs. exclusive variants.
+
+    For example, let the input be a vector x of length n and the output be vector y.
+    Then y[j] = sum(x[...]) where ... denotes a sequence of indices from this list:
+
+    - inclusive + forward:   0..j
+    - inclusive + reverse:   j..n-1
+    - exclusive + forward:   0..j-1
+    - exclusive + reverse: j+1..n-1
+
+    For multidimensional tensors, the cumulative applies across a specified axis. For
+    example, given a 2D input, a forward inclusive cumulative across axis 0 generates
+    cumulative sums within each column.
+
+    :ivar op: :class:`CumulativeOperation` The cumulative operation for the layer.
+    :ivar exclusive: :class:`bool` Specifies whether it is an exclusive cumulative or inclusive cumulative.
+    :ivar reverse: :class:`bool` Specifies whether the cumulative operation should be applied backward.
+
+)trtdoc";
+} // namespace ICumulativeLayerDoc
+
 namespace INetworkDefinitionDoc
 {
 constexpr const char* descr = R"trtdoc(
@@ -1916,7 +1977,7 @@ constexpr const char* add_input = R"trtdoc(
     Adds an input to the network.
 
     :arg name: The name of the tensor. Each input and output tensor must have a unique name.
-    :arg dtype: The data type of the tensor. Currently, tensorrt.int8 is not supported for inputs.
+    :arg dtype: The data type of the tensor.
     :arg shape: The dimensions of the tensor. The total volume must be less than 2^31 elements.
 
     :returns: The newly added Tensor.
@@ -2522,6 +2583,18 @@ constexpr const char* add_dequantize = R"trtdoc(
     :returns: The new dequantization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
+constexpr const char* add_dynamic_quantize = R"trtdoc(
+    Add a dynamic quantization layer to the network.
+    See :class:`IDynamicQuantizeLayer` for more information.
+
+    :arg input: A tensor to quantize.
+    :arg axis: The axis that is sliced into blocks.
+    :arg block_size: The number of elements that are quantized using a shared scale factor.
+    :arg output_type: The data type of the quantized output tensor.
+    :arg scale_type: The data type of the scale factor used for quantizing the input data.
+
+    :returns: The new DynamicQuantization layer, or :class:`None` if it could not be created.
+)trtdoc";
 
 constexpr const char* add_if_conditional = R"trtdoc(
     Adds an if-conditional to the network, which provides a way to specify subgraphs that will be conditionally executed using lazy evaluation.
@@ -2595,6 +2668,19 @@ constexpr char const* add_unsqueeze = R"trtdoc(
 )trtdoc";
 
 
+
+constexpr const char* add_cumulative = R"trtdoc(
+    Add a cumulative layer to the network.
+    See :class:`ICumulativeLayer` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg axis: The axis tensor to apply the cumulative operation on. Currently, it must be a build-time constant 0-D shape tensor.
+    :arg op: The reduction operation to perform.
+    :arg exclusive: The boolean that specifies whether it is an exclusive cumulative or inclusive cumulative.
+    :arg reverse: The boolean that specifies whether the cumulative should be applied backward.
+
+    :returns: The new cumulative layer, or :class:`None` if it could not be created.
+)trtdoc";
 
 } // namespace INetworkDefinitionDoc
 

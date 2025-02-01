@@ -57,7 +57,7 @@ class TestPublicImports:
         for submodule_path in SUBMODULE_PATHS:
             submodule_name = ".".join(submodule_path.split(os.path.sep))
             cmd = [poly_venv.python, "-c", f"from {submodule_name} import *"]
-            print(" ".join(cmd))
+            print(" ".join(map(str, cmd)))
             output = poly_venv.run(cmd, capture=True)
             print(output)
 
@@ -67,7 +67,7 @@ class TestPublicImports:
             "-c",
             "from polygraphy.json import to_json, from_json; x = to_json(1); x = from_json(x)",
         ]
-        print(" ".join(cmd))
+        print(" ".join(map(str, cmd)))
         output = poly_venv.run(cmd, capture=True)
         print(output)
 
@@ -110,7 +110,7 @@ class TestAutoinstallDeps:
     def test_can_automatically_install_deps(self, poly_venv, cmd):
         poly_venv.env["POLYGRAPHY_AUTOINSTALL_DEPS"] = "1"
         cmd = [poly_venv.python, *POLYGRAPHY_CMD] + cmd
-        print(f"Running: {' '.join(cmd)}")
+        print(f"Running: {' '.join(map(str, cmd))}")
         output = poly_venv.run(cmd, capture=True)
         print(output)
         assert "is required, but not installed. Attempting to install now" in output

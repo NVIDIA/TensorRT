@@ -22,14 +22,15 @@ import json
 import numpy as np
 import onnx
 from onnx import numpy_helper, shape_inference
+from glob import glob
 import onnx_graphsurgeon as gs
 from safetensors import safe_open
 import os
+import sys
 from polygraphy.backend.onnx.loader import fold_constants
 import re
 import tempfile
 import torch
-import torch.nn.functional as F
 from transformers import (
     AutoConfig,
     CLIPImageProcessor,
@@ -61,10 +62,18 @@ models_to_import = [
     'UNet2DConditionModel',
     'UNetSpatioTemporalConditionModel',
     'StableCascadeUNet',
-    'FluxTransformer2DModel'
+    'FluxTransformer2DModel',
 ]
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, 'diffusers.models')
+
+def onnx_graph_needs_external_data(onnx_graph):
+    if sys.platform == "win32":
+        # ByteSize is broken (wraps around) on Windows
+        return True
+    else:
+        return onnx_graph.ByteSize() > 2147483648
+
 
 class Optimizer():
     def __init__(
@@ -97,7 +106,7 @@ class Optimizer():
 
     def infer_shapes(self, return_onnx=False):
         onnx_graph = gs.export_onnx(self.graph)
-        if onnx_graph.ByteSize() > 2147483648:
+        if onnx_graph_needs_external_data(onnx_graph):
             temp_dir = tempfile.TemporaryDirectory().name
             os.makedirs(temp_dir, exist_ok=True)
             onnx_orig_path = os.path.join(temp_dir, 'model.onnx')
@@ -200,6 +209,14 @@ class Optimizer():
             convert_fp16_io(self.graph)
         # Add cast nodes to MHA's BMM1 and BMM2's I/O.
         cast_fp8_mha_io(self.graph)
+    
+    def flux_convert_rope_weight_type(self):
+        for node in self.graph.nodes:
+            if node.op == "Einsum":
+                node.inputs[1].dtype == "float32"
+                print(f"Fixed RoPE (Rotary Position Embedding) weight type: {node.name}")
+        return gs.export_onnx(self.graph)
+
 
 def get_path(version, pipeline, controlnets=None):
     if controlnets is not None:
@@ -243,11 +260,15 @@ def get_path(version, pipeline, controlnets=None):
         return "black-forest-labs/FLUX.1-dev"
     elif version == 'flux.1-schnell':
         return "black-forest-labs/FLUX.1-schnell"
+    elif version == "flux.1-dev-canny":
+        return "black-forest-labs/FLUX.1-Canny-dev"
+    elif version == "flux.1-dev-depth":
+        return "black-forest-labs/FLUX.1-Depth-dev"
     else:
         raise ValueError(f"Unsupported version {version} + pipeline {pipeline.name}")
 
 def get_clip_embedding_dim(version, pipeline):
-    if version in ("1.4", "1.5", "dreamshaper-7", "flux.1-dev", "flux.1-schnell"):
+    if version in ("1.4", "1.5", "dreamshaper-7", "flux.1-dev", "flux.1-schnell", "flux.1-dev-canny", "flux.1-dev-depth"):
         return 768
     elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):
         return 1024
@@ -301,6 +322,13 @@ class LoraLoader(StableDiffusionLoraLoaderMixin):
         self.paths = paths
         self.weights = weights
         self.scale = scale
+
+def is_model_cached(model_dir, model_opts, hf_safetensor, model_name="diffusion_pytorch_model"):
+    variant = "." + model_opts.get("variant") if "variant" in model_opts else ""
+    suffix = ".safetensors" if hf_safetensor else ".bin"
+    # WAR with * for larger models that are split into multiple smaller ckpt files
+    model_file = model_name + variant + "*" + suffix
+    return bool(glob(os.path.join(model_dir, model_file)))
 
 class BaseModel():
     def __init__(self,
@@ -360,12 +388,6 @@ class BaseModel():
             token=self.hf_token,
             **model_opts,
         ).to(self.device)
-
-    def get_model_path(self, model_dir, model_opts, model_name="diffusion_pytorch_model"):
-        variant = "." + model_opts.get("variant") if "variant" in model_opts else ""
-        suffix = ".safetensors" if self.hf_safetensor else ".bin"
-        model_file = model_name + variant + suffix
-        return os.path.join(model_dir, model_file)
 
     def get_model(self, torch_inference=''):
         pass
@@ -434,7 +456,7 @@ class BaseModel():
 
             print(f"[I] Optimizing ONNX model: {onnx_opt_path}")
             onnx_opt_graph = self.optimize(onnx.load(onnx_path))
-            if onnx_opt_graph.ByteSize() > 2147483648:
+            if onnx_graph_needs_external_data(onnx_opt_graph):
                 onnx.save_model(
                     onnx_opt_graph,
                     onnx_opt_path,
@@ -502,6 +524,9 @@ class BaseModel():
             is_fp16_io = kwargs.get('is_fp16_io', True)
             opt.modify_fp8_graph(is_fp16_io=is_fp16_io)
             opt.info(self.name + ': modify fp8 graph')
+        if self.version.startswith("flux.1") and self.fp8:
+            opt.flux_convert_rope_weight_type()
+            opt.info(self.name + ': convert rope weight type for fp8 flux')
         opt.fold_constants()
         opt.info(self.name + ': fold constants')
         opt.infer_shapes()
@@ -566,7 +591,7 @@ class CLIPModel(BaseModel):
     def get_model(self, torch_inference=''):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
         clip_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        if not os.path.exists(clip_model_dir):
+        if not is_model_cached(clip_model_dir, model_opts, self.hf_safetensor, model_name='model'):
             model = CLIPTextModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -661,8 +686,7 @@ class CLIPWithProjModel(CLIPModel):
     def get_model(self, torch_inference=''):
         model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else {}
         clip_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        clip_path = self.get_model_path(clip_model_dir, model_opts, model_name='model')
-        if not os.path.exists(clip_path):
+        if not is_model_cached(clip_model_dir, model_opts, self.hf_safetensor, model_name='model'):
             model = CLIPTextModelWithProjection.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -670,7 +694,7 @@ class CLIPWithProjModel(CLIPModel):
                 **model_opts).to(self.device)
             model.save_pretrained(clip_model_dir, **model_opts)
         else:
-            print(f"[I] Load CLIPTextModelWithProjection model from: {clip_path}")
+            print(f"[I] Load CLIPTextModelWithProjection model from: {clip_model_dir}")
             model = CLIPTextModelWithProjection.from_pretrained(clip_model_dir, **model_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
@@ -734,24 +758,28 @@ class T5Model(BaseModel):
     ):
         super(T5Model, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, bf16=bf16, max_batch_size=max_batch_size, text_maxlen=text_maxlen)
         self.subfolder = subfolder
-        self.config = AutoConfig.from_pretrained(self.path, subfolder=self.subfolder, token=self.hf_token)
+        self.t5_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
+        if not os.path.exists(self.t5_model_dir):
+            self.config = AutoConfig.from_pretrained(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load T5Encoder Config from: {self.t5_model_dir}")
+            self.config = AutoConfig.from_pretrained(self.t5_model_dir)
         self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
 
     def get_model(self, torch_inference=''):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
-        t5_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        if not os.path.exists(t5_model_dir):
+        if not is_model_cached(self.t5_model_dir, model_opts, self.hf_safetensor, model_name='model'):
             model = T5EncoderModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 token=self.hf_token,
                 **model_opts).to(self.device)
-            model.save_pretrained(t5_model_dir, **model_opts)
+            model.save_pretrained(self.t5_model_dir, **model_opts)
         else:
-            print(f"[I] Load T5EncoderModel model from: {t5_model_dir}")
-            model = T5EncoderModel.from_pretrained(t5_model_dir, **model_opts).to(self.device)
+            print(f"[I] Load T5EncoderModel model from: {self.t5_model_dir}")
+            model = T5EncoderModel.from_pretrained(self.t5_model_dir, **model_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
 
@@ -1077,8 +1105,7 @@ class UNetModel(BaseModel):
             model = UNet2DConditionControlNetModel(unet_model, controlnets)
         else:
             unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-            unet_path = self.get_model_path(unet_model_dir, model_opts)
-            if not os.path.exists(unet_path):
+            if not is_model_cached(unet_model_dir, model_opts, self.hf_safetensor):
                 model = UNet2DConditionModel.from_pretrained(self.path,
                     subfolder=self.subfolder,
                     use_safetensors=self.hf_safetensor,
@@ -1086,7 +1113,7 @@ class UNetModel(BaseModel):
                     **model_opts).to(self.device)
                 model.save_pretrained(unet_model_dir, **model_opts)
             else:
-                print(f"[I] Load UNet2DConditionModel  model from: {unet_path}")
+                print(f"[I] Load UNet2DConditionModel  model from: {unet_model_dir}")
                 model = UNet2DConditionModel.from_pretrained(unet_model_dir, **model_opts).to(self.device)
             if torch_inference:
                 model.to(memory_format=torch.channels_last)
@@ -1217,8 +1244,7 @@ class UNetXLModel(BaseModel):
     def get_model(self, torch_inference=''):
         model_opts = {'variant': 'fp16', 'torch_dtype': torch.float16} if self.fp16 else {}
         unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        unet_path = self.get_model_path(unet_model_dir, model_opts)
-        if not os.path.exists(unet_path):
+        if not is_model_cached(unet_model_dir, model_opts, self.hf_safetensor):
             model = UNet2DConditionModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -1229,7 +1255,7 @@ class UNetXLModel(BaseModel):
                 model.set_default_attn_processor()
             model.save_pretrained(unet_model_dir, **model_opts)
         else:
-            print(f"[I] Load UNet2DConditionModel model from: {unet_path}")
+            print(f"[I] Load UNet2DConditionModel model from: {unet_model_dir}")
             model = UNet2DConditionModel.from_pretrained(unet_model_dir, **model_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
@@ -1410,8 +1436,7 @@ class UNetTemporalModel(BaseModel):
     def get_model(self, torch_inference=''):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
         unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        unet_path = self.get_model_path(unet_model_dir, model_opts)
-        if not os.path.exists(unet_path):
+        if not is_model_cached(unet_model_dir, model_opts, self.hf_safetensor):
             model = UNetSpatioTemporalConditionModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -1419,7 +1444,7 @@ class UNetTemporalModel(BaseModel):
                 **model_opts).to(self.device)
             model.save_pretrained(unet_model_dir, **model_opts)
         else:
-            print(f"[I] Load UNetSpatioTemporalConditionModel model from: {unet_path}")
+            print(f"[I] Load UNetSpatioTemporalConditionModel model from: {unet_model_dir}")
             model = UNetSpatioTemporalConditionModel.from_pretrained(unet_model_dir, **model_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
@@ -1511,8 +1536,7 @@ class UNetCascadeModel(BaseModel):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {}
         model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else model_opts
         unet_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        unet_path = self.get_model_path(unet_model_dir, model_opts)
-        if not os.path.exists(unet_path):
+        if not is_model_cached(unet_model_dir, model_opts, self.hf_safetensor):
             model = StableCascadeUNet.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -1520,7 +1544,7 @@ class UNetCascadeModel(BaseModel):
                 **model_opts).to(self.device)
             model.save_pretrained(unet_model_dir, **model_opts)
         else:
-            print(f"[I] Load Stable Cascade UNet pytorch model from: {unet_path}")
+            print(f"[I] Load Stable Cascade UNet pytorch model from: {unet_model_dir}")
             model = StableCascadeUNet.from_pretrained(unet_model_dir, **model_opts).to(self.device)
         model = optimize_checkpoint(model, torch_inference)
         return model
@@ -1640,25 +1664,29 @@ class FluxTransformerModel(BaseModel):
     ):
         super(FluxTransformerModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, int8=int8, fp8=fp8, bf16=bf16, max_batch_size=max_batch_size, text_maxlen=text_maxlen)
         self.subfolder = 'transformer'
-        self.config = FluxTransformer2DModel.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        self.transformer_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
+        if not os.path.exists(self.transformer_model_dir):
+            self.config = FluxTransformer2DModel.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load FluxTransformer2DModel config from: {self.transformer_model_dir}")
+            self.config = FluxTransformer2DModel.load_config(self.transformer_model_dir)
         self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
+        self.out_channels = self.config.get('out_channels') or self.config['in_channels']
 
     def get_model(self, torch_inference=''):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
-        transformer_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        transformer_path = self.get_model_path(transformer_model_dir, model_opts)
-        if not os.path.exists(transformer_path):
+        if not is_model_cached(self.transformer_model_dir, model_opts, self.hf_safetensor):
             model = FluxTransformer2DModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 token=self.hf_token,
                 **model_opts).to(self.device)
-            model.save_pretrained(transformer_model_dir, **model_opts)
+            model.save_pretrained(self.transformer_model_dir, **model_opts)
         else:
-            print(f"[I] Load FluxTransformer2DModel  model from: {transformer_path}")
-            model = FluxTransformer2DModel.from_pretrained(transformer_model_dir, **model_opts).to(self.device)
+            print(f"[I] Load FluxTransformer2DModel model from: {self.transformer_model_dir}")
+            model = FluxTransformer2DModel.from_pretrained(self.transformer_model_dir, **model_opts).to(self.device)
         if torch_inference:
             model.to(memory_format=torch.channels_last)
         model = optimize_checkpoint(model, torch_inference)
@@ -1708,7 +1736,7 @@ class FluxTransformerModel(BaseModel):
             'timestep': (batch_size,),
             'img_ids': ((latent_height // 2) * (latent_width // 2), 3),
             'txt_ids': (self.text_maxlen, 3),
-            'latent': (batch_size, (latent_height // 2) * (latent_width // 2), self.config['in_channels']),
+            'latent': (batch_size, (latent_height // 2) * (latent_width // 2), self.out_channels),
         }
         if self.config['guidance_embeds']:
             shape_dict['guidance'] = (batch_size,)
@@ -1736,7 +1764,7 @@ class FluxTransformerModel(BaseModel):
 
     def optimize(self, onnx_graph):
         if self.fp8:
-            return super().optimize(onnx_graph, modify_fp8_graph=True, is_fp16_io=False)
+            return super().optimize(onnx_graph)
         if self.int8:
             return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
         return super().optimize(onnx_graph)
@@ -1757,21 +1785,25 @@ class VAEModel(BaseModel):
     ):
         super(VAEModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, bf16=bf16, max_batch_size=max_batch_size)
         self.subfolder = 'vae'
-        self.config = AutoencoderKL.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        self.vae_decoder_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
+        if not os.path.exists(self.vae_decoder_model_dir):
+            self.config = AutoencoderKL.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load AutoencoderKL (decoder) config from: {self.vae_decoder_model_dir}")
+            self.config = AutoencoderKL.load_config(self.vae_decoder_model_dir)
 
     def get_model(self, torch_inference=''):
         model_opts = {'torch_dtype': torch.float16} if self.fp16 else {'torch_dtype': torch.bfloat16} if self.bf16 else {}
-        vae_decoder_model_path = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        if not os.path.exists(vae_decoder_model_path):
+        if not is_model_cached(self.vae_decoder_model_dir, model_opts, self.hf_safetensor):
             model = AutoencoderKL.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 token=self.hf_token,
                 **model_opts).to(self.device)
-            model.save_pretrained(vae_decoder_model_path, **model_opts)
+            model.save_pretrained(self.vae_decoder_model_dir, **model_opts)
         else:
-            print(f"[I] Load AutoencoderKL (decoder) model from: {vae_decoder_model_path}")
-            model = AutoencoderKL.from_pretrained(vae_decoder_model_path, **model_opts).to(self.device)
+            print(f"[I] Load AutoencoderKL (decoder) model from: {self.vae_decoder_model_dir}")
+            model = AutoencoderKL.from_pretrained(self.vae_decoder_model_dir, **model_opts).to(self.device)
         model.forward = model.decode
         model = optimize_checkpoint(model, torch_inference)
         return model
@@ -1945,18 +1977,20 @@ class VAEDecTemporalModel(BaseModel):
 
 
 class TorchVAEEncoder(torch.nn.Module):
-    def __init__(self, version, pipeline, hf_token, device, path, framework_model_dir, hf_safetensor=False):
+    def __init__(self, version, pipeline, hf_token, device, path, framework_model_dir, subfolder, fp16=False, bf16=False, hf_safetensor=False):
         super().__init__()
-        vae_encoder_model_dir = get_checkpoint_dir(framework_model_dir, version, pipeline, 'vae_encoder')
-        if not os.path.exists(vae_encoder_model_dir):
+        model_opts = {'torch_dtype': torch.float16} if fp16 else {'torch_dtype': torch.bfloat16} if bf16 else {}
+        vae_encoder_model_dir = get_checkpoint_dir(framework_model_dir, version, pipeline, subfolder)
+        if not is_model_cached(vae_encoder_model_dir, model_opts, hf_safetensor):
             self.vae_encoder = AutoencoderKL.from_pretrained(path,
                 subfolder='vae',
                 use_safetensors=hf_safetensor,
-                token=hf_token).to(device)
-            self.vae_encoder.save_pretrained(vae_encoder_model_dir)
+                token=hf_token,
+                **model_opts).to(device)
+            self.vae_encoder.save_pretrained(vae_encoder_model_dir, **model_opts)
         else:
             print(f"[I] Load AutoencoderKL (encoder) model from: {vae_encoder_model_dir}")
-            self.vae_encoder = AutoencoderKL.from_pretrained(vae_encoder_model_dir).to(device)
+            self.vae_encoder = AutoencoderKL.from_pretrained(vae_encoder_model_dir, **model_opts).to(device)
 
     def forward(self, x):
         return self.vae_encoder.encode(x).latent_dist.sample()
@@ -1971,12 +2005,21 @@ class VAEEncoderModel(BaseModel):
         verbose,
         framework_model_dir,
         fp16=False,
+        tf32=False,
+        bf16=False,
         max_batch_size=16,
     ):
-        super(VAEEncoderModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, max_batch_size=max_batch_size)
+        super(VAEEncoderModel, self).__init__(version, pipeline, device=device, hf_token=hf_token, verbose=verbose, framework_model_dir=framework_model_dir, fp16=fp16, tf32=tf32, bf16=bf16, max_batch_size=max_batch_size)
+        self.subfolder = 'vae'
+        self.vae_encoder_model_dir = get_checkpoint_dir(framework_model_dir, version, self.pipeline, self.subfolder)
+        if not os.path.exists(self.vae_encoder_model_dir):
+            self.config = AutoencoderKL.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load AutoencoderKL (encoder) config from: {self.vae_encoder_model_dir}")
+            self.config = AutoencoderKL.load_config(self.vae_encoder_model_dir)
 
     def get_model(self, torch_inference=''):
-        vae_encoder = TorchVAEEncoder(self.version, self.pipeline, self.hf_token, self.device, self.path, self.framework_model_dir, hf_safetensor=self.hf_safetensor)
+        vae_encoder = TorchVAEEncoder(self.version, self.pipeline, self.hf_token, self.device, self.path, self.framework_model_dir, self.subfolder, self.fp16, self.bf16, hf_safetensor=self.hf_safetensor)
         return vae_encoder
 
     def get_input_names(self):
@@ -2007,12 +2050,13 @@ class VAEEncoderModel(BaseModel):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return {
             'images': (batch_size, 3, image_height, image_width),
-            'latent': (batch_size, 4, latent_height, latent_width)
+            'latent': (batch_size, self.config['latent_channels'], latent_height, latent_width)
         }
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         self.check_dims(batch_size, image_height, image_width)
-        return torch.randn(batch_size, 3, image_height, image_width, dtype=torch.float32, device=self.device)
+        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
+        return torch.randn(batch_size, 3, image_height, image_width, dtype=dtype, device=self.device)
 
 class SD3_VAEEncoderModel(VAEEncoderModel):
     def __init__(self,
@@ -2086,8 +2130,7 @@ class VQGANModel(BaseModel):
     def get_model(self, torch_inference=''):
         model_opts = {'variant': 'bf16', 'torch_dtype': torch.bfloat16} if self.bf16 else {}
         vqgan_model_dir = get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
-        vqgan_path = self.get_model_path(vqgan_model_dir, model_opts, model_name='model')
-        if not os.path.exists(vqgan_path):
+        if not is_model_cached(vqgan_model_dir, model_opts, self.hf_safetensor, model_name='model'):
             model = PaellaVQModel.from_pretrained(self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -2095,7 +2138,7 @@ class VQGANModel(BaseModel):
                 **model_opts).to(self.device)
             model.save_pretrained(vqgan_model_dir, **model_opts)
         else:
-            print(f"[I] Load VQGAN pytorch model from: {vqgan_path}")
+            print(f"[I] Load VQGAN pytorch model from: {vqgan_model_dir}")
             model = PaellaVQModel.from_pretrained(vqgan_model_dir, **model_opts).to(self.device)
         model.forward = model.decode
         model = optimize_checkpoint(model, torch_inference)

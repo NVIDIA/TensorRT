@@ -87,3 +87,26 @@ class TestProfile:
 
         trt_profile = profile.to_trt(builder, network)
         trt_profile.get_shape("X") == ((1, 2, 1, 1), (1, 2, 2, 2), (1, 2, 4, 4))
+
+    @pytest.mark.parametrize("name, should_match", [
+        ("inp_*",      [True for _ in range(12)]),
+        ("inp_?",      [False, False, False, *[True for _ in range(9)]]),
+        ("inp_[abc]",  [*[False for _ in range(6)], True, True, True, False, False, False]),
+        ("inp_[!abc]", [False, False, False, True, True, True, False, False, False, True, True, True]),
+    ])
+    def test_input_name_with_wildcards(self, name, should_match):
+        match_case = [
+            "inp_foo", "inp_bar", "inp_123", "inp_1", "inp_s", "inp_k",
+            "inp_a", "inp_b", "inp_c", "inp_d", "inp_e", "inp_f"
+        ]
+        builder, network = create_network()
+        for input in match_case:
+            network.add_input(input, shape=(-1, 2, 3), dtype=trt.float32)
+
+        profile = Profile()
+        profile.add(name, min=(2, 2, 3), opt=(2, 2, 3), max=(2, 2, 3))
+        profile.fill_defaults(network)
+        trt_prof = profile.to_trt(builder, network)
+        res = [trt_prof.get_shape(case) == [(2, 2, 3), (2, 2, 3), (2, 2, 3)] for case in match_case]
+        assert res == should_match 
+

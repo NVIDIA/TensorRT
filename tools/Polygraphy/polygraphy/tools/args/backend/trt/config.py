@@ -477,6 +477,14 @@ class TrtConfigArgs(BaseArgs):
                 default=None,
             )
 
+        self.group.add_argument(
+            "--tiling-optimization-level",
+            help="The tiling optimization level. Setting a higher optimization "
+            "level allows TensorRT to spend more building time for more tiling strategies. "
+            "Values come from the names of values in the `trt.TilingOptimizationLevel` enum and are case-insensitive.",
+            default=None,
+        )
+
     def parse_impl(self, args):
         """
         Parses command-line arguments and populates the following attributes:
@@ -522,6 +530,7 @@ class TrtConfigArgs(BaseArgs):
             disable_compilation_cache (bool): Whether to disable caching JIT-compiled code.
             weight_streaming (bool): Whether to enable weight streaming for the TensorRT Engine.
             runtime_platform (str): A string representing the target runtime platform enum value.
+            tiling_optimization_level (str): The tiling optimization level.
         """
 
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
@@ -690,6 +699,15 @@ class TrtConfigArgs(BaseArgs):
 
         self.weight_streaming = args_util.get(args, "weight_streaming")
 
+        self.tiling_optimization_level = None
+        tiling_optimization_level = args_util.get(
+            args, "tiling_optimization_level"
+        )
+        if tiling_optimization_level is not None:
+            self.tiling_optimization_level = make_trt_enum_val(
+                "TilingOptimizationLevel", tiling_optimization_level
+            )
+
     def add_to_script_impl(self, script):
         profiles = []
         for profile_dict in self.profile_dicts:
@@ -826,6 +844,7 @@ class TrtConfigArgs(BaseArgs):
                 disable_compilation_cache=self.disable_compilation_cache,
                 weight_streaming=self.weight_streaming,
                 runtime_platform=self.runtime_platform,
+                tiling_optimization_level=self.tiling_optimization_level,
             )
             if config_loader_str is not None:
                 script.add_import(

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import math
 import time
 from collections import OrderedDict
 
@@ -255,7 +256,7 @@ class TrtRunner(BaseRunner):
     def get_input_metadata_impl(self):
         return trt_util.get_metadata_from_engine(self.engine, self.context, mode=trt.TensorIOMode.INPUT)
 
-    def _infer_impl(self, feed_dict, copy_outputs_to_host):
+    def _infer_impl(self, feed_dict, copy_outputs_to_host, return_raw_buffers):
         def get_io(mode):
             for idx in range(self.engine.num_io_tensors):
                 name = self.engine.get_tensor_name(idx)
@@ -361,13 +362,19 @@ class TrtRunner(BaseRunner):
             if tensor_format == trt.TensorFormat.HWC:
                 shape = trt_util.get_hwc_shape_from_chw(shape, self.context.get_tensor_strides(name))
             using_vectorized_format = tensor_format != trt.TensorFormat.LINEAR and tensor_format != trt.TensorFormat.HWC
+            should_use_formatted_array = return_raw_buffers or using_vectorized_format
 
             dtype = DataType.from_dtype(self.engine.get_tensor_dtype(name), source_module="tensorrt")
 
             # The memory allocated by the output allocator may be larger than actually required.
             # If we're using a vectorized format, then we need to copy the whole thing.
             # Otherwise, we can determine how much we actually need.
-            nbytes = util.array.nbytes(raw_array) if using_vectorized_format else (util.volume(shape) * dtype.itemsize)
+            nbytes = (
+                util.array.nbytes(raw_array)
+                if using_vectorized_format
+                # Some data types have fractional sizes, in which case we round up to the nearest byte.
+                else int(math.ceil(util.volume(shape) * dtype.itemsize))
+            )
 
             if copy_outputs_to_host:
                 raw_array = _get_array_on_cpu(
@@ -379,7 +386,7 @@ class TrtRunner(BaseRunner):
                     use_torch=use_torch,
                 )
 
-            if using_vectorized_format:
+            if should_use_formatted_array:
                 array = FormattedArray(raw_array, shape=shape)
             else:
                 array = util.array.view(raw_array, dtype, shape)
@@ -398,7 +405,7 @@ class TrtRunner(BaseRunner):
         return output_buffers
 
     @util.check_called_by("infer")
-    def infer_impl(self, feed_dict, copy_outputs_to_host=None):
+    def infer_impl(self, feed_dict, copy_outputs_to_host=None, return_raw_buffers=None):
         """
         Implementation for running inference with TensorRT.
         Do not call this method directly - use ``infer()`` instead,
@@ -424,9 +431,10 @@ class TrtRunner(BaseRunner):
                     Polygraphy DeviceViews, or PyTorch tensors.
         """
         copy_outputs_to_host = util.default(copy_outputs_to_host, True)
+        return_raw_buffers = util.default(return_raw_buffers, False)
 
         start = time.time()
-        output_buffers = self._infer_impl(feed_dict, copy_outputs_to_host)
+        output_buffers = self._infer_impl(feed_dict, copy_outputs_to_host, return_raw_buffers)
         end = time.time()
         self.inference_time = end - start
 

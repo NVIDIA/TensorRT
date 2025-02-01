@@ -45,7 +45,7 @@ class TestLogger:
             logger.info("Hello")
             log_file.seek(0)
             assert (
-                f"[I] [tests/logger/test_logger.py:{inspect.currentframe().f_lineno - 5}] Hello\n"
+                f"[I] [tests/logger/test_logger.py:{inspect.currentframe().f_lineno - 3}] Hello\n"
                 == log_file.read()
             )
 

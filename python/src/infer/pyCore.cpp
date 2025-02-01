@@ -365,6 +365,90 @@ void docProcessDebugTensor(IDebugListener& self, void const* addr, TensorLocatio
     return;
 }
 
+uint64_t getTacticHash(TimingCacheValue const& value)
+{
+    return value.tacticHash;
+}
+
+void setTacticHash(TimingCacheValue& value, uint64_t tacticHash)
+{
+    value.tacticHash = tacticHash;
+}
+
+float getTimingMSec(TimingCacheValue const& value)
+{
+    return value.timingMSec;
+}
+
+void setTimingMSec(TimingCacheValue& value, float timingMSec)
+{
+    value.timingMSec = timingMSec;
+}
+
+namespace detail
+{
+constexpr int64_t kBYTES_PER_KEY = 16;
+constexpr int64_t kCHARS_PER_BYTE = 2;
+constexpr int64_t kPREFIX_CHARS = 2;
+constexpr int64_t kTOTAL_CHARS = kPREFIX_CHARS + kBYTES_PER_KEY * kCHARS_PER_BYTE;
+} // namespace detail
+
+TimingCacheKey parseTimingCacheKey(std::string const& text)
+{
+    using namespace detail;
+
+    if (text.size() != kTOTAL_CHARS)
+    {
+        std::ostringstream msg;
+        msg << "The text should have exactly " << kTOTAL_CHARS << " characters.";
+        utils::throwPyError(PyExc_ValueError, msg.str().c_str());
+    }
+
+    int offset = 0;
+
+    sscanf(text.c_str(), "0%*[xX]%n", &offset);
+
+    PY_ASSERT_VALUE_ERROR(offset == 2, "The text should start with prefix `0x` or `0X`.");
+
+    TimingCacheKey key;
+
+    for (int64_t i = 0; i < kBYTES_PER_KEY; ++i, offset += kCHARS_PER_BYTE)
+    {
+        int64_t numReceived = sscanf(text.c_str() + offset, "%2" SCNx8, &key.data[i]);
+        PY_ASSERT_VALUE_ERROR(numReceived == 1, "The text has invalid content.");
+    }
+
+    return key;
+}
+
+std::string convertTimingCacheKeyToString(TimingCacheKey const& key)
+{
+    using namespace detail;
+
+    char buffer[kTOTAL_CHARS + 1] = "0x";
+
+    for (int64_t i = 0; i < kBYTES_PER_KEY; ++i)
+    {
+        int64_t offset = kPREFIX_CHARS + kCHARS_PER_BYTE * i;
+        sprintf(buffer + offset, "%02" PRIx8, key.data[i]);
+    }
+
+    return std::string(buffer);
+}
+
+std::vector<TimingCacheKey> queryTimingCacheKeys(ITimingCache const& cache)
+{
+    int64_t numKeys = cache.queryKeys(nullptr, 0);
+    PY_ASSERT_RUNTIME_ERROR(numKeys >= 0, "Failed to get the number of keys in the timing cache");
+
+    std::vector<TimingCacheKey> keys(numKeys);
+
+    PY_ASSERT_RUNTIME_ERROR(
+        numKeys == cache.queryKeys(keys.data(), keys.size()), "Failed to get keys from the timing cache");
+
+    return keys;
+}
+
 } // namespace lambdas
 
 namespace PyGpuAllocatorHelper
@@ -1424,6 +1508,7 @@ void bindCore(py::module& m)
         .value("GPU_FALLBACK", BuilderFlag::kGPU_FALLBACK, BuilderFlagDoc::GPU_FALLBACK)
         .value("REFIT", BuilderFlag::kREFIT, BuilderFlagDoc::REFIT)
         .value("DISABLE_TIMING_CACHE", BuilderFlag::kDISABLE_TIMING_CACHE, BuilderFlagDoc::DISABLE_TIMING_CACHE)
+        .value("EDITABLE_TIMING_CACHE", BuilderFlag::kEDITABLE_TIMING_CACHE, BuilderFlagDoc::EDITABLE_TIMING_CACHE)
         .value("TF32", BuilderFlag::kTF32, BuilderFlagDoc::TF32)
         .value("SPARSE_WEIGHTS", BuilderFlag::kSPARSE_WEIGHTS, BuilderFlagDoc::SPARSE_WEIGHTS)
         .value("SAFETY_SCOPE", BuilderFlag::kSAFETY_SCOPE, BuilderFlagDoc::SAFETY_SCOPE)
@@ -1449,7 +1534,7 @@ void bindCore(py::module& m)
         .value("REFIT_INDIVIDUAL", BuilderFlag::kREFIT_INDIVIDUAL, BuilderFlagDoc::REFIT_INDIVIDUAL)
         .value("STRICT_NANS", BuilderFlag::kSTRICT_NANS, BuilderFlagDoc::STRICT_NANS)
         .value("MONITOR_MEMORY", BuilderFlag::kMONITOR_MEMORY, BuilderFlagDoc::MONITOR_MEMORY)
-        ;
+        .value("FP4", BuilderFlag::kFP4, BuilderFlagDoc::FP4);
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1500,10 +1585,29 @@ void bindCore(py::module& m)
         .value("EDGE_MASK_CONVOLUTIONS", TacticSource::kEDGE_MASK_CONVOLUTIONS, TacticSourceDoc::EDGE_MASK_CONVOLUTIONS)
         .value("JIT_CONVOLUTIONS", TacticSource::kJIT_CONVOLUTIONS, TacticSourceDoc::JIT_CONVOLUTIONS);
 
+    py::class_<TimingCacheKey>(m, "TimingCacheKey", TimingCacheKeyDoc::descr, py::module_local())
+        .def_static("parse", &lambdas::parseTimingCacheKey, "text"_a, TimingCacheKeyDoc::parse)
+        .def("__str__", &lambdas::convertTimingCacheKeyToString, TimingCacheKeyDoc::convertTimingCacheKeyToString);
+
+    py::class_<TimingCacheValue>(m, "TimingCacheValue", TimingCacheValueDoc::descr, py::module_local())
+        .def(py::init<uint64_t, float>())
+        .def_property("tacticHash", &lambdas::getTacticHash, &lambdas::setTacticHash)
+        .def_property("timingMSec", &lambdas::getTimingMSec, &lambdas::setTimingMSec);
+
     py::class_<ITimingCache>(m, "ITimingCache", ITimingCacheDoc::descr, py::module_local())
         .def("serialize", &ITimingCache::serialize, ITimingCacheDoc::serialize)
         .def("combine", &ITimingCache::combine, "input_cache"_a, "ignore_mismatch"_a, ITimingCacheDoc::combine)
-        .def("reset", &ITimingCache::reset, ITimingCacheDoc::reset);
+        .def("reset", &ITimingCache::reset, ITimingCacheDoc::reset)
+        .def("queryKeys", &lambdas::queryTimingCacheKeys, ITimingCacheDoc::queryKeys)
+        .def("query", &ITimingCache::query, "key"_a, ITimingCacheDoc::query)
+        .def("update", &ITimingCache::update, "key"_a, "value"_a, ITimingCacheDoc::update);
+
+    py::enum_<TilingOptimizationLevel>(
+        m, "TilingOptimizationLevel", TilingOptimizationLevelDoc::descr, py::module_local())
+        .value("NONE", TilingOptimizationLevel::kNONE, TilingOptimizationLevelDoc::NONE)
+        .value("FAST", TilingOptimizationLevel::kFAST, TilingOptimizationLevelDoc::FAST)
+        .value("MODERATE", TilingOptimizationLevel::kMODERATE, TilingOptimizationLevelDoc::MODERATE)
+        .value("FULL", TilingOptimizationLevel::kFULL, TilingOptimizationLevelDoc::FULL);
 
 #if EXPORT_ALL_BINDINGS
     py::class_<IBuilderConfig>(m, "IBuilderConfig", IBuilderConfigDoc::descr, py::module_local())
@@ -1556,8 +1660,12 @@ void bindCore(py::module& m)
         .def("can_run_on_DLA", &IBuilderConfig::canRunOnDLA, "layer"_a, IBuilderConfigDoc::can_run_on_DLA)
         .def_property(
             "profiling_verbosity", &IBuilderConfig::getProfilingVerbosity, &IBuilderConfig::setProfilingVerbosity)
-        .def_property("algorithm_selector", &IBuilderConfig::getAlgorithmSelector,
-            py::cpp_function(&IBuilderConfig::setAlgorithmSelector, py::keep_alive<1, 2>{}))
+        .def_property("algorithm_selector",
+            utils::deprecateMember(&IBuilderConfig::getAlgorithmSelector,
+                "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
+            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setAlgorithmSelector,
+                                 "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
+                py::keep_alive<1, 2>{}))
         .def("set_tactic_sources", &IBuilderConfig::setTacticSources, "tactic_sources"_a,
             IBuilderConfigDoc::set_tactic_sources)
         .def("get_tactic_sources", &IBuilderConfig::getTacticSources, IBuilderConfigDoc::get_tactic_sources)
@@ -1580,6 +1688,9 @@ void bindCore(py::module& m)
         .def_property("max_aux_streams", &IBuilderConfig::getMaxAuxStreams, &IBuilderConfig::setMaxAuxStreams)
         .def_property("progress_monitor", &IBuilderConfig::getProgressMonitor,
             py::cpp_function(&IBuilderConfig::setProgressMonitor, py::keep_alive<1, 2>{}))
+        .def_property("tiling_optimization_level", &IBuilderConfig::getTilingOptimizationLevel,
+            &IBuilderConfig::setTilingOptimizationLevel)
+        .def_property("l2_limit_for_tiling", &IBuilderConfig::getL2LimitForTiling, &IBuilderConfig::setL2LimitForTiling)
 
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
@@ -1588,7 +1699,8 @@ void bindCore(py::module& m)
         .value("EXPLICIT_BATCH", NetworkDefinitionCreationFlag::kEXPLICIT_BATCH,
             NetworkDefinitionCreationFlagDoc::EXPLICIT_BATCH)
         .value("STRONGLY_TYPED", NetworkDefinitionCreationFlag::kSTRONGLY_TYPED,
-            NetworkDefinitionCreationFlagDoc::STRONGLY_TYPED);
+            NetworkDefinitionCreationFlagDoc::STRONGLY_TYPED)
+        ;
 
     // Builder
     py::class_<IBuilder>(m, "Builder", BuilderDoc::descr, py::module_local())

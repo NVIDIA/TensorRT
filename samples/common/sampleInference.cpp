@@ -46,7 +46,10 @@
 #include "sampleOptions.h"
 #include "sampleReporting.h"
 #include "sampleUtils.h"
+
+
 using namespace nvinfer1;
+
 namespace sample
 {
 
@@ -370,7 +373,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
         }
 
         iEnv.contexts.emplace_back(ec);
-        iEnv.bindings.emplace_back(new Bindings(useManagedMemory));
+        iEnv.bindings.emplace_back(std::make_unique<Bindings>(useManagedMemory));
     }
 
     CHECK(cudaStreamDestroy(setOptProfileStream));
@@ -493,7 +496,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     // Create Debug Listener and turn on debug states if client requested dumping debug tensors.
     if (!inference.debugTensorFileNames.empty())
     {
-        iEnv.listener.reset(new DebugTensorWriter(inference.debugTensorFileNames));
+        iEnv.listener = std::make_unique<DebugTensorWriter>(inference.debugTensorFileNames);
         iEnv.contexts.front()->setDebugListener(iEnv.listener.get());
         for (auto const& s : inference.debugTensorFileNames)
         {
@@ -528,8 +531,7 @@ TaskInferenceEnvironment::TaskInferenceEnvironment(
 {
     BuildEnvironment bEnv(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
     loadEngineToBuildEnv(engineFile, bEnv, sample::gLogError);
-    std::unique_ptr<InferenceEnvironment> tmp(new InferenceEnvironment(bEnv));
-    iEnv = std::move(tmp);
+    iEnv = std::make_unique<InferenceEnvironment>(bEnv);
 
     CHECK(cudaSetDevice(device));
     SystemOptions system{};
@@ -720,21 +722,19 @@ class Iteration
 {
 
 public:
-    Iteration(int32_t id, InferenceOptions const& inference, nvinfer1::IExecutionContext& context, Bindings& bindings)
+    explicit Iteration(
+        int32_t id, InferenceOptions const& inference, nvinfer1::IExecutionContext& context, Bindings& bindings)
         : mBindings(bindings)
         , mStreamId(id)
         , mDepth(1 + inference.overlap)
         , mActive(mDepth)
         , mEvents(mDepth)
         , mEnqueueTimes(mDepth)
-        , mContext(&context)
     {
-        for (int32_t d = 0; d < mDepth; ++d)
+        for (auto& eventsAtDepth : mEvents)
         {
-            for (int32_t e = 0; e < static_cast<int32_t>(EventType::kNUM); ++e)
-            {
-                mEvents[d][e].reset(new TrtCudaEvent(!inference.spin));
-            }
+            std::generate(eventsAtDepth.begin(), eventsAtDepth.end(),
+                [&] { return std::make_unique<TrtCudaEvent>(!inference.spin); });
         }
         createEnqueueFunction(inference, context, bindings);
     }
@@ -942,7 +942,6 @@ private:
 
     int32_t enqueueStart{0};
     std::vector<EnqueueTimes> mEnqueueTimes;
-    nvinfer1::IExecutionContext* mContext{nullptr};
 };
 
 bool inferenceLoop(std::vector<std::unique_ptr<Iteration>>& iStreams, TimePoint const& cpuStart,
@@ -1020,17 +1019,22 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
 
         CHECK(cudaSetDevice(device));
 
-        std::vector<std::unique_ptr<Iteration>> iStreams;
-
-        for (int32_t s = 0; s < streamsPerThread; ++s)
-        {
+        //! Function to make one iteration:
+        auto makeIteration = [&](int32_t s) -> std::unique_ptr<Iteration> {
             int32_t const streamId{threadIdx * streamsPerThread + s};
-            auto* iteration = new Iteration(streamId, inference, *iEnv.getContext(streamId), *iEnv.bindings[streamId]);
+            auto iteration = std::make_unique<Iteration>(
+                streamId, inference, *iEnv.getContext(streamId), *iEnv.bindings[streamId]);
             if (inference.skipTransfers)
             {
                 iteration->setInputData(true);
             }
-            iStreams.emplace_back(iteration);
+            return iteration;
+        };
+
+        std::vector<std::unique_ptr<Iteration>> iStreams;
+        for (int32_t s = 0; s < streamsPerThread; ++s)
+        {
+            iStreams.emplace_back(makeIteration(s));
         }
 
         for (auto& s : iStreams)
@@ -1042,9 +1046,8 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
         if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs,
                 localTrace, inference.skipTransfers, inference.idle))
         {
-            sync.mutex.lock();
+            std::lock_guard<std::mutex> lock{sync.mutex};
             iEnv.error = true;
-            sync.mutex.unlock();
         }
 
         if (inference.skipTransfers)
@@ -1055,15 +1058,15 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
             }
         }
 
-        sync.mutex.lock();
-        trace.insert(trace.end(), localTrace.begin(), localTrace.end());
-        sync.mutex.unlock();
+        {
+            std::lock_guard<std::mutex> lock{sync.mutex};
+            trace.insert(trace.end(), localTrace.begin(), localTrace.end());
+        }
     }
     catch (...)
     {
-        sync.mutex.lock();
+        std::lock_guard<std::mutex> lock{sync.mutex};
         iEnv.error = true;
-        sync.mutex.unlock();
     }
 }
 
@@ -1328,6 +1331,7 @@ void Binding::fill()
     }
     case nvinfer1::DataType::kFP8: ASSERT(false && "FP8 is not supported");
     case nvinfer1::DataType::kINT4: ASSERT(false && "INT4 is not supported");
+    case DataType::kFP4: ASSERT(false && "FP4 is not supported");
     }
 }
 
@@ -1390,6 +1394,7 @@ void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim,
     }
     case nvinfer1::DataType::kFP8: ASSERT(false && "FP8 is not supported");
     case nvinfer1::DataType::kINT4: ASSERT(false && "INT4 is not supported");
+    case nvinfer1::DataType::kFP4: ASSERT(false && "FP4 is not supported");
     }
 }
 
@@ -1405,33 +1410,30 @@ void Bindings::addBinding(TensorInfo const& tensorInfo, std::string const& fileN
     mBindings[b].isInput = tensorInfo.isInput;
     mBindings[b].volume = tensorInfo.vol;
     mBindings[b].dataType = tensorInfo.dataType;
+    //! Make a UnifiedMirroredBuffer if useManaged or Discrete othereise:
+    auto makeBuffer = [](bool useManaged) -> std::unique_ptr<IMirroredBuffer> {
+        if (useManaged)
+        {
+            return std::make_unique<UnifiedMirroredBuffer>();
+        }
+        else
+        {
+            return std::make_unique<DiscreteMirroredBuffer>();
+        }
+    };
     if (tensorInfo.isDynamic)
     {
         ASSERT(!tensorInfo.isInput); // Only output shape can be possibly unknown because of DDS.
         if (mBindings[b].outputAllocator == nullptr)
         {
-            if (mUseManaged)
-            {
-                mBindings[b].outputAllocator.reset(new OutputAllocator(new UnifiedMirroredBuffer));
-            }
-            else
-            {
-                mBindings[b].outputAllocator.reset(new OutputAllocator(new DiscreteMirroredBuffer));
-            }
+            mBindings[b].outputAllocator = std::make_unique<OutputAllocator>(makeBuffer(mUseManaged));
         }
     }
     else
     {
         if (mBindings[b].buffer == nullptr)
         {
-            if (mUseManaged)
-            {
-                mBindings[b].buffer.reset(new UnifiedMirroredBuffer);
-            }
-            else
-            {
-                mBindings[b].buffer.reset(new DiscreteMirroredBuffer);
-            }
+            mBindings[b].buffer = makeBuffer(mUseManaged);
         }
         // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
         // even for empty tensors, so allocate a dummy byte.

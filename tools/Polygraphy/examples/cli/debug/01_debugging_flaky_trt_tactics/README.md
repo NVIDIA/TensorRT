@@ -1,7 +1,8 @@
 # Debugging Flaky TensorRT Tactics
 
 **IMPORTANT: This example no longer works reliably for newer versions of TensorRT, since they make some**
-    **tactic choices that are not exposed via the IAlgorithmSelector interface. Thus, the approach outlined below**
+    **tactic choices that are not exposed via the IAlgorithmSelector interface (Deprecated in TensorRT 10.8.**
+    **Please use editable mode in ITimingCache instead). Thus, the approach outlined below**
     **cannot guarantee deterministic engine builds. With TensorRT 8.7 and newer, you can use the**
     **tactic timing cache (`--save-timing-cache` and `--load-timing-cache` in Polygraphy) to ensure**
     **determinism, but these files are opaque and thus cannot be interpreted by `inspect diff-tactics`**

@@ -61,6 +61,8 @@ enum class PluginFieldType : int32_t
     kFP8 = 11,
     //! INT4 field type.
     kINT4 = 12,
+    //! FP4 field type.
+    kFP4 = 13,
 };
 
 //!

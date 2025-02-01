@@ -35,6 +35,9 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
     # load the bindings. If we imported the tensorrt_libs wheel, then that should have taken care of it for us.
     def find_lib(name):
         paths = os.environ["PATH"].split(os.path.pathsep)
+        # Add ../##TENSORRT_MODULE##.libs to the search path.  This allows repackaging non-standalone TensorRT wheels as standalone
+        # using delvewheel (with the --no-mangle-all flag set) to work properly.
+        paths.append(os.path.join(os.path.dirname(__file__), os.pardir, "##TENSORRT_MODULE##.libs"))
         for path in paths:
             libpath = os.path.join(path, name)
             if os.path.isfile(libpath):
@@ -194,6 +197,7 @@ def _itemsize(trt_type):
         uint8: 1,
         fp8: 1,
         int4: 0.5,
+        fp4: 0.5,
     }
     if trt_type in mapping:
         return mapping[trt_type]

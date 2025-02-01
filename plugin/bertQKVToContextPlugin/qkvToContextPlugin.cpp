@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -213,9 +213,9 @@ bool QKVToContextPluginDynamic::supportsFormatCombination(
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Xavier, Turing and Ampere
     if (mType == DataType::kINT8)
     {
-        if (mSM != kSM_75 && mSM != kSM_80 && mSM != kSM_86 && mSM != kSM_87 && mSM != kSM_89 && mSM != kSM_90)
+        if (!elem(mSM, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120}))
         {
-            gLogError << "INT8 IO is only supported on Turing, Ampere and Hopper for plugin "
+            gLogError << "INT8 IO is only supported on Turing, Ampere, Hopper and Blackwell for plugin "
                       << kQKV_TO_CONTEXT_PLUGIN_NAME << std::endl;
             return false;
         }
@@ -462,9 +462,14 @@ int32_t QKVToContextPluginDynamic::getOutputDataTypes(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-void QKVToContextPluginDynamic::setCublasHandle(cublasContext* cublasHandle)
+void QKVToContextPluginDynamic::setCublasResources(std::shared_ptr<CublasWrapper> cublasWrapper)
 {
-    mCublas = cublasHandle;
+    mCublasWrapper = cublasWrapper;
+    // The shared cublasWrapper resource owns the handle.
+    // but `this` instance has a non-owning pointer to the handle.
+    // Note that the cublasWrapper inits the handle and checks for nullptr
+    // so we don't have to do that here.
+    mCublasHandle = mCublasWrapper->getCublasHandle();
 }
 
 IPluginV3* QKVToContextPluginDynamic::attachToContext(IPluginResourceContext* context) noexcept
@@ -472,10 +477,9 @@ IPluginV3* QKVToContextPluginDynamic::attachToContext(IPluginResourceContext* co
     try
     {
         auto p = static_cast<QKVToContextPluginDynamic*>(clone());
-        mCublasWrapper = createPluginCublasWrapper(context);
-        auto cublasHandle = mCublasWrapper->getCublasHandle();
-        PLUGIN_VALIDATE(cublasHandle != nullptr);
-        p->setCublasHandle(cublasHandle);
+        // the clone has shared ownership of underling cublasWrapper instance
+        // that is mapped to current context
+        p->setCublasResources(createPluginCublasWrapper(context));
         return p;
     }
     catch (const std::exception& e)
@@ -524,14 +528,14 @@ int32_t QKVToContextPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
         if (mHasImask && fusedDispatcher.get() && fusedDispatcher->isValid(mHeadSize, inputDesc->dims.d[SDIM]))
         {
             fusedDispatcher->run(
-                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
+                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublasHandle);
         }
         else
         {
             PLUGIN_VALIDATE(unfusedDispatcher.get(), "The Unfused MHARunner is uninitialized, no MHARunner available!");
             PLUGIN_VALIDATE(mType != DataType::kINT8, "The Unfused MHARunner does not support INT8!");
             unfusedDispatcher->run(
-                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
+                inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublasHandle);
         }
     }
     catch (std::exception const& e)
@@ -785,8 +789,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        bool isSMSupported =
-            mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75;
+        bool isSMSupported = elem(mSM, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120});
         PLUGIN_ASSERT(isSMSupported && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
@@ -816,8 +819,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     {
         // variable sequence length is only supported with the fused MHA kernels
         // we should not override mS!
-        bool isSMSupported =
-            mSM == kSM_90 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_89 || mSM == kSM_80 || mSM == kSM_75;
+        bool isSMSupported = elem(mSM, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120});
         PLUGIN_ASSERT(isSMSupported && (type == DataType::kINT8 || type == DataType::kHALF)
             && "requesting maxSeqlen not compatible with GPU arch");
         // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
@@ -948,14 +950,12 @@ bool QKVToContextVarSeqlenPlugin::supportsFormatCombination(
     int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     // we only support variable sequence and int8 IO in fused mha runner, and we only support fused mha runner on
-    // Turing, Ampere, Hopper.
-    bool const hasV2Kernels
-        = (
-            mSM == kSM_90 || mSM == kSM_89 || mSM == kSM_87 || mSM == kSM_86 || mSM == kSM_80 || mSM == kSM_75);
-    PLUGIN_ASSERT(
-        (mType != DataType::kINT8 || hasV2Kernels) && "INT8 IO is only supported on Xavier, Turing, Ampere, Hopper!");
-    PLUGIN_ASSERT(
-        (!mUseVarSeqlen || hasV2Kernels) && "Variable sequence is only supported on Xavier, Turing, Ampere, Hopper!");
+    // Turing, Ampere, Hopper and Blackwell
+    bool const hasV2Kernels = elem(mSM, {kSM_75, kSM_80, kSM_86, kSM_87, kSM_89, kSM_90, kSM_100, kSM_120});
+    PLUGIN_ASSERT((mType != DataType::kINT8 || hasV2Kernels)
+        && "INT8 IO is only supported on Xavier, Turing, Ampere, Hopper and Blackwell!");
+    PLUGIN_ASSERT((!mUseVarSeqlen || hasV2Kernels)
+        && "Variable sequence is only supported on Xavier, Turing, Ampere, Hopper and Blackwell!");
 
     PLUGIN_ASSERT(pos >= 0);
     PLUGIN_ASSERT(pos < 2 + mHasImask + 2 * mUseVarSeqlen);
@@ -1161,9 +1161,14 @@ int32_t QKVToContextVarSeqlenPlugin::getOutputDataTypes(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-void QKVToContextVarSeqlenPlugin::setCublasHandle(cublasContext* cublasHandle)
+void QKVToContextVarSeqlenPlugin::setCublasResources(std::shared_ptr<CublasWrapper> cublasWrapper)
 {
-    mCublas = cublasHandle;
+    mCublasWrapper = cublasWrapper;
+    // The shared cublasWrapper resource owns the handle.
+    // but `this` instance has a non-owning pointer to the handle.
+    // Note that the cublasWrapper inits the handle and checks for nullptr
+    // so we don't have to do that here.
+    mCublasHandle = mCublasWrapper->getCublasHandle();
 }
 
 IPluginV3* QKVToContextVarSeqlenPlugin::attachToContext(IPluginResourceContext* context) noexcept
@@ -1171,10 +1176,9 @@ IPluginV3* QKVToContextVarSeqlenPlugin::attachToContext(IPluginResourceContext* 
     try
     {
         auto p = static_cast<QKVToContextVarSeqlenPlugin*>(clone());
-        mCublasWrapper = createPluginCublasWrapper(context);
-        auto cublasHandle = mCublasWrapper->getCublasHandle();
-        PLUGIN_VALIDATE(cublasHandle != nullptr);
-        p->setCublasHandle(cublasHandle);
+        // the clone has shared ownership of underling cublasWrapper instance
+        // that is mapped to current context
+        p->setCublasResources(createPluginCublasWrapper(context));
         return p;
     }
     catch (const std::exception& e)
@@ -1183,7 +1187,6 @@ IPluginV3* QKVToContextVarSeqlenPlugin::attachToContext(IPluginResourceContext* 
     }
     return nullptr;
 }
-
 
 char const* QKVToContextVarSeqlenPlugin::getPluginVersion() const noexcept
 {
@@ -1283,7 +1286,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
                 try
                 {
                     dispatcher->run(paddingArgs.inputDesc, paddingArgs.outputDesc, paddingArgs.inputs,
-                        paddingArgs.outputs, workspace, stream, mCublas);
+                        paddingArgs.outputs, workspace, stream, mCublasHandle);
                 }
                 catch (std::exception const& e)
                 {
@@ -1300,7 +1303,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
                 // No pad/unpad is needed.
                 try
                 {
-                    dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream, mCublas);
+                    dispatcher->run(inputDesc, outputDesc, inputs, outputs, workspace, stream, mCublasHandle);
                 }
                 catch (std::exception const& e)
                 {
@@ -1323,7 +1326,7 @@ int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     PLUGIN_ASSERT(mB == inputDesc->dims.d[BDIM]);
 
     void const* maskPtr = mHasImask ? inputs[1] : nullptr;
-    mDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
+    mDispatcher->run(inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublasHandle);
     return cudaGetLastError();
 }
 
@@ -1402,7 +1405,7 @@ IPluginV3* QKVToContextVarSeqlenPluginCreator::createPlugin(
         int32_t typeId = -1;
         int32_t s = -1;
         int32_t b = -1;
-        void const* runnerStateBuffer;
+        void const* runnerStateBuffer = nullptr;
         int32_t varSeqlen = 0;
         float dqProbs = -1;
         int32_t useInt8ScaleMax = -1;

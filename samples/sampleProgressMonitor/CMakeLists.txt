@@ -15,9 +15,7 @@
 # limitations under the License.
 #
 
-SET(SAMPLE_SOURCES
-     sampleProgressMonitor.cpp
-)
+set(SAMPLE_SOURCES sampleProgressMonitor.cpp)
 
 set(SAMPLE_PARSERS "onnx")
 

@@ -85,8 +85,9 @@ public:
         auto s_ = status_;                                                                                             \
         if (s_ != CUDNN_STATUS_SUCCESS)                                                                                \
         {                                                                                                              \
-            nvinfer1::pluginInternal::CudnnWrapper& wapper = nvinfer1::pluginInternal::getCudnnWrapper();              \
-            const char* msg = wapper.cudnnGetErrorString(s_);                                                          \
+            nvinfer1::pluginInternal::CudnnWrapper& wrapper                                                            \
+                = nvinfer1::pluginInternal::getCudnnWrapper(/* plugin caller name */ nullptr);                         \
+            const char* msg = wrapper.cudnnGetErrorString(s_);                                                         \
             nvinfer1::plugin::throwCudnnError(__FILE__, FN_NAME, __LINE__, s_, msg);                                   \
         }                                                                                                              \
     }

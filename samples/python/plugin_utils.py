@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -70,6 +70,14 @@ def checkCudaErrors(result):
     else:
         return result[1:]
 
+def getComputeCapacity(devID):
+    major = checkCudaErrors(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMajor, devID))
+    minor = checkCudaErrors(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMinor, devID))
+    # Map 12.1 to 12.0 due to known limitations in TensorRT.
+    if major == 12 and minor == 1:
+        minor = 0
+    return (major, minor)
+
 
 # Taken from https://github.com/NVIDIA/cuda-python/blob/main/examples/common/common.py
 class KernelHelper:
@@ -87,16 +95,7 @@ class KernelHelper:
         # Initialize CUDA
         checkCudaErrors(cudart.cudaFree(0))
 
-        major = checkCudaErrors(
-            cudart.cudaDeviceGetAttribute(
-                cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMajor, devID
-            )
-        )
-        minor = checkCudaErrors(
-            cudart.cudaDeviceGetAttribute(
-                cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMinor, devID
-            )
-        )
+        major, minor = getComputeCapacity(devID)
         _, nvrtc_minor = checkCudaErrors(nvrtc.nvrtcVersion())
         use_cubin = nvrtc_minor >= 1
         prefix = "sm" if use_cubin else "compute"

@@ -648,6 +648,26 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
     setFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
 }
 
+[[nodiscard]] bool setupTilingSettings(BuildOptions const& build, IBuilderConfig& config, std::ostream& err)
+{
+    if (!config.setTilingOptimizationLevel(static_cast<TilingOptimizationLevel>(build.tilingOptimizationLevel)))
+    {
+        err << "Can not set tilingOptimizationLevel(" << build.tilingOptimizationLevel << ")" << std::endl;
+        return false;
+    }
+
+    if (build.l2LimitForTiling != -1)
+    {
+        if (!config.setL2LimitForTiling(build.l2LimitForTiling))
+        {
+            err << "Can not set l2LimitForTiling(" << build.l2LimitForTiling << ")" << std::endl;
+            return false;
+        }
+    }
+
+    return true;
+}
+
 } // namespace
 
 bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
@@ -1153,6 +1173,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kWEIGHT_STREAMING);
     }
 
+    if (!setupTilingSettings(build, config, err))
+    {
+        return false;
+    }
+
     return true;
 }
 
@@ -1518,6 +1543,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
         case DataType::kUINT8:
         case DataType::kFP8:
         case DataType::kINT4:
+        case DataType::kFP4:
             // Refit not supported for these types.
             break;
         }
@@ -1548,7 +1574,9 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     case LayerType::kCONDITION:
     case LayerType::kCONDITIONAL_INPUT:
     case LayerType::kCONDITIONAL_OUTPUT:
+    case LayerType::kCUMULATIVE:
     case LayerType::kDEQUANTIZE:
+    case LayerType::kDYNAMIC_QUANTIZE:
     case LayerType::kEINSUM:
     case LayerType::kELEMENTWISE:
     case LayerType::kFILL:

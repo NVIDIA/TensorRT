@@ -143,7 +143,7 @@ int32_t InstanceNormalizationV3Plugin::initializeContext()
         PLUGIN_ASSERT(mDeviceBias != nullptr);
         PLUGIN_CUASSERT(cudaMemcpy(mDeviceScale, &mHostScale[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
         PLUGIN_CUASSERT(cudaMemcpy(mDeviceBias, &mHostBias[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
-        
+
         PLUGIN_CUASSERT(cudaDriverGetVersion(&mCudaDriverVersion));
     }
     mInitialized = true;
@@ -226,7 +226,7 @@ int32_t InstanceNormalizationV3Plugin::enqueue(PluginTensorDesc const* inputDesc
     cudaStream_t stream) noexcept
 {
     PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
-    
+
     nvinfer1::Dims input_dims = inputDesc[0].dims;
     // early return for empty tensor
     if (std::any_of(input_dims.d, input_dims.d + input_dims.nbDims, [](int32_t d) { return d == 0; }))

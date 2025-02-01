@@ -14,20 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
 
 from typing import List, Sequence, Union
 
 import numpy as np
 import onnx
 import onnx.numpy_helper
+
 from onnx_graphsurgeon.exporters.base_exporter import BaseExporter
 from onnx_graphsurgeon.ir.function import Function
 from onnx_graphsurgeon.ir.graph import Graph
 from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import (
     Constant,
-    SparseValues,
     LazyValues,
+    SparseValues,
     Tensor,
     Variable,
 )
@@ -36,8 +38,38 @@ from onnx_graphsurgeon.util import misc
 
 
 def dtype_to_onnx(dtype: Union[np.dtype, "onnx.TensorProto.DataType"]) -> int:
+    """Given `dtype`, return the ONNX data type enum."""
+
+    # Already converted to ONNX dtype. Return the input dtype directly.
     if isinstance(dtype, int):
         return dtype
+
+    # Custom dtypes defined in `ml_dtypes`, if installed.
+    try:
+        import ml_dtypes
+
+        ml_dtype_to_onnx_name = {
+            np.dtype(ml_dtypes.bfloat16): "BFLOAT16",
+            np.dtype(ml_dtypes.float8_e4m3fn): "FLOAT8E4M3FN",
+            np.dtype(ml_dtypes.float8_e4m3fnuz): "FLOAT8E4M3FN",
+            np.dtype(ml_dtypes.float8_e5m2): "FLOAT8E5M2",
+            np.dtype(ml_dtypes.float8_e5m2fnuz): "FLOAT8E5M2FNUZ",
+            np.dtype(ml_dtypes.uint4): "UINT4",
+            np.dtype(ml_dtypes.int4): "INT4",
+        }
+        onnx_name = ml_dtype_to_onnx_name.get(dtype)
+        if onnx_name:
+            if hasattr(onnx.TensorProto, onnx_name):
+                return getattr(onnx.TensorProto, onnx_name)
+            else:
+                raise RuntimeError(
+                    f"Current ONNX package does not support {onnx_name}. Please upgrade ONNX to the latest version."
+                )
+    except ImportError:
+        # Skip if `ml_dtypes` is not installed.
+        pass
+
+    # Native numpy dtypes.
     return onnx.helper.np_dtype_to_tensor_dtype(np.dtype(dtype))
 
 
@@ -91,15 +123,10 @@ def update_import_domains(graph):
 
 class NumpyArrayConverter(object):
     def __init__(self, container, scalar_converter):
-        self.container = container
-        self.scalar_converter = scalar_converter
+        self.func = np.vectorize(scalar_converter, otypes=[container])
 
     def __call__(self, arr):
-        new_arr = np.empty(arr.size, dtype=self.container)
-        flatten = arr.flatten()
-        for i in range(arr.size):
-            new_arr[i] = self.scalar_converter(flatten[i])
-        return new_arr.reshape(arr.shape)
+        return self.func(arr)
 
 
 _NUMPY_ARRAY_CONVERTERS = {
@@ -115,13 +142,11 @@ _NUMPY_ARRAY_CONVERTERS = {
 
 
 # Converts a gs.Constant to an onnx tensor and convert the values according to gs.Constant.export_dtype
-def constant_to_onnx_tensor(tensor: Constant):
+def constant_to_onnx_tensor(tensor: Constant) -> onnx.TensorProto:
     source_dtype = dtype_to_onnx(tensor.dtype)
     target_dtype = dtype_to_onnx(tensor.export_dtype)
 
-    if source_dtype == target_dtype:
-        onnx_tensor = onnx.numpy_helper.from_array(tensor.values)
-    else:
+    if source_dtype != target_dtype:
         source_dtype_str = onnx.helper.tensor_dtype_to_string(source_dtype)
         target_dtype_str = onnx.helper.tensor_dtype_to_string(target_dtype)
         assert source_dtype == onnx.TensorProto.FLOAT, (
@@ -130,16 +155,20 @@ def constant_to_onnx_tensor(tensor: Constant):
         )
         assert target_dtype in _NUMPY_ARRAY_CONVERTERS.keys(), (
             f"Cannot convert onnx dtype {source_dtype_str} to {target_dtype_str}. "
-            "Only float32 to {_NUMPY_ARRAY_CONVERTERS.keys()} is supported"
+            f"Only float32 to {_NUMPY_ARRAY_CONVERTERS.keys()} is supported."
         )
         arr = _NUMPY_ARRAY_CONVERTERS[target_dtype](tensor.values)
+        tensor_raw_bytes = arr.tobytes()
+    else:
+        tensor_raw_bytes = tensor.values.tobytes()
 
-        onnx_tensor = onnx.TensorProto()
-        onnx_tensor.data_type = target_dtype
-        onnx_tensor.dims.extend(arr.shape)
-        onnx_tensor.raw_data = arr.tobytes()
-
-    return onnx_tensor
+    return onnx.helper.make_tensor(
+        name=tensor.name,
+        data_type=target_dtype,
+        dims=tensor.shape,
+        vals=tensor_raw_bytes,
+        raw=True,
+    )
 
 
 class OnnxExporter(BaseExporter):
@@ -149,12 +178,12 @@ class OnnxExporter(BaseExporter):
         # the original onnx.TensorProto directly.
         if isinstance(tensor._values, LazyValues):
             onnx_tensor = tensor._values.tensor
+            onnx_tensor.name = tensor.name
         else:
             onnx_tensor = constant_to_onnx_tensor(tensor)
 
             if tensor.data_location is not None:
                 onnx_tensor.data_location = tensor.data_location
-        onnx_tensor.name = tensor.name
         return onnx_tensor
 
     @staticmethod

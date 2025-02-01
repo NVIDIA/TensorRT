@@ -272,12 +272,15 @@ int main(int argc, char** argv)
         {
             sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
         }
-#if !TRT_WINML
+#if TRT_WINML
+        std::string const jitInVersion = " JIT";
+#else
+        std::string const jitInVersion;
         setCudaDevice(options.system.device, sample::gLogInfo);
 #endif
         sample::gLogInfo << std::endl;
         sample::gLogInfo << "TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "."
-                         << NV_TENSORRT_PATCH << std::endl;
+                         << NV_TENSORRT_PATCH << jitInVersion << std::endl;
 
         // Record specified runtime
         gUseRuntime = options.build.useRuntime;
@@ -339,6 +342,8 @@ int main(int argc, char** argv)
             sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
             return sample::gLogger.reportPass(sampleTest);
         }
+
+        setCudaDevice(options.system.device, sample::gLogInfo);
 #endif
 
 #if !TRT_WINML

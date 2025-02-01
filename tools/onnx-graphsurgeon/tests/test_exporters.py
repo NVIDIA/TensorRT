@@ -14,22 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from __future__ import annotations
 
 from collections import OrderedDict
+from typing import Sequence
+from unittest import mock
 
+import ml_dtypes
 import numpy as np
 import onnx
 import onnx.numpy_helper
 import pytest
-from onnx_graphsurgeon.exporters.onnx_exporter import (
-    OnnxExporter,
-    constant_to_onnx_tensor,
-)
-from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
-from onnx_graphsurgeon.ir.node import Node
-from onnx_graphsurgeon.ir.function import Function
-from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
-
+from numpy.typing import DTypeLike, NDArray
 from onnx_models import (
     dim_param_model,
     ext_weights,
@@ -42,18 +38,42 @@ from onnx_models import (
     sparse_nnz_rank_model,
 )
 
+from onnx_graphsurgeon.exporters.onnx_exporter import (
+    OnnxExporter,
+    constant_to_onnx_tensor,
+)
+from onnx_graphsurgeon.importers.onnx_importer import OnnxImporter
+from onnx_graphsurgeon.ir.function import Function
+from onnx_graphsurgeon.ir.node import Node
+from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
+
 
 class TestOnnxExporter(object):
-    def test_export_constant_tensor_lazy_values_to_tensor_proto(self):
+
+    def _bytes_to_np_array(self, b: bytes, shape: Sequence[int], dtype: DTypeLike) -> NDArray:
+        """Construct a np.array from raw bytes.
+
+        For ML-specific types like float8_e3m4, `onnx.numpy_helper.to_array` does not convert to arrays with correct
+        numerical representations, but only puts the correct bytes into 8-bit containers like uint8. This makes
+        numerical comparisons impossible and hence not useful for testing. Instead, this function always converts to
+        arrays with correct numerical representations as long as the `dtype` argument is given `ml_dtypes.xxx`.
+        """
+        return np.frombuffer(b, dtype=dtype).reshape(shape)
+
+    def test_should_export_not_load_lazy_values(self):
+        """Test that when exporting a gs.Constant with LazyValues, the exporter does not load the lazy values."""
+        # Precondition.
         name = "constant_tensor"
         shape = (3, 3, 3)
         dtype = np.float32
         onnx_tensor = onnx.numpy_helper.from_array(np.ones(shape=shape, dtype=dtype))
         tensor = Constant(name=name, values=LazyValues(onnx_tensor))
 
-        # Exporter should *not* load LazyValues into a numpy array.
+        # Under test.
         onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
-        assert isinstance(tensor._values, LazyValues)
+
+        # Postcondition.
+        assert isinstance(tensor._values, LazyValues)  # Exporter should *not* load LazyValues into a numpy array.
 
     def test_export_constant_tensor_to_tensor_proto(self):
         name = "constant_tensor"
@@ -63,9 +83,114 @@ class TestOnnxExporter(object):
         tensor = Constant(name=name, values=values)
         onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
         assert onnx_tensor.name == name
-        assert np.all(onnx.numpy_helper.to_array(onnx_tensor) == values)
+        assert np.all(self._bytes_to_np_array(onnx_tensor.raw_data, onnx_tensor.dims, np.float32) == values)
         assert onnx_tensor.data_type == onnx.TensorProto.FLOAT
         assert tuple(onnx_tensor.dims) == shape
+
+    def test_should_export_constant_tensor_with_different_target_dtype(self) -> None:
+        """Test that `export_tensor_proto` exports a TensorProto with correct data when the target dtype is different
+        from source dtype.
+        """
+        # Precondition.
+        name = "constant_tensor"
+        shape = (3, 224, 224)
+        values = np.random.random_sample(size=shape).astype(np.float32)
+
+        tensor = Constant(name=name, values=values, export_dtype=onnx.TensorProto.FLOAT8E4M3FN)
+
+        # Under test.
+        onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
+
+        # Postcondition.
+        assert onnx_tensor.name == name
+        assert np.all(
+            np.isclose(
+                self._bytes_to_np_array(onnx_tensor.raw_data, onnx_tensor.dims, ml_dtypes.float8_e4m3fn),
+                values,
+                atol=0.1,
+            )
+        )
+        assert onnx_tensor.data_type == onnx.TensorProto.FLOAT8E4M3FN
+        assert tuple(onnx_tensor.dims) == shape
+
+    def test_should_export_constant_tensor_with_ml_dtype(self) -> None:
+        """Test that `export_tensor_proto` exports a TensorProto with correct data when the Constant has values in
+        ml_dtypes.
+        """
+        # Precondition.
+        name = "constant_tensor"
+        shape = (3, 224, 224)
+        values = np.random.random_sample(size=shape).astype(ml_dtypes.float8_e4m3fn)
+
+        tensor = Constant(name=name, values=values)
+
+        # Under test.
+        onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
+
+        # Postcondition.
+        assert onnx_tensor.name == name
+        assert np.all(
+            self._bytes_to_np_array(onnx_tensor.raw_data, onnx_tensor.dims, ml_dtypes.float8_e4m3fn) == tensor.values
+        )
+        assert onnx_tensor.data_type == onnx.TensorProto.FLOAT8E4M3FN
+        assert tuple(onnx_tensor.dims) == shape
+
+    def test_should_export_constant_tensor_with_ml_dtype_raise_error_when_onnx_dtype_not_supported(self) -> None:
+        """Test that `export_tensor_proto` raises an error when the corresponding ONNX data type is not supported and
+        prompts the user to upgrade the ONNX package.
+        """
+        # Precondition.
+        name = "constant_tensor"
+        shape = (3, 224, 224)
+        values = np.random.random_sample(size=shape).astype(ml_dtypes.int4)
+        tensor = Constant(name=name, values=values)
+
+        # Mock an outdated ONNX package that does not support INT4.
+        with mock.patch("onnx.TensorProto") as mock_TensorProto:
+            del mock_TensorProto.INT4
+
+            # Under test and postcondition.
+            with pytest.raises(RuntimeError) as e:
+                OnnxExporter.export_tensor_proto(tensor)
+            assert (
+                str(e.value) == "Current ONNX package does not support INT4. Please upgrade ONNX to the latest version."
+            )
+
+    def test_should_export_constant_tensor_pass_when_ml_dtypes_not_installed(self) -> None:
+        """Test that `export_tensor_proto` passes when the ml_dtypes package was not installed."""
+        # Precondition.
+        tensor = Constant(name="constant_tensor", values=np.random.random_sample(size=(3, 224, 224)))
+
+        with mock.patch.dict("sys.modules", {"ml_dtypes": None}):
+            # Make sure that the ml_dtypes package is not installed.
+            with pytest.raises(ImportError):
+                import ml_dtypes  # noqa: F401
+
+            # Under test and postcondition.
+            OnnxExporter.export_tensor_proto(tensor)
+
+    def test_should_export_constant_tensor_with_lazy_values(self) -> None:
+        """Test that `export_tensor_proto` correctly exports a Constant object with LazyValues."""
+        # Precondition.
+        constant_name = "constant_name"
+        lazy_value_name = "lazy_value_name"
+        shape = (2,)
+        values = np.random.random_sample(size=shape).astype(np.float32)
+
+        input_onnx_tensor = onnx.TensorProto(
+            dims=shape, data_type=onnx.TensorProto.FLOAT, raw_data=values.tobytes(), name=lazy_value_name
+        )
+        tensor = Constant(name=constant_name, values=LazyValues(tensor=input_onnx_tensor))
+
+        # Under test.
+        exported_onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
+
+        # Postcondition.
+        # Importantly, the exported TensorProto's name should be `constant_name`, NOT `lazy_value_name`.
+        assert exported_onnx_tensor.name == constant_name
+        assert np.all(self._bytes_to_np_array(exported_onnx_tensor.raw_data, exported_onnx_tensor.dims, np.float32))
+        assert exported_onnx_tensor.data_type == onnx.TensorProto.FLOAT
+        assert tuple(exported_onnx_tensor.dims) == shape
 
     def test_export_constant_tensor_to_value_info_proto(self):
         name = "constant_tensor"

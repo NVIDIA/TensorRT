@@ -16,8 +16,9 @@
 #
 
 import sys
+
 import onnx_graphsurgeon
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 
 def no_publish():

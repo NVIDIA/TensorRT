@@ -656,3 +656,27 @@ class TestTrtConfigArgs:
             builder, network=network
         ) as config:
             assert config.profiling_verbosity == expected
+    
+    if mod.version(trt.__version__) >= mod.version("10.8"):
+        @pytest.mark.parametrize(
+            "level, expected",
+            [
+                ("none", trt.TilingOptimizationLevelLevel.NONE),
+                ("fast", trt.TilingOptimizationLevel.FAST),
+                ("moderate", trt.TilingOptimizationLevel.MODERATE),
+                ("full", trt.TilingOptimizationLevel.FULL),
+            ],
+        )
+        def test_tiling_optimization_level(self, trt_config_args, level):
+            trt_config_args.parse_args(["--tiling-optimization-level", str(level)])
+            assert (
+                str(trt_config_args.tiling_optimization_level)
+                == f"trt.TilingOptimizationLevel.{expected.name}"
+            )
+
+            builder, network = create_network()
+
+            with builder, network, trt_config_args.create_config(
+                builder, network=network
+            ) as config:
+                assert config.tiling_optimization_level == expected

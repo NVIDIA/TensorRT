@@ -318,17 +318,61 @@ struct ManagedAllocator
 
 struct HostAllocator
 {
+    //! Attempts to allocate size bytes on host, pointing *ptr to the start.
+    //! First attempts to allocate pinned memory using cudaMallocHost(ptr, size), failing that, warns to gLogWarning and
+    //! falls back to ::operator new(size) to allocate pageable memory. If that still fails, an exception may be thrown.
     void operator()(void** ptr, size_t size)
     {
-        CHECK(cudaMallocHost(ptr, size));
+        // Try allocating pinned host memory.
+        cudaError_t ret = cudaMallocHost(ptr, size);
+
+        // If we cannot allocate pinned host memory, allocate pageable host memory instead and print a warning.
+        if (ret != cudaSuccess)
+        {
+            // Clean up the last cuda error.
+            (void) cudaGetLastError();
+
+            sample::gLogWarning << "cudaMallocHost() call with ptr=" << ptr << " and size=" << size
+                                << " returns a cuda error: " << cudaGetErrorString(ret) << std::endl;
+            sample::gLogWarning << "Allocate pageable host memory instead of pinned host memory. H2D and D2H copy "
+                                   "latencies may become longer."
+                                << std::endl;
+            *ptr = ::operator new(size);
+
+            // Make sure there is no remaining cuda error at this point.
+            CHECK(cudaGetLastError());
+        }
     }
 };
 
 struct HostDeallocator
 {
+    //! Attempts to deallocate the host memory allocated by HostAllocator.
+    //! It first checks if ptr is a pinned or pageable host memory. If pinned, call cudaFreeHost() to free it. If
+    //! pageable, call ::operator delete() to free it. If ptr is neither of them, an error is printed and the program
+    //! exits.
     void operator()(void* ptr)
     {
-        CHECK(cudaFreeHost(ptr));
+        // Check if the host memory pointer is pinned or pageable.
+        cudaPointerAttributes attrs;
+        CHECK(cudaPointerGetAttributes(&attrs, ptr));
+
+        // If pinned, call cudaFreeHost() to deallocate it.
+        if (attrs.type == cudaMemoryTypeHost)
+        {
+            CHECK(cudaFreeHost(ptr));
+        }
+        // If pageable, delete it directly.
+        else if (attrs.type == cudaMemoryTypeUnregistered)
+        {
+            ::operator delete(ptr);
+        }
+        // The host memory pointer should not be of any other types.
+        else
+        {
+            sample::gLogError << "Unexpected cuda memory type:" << static_cast<int32_t>(attrs.type) << std::endl;
+            exit(EXIT_FAILURE);
+        }
     }
 };
 
@@ -481,10 +525,14 @@ private:
 class OutputAllocator : public nvinfer1::IOutputAllocator
 {
 public:
-    OutputAllocator(IMirroredBuffer* buffer)
-        : mBuffer(buffer)
+    //! Construct, using buffer as the backing storage:
+    explicit OutputAllocator(std::unique_ptr<IMirroredBuffer> buffer)
+        : mBuffer{std::move(buffer)}
     {
+        ASSERT(mBuffer);
     }
+
+    ~OutputAllocator() override = default;
 
     void* reallocateOutput(
         char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept override
@@ -522,18 +570,16 @@ public:
         return mFinalDims;
     }
 
-    ~OutputAllocator() override {}
-
 private:
     std::unique_ptr<IMirroredBuffer> mBuffer;
     uint64_t mSize{};
     nvinfer1::Dims mFinalDims;
 };
 
-#if !TRT_WINML
 //! Set the GPU to run the inference on.
 void setCudaDevice(int32_t device, std::ostream& os);
 
+#if !TRT_WINML
 //! Get the CUDA version of the current CUDA driver.
 int32_t getCudaDriverVersion();
 

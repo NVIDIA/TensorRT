@@ -39,7 +39,7 @@ size_t dataTypeSize(nvinfer1::DataType dataType)
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kFP8: return 1U;
     case nvinfer1::DataType::kINT4:
-        ASSERT(false && "Element size is not implemented for sub-byte data-types.");
+    case nvinfer1::DataType::kFP4: ASSERT(false && "Element size is not implemented for sub-byte data-types.");
     }
     return 0;
 }
@@ -402,7 +402,7 @@ void sparsify(Weights const& weights, int32_t k, int32_t trs, std::vector<int8_t
     case DataType::kINT4:
     case DataType::kFP8:
     case DataType::kINT64:
-        ASSERT(false && "Unsupported data type");
+    case DataType::kFP4: ASSERT(false && "Unsupported data type");
     }
 }
 

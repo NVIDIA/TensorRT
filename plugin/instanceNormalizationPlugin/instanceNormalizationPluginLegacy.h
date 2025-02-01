@@ -30,6 +30,13 @@ namespace nvinfer1
 {
 namespace plugin
 {
+
+namespace
+{
+constexpr char const* gInstancePluginFullNameV1{"InstanceNormalization_TRT, version: 1"};
+constexpr char const* gInstancePluginFullNameV2{"InstanceNormalization_TRT, version: 2"};
+} // namespace
+
 class InstanceNormalizationPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 
@@ -109,7 +116,8 @@ private:
     float* mDeviceScale{nullptr};
     float* mDeviceBias{nullptr};
     nvinfer1::pluginInternal::cudnnHandle_t mCudnnHandle{nullptr};
-    nvinfer1::pluginInternal::CudnnWrapper& mCudnnWrapper = nvinfer1::pluginInternal::getCudnnWrapper();
+    nvinfer1::pluginInternal::CudnnWrapper& mCudnnWrapper
+        = nvinfer1::pluginInternal::getCudnnWrapper(gInstancePluginFullNameV1);
 
     nvinfer1::pluginInternal::cudnnTensorDescriptor_t mXDescriptor{nullptr};
     nvinfer1::pluginInternal::cudnnTensorDescriptor_t mYDescriptor{nullptr};
@@ -177,6 +185,10 @@ public:
     InstanceNormalizationPluginV2() = delete;
     char const* getPluginVersion() const noexcept override;
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
+
+private:
+    nvinfer1::pluginInternal::CudnnWrapper& mCudnnWrapper
+        = nvinfer1::pluginInternal::getCudnnWrapper(gInstancePluginFullNameV2);
 };
 
 class InstanceNormalizationPluginCreatorV2 final : public InstanceNormalizationPluginCreator

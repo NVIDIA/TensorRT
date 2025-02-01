@@ -96,7 +96,8 @@ void GroupNormalizationPlugin::attachToContext(
 {
     try
     {
-        mCudnnWrapper = createPluginCudnnWrapper(gpuAllocator);
+        std::string kFULL_NAME = std::string(kGROUP_NORM_NAME) + ", version: " + std::string(kGROUP_NORM_VERSION);
+        mCudnnWrapper = createPluginCudnnWrapper(gpuAllocator, kFULL_NAME.c_str());
         mCudnnHandle = mCudnnWrapper->getCudnnHandle();
         PLUGIN_VALIDATE(mCudnnHandle);
         PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnCreateTensorDescriptor(&mTensorDesc));

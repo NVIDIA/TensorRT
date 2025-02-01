@@ -214,7 +214,26 @@ class TestDataLoader:
         data_loader.input_metadata = input_meta
 
         assert util.array.is_torch(data_loader[0]["X"])
+    
+    @pytest.mark.parametrize("name, should_match", [
+        ("inp_*",      [True for _ in range(12)]),
+        ("inp_?",      [False, False, False, *[True for _ in range(9)]]),
+        ("inp_[abc]",  [*[False for _ in range(6)], True, True, True, False, False, False]),
+        ("inp_[!abc]", [False, False, False, True, True, True, False, False, False, True, True, True]),
+    ])
+    def test_input_name_with_wildcards(self, name, should_match):
+        match_case = [
+            "inp_foo", "inp_bar", "inp_123", "inp_1", "inp_s", "inp_k",
+            "inp_a", "inp_b", "inp_c", "inp_d", "inp_e", "inp_f",
+        ]
+        input_meta = TensorMetadata().add(name, dtype=np.float32, shape=(2, 2, 3))
+        data_loader = DataLoader(input_metadata=input_meta)
+        data_loader.input_metadata = TensorMetadata()
+        for case in match_case:
+            data_loader.input_metadata.add(case, dtype=np.float32, shape=(-1, 2, 3))
 
+        res = [data_loader[0][name].shape == (2, 2, 3) for name in data_loader[0]]
+        assert res == should_match 
 
 build_torch = lambda a, **kwargs: util.array.to_torch(np.array(a, **kwargs))
 

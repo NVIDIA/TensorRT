@@ -23,6 +23,7 @@ namespace tensorrt
 namespace IAlgorithmIOInfoDOC
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     This class carries information about input or output of the algorithm.
     IAlgorithmIOInfo for all the input and output along with IAlgorithmVariant denotes the variation of algorithm
     and can be used to select or reproduce an algorithm using IAlgorithmSelector.select_algorithms().
@@ -37,6 +38,7 @@ constexpr const char* descr = R"trtdoc(
 namespace IAlgorithmVariantDOC
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     provides a unique 128-bit identifier, which along with the input and output information
     denotes the variation of algorithm and can be used to select or reproduce an algorithm,
     using IAlgorithmSelector.select_algorithms()
@@ -52,6 +54,7 @@ constexpr const char* descr = R"trtdoc(
 namespace IAlgorithmContextDoc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     Describes the context and requirements, that could be fulfilled by one or
     more instances of IAlgorithm.
     see IAlgorithm
@@ -60,9 +63,11 @@ constexpr const char* descr = R"trtdoc(
     :ivar num_inputs: :class:`int`  number of inputs of the algorithm.
     :ivar num_outputs: :class:`int` number of outputs of the algorithm.
 )trtdoc"
-           ;
+
+    ;
 
 constexpr const char* get_shape = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     Get the minimum / optimum / maximum dimensions for a dynamic input tensor.
 
     :arg index: Index of the input or output of the algorithm. Incremental numbers assigned to indices of inputs and the outputs.
@@ -74,6 +79,7 @@ constexpr const char* get_shape = R"trtdoc(
 namespace IAlgorithmDoc
 {
 constexpr const char* descr = R"trtdoc(
+        [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
         Application-implemented interface for selecting and reporting the tactic selection of a layer.
         Tactic Selection is a step performed by the builder for deciding best algorithms for a layer.
 
@@ -83,6 +89,7 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 
 constexpr const char* get_algorithm_io_info = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     A single call for both inputs and outputs. Incremental numbers assigned to indices of inputs and the outputs.
 
     :arg index: Index of the input or output of the algorithm. Incremental numbers assigned to indices of inputs and the outputs.
@@ -94,6 +101,7 @@ constexpr const char* get_algorithm_io_info = R"trtdoc(
 namespace IAlgorithmSelectorDoc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     Interface implemented by application for selecting and reporting algorithms of a layer provided by the
     builder.
     note A layer in context of algorithm selection may be different from ILayer in INetworkDefiniton.
@@ -109,6 +117,7 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 
 constexpr const char* select_algorithms = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     Select Algorithms for a layer from the given list of algorithm choices.
 
     Note: TRT uses its default algorithm selection to choose from the list returned by the user.
@@ -130,6 +139,7 @@ constexpr const char* select_algorithms = R"trtdoc(
 )trtdoc";
 
 constexpr const char* report_algorithms = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     Called by TensorRT to report choices it made.
 
     Note: For a given optimization profile, this call comes after all calls to select_algorithms.

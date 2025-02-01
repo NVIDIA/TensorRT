@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-SET(SAMPLE_SOURCES
+set(SAMPLE_SOURCES
     ../common/sampleDevice.cpp
     ../common/sampleEngines.cpp
     ../common/sampleInference.cpp
@@ -22,8 +22,7 @@ SET(SAMPLE_SOURCES
     ../common/sampleReporting.cpp
     ../common/sampleUtils.cpp
     ../common/bfloat16.cpp
-    trtexec.cpp
-)
+    trtexec.cpp)
 
 set(SAMPLE_PARSERS "onnx")
 

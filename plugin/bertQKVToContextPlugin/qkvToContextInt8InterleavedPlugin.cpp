@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -63,9 +63,9 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& 
     mUseExplicitInt8 = static_cast<int32_t>(useExplicitInt8);
     // variable sequence length is only supported with the fused MHA kernels
     // we should not override mS!
-    bool isSMSupported = mSM == kSM_AMPERE_100 || mSM == kSM_AMPERE_10X || mSM == kSM_AMPERE_10B || mSM == kSM_TURING
-        || mSM == kSM_XAVIER || mSM == kSM_ADA_10X || mSM == kSM_HOPPER_100
-        ;
+    bool isSMSupported = elem(mSM,
+        {kSM_AMPERE_100, kSM_AMPERE_10X, kSM_AMPERE_10B, kSM_TURING, kSM_XAVIER, kSM_ADA_10X, kSM_HOPPER_100,
+            kSM_BLACKWELL_100, kSM_BLACKWELL_120});
     PLUGIN_VALIDATE(isSMSupported && "requesting maxSeqlen not compatible with GPU arch");
     // the layout changes: SxB will be a combined \sum_i s_i and hdim will be the 2nd dimension instead of the third
     mXmmaKernel = getXMMAKernelsV2(DATA_TYPE_INT8, mSM);
