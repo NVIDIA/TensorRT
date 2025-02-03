@@ -26,7 +26,12 @@ from torch.autograd import Variable
 import numpy as np
 
 from random import randint
+import random
 
+seed = 42
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
 
 # Network
 class Net(nn.Module):
