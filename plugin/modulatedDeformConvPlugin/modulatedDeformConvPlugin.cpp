@@ -191,6 +191,8 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
         void* output = outputs[0];
         int32_t im2colStep = std::min(batch, 32);
 
+        PLUGIN_CUBLASASSERT(mCublasWrapper->cublasSetStream(mCublasHandle, stream));
+
         auto data_type = inputDesc[0].type;
         switch (data_type)
         {
