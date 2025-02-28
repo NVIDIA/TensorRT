@@ -93,7 +93,7 @@ if __name__ == "__main__":
                 seg_image = controlnet_aux.SamDetector.from_pretrained("ybelkada/segment-anything", subfolder="checkpoints")(seg_image)
                 input_images.append(seg_image.resize((args.height, args.width)))
             else:
-                raise ValueError(f"You should implement the conditonal image of this controlnet: {controlnet}")
+                raise ValueError(f"You should implement the conditional image of this controlnet: {controlnet}")
     assert len(input_images) > 0
 
     kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
