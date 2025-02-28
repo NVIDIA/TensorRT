@@ -1,6 +1,6 @@
 # TensorRT Demo with BERT
 
-To run the demo Jupyter notebooks in this folder, follow the instructions in the [TRT setup guide](../../../README.md) to build and launch the docker container. Then, use your browswer to open the Jupyter lab interface at <host_name>:8888/lab using the password provided in the terminal.
+To run the demo Jupyter notebooks in this folder, follow the instructions in the [TRT setup guide](../../../README.md) to build and launch the docker container. Then, use your browser to open the Jupyter lab interface at <host_name>:8888/lab using the password provided in the terminal.
 
 
 Notebook list:

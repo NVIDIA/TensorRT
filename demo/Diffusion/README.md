@@ -13,7 +13,7 @@ cd TensorRT
 
 ### Launch NVIDIA pytorch container
 
-Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
+Install nvidia-docker using [these instructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
 docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.01-py3 /bin/bash
@@ -427,7 +427,7 @@ python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry b
 
 ## Configuration options
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.
-- To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
+- To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best performance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
 

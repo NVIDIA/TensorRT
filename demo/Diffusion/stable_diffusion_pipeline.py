@@ -896,9 +896,9 @@ class StableDiffusionPipeline:
             image_strength (float):
                 Strength of transformation applied to input_image. Must be between 0 and 1.
             mask_image (image):
-                Mask image containg the region to be inpainted.
+                Mask image containing the region to be inpainted.
             controlnet_scales (torch.Tensor)
-                A tensor which containes ControlNet scales, essential for multi ControlNet.
+                A tensor which contains ControlNet scales, essential for multi ControlNet.
                 Must be equal to number of Controlnets.
             warmup (bool):
                 Indicate if this is a warmup run.
