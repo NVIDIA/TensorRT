@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cuda_profiler_api.h>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -39,6 +40,7 @@
 
 #include "ErrorRecorder.h"
 #include "bfloat16.h"
+#include "common.h"
 #include "logger.h"
 #include "sampleDevice.h"
 #include "sampleEngines.h"
@@ -46,7 +48,11 @@
 #include "sampleOptions.h"
 #include "sampleReporting.h"
 #include "sampleUtils.h"
+#include <cuda.h>
 
+#if CUDA_VERSION >= 11060
+#include <cuda_fp8.h>
+#endif
 
 using namespace nvinfer1;
 
@@ -232,6 +238,22 @@ bool allocateContextMemory(InferenceEnvironment& iEnv, InferenceOptions const& i
     }
     return true;
 }
+
+//! \brief Transform shapeData so that it can be type-punned to array of int64_t.
+//!
+//! Transform shapeData so if data() is type-punned to (int64_t*), the sequence
+//! of values are equal to the original elements of shapeData. The code relies
+//! on std::vector<int32_t>::data either being aligned on 8 byte boundaries or
+//! the CPU tolerating misaligned accesses. The latter is true of x86 and ARM64.
+void stretchInt32ToInt64(std::vector<int32_t>& shapeData)
+{
+    int64_t const size = shapeData.size();
+    shapeData.resize((sizeof(int64_t) / sizeof(int32_t)) * size);
+    int32_t const* src = shapeData.data();
+    int64_t* dst = reinterpret_cast<int64_t*>(shapeData.data());
+    std::copy_backward(src, src + size, dst + size);
+}
+
 } // namespace
 
 bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inference, SystemOptions const& system)
@@ -450,8 +472,17 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                 int32_t* shapeTensorData{nullptr};
                 if (isShapeInferenceIO)
                 {
-                    // Save the data in iEnv, in a way that it's address does not change
+                    // Save the data in iEnv, in a way that its address does not change
                     // before enqueueV3 is called.
+                    DataType const type = engine->getTensorDataType(name);
+                    switch (type)
+                    {
+                    case DataType::kINT64: stretchInt32ToInt64(shapeData); break;
+                    case DataType::kINT32: break;
+                    default:
+                        sample::gLogError << "Shape tensor " << name << " has unexpected type " << type << std::endl;
+                        return false;
+                    }
                     iEnv.inputShapeTensorValues.emplace_back(shapeData);
                     shapeTensorData = iEnv.inputShapeTensorValues.back().data();
                 }
@@ -468,8 +499,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                     }
                     else
                     {
-                        sample::gLogInfo << "Set shape of input tensor " << name << " to: " << shapeData
-                                            << std::endl;
+                        sample::gLogInfo << "Set shape of input tensor " << name << " to: " << shapeData << std::endl;
                         if (!c->setInputShape(name, toDims(shapeData)))
                         {
                             return false;
@@ -1329,8 +1359,23 @@ void Binding::fill()
         fillBuffer<uint8_t>(buffer->getHostBuffer(), volume, 0, 255);
         break;
     }
-    case nvinfer1::DataType::kFP8: ASSERT(false && "FP8 is not supported");
-    case nvinfer1::DataType::kINT4: ASSERT(false && "INT4 is not supported");
+    case nvinfer1::DataType::kFP8:
+#if CUDA_VERSION < 11060
+        ASSERT(false && "FP8 is not supported");
+#else
+    {
+        fillBuffer<__nv_fp8_e4m3>(buffer->getHostBuffer(), volume, -1.0F, 1.0F);
+        break;
+    }
+#endif
+    case nvinfer1::DataType::kINT4:
+    {
+        // int4 is implemented as packing two elements into a single byte,
+        // so all possible bit patterns of the two int4 elements coincides with all possible bit patterns of
+        // an uint8.
+        fillBuffer<uint8_t>(buffer->getHostBuffer(), volume, 0, 255);
+        break;
+    }
     case DataType::kFP4: ASSERT(false && "FP4 is not supported");
     }
 }
@@ -1392,8 +1437,20 @@ void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim,
         dumpBuffer<int64_t>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
         break;
     }
-    case nvinfer1::DataType::kFP8: ASSERT(false && "FP8 is not supported");
-    case nvinfer1::DataType::kINT4: ASSERT(false && "INT4 is not supported");
+    case nvinfer1::DataType::kFP8:
+#if CUDA_VERSION < 11060
+        ASSERT(false && "FP8 is not supported");
+#else
+    {
+        dumpBuffer<__nv_fp8_e4m3>(outputBuffer, separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
+#endif
+    case nvinfer1::DataType::kINT4:
+    {
+        dumpInt4Buffer(outputBuffer, separator, os, dims, strides, vectorDim, spv);
+        break;
+    }
     case nvinfer1::DataType::kFP4: ASSERT(false && "FP4 is not supported");
     }
 }
@@ -1443,8 +1500,7 @@ void Bindings::addBinding(TensorInfo const& tensorInfo, std::string const& fileN
         }
         else
         {
-            mBindings[b].buffer->allocate(
-                static_cast<size_t>(tensorInfo.vol) * static_cast<size_t>(dataTypeSize(tensorInfo.dataType)));
+            mBindings[b].buffer->allocate(samplesCommon::getNbBytes(tensorInfo.dataType, tensorInfo.vol));
         }
         mDevicePointers[b] = mBindings[b].buffer->getDeviceBuffer();
     }
@@ -1569,7 +1625,7 @@ void Bindings::dumpRawBindingToFiles(nvinfer1::IExecutionContext const& context,
 
         std::ofstream f(fileName.str(), std::ios::out | std::ios::binary);
         ASSERT(f && "Cannot open file for write");
-        f.write(static_cast<char*>(outputBuffer), binding.volume * samplesCommon::elementSize(binding.dataType));
+        f.write(static_cast<char*>(outputBuffer), samplesCommon::getNbBytes(binding.dataType, binding.volume));
         f.close();
     }
 }
@@ -1628,8 +1684,8 @@ bool DebugTensorWriter::processDebugTensor(void const* addr, nvinfer1::TensorLoc
 {
     CHECK(cudaStreamSynchronize(stream));
     // Store data from callback.
-    int64_t size = std::accumulate(shape.d, shape.d + shape.nbDims, 1LL, std::multiplies<int64_t>{})
-        * samplesCommon::elementSize(type);
+    auto volume = std::accumulate(shape.d, shape.d + shape.nbDims, 1LL, std::multiplies<int64_t>{});
+    int64_t size = samplesCommon::getNbBytes(type, volume);
     std::vector<char> hostDataOut(size, 0);
     CHECK(cudaMemcpy(hostDataOut.data(), addr, size, cudaMemcpyDeviceToHost));
 

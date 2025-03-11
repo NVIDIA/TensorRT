@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,12 +66,23 @@ Logger for the :class:`Builder`, :class:`ICudaEngine` and :class:`Runtime` .
 )trtdoc";
 
 constexpr char const* log = R"trtdoc(
-Logs a message to `stderr` .
+Logs a message.
 
 :arg severity: The severity of the message.
 :arg msg: The log message.
 )trtdoc";
 } // namespace LoggerDoc
+
+namespace DefaultLoggerDoc
+{
+constexpr char const* log = R"trtdoc(
+Logs a message to `stdout`.
+
+:arg severity: The severity of the message.
+:arg msg: The log message.
+)trtdoc";
+
+}
 
 namespace SeverityDoc
 {
@@ -599,7 +610,6 @@ constexpr char const* set_all_tensors_debug_state = R"trtdoc(
 
     :arg flag: True if turning on debug state of tensor. False if turning off.
 )trtdoc";
-
 } // namespace IExecutionContextDoc
 
 namespace IDebugListenerDoc
@@ -715,7 +725,6 @@ constexpr char const* descr = R"trtdoc(
     :ivar weight_streaming_budget_v2: Set and get the current weight streaming budget for inference. The budget may be set any non-negative value. A value of 0 streams the most weights. Values equal to streamable_weights_size (default) or larger will disable weight streaming.
     :ivar weight_streaming_scratch_memory_size: The amount of scratch memory required by a TensorRT ExecutionContext to perform inference. This value may change based on the current weight streaming budget. Please use the V2 memory APIs, engine.device_memory_size_v2 and ExecutionContext.set_device_memory() to provide memory which includes the current weight streaming scratch memory. Not specifying these APIs or using the V1 APIs will not include this memory, so TensorRT will resort to allocating itself.
     )trtdoc"
-
     ;
 
 // Documentation bug with parameters on these three functions because they are overloaded.
@@ -982,12 +991,26 @@ constexpr char const* descr = R"trtdoc(
 
             def seek(self, offset: int, where: SeekPosition) -> bool:
                 ... # Your implementation here
+
+    To implement a read operation that retrieves the entire buffer, use the following approach:
+    ::
+        def read(self, num_bytes: int, stream: int) -> bytes:
+            data = read_file_with_size(num_bytes)
+            return data
+
+    To read the buffer in chunks to reduce peak host memory usage (e.g., splitting the read into 200MiB chunks):
+    ::
+        def read(self, num_bytes: int, stream: int) -> bytes:
+            chunk_size = 200 * 1024 * 1024  # 200MiB
+            num_bytes = min(num_bytes, chunk_size)
+            data = read_file_with_size(num_bytes)
+            return data
 )trtdoc";
 
 constexpr char const* read = R"trtdoc(
     A callback implemented by the application to read a particular chunk of memory.
 
-    :arg num_bytes: The number of bytes required.
+    :arg num_bytes: The number of bytes to read. If N bytes are requested but only M bytes (M < N) are read, additional read requests will be made until all N bytes are retrieved.
     :arg stream: A handle to the cudaStream your implementation can use for reading.
 
     :returns: A buffer containing the bytes read.
@@ -1137,8 +1160,7 @@ constexpr char const* ALIASED_PLUGIN_IO_10_03 = R"trtdoc(
 namespace HardwareCompatibilityLevelDoc
 {
 constexpr char const* descr = R"trtdoc(
-    Describes requirements of compatibility with GPU architectures other than that of the GPU on which the engine was
-    built. Levels except NONE are only supported for engines built on NVIDIA Ampere and later GPUs.
+    Describes requirements of compatibility with GPU architectures other than that of the GPU on which the engine was built.
     Note that compatibility with future hardware depends on CUDA forward compatibility support.
 )trtdoc";
 constexpr char const* NONE = R"trtdoc(
@@ -1148,7 +1170,14 @@ constexpr char const* AMPERE_PLUS = R"trtdoc(
     Require that the engine is compatible with Ampere and newer GPUs. This will limit the combined usage of driver reserved and backend kernel max shared memory to
     48KiB, may reduce the number of available tactics for each layer, and may prevent some fusions from occurring.
     Thus this can decrease the performance, especially for tf32 models.
-    This option will disable cuDNN, cuBLAS, and cuBLAS LT as tactic sources.
+    This option will disable cuDNN, cuBLAS, and cuBLASLt as tactic sources.
+    This option is only supported for engines built on NVIDIA Ampere and later GPUs.
+)trtdoc";
+constexpr char const* SAME_COMPUTE_CAPABILITY = R"trtdoc(
+    Require that the engine is compatible with GPUs that have the same Compute Capability version as the one it was built on.
+    This may decrease the performance compared to an engine with no compatibility.
+    This option will disable cuDNN, cuBLAS, and cuBLASLt as tactic sources.
+    This option is only supported for engines built on NVIDIA Turing and later GPUs.
 )trtdoc";
 } // namespace HardwareCompatibilityLevelDoc
 
@@ -1199,6 +1228,10 @@ constexpr char const* EXPLICIT_BATCH
     = R"trtdoc([DEPRECATED] Ignored because networks are always "explicit batch" in TensorRT 10.0.)trtdoc";
 constexpr char const* STRONGLY_TYPED
     = R"trtdoc(Specify that every tensor in the network has a data type defined in the network following only type inference rules and the inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network output types will be inferred based on the input types and the type inference rules)trtdoc";
+constexpr char const* PREFER_AOT_PYTHON_PLUGINS
+    = R"trtdoc(If set, for a Python plugin with both AOT and JIT implementations, the AOT implementation will be used.)trtdoc";
+constexpr char const* PREFER_JIT_PYTHON_PLUGINS
+    = R"trtdoc(If set, for a Python plugin with both AOT and JIT implementations, the JIT implementation will be used.)trtdoc";
 } // namespace NetworkDefinitionCreationFlagDoc
 
 namespace ISerializationConfigDoc
@@ -1669,7 +1702,6 @@ constexpr char const* get_preview_feature = R"trtdoc(
 
     :returns: true if the feature is enabled, false otherwise
 )trtdoc";
-
 } // namespace IBuilderConfigDoc
 
 namespace SerializationFlagDoc
@@ -1831,7 +1863,6 @@ constexpr char const* deserialize_cuda_engine_reader_v2 = R"trtdoc(
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";
-
 
 constexpr char const* get_plugin_registry = R"trtdoc(
     Get the local plugin registry that can be used by the runtime.

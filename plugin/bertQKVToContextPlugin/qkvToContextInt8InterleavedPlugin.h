@@ -19,7 +19,7 @@
 #define TRT_QKV_TO_CONTEXT_INTERLEAVED_PLUGIN_H
 
 #include "NvInferPlugin.h"
-#include "fused_multihead_attention_v2/include/fused_multihead_attention_v2.h"
+#include "fused_multihead_attention_v2/fused_multihead_attention_v2.h"
 #include <cuda.h>
 #include <string>
 #include <vector>

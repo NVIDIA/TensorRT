@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +24,9 @@
 #define NV_INFER_VERSION_H
 
 #define NV_TENSORRT_MAJOR 10 //!< TensorRT major version.
-#define NV_TENSORRT_MINOR 8  //!< TensorRT minor version.
+#define NV_TENSORRT_MINOR 9  //!< TensorRT minor version.
 #define NV_TENSORRT_PATCH 0  //!< TensorRT patch version.
-#define NV_TENSORRT_BUILD 43  //!< TensorRT build number.
+#define NV_TENSORRT_BUILD 34  //!< TensorRT build number.
 
 #define NV_TENSORRT_LWS_MAJOR 0 //!< TensorRT LWS major version.
 #define NV_TENSORRT_LWS_MINOR 0 //!< TensorRT LWS minor version.

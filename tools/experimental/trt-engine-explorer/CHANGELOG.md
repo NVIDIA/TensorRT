@@ -2,6 +2,23 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.2.1 (2025-March)
+- Added `trex summary` sub-command
+- Trimmed `compare_engines.ipynb`
+
+## v0.2.0 (2025-January)
+- Allow the `trex` command-line tool to run in environments where the tensorrt Python bindings is not installed. `trex process` will not be available when tensorrt is not installed, but `trex summary` and `trex draw` are always available.
+- Add FP4 rendering.
+- Separate control of node metadata and name rendering.
+- Enhance the `trex draw` command-line sub-tool with new features:
+  - `--output_format=format`: Control the output format (png, svg, dot)
+  - `--beam=node,radius`: Draw the induced subgraph of neighbors centered at node n within a given radius.
+  - `--query=regex_string`: Draw the induced subgraph of all nodes whose name or metadata matches the regular expression.
+
+## v0.1.9 (2024-April)
+- Fixed virtualenv installation
+- Added INT4 rendering
+
 ## v0.1.8 (2024-March)
 - Added `trex` command-line tool (see `bin/README.md`)
 - Updated to support Python 3.10, new package installations and TensorRT 10.0.

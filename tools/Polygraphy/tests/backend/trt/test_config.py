@@ -456,12 +456,12 @@ class TestCreateConfig:
 
     if mod.version(trt.__version__) >= mod.version("10.8"):
         @pytest.mark.parametrize(
-            "level, expected",
+            "level",
             [
-                ("none", trt.TilingOptimizationLevelLevel.NONE),
-                ("fast", trt.TilingOptimizationLevel.FAST),
-                ("moderate", trt.TilingOptimizationLevel.MODERATE),
-                ("full", trt.TilingOptimizationLevel.FULL),
+                trt.TilingOptimizationLevel.NONE,
+                trt.TilingOptimizationLevel.FAST,
+                trt.TilingOptimizationLevel.MODERATE,
+                trt.TilingOptimizationLevel.FULL,
             ],
         )
         def test_tiling_optimization_level(self, identity_builder_network, level):

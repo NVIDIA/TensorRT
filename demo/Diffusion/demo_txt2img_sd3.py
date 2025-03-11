@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,17 +16,19 @@
 #
 
 import argparse
-from PIL import Image
-from cuda import cudart
 
-from stable_diffusion_3_pipeline import StableDiffusion3Pipeline
-from utilities import PIPELINE_TYPE, add_arguments
-from utils_sd3.other_impls import preprocess_image_sd3
+from cuda import cudart
+from PIL import Image
+
+from demo_diffusion import dd_argparse
+from demo_diffusion import pipeline as pipeline_module
+from demo_diffusion.utils_sd3.other_impls import preprocess_image_sd3
+
 
 def parseArgs():
     # Stable Diffusion 3 configuration
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion 3 Txt2Img Demo", conflict_handler='resolve')
-    parser = add_arguments(parser)
+    parser = dd_argparse.add_arguments(parser)
     parser.add_argument('--version', type=str, default="sd3", choices=["sd3"], help="Version of Stable Diffusion")
     parser.add_argument('--height', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
@@ -47,7 +49,9 @@ def process_pipeline_args(args):
         raise ValueError(f"Batch size {args.batch_size} is larger than allowed {max_batch_size}.")
 
     if args.use_cuda_graph and (not args.build_static_batch or args.build_dynamic_shape):
-        raise ValueError(f"Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`")
+        raise ValueError(
+            "Using CUDA graph requires static dimensions. Enable `--build-static-batch` and do not specify `--build-dynamic-shape`"
+        )
 
     input_image = None
     if args.input_image:
@@ -100,9 +104,9 @@ if __name__ == "__main__":
     kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
 
     # Initialize demo
-    demo = StableDiffusion3Pipeline(
-        pipeline_type=PIPELINE_TYPE.TXT2IMG,
-        **kwargs_init_pipeline)
+    demo = pipeline_module.StableDiffusion3Pipeline(
+        pipeline_type=pipeline_module.PIPELINE_TYPE.TXT2IMG, **kwargs_init_pipeline
+    )
 
     # Load TensorRT engines and pytorch modules
     demo.loadEngines(

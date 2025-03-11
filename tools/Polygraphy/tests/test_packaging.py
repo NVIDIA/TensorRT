@@ -31,7 +31,7 @@ class TestWheel:
 
         # Newer versions of setuptools break pytest-virtualenv
         virtualenv.run(
-            [virtualenv.python, "-m", "pip", "install", "setuptools==59.6.0"]
+            [virtualenv.python, "-m", "pip", "install", "setuptools"]
         )
 
         virtualenv.run(["make", "install"], cwd=ROOT_DIR)

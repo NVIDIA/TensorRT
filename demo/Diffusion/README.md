@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.8 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.9 --single-branch
 cd TensorRT
 ```
 
@@ -42,13 +42,14 @@ pip3 install -r requirements.txt
 ```
 
 > NOTE: demoDiffusion has been tested on systems with NVIDIA H100, A100, L40, T4, and RTX4090 GPUs, and the following software configuration.
+
 ```
 diffusers           0.31.0
 onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.8.0.43
+tensorrt            10.9.0.34
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -131,7 +132,6 @@ Examples:
 
 Multiple ControlNet types can also be specified to combine the conditionings. While specifying multiple conditionings, controlnet scales should also be provided. The scales signify the importance of each conditioning in relation with the other. For example, to condition using `openpose` and `canny` with scales of 1.0 and 0.8 respectively, the arguments provided would be `--controlnet-type openpose canny` and `--controlnet-scale 1.0 0.8`. Note that the number of controlnet scales provided should match the number of controlnet types.
 
-
 ### Generate an image with Stable Diffusion XL guided by a single text prompt
 
 Run the below command to generate an image with Stable Diffusion XL
@@ -145,6 +145,14 @@ The optional refiner model may be enabled by specifying `--enable-refiner` and s
 ```bash
 python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --hf-token=$HF_TOKEN --version=xl-1.0 --enable-refiner --onnx-refiner-dir=onnx-refiner --engine-refiner-dir=engine-refiner
 ```
+
+### Generate an image with Stable Diffusion XL with ControlNet guided by an image and a text prompt
+
+```bash
+python3 demo_controlnet.py "A beautiful bird with rainbow colors" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 20 --onnx-dir=onnx-cnet --engine-dir=engine-cnet --version xl-1.0
+```
+
+> NOTE: Currently only `--controlnet-type canny` is supported. `--input-image` must be a pre-processed image corresponding to `--controlnet-type canny`. If unspecified, a sample image will be downloaded.
 
 ### Generate an image guided by a text prompt, and using specified LoRA model weight updates
 
@@ -174,11 +182,15 @@ For step-by-step tutorials to run INT8 & FP8 inference on stable diffusion model
 
 [LCM-LoRA](https://arxiv.org/abs/2311.05556) produces good quality images in 4 to 8 denoising steps instead of 30+ needed base model. Note that we use LCM scheduler and disable classifier-free-guidance by setting `--guidance-scale` to 0.
 LoRA weights are fused into the ONNX and finalized TensorRT plan files in this example.
+
 ```bash
 python3 demo_txt2img_xl.py "Einstein" --version xl-1.0 --lora-path "latent-consistency/lcm-lora-sdxl" --lora-weight 1.0 --onnx-dir onnx-sdxl-lcm-nocfg --engine-dir engine-sdxl-lcm-nocfg --denoising-steps 4 --scheduler LCM --guidance-scale 0.0
 ```
+
 ### Faster Text-to-Image using SDXL Turbo
+
 Even faster image generation than LCM, producing coherent images in just 1 step. Note: SDXL Turbo works best for 512x512 resolution, EulerA scheduler and classifier-free-guidance disabled.
+
 ```bash
 python3 demo_txt2img_xl.py "Einstein" --version xl-turbo --onnx-dir onnx-sdxl-turbo --engine-dir engine-sdxl-turbo --denoising-steps 1 --scheduler EulerA --guidance-scale 0.0 --width 512 --height 512
 ```
@@ -212,10 +224,10 @@ cd onnx-svd-xt-1-1 && git lfs pull && cd ..
 ```
 
 SVD-XT-1.1 (25 frames at resolution 576x1024)
+
 ```bash
 python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --hf-token=$HF_TOKEN
 ```
-
 
 Run the command below to generate a video in FP8.
 
@@ -232,6 +244,7 @@ emb = emb.repeat_interleave(num_frames, dim=0)
 ```
 
 You may also specify a custom conditioning image using `--input-image`:
+
 ```bash
 python3 demo_img2vid.py --version svd-xt-1.1 --onnx-dir onnx-svd-xt-1-1 --engine-dir engine-svd-xt-1-1 --input-image https://www.hdcarwallpapers.com/walls/2018_chevrolet_camaro_zl1_nascar_race_car_2-HD.jpg --hf-token=$HF_TOKEN
 ```
@@ -241,11 +254,13 @@ NOTE: The min and max guidance scales are configured using --min-guidance-scale 
 ### Generate an image guided by a text prompt using Stable Cascade
 
 Run the below command to generate an image using Stable Cascade
+
 ```bash
 python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a pilot" --onnx-dir onnx-sc --engine-dir engine-sc
 ```
 
 The lite versions of the models are also supported using the command below
+
 ```bash
 python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a pilot" --onnx-dir onnx-sc-lite --engine-dir engine-sc-lite --lite
 ```
@@ -258,61 +273,40 @@ python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a
 
 ### Generating Images with Flux
 
-#### Download Pre-exported Models (Recommended for GPUs with <48GB VRAM)
-
-Install Git LFS:
-
-```bash
-sudo apt-get install git-lfs
-```
-
-Download ONNX models for the desired pipeline and precision:
-
-```bash
-# login to huggingface-cli using the $HF_TOKEN
-git config --global credential.helper store # set the 'store' credential helper as default
-huggingface-cli login --token $HF_TOKEN --add-to-git-credential
-
-# Example for flux.1-dev BF16 pipeline. Models will be downloaded to ./onnx-flux-dev after the script is run.
-./scripts/download_flux_onnx_models.sh --version "flux.1-dev" --precision "bf16"
-
-# View supported configurations
-./scripts/download_flux_onnx_models.sh --help
-```
-
 #### 1. Generate an Image from a Text Prompt
 
 ##### Run Flux.1-Dev
+
+NOTE: Pass `--download-onnx-models` to avoid native ONNX export and download the ONNX models from (Black Forest Labs' collection)[https://huggingface.co/collections/black-forest-labs/flux1-onnx-679d06b7579583bd84c8ef83]. It is only supported for BF16, FP8, and FP4 pipelines.
 
 ```bash
 # FP16 (requires >48GB VRAM for native export)
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN
 
 # BF16
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16 --onnx-dir onnx-flux-dev/ --model-onnx-dirs=transformer:onnx-flux-dev/transformer_bf16/ --engine-dir engine-flux-dev/bf16
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16 --download-onnx-models
 
 # FP8
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8 --onnx-dir onnx-flux-dev/ --model-onnx-dirs=transformer:onnx-flux-dev/transformer_fp8/ --engine-dir engine-flux-dev/fp8 --build-static-batch
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8 --download-onnx-models
 
 # FP4
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp4 --onnx-dir onnx-flux-dev/ --model-onnx-dirs=transformer:onnx-flux-dev/transformer_fp4/ --engine-dir engine-flux-dev/fp4
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp4 --download-onnx-models
 ```
 
 ##### Run Flux.1-Schnell
-
 
 ```bash
 # FP16 (requires >48GB VRAM for native export)
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell"
 
 # BF16
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --bf16 --onnx-dir onnx-flux-schnell/ --model-onnx-dirs=transformer:onnx-flux-schnell/transformer_bf16 --engine-dir engine-flux-schnell/bf16
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --bf16 --download-onnx-models
 
 # FP8
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp8 --onnx-dir onnx-flux-schnell/ --model-onnx-dirs=transformer:onnx-flux-schnell/transformer_fp8 --engine-dir engine-flux-schnell/fp8 --build-static-batch
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp8 --download-onnx-models
 
 # FP4
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp4 --onnx-dir onnx-flux-schnell/ --model-onnx-dirs=transformer:onnx-flux-schnell/transformer_fp4 --engine-dir engine-flux-schnell/fp4
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp4 --download-onnx-models
 ```
 
 ---
@@ -351,32 +345,32 @@ You can use the `--calibraton-dataset` flag to specify the path, which is set to
 
 ```bash
 # BF16
-python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --bf16 --denoising-steps 30 --onnx-dir onnx-flux-dev-depth/ --model-onnx-dirs=transformer:onnx-flux-dev-depth/transformer_bf16 --engine-dir engine-flux-dev-depth/bf16
+python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --bf16 --denoising-steps 30  --download-onnx-models
 
 # FP8 using pre-exported ONNX models
-python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --onnx-dir onnx-flux-dev-depth/ --model-onnx-dirs=transformer:onnx-flux-dev-depth/transformer_fp8 --engine-dir engine-flux-dev-depth/fp8 --build-static-batch
+python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch
 
 # FP8 using native ONNX export
 rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30
 
 # FP4
-python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp4 --denoising-steps 30 --onnx-dir onnx-flux-dev-depth/ --model-onnx-dirs=transformer:onnx-flux-dev-depth/transformer_fp4 --engine-dir engine-flux-dev-depth/fp4
+python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp4 --denoising-steps 30 --download-onnx-models
 ```
 
 ##### Canny ControlNet
 
 ```bash
 # BF16
-python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --bf16 --onnx-dir onnx-flux-dev-canny/ --model-onnx-dirs=transformer:onnx-flux-dev-canny/transformer_bf16 --engine-dir engine-flux-dev-canny/bf16
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --bf16 --denoising-steps 30 --download-onnx-models
 
 # FP8 using pre-exported ONNX models
-python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --onnx-dir onnx-flux-dev-canny/ --model-onnx-dirs=transformer:onnx-flux-dev-canny/transformer_fp8 --engine-dir engine-flux-dev-canny/fp8 --build-static-batch
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch
 
 # FP8 using native ONNX export
-rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --calibration-dataset {custom/dataset/path}
+rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --denoising-steps 30 --calibration-dataset {custom/dataset/path}
 
 # FP4
-python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp4 --onnx-dir onnx-flux-dev-canny/ --model-onnx-dirs=transformer:onnx-flux-dev-canny/transformer_fp4 --engine-dir engine-flux-dev-canny/fp4
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp4 --denoising-steps 30 --download-onnx-models
 ```
 
 ---
@@ -398,7 +392,7 @@ python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry b
 - `--low-vram`: Enables model-offloading for reduced VRAM usage.
 - `--ws`: Enables weight streaming in TensorRT engines.
 - `--t5-ws-percentage` and `--transformer-ws-percentage`: Set runtime weight streaming budgets.
-- `--build-static-batch`: Build all engines using static dimensions to lower the required activation memory. This will limit inference to the specified spatial dimensions.
+- `--build-static-batch`: Build all engines using static batch sizes to lower the required activation memory. This will limit supported batch size of these engines for inference to the value specified by `--batch-size`.
 
 ##### FLUX VRAM Requirements Table
 
@@ -413,22 +407,15 @@ Memory usage captured below excludes the ONNX export step, and assumes use of th
 
 NOTE: The FP8 and FP4 Pipelines are supported on Hopper/Ada/Blackwell devices only. The FP4 pipeline is most performant on Blackwell devices.
 
-### Use separate directories for individual ONNX models
-The directories specified in `--model-onnx-dirs` will override the directory set in `--onnx-dir`. Unspecified models will continue to use the directory set in `--onnx-dir`.
-Suppose the model storage locations are as following:
-* transformer model ONNX files are saved at `./onnx_folder_1/transformer` and `./onnx_folder_1/transformer.opt`.
-* vae model ONNX files are saved in `./onnx_folder_2/vae` and `./onnx_folder_2/vae.opt`.
-* Other models (t5 and clip) are still under `./onnx/`.
+### Specify Custom Paths for ONNX models and TensorRT engines (FLUX only)
 
-The corresponding command to run the pipeline:
-```bash
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --onnx-dir=onnx --model-onnx-dirs=transformer:onnx_folder_1,vae:onnx_folder_2
-```
+Custom override paths to pre-exported ONNX model files can be provided using `--custom-onnx-paths`. These ONNX models are directly used to build TRT engines without further optimization on the ONNX graphs. Paths should be a comma-separated list of <model_name>:<path> pairs. For example: `--custom-onnx-paths=transformer:/path/to/transformer.onnx,vae:/path/to/vae.onnx`. Call <PipelineClass>.get_model_names(...) for the list of supported model names.
+
+Custom override paths to pre-built engine files can be provided using `--custom-engine-paths`. Paths should be a comma-separated list of <model_name>:<path> pairs. For example: `--custom-onnx-paths=transformer:/path/to/transformer.plan,vae:/path/to/vae.plan`.
 
 ## Configuration options
+
 - Noise scheduler can be set using `--scheduler <scheduler>`. Note: not all schedulers are available for every version.
 - To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
-
-

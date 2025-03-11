@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,13 +20,16 @@ import types
 import typing
 from typing import Callable, Tuple, List
 import numpy as np
-
-from ._plugin_class import _TemplatePlugin
+from ._plugin_class import _TemplateJITPlugin
+from ._export import IS_AOT_ENABLED
+if IS_AOT_ENABLED:
+    from ._plugin_class import _TemplateAOTPlugin
 from ._validate import (
     _parse_register_inputs,
     _parse_register_return,
     _validate_autotune,
     _validate_impl,
+    _validate_aot_impl,
     _validate_name_and_namespace,
 )
 from ._utils import (
@@ -91,11 +94,13 @@ class PluginDef:
         self.plugin_id = None  # includes namespace (format is ns::name)
         self.register_func = None
         self.impl_func = None
+        self.aot_impl_func = None
         self.autotune_func = None
         self.autotune_attr_names = None
         self.input_tensor_names = None
         self.input_attrs = None  # map name -> type
         self.impl_attr_names = None
+        self.aot_impl_attr_names = None
         self.num_outputs = None
         self.input_arg_schema = None
         self.expects_tactic = None
@@ -195,24 +200,26 @@ class PluginDef:
                     )
                 )
 
-        plg = plg_creator.create_plugin(
-            name,
-            namespace,
-            trt.PluginFieldCollection(fields),
-            trt.TensorRTPhase.BUILD,
-        )
-        plg.init(
-            self.register_func,
-            attrs,
-            self.impl_attr_names,
-            self.impl_func,
-            self.autotune_attr_names,
-            self.autotune_func,
-            self.expects_tactic,
-        )
+        def create_plugin_instance(quick_plugin_creation_request: "trt.QuickPluginCreationRequest" = None):
+            if quick_plugin_creation_request is None:
+                plg = plg_creator.create_plugin(
+                    name,
+                    namespace,
+                    trt.PluginFieldCollection(fields),
+                    trt.TensorRTPhase.BUILD
+                )
+            else:
+                plg = plg_creator.create_plugin(
+                    name,
+                    namespace,
+                    trt.PluginFieldCollection(fields),
+                    trt.TensorRTPhase.BUILD,
+                    quick_plugin_creation_request
+                )
 
-        return input_tensors, [], plg
+            return input_tensors, [], plg
 
+        return create_plugin_instance
 
 class _TemplatePluginCreator(trt.IPluginCreatorV3Quick):
     def __init__(self, name, namespace, attrs):
@@ -246,7 +253,7 @@ class _TemplatePluginCreator(trt.IPluginCreatorV3Quick):
 
         self.field_names = trt.PluginFieldCollection(field_names)
 
-    def create_plugin(self, name, namespace, fc, phase):
+    def create_plugin(self, name, namespace, fc, phase, qpcr: "trt.QuickPluginCreationRequest" = None):
         desc = QDP_REGISTRY[f"{namespace}::{name}"]
         name = name
         namespace = namespace
@@ -271,18 +278,83 @@ class _TemplatePluginCreator(trt.IPluginCreatorV3Quick):
                 else:
                     attrs[f.name] = attr_type_annot(f.data)
 
-        plg = _TemplatePlugin(name, namespace, desc.num_outputs)
-        plg.init(
-            desc.register_func,
-            attrs,
-            desc.impl_attr_names,
-            desc.impl_func,
-            desc.autotune_attr_names,
-            desc.autotune_func,
-            desc.expects_tactic,
-        )
-        return plg
+        jit_or_aot = None # True if JIT is to be created, False if AOT. Not None will be asserted before plugin creation.
 
+        if qpcr is None:
+            plg = _TemplateJITPlugin(name, namespace, desc.num_outputs)
+
+            plg.init(
+                desc.register_func,
+                attrs,
+                desc.impl_attr_names,
+                desc.impl_func,
+                desc.autotune_attr_names,
+                desc.autotune_func,
+                desc.expects_tactic,
+            )
+
+            return plg
+
+        # If there is a strict preference, that takes precedence
+        if qpcr == trt.QuickPluginCreationRequest.STRICT_AOT:
+            if desc.aot_impl_func is None:
+                raise ValueError(f"AOT implementation requested, but not defined for '{desc.plugin_id}'. Was @trt.plugin.aot_impl defined?")
+            jit_or_aot = False
+        elif qpcr == trt.QuickPluginCreationRequest.STRICT_JIT:
+            if desc.impl_func is None:
+                raise ValueError(f"JIT implementation requested, but not defined for '{desc.plugin_id}'. Was @trt.plugin.impl defined?")
+            jit_or_aot = True
+        else:
+            aot_defined = desc.aot_impl_func is not None
+            jit_defined = desc.impl_func is not None
+
+            # A preferemce must be indicated if both AOT and JIT implementations are defined
+            if aot_defined and jit_defined:
+                if qpcr == trt.QuickPluginCreationRequest.PREFER_AOT:
+                    jit_or_aot = False
+                elif qpcr == trt.QuickPluginCreationRequest.PREFER_JIT:
+                    jit_or_aot = True
+                else:
+                    raise ValueError(f"Plugin '{desc.plugin_id}' has both AOT and JIT implementations. NetworkDefinitionCreationFlag.PREFER_AOT_PYTHON_PLUGINS or NetworkDefinitionCreationFlag.PREFER_JIT_PYTHON_PLUGINS should be specified.")
+            else:
+                # If only one implementation is defined, use that.
+                # Any preference specified is ignored. If the preference is strong, a strict flag should have been specified.
+                if aot_defined:
+                    jit_or_aot = False
+                elif jit_defined:
+                    jit_or_aot = True
+                else:
+                    raise ValueError(f"Plugin '{desc.plugin_id}' does not have either a AOT or JIT implementation.")
+
+        assert jit_or_aot is not None
+
+        if jit_or_aot:
+            plg = _TemplateJITPlugin(name, namespace, desc.num_outputs)
+
+            plg.init(
+                desc.register_func,
+                attrs,
+                desc.impl_attr_names,
+                desc.impl_func,
+                desc.autotune_attr_names,
+                desc.autotune_func,
+                desc.expects_tactic,
+            )
+
+        else:
+            plg = _TemplateAOTPlugin(name, namespace, desc.num_outputs)
+
+            plg.init(
+                desc.register_func,
+                attrs,
+                desc.aot_impl_attr_names,
+                desc.aot_impl_func,
+                desc.autotune_attr_names,
+                desc.autotune_func
+            )
+
+        # the caller can determine if the created plugin is an AOT or JIT plugin by inspecting the interface info
+        return plg
 
 def _register_plugin_creator(name: str, namespace: str, attrs_types):
     plg_registry = trt.get_plugin_registry()
@@ -442,6 +514,102 @@ def impl(plugin_id: str) -> Callable:
         plugin_def.impl_attr_names = impl_attr_names
         plugin_def.expects_tactic = found_tactic
         return impl_func
+
+    return decorator
+
+# Decorator for `tensorrt.plugin.aot_impl`
+@public_api()
+def aot_impl(plugin_id: str) -> Callable:
+    """
+    Wraps a function to define an Ahead-of-Time (AOT) implementation for a plugin already registered through `trt.plugin.register`.
+
+    This API is only intended to be used as a decorator. The decorated function is not required to have type hints for input arguments or return value;
+    however, any type hints specified will be validated against the `trt.plugin.register` signature for consistency.
+
+    The schema for the function is as follows:
+    .. code-block:: text
+
+        (inp0: TensorDesc, inp1: TensorDesc, ..., attr0: SupportedAttrType, attr1: SupportedAttrType, outputs: Tuple[TensorDesc], tactic: Optional[int]) -> Tuple[str, str, KernelLaunchParams, SymExprs]
+
+    * Input tensors are passed first, each described by a `TensorDesc`.
+    * Plugin attributes are declared next.
+       * Not all attributes included in `trt.plugin.register` must be specified here -- they could be a subset.
+       * NOTE: Plugin attributes are not serialized into the engine when using an AOT implementation.
+    * `tactic` is an optional argument. If the plugin is using custom tactics, it must be specified to receive the tactic value to use for the current execution of the plugin.
+
+    Args:
+        plugin_id: The ID for the plugin in the form "{namespace}::{name}", which must match that used during `trt.plugin.register`
+
+    :returns:
+        - kernel_name: The name of the kernel.
+        - compiled_kernel: Compiled form of the kernel. Presently, only PTX is supported.
+        - launch_params: The launch parameters for the kernel
+        - extra_args: Symbolic expressions for scalar inputs to the kernel, located after the tensor inputs and before the tensor outputs
+
+    .. code-block:: python
+        :linenos:
+        :caption: Implementation of an elementwise plugin with an OpenAI Triton kernel
+
+        import tensorrt.plugin as trtp
+        import triton
+        import triton.language as tl
+
+        @triton.jit
+        def add_kernel(x_ptr, n_elements, y_ptr, BLOCK_SIZE: tl.constexpr):
+            pid = tl.program_id(0)
+            offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+            mask = offsets < n_elements
+            x = tl.load(x_ptr + offsets, mask=mask)
+            tl.store(y_ptr + offsets, x + 1, mask=mask)
+
+        @trtp.register("my::add_plugin")
+        def add_plugin_desc(inp0: trtp.TensorDesc, block_size: int) -> Tuple[trtp.TensorDesc]:
+            return inp0.like()
+
+        @trtp.aot_impl("my::elemwise_add_plugin")
+        def add_plugin_aot_impl(
+            inp0: trtp.TensorDesc, block_size: int, single_tactic: bool, outputs: Tuple[trtp.TensorDesc], tactic: int
+        ) -> Tuple[Union[str, bytes], Union[str, bytes], trtp.KernelLaunchParams, trtp.SymExprs]:
+
+            type_str = "fp32" if inp0.dtype == trt.float32 else "fp16"
+
+            src = triton.compiler.ASTSource(
+                fn=add_kernel,
+                signature=f"*{type_str},i32,*{type_str}",
+                constants={
+                    "BLOCK_SIZE": block_size,
+                },
+            )
+
+            compiled_kernel = triton.compile(src)
+
+            N = inp0.shape_expr.numel()
+            launch_params = trtp.KernelLaunchParams()
+
+            # grid dims
+            launch_params.grid_x = trtp.cdiv(N, block_size)
+            # block dims
+            launch_params.block_x = compiled_kernel.metadata.num_warps * 32
+            # shared memory
+            launch_params.shared_mem = compiled_kernel.metadata.shared
+
+            extra_args = trtp.SymIntExprs(1)
+            extra_args[0] = trtp.SymInt32(N)
+
+            return compiled_kernel.metadata.name, compiled_kernel.asm["ptx"], launch_params, extra_args
+    """
+    def decorator(aot_impl_func: Callable):
+        if plugin_id not in QDP_REGISTRY:
+            raise ValueError(
+                f"Plugin {plugin_id} is not registered. Did you register it with tensorrt.plugin.register API?"
+            )
+
+        plugin_def = QDP_REGISTRY[plugin_id]
+        aot_impl_attr_names = _validate_aot_impl(aot_impl_func, plugin_def)
+
+        plugin_def.aot_impl_func = aot_impl_func
+        plugin_def.aot_impl_attr_names = aot_impl_attr_names
+        return aot_impl_func
 
     return decorator
 

@@ -31,7 +31,6 @@
 //! It can be run with the following command line:
 //! Command: ./sample_editable_timing_cache
 
-#include <charconv>
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
@@ -40,6 +39,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include <cstdlib> // for strtoull
 
 #define DEFINE_TRT_ENTRYPOINTS 1
 #define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
@@ -423,10 +423,10 @@ bool parseTactic(std::string_view text, size_t* hash)
     CHECK_RETURN_W_MSG(
         static_cast<int64_t>(text.size()) <= kTOTAL_CAHRS_PER_TACTIC, false, "Unexpected length of tactic");
 
-    auto [ptr, err] = std::from_chars(text.data() + kNUM_PREFIX_CHARS, text.data() + text.size(), *hash, 16);
-
-    CHECK_RETURN_W_MSG(err == std::errc(), false, "Failed to parse the tactic.");
-    CHECK_RETURN_W_MSG(ptr == text.data() + text.size(), false, "Found junk in the text.");
+    char const* start = text.data() + kNUM_PREFIX_CHARS;
+    char* end = nullptr;
+    *hash = std::strtoull(start, &end, 16);
+    CHECK_RETURN_W_MSG(end == text.data() + text.size(), false, "Found junk in the text.");
 
     return true;
 }

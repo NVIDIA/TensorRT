@@ -37,6 +37,7 @@ $ git clone https://github.com/NVIDIA/TensorRT.git
 $ docker pull nvcr.io/nvidia/tensorflow:22.03-tf2-py3
 $ docker run -it --runtime=nvidia --gpus all --net host -v ~/TensorRT/tools/tensorflow-quantization:/home/tensorflow-quantization nvcr.io/nvidia/tensorflow:22.03-tf2-py3 /bin/bash
 ```
+
 After last command, you will be placed in `/workspace` directory inside the running docker container whereas `tensorflow-quantization` repo is mounted in `/home` directory.
 
 ```bash
@@ -45,6 +46,7 @@ $ ./install.sh
 $ cd tests
 $ python3 -m pytest quantize_test.py -rP
 ```
+
 If all tests pass, installation is successful.
 
 ### Local
@@ -70,12 +72,12 @@ TensorFlow 2.x Quantization toolkit [user guide](https://docs.nvidia.com/deeplea
 2. Only Functional and Sequential Keras models are supported. Original Keras layers are wrapped into quantized layers using TensorFlow's [clone_model](https://www.tensorflow.org/api_docs/python/tf/keras/models/clone_model) method, which doesn't support subclassed models.
 3. Saving the quantized version of a few layers may not be supported in `TensorFlow < 2.8`:
    - `DepthwiseConv2D` support was added in TF 2.8.
-   - `Conv2DTranspose` is not yet supported by TF (see the open bug [here](https://github.com/tensorflow/model-optimization/issues/964)). 
-       However, there's a workaround if you do not need the TF2 SavedModel file and just the ONNX file:
-       1. Implement `Conv2DTransposeQuantizeWrapper`. See our [user guide](https://docs.nvidia.com/deeplearning/tensorrt/tensorflow-quantization-toolkit/docs/docs/add_new_layer_support.html#example) for more information on how to do that.
-       2. Convert the quantized Keras model to ONNX using our provided utility function `convert_keras_model_to_onnx`.
+   - `Conv2DTranspose` is not yet supported by TF (see the open bug [here](https://github.com/tensorflow/model-optimization/issues/964)).
+     However, there's a workaround if you do not need the TF2 SavedModel file and just the ONNX file:
+     1. Implement `Conv2DTransposeQuantizeWrapper`. See our [user guide](https://docs.nvidia.com/deeplearning/tensorrt/tensorflow-quantization-toolkit/docs/docs/add_new_layer_support.html#example) for more information on how to do that.
+     2. Convert the quantized Keras model to ONNX using our provided utility function `convert_keras_model_to_onnx`.
 
 ## Resources
 
-- [GTC 2022 talk](https://www.nvidia.com/gtc/session-catalog/?search=dheeraj%20&search=dheeraj+#/session/1636418253677001loTP)
+- [GTC 2022 talk](https://www.nvidia.com/en-us/on-demand/session/gtcspring22-s41440/)
 - Quantization Basics [whitepaper](https://arxiv.org/abs/2004.09602)

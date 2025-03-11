@@ -23,4 +23,4 @@ from trex.activations import *
 from trex.engine_plan import *
 from trex.colors import *
 
-__version__ = "0.1.8"
+__version__ = "0.2.1"

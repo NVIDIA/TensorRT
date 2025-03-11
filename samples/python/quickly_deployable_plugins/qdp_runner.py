@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -176,7 +176,7 @@ def check_artifacts_dir_exists(artifacts_dir):
 
 
 def run_circ_pad(
-    enable_multi_tactic=False, mode="onnx", artifacts_dir=None, save_or_load_engine=None
+    enable_multi_tactic=False, mode="onnx", artifacts_dir=None, save_or_load_engine=None, aot=False
 ):
 
     if enable_multi_tactic:
@@ -197,7 +197,7 @@ def run_circ_pad(
         if mode == "inetdef":
             builder, network = create_network()
             i_x = network.add_input(name="x", dtype=trt.DataType.FLOAT, shape=x.shape)
-            out = network.add_plugin(trtp.op.sample.circ_pad_plugin(i_x, pads=pads))
+            out = network.add_plugin(trtp.op.sample.circ_pad_plugin(i_x, pads=pads), aot = aot)
             out.get_output(0).name = "y"
             network.mark_output(tensor=out.get_output(0))
 
@@ -219,7 +219,7 @@ def run_circ_pad(
                 op="circ_pad_plugin",
                 inputs=[var_x],
                 outputs=[var_y],
-                attrs={"pads": pads, "plugin_namespace": "sample"},
+                attrs={"pads": pads, "plugin_namespace": "sample", "aot": aot},
             )
             graph = gs.Graph(
                 nodes=[circ_pad_node], inputs=[var_x], outputs=[var_y], opset=16
@@ -253,6 +253,7 @@ def run_circ_pad(
 def setup_add_sample(subparsers):
     subparser = subparsers.add_parser("add", help="'add' sample help")
     subparser.add_argument("--autotune", action="store_true", help="Enable autotuning")
+    subparser.add_argument("--aot", action="store_true", help="Use the AOT implementation of the plugin")
     subparser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable more verbose log output"
     )
@@ -273,12 +274,12 @@ def setup_non_zero_sample(subparsers):
 
 
 def setup_circ_pad_sample(subparsers):
-    subparser = subparsers.add_parser("circ_pad", help="circ_pad sample help")
+    subparser = subparsers.add_parser("circ_pad", help="circ_pad sample help.")
     subparser.add_argument(
-        "--multi_tactic", action="store_true", help="Enable multiple tactics"
+        "--multi_tactic", action="store_true", help="Enable multiple tactics."
     )
     subparser.add_argument(
-        "--save_engine", action="store_true", help="Save engine to the artifacts_dir"
+        "--save_engine", action="store_true", help="Save engine to the artifacts_dir."
     )
     subparser.add_argument(
         "--load_engine",
@@ -296,8 +297,9 @@ def setup_circ_pad_sample(subparsers):
         choices=["onnx", "inetdef"],
         help="Whether to use ONNX parser or INetworkDefinition APIs to construct the network.",
     )
+    subparser.add_argument("--aot", action="store_true", help="Use the AOT implementation of the plugin.")
     subparser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose log output"
+        "-v", "--verbose", action="store_true", help="Enable verbose log output."
     )
 
     return subparser
@@ -356,4 +358,9 @@ if __name__ == "__main__":
         if args.save_engine is True:
             save_or_load_engine = True
 
-        run_circ_pad(args.multi_tactic, args.mode, args.artifacts_dir, save_or_load_engine)
+        if args.multi_tactic and args.aot:
+            parser.error(
+                "circ_pad: '--aot' is not supported when '--multi_tactic' is specified."
+            )
+
+        run_circ_pad(args.multi_tactic, args.mode, args.artifacts_dir, save_or_load_engine, args.aot)

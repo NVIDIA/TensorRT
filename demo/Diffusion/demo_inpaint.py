@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,12 +20,14 @@ import argparse
 from cuda import cudart
 from PIL import Image
 
-from stable_diffusion_pipeline import StableDiffusionPipeline
-from utilities import PIPELINE_TYPE, TRT_LOGGER, add_arguments, download_image, process_pipeline_args
+from demo_diffusion import dd_argparse
+from demo_diffusion import image as image_module
+from demo_diffusion import pipeline as pipeline_module
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion Inpaint Demo", conflict_handler='resolve')
-    parser = add_arguments(parser)
+    parser = dd_argparse.add_arguments(parser)
     parser.add_argument('--version', type=str, default="1.5", choices=["1.5", "2.0"], help="Stable Diffusion version. Only 1.5 and 2.0 supported for inpainting.")
     parser.add_argument('--scheduler', type=str, default="PNDM", choices=["PNDM"], help="Scheduler for diffusion process")
     parser.add_argument('--input-image', type=str, default="", help="Path to the input image")
@@ -40,13 +42,13 @@ if __name__ == "__main__":
         input_image = Image.open(args.input_image).convert("RGB")
     else:
         img_url = "https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png"
-        input_image = download_image(img_url)
+        input_image = image_module.download_image(img_url)
 
     if args.mask_image:
         mask_image = Image.open(args.mask_image).convert("RGB")
     else:
         mask_url = "https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo_mask.png"
-        mask_image = download_image(mask_url)
+        mask_image = image_module.download_image(mask_url)
 
     image_width, image_height = input_image.size
     if image_height != args.height or image_width != args.width:
@@ -60,12 +62,12 @@ if __name__ == "__main__":
         mask_image = mask_image.resize((args.height, args.width))
         mask_height, mask_width = args.height, args.width
 
-    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
+    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = dd_argparse.process_pipeline_args(args)
 
     # Initialize demo
-    demo = StableDiffusionPipeline(
-        pipeline_type=PIPELINE_TYPE.INPAINT,
-        **kwargs_init_pipeline)
+    demo = pipeline_module.StableDiffusionPipeline(
+        pipeline_type=pipeline_module.PIPELINE_TYPE.INPAINT, **kwargs_init_pipeline
+    )
 
     # Load TensorRT engines and pytorch modules
     demo.loadEngines(

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -176,6 +176,7 @@ enum class DataType : int32_t
     //! 4-bit floating point type
     //! 1 bit sign, 2 bit exponent, 1 bit mantissa
     kFP4 = 10,
+
 };
 
 namespace impl
@@ -184,7 +185,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<DataType>
 {
-    //! Declaration of kVALUE that represents the maximum number of elements in the DataType enum.
+//! Declaration of kVALUE that represents the maximum number of elements in the DataType enum.
     static constexpr int32_t kVALUE = 11;
 };
 } // namespace impl

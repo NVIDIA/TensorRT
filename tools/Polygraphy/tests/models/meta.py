@@ -382,11 +382,6 @@ ONNX_MODELS = {
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
     ),
-    "invalid": Model(
-        path=model_path("invalid.onnx"),
-        LoaderType=BytesFromPath,
-        check_runner=no_check_implemented,
-    ),
     "empty": Model(
         path=model_path("empty.onnx"),
         LoaderType=BytesFromPath,

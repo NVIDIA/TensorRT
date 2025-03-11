@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,206 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+if (${TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW})
+
+option(TRT_BUILD_INCLUDE_BERT_QKV_PLUGIN "Build the BERT QKV to Context Plugin and related plugins." ON)
+
+set(TRT_PLUGIN_NAMES
+    batchedNMSPlugin
+    batchTilePlugin
+    clipPlugin
+    coordConvACPlugin
+    cropAndResizePlugin
+    decodeBbox3DPlugin
+    detectionLayerPlugin
+    disentangledAttentionPlugin
+    efficientNMSPlugin
+    flattenConcat
+    generateDetectionPlugin
+    gridAnchorPlugin
+    groupNormalizationPlugin
+    instanceNormalizationPlugin
+    leakyReluPlugin
+    modulatedDeformConvPlugin
+    multilevelCropAndResizePlugin
+    multilevelProposeROI
+    multiscaleDeformableAttnPlugin
+    nmsPlugin
+    normalizePlugin
+    nvFasterRCNN
+    pillarScatterPlugin
+    priorBoxPlugin
+    proposalLayerPlugin
+    proposalPlugin
+    pyramidROIAlignPlugin
+    regionPlugin
+    reorgPlugin
+    resizeNearestPlugin
+    roiAlignPlugin
+    scatterElementsPlugin
+    scatterPlugin
+    specialSlicePlugin
+    splitPlugin
+    voxelGeneratorPlugin
+)
+
+
+if(${TRT_BUILD_INCLUDE_BERT_QKV_PLUGIN})
+    list(APPEND TRT_PLUGIN_NAMES
+        bertQKVToContextPlugin
+        embLayerNormPlugin
+        fcPlugin
+        geluPlugin
+        skipLayerNormPlugin
+    )
+endif()
+
+add_library(tensorrt_plugins SHARED)
+add_library(tensorrt_plugins_internal SHARED)
+
+function(add_plugin_source)
+    target_sources(tensorrt_plugins PRIVATE ${ARGN})
+    target_sources(tensorrt_plugins_internal PRIVATE ${ARGN})
+endfunction()
+
+add_library(tensorrt_vc_plugins SHARED)
+
+function(add_vc_plugin_source)
+    target_sources(tensorrt_vc_plugins PRIVATE ${ARGN})
+endfunction()
+
+add_subdirectory(api)
+add_subdirectory(vc)
+add_subdirectory(common)
+
+foreach(PLUGIN_NAME IN LISTS TRT_PLUGIN_NAMES)
+    add_subdirectory(${PLUGIN_NAME})
+endforeach()
+
+if (NOT MSVC)
+    set(trt_plugins_link_options
+        "LINKER:--version-script=${CMAKE_CURRENT_LIST_DIR}/exports.map"
+        "LINKER:-z,relro"
+        "LINKER:-Bsymbolic"
+        "LINKER:--no-undefined"
+        "LINKER:--no-as-needed"
+        "$<$<CONFIG:Release>:LINKER:--strip-all>"
+    )
+else()
+    set(trt_plugins_link_options)
+endif()
+
+set(trt_plugin_dependencies
+    tensorrt
+    CUDA::cudart_static
+)
+
+if(NOT MSVC)
+    list(APPEND trt_plugin_dependencies
+        Threads::Threads    
+        CUDA::culibos
+    )
+endif()
+
+set(trt_plugin_include_dirs
+    ${TensorRT_SOURCE_DIR}/externals
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+
+set(trt_plugin_compile_options
+    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+)
+
+# Target properties for tensorrt_plugins
+target_include_directories(tensorrt_plugins PRIVATE ${trt_plugin_include_dirs})
+target_link_libraries(tensorrt_plugins PRIVATE ${trt_plugin_dependencies})
+target_link_options(tensorrt_plugins PRIVATE ${trt_plugins_link_options})
+target_compile_options(tensorrt_plugins PRIVATE ${trt_plugin_compile_options})
+
+set_target_properties(
+    tensorrt_plugins
+    PROPERTIES CXX_VISIBILITY_PRESET hidden
+               VISIBILITY_INLINES_HIDDEN ON
+               OUTPUT_NAME nvinfer_plugin
+               VERSION ${TensorRT_VERSION}
+               SOVERSION ${TRT_MAJOR}
+               LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports.map)
+
+
+if (NOT MSVC)
+    set(trt_plugins_internal_link_options
+        "LINKER:--version-script=${TensorRT_SOURCE_DIR}/Exports-plugin_internal.map"
+        "LINKER:-z,relro"
+        "LINKER:-Bsymbolic"
+        "LINKER:--no-undefined"
+        "LINKER:--no-as-needed"
+        "$<$<CONFIG:Release>:LINKER:--strip-all>"
+    )
+else()
+    set(trt_plugins_internal_link_options)
+endif()
+
+# Target properties for tensorrt_plugins_internal
+# This library is effectively the same as tensorrt_plugins, but without stripped symbols.
+target_include_directories(tensorrt_plugins_internal PUBLIC ${trt_plugin_include_dirs})
+target_link_libraries(tensorrt_plugins_internal PRIVATE ${trt_plugin_dependencies})
+target_link_options(tensorrt_plugins_internal PRIVATE ${trt_plugins_internal_link_options})
+target_compile_options(tensorrt_plugins_internal PRIVATE ${trt_plugin_compile_options})
+
+set_target_properties(
+    tensorrt_plugins
+    PROPERTIES CXX_VISIBILITY_PRESET default
+               VISIBILITY_INLINES_HIDDEN OFF
+               OUTPUT_NAME nvinfer_plugin_internal
+               VERSION ${TensorRT_VERSION}
+               SOVERSION ${TRT_MAJOR}
+               LINK_DEPENDS ${TensorRT_SOURCE_DIR}/Exports-plugin_internal.map)
+
+if (NOT MSVC)
+    set(trt_vc_plugins_link_options
+        "LINKER:--version-script=${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map"
+        "LINKER:-z,relro"
+        "LINKER:-Bsymbolic"
+        "LINKER:--no-undefined"
+        "LINKER:--no-as-needed"
+        "$<$<CONFIG:Release>:LINKER:--strip-all>"
+    )
+else()
+    set(trt_vc_plugins_link_options)
+endif()
+
+# Target properties for tensorrt_vc_plugins
+# This library includes a minimal subset of the plugins used for version compatibility.
+target_include_directories(tensorrt_vc_plugins PRIVATE ${trt_plugin_include_dirs})
+target_link_libraries(tensorrt_vc_plugins PRIVATE ${trt_plugin_dependencies})
+target_link_options(tensorrt_vc_plugins PRIVATE ${trt_vc_plugins_link_options})
+target_compile_options(tensorrt_vc_plugins PRIVATE ${trt_plugin_compile_options})
+
+set_target_properties(
+    tensorrt_vc_plugins
+    PROPERTIES CXX_VISIBILITY_PRESET hidden
+                VISIBILITY_INLINES_HIDDEN ON
+                OUTPUT_NAME nvinfer_vc_plugin
+                VERSION ${TensorRT_VERSION}
+                SOVERSION ${TRT_MAJOR}
+                LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map)
+
+foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
+    target_compile_definitions(tensorrt_plugins PRIVATE "ENABLE_SM${SM}")
+    target_compile_definitions(tensorrt_plugins_internal PRIVATE "ENABLE_SM${SM}")
+    target_compile_definitions(tensorrt_vc_plugins PRIVATE "ENABLE_SM${SM}")
+endforeach()
+
+install(
+    TARGETS tensorrt_plugins tensorrt_plugins_internal tensorrt_vc_plugins
+    OPTIONAL
+    LIBRARY DESTINATION "."
+    ARCHIVE DESTINATION "."
+    RUNTIME DESTINATION "."
+)
+
+else() # TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW
 add_custom_target(plugin)
 
 set(TARGET_NAME ${nvinfer_plugin_lib_name})
@@ -29,14 +229,42 @@ set(VFC_PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports-vfc_plugin.map)
 if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 endif()
-set(ENABLED_SMS "-DENABLE_SM72 -DENABLE_SM75 -DENABLE_SM80 -DENABLE_SM86 -DENABLE_SM87 -DENABLE_SM89 -DENABLE_SM90")
-if(CUDA_VERSION VERSION_GREATER_EQUAL 12.8)
-    set(ENABLED_SMS "${ENABLED_SMS} -DENABLE_SM100")
-    set(ENABLED_SMS "${ENABLED_SMS} -DENABLE_SM120")
-endif()
+
+foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
+  set(ENABLED_SMS "${ENABLED_SMS} -DENABLE_SM${SM}")
+endforeach()
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ENABLED_SMS}")
 set(PLUGIN_SOURCES)
 set(PLUGIN_CU_SOURCES)
+set(VFC_PLUGIN_SOURCES)
+set(VFC_PLUGIN_CU_SOURCES)
+
+# Backwards compat versions of the functions used by the new flow that bind to the old flow.
+# We have to add C++ sources to PLUGIN_SOURCES, and Cuda sources to PLUGIN_CU_SOURCES.
+macro(add_plugin_source)
+    foreach(SRC_FILE IN ITEMS ${ARGN})
+        if(SRC_FILE MATCHES "^.*((\.h)|(\.cpp)|(\.hpp))$")
+            list(APPEND PLUGIN_SOURCES ${CMAKE_CURRENT_LIST_DIR}/${SRC_FILE})
+        else()
+            list(APPEND PLUGIN_CU_SOURCES ${CMAKE_CURRENT_LIST_DIR}/${SRC_FILE})
+        endif()
+    endforeach()
+    set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)
+    set(PLUGIN_CU_SOURCES ${PLUGIN_CU_SOURCES} PARENT_SCOPE)
+endmacro()
+
+macro(add_vc_plugin_source)
+    foreach(SRC_FILE IN ITEMS ${ARGN})
+        if(SRC_FILE MATCHES "^.*((\.h)|(\.cpp)|(\.hpp))$")
+            list(APPEND VFC_PLUGIN_SOURCES ${CMAKE_CURRENT_LIST_DIR}/${SRC_FILE})
+        else()
+            list(APPEND VFC_PLUGIN_CU_SOURCES ${CMAKE_CURRENT_LIST_DIR}/${SRC_FILE})
+        endif()
+    endforeach()
+    set(VFC_PLUGIN_SOURCES ${VFC_PLUGIN_SOURCES} PARENT_SCOPE)
+    set(VFC_PLUGIN_CU_SOURCES ${VFC_PLUGIN_CU_SOURCES} PARENT_SCOPE)
+endmacro()
 
 set(PLUGIN_LISTS
     batchTilePlugin
@@ -48,7 +276,6 @@ set(PLUGIN_LISTS
     detectionLayerPlugin
     disentangledAttentionPlugin
     efficientNMSPlugin
-    efficientNMSPlugin/tftrt
     flattenConcat
     generateDetectionPlugin
     gridAnchorPlugin
@@ -243,3 +470,5 @@ install(
     RUNTIME DESTINATION bin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib)
+
+endif()

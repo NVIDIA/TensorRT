@@ -23,9 +23,9 @@ This file contains color pallete defnitions.
 from collections import defaultdict
 
 
-NVDA_GREEN = '#76b900'
-UNKNOWN_KEY_COLOR = 'gray'
-GRID_COLOR = 'rgba(114, 179, 24, 0.3)'
+NVDA_GREEN = "#76b900"
+UNKNOWN_KEY_COLOR = "gray"
+GRID_COLOR = "rgba(114, 179, 24, 0.3)"
 
 
 # pallete = px.colors.qualitative.G10
@@ -48,11 +48,13 @@ default_pallete = [
 
 # Set a color for each precision datatype.
 precision_colormap = defaultdict(lambda: UNKNOWN_KEY_COLOR, {
-    'INT8':  NVDA_GREEN,
-    'FP32':  'red',
-    'FP16':  'orange',
-    'INT32': 'lightgray',
-    'FP8':   'deepskyblue',
+    "INT8":  NVDA_GREEN,
+    "FP32":  "red",
+    "FP16":  "orange",
+    "INT32": "lightgray",
+    "FP8":   "deepskyblue",
+    "INT4":  "#CC66FF",  # Heliotrope (bright lavender)
+    "FP4":   "#F4D03F",  # bright yellow
 })
 
 

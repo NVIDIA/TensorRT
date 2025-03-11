@@ -30,6 +30,7 @@ __DATATYPE_FROM_ONNXRT = {
     "tensor(int32)": DataType.INT32,
     "tensor(int64)": DataType.INT64,
     "tensor(int8)": DataType.INT8,
+    "tensor(int4)": DataType.INT4,
     "tensor(uint16)": DataType.UINT16,
     "tensor(uint32)": DataType.UINT32,
     "tensor(uint64)": DataType.UINT64,

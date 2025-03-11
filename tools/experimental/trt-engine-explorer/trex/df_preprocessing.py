@@ -136,7 +136,7 @@ def __fix_type(df: pd.DataFrame):
         df['type'] = df.ParameterType.fillna(value=df.subtype)
         df.drop(['ParameterType'], axis=1, inplace=True)
     except AttributeError:
-        pass
+        df['type'] = df['subtype']
 
 
 def __fix_tactic(df: pd.DataFrame):

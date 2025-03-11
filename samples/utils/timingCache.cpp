@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +34,7 @@ std::vector<char> loadTimingCacheFile(ILogger& logger, std::string const& inFile
 {
     try
     {
-        std::unique_ptr<FileLock> fileLock{new FileLock(logger, inFileName)};
+        FileLock const fileLock{logger, inFileName};
         std::ifstream iFile(inFileName, std::ios::in | std::ios::binary);
         if (!iFile)
         {
@@ -79,7 +79,7 @@ void saveTimingCacheFile(ILogger& logger, std::string const& outFileName, IHostM
 {
     try
     {
-        std::unique_ptr<FileLock> fileLock{new FileLock(logger, outFileName)};
+        FileLock const fileLock{logger, outFileName};
         std::ofstream oFile(outFileName, std::ios::out | std::ios::binary);
         if (!oFile)
         {
@@ -88,7 +88,7 @@ void saveTimingCacheFile(ILogger& logger, std::string const& outFileName, IHostM
             logger.log(ILogger::Severity::kWARNING, ss.str().c_str());
             return;
         }
-        oFile.write(reinterpret_cast<char*>(blob->data()), blob->size());
+        oFile.write(reinterpret_cast<char const*>(blob->data()), blob->size());
         oFile.close();
         std::stringstream ss;
         ss << "Saved " << blob->size() << " bytes of timing cache to " << outFileName;
@@ -109,7 +109,7 @@ void updateTimingCacheFile(nvinfer1::ILogger& logger, std::string const& fileNam
         std::unique_ptr<IBuilderConfig> config{builder.createBuilderConfig()};
         std::unique_ptr<ITimingCache> fileTimingCache{config->createTimingCache(static_cast<void const*>(nullptr), 0)};
 
-        std::unique_ptr<FileLock> fileLock{new FileLock(logger, fileName)};
+        FileLock const fileLock{logger, fileName};
         std::ifstream iFile(fileName, std::ios::in | std::ios::binary);
         if (iFile)
         {

@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from trex.engine_plan import EnginePlan
 from trex.layer import Layer
 from trex.activations import Activation
-from trex.colors import precision_colormap, layer_colormap
+from trex.colors import precision_colormap, layer_colormap, NVDA_GREEN
 
 
 class PortDesc(NamedTuple):
@@ -308,7 +308,7 @@ class PlanGraph(object):
         constants_outputs = [const.outputs[0].name for const in plan.constants]
         constants_producers = {const.outputs[0].name + ".0": const for const in plan.constants}
         for region in self.regions:
-            is_myelin_const = len(region.writers()) == 0
+            is_myelin_const = len(region.writers()) == 0 and region.name not in plan.bindings
             is_constant = region.name in constants_outputs
             if (is_constant or is_myelin_const) and not self.include_constants:
                 continue
@@ -405,28 +405,17 @@ latency_types = (
 def render_dot(dot_graph: Digraph, engine_name: str, output_format: str):
     """Render dot graph to an external file using the specified format."""
     dot_graph.format = output_format
-    output_fname = os.path.abspath(f'{engine_name}.' + output_format)
+    output_fname = os.path.abspath(f"{engine_name}.{output_format}")
     dot_graph.render(outfile=output_fname, view=False, overwrite_source=False)
     print(f"Created file://{output_fname}")
     return output_fname
 
-
-def name_or_metadata(layer: Layer, prefer_matadata: bool=True):
-    def clean_layer_name(layer_name: str):
-        layer_name = layer_name.replace("||", "\|\|")
-        layer_name = layer_name.replace("{", "")
-        layer_name = layer_name.replace("}", "")
-        return layer_name
-
-    try:
-        metadata = layer.metadata
-        if metadata is not None and len(metadata) == 0:
-            metadata = None
-    except AttributeError:
-        metadata = None
-    if prefer_matadata and metadata is not None:
-        return metadata
-    return clean_layer_name(layer.name)
+def clean_layer_name(layer: Layer):
+    layer_name = layer.name
+    layer_name = layer_name.replace("||", r"\|\|")
+    layer_name = layer_name.replace("{", "")
+    layer_name = layer_name.replace("}", "")
+    return layer_name
 
 
 def layer_node_renderer_simple(
@@ -435,7 +424,7 @@ def layer_node_renderer_simple(
     display_layer_names: bool=True,
     expand_layer_details: bool=False,
     stack_layer_names: bool=True,
-    prefer_matadata: bool=True,
+    display_metadata: bool=True,
 ) -> str:
     return f"{layer.name}\\n{layer.type}" if display_layer_names else f"{layer.type}"
 
@@ -446,7 +435,7 @@ def layer_node_renderer_keras(
     display_layer_names: bool=True,
     expand_layer_details: bool=False,
     stack_layer_names: bool=True,
-    prefer_matadata: bool=True,
+    display_metadata: bool=True,
 ) -> str:
     """Keras-style node label formatting."""
 
@@ -456,8 +445,10 @@ def layer_node_renderer_keras(
             io_desc_str += str(t.shape)
         return io_desc_str
 
-    name = name_or_metadata(layer, prefer_matadata)
+    name = clean_layer_name(layer)
     label =  f"{name}\\n" if display_layer_names else ""
+    metadata = layer.metadata if layer.metadata is not None else ""
+    label += f"{metadata}\\n" if display_metadata else ""
     label += f"{layer.type}"
     label += "|{input:|output:}|{{"
     label += add_io(layer.inputs)
@@ -467,14 +458,14 @@ def layer_node_renderer_keras(
     return label
 
 
-def layer_node_highlighter(node_id: str, highlighted_layers_ids: List[int]
+def layer_node_highlighter(node_name: str, highlighted_layer_names: List[str]
 ) -> Dict:
     """Highlight a layer node.
 
-    Create a yellow hailo around the node.
+    Create a halo around the node.
     """
-    should_highlight = highlighted_layers_ids and node_id in highlighted_layers_ids
-    formatting = {'penwidth': str(6), 'color': 'yellow'}
+    should_highlight = highlighted_layer_names and node_name in highlighted_layer_names
+    formatting = {'penwidth': str(6), 'color': 'red'}
     return formatting if should_highlight else {}
 
 
@@ -484,7 +475,7 @@ def layer_node_configurable_renderer(
     display_layer_names: bool=True,
     expand_layer_details: bool=False,
     stack_layer_names: bool=True,
-    prefer_matadata: bool=True,
+    display_metadata: bool=True,
 ) -> str:
     def html_tbl(rows: List[str]):
         def html_tbl_row(row_content, bold:bool, color: str=None):
@@ -558,21 +549,31 @@ def layer_node_configurable_renderer(
             return
         rows.append((layer.raw_dict['Origin'], None))
 
-    def add_node_name(layer: Layer, rows: List[str], stack_layer_names: bool, prefer_matadata: bool):
-        layer_name = name_or_metadata(layer, prefer_matadata) if display_layer_names else ""
+    def add_stacked_name(name: str, rows: List[str], stack_layer_names: bool):
         if stack_layer_names:
-            # This is layer name "stacking": splitting on '+' and stacking in several rows
-            parts = layer_name.split('+')
+            # Layer name "stacking" is: splitting on '+' and stacking in several rows
+            parts = name.split('+')
             for p in parts:
                 rows.append((p,))
         else:
-            rows.append((layer_name,))
+            rows.append((name,))
+
+    def add_node_name(layer: Layer, rows: List[str], stack_layer_names: bool):
+        layer_name = clean_layer_name(layer)
+        add_stacked_name(layer_name, rows, stack_layer_names)
+
+    def add_metadata(layer: Layer, rows: List[str], stack_layer_names: bool):
+        metadata = layer.metadata if layer.metadata is not None else ""
+        add_stacked_name(metadata, rows, stack_layer_names)
 
     rows = [(f"{layer.type}",)]
+
     if latency:
         rows.append((f"{latency} ms",))
     if display_layer_names:
-        add_node_name(layer, rows, stack_layer_names, prefer_matadata)
+        add_node_name(layer, rows, stack_layer_names)
+    if display_metadata:
+        add_metadata(layer, rows, stack_layer_names)
     handle_reformat(layer, rows)
     if expand_layer_details:
         handle_pwgen(layer, rows)
@@ -687,7 +688,7 @@ class DotGraph(object):
         display_edge_details: bool=True,
         highlight_layers: list=None,
         remove_disconnected_layers: bool=False,
-        display_matadata: bool=True,
+        display_metadata: bool=True,
     ):
         plan_graph = PlanGraph(
             plan, display_regions, display_constants, display_forking_regions)
@@ -706,19 +707,12 @@ class DotGraph(object):
         self.display_region_names = display_region_names
         self.display_edge_name = display_edge_name
         self.display_edge_details = display_edge_details
-        # Get the node names of the layers to highlight
-        self.highlighted_layers_ids = None
-        if highlight_layers:
-            try:
-                highlight_layers_name = plan.df['Name'].iloc[highlight_layers].to_list()
-                self.highlighted_layers_ids = [_get_dot_id(name) for name in highlight_layers_name]
-            except IndexError:
-                warnings.warn("The layers indices specified for highlighting are incorrect")
+        self.highlighted_layers = highlight_layers
 
         node_name_2_node_id = {}
         if remove_disconnected_layers:
             self.__remove_disconnected_layers(plan_graph)
-        self.display_matadata = display_matadata
+        self.display_metadata = display_metadata
         self.__add_dot_region_nodes(plan_graph, node_name_2_node_id)
         self.__add_dot_layer_nodes(plan, plan_graph, node_name_2_node_id)
         self.__add_edges(plan_graph, node_name_2_node_id)
@@ -797,7 +791,7 @@ class DotGraph(object):
         self, node_id: str, layer: Layer, latency: float, layer_node_renderer: Callable
     ):
         formatting = self.layer_node_formatter(layer)
-        formatting.update(self.layer_node_highlighter(node_id, self.highlighted_layers_ids))
+        formatting.update(self.layer_node_highlighter(layer.name, self.highlighted_layers))
         self.dot.node(
             str(node_id),
             layer_node_renderer(
@@ -806,7 +800,7 @@ class DotGraph(object):
                 expand_layer_details=self.expand_layer_details,
                 display_layer_names=self.display_layer_names,
                 stack_layer_names=self.stack_layer_names,
-                prefer_matadata=self.display_matadata),
+                display_metadata=self.display_metadata),
                 **formatting)
 
     def __create_dot_dependency_edge(self, src, dst):

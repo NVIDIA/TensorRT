@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +21,24 @@ from setuptools import setup
 distribution_package_name = "##TENSORRT_MODULE##"
 plugin_import_package_name = f"{distribution_package_name}.plugin"
 
+DISABLE_INTERNAL_PIP_FLAG = "NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP"
+
 setup(
     name=distribution_package_name,
     version="##TENSORRT_PYTHON_VERSION##",
     description="TensorRT Metapackage",
-    long_description="TensorRT Metapackage",
+    long_description="""
+Metapackage for NVIDIA TensorRT, which is an SDK that facilitates high-performance machine learning inference. It is designed to work in a complementary fashion with training frameworks such as TensorFlow, PyTorch, and MXNet. It focuses specifically on running an already-trained network quickly and efficiently on NVIDIA hardware.
+
+If the dependencies of this package cannot be correctly installed from PyPI for any reason, you can try using the NVIDIA package index instead:
+```
+export {}=0
+pip install tensorrt
+```
+""".format(
+        DISABLE_INTERNAL_PIP_FLAG
+    ),
+    long_description_content_type="text/markdown",
     author="NVIDIA Corporation",
     license="Proprietary",
     classifiers=[
@@ -34,9 +47,7 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     packages=[plugin_import_package_name],
-    install_requires=[
-        "##TENSORRT_MODULE##_cu##CUDA_MAJOR##==##TENSORRT_PYTHON_VERSION##"
-    ],
+    install_requires=["##TENSORRT_MODULE##_cu##CUDA_MAJOR##==##TENSORRT_PYTHON_VERSION##"],
     include_package_data=True,
     zip_safe=True,
     keywords="nvidia tensorrt deeplearning inference",

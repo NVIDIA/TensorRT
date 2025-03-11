@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -305,11 +305,12 @@ char const* ModulatedDeformableConvPluginDynamic::getPluginNamespace() const noe
 
 ModulatedDeformableConvPluginDynamicCreator::ModulatedDeformableConvPluginDynamicCreator()
 {
-    mPluginAttributes.emplace_back(nvinfer1::PluginField("stride"));
-    mPluginAttributes.emplace_back(nvinfer1::PluginField("padding"));
-    mPluginAttributes.emplace_back(nvinfer1::PluginField("dilation"));
-    mPluginAttributes.emplace_back(nvinfer1::PluginField("group"));
-    mPluginAttributes.emplace_back(nvinfer1::PluginField("deformable_group"));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("stride", nullptr, nvinfer1::PluginFieldType::kINT32, 2));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("padding", nullptr, nvinfer1::PluginFieldType::kINT32, 2));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("dilation", nullptr, nvinfer1::PluginFieldType::kINT32, 2));
+    mPluginAttributes.emplace_back(nvinfer1::PluginField("group", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
+    mPluginAttributes.emplace_back(
+        nvinfer1::PluginField("deformable_group", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
     mFC.nbFields = mPluginAttributes.size();
     mFC.fields = mPluginAttributes.data();
 }

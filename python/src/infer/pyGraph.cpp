@@ -26,7 +26,6 @@
 #include "NvInferSerialize.h"
 #endif
 
-
 #include "infer/pyGraphDoc.h"
 
 // clang-format off
@@ -128,9 +127,24 @@ namespace tensorrt
 
         static const auto add_plugin_default_func = [] (INetworkDefinition& self, py::function func)
         {
-            return add_plugin(self, func());
+            auto const preferAOT = self.getFlag(NetworkDefinitionCreationFlag::kPREFER_AOT_PYTHON_PLUGINS);
+            auto const preferJIT = self.getFlag(NetworkDefinitionCreationFlag::kPREFER_JIT_PYTHON_PLUGINS);
+            PY_ASSERT_VALUE_ERROR(!preferAOT || !preferJIT, "Both NetworkDefinitionCreationFlag.PREFER_AOT_PYTHON_PLUGINS and NetworkDefinitionCreationFlag.PREFER_JIT_PYTHON_PLUGINS cannot be specified at the same time.");
+            // If none of these flags are specified, it is fine as long as only AOT or only JIT implementation is defined;
+            // we defer checking that to the Python backend
+            //  - If both are defined, the plugin creator will raise an error.
+            auto const request = preferJIT
+                ? QuickPluginCreationRequest::kPREFER_JIT
+                : (preferAOT ? QuickPluginCreationRequest::kPREFER_AOT : QuickPluginCreationRequest::kUNKNOWN);
+            return add_plugin(self, func(request));
         };
 
+        static const auto add_plugin_func = [] (INetworkDefinition& self, py::function func, bool aot)
+        {
+            auto const request = aot ? QuickPluginCreationRequest::kSTRICT_AOT : QuickPluginCreationRequest::kSTRICT_JIT;
+            py::tuple pyResult = func(request);
+            return add_plugin(self, pyResult);
+        };
 
         static const auto add_convolution_nd = [](INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
@@ -165,6 +179,7 @@ namespace tensorrt
         {
             return self.addDynamicQuantize(input, axis, block_size, output_type, scale_type);
         };
+
 
         static const auto add_scatter = [](INetworkDefinition& self, ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode)
         {
@@ -268,7 +283,6 @@ namespace tensorrt
         };
 
 
-
     } /* lambdas */
 
     static void cumulative_layer_set_operation(ICumulativeLayer& self, CumulativeOperation op)
@@ -332,7 +346,6 @@ namespace tensorrt
             .value("UNSQUEEZE", LayerType::kUNSQUEEZE, LayerTypeDoc::UNSQUEEZE)
             .value("CUMULATIVE", LayerType::kCUMULATIVE, LayerTypeDoc::CUMULATIVE)
             .value("DYNAMIC_QUANTIZE", LayerType::kDYNAMIC_QUANTIZE, LayerTypeDoc::DYNAMIC_QUANTIZE)
-
         ; // LayerType
 
         py::enum_<TensorFormat>(m, "TensorFormat", TensorFormatDoc::descr, py::arithmetic{}, py::module_local())
@@ -370,7 +383,6 @@ namespace tensorrt
             .def("reset_dynamic_range", utils::deprecateMember(&ITensor::resetDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), ITensorDoc::reset_dynamic_range)
             .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
-
         ;
 
         py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr, py::module_local())
@@ -493,6 +505,8 @@ namespace tensorrt
             .def_property("to_type", &IDynamicQuantizeLayer::getToType, &IDynamicQuantizeLayer::setToType)
             .def_property("scale_type", &IDynamicQuantizeLayer::getScaleType, &IDynamicQuantizeLayer::setScaleType)
         ;
+
+
         py::class_<ISoftMaxLayer, ILayer, std::unique_ptr<ISoftMaxLayer, py::nodelete>>(m, "ISoftMaxLayer", ISoftMaxLayerDoc::descr, py::module_local())
             .def_property("axes", &ISoftMaxLayer::getAxes, &ISoftMaxLayer::setAxes)
         ;
@@ -867,7 +881,6 @@ namespace tensorrt
         ;
 
 
-
         py::enum_<CumulativeOperation>(m, "CumulativeOperation", CumulativeOperationDoc::descr, py::module_local())
             .value("SUM", CumulativeOperation::kSUM, CumulativeOperationDoc::SUM)
         ;
@@ -956,6 +969,7 @@ namespace tensorrt
             .def("add_plugin", lambdas::add_plugin, "tuple"_a,
                 INetworkDefinitionDoc::add_plugin_v3, py::return_value_policy::reference_internal)
             .def("add_plugin", lambdas::add_plugin_default_func, "func"_a, py::return_value_policy::reference_internal)
+            .def("add_plugin", lambdas::add_plugin_func, "func"_a, "aot"_a, py::return_value_policy::reference_internal)
             .def("add_parametric_relu", &INetworkDefinition::addParametricReLU, "input"_a,
                 "slopes"_a, INetworkDefinitionDoc::add_parametric_relu, py::return_value_policy::reference_internal)
             .def("add_resize", &INetworkDefinition::addResize, "input"_a, INetworkDefinitionDoc::add_resize,
@@ -1023,7 +1037,6 @@ namespace tensorrt
             .def("is_debug_tensor", &INetworkDefinition::isDebugTensor, "tensor"_a, INetworkDefinitionDoc::is_debug_tensor)
             .def("add_squeeze", &INetworkDefinition::addSqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
             .def("add_unsqueeze", &INetworkDefinition::addUnsqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_unsqueeze, py::return_value_policy::reference_internal)
-
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization
             .def("serialize", lambdas::network_serialize, INetworkDefinitionDoc::serialize)

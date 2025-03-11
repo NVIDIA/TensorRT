@@ -202,10 +202,14 @@ def export(funcify=False, func_name=None):
                 """
             )
 
+            new_locals = {}
             exec(
-                func_code, {"loader_binding": loader}, locals()
-            )  # Need to bind the loader this way, or it won't be accesible from func_code.
-            func = locals()["func_var"]
+                func_code,
+                # Need to bind the loader this way, or it won't be accesible from func_code.
+                {"loader_binding": loader},
+                new_locals,
+            )
+            func = new_locals["func_var"]
 
             # Next we setup the docstring so that it is a combination of the __init__
             # and call_impl docstrings.

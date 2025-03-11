@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -1039,6 +1039,7 @@ public:
     virtual bool getReverse() const noexcept = 0;
 }; // class VCumulativeLayer
 
+
 class VNetworkDefinition : public VRoot
 {
 public:
@@ -1114,8 +1115,6 @@ public:
     virtual INormalizationLayer* addNormalization(
         ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept = 0;
     virtual ICastLayer* addCast(ITensor& input, DataType toType) noexcept = 0;
-    virtual ICumulativeLayer* addCumulative(
-        ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept = 0;
     virtual IBuilder& getBuilder() const noexcept = 0;
     virtual NetworkDefinitionCreationFlags getFlags() const noexcept = 0;
     virtual bool getFlag(NetworkDefinitionCreationFlag networkDefinitionCreationFlag) const noexcept = 0;
@@ -1131,8 +1130,9 @@ public:
     virtual ISqueezeLayer* addSqueeze(ITensor& input, ITensor& axes) noexcept = 0;
     virtual IUnsqueezeLayer* addUnsqueeze(ITensor& input, ITensor& axes) noexcept = 0;
     virtual IDynamicQuantizeLayer* addDynamicQuantize(
-        ITensor& input, int32_t axis, int32_t blockSize, DataType toType, DataType scaleType) noexcept
-        = 0;
+        ITensor& input, int32_t axis, int32_t blockSize, DataType toType, DataType scaleType) noexcept = 0;
+    virtual ICumulativeLayer* addCumulative(
+        ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept = 0;
 };
 
 class VAlgorithmIOInfo : public VRoot

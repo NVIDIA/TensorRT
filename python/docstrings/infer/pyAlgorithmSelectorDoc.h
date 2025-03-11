@@ -63,7 +63,6 @@ constexpr const char* descr = R"trtdoc(
     :ivar num_inputs: :class:`int`  number of inputs of the algorithm.
     :ivar num_outputs: :class:`int` number of outputs of the algorithm.
 )trtdoc"
-
     ;
 
 constexpr const char* get_shape = R"trtdoc(

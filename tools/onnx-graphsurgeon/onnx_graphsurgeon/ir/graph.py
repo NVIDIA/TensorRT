@@ -547,6 +547,12 @@ class Graph(object):
         def get_hierarchy_level(node_or_func, visited=None):
             from onnx_graphsurgeon.ir.function import Function
 
+            # If we've already determined the hierarchy level of the node, we should
+            # early exit before checking the visited set. If we check the visited set here, 
+            # we may detect false cycles in diamond-shaped graphs.
+            if get_id(node_or_func) in hierarchy_levels:
+                return hierarchy_levels[get_id(node_or_func)].level
+
             visited = misc.default_value(visited, set())
             if get_id(node_or_func) in visited:
                 if isinstance(node_or_func, Function):
@@ -593,9 +599,6 @@ class Graph(object):
                 else:
                     inputs = get_used_funcs(node_or_func.nodes).values()
                 return inputs
-
-            if get_id(node_or_func) in hierarchy_levels:
-                return hierarchy_levels[get_id(node_or_func)].level
 
             # The level of a node is the level of its highest input + 1.
             max_input_level = max(

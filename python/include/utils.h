@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,12 +32,46 @@
 #include <memory>
 #include <string>
 
+#if defined(__GLIBC__)
+#include <sys/resource.h>
+#include <sys/sysinfo.h>
+#include <unistd.h>
+#endif
+
+#define CUDA_LIB_NAME "cuda"
+
+//! Macro evaluates the expression \p EXPR, and if not equal to `CUDA_SUCCESS`, logs to `std::cerr` and evaluates return
+//! RET_ON_FAIL.
+#define CUDA_CALL_WITH_RET(EXPR, RET_ON_FAIL)                                                                          \
+    if (CUresult retCode = (EXPR); retCode != CUDA_SUCCESS)                                                            \
+    {                                                                                                                  \
+        std::cerr << "[ERROR] Failed to " << #EXPR << " with error " << retCode << std::endl;                          \
+        return RET_ON_FAIL;                                                                                            \
+    }
+
 namespace tensorrt
 {
 namespace utils
 {
 
 namespace py = pybind11;
+
+// Wrapper function for dlopen/dlclose/dlsym, support both Windows and Linux
+//! \brief Attempts to open the library
+//!
+//! \param libName. The returned library handle may be nullptr on failure and must be closed with `dllClose`.
+[[nodiscard]] void* nvdllOpen(char const* libName);
+
+//! Closes a library opened with `nvdllOpen`.
+void dllClose(void* handle);
+
+//! \brief get symbol from the library
+//!
+//! \param name in a dll
+//! \param handle, loaded by `nvdllOpen`.
+//!
+//! \return the pointer to the symbol named
+[[nodiscard]] void* dllGetSym(void* handle, char const* name);
 
 // Returns the size in bytes of the specified data type.
 size_t size(nvinfer1::DataType type);

@@ -42,4 +42,3 @@ python setup.py install
 
 * Pytorch Quantization Toolkit [userguide](https://docs.nvidia.com/deeplearning/tensorrt/pytorch-quantization-toolkit/docs/index.html)
 * Quantization Basics [whitepaper](https://arxiv.org/abs/2004.09602)
-

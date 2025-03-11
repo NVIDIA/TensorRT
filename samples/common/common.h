@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <fstream>
 #include <functional>
@@ -70,23 +71,22 @@
     {                                                                                                                  \
         if (!(status))                                                                                                 \
         {                                                                                                              \
-            sample::gLogError << errMsg << " Error in " << __FILE__ << ", function " << FN_NAME << "(), line " << __LINE__     \
-                      << std::endl;                                                                                    \
+            sample::gLogError << errMsg << " Error in " << __FILE__ << ", function " << FN_NAME << "(), line "         \
+                              << __LINE__ << std::endl;                                                                \
             return val;                                                                                                \
         }                                                                                                              \
     } while (0)
 
 #undef ASSERT
-#define ASSERT(condition)                                                   \
-    do                                                                      \
-    {                                                                       \
-        if (!(condition))                                                   \
-        {                                                                   \
-            sample::gLogError << "Assertion failure: " << #condition << std::endl;  \
-            exit(EXIT_FAILURE);                                                       \
-        }                                                                   \
+#define ASSERT(condition)                                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(condition))                                                                                              \
+        {                                                                                                              \
+            sample::gLogError << "Assertion failure: " << #condition << std::endl;                                     \
+            exit(EXIT_FAILURE);                                                                                        \
+        }                                                                                                              \
     } while (0)
-
 
 #define CHECK_RETURN(status, val) CHECK_RETURN_W_MSG(status, val, "")
 
@@ -314,7 +314,8 @@ std::vector<size_t> argMagnitudeSort(Iter begin, Iter end)
 {
     std::vector<size_t> indices(end - begin);
     std::iota(indices.begin(), indices.end(), 0);
-    std::sort(indices.begin(), indices.end(), [&begin](size_t i, size_t j) { return std::abs(begin[j]) < std::abs(begin[i]); });
+    std::sort(indices.begin(), indices.end(),
+        [&begin](size_t i, size_t j) { return std::abs(begin[j]) < std::abs(begin[i]); });
     return indices;
 }
 
@@ -526,23 +527,28 @@ inline int32_t parseDLA(int32_t argc, char** argv)
     return -1;
 }
 
-inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
+inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
 {
     switch (t)
     {
-    case nvinfer1::DataType::kINT64: return 8;
+    case nvinfer1::DataType::kINT64: return 8 * vol;
     case nvinfer1::DataType::kINT32:
-    case nvinfer1::DataType::kFLOAT: return 4;
+    case nvinfer1::DataType::kFLOAT: return 4 * vol;
     case nvinfer1::DataType::kBF16:
-    case nvinfer1::DataType::kHALF: return 2;
+    case nvinfer1::DataType::kHALF: return 2 * vol;
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
-    case nvinfer1::DataType::kINT8:
-    case nvinfer1::DataType::kFP8: return 1;
+    case nvinfer1::DataType::kINT8: return vol;
+    case nvinfer1::DataType::kFP8:
+#if CUDA_VERSION < 11060
+        ASSERT(false && "FP8 is not supported");
+#else
+        return vol;
+#endif
     case nvinfer1::DataType::kINT4:
-    case nvinfer1::DataType::kFP4: ASSERT(false && "Element size is not implemented for sub-byte data-types");
+    case nvinfer1::DataType::kFP4: return (vol + 1) / 2;
     }
-    return 0;
+    ASSERT(false && "Unknown element type");
 }
 
 inline int64_t volume(nvinfer1::Dims const& dims, int32_t start, int32_t stop)

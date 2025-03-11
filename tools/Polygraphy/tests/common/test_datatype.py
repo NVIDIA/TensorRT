@@ -113,7 +113,7 @@ class TestDataType:
     )
     @pytest.mark.parametrize("dtype", DATATYPES, ids=str)
     def test_tensorrt(self, dtype):
-        if dtype in [
+        unsupported_types = [
             DataType.FLOAT64,
             DataType.INT16,
             DataType.UINT16,
@@ -124,7 +124,10 @@ class TestDataType:
             DataType.FLOAT8E4M3FNUZ,
             DataType.FLOAT8E5M2,
             DataType.FLOAT8E5M2FNUZ,
-        ]:
+        ]
+        if  mod.version(trt.__version__) < mod.version("10.8"):
+            unsupported_types.append(DataType.FLOAT4)
+        if dtype in unsupported_types:
             pytest.xfail("Type not supported by TensorRT")
 
         tensorrt_dtype = dtype.tensorrt()

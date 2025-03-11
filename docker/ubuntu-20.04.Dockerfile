@@ -28,7 +28,7 @@ ENV CUDA_VERSION_MAJOR_MINOR=12.2
 ENV NV_CUDNN_PACKAGE "libcudnn8=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
 ENV NV_CUDNN_PACKAGE_DEV "libcudnn8-dev=$NV_CUDNN_VERSION-1+cuda${CUDA_VERSION_MAJOR_MINOR}"
 
-ENV TRT_VERSION 10.8.0.43
+ENV TRT_VERSION 10.9.0.34
 SHELL ["/bin/bash", "-c"]
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -74,29 +74,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install python3
 RUN apt-get install -y --no-install-recommends \
-      python3 \
-      python3-pip \
-      python3-dev \
-      python3-wheel &&\
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-wheel &&\
     cd /usr/local/bin &&\
     ln -s /usr/bin/python3 python &&\
     ln -s /usr/bin/pip3 pip;
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.8.0/tars/TensorRT-10.8.0.43.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && tar -xf TensorRT-10.8.0.43.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-        && cp -a TensorRT-10.8.0.43/lib/*.so* /usr/lib/x86_64-linux-gnu \
-        && pip install TensorRT-10.8.0.43/python/tensorrt-10.8.0.43-cp38-none-linux_x86_64.whl ;\
-elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.8.0/tars/TensorRT-10.8.0.43.Linux.x86_64-gnu.cuda-12.8.tar.gz \
-        && tar -xf TensorRT-10.8.0.43.Linux.x86_64-gnu.cuda-12.8.tar.gz \
-        && cp -a TensorRT-10.8.0.43/lib/*.so* /usr/lib/x86_64-linux-gnu \
-        && pip install TensorRT-10.8.0.43/python/tensorrt-10.8.0.43-cp38-none-linux_x86_64.whl ;\
-else \
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.9.0/tars/TensorRT-10.9.0.34.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+    && tar -xf TensorRT-10.9.0.34.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+    && cp -a TensorRT-10.9.0.34/lib/*.so* /usr/lib/x86_64-linux-gnu \
+    && pip install TensorRT-10.9.0.34/python/tensorrt-10.9.0.34-cp38-none-linux_x86_64.whl ;\
+    elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.9.0/tars/TensorRT-10.9.0.34.Linux.x86_64-gnu.cuda-12.8.tar.gz \
+    && tar -xf TensorRT-10.9.0.34.Linux.x86_64-gnu.cuda-12.8.tar.gz \
+    && cp -a TensorRT-10.9.0.34/lib/*.so* /usr/lib/x86_64-linux-gnu \
+    && pip install TensorRT-10.9.0.34/python/tensorrt-10.9.0.34-cp38-none-linux_x86_64.whl ;\
+    else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \
-fi
+    fi
 
 # Install PyPI packages
 RUN pip3 install --upgrade pip

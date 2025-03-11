@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,25 +15,27 @@
 # limitations under the License.
 #
 import tensorrt as trt
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 from ._utils import _numpy_to_plugin_field_type, _built_in_to_plugin_field_type
-from ._tensor import TensorDesc, Tensor, Shape, ShapeExpr, ShapeExprs
+from ._tensor import TensorDesc, Tensor, Shape, ShapeExpr, ShapeExprs, SymIntExpr, SymExprs, SymInt32
+from ._export import IS_AOT_ENABLED
+if IS_AOT_ENABLED:
+    from ._tensor import KernelLaunchParams
 from ._autotune import _TypeFormatCombination
 
+from ._export import public_api
 
-class _TemplatePlugin(
+class _TemplatePluginBase(
     trt.IPluginV3,
     trt.IPluginV3QuickCore,
     trt.IPluginV3QuickBuild,
-    trt.IPluginV3QuickRuntime,
 ):
     def __init__(self, name, namespace, num_outputs):
         trt.IPluginV3.__init__(self)
         trt.IPluginV3QuickCore.__init__(self)
         trt.IPluginV3QuickBuild.__init__(self)
-        trt.IPluginV3QuickRuntime.__init__(self)
 
         self.plugin_version = "1"
         self.input_types = []
@@ -46,28 +48,6 @@ class _TemplatePlugin(
         self.autotune_combs = []
         self.supported_combs = {}
         self.curr_comb = None
-        self.expects_tactic = False
-
-    def init(
-        self,
-        register_function,
-        attrs,
-        impl_attr_names,
-        impl_function,
-        autotune_attr_names,
-        autotune_function,
-        expects_tactic,
-    ):
-        self.register_function = register_function
-        self.impl_function = impl_function
-        self.attrs = attrs
-        self.impl_attr_names = impl_attr_names
-        self.autotune_attr_names = autotune_attr_names
-        self.autotune_function = autotune_function
-        self.expects_tactic = expects_tactic
-
-    def get_capability_interface(self, type):
-        return self
 
     def get_num_outputs(self):
         return self.num_outputs
@@ -140,7 +120,7 @@ class _TemplatePlugin(
 
     def get_output_shapes(self, inputs, shape_inputs, exprBuilder):
         assert len(shape_inputs) == 0  # Shape inputs are not yet supported for QDPs
-        ShapeExpr._exprBuilder = exprBuilder
+        SymIntExpr._exprBuilder = exprBuilder
         self.input_descs = []
         for i in range(len(inputs)):
             desc = TensorDesc()
@@ -247,6 +227,45 @@ class _TemplatePlugin(
 
         return ret_supported_combs
 
+    def get_aliased_input(self, output_index: int):
+        return self.aliased_map[output_index]
+
+    def get_valid_tactics(self):
+        tactics = self.supported_combs.get(self.curr_comb)
+        assert tactics is not None
+        return list(tactics)
+
+    def set_tactic(self, tactic):
+        self._tactic = tactic
+
+class _TemplateJITPlugin(_TemplatePluginBase, trt.IPluginV3QuickRuntime):
+    def __init__(self, name, namespace, num_outputs):
+        super().__init__(name, namespace, num_outputs)
+        trt.IPluginV3QuickRuntime.__init__(self)
+
+        self.expects_tactic = False
+
+    def init(
+        self,
+        register_function,
+        attrs,
+        impl_attr_names,
+        impl_function,
+        autotune_attr_names,
+        autotune_function,
+        expects_tactic,
+    ):
+        self.register_function = register_function
+        self.impl_function = impl_function
+        self.attrs = attrs
+        self.impl_attr_names = impl_attr_names
+        self.autotune_attr_names = autotune_attr_names
+        self.autotune_function = autotune_function
+        self.expects_tactic = expects_tactic
+
+    def get_capability_interface(self, type):
+        return self
+
     def enqueue(
         self,
         input_desc,
@@ -305,20 +324,136 @@ class _TemplatePlugin(
         else:
             self.impl_function(*input_tensors, *val, output_tensors, stream=stream)
 
-    def get_aliased_input(self, output_index: int):
-        return self.aliased_map[output_index]
-
-    def get_valid_tactics(self):
-        tactics = self.supported_combs.get(self.curr_comb)
-        assert tactics is not None
-        return list(tactics)
-
-    def set_tactic(self, tactic):
-        self._tactic = tactic
-
     def clone(self):
-        cloned_plugin = _TemplatePlugin(
+        cloned_plugin = _TemplateJITPlugin(
             self.plugin_name, self.plugin_namespace, self.num_outputs
         )
         cloned_plugin.__dict__.update(self.__dict__)
         return cloned_plugin
+
+if IS_AOT_ENABLED:
+    class _TemplateAOTPlugin(
+        _TemplatePluginBase,
+        trt.IPluginV3QuickAOTBuild,
+    ):
+        def __init__(self, name, namespace, num_outputs):
+            _TemplatePluginBase.__init__(self, name, namespace, num_outputs)
+            trt.IPluginV3QuickAOTBuild.__init__(self)
+            self.kernel_map = {}
+
+        def set_tactic(self, tactic):
+            self._tactic = tactic
+
+        def init(
+            self,
+            register_function,
+            attrs,
+            aot_impl_attr_names,
+            aot_impl_function,
+            autotune_attr_names,
+            autotune_function
+        ):
+            self.register_function = register_function
+            self.aot_impl_function = aot_impl_function
+            self.attrs = attrs
+            self.aot_impl_attr_names = aot_impl_attr_names
+            self.autotune_attr_names = autotune_attr_names
+            self.autotune_function = autotune_function
+
+        def get_capability_interface(self, type):
+            return self
+
+        def get_kernel(self, inputDesc, outputDesc):
+            io_types = []
+            io_formats = []
+
+            for i, desc in enumerate(inputDesc):
+                io_types.append(desc.type)
+                io_formats.append(desc.format)
+
+            for i, desc in enumerate(outputDesc):
+                io_types.append(desc.type)
+                io_formats.append(desc.format)
+
+            key = (tuple(io_types), tuple(io_formats), self._tactic)
+
+            assert key in self.kernel_map, "key {} not in kernel_map".format(key)
+
+            kernel_name, ptx = self.kernel_map[key]
+
+            return kernel_name, ptx.encode() if isinstance(ptx, str) else ptx
+
+        def get_launch_params(self, inDimsExprs, in_out, num_inputs, launchParams, symExprSetter, exprBuilder):
+
+            SymIntExpr._exprBuilder = exprBuilder
+
+            if len(self.attrs) > 0:
+                _, val = zip(*self.attrs.items())
+            else:
+                val = ()
+
+            io_types = []
+            io_formats = []
+
+            for i, desc in enumerate(in_out):
+                if i < num_inputs:
+                    self.input_descs[i]._immutable = False
+                    self.input_descs[i].shape = Shape(desc)
+                    self.input_descs[i].dtype = desc.desc.type
+                    self.input_descs[i].format = desc.desc.format
+                    self.input_descs[i].scale = desc.desc.scale
+                    io_types.append(desc.desc.type)
+                    io_formats.append(desc.desc.format)
+                    self.input_descs[i]._immutable = True
+                else:
+                    self.output_descs[i - num_inputs]._immutable = False
+                    self.output_descs[i - num_inputs].shape = Shape(desc)
+                    self.output_descs[i - num_inputs].dtype = desc.desc.type
+                    self.output_descs[i - num_inputs].format = desc.desc.format
+                    self.output_descs[i - num_inputs].scale = desc.desc.scale
+                    io_types.append(desc.desc.type)
+                    io_formats.append(desc.desc.format)
+                    self.output_descs[i - num_inputs]._immutable = True
+
+            kernel_name, ptx, launch_params, extra_args = self.aot_impl_function(
+                *self.input_descs, *val, self.output_descs, self._tactic
+            )
+
+            if not isinstance(kernel_name, str) and not isinstance(kernel_name, bytes):
+                raise TypeError(f"Kernel name must be a 'str' or 'bytes'.  Got: {type(kernel_name)}.")
+
+            if not isinstance(ptx, str) and not isinstance(ptx, bytes):
+                raise TypeError(f"PTX/CUBIN must be a 'str' or 'bytes'.  Got: {type(ptx)}.")
+
+            if not isinstance(launch_params, KernelLaunchParams):
+                raise TypeError(f"Launch params must be a 'tensorrt.plugin.KernelLaunchParams'.  Got: {type(launch_params)}.")
+
+            if not isinstance(extra_args, SymExprs):
+                raise TypeError(f"Extra args must be a 'tensorrt.plugin.SymIntExprs'.  Got: {type(extra_args)}.")
+
+            launchParams.grid_x = launch_params.grid_x()
+            launchParams.grid_y = launch_params.grid_y()
+            launchParams.grid_z = launch_params.grid_z()
+            launchParams.block_x = launch_params.block_x()
+            launchParams.block_y = launch_params.block_y()
+            launchParams.block_z = launch_params.block_z()
+            launchParams.shared_mem = launch_params.shared_mem()
+
+            self.kernel_map[(tuple(io_types), tuple(io_formats), self._tactic)] = (kernel_name, ptx)
+
+            symExprSetter.nbSymExprs = len(extra_args)
+
+            for i, arg in enumerate(extra_args):
+                if not isinstance(arg, SymInt32):
+                    raise TypeError(f"Extra args must be a 'tensorrt.plugin.SymInt32'.  Got: {type(arg)}.")
+                symExprSetter[i] = arg()
+
+        def get_timing_cache_id(self):
+            return ""
+
+        def clone(self):
+            cloned_plugin = _TemplateAOTPlugin(
+                self.plugin_name, self.plugin_namespace, self.num_outputs
+            )
+            cloned_plugin.__dict__.update(self.__dict__)
+            return cloned_plugin

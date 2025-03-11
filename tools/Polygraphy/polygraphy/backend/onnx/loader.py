@@ -682,8 +682,11 @@ class InferShapes(BaseLoader):
                         "use the `--no-onnxruntime-shape-inference` command-line option.",
                         mode=LogMode.ONCE,
                     )
-                except:
+                except Exception as err:
                     use_onnx_shape_inference = True
+                    G_LOGGER.extra_verbose(
+                        f"Error while running `onnxruntime.tools.symbolic_shape_infer`:\n{err}"
+                    )
                     G_LOGGER.warning(
                         "Falling back to `onnx.shape_inference` because `onnxruntime.tools.symbolic_shape_infer` either could not be loaded "
                         "or did not run successfully.\n"

@@ -1,3 +1,8 @@
-sphinx-rtd-theme==2.0.0
-sphinx==7.2.6
-docutils==0.20.1
+docutils==0.16; python_version<"3.7"
+docutils==0.18.1; python_version>="3.7"
+sphinx==4.4.0; python_version<"3.7"
+sphinx==7.1.2; python_version>="3.7"
+furo==2022.4.7; python_version<"3.7"
+furo==2024.8.6; python_version>="3.7"
+myst-parser==0.16.1; python_version<"3.7"
+myst-parser==3.0.1; python_version>="3.7"

@@ -371,36 +371,6 @@ class TestLint:
         )  # condition for onnxruntime entry
 
     @pytest.mark.script_launch_mode("subprocess")
-    def test_invalid_model_error(self, poly_check):
-        """
-        Test that an invalid model is handled correctly.
-        The invalid model should trigger an error parsing message.
-        Behavior: a lint entry is emitted from onnx_loader with level exception.
-        """
-        invalid_model_name = "invalid"
-
-        # Test with invalid model
-        output_json, _ = self.run_lint_get_json(
-            poly_check,
-            ONNX_MODELS[invalid_model_name].path,
-            expect_error=True,
-        )
-        lint_entries = output_json["lint_entries"]
-
-        # condition for onnx_loader entry for invalid model
-        condition = (
-            lambda entry: "Error parsing message with type 'onnx.ModelProto'"
-            in entry["message"]
-            and entry["source"] == Lint.Source.ONNX_LOADER.value
-            and entry["level"] == Lint.Level.EXCEPTION.value
-        )
-
-        assert len(lint_entries) == 1  # there should be only one lint entry
-        assert condition(
-            lint_entries[0]
-        )  # condition for onnx_loader entry for invalid model
-
-    @pytest.mark.script_launch_mode("subprocess")
     def test_empty_model_warning(self, poly_check):
         """
         Test that an empty model is handled correctly.

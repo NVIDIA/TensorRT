@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import tensorrt as trt
 from types import ModuleType
 import importlib
 
@@ -34,3 +35,5 @@ def public_api(module: ModuleType = None, symbol: str = None):
         return obj
 
     return export_impl
+
+IS_AOT_ENABLED = hasattr(trt, "QuickPluginCreationRequest")

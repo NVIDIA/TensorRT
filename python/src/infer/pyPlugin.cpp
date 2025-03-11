@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -812,9 +812,16 @@ public:
                         {
                             try
                             {
-                                return pyResult.cast<IPluginV3QuickBuild*>();
+                                return pyResult.cast<IPluginV3QuickAOTBuild*>();
                             }
-                            PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid build capability interface")
+                            catch (py::cast_error const& e)
+                            {
+                                try
+                                {
+                                    return pyResult.cast<IPluginV3QuickBuild*>();
+                                }
+                                PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid build capability interface")
+                            }
                         }
                     }
                 }
@@ -1950,6 +1957,131 @@ public:
         : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickBuild>(&a){};
 };
 
+class PyIPluginV3QuickAOTBuildImpl : public PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickAOTBuild>
+{
+public:
+    PyIPluginV3QuickAOTBuildImpl()
+        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickAOTBuild>(this)
+    {
+    }
+
+    PyIPluginV3QuickAOTBuildImpl(IPluginV3QuickAOTBuild const& a)
+        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickAOTBuild>(&a){};
+
+    int32_t getKernel(PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs,
+        const char** kernelName, char** compiledKernel, int32_t* compiledKernelSize) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+
+            py::function pyGetKernel = utils::getOverride(static_cast<IPluginV3QuickAOTBuild*>(this), "get_kernel");
+
+            if (!pyGetKernel)
+            {
+                utils::throwPyError(PyExc_RuntimeError, "no implementation provided for get_kernel()");
+            }
+
+            std::vector<PluginTensorDesc> inVector;
+            for (int32_t idx = 0; idx < nbInputs; ++idx)
+            {
+                inVector.push_back(*(in + idx));
+            }
+
+            std::vector<PluginTensorDesc> outVector;
+            for (int32_t idx = 0; idx < nbOutputs; ++idx)
+            {
+                outVector.push_back(*(out + idx));
+            }
+
+            py::object pyResult = pyGetKernel(inVector, outVector);
+
+            try
+            {
+                auto result = pyResult.cast<std::tuple<std::string, py::bytes>>();
+
+                *kernelName = std::get<0>(result).c_str();
+                mCompiledKernel = std::get<1>(result);
+                py::buffer_info buffer(py::buffer(mCompiledKernel).request());
+                *compiledKernel = static_cast<char*>(buffer.ptr);
+                *compiledKernelSize = buffer.size;
+
+                return 0;
+            }
+            PLUGIN_API_CATCH_CAST("get_kernel", "std::tuple<std::string, std::bytes>")
+            catch (py::error_already_set& e)
+            {
+                std::cerr << "[ERROR] Exception thrown from get_kernel() " << e.what() << std::endl;
+            }
+            return -1;
+        }
+        PLUGIN_API_CATCH("get_kernel")
+        return -1;
+    }
+
+    int32_t getLaunchParams(DimsExprs const* inputs, DynamicPluginTensorDesc const* inOut, int32_t nbInputs,
+        int32_t nbOutputs, IKernelLaunchParams* launchParams, ISymExprs* extraArgs,
+        IExprBuilder& exprBuilder) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+
+            py::function pyGetLaunchParams
+                = utils::getOverride(static_cast<IPluginV3QuickAOTBuild*>(this), "get_launch_params");
+            if (!pyGetLaunchParams)
+            {
+                utils::throwPyError(PyExc_RuntimeError, "no implementation provided for get_launch_params()");
+            }
+
+            std::vector<DimsExprs> inVector;
+            for (int32_t idx = 0; idx < nbInputs; ++idx)
+            {
+                inVector.push_back(*(inputs + idx));
+            }
+
+            std::vector<DynamicPluginTensorDesc> inOutVector;
+            std::copy_n(inOut, nbInputs + nbOutputs, std::back_inserter(inOutVector));
+
+            py::object pyResult
+                = pyGetLaunchParams(inVector, inOutVector, nbInputs, launchParams, extraArgs, &exprBuilder);
+
+            return 0;
+        }
+        PLUGIN_API_CATCH("get_launch_params")
+        return -1;
+    }
+
+    int32_t setTactic(int32_t tactic) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+
+            py::function pySetTactic = utils::getOverride(static_cast<IPluginV3QuickAOTBuild*>(this), "set_tactic");
+            if (!pySetTactic)
+            {
+                utils::throwPyError(PyExc_RuntimeError, "no implementation provided for set_tactic()");
+            }
+
+            try
+            {
+                pySetTactic(tactic);
+            }
+            catch (py::error_already_set& e)
+            {
+                std::cerr << "[ERROR] Exception thrown from set_tactic() " << e.what() << std::endl;
+                return -1;
+            }
+            return 0;
+        }
+        PLUGIN_API_CATCH("set_tactic")
+        return -1;
+    }
+
+private:
+    py::bytes mCompiledKernel;
+};
 
 class PyIPluginV3QuickRuntimeImpl : public IPluginV3QuickRuntime
 {
@@ -2574,8 +2706,8 @@ public:
         return nullptr;
     }
 
-    IPluginV3* createPlugin(
-        char const* name, char const* nspace, const PluginFieldCollection* fc, TensorRTPhase phase) noexcept override
+    IPluginV3* createPlugin(char const* name, char const* nspace, const PluginFieldCollection* fc, TensorRTPhase phase,
+        QuickPluginCreationRequest quickPluginType) noexcept override
     {
         try
         {
@@ -2590,7 +2722,7 @@ public:
 
             std::string nameString{name};
             std::string namespaceString{nspace};
-            py::handle handle = pyCreatePlugin(nameString, namespaceString, fc, phase).release();
+            py::handle handle = pyCreatePlugin(nameString, namespaceString, fc, phase, quickPluginType).release();
             try
             {
                 return handle.cast<IPluginV3*>();
@@ -2644,6 +2776,60 @@ private:
     std::optional<std::string> mPluginVersion;
 };
 
+class SymExprImpl : public ISymExpr
+{
+public:
+    SymExprImpl() = default;
+
+    PluginArgType getType() const noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            if (!mType.has_value())
+            {
+                utils::throwPyError(PyExc_RuntimeError, "type not initialized");
+            }
+            return mType.value();
+        }
+        PLUGIN_API_CATCH("get_type")
+        return PluginArgType{};
+    }
+
+    PluginArgDataType getDataType() const noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            if (!mDtype.has_value())
+            {
+                utils::throwPyError(PyExc_RuntimeError, "data_type not initialized");
+            }
+            return mDtype.value();
+        }
+        PLUGIN_API_CATCH("get_data_type")
+        return PluginArgDataType{};
+    }
+
+    void* getExpr() noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            if (!mExpr.has_value())
+            {
+                utils::throwPyError(PyExc_RuntimeError, "expr not initialized");
+            }
+            return mExpr.value();
+        }
+        PLUGIN_API_CATCH("get_expr")
+        return nullptr;
+    }
+
+    std::optional<PluginArgDataType> mDtype;
+    std::optional<PluginArgType> mType;
+    std::optional<void*> mExpr;
+};
 
 namespace
 {
@@ -2856,9 +3042,16 @@ static const auto get_capability_interface = [](IPluginV3& self, PluginCapabilit
                     {
                         try
                         {
-                            return py::cast(static_cast<IPluginV3QuickBuild*>(capability_interface));
+                            return py::cast(static_cast<IPluginV3QuickAOTBuild*>(capability_interface));
                         }
-                        PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid build capability interface")
+                        catch (py::cast_error const& e)
+                        {
+                            try
+                            {
+                                return py::cast(static_cast<IPluginV3QuickBuild*>(capability_interface));
+                            }
+                            PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid build capability interface")
+                        }
                     }
                 }
             }
@@ -2918,9 +3111,11 @@ static const auto creator_create_plugin_v3
           return self.createPlugin(name.c_str(), fc, phase);
       };
 
-static const auto creator_create_plugin_v3_quick =
-    [](IPluginCreatorV3Quick& self, std::string const& name, std::string const& nspace, PluginFieldCollection const* fc,
-        TensorRTPhase phase) { return self.createPlugin(name.c_str(), nspace.c_str(), fc, phase); };
+static const auto creator_create_plugin_v3_quick
+    = [](IPluginCreatorV3Quick& self, std::string const& name, std::string const& nspace,
+          PluginFieldCollection const* fc, TensorRTPhase phase, QuickPluginCreationRequest quickPluginType) {
+          return self.createPlugin(name.c_str(), nspace.c_str(), fc, phase, quickPluginType);
+      };
 
 static const auto deserialize_plugin = [](IPluginCreator& self, std::string const& name, py::buffer& serializedPlugin) {
     py::buffer_info info = serializedPlugin.request();
@@ -3013,6 +3208,23 @@ static const auto IPluginV3_set_num_outputs = [](IPluginV3OneBuild& self, int32_
     utils::throwPyError(PyExc_AttributeError, "Can't set attribute: num_outputs is read-only for C++ plugins");
 };
 
+static const auto ISymExpr_set_type = [](ISymExpr& self, PluginArgType mType) {
+    auto expr = static_cast<SymExprImpl*>(&self);
+    expr->mType = mType;
+    return;
+};
+
+static const auto ISymExpr_set_data_type = [](ISymExpr& self, PluginArgDataType mDtype) {
+    auto expr = static_cast<SymExprImpl*>(&self);
+    expr->mDtype = mDtype;
+    return;
+};
+
+static const auto ISymExpr_set_expr = [](ISymExpr& self, void* mExpr) {
+    auto expr = static_cast<SymExprImpl*>(&self);
+    expr->mExpr = mExpr;
+    return;
+};
 
 } // namespace lambdas
 
@@ -3499,6 +3711,11 @@ void bindPlugin(py::module& m)
         .def(py::init<>())
         .def(py::init<const IPluginV3QuickBuild&>());
 
+    py::class_<IPluginV3QuickAOTBuild, IPluginV3QuickBuild, IPluginCapability, IVersionedInterface,
+        PyIPluginV3QuickAOTBuildImpl, std::unique_ptr<IPluginV3QuickAOTBuild>>(
+        m, "IPluginV3QuickAOTBuild", py::module_local())
+        .def(py::init<>())
+        .def(py::init<const IPluginV3QuickAOTBuild&>());
 
     py::class_<IPluginV3QuickRuntime, IPluginCapability, IVersionedInterface, PyIPluginV3QuickRuntimeImpl,
         std::unique_ptr<IPluginV3QuickRuntime>>(m, "IPluginV3QuickRuntime", py::module_local())
@@ -3579,7 +3796,7 @@ void bindPlugin(py::module& m)
             py::cpp_function(
                 &helpers::setPluginNamespace<IPluginCreatorV3Quick, IPluginCreatorV3QuickImpl>, py::keep_alive<1, 2>{}))
         .def("create_plugin", lambdas::creator_create_plugin_v3_quick, "name"_a, "namespace"_a, "field_collection"_a,
-            "phase"_a);
+            "phase"_a, "quickPluginType"_a);
 
     py::class_<IPluginResourceContext, std::unique_ptr<IPluginResourceContext, py::nodelete>>(
         m, "IPluginResourceContext", IPluginResourceContextDoc::descr, py::module_local())
@@ -3654,6 +3871,41 @@ void bindPlugin(py::module& m)
         .value("BUILD", TensorRTPhase::kBUILD)
         .value("RUNTIME", TensorRTPhase::kRUNTIME);
 
+    py::enum_<QuickPluginCreationRequest>(m, "QuickPluginCreationRequest", py::arithmetic{}, py::module_local())
+        .value("UNKNOWN", QuickPluginCreationRequest::kUNKNOWN)
+        .value("PREFER_JIT", QuickPluginCreationRequest::kPREFER_JIT)
+        .value("PREFER_AOT", QuickPluginCreationRequest::kPREFER_AOT)
+        .value("STRICT_JIT", QuickPluginCreationRequest::kSTRICT_JIT)
+        .value("STRICT_AOT", QuickPluginCreationRequest::kSTRICT_AOT);
+
+    py::class_<IKernelLaunchParams, std::unique_ptr<IKernelLaunchParams, py::nodelete>>(
+        m, "KernelLaunchParams", py::module_local())
+        .def_property("grid_x", &IKernelLaunchParams::getGridX, &IKernelLaunchParams::setGridX)
+        .def_property("grid_y", &IKernelLaunchParams::getGridY, &IKernelLaunchParams::setGridY)
+        .def_property("grid_z", &IKernelLaunchParams::getGridZ, &IKernelLaunchParams::setGridZ)
+        .def_property("block_x", &IKernelLaunchParams::getBlockX, &IKernelLaunchParams::setBlockX)
+        .def_property("block_y", &IKernelLaunchParams::getBlockY, &IKernelLaunchParams::setBlockY)
+        .def_property("block_z", &IKernelLaunchParams::getBlockZ, &IKernelLaunchParams::setBlockZ)
+        .def_property("shared_mem", &IKernelLaunchParams::getSharedMem, &IKernelLaunchParams::setSharedMem);
+    py::enum_<PluginArgType>(m, "PluginArgType", py::arithmetic{}, py::module_local())
+        .value("INT", PluginArgType::kINT);
+
+    py::enum_<PluginArgDataType>(m, "PluginArgDataType", py::arithmetic{}, py::module_local())
+        .value("INT8", PluginArgDataType::kINT8)
+        .value("INT16", PluginArgDataType::kINT16)
+        .value("INT32", PluginArgDataType::kINT32);
+
+    py::class_<ISymExpr, SymExprImpl, std::unique_ptr<ISymExpr, py::nodelete>>(m, "ISymExpr", py::module_local())
+        .def(py::init<>())
+        .def_property("type", nullptr, lambdas::ISymExpr_set_type)
+        .def_property("dtype", nullptr, lambdas::ISymExpr_set_data_type)
+        .def_property("expr", nullptr, lambdas::ISymExpr_set_expr);
+
+    py::class_<ISymExprs, std::unique_ptr<ISymExprs, py::nodelete>>(m, "ISymExprs", py::module_local())
+        .def_property("nbSymExprs", &ISymExprs::getNbSymExprs, &ISymExprs::setNbSymExprs)
+        .def("__len__", &ISymExprs::getNbSymExprs)
+        .def("__getitem__", &ISymExprs::getSymExpr)
+        .def("__setitem__", &ISymExprs::setSymExpr);
 
 #if EXPORT_ALL_BINDINGS
     m.def("get_builder_plugin_registry", &getBuilderPluginRegistry, py::return_value_policy::reference,

@@ -1,4 +1,6 @@
 __pycache__/
-onnx/*.onnx
-engine/*.plan
-output/*.png
+onnx/
+engine/
+output/
+pytorch_model/
+artifacts_cache/

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +18,12 @@
 // This contains the core elements of the API, i.e. builder, logger, engine, runtime, context.
 #include "ForwardDeclarations.h"
 #include "utils.h"
-
 #include <chrono>
 #include <iomanip>
 #include <pybind11/stl.h>
 
 #include "infer/pyCoreDoc.h"
+#include <cuda.h>
 #include <cuda_runtime_api.h>
 
 namespace tensorrt
@@ -169,7 +169,6 @@ static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffe
 static const auto reader_v2_read = [](IStreamReaderV2& self, void* destination, int64_t nbBytes, size_t stream) {
     return self.read(destination, nbBytes, reinterpret_cast<cudaStream_t>(stream));
 };
-
 
 
 // For ICudaEngine
@@ -355,7 +354,6 @@ void serialization_config_set_flags(ISerializationConfig& self, uint32_t flags)
         utils::throwPyError(PyExc_RuntimeError, "Provided serialization flags is incorrect");
     }
 }
-
 
 // For IDebugListener, this function is intended to be override by client.
 // The bindings here will never be called and is for documentation purpose only.
@@ -722,26 +720,100 @@ public:
 
 class PyStreamReaderV2 : public IStreamReaderV2
 {
+    using TFnPointerGetAttribute = CUresult (*)(void*, CUpointer_attribute, CUdeviceptr);
+    using TFnMemcpyHtoD = CUresult (*)(CUdeviceptr, const void*, size_t);
+
 public:
+    PyStreamReaderV2()
+    {
+        py::gil_scoped_acquire gil{};
+        mCudaHandle = utils::nvdllOpen(CUDA_LIB_NAME);
+        if (!mCudaHandle)
+        {
+            utils::throwPyError(PyExc_RuntimeError, "[ERROR] Failed to open cuda driver.");
+        }
+        mFnPointerGetAttribute
+            = reinterpret_cast<TFnPointerGetAttribute>(utils::dllGetSym(mCudaHandle, "cuPointerGetAttribute"));
+        mFnMemcpyHtoD = reinterpret_cast<TFnMemcpyHtoD>(utils::dllGetSym(mCudaHandle, "cuMemcpyHtoD_v2"));
+    }
+
+    ~PyStreamReaderV2()
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            utils::dllClose(mCudaHandle);
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] An exception occurred while closing the CUDA driver.";
+        }
+    }
+
     int64_t read(void* destination, int64_t nbBytes, cudaStream_t stream) noexcept override
     {
         try
         {
             py::gil_scoped_acquire gil{};
-            py::function pyFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "read");
-
-            if (!pyFunc)
+            if (!mFnPointerGetAttribute || !mFnMemcpyHtoD)
             {
+                utils::throwPyError(PyExc_RuntimeError,
+                    "[ERROR] Read is skipped due to failed to get necessary API entry in cuda driver.");
+                return 0;
+            }
+            py::function pyReadFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "read");
+            if (!pyReadFunc)
+            {
+                utils::throwPyError(PyExc_RuntimeError, "[ERROR] Failed to find override read function in python.");
                 return 0;
             }
 
-            intptr_t cudaStreamPtr = reinterpret_cast<intptr_t>(stream);
+            // Check destination memory location.
+            uint32_t attributes{};
+            CUresult ret = mFnPointerGetAttribute(
+                &attributes, CU_POINTER_ATTRIBUTE_MEMORY_TYPE, reinterpret_cast<CUdeviceptr>(destination));
+            if (ret == CUDA_ERROR_INVALID_VALUE)
+            {
+                attributes = CU_MEMORYTYPE_HOST;
+            }
+            else
+            {
+                CUDA_CALL_WITH_RET(ret, 0);
+            }
+            bool const useH2DCopy = attributes == CU_MEMORYTYPE_DEVICE;
+            auto copyDestination = static_cast<std::byte*>(destination);
+            auto cudaStreamPtr = reinterpret_cast<intptr_t>(stream);
 
-            py::buffer data = pyFunc(nbBytes, cudaStreamPtr); // user implements this
-            py::buffer_info info = data.request();
-            int64_t bytesRead = info.size * info.itemsize;
-            std::memcpy(destination, info.ptr, std::min(bytesRead, nbBytes));
-            return bytesRead;
+            // In C++ we can use GDS to reduce host memory usage. For Python, we handle this in the bindings by copying
+            // data chunk by chunk.
+            int64_t totalBytesRead{};
+            while (totalBytesRead < nbBytes)
+            {
+                int64_t bytesToRead = nbBytes - totalBytesRead;
+                py::buffer data = pyReadFunc(bytesToRead, cudaStreamPtr);
+                py::buffer_info info = data.request();
+                // User might chunk the memory into pieces to save peak host memory usage.
+                int64_t bytesRead = std::min(info.size * info.itemsize, bytesToRead);
+                if (bytesRead == 0)
+                {
+                    std::cerr
+                        << "[ERROR] User aborted the operation, the read function in streamReaderV2 returned 0 bytes.";
+                    break;
+                }
+
+                if (useH2DCopy)
+                {
+                    CUDA_CALL_WITH_RET(mFnMemcpyHtoD(reinterpret_cast<CUdeviceptr>(copyDestination + totalBytesRead),
+                                           info.ptr, bytesRead),
+                        totalBytesRead);
+                }
+                else
+                {
+                    std::memcpy(copyDestination + totalBytesRead, info.ptr, bytesRead);
+                }
+                totalBytesRead += bytesRead;
+            }
+            return totalBytesRead;
         }
         catch (std::exception const& e)
         {
@@ -759,14 +831,13 @@ public:
         try
         {
             py::gil_scoped_acquire gil{};
-            py::function pyFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "seek");
-
-            if (!pyFunc)
+            py::function pySeekFunc = utils::getOverride(static_cast<IStreamReaderV2*>(this), "seek");
+            if (!pySeekFunc)
             {
-                return false;
+                std::cerr << "[ERROR] Failed to find override seek function in python." << std::endl;
+                return 0;
             }
-
-            py::bool_ ret = pyFunc(offset, where);
+            py::bool_ ret = pySeekFunc(offset, where);
             return ret;
         }
         catch (std::exception const& e)
@@ -779,6 +850,11 @@ public:
         }
         return false;
     }
+
+private:
+    void* mCudaHandle{};
+    TFnPointerGetAttribute mFnPointerGetAttribute{};
+    TFnMemcpyHtoD mFnMemcpyHtoD{};
 };
 
 class PyDebugListener : public IDebugListener
@@ -910,7 +986,7 @@ void bindCore(py::module& m)
     py::class_<DefaultLogger, ILogger>(m, "Logger", LoggerDoc::descr, py::module_local())
         .def(py::init<ILogger::Severity>(), "min_severity"_a = ILogger::Severity::kWARNING)
         .def_readwrite("min_severity", &DefaultLogger::mMinSeverity)
-        .def("log", &DefaultLogger::log, "severity"_a, "msg"_a, LoggerDoc::log);
+        .def("log", &DefaultLogger::log, "severity"_a, "msg"_a, DefaultLoggerDoc::log);
 
     class PyProfiler : public IProfiler
     {
@@ -1250,7 +1326,6 @@ void bindCore(py::module& m)
         .def("get_debug_state", &IExecutionContext::getDebugState, "name"_a, IExecutionContextDoc::get_debug_state)
         .def("set_all_tensors_debug_state", &IExecutionContext::setAllTensorsDebugState, "flag"_a,
             IExecutionContextDoc::set_all_tensors_debug_state)
-
         ;
 
     py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
@@ -1448,7 +1523,6 @@ void bindCore(py::module& m)
         // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
 
-
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
@@ -1556,7 +1630,8 @@ void bindCore(py::module& m)
     py::enum_<HardwareCompatibilityLevel>(
         m, "HardwareCompatibilityLevel", HardwareCompatibilityLevelDoc::descr, py::module_local())
         .value("NONE", HardwareCompatibilityLevel::kNONE, HardwareCompatibilityLevelDoc::NONE)
-        .value("AMPERE_PLUS", HardwareCompatibilityLevel::kAMPERE_PLUS, HardwareCompatibilityLevelDoc::AMPERE_PLUS);
+        .value("AMPERE_PLUS", HardwareCompatibilityLevel::kAMPERE_PLUS, HardwareCompatibilityLevelDoc::AMPERE_PLUS)
+        .value("SAME_COMPUTE_CAPABILITY", HardwareCompatibilityLevel::kSAME_COMPUTE_CAPABILITY, HardwareCompatibilityLevelDoc::SAME_COMPUTE_CAPABILITY);
 
     py::enum_<RuntimePlatform>(m, "RuntimePlatform", RuntimePlatformDoc::descr, py::module_local())
         .value("SAME_AS_BUILD", RuntimePlatform::kSAME_AS_BUILD, RuntimePlatformDoc::SAME_AS_BUILD)
@@ -1691,7 +1766,6 @@ void bindCore(py::module& m)
         .def_property("tiling_optimization_level", &IBuilderConfig::getTilingOptimizationLevel,
             &IBuilderConfig::setTilingOptimizationLevel)
         .def_property("l2_limit_for_tiling", &IBuilderConfig::getL2LimitForTiling, &IBuilderConfig::setL2LimitForTiling)
-
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
@@ -1700,6 +1774,10 @@ void bindCore(py::module& m)
             NetworkDefinitionCreationFlagDoc::EXPLICIT_BATCH)
         .value("STRONGLY_TYPED", NetworkDefinitionCreationFlag::kSTRONGLY_TYPED,
             NetworkDefinitionCreationFlagDoc::STRONGLY_TYPED)
+        .value("PREFER_AOT_PYTHON_PLUGINS", NetworkDefinitionCreationFlag::kPREFER_AOT_PYTHON_PLUGINS,
+            NetworkDefinitionCreationFlagDoc::PREFER_AOT_PYTHON_PLUGINS)
+        .value("PREFER_JIT_PYTHON_PLUGINS", NetworkDefinitionCreationFlag::kPREFER_JIT_PYTHON_PLUGINS,
+            NetworkDefinitionCreationFlagDoc::PREFER_JIT_PYTHON_PLUGINS)
         ;
 
     // Builder
@@ -1750,7 +1828,6 @@ void bindCore(py::module& m)
         .def("deserialize_cuda_engine", py::overload_cast<IStreamReaderV2&>(&IRuntime::deserializeCudaEngine),
             "stream_reader_v2"_a, RuntimeDoc::deserialize_cuda_engine_reader_v2,
             py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
-
         .def_property("DLA_core", &IRuntime::getDLACore, &IRuntime::setDLACore)
         .def_property_readonly("num_DLA_cores", &IRuntime::getNbDLACores)
         .def_property("gpu_allocator", nullptr, py::cpp_function(&IRuntime::setGpuAllocator, py::keep_alive<1, 2>{}))

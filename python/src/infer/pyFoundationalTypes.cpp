@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -187,7 +187,8 @@ void bindFoundationalTypes(py::module& m)
         .value("UINT8", DataType::kUINT8, DataTypeDoc::uint8)
         .value("FP8", DataType::kFP8, DataTypeDoc::fp8)
         .value("INT4", DataType::kINT4, DataTypeDoc::int4)
-        .value("FP4", DataType::kFP4, DataTypeDoc::fp4); // DataType
+        .value("FP4", DataType::kFP4, DataTypeDoc::fp4)
+        ; // DataType
 
     // Also create direct mappings (so we can call trt.float32, for example).
     m.attr("float32") = DataType::kFLOAT;

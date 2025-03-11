@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,8 +28,11 @@ def add_kernel(x_ptr, y_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
 
 
 @triton.jit
-def circ_pad(
+def circ_pad_kernel(
+    # input tensor
     X,
+    # extra scalar args in between input and output tensors
+    # for kernel signature to be compatible with AOT plugin impl
     all_pads_0,
     all_pads_2,
     all_pads_4,
@@ -38,12 +41,13 @@ def circ_pad(
     orig_dims_1,
     orig_dims_2,
     orig_dims_3,
-    Y,
     Y_shape_1,
     Y_shape_2,
     Y_shape_3,
     X_len,
     Y_len,
+    # output tensor
+    Y,
     BLOCK_SIZE: tl.constexpr,
 ):
     pid = tl.program_id(0)

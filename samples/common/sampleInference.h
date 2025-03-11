@@ -54,7 +54,9 @@ struct InferenceEnvironment
     InferenceEnvironment() = delete;
     InferenceEnvironment(InferenceEnvironment const& other) = delete;
     InferenceEnvironment(InferenceEnvironment&& other) = delete;
-    InferenceEnvironment(BuildEnvironment& bEnv) : engine(std::move(bEnv.engine)), safe(bEnv.engine.isSafe())
+    InferenceEnvironment(BuildEnvironment& bEnv)
+        : engine(std::move(bEnv.engine))
+        , safe(bEnv.engine.isSafe())
     {
     }
 

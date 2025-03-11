@@ -34,6 +34,7 @@ def _get_mapping():
         "INT32": DataType.INT32,
         "INT64": DataType.INT64,
         "INT8": DataType.INT8,
+        "INT4": DataType.INT4,
         "UINT16": DataType.UINT16,
         "UINT32": DataType.UINT32,
         "UINT64": DataType.UINT64,
