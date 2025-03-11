@@ -18,14 +18,14 @@ import functools
 from textwrap import dedent
 
 from polygraphy import mod
-from polygraphy.exception import PolygraphyException, DataTypeConversionException
+from polygraphy.exception import DataTypeConversionException
 from polygraphy.logger import G_LOGGER, LogMode
 
 
 import enum
 
 
-class _SkipImporterException(PolygraphyException):
+class _SkipImporterException(Exception):
     pass
 
 
@@ -140,15 +140,18 @@ class DataType:
                     f"Could not find source module: {source_module} in known importers. "
                     f"Note: Importer functions have been registered for the following modules: {list(DataType._IMPORTER_FUNCS.keys())}"
                 )
-            return DataType._IMPORTER_FUNCS[source_module](dtype)
-
-        for func in DataType._IMPORTER_FUNCS.values():
             try:
-                ret = func(dtype)
+                return DataType._IMPORTER_FUNCS[source_module](dtype)
             except _SkipImporterException:
                 pass
-            else:
-                return ret
+        else:
+            for func in DataType._IMPORTER_FUNCS.values():
+                try:
+                    ret = func(dtype)
+                except _SkipImporterException:
+                    pass
+                else:
+                    return ret
 
         msg = f"Could not convert: {dtype} to a corresponding Polygraphy data type. Leaving this type in its source format."
         G_LOGGER.warning(msg, mode=LogMode.ONCE)

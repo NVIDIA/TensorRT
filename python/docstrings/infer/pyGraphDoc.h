@@ -76,6 +76,8 @@ constexpr const char* SQUEEZE = R"trtdoc(Squeeze layer)trtdoc";
 constexpr const char* UNSQUEEZE = R"trtdoc(Unsqueeze layer)trtdoc";
 constexpr const char* CUMULATIVE = R"trtdoc(Cumulative layer)trtdoc";
 constexpr const char* DYNAMIC_QUANTIZE = R"trtdoc(DynamicQuantize layer)trtdoc";
+constexpr const char* SPLIT_TO_RAGGED = R"trtdoc(SplitToRagged layer)trtdoc";
+constexpr const char* CONCAT_FROM_RAGGED = R"trtdoc(ConcatFromRagged layer)trtdoc";
 } // namespace LayerTypeDoc
 
 namespace TensorFormatDoc
@@ -203,9 +205,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc"
-
     ;
-
 
 constexpr const char* set_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
@@ -1680,6 +1680,29 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 } // namespace IDynamicQuantizeLayerDoc
 
+namespace ISplitToRaggedLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A SplitToRagged layer in an :class:`INetworkDefinition` .
+    
+    Split a tensor into a ragged tensor along the specified 'axis'. 
+
+    :ivar axis: :class:`int` 
+
+)trtdoc";
+} // namespace ISplitToRaggedLayerDoc
+
+namespace IConcatFromRaggedLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A ConcatFromRagged layer in an :class:`INetworkDefinition` .
+
+    Concatenate a ragged tensor to a regular tensor. 
+
+    :ivar axis: :class:`int` 
+)trtdoc";
+} // namespace IConcatFromRaggedLayerDoc
+
 namespace IIfConditionalBoundaryLayerDoc
 {
 constexpr const char* descr = R"trtdoc(
@@ -1908,7 +1931,6 @@ constexpr const char* set_input = R"trtdoc(
 )trtdoc";
 
 } // namespace IUnsqueezeLayerDoc
-
 
 
 namespace CumulativeOperationDoc
@@ -2596,6 +2618,25 @@ constexpr const char* add_dynamic_quantize = R"trtdoc(
     :returns: The new DynamicQuantization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
+constexpr const char* add_split_to_ragged = R"trtdoc(
+    Add a dynamic quantization layer to the network.
+    See :class:`IDynamicQuantizeLayer` for more information.
+
+    :arg input: A tensor to quantize.
+    :arg axis: The axis that is sliced into blocks.
+
+    :returns: The new SplitToRagged layer, or :class:`None` if it could not be created.
+)trtdoc";
+constexpr const char* add_concat_from_ragged = R"trtdoc(
+    Add a dynamic quantization layer to the network.
+    See :class:`IDynamicQuantizeLayer` for more information.
+
+    :arg input: A tensor to quantize.
+    :arg axis: The axis that is sliced into blocks.
+
+    :returns: The new ConcatFromRagged layer, or :class:`None` if it could not be created.
+)trtdoc";
+
 constexpr const char* add_if_conditional = R"trtdoc(
     Adds an if-conditional to the network, which provides a way to specify subgraphs that will be conditionally executed using lazy evaluation.
     See :class:`IIfConditional` for more information.
@@ -2666,7 +2707,6 @@ constexpr char const* add_unsqueeze = R"trtdoc(
 
     :returns: the new Unsqueeze layer, or :class:`None` if it could not be created.
 )trtdoc";
-
 
 
 constexpr const char* add_cumulative = R"trtdoc(

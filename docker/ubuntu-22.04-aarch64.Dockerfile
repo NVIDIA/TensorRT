@@ -20,7 +20,7 @@ ARG CUDA_VERSION=12.8.0
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
-ENV TRT_VERSION 10.8.0.43
+ENV TRT_VERSION 10.9.0.34
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -60,10 +60,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install python3
 RUN apt-get install -y --no-install-recommends \
-      python3 \
-      python3-pip \
-      python3-dev \
-      python3-wheel &&\
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-wheel &&\
     cd /usr/local/bin &&\
     ln -s /usr/bin/python3 python &&\
     ln -s /usr/bin/pip3 pip;
@@ -71,16 +71,16 @@ RUN apt-get install -y --no-install-recommends \
 # Install TensorRT. This will also pull in CUDNN
 RUN ver="${CUDA_VERSION%.*}" &&\
     if [ "${ver%.*}" = "12" ] ; then \
-        ver="12.8"; \
+    ver="12.8"; \
     fi &&\
     v="${TRT_VERSION}-1+cuda${ver}" &&\
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/3bf863cc.pub &&\
     apt-get update &&\
     sudo apt-get -y install libnvinfer10=${v} libnvonnxparsers10=${v}  libnvinfer-plugin10=${v} \
-        libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvinfer-plugin-dev=${v} \
-        python3-libnvinfer=${v} libnvinfer-dispatch10=${v} libnvinfer-dispatch-dev=${v} libnvinfer-lean10=${v} \
-        libnvinfer-lean-dev=${v} libnvinfer-vc-plugin10=${v} libnvinfer-vc-plugin-dev=${v} \
-        libnvinfer-headers-dev=${v} libnvinfer-headers-plugin-dev=${v};
+    libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvinfer-plugin-dev=${v} \
+    python3-libnvinfer=${v} libnvinfer-dispatch10=${v} libnvinfer-dispatch-dev=${v} libnvinfer-lean10=${v} \
+    libnvinfer-lean-dev=${v} libnvinfer-vc-plugin10=${v} libnvinfer-vc-plugin-dev=${v} \
+    libnvinfer-headers-dev=${v} libnvinfer-headers-plugin-dev=${v};
 
 # Install Cmake
 RUN cd /tmp && \

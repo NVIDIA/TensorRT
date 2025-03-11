@@ -260,7 +260,7 @@ def update_expected_output(expected):
 )
 def test_str_from_config(create_config, expected, dummy_network):
     config = create_config(*dummy_network)
-    actual = trt_util.str_from_config(config)
+    actual = trt_util.str_from_config(config, dummy_network)
     expected = dedent(expected).strip()
     assert actual == expected
 

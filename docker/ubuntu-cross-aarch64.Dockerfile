@@ -21,7 +21,7 @@ ARG OS_VERSION=22.04
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.8.0.43
+ENV TRT_VERSION 10.9.0.34
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG uid=1000
@@ -120,9 +120,9 @@ RUN cd /pdk_files/tensorrt \
     && cd lib \
     && mkdir stubs \
     && for x in nvinfer nvparsers nvinfer_plugin nvonnxparser; \
-       do                                                     \
-            CC=aarch64-linux-gnu-gcc /pdk_files/stubify.sh lib${x}.so stubs/lib${x}.so \
-       ; done
+    do                                                     \
+    CC=aarch64-linux-gnu-gcc /pdk_files/stubify.sh lib${x}.so stubs/lib${x}.so \
+    ; done
 
 # Set environment and working directory
 ENV TRT_LIBPATH /pdk_files/tensorrt/lib

@@ -154,6 +154,10 @@ def get_layer_class_mapping():
     try_add("REVERSE_SEQUENCE", "IReverseSequenceLayer")
     try_add("NORMALIZATION", "INormalizationLayer")
     try_add("CAST", "ICastLayer")
+    try_add("SQUEEZE", "ISqueezeLayer")
+    try_add("UNSQUEEZE", "IUnsqueezeLayer")
+    try_add("CUMULATIVE", "ICumulativeLayer")
+    try_add("DYNAMIC_QUANTIZE", "IDynamicQuantizeLayer")
 
     return layer_class_mapping
 
@@ -411,7 +415,7 @@ def unmark_outputs(network, outputs):
             network.unmark_output(tensor)
 
 
-def str_from_config(config):
+def str_from_config(config, network):
     # Check the default device type so that we can trigger this from the tests.
     # On non-DLA platforms, config.DLA_core can never be set to anything other than -1,
     # but default_device_type can be set to DLA..
@@ -436,6 +440,10 @@ def str_from_config(config):
     # Flags
     enabled_builder_flags = get_enabled_enum_vals(
         trt.BuilderFlag, lambda flag: config.get_flag(flag)
+    )
+    enabled_builder_flags += get_enabled_enum_vals(
+        trt.NetworkDefinitionCreationFlag,
+        lambda flag: hasattr(network, "get_flag") and network.get_flag(flag),
     )
     add_line("Flags", f"{str_from_list(enabled_builder_flags)}")
 
@@ -735,9 +743,16 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
             )
         else:
             inspector.execution_context = context
-            for profile_idx in range(engine.num_optimization_profiles):
+
+            # In TRT 10, layer information is not specified per profile.
+            if mod.version(trt.__version__) >= mod.version("10"):
+                num_profiles_to_print = 1
+            else:
+                num_profiles_to_print = engine.num_optimization_profiles
+
+            for profile_idx in range(num_profiles_to_print):
                 indent_level = 0
-                if engine.num_optimization_profiles >= 1:
+                if num_profiles_to_print > 1:
                     indent_level = 1
                     engine_str += f"- Profile: {profile_idx}\n"
 

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-file(GLOB SRCS *.cpp)
-set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
-set(PLUGIN_SOURCES
-    ${PLUGIN_SOURCES}
-    PARENT_SCOPE)
+
+add_plugin_source(
+    pyramidROIAlignPlugin.cpp
+    pyramidROIAlignPlugin.h
+)

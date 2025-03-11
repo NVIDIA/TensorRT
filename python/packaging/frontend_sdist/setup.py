@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +32,9 @@ tensorrt_submodules = [
     "{}_bindings=={}".format(distribution_package_name, tensorrt_version),
 ]
 nvidia_pip_index_url = os.environ.get("NVIDIA_PIP_INDEX_URL", "https://pypi.nvidia.com")
-disable_internal_pip = os.environ.get("NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP", False)
+
+DISABLE_INTERNAL_PIP_FLAG = "NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP"
+disable_internal_pip = os.environ.get(DISABLE_INTERNAL_PIP_FLAG, "1") == "1"
 
 
 def run_pip_command(args, call_func):
@@ -64,9 +66,7 @@ if sys.platform not in ("linux", "win32"):
 if sys.implementation.name != "cpython":
     raise RuntimeError("TensorRT currently only builds wheels for CPython")
 if platform.machine() not in ("x86_64", "AMD64", "aarch64"):
-    raise RuntimeError(
-        "TensorRT currently only builds wheels for x86_64 and ARM SBSA processors"
-    )
+    raise RuntimeError("TensorRT currently only builds wheels for x86_64 and ARM SBSA processors")
 if "tegra" in platform.release():
     raise RuntimeError("TensorRT does not currently build wheels for Tegra systems")
 
@@ -108,20 +108,14 @@ def parent_command_line():
         pass
     # fall back to shell
     try:
-        return subprocess.check_output(
-            ["ps", "-p", str(pid), "-o", "command", "--no-headers"]
-        ).decode()
+        return subprocess.check_output(["ps", "-p", str(pid), "-o", "command", "--no-headers"]).decode()
     except:
         return ""
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
 install_requires = []
-if (
-    disable_internal_pip
-    or nvidia_pip_index_url in parent_command_line()
-    or nvidia_pip_index_url in pip_config_list()
-):
+if disable_internal_pip or nvidia_pip_index_url in parent_command_line() or nvidia_pip_index_url in pip_config_list():
     install_requires.extend(tensorrt_submodules)
     cmdclass = {}
 else:
@@ -135,21 +129,13 @@ setup(
     long_description="""
 NVIDIA TensorRT is an SDK that facilitates high-performance machine learning inference. It is designed to work in a complementary fashion with training frameworks such as TensorFlow, PyTorch, and MXNet. It focuses specifically on running an already-trained network quickly and efficiently on NVIDIA hardware.
 
-**IMPORTANT:** This is a special release of TensorRT designed to work only with TensorRT-LLM.
-Please refrain from upgrading to this version if you are not using TensorRT-LLM.
-
-To install, please execute the following:
+If the dependencies of this package cannot be correctly installed from PyPI for any reason, you can try using the NVIDIA package index instead:
 ```
-pip install tensorrt --extra-index-url {}
-```
-Or add the index URL to the (space-separated) PIP_EXTRA_INDEX_URL environment variable:
-```
-export PIP_EXTRA_INDEX_URL='{}'
+export {}=0
 pip install tensorrt
 ```
-When the extra index url does not contain `{}`, a nested `pip install` will run with the proper extra index url hard-coded.
 """.format(
-        nvidia_pip_index_url, nvidia_pip_index_url, nvidia_pip_index_url
+        DISABLE_INTERNAL_PIP_FLAG
     ),
     long_description_content_type="text/markdown",
     author="NVIDIA Corporation",

@@ -67,6 +67,10 @@ TensorInfo<TScalar, TIndex> getTensorInfo(const void* d, PluginTensorDesc const&
     {
         sz[i] = t.dims.d[i];
     }
+    for (int32_t i = dims; i < kMAX_TENSORINFO_DIMS; ++i)
+    {
+        sz[i] = static_cast<TIndex>(0);
+    }
     // calculate strides
     st[dims - 1] = 1;
     for (int32_t i = dims - 2; i >= 0; --i)

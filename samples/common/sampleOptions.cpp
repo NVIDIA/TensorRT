@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -153,7 +153,8 @@ nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
         {"fp16", nvinfer1::DataType::kHALF}, {"bf16", nvinfer1::DataType::kBF16}, {"int8", nvinfer1::DataType::kINT8},
         {"fp8", nvinfer1::DataType::kFP8}, {"int32", nvinfer1::DataType::kINT32}, {"int64", nvinfer1::DataType::kINT64},
-        {"bool", nvinfer1::DataType::kBOOL}, {"uint8", nvinfer1::DataType::kUINT8}, {"int4", nvinfer1::DataType::kINT4}};
+        {"bool", nvinfer1::DataType::kBOOL}, {"uint8", nvinfer1::DataType::kUINT8},
+        {"int4", nvinfer1::DataType::kINT4}};
     const auto& dt = strToDT.find(option);
     if (dt == strToDT.end())
     {
@@ -277,7 +278,7 @@ std::pair<std::string, T> splitNameAndValue(const std::string& s)
 
     // Support 'inputName':Path format for --loadInputs flag when dealing with Windows paths.
     // i.e. 'inputName':c:\inputData
-    std::vector<std::string> quoteNameRange{ splitToStringVec(s, '\'') };
+    std::vector<std::string> quoteNameRange{splitToStringVec(s, '\'')};
     // splitToStringVec returns the entire string when delimiter is not found, so it's size is always at least 1
     if (quoteNameRange.size() != 1)
     {
@@ -683,16 +684,17 @@ bool getOptimizationProfiles(
     size_t profileIndex{};
 
     auto getShapes
-        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector) {
-              std::vector<std::string> shapeList{splitToStringVec(list, ',')};
-              for (auto const& s : shapeList)
-              {
-                  auto nameDimsPair = splitNameAndValue<std::vector<int32_t>>(s);
-                  auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
-                  auto dims = nameDimsPair.second;
-                  insertShapesBuild(shapes, selector, tensorName, dims);
-              }
-          };
+        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector)
+    {
+        std::vector<std::string> shapeList{splitToStringVec(list, ',')};
+        for (auto const& s : shapeList)
+        {
+            auto nameDimsPair = splitNameAndValue<std::vector<int32_t>>(s);
+            auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
+            auto dims = nameDimsPair.second;
+            insertShapesBuild(shapes, selector, tensorName, dims);
+        }
+    };
 
     while (getAndDelOptionWithPosition(arguments, argument, profileIndex, pos))
     {
@@ -776,7 +778,8 @@ std::ostream& printTacticSources(
     }
     else
     {
-        auto const addSource = [&](uint32_t source, std::string const& name) {
+        auto const addSource = [&](uint32_t source, std::string const& name)
+        {
             if (enabledSources & source)
             {
                 os << name << " [ON], ";
@@ -790,7 +793,8 @@ std::ostream& printTacticSources(
         addSource(1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS), "cublas");
         addSource(1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS_LT), "cublasLt");
         addSource(1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUDNN), "cudnn");
-        addSource(1U << static_cast<uint32_t>(nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS), "edge mask convolutions");
+        addSource(
+            1U << static_cast<uint32_t>(nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS), "edge mask convolutions");
         addSource(1U << static_cast<uint32_t>(nvinfer1::TacticSource::kJIT_CONVOLUTIONS), "JIT convolutions");
     }
     return os;
@@ -837,7 +841,8 @@ std::ostream& printPrecision(std::ostream& os, BuildOptions const& options)
 
 std::ostream& printTempfileControls(std::ostream& os, TempfileControlFlags const tempfileControls)
 {
-    auto getFlag = [&](TempfileControlFlag f) -> char const* {
+    auto getFlag = [&](TempfileControlFlag f) -> char const*
+    {
         bool allowed = !!(tempfileControls & (1U << static_cast<int64_t>(f)));
         return allowed ? "allow" : "deny";
     };
@@ -874,7 +879,8 @@ std::ostream& printSparsity(std::ostream& os, BuildOptions const& options)
 
 std::ostream& printMemoryPools(std::ostream& os, BuildOptions const& options)
 {
-    auto const printValueOrDefault = [&os](double const val, char const* unit = "MiB") {
+    auto const printValueOrDefault = [&os](double const val, char const* unit = "MiB")
+    {
         if (val >= 0)
         {
             os << val << " " << unit;
@@ -925,7 +931,8 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
         return os;
     }
 
-    auto const addFlag = [&](PreviewFeature feat) {
+    auto const addFlag = [&](PreviewFeature feat)
+    {
         int32_t featVal = static_cast<int32_t>(feat);
         if (options.previewFeatures.find(featVal) != options.previewFeatures.end())
         {
@@ -1059,7 +1066,8 @@ void getTempfileControls(Arguments& arguments, char const* argument, TempfileCon
 
 void BuildOptions::parse(Arguments& arguments)
 {
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument)
+    {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -1143,7 +1151,7 @@ void BuildOptions::parse(Arguments& arguments)
         {
             throw std::invalid_argument(arg.what()
                 + std::string(
-                      " conversion failure: failed to parse --memPoolSize. Please double check your input string."));
+                    " conversion failure: failed to parse --memPoolSize. Please double check your input string."));
         }
 
         if (memPoolSize < 0)
@@ -1248,7 +1256,8 @@ void BuildOptions::parse(Arguments& arguments)
 
     if (stronglyTyped)
     {
-        auto disableAndLog = [](bool& flag, std::string mode, std::string type) {
+        auto disableAndLog = [](bool& flag, std::string mode, std::string type)
+        {
             if (flag)
             {
                 flag = false;
@@ -1272,8 +1281,7 @@ void BuildOptions::parse(Arguments& arguments)
         if (!(stronglyTyped || fp16 || bf16 || int8 || fp8 || int4))
         {
             sample::gLogInfo << "TF32 is enabled by default. Add --noTF32 flag to further improve accuracy with some "
-                            << "performance cost."
-                            << std::endl;
+                             << "performance cost." << std::endl;
         }
     }
 
@@ -1411,7 +1419,8 @@ void BuildOptions::parse(Arguments& arguments)
             }
             t.erase(0, 1);
 
-            const auto toUpper = [](std::string& sourceName) {
+            const auto toUpper = [](std::string& sourceName)
+            {
                 std::transform(
                     sourceName.begin(), sourceName.end(), sourceName.begin(), [](char c) { return std::toupper(c); });
                 return sourceName;
@@ -1507,15 +1516,21 @@ void BuildOptions::parse(Arguments& arguments)
     {
         hardwareCompatibilityLevel = HardwareCompatibilityLevel::kAMPERE_PLUS;
     }
+    else if (samplesCommon::toLower(hardwareCompatibleArgs) == "samecomputecapability")
+    {
+        hardwareCompatibilityLevel = HardwareCompatibilityLevel::kSAME_COMPUTE_CAPABILITY;
+    }
     else
     {
         throw std::invalid_argument(std::string("Unknown hardwareCompatibilityLevel: ") + hardwareCompatibleArgs
-            + ". Valid options: none, ampere+.");
+            + ". Valid options: none, ampere+, sameComputeCapability.");
     }
 
-    if (pluginInstanceNorm && (versionCompatible || hardwareCompatibilityLevel == HardwareCompatibilityLevel::kAMPERE_PLUS))
+    if (pluginInstanceNorm
+        && (versionCompatible || hardwareCompatibilityLevel == HardwareCompatibilityLevel::kAMPERE_PLUS))
     {
-        throw std::invalid_argument("Plugin InstanceNorm cannot be used with version compatible or hardware compatible engines!");
+        throw std::invalid_argument(
+            "Plugin InstanceNorm cannot be used with version compatible or hardware compatible engines!");
     }
 
     getAndDelOption(arguments, "--maxAuxStreams", maxAuxStreams);
@@ -1813,21 +1828,28 @@ void AllOptions::parse(Arguments& arguments)
         if (build.buildDLAStandalone)
         {
             build.skipInference = true;
-            auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt, bool isInput) {
-                return fmt.empty() ? false : std::all_of(fmt.begin(), fmt.end(), [&](IOFormat const& pair) {
-                    bool supported{false};
-                    bool const isDLA_LINEAR{
-                        pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kDLA_LINEAR)};
-                    bool const isHWC4{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW4)
-                        || pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kDLA_HWC4)};
-                    bool const isCHW32{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW32)};
-                    bool const isCHW16{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW16)};
-                    supported |= pair.first == nvinfer1::DataType::kINT8
-                        && (isDLA_LINEAR || (isInput ? isHWC4 : false) || isCHW32);
-                    supported |= pair.first == nvinfer1::DataType::kHALF
-                        && (isDLA_LINEAR || (isInput ? isHWC4 : false) || isCHW16);
-                    return supported;
-                });
+            auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt, bool isInput)
+            {
+                return fmt.empty()
+                    ? false
+                    : std::all_of(fmt.begin(), fmt.end(),
+                        [&](IOFormat const& pair)
+                        {
+                            bool supported{false};
+                            bool const isDLA_LINEAR{
+                                pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kDLA_LINEAR)};
+                            bool const isHWC4{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW4)
+                                || pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kDLA_HWC4)};
+                            bool const isCHW32{
+                                pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW32)};
+                            bool const isCHW16{
+                                pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW16)};
+                            supported |= pair.first == nvinfer1::DataType::kINT8
+                                && (isDLA_LINEAR || (isInput ? isHWC4 : false) || isCHW32);
+                            supported |= pair.first == nvinfer1::DataType::kHALF
+                                && (isDLA_LINEAR || (isInput ? isHWC4 : false) || isCHW16);
+                            return supported;
+                        });
             };
             if (!checkSafeDLAFormats(build.inputFormats, true) || !checkSafeDLAFormats(build.outputFormats, false))
             {
@@ -1856,7 +1878,8 @@ void TaskInferenceOptions::parse(Arguments& arguments)
 
 void SafeBuilderOptions::parse(Arguments& arguments)
 {
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument)
+    {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -2229,7 +2252,8 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Debug Tensors: " << options.debugTensors                                                                     << std::endl;
     // clang-format on
 
-    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
+    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats)
+    {
         if (formats.empty())
         {
             os << direction << "s format: fp32:CHW" << std::endl;
@@ -2384,7 +2408,8 @@ std::ostream& operator<<(std::ostream& os, const AllOptions& options)
 
 std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
 {
-    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
+    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats)
+    {
         if (formats.empty())
         {
             os << direction << "s format: fp32:CHW" << std::endl;
@@ -2479,19 +2504,19 @@ void BuildOptions::help(std::ostream& os)
           "                                     Note: If this option is specified, please set comma-separated types and formats for all"            "\n"
           "                                           outputs following the same order as network outputs ID (even if only one output"              "\n"
           "                                           needs specifying IO format) or set the type and format once for broadcasting."                "\n"
-          R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                            "\n"
+        R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                              "\n"
           "                                                 IOfmt ::= type:fmt"                                                                     "\n"
-          R"(                                               type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int64"|"int8"|"uint8"|"bool")"                  "\n"
-          R"(                                               fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
-          R"(                                                          "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                            "\n"
+        R"(                                                 type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int64"|"int8"|"uint8"|"bool")"                  "\n"
+        R"(                                                 fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
+        R"(                                                            "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                            "\n"
           "  --memPoolSize=poolspec             Specify the size constraints of the designated memory pool(s)"                                      "\n"
           "                                     Supports the following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                      "\n"
           "                                     If none of suffixes is appended, the defualt unit is in MiB."                                       "\n"
           "                                     Note: Also accepts decimal sizes, e.g. 0.25M. Will be rounded down to the nearest integer bytes."   "\n"
           "                                     In particular, for dlaSRAM the bytes will be rounded down to the nearest power of 2."               "\n"
-          R"(                                   Pool constraint: poolspec ::= poolfmt[","poolspec])"                                                "\n"
+        R"(                                     Pool constraint: poolspec ::= poolfmt[","poolspec])"                                                "\n"
           "                                                      poolfmt ::= pool:size"                                                             "\n"
-          R"(                                                    pool ::= "workspace"|"dlaSRAM"|"dlaLocalDRAM"|"dlaGlobalDRAM"|"tacticSharedMem")"  "\n"
+        R"(                                                      pool ::= "workspace"|"dlaSRAM"|"dlaLocalDRAM"|"dlaGlobalDRAM"|"tacticSharedMem")"  "\n"
           "  --profilingVerbosity=mode          Specify profiling verbosity. mode ::= layer_names_only|detailed|none (default = layer_names_only)." "\n"
           "                                     Please only assign once."                                                                           "\n"
           "  --avgTiming=M                      Set the number of times averaged in each iteration for kernel selection (default = "
@@ -2511,16 +2536,16 @@ void BuildOptions::help(std::ostream& os)
           "  --pluginInstanceNorm, --pi         Set `kNATIVE_INSTANCENORM` to false in the ONNX parser. This will cause the ONNX parser to use"     "\n"
           "                                     a plugin InstanceNorm implementation over the native implementation when parsing."                  "\n"
 #endif
-          R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"      "\n"
+        R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"        "\n"
           "                                     not support building an engine."                                                                    "\n"
-          R"(                                           runtime::= "full"|"lean"|"dispatch")"                                                       "\n"
+        R"(                                         runtime::= "full"|"lean"|"dispatch")"                                                           "\n"
           "  --leanDLLPath=<file>               External lean runtime DLL to use in version compatiable mode."                                      "\n"
           "  --excludeLeanRuntime               When --versionCompatible is enabled, this flag indicates that the generated engine should"          "\n"
           "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
           "                                     valid lean runtime to use when loading the engine."     "\n"
           "  --monitorMemory                    Enable memory monitor report for debugging usage. (default = disabled)"                             "\n"
           "  --sparsity=spec                    Control sparsity (default = disabled). "                                                            "\n"
-          R"(                                   Sparsity: spec ::= "disable", "enable", "force")"                                                   "\n"
+        R"(                                     Sparsity: spec ::= "disable", "enable", "force")"                                                   "\n"
           "                                     Note: Description about each of these options is as below"                                          "\n"
           "                                           disable = do not enable sparse tactics in the builder (this is the default)"                  "\n"
           "                                           enable  = enable sparse tactics in the builder (but these tactics will only be"               "\n"
@@ -2534,69 +2559,69 @@ void BuildOptions::help(std::ostream& os)
           "  --bf16                             Enable bf16 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --int8                             Enable int8 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --fp8                              Enable fp8 precision, in addition to fp32 (default = disabled)"                                     "\n"
-          "  --int4                             Enable int4 precision, in addition to fp32 (default = disabled)"                                     "\n"
+          "  --int4                             Enable int4 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
           "  --stronglyTyped                    Create a strongly typed network. (default = disabled)"                                              "\n"
           "  --directIO                         [Deprecated] Avoid reformatting at network boundaries. (default = disabled)"                        "\n"
           "  --precisionConstraints=spec        Control precision constraint setting. (default = none)"                                             "\n"
-          R"(                                       Precision Constraints: spec ::= "none" | "obey" | "prefer")"                                    "\n"
+        R"(                                     Precision Constraints: spec ::= "none" | "obey" | "prefer")"                                        "\n"
           "                                         none = no constraints"                                                                          "\n"
           "                                         prefer = meet precision constraints set by --layerPrecisions/--layerOutputTypes if possible"    "\n"
           "                                         obey = meet precision constraints set by --layerPrecisions/--layerOutputTypes or fail"          "\n"
           "                                                otherwise"                                                                               "\n"
           "  --layerPrecisions=spec             Control per-layer precision constraints. Effective only when precisionConstraints is set to"        "\n"
-          R"(                                   "obey" or "prefer". (default = none))"                                                              "\n"
-          R"(                                   The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
+        R"(                                     "obey" or "prefer". (default = none))"                                                              "\n"
+        R"(                                     The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
           "                                     contain at most one wildcard ('*') character."                                                      "\n"
-          R"(                                   Per-layer precision spec ::= layerPrecision[","spec])"                                              "\n"
-          R"(                                                       layerPrecision ::= layerName":"precision)"                                      "\n"
-          R"(                                                       precision ::= "fp32"|"fp16"|"bf16"|"int32"|"int8")"                             "\n"
+        R"(                                     Per-layer precision spec ::= layerPrecision[","spec])"                                              "\n"
+        R"(                                                         layerPrecision ::= layerName":"precision)"                                      "\n"
+        R"(                                                         precision ::= "fp32"|"fp16"|"bf16"|"int32"|"int8")"                             "\n"
           "  --layerOutputTypes=spec            Control per-layer output type constraints. Effective only when precisionConstraints is set to"      "\n"
-          R"(                                   "obey" or "prefer". (default = none)"                                                               "\n"
-          R"(                                   The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
+        R"(                                     "obey" or "prefer". (default = none)"                                                               "\n"
+        R"(                                     The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
           "                                     contain at most one wildcard ('*') character. If a layer has more than"                             "\n"
-          R"(                                   one output, then multiple types separated by "+" can be provided for this layer.)"                  "\n"
-          R"(                                   Per-layer output type spec ::= layerOutputTypes[","spec])"                                          "\n"
-          R"(                                                         layerOutputTypes ::= layerName":"type)"                                       "\n"
-          R"(                                                         type ::= "fp32"|"fp16"|"bf16"|"int32"|"int8"["+"type])"                       "\n"
+        R"(                                     one output, then multiple types separated by "+" can be provided for this layer.)"                  "\n"
+        R"(                                     Per-layer output type spec ::= layerOutputTypes[","spec])"                                          "\n"
+        R"(                                                           layerOutputTypes ::= layerName":"type)"                                       "\n"
+        R"(                                                           type ::= "fp32"|"fp16"|"bf16"|"int32"|"int8"["+"type])"                       "\n"
           "  --layerDeviceTypes=spec            Specify layer-specific device type."                                                                "\n"
           "                                     The specs are read left-to-right, and later ones override earlier ones. If a layer does not have"   "\n"
           "                                     a device type specified, the layer will opt for the default device type."                           "\n"
-          R"(                                   Per-layer device type spec ::= layerDeviceTypePair[","spec])"                                       "\n"
-          R"(                                                         layerDeviceTypePair ::= layerName":"deviceType)"                              "\n"
-          R"(                                                           deviceType ::= "GPU"|"DLA")"                                                "\n"
+        R"(                                     Per-layer device type spec ::= layerDeviceTypePair[","spec])"                                       "\n"
+        R"(                                                           layerDeviceTypePair ::= layerName":"deviceType)"                              "\n"
+        R"(                                                           deviceType ::= "GPU"|"DLA")"                                                  "\n"
           "  --calib=<file>                     Read INT8 calibration cache file"                                                                   "\n"
           "  --safe                             Enable build safety certified engine, if DLA is enable, --buildDLAStandalone will be specified"     "\n"
           "                                     automatically (default = disabled)"                                                                 "\n"
           "  --buildDLAStandalone               Enable build DLA standalone loadable which can be loaded by cuDLA, when this option is enabled, "   "\n"
           "                                     --allowGPUFallback is disallowed and --skipInference is enabled by default. Additionally, "         "\n"
           "                                     specifying --inputIOFormats and --outputIOFormats restricts I/O data type and memory layout"        "\n"
-          "                                     (default = disabled)"        "\n"
+          "                                     (default = disabled)"                                                                               "\n"
           "  --allowGPUFallback                 When DLA is enabled, allow GPU fallback for unsupported layers (default = disabled)"                "\n"
           "  --restricted                       Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
           "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
           "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
-          "  --asyncFileReader=<file>           Load a serialized engine using async stream reader"                                                                           "\n"
+          "  --asyncFileReader=<file>           Load a serialized engine using async stream reader"                                                 "\n"
           "  --getPlanVersionOnly               Print TensorRT version when loaded plan was created. Works without deserialization of the plan."    "\n"
           "                                     Use together with --loadEngine. Supported only for engines created with 8.6 and forward."           "\n"
           "  --tacticSources=tactics            Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             "\n"
           "                                     tactic sources (default = all available tactics)."                                                  "\n"
           "                                     Note: Currently only cuDNN, cuBLAS, cuBLAS-LT, and edge mask convolutions are listed as optional"   "\n"
           "                                           tactics."                                                                                     "\n"
-          R"(                                   Tactic Sources: tactics ::= [","tactic])"                                                           "\n"
+        R"(                                     Tactic Sources: tactics ::= tactic[","tactics])"                                                    "\n"
           "                                                     tactic  ::= (+|-)lib"                                                               "\n"
-          R"(                                                   lib     ::= "CUBLAS"|"CUBLAS_LT"|"CUDNN"|"EDGE_MASK_CONVOLUTIONS")"                 "\n"
-          R"(                                                               |"JIT_CONVOLUTIONS")"                                                   "\n"
+        R"(                                                     lib     ::= "CUBLAS"|"CUBLAS_LT"|"CUDNN"|"EDGE_MASK_CONVOLUTIONS")"                 "\n"
+        R"(                                                                 |"JIT_CONVOLUTIONS")"                                                   "\n"
           "                                     For example, to disable cudnn and enable cublas: --tacticSources=-CUDNN,+CUBLAS"                    "\n"
           "  --noBuilderCache                   Disable timing cache in builder (default is to enable timing cache)"                                "\n"
-          "  --noCompilationCache               Disable Compilation cache in builder, and the cache is part of timing cache (default is to enable compilation cache)"                                                "\n"
+          "  --noCompilationCache               Disable Compilation cache in builder, and the cache is part of timing cache (default is to enable compilation cache)" "\n"
           "  --errorOnTimingCacheMiss           Emit error when a tactic being timed is not present in the timing cache (default = false)"          "\n"
           "  --timingCacheFile=<file>           Save/load the serialized global timing cache"                                                       "\n"
           "  --preview=features                 Specify preview feature to be used by adding (+) or removing (-) preview features from the default" "\n"
-          R"(                                   Preview Features: features ::= [","feature])"                                                       "\n"
+        R"(                                     Preview Features: features ::= feature[","features])"                                               "\n"
           "                                                       feature  ::= (+|-)flag"                                                           "\n"
-          R"(                                                     flag     ::= "aliasedPluginIO1003")"                                              "\n"
-          R"(                                                                  |"profileSharing0806")"                                              "\n"
+        R"(                                                       flag     ::= "aliasedPluginIO1003")"                                              "\n"
+        R"(                                                                    |"profileSharing0806")"                                              "\n"
           "  --builderOptimizationLevel         Set the builder optimization level. (default is 3)"                                                 "\n"
           "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
           "                                     Valid values include integers from 0 to the maximum optimization level, which is currently 5."      "\n"
@@ -2604,12 +2629,13 @@ void BuildOptions::help(std::ostream& os)
           "                                     Larger number of tactics allow TensorRT to spend more building time on evaluating tactics."         "\n"
           "                                     Default value -1 means TensorRT can decide the number of tactics based on its own heuristic."       "\n"
           "  --hardwareCompatibilityLevel=mode  Make the engine file compatible with other GPU architectures. (default = none)"                     "\n"
-          R"(                                   Hardware Compatibility Level: mode ::= "none" | "ampere+")"                                         "\n"
+        R"(                                     Hardware Compatibility Level: mode ::= "none" | "ampere+" | "sameComputeCapability")"               "\n"
           "                                         none = no compatibility"                                                                        "\n"
           "                                         ampere+ = compatible with Ampere and newer GPUs"                                                "\n"
+          "                                         sameComputeCapability = compatible with GPUs that have the same Compute Capability version"     "\n"
           "  --runtimePlatform=platform         Set the target platform for runtime execution. (default = SameAsBuild)"                             "\n"
           "                                     When this option is enabled, --skipInference is enabled by default."                                "\n"
-          R"(                                   RuntimePlatfrom: platform ::= "SameAsBuild" | "WindowsAMD64")"                                      "\n"
+        R"(                                     RuntimePlatfrom: platform ::= "SameAsBuild" | "WindowsAMD64")"                                      "\n"
           "                                         SameAsBuild = no requirement for cross-platform compatibility."                                 "\n"
           "                                         WindowsAMD64 = set the target platform for engine execution as Windows AMD64 system"            "\n"
           "  --tempdir=<dir>                    Overrides the default temporary directory TensorRT will use when creating temporary files."         "\n"
@@ -2621,7 +2647,7 @@ void BuildOptions::help(std::ostream& os)
           "                                                filesystem (in the directory given by --tempdir)."                                       "\n"
           "                                     For example, to allow in-memory files and disallow temporary files:"                                "\n"
           "                                         --tempfileControls=in_memory:allow,temporary:deny"                                              "\n"
-          R"(                                     If a flag is unspecified, the default behavior is "allow".)"                                      "\n"
+        R"(                                     If a flag is unspecified, the default behavior is "allow".)"                                        "\n"
           "  --maxAuxStreams=N                  Set maximum number of auxiliary streams per inference stream that TRT is allowed to use to run "    "\n"
           "                                     kernels in parallel if the network contains ops that can run in parallel, with the cost of more "   "\n"
           "                                     memory usage. Set this to 0 for optimal memory usage. (default = using heuristics)"                 "\n"
@@ -2666,7 +2692,7 @@ void InferenceOptions::help(std::ostream& os)
     // clang-format off
     os << "=== Inference Options ==="                                                                                                << std::endl <<
           "  --shapes=spec               Set input shapes for dynamic shapes inference inputs."                                      << std::endl <<
-          R"(                              Note: Input names can be wrapped with escaped single quotes (ex: 'Input:0').)"            << std::endl <<
+        R"(                              Note: Input names can be wrapped with escaped single quotes (ex: 'Input:0').)"              << std::endl <<
           "                              Example input shapes spec: input0:1x3x256x256, input1:1x3x128x128"                          << std::endl <<
           "                              For scalars (0-D shapes), use input0:scalar or simply input0: with nothing after the colon."<< std::endl <<
           "                              Each input shape is supplied as a key-value pair where key is the input name and"           << std::endl <<
@@ -2676,8 +2702,8 @@ void InferenceOptions::help(std::ostream& os)
           "                              name can contain at most one wildcard ('*') character."                                     << std::endl <<
           "  --loadInputs=spec           Load input values from files (default = generate random inputs). Input names can be "
                                                                                        "wrapped with single quotes (ex: 'Input:0')"  << std::endl <<
-          R"(                            Input values spec ::= Ival[","spec])"                                                       << std::endl <<
-          R"(                                         Ival ::= name":"file)"                                                         << std::endl <<
+        R"(                              Input values spec ::= Ival[","spec])"                                                       << std::endl <<
+        R"(                                           Ival ::= name":"file)"                                                         << std::endl <<
           "                              Consult the README for more information on generating files for custom inputs."             << std::endl <<
           "  --iterations=N              Run at least N inference iterations (default = "               << defaultIterations << ")"  << std::endl <<
           "  --warmUp=N                  Run for N milliseconds to warmup before measuring performance (default = "
@@ -2711,24 +2737,24 @@ void InferenceOptions::help(std::ostream& os)
           "  --useProfile                Set the optimization profile for the inference context "
                                                                                    "(default = " << defaultOptProfileIndex << " )."  << std::endl <<
           "  --allocationStrategy=spec   Specify how the internal device memory for inference is allocated."                         << std::endl <<
-          R"(                            Strategy: spec ::= "static", "profile", "runtime")"                                         << std::endl <<
+        R"(                              Strategy: spec ::= "static"|"profile"|"runtime")"                                         << std::endl <<
           "                                  static = Allocate device memory based on max size across all profiles."                 << std::endl <<
           "                                  profile = Allocate device memory based on max size of the current profile."             << std::endl <<
           "                                  runtime = Allocate device memory based on the actual input shapes."                     << std::endl <<
           "  --saveDebugTensors          Specify list of names of tensors to turn on the debug state"                                << std::endl <<
           "                              and filename to save raw outputs to."                                                       << std::endl <<
           "                              These tensors must be specified as debug tensors during build time."                        << std::endl <<
-          R"(                            Input values spec ::= Ival[","spec])"                                                       << std::endl <<
-          R"(                                         Ival ::= name":"file)"                                                         << std::endl <<
+        R"(                              Input values spec ::= Ival[","spec])"                                                       << std::endl <<
+        R"(                                           Ival ::= name":"file)"                                                         << std::endl <<
           "  --weightStreamingBudget     Set the maximum amount of GPU memory TensorRT is allowed to use for weights."               << std::endl <<
           "                              It can take on the following values:"                                                       << std::endl <<
-          "                                -2: (default) Disable weight streaming at runtime."                                       << std::endl <<
-          "                                -1: TensorRT will automatically decide the budget."                                       << std::endl <<
-          "                                 0-100%: Percentage of streamable weights that reside on the GPU."                        << std::endl <<
-          "                                         0% saves the most memory but will have the worst performance."                   << std::endl <<
-          "                                         Requires the % character."                                                       << std::endl <<
-          "                                >=0B: The exact amount of streamable weights that reside on the GPU. Supports the "       << std::endl <<
-          "                                     following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                    << std::endl;
+          "                                  -2: (default) Disable weight streaming at runtime."                                     << std::endl <<
+          "                                  -1: TensorRT will automatically decide the budget."                                     << std::endl <<
+          "                                   0-100%: Percentage of streamable weights that reside on the GPU."                      << std::endl <<
+          "                                           0% saves the most memory but will have the worst performance."                 << std::endl <<
+          "                                           Requires the '%' character."                                                   << std::endl <<
+          "                                  >=0B: The exact amount of streamable weights that reside on the GPU. Supports the "     << std::endl <<
+          "                                       following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                  << std::endl;
     // clang-format on
 }
 
@@ -2815,11 +2841,11 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
           "                              Note: If this option is specified, please set comma-separated types and formats for all"            << std::endl <<
           "                                    outputs following the same order as network outputs ID (even if only one output"              << std::endl <<
           "                                    needs specifying IO format) or set the type and format once for broadcasting."                << std::endl <<
-          R"(                            IO Formats: spec  ::= IOfmt[","spec])"                                                              << std::endl <<
+        R"(                              IO Formats: spec  ::= IOfmt[","spec])"                                                              << std::endl <<
           "                                          IOfmt ::= type:fmt"                                                                     << std::endl <<
-          R"(                                          type  ::= "fp32"|"fp16"|"int32"|"int8")"                                              << std::endl <<
-          R"(                                          fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                      << std::endl <<
-          R"(                                                     "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                          << std::endl <<
+        R"(                                          type  ::= "fp32"|"fp16"|"int32"|"int8")"                                                << std::endl <<
+        R"(                                          fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        << std::endl <<
+        R"(                                                   "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                              << std::endl <<
           "  --int8                      Enable int8 precision, in addition to fp16 (default = disabled)"                                    << std::endl <<
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
@@ -2832,7 +2858,7 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
           "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                                << std::endl <<
           "  --timingCacheFile=<file>    Save/load the serialized global timing cache"                                                       << std::endl <<
           "  --sparsity=spec             Control sparsity (default = disabled). "                                                            << std::endl <<
-          R"(                              Sparsity: spec ::= "disable", "enable", "force")"                                                 << std::endl <<
+        R"(                              Sparsity: spec ::= "disable", "enable", "force")"                                                   << std::endl <<
           "                              Note: Description about each of these options is as below"                                          << std::endl <<
           "                                    disable = do not enable sparse tactics in the builder (this is the default)"                  << std::endl <<
           "                                    enable  = enable sparse tactics in the builder (but these tactics will only be"               << std::endl <<

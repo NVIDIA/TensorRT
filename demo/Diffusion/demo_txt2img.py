@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,24 +19,25 @@ import argparse
 
 from cuda import cudart
 
-from stable_diffusion_pipeline import StableDiffusionPipeline
-from utilities import PIPELINE_TYPE, TRT_LOGGER, add_arguments, process_pipeline_args
+from demo_diffusion import dd_argparse
+from demo_diffusion import pipeline as pipeline_module
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion Txt2Img Demo")
-    parser = add_arguments(parser)
+    parser = dd_argparse.add_arguments(parser)
     return parser.parse_args()
 
 if __name__ == "__main__":
     print("[I] Initializing StableDiffusion txt2img demo using TensorRT")
     args = parseArgs()
 
-    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
+    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = dd_argparse.process_pipeline_args(args)
 
     # Initialize demo
-    demo = StableDiffusionPipeline(
-        pipeline_type=PIPELINE_TYPE.TXT2IMG,
-        **kwargs_init_pipeline)
+    demo = pipeline_module.StableDiffusionPipeline(
+        pipeline_type=pipeline_module.PIPELINE_TYPE.TXT2IMG, **kwargs_init_pipeline
+    )
 
     # Load TensorRT engines and pytorch modules
     demo.loadEngines(

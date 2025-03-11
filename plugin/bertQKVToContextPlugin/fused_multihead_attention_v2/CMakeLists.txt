@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +14,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-file(GLOB SRCS src/*.cpp)
-set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
-set(PLUGIN_SOURCES
-    ${PLUGIN_SOURCES}
-    PARENT_SCOPE)
-file(GLOB CU_SRCS src/*.cu)
-set(BERT_CU_SOURCES ${BERT_CU_SOURCES} ${CU_SRCS})
-set(BERT_CU_SOURCES
-    ${BERT_CU_SOURCES}
-    PARENT_SCOPE)
+
+# This folder contains a bunch of source files holding cubins. Since the files are huge, we only want to include and compile them if used.
+# Usage is indicated by the SM being set in CMAKE_CUDA_ARCHITECTURES.
+
+function(add_plugin_source_if_exists)
+    foreach(SRC_FILE IN LISTS ARGN)
+        if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/${SRC_FILE})
+            add_plugin_source(${SRC_FILE})
+        endif()
+    endforeach()
+endfunction()
+
+foreach(SM IN LISTS BERT_QKV_SUPPORTED_SMS)
+    should_compile_kernel(${SM} SHOULD_COMPILE)
+    if (${SHOULD_COMPILE})
+        # Not every file exists for each SM, so we list all of the candidates and add them if present.
+        add_plugin_source_if_exists(
+            fused_multihead_attention_v2_fp16_64_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_96_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_128_32_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_128_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_256_32_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_256_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_384_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_512_32_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_fp16_512_64_kernel.sm${SM}.cpp
+
+            fused_multihead_attention_v2_il_int8_64_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_il_int8_96_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_il_int8_128_32_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_il_int8_128_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_il_int8_192_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_il_int8_256_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_il_int8_384_64_kernel.sm${SM}.cpp
+
+            fused_multihead_attention_v2_int8_64_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_96_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_128_32_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_128_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_192_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_256_32_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_256_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_384_64_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_512_32_kernel.sm${SM}.cpp
+            fused_multihead_attention_v2_int8_512_64_kernel.sm${SM}.cpp
+        )
+    endif()
+endforeach()
+
+add_plugin_source(
+    fused_multihead_attention_v2.h
+)

@@ -283,10 +283,11 @@ class TestSaveOnnx:
             assert is_file_non_empty(outpath)
 
     def test_external_data(self):
-        with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
+        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(dir=".") as data:
+            rpath_name = os.path.basename(data.name)
             model = OnnxFromPath(ONNX_MODELS["const_foldable"].path)
             loader = SaveOnnx(
-                model, path.name, external_data_path=data.name, size_threshold=0
+                model, path.name, external_data_path=rpath_name, size_threshold=0
             )
             loader()
             assert is_file_non_empty(path.name)

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -391,7 +391,8 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
                     case DataType::kBF16:
                     case DataType::kINT4:
                     case DataType::kINT64:
-                    case nvinfer1::DataType::kFP4: ASSERT(false && "Unsupported data type");
+                    case DataType::kFP4:
+                        ASSERT(false && "Unsupported data type");
                     }
                     max = std::max(max, std::abs(val));
                 }

@@ -70,6 +70,8 @@ _regionFormatDict = {
     "Channel major BFloat16 format where channel % 8 == 0 with 3 spatial dimensions": "BF16 NDHWC8",
     "Channel major BFloat16 format where channel % 2 == 0": "BF16 NHWC2",
     "Two wide channel vectorized row major BFloat16 format": "BF16 NC2HW",
+    "Row major linear FP4 format (kLINEAR)" : "FP4",
+    "Row major linear FP4 format" : "FP4",
     "Row major linear FP8 format": "FP8 NCHW",
     "Unknown format": "Unknown format",
     # kgen formats
@@ -90,6 +92,9 @@ _regionFormatDict = {
     "UInt32": "UInt32",
     "UInt64": "UInt64",
     "UInt8": "UInt8",
+    "Int4": "Int4",
+    "FP4": "FP4",
+    "FP4E2M1": "FP4",
 }
 
 class Activation:
@@ -100,7 +105,7 @@ class Activation:
                 data_type, layout = desc.split(' ')
             except ValueError:
                 data_type = desc
-            unknown_format = ('Unknown format', 0)
+            unknown_format = (data_type, 0)
             precision, data_size = {
                 'FP8':            ('FP8',    1),
                 'FP16':           ('FP16',   2),
@@ -118,6 +123,8 @@ class Activation:
                 'UInt16':         ('UINT16', 2),
                 'UInt32':         ('UINT32', 4),
                 'UInt64':         ('UINT64', 8),
+                'Int4':           ('INT4',   0.5),
+                'FP4':            ('FP4',    0.5),
                 'Unknown format': unknown_format,
                 'None':           unknown_format,
             }.get(data_type, (data_type, 0))

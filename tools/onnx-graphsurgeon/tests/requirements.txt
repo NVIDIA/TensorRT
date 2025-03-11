@@ -1,6 +1,6 @@
 numpy
-onnx==1.14.0
-onnxruntime==1.15.0
+onnx
+onnxruntime==1.19.2
 protobuf>=3.20.2
 pytest
 ml_dtypes

@@ -31,20 +31,25 @@ else:
 
 
 if not _libs_wheel_imported and sys.platform.startswith("win"):
+    log_found_dlls = bool(int(os.environ.get("TRT_LOG_FOUND_DLLS", 0)))
     # On Windows, we need to manually open the TensorRT libraries - otherwise we are unable to
     # load the bindings. If we imported the tensorrt_libs wheel, then that should have taken care of it for us.
     def find_lib(name):
         paths = os.environ["PATH"].split(os.path.pathsep)
+
         # Add ../##TENSORRT_MODULE##.libs to the search path.  This allows repackaging non-standalone TensorRT wheels as standalone
         # using delvewheel (with the --no-mangle-all flag set) to work properly.
         paths.append(os.path.join(os.path.dirname(__file__), os.pardir, "##TENSORRT_MODULE##.libs"))
+
         for path in paths:
             libpath = os.path.join(path, name)
             if os.path.isfile(libpath):
+                if log_found_dlls:
+                    print(f"Found {name} in path: {libpath}")
                 return libpath
 
-        if name.startswith("cudnn") or name.startswith("cublas"):
-            return ""
+        if name.startswith("nvinfer_builder_resource"):
+            return None
 
         raise FileNotFoundError(
             "Could not find: {:}. Is it on your PATH?\nNote: Paths searched were:\n{:}".format(name, paths)
@@ -54,11 +59,9 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
     LIBRARIES = {
         "tensorrt": [
             "nvinfer_##TENSORRT_MAJOR##.dll",
-            "cublas64_##CUDA_MAJOR##.dll",
-            "cublasLt64_##CUDA_MAJOR##.dll",
-            "cudnn64_##CUDNN_MAJOR##.dll",
             "nvinfer_plugin_##TENSORRT_MAJOR##.dll",
             "nvonnxparser_##TENSORRT_MAJOR##.dll",
+            "nvinfer_builder_resource_##TENSORRT_MAJOR##.dll",
         ],
         "tensorrt_dispatch": [
             "nvinfer_dispatch_##TENSORRT_MAJOR##.dll",
@@ -70,8 +73,10 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
 
     for lib in LIBRARIES:
         lib_path = find_lib(lib)
-        if lib_path != "":
-            ctypes.CDLL(lib_path)
+        if not lib_path:
+            continue
+        assert os.path.isfile(lib_path)
+        ctypes.CDLL(lib_path)
 
 del _libs_wheel_imported
 

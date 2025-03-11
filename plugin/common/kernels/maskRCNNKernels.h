@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +58,8 @@ inline size_t typeSize(const nvinfer1::DataType type)
     case nvinfer1::DataType::kUINT8: return sizeof(uint8_t);
     case nvinfer1::DataType::kFP8:
     case nvinfer1::DataType::kINT4:
-    case nvinfer1::DataType::kFP4: PLUGIN_FAIL("Unsupported data type");
+    case nvinfer1::DataType::kFP4:
+        PLUGIN_FAIL("Unsupported data type");
     }
     return 0;
 }

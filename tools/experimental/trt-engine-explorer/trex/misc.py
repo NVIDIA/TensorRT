@@ -36,6 +36,11 @@ def group_sum_attr(df, grouping_attr, reduced_attr):
     return grp
 
 
+def group_mean_attr(df, grouping_attr, reduced_attr):
+    grp = df.groupby([grouping_attr])[reduced_attr].mean().reset_index()
+    return grp
+
+
 def shape_to_str(shape):
     return "[" + ",".join(str(dim) for dim in shape) + "]"
 

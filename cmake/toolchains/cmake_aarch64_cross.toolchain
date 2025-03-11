@@ -53,3 +53,5 @@ set(CMAKE_CUDA_COMPILER_FORCED TRUE)
 set(CUDA_LIBS -L${CUDA_ROOT}/lib)
 
 set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas -lcudart -lstdc++ -lm)
+
+link_directories(${CUDA_ROOT}/lib)

@@ -4,6 +4,15 @@
 pytorch_quantization.utils
 ===================================
 
+
+pytorch_quantization.utils.amp\_wrapper
+------------------------------------------
+
+.. automodule:: pytorch_quantization.utils.amp_wrapper
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 pytorch_quantization.utils.quant\_logging
 --------------------------------------------
 

@@ -37,8 +37,8 @@ def main():
 
     setup(
         name="trex",
-        version="0.1.8",
-        description="TREX: TensorRT Engine Exploration Toolkit",
+        version="0.2.1",
+        description="TREx: TensorRT Engine Exploration Toolkit",
         long_description=open("README.md", "r", encoding="utf-8").read(),
         author="NVIDIA",
         author_email="svc_tensorrt@nvidia.com",
@@ -50,7 +50,7 @@ def main():
         install_requires=required_pckgs,
         extras_require={"notebook": extras_require_notebook},
         packages=find_packages(exclude=("tests", "tests.*")),
-        scripts=[os.path.join("bin", "trex")],
+        entry_points={"console_scripts": "trex=bin.trex:main"},
         zip_safe=True,
     )
 

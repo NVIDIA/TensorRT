@@ -1,13 +1,15 @@
 # Packages required for core functionality.
 protobuf
-onnx==1.15.0
+onnx>=1.15.0
 pandas==2.2.1
 pytest
 graphviz
+pydot
 numpy
+networkx
+tabulate
 
 # Packages required for utilities
-pynvx
 pynvml
 
 # Packages required for excel reporting.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Single run:
-# ../../engine_builder/build_engine_single.py --root_dir=/home/nvidia/PycharmProjects/tensorrt_qat_sagar/examples/resnet/weights/resnet50v1 --onnx=model_baseline_dynamic.onnx --engine=model_baseline_dynamic.engine --input=224,224,3 --min_bs=1 --max_bs=1 --opt_bs=1 --precision=fp32
+# ../../engine_builder/build_engine_single.py --root_dir=/home/nvidia/PycharmProjects/tensorflow-quantization/examples/resnet/weights/resnet50v1 --onnx=model_baseline_dynamic.onnx --engine=model_baseline_dynamic.engine --input=224,224,3 --min_bs=1 --max_bs=1 --opt_bs=1 --precision=fp32
 #
 
 RESNET_DEPTH=50

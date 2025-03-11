@@ -135,7 +135,7 @@ public:
     //!
     size_t nbBytes() const
     {
-        return this->size() * samplesCommon::getElementSize(mType);
+        return samplesCommon::getNbBytes(mType, size());
     }
 
     //!

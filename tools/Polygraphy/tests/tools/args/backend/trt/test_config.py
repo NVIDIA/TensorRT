@@ -661,13 +661,13 @@ class TestTrtConfigArgs:
         @pytest.mark.parametrize(
             "level, expected",
             [
-                ("none", trt.TilingOptimizationLevelLevel.NONE),
+                ("none", trt.TilingOptimizationLevel.NONE),
                 ("fast", trt.TilingOptimizationLevel.FAST),
                 ("moderate", trt.TilingOptimizationLevel.MODERATE),
                 ("full", trt.TilingOptimizationLevel.FULL),
             ],
         )
-        def test_tiling_optimization_level(self, trt_config_args, level):
+        def test_tiling_optimization_level(self, trt_config_args, level, expected):
             trt_config_args.parse_args(["--tiling-optimization-level", str(level)])
             assert (
                 str(trt_config_args.tiling_optimization_level)

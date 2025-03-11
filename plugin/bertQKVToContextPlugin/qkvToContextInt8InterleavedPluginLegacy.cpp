@@ -27,7 +27,7 @@
 #include <tuple>
 #include <vector>
 
-#include "bertQKVToContextPlugin/fused_multihead_attention_v2/include/fused_multihead_attention_v2.h"
+#include "bertQKVToContextPlugin/fused_multihead_attention_v2/fused_multihead_attention_v2.h"
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;

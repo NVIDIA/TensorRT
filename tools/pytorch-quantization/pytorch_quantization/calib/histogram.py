@@ -136,7 +136,7 @@ class HistogramCalibrator(_Calibrator):
             amax: a tensor
         """
         if isinstance(self._calib_hist, torch.Tensor):
-            calib_hist = self._calib_hist.to(torch.int64).cpu().numpy()
+            calib_hist = self._calib_hist.int().cpu().numpy()
             calib_bin_edges = self._calib_bin_edges.cpu().numpy()
         else:
             calib_hist = self._calib_hist
@@ -383,4 +383,3 @@ def calibrate_weights(model, method="percentile", perchannel=True, percentile=99
                 calib_amax_shape[axis] = module.weight.shape[axis]
                 calib_amax = torch.stack(calib_amax).reshape(calib_amax_shape)
             module.weight_quantizer.amax = calib_amax.detach().cpu().numpy()
-

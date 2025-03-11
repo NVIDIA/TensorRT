@@ -29,7 +29,7 @@
 //!
 //! Please see the accompanying user guide and samples for higher-level information and general advice on
 //! using TensorRT.
-//
+//!
 //! TensorRT Versioning follows Semantic Versioning Guidelines specified here: https://semver.org/
 //!
 
@@ -106,7 +106,7 @@ enum class LayerType : int32_t
     kSQUEEZE = 47,            //!< Squeeze Layer.
     kUNSQUEEZE = 48,          //!< Unsqueeze Layer.
     kCUMULATIVE = 49,         //!< Cumulative layer.
-    kDYNAMIC_QUANTIZE = 50    //!< Dynamic Quantize layer.
+    kDYNAMIC_QUANTIZE = 50,    //!< Dynamic Quantize layer.
 };
 
 //!
@@ -3416,7 +3416,7 @@ public:
     //! \param index the index of the input to modify.
     //! \param tensor the new input tensor
     //!
-    //! For a slice layer, the values 0-4 are valid.
+    //! For a slice layer, the values 0-5 are valid.
     //! The indices are as follows:
     //!
     //! - 0: Tensor to be sliced.
@@ -4357,7 +4357,9 @@ protected:
 };
 
 //!
-//! \enum Enum that describes kinds of loop outputs.
+//! \enum LoopOutput
+//!
+//! \brief Enum that describes kinds of loop outputs.
 //!
 enum class LoopOutput : int32_t
 {
@@ -4383,7 +4385,9 @@ constexpr inline int32_t EnumMax<LoopOutput>() noexcept
 }
 
 //!
-//! \enum Enum that describes kinds of trip limits.
+//! \enum TripLimit
+//!
+//! \brief Enum that describes kinds of trip limits.
 //!
 enum class TripLimit : int32_t
 {
@@ -6407,6 +6411,7 @@ protected:
     virtual ~INormalizationLayer() noexcept = default;
 };
 
+
 //!
 //! \class ISqueezeLayer
 //!
@@ -7745,7 +7750,7 @@ public:
     //!
     //! \see IDequantizeLayer
     //!
-    //! \p input tensor data type must be DataType::kINT8/DataType::kFP8.
+    //! \p input tensor data type must be DataType::kINT8 or DataType::kFP8.
     //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
     //! be a build-time constant.
     //!
@@ -7763,10 +7768,11 @@ public:
     //!
     //! \param input The input tensor to be dequantized.
     //! \param scale A tensor with the scale value.
+    //! \param outputType Output tensor data type.
     //!
     //! \see IDequantizeLayer
     //!
-    //! \p input tensor data type must be DataType::kINT8/DataType::kFP8/DataType::kINT4.
+    //! \p input tensor data type must be DataType::kINT8, DataType::kFP8 or DataType::kINT4.
     //! \p scale tensor data type defaults to DataType::kFLOAT. For strongly typed networks, it must be the same as the
     //! output data type. The subgraph which terminates with the \p scale tensor must be a build-time constant.
     //! \p outputType output tensor data type, default value is DataType::kFLOAT. Future calls to set output type using
@@ -7807,7 +7813,7 @@ public:
     //!
     //! \see IQuantizeLayer
     //!
-    //! \p input tensor data type must be DataType::kFLOAT/DataType::kHALF.
+    //! \p input tensor data type must be DataType::kFLOAT or DataType::kHALF.
     //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
     //! be a build-time constant.
     //!
@@ -7825,10 +7831,11 @@ public:
     //!
     //! \param input The input tensor to be quantized.
     //! \param scale A tensor with the scale value.
+    //! \param outputType Output tensor data type.
     //!
     //! \see IQuantizeLayer
     //!
-    //! \p input tensor data type must be DataType::kFLOAT/DataType::kHALF/DataType::kBF16.
+    //! \p input tensor data type must be DataType::kFLOAT, DataType::kHALF or DataType::kBF16.
     //! \p scale tensor data type defaults to DataType::kFLOAT. For strongly typed networks, it must have the same data
     //! type as the input. The subgraph which terminates with the \p scale tensor must be a build-time constant.
     //! \p outputType output tensor data type, must be DataType::kINT8 (default), DataType::kFP8 or DataType::kINT4.
@@ -7853,10 +7860,9 @@ public:
     //! \param axis The axis that is sliced into blocks. The axis must be the last or second to last dimension.
     //! \param blockSize The number of elements that are quantized using a shared scale factor.
     //! Currently only blocks of 16 elements are supported.
-    //!
-    //! \p outputType The data type of the quantized output tensor, must be DataType::kFP4. Future calls to set output
+    //! \param outputType The data type of the quantized output tensor, must be DataType::kFP4. Future calls to set output
     //! type using setToType or setOutputType must be consistent.
-    //! \p scaleType The data type of the scale factor used for quantizing the input data, must be DataType::kFP8.
+    //! \param scaleType The data type of the scale factor used for quantizing the input data, must be DataType::kFP8.
     //!
     //! \return The new dynamic quantization layer, or nullptr if it could not be created.
     //!
@@ -8813,7 +8819,7 @@ enum class BuilderFlag : int32_t
 
     //! Enable plugins with FP8 input/output.
     //!
-    //! This flag is not supported with hardware-compatibility mode.
+    //! This flag is not supported when HardwareCompatibilityLevel::kAMPERE_PLUS is enabled.
     //!
     //! \see HardwareCompatibilityLevel
     kFP8 = 15,
@@ -9192,10 +9198,8 @@ struct EnumMaxImpl<PreviewFeature>
 //!
 //! \enum HardwareCompatibilityLevel
 //!
-//! \brief Describes requirements of compatibility with GPU architectures other than that of the GPU on which the engine was
-//! built.
-//!
-//! Levels except kNONE are only supported for engines built on NVIDIA Ampere and later GPUs.
+//! \brief Describes requirements of compatibility with GPU architectures other than that of the GPU on which the engine
+//! was built.
 //!
 //! \warning Note that compatibility with future hardware depends on CUDA forward compatibility support.
 //!
@@ -9209,12 +9213,24 @@ enum class HardwareCompatibilityLevel : int32_t
     //! reserved and backend kernel max shared memory to 48KiB, may reduce the number of available tactics for each
     //! layer, and may prevent some fusions from occurring. Thus this can decrease the performance, especially for tf32
     //! models.
-    //! This option will disable cuDNN, cuBLAS, and cuBLAS LT as tactic sources.
+    //! This option will disable cuDNN, cuBLAS, and cuBLASLt as tactic sources.
+    //!
+    //! This option is only supported for engines built on NVIDIA Ampere and later GPUs.
     //!
     //! The driver reserved shared memory can be queried from cuDeviceGetAttribute(&reservedShmem,
     //! CU_DEVICE_ATTRIBUTE_RESERVED_SHARED_MEMORY_PER_BLOCK).
     //!
     kAMPERE_PLUS = 1,
+
+    //! Require that the engine is compatible with GPUs that have the same Compute Capability
+    //! (https://developer.nvidia.com/cuda-gpus) as the one it was built on. This may decrease the performance compared
+    //! to an engine with no compatibility.
+    //!
+    //! This option will disable cuDNN, cuBLAS, and cuBLASLt as tactic sources.
+    //!
+    //! This option is only supported for engines built on NVIDIA Turing and later GPUs.
+    //!
+    kSAME_COMPUTE_CAPABILITY = 2,
 };
 
 namespace impl
@@ -9227,7 +9243,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<HardwareCompatibilityLevel>
 {
-    static constexpr int32_t kVALUE = 2;
+    static constexpr int32_t kVALUE = 3;
 };
 } // namespace impl
 
@@ -9259,9 +9275,9 @@ enum class TilingOptimizationLevel : int32_t
 namespace impl
 {
 //!
-//! Maximum number of elements in HardwareCompatibilityLevel enum.
+//! Maximum number of elements in TilingOptimizationLevel enum.
 //!
-//! \see HardwareCompatibilityLevel
+//! \see TilingOptimizationLevel
 //!
 template <>
 struct EnumMaxImpl<TilingOptimizationLevel>
@@ -10308,6 +10324,15 @@ enum class NetworkDefinitionCreationFlag : int32_t
     //! inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network
     //! output types will be inferred based on the input types and the type inference rules.
     kSTRONGLY_TYPED = 1,
+    //! If set, for a Python plugin with both AOT and JIT implementations, the JIT implementation will be used.
+    //! Any plugin-specific JIT/AOT specification may override this.
+    //! Cannot be used in conjunction with NetworkDefinitionCreationFlag::kPREFER_AOT_PYTHON_PLUGINS.
+    kPREFER_JIT_PYTHON_PLUGINS = 2,
+
+    //! If set, for a Python plugin with both AOT and JIT implementations, the AOT implementation will be used.
+    //! Any plugin-specific JIT/AOT specification may override this.
+    //! Cannot be used in conjunction with NetworkDefinitionCreationFlag::kPREFER_JIT_PYTHON_PLUGINS.
+    kPREFER_AOT_PYTHON_PLUGINS = 3,
 };
 
 //!
@@ -10318,7 +10343,7 @@ enum class NetworkDefinitionCreationFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<NetworkDefinitionCreationFlag>() noexcept
 {
-    return 2;
+    return 4;
 }
 
 //!
@@ -10379,7 +10404,8 @@ public:
     //! \param allocator Set the GPU allocator to be used by the builder. All GPU memory acquired will use this
     //! allocator. If NULL is passed, the default allocator will be used.
     //!
-    //! Default: uses cudaMalloc/cudaFree.
+    //! Default: allocateAsync uses cudaMallocAsync if cudaDevAttrMemoryPoolsSupported returns true, otherwise falls
+    //! back to cudaMalloc. allocate always uses cudaMalloc.
     //!
     //! \note This allocator will be passed to any engines created via the builder; thus the lifetime of the allocator
     //! must span the lifetime of those engines as
@@ -10395,7 +10421,7 @@ public:
     //!
     //! \see IBuilderConfig
     //!
-    [[nodiscard]] nvinfer1::IBuilderConfig* createBuilderConfig() noexcept
+    nvinfer1::IBuilderConfig* createBuilderConfig() noexcept
     {
         return mImpl->createBuilderConfig();
     }
@@ -10417,7 +10443,7 @@ public:
     //!
     //! \see INetworkDefinition, NetworkDefinitionCreationFlags
     //!
-    [[nodiscard]] nvinfer1::INetworkDefinition* createNetworkV2(NetworkDefinitionCreationFlags flags) noexcept
+    nvinfer1::INetworkDefinition* createNetworkV2(NetworkDefinitionCreationFlags flags) noexcept
     {
         return mImpl->createNetworkV2(flags);
     }
@@ -10432,7 +10458,7 @@ public:
     //!
     //! \see IOptimizationProfile
     //!
-    [[nodiscard]] nvinfer1::IOptimizationProfile* createOptimizationProfile() noexcept
+    nvinfer1::IOptimizationProfile* createOptimizationProfile() noexcept
     {
         return mImpl->createOptimizationProfile();
     }

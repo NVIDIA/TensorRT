@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,19 +21,14 @@ import PIL
 from cuda import cudart
 from PIL import Image
 
-from stable_diffusion_pipeline import StableDiffusionPipeline
-from utilities import (
-    PIPELINE_TYPE,
-    TRT_LOGGER,
-    add_arguments,
-    download_image,
-    preprocess_image,
-    process_pipeline_args
-)
+from demo_diffusion import dd_argparse
+from demo_diffusion import image as image_module
+from demo_diffusion import pipeline as pipeline_module
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion Img2Img Demo")
-    parser = add_arguments(parser)
+    parser = dd_argparse.add_arguments(parser)
     parser.add_argument('--input-image', type=str, default="", help="Path to the input image")
     return parser.parse_args()
 
@@ -45,7 +40,7 @@ if __name__ == "__main__":
         input_image = Image.open(args.input_image)
     else:
         url = "https://raw.githubusercontent.com/CompVis/stable-diffusion/main/assets/stable-samples/img2img/sketch-mountains-input.jpg"
-        input_image = download_image(url)
+        input_image = image_module.download_image(url)
 
     image_width, image_height = input_image.size
     if image_height != args.height or image_width != args.width:
@@ -54,14 +49,14 @@ if __name__ == "__main__":
         image_height, image_width = args.height, args.width
 
     if isinstance(input_image, PIL.Image.Image):
-        input_image = preprocess_image(input_image)
+        input_image = image_module.preprocess_image(input_image)
 
-    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
+    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = dd_argparse.process_pipeline_args(args)
 
     # Initialize demo
-    demo = StableDiffusionPipeline(
-        pipeline_type=PIPELINE_TYPE.IMG2IMG,
-        **kwargs_init_pipeline)
+    demo = pipeline_module.StableDiffusionPipeline(
+        pipeline_type=pipeline_module.PIPELINE_TYPE.IMG2IMG, **kwargs_init_pipeline
+    )
 
     # Load TensorRT engines and pytorch modules
     demo.loadEngines(

@@ -532,7 +532,7 @@ class EngineBytesFromNetwork(BaseLoader):
                     multiple processes from attempting to update the timing cache at the same time.
         """
         self._network = network
-        self._config = util.default(config, CreateConfig())
+        self._config = config if config is not None else CreateConfig()
         self.timing_cache_path = save_timing_cache
 
     @util.check_called_by("__call__")
@@ -570,7 +570,7 @@ class EngineBytesFromNetwork(BaseLoader):
         )
 
         G_LOGGER.start(
-            f"Building engine with configuration:\n{trt_util.str_from_config(config)}"
+            f"Building engine with configuration:\n{trt_util.str_from_config(config, network)}"
         )
 
         start_time = time.time()
@@ -929,9 +929,9 @@ class OnnxLikeFromNetwork(BaseLoader):
                 ):
                     try:
                         attr = list(attr)
+                        attr = attr if len(attr) > 0 else "None" # Empty Dims
                     except ValueError:  # Invalid dims
-                        attr = []
-
+                        attr = "None"
                 if hasattr(attr, "__entries"):  # TensorRT Enums
                     attr = attr.name
 

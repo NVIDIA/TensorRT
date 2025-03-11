@@ -22,69 +22,71 @@
 # the use-case described in the TREx blog post.
 # (i.e. quantization of Convs only, quantization of residual connections, and
 # quantization of GAP layer are all controlled separately).
-# https://gitlab-master.nvidia.com/TensorRT/Tools/pytorch-quantization/-/blob/master/examples/torchvision/models/classification/resnet.py
 
+
+from typing import Any, Callable, List, Optional, Type, Union
 
 import torch
-from torch import Tensor
 import torch.nn as nn
-from torch.hub import load_state_dict_from_url
-from typing import Type, Any, Callable, Union, List, Optional
-from pytorch_quantization import quant_modules
 from pytorch_quantization import nn as quant_nn
+from torch import Tensor
+from torch.hub import load_state_dict_from_url
 
 __all__ = [
-    'ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d',
-    'wide_resnet50_2', 'wide_resnet101_2'
+    "ResNet",
+    "resnet18",
+    "resnet34",
+    "resnet50",
+    "resnet101",
+    "resnet152",
+    "resnext50_32x4d",
+    "resnext101_32x8d",
+    "wide_resnet50_2",
+    "wide_resnet101_2",
 ]
 
 model_urls = {
-    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
-    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
-    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
-    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
-    'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
-    'resnext50_32x4d': 'https://download.pytorch.org/models/resnext50_32x4d-7cdf4587.pth',
-    'resnext101_32x8d': 'https://download.pytorch.org/models/resnext101_32x8d-8ba56ff5.pth',
-    'wide_resnet50_2': 'https://download.pytorch.org/models/wide_resnet50_2-95faca4d.pth',
-    'wide_resnet101_2': 'https://download.pytorch.org/models/wide_resnet101_2-32ee1156.pth',
+    "resnet18": "https://download.pytorch.org/models/resnet18-5c106cde.pth",
+    "resnet34": "https://download.pytorch.org/models/resnet34-333f7ec4.pth",
+    "resnet50": "https://download.pytorch.org/models/resnet50-19c8e357.pth",
+    "resnet101": "https://download.pytorch.org/models/resnet101-5d3b4d8f.pth",
+    "resnet152": "https://download.pytorch.org/models/resnet152-b121ed2d.pth",
+    "resnext50_32x4d": "https://download.pytorch.org/models/resnext50_32x4d-7cdf4587.pth",
+    "resnext101_32x8d": "https://download.pytorch.org/models/resnext101_32x8d-8ba56ff5.pth",
+    "wide_resnet50_2": "https://download.pytorch.org/models/wide_resnet50_2-95faca4d.pth",
+    "wide_resnet101_2": "https://download.pytorch.org/models/wide_resnet101_2-32ee1156.pth",
 }
 
 
-def conv3x3(in_planes: int,
-            out_planes: int,
-            stride: int = 1,
-            groups: int = 1,
-            dilation: int = 1,
-            quantize: bool = False
+def conv3x3(
+    in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1, quantize: bool = False
 ) -> nn.Conv2d:
     """3x3 convolution with padding"""
     if quantize:
-        return quant_nn.QuantConv2d(in_planes,
-                                    out_planes,
-                                    kernel_size=3,
-                                    stride=stride,
-                                    padding=dilation,
-                                    groups=groups,
-                                    bias=False,
-                                    dilation=dilation)
+        return quant_nn.QuantConv2d(
+            in_planes,
+            out_planes,
+            kernel_size=3,
+            stride=stride,
+            padding=dilation,
+            groups=groups,
+            bias=False,
+            dilation=dilation,
+        )
     else:
-        return nn.Conv2d(in_planes,
-                         out_planes,
-                         kernel_size=3,
-                         stride=stride,
-                         padding=dilation,
-                         groups=groups,
-                         bias=False,
-                         dilation=dilation)
+        return nn.Conv2d(
+            in_planes,
+            out_planes,
+            kernel_size=3,
+            stride=stride,
+            padding=dilation,
+            groups=groups,
+            bias=False,
+            dilation=dilation,
+        )
 
 
-def conv1x1(
-    in_planes: int,
-    out_planes: int,
-    stride: int = 1,
-    quantize: bool = False
-) -> nn.Conv2d:
+def conv1x1(in_planes: int, out_planes: int, stride: int = 1, quantize: bool = False) -> nn.Conv2d:
     """1x1 convolution"""
     if quantize:
         return quant_nn.QuantConv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
@@ -106,13 +108,13 @@ class BasicBlock(nn.Module):
         dilation: int = 1,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
         quantize: bool = False,
-        quantize_residual: bool = False
+        quantize_residual: bool = False,
     ) -> None:
         super(BasicBlock, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         if groups != 1 or base_width != 64:
-            raise ValueError('BasicBlock only supports groups=1 and base_width=64')
+            raise ValueError("BasicBlock only supports groups=1 and base_width=64")
         if dilation > 1:
             raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
@@ -125,8 +127,7 @@ class BasicBlock(nn.Module):
         self.stride = stride
         self._quantize_residual = quantize_residual
         if self._quantize_residual:
-            self.residual_quantizer = quant_nn.TensorQuantizer(
-                quant_nn.QuantConv2d.default_quant_desc_input)
+            self.residual_quantizer = quant_nn.TensorQuantizer(quant_nn.QuantConv2d.default_quant_desc_input)
 
     def forward(self, x: Tensor) -> Tensor:
         identity = x
@@ -170,12 +171,12 @@ class Bottleneck(nn.Module):
         dilation: int = 1,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
         quantize: bool = False,
-        quantize_residual: bool = False
+        quantize_residual: bool = False,
     ) -> None:
         super(Bottleneck, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
-        width = int(planes * (base_width / 64.)) * groups
+        width = int(planes * (base_width / 64.0)) * groups
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width, quantize=quantize)
         self.bn1 = norm_layer(width)
@@ -218,18 +219,20 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self,
-                 block: Type[Union[BasicBlock, Bottleneck]],
-                 layers: List[int],
-                 quantize: bool = False,
-                 quantize_residual: bool = False,
-                 quantize_gap: bool = False,
-                 num_classes: int = 1000,
-                 zero_init_residual: bool = False,
-                 groups: int = 1,
-                 width_per_group: int = 64,
-                 replace_stride_with_dilation: Optional[List[bool]] = None,
-                 norm_layer: Optional[Callable[..., nn.Module]] = None) -> None:
+    def __init__(
+        self,
+        block: Type[Union[BasicBlock, Bottleneck]],
+        layers: List[int],
+        quantize: bool = False,
+        quantize_residual: bool = False,
+        quantize_gap: bool = False,
+        num_classes: int = 1000,
+        zero_init_residual: bool = False,
+        groups: int = 1,
+        width_per_group: int = 64,
+        replace_stride_with_dilation: Optional[List[bool]] = None,
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
+    ) -> None:
         super(ResNet, self).__init__()
         self._quantize = quantize
         self._quantize_residual = quantize_residual
@@ -246,18 +249,15 @@ class ResNet(nn.Module):
             # the 2x2 stride with a dilated convolution instead
             replace_stride_with_dilation = [False, False, False]
         if len(replace_stride_with_dilation) != 3:
-            raise ValueError("replace_stride_with_dilation should be None "
-                             "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
+            raise ValueError(
+                "replace_stride_with_dilation should be None "
+                "or a 3-element tuple, got {}".format(replace_stride_with_dilation)
+            )
         self.groups = groups
         self.base_width = width_per_group
 
         if quantize:
-            self.conv1 = quant_nn.QuantConv2d(3,
-                                        self.inplanes,
-                                        kernel_size=7,
-                                        stride=2,
-                                        padding=3,
-                                        bias=False)
+            self.conv1 = quant_nn.QuantConv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         else:
             self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
 
@@ -265,24 +265,11 @@ class ResNet(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block,
-                                       128,
-                                       layers[1],
-                                       stride=2,
-                                       dilate=replace_stride_with_dilation[0])
-        self.layer3 = self._make_layer(block,
-                                       256,
-                                       layers[2],
-                                       stride=2,
-                                       dilate=replace_stride_with_dilation[1])
-        self.layer4 = self._make_layer(block,
-                                       512,
-                                       layers[3],
-                                       stride=2,
-                                       dilate=replace_stride_with_dilation[2])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1])
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         if quantize_gap:
-            self.gap_quantizer = quant_nn.TensorQuantizer(
-                quant_nn.QuantConv2d.default_quant_desc_input)
+            self.gap_quantizer = quant_nn.TensorQuantizer(quant_nn.QuantConv2d.default_quant_desc_input)
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
@@ -293,7 +280,7 @@ class ResNet(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -330,19 +317,33 @@ class ResNet(nn.Module):
 
         layers = []
         layers.append(
-            block(self.inplanes, planes, stride, downsample, self.groups, self.base_width, previous_dilation,
-                  norm_layer, self._quantize, self._quantize_residual))
+            block(
+                self.inplanes,
+                planes,
+                stride,
+                downsample,
+                self.groups,
+                self.base_width,
+                previous_dilation,
+                norm_layer,
+                self._quantize,
+                self._quantize_residual,
+            )
+        )
         self.inplanes = planes * block.expansion
         for _ in range(1, blocks):
             layers.append(
-                block(self.inplanes,
-                      planes,
-                      groups=self.groups,
-                      base_width=self.base_width,
-                      dilation=self.dilation,
-                      norm_layer=norm_layer,
-                      quantize=self._quantize,
-                      quantize_residual=self._quantize_residual))
+                block(
+                    self.inplanes,
+                    planes,
+                    groups=self.groups,
+                    base_width=self.base_width,
+                    dilation=self.dilation,
+                    norm_layer=norm_layer,
+                    quantize=self._quantize,
+                    quantize_residual=self._quantize_residual,
+                )
+            )
 
         return nn.Sequential(*layers)
 
@@ -373,7 +374,9 @@ class ResNet(nn.Module):
 def _resnet(
     arch: str,
     block: Type[Union[BasicBlock, Bottleneck]],
-    layers: List[int], pretrained: bool, progress: bool,
+    layers: List[int],
+    pretrained: bool,
+    progress: bool,
     **kwargs: Any
 ) -> ResNet:
     model = ResNet(block, layers, **kwargs)
@@ -383,11 +386,7 @@ def _resnet(
     return model
 
 
-def resnet18(
-    pretrained: bool = False,
-    progress: bool = True,
-    **kwargs: Any
-) -> ResNet:
+def resnet18(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> ResNet:
     r"""ResNet-18 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_.
 
@@ -395,4 +394,4 @@ def resnet18(
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet18', BasicBlock, [2, 2, 2, 2], pretrained, progress, **kwargs)
+    return _resnet("resnet18", BasicBlock, [2, 2, 2, 2], pretrained, progress, **kwargs)

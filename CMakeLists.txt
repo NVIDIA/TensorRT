@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -176,35 +176,21 @@ set(CUDA_LIBRARIES ${CUDART_LIB})
 if (DEFINED GPU_ARCHS)
   message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
   separate_arguments(GPU_ARCHS)
+  foreach(SM IN LISTS GPU_ARCHS)
+    list(APPEND CMAKE_CUDA_ARCHITECTURES SM)
+  endforeach()
 else()
-  list(APPEND GPU_ARCHS
-      75
-    )
-
-  find_file(IS_L4T_NATIVE nv_tegra_release PATHS /env/)
-  set (IS_L4T_CROSS "False")
-  if (DEFINED ENV{IS_L4T_CROSS})
-    set(IS_L4T_CROSS $ENV{IS_L4T_CROSS})
+  list(APPEND CMAKE_CUDA_ARCHITECTURES 72 75 80 86 87 89 90)
+  
+  if(CUDA_VERSION VERSION_GREATER_EQUAL 12.8)
+      list(APPEND CMAKE_CUDA_ARCHITECTURES 100 120)
   endif()
 
-  if (IS_L4T_NATIVE OR ${IS_L4T_CROSS} STREQUAL "True")
-    # Only Orin (SM87) supported
-    list(APPEND GPU_ARCHS 87)
-  endif()
-
-  if (CUDA_VERSION VERSION_GREATER_EQUAL 11.0)
-    # Ampere GPU (SM80) support is only available in CUDA versions > 11.0
-    list(APPEND GPU_ARCHS 80)
-  endif()
-  if (CUDA_VERSION VERSION_GREATER_EQUAL 11.1)
-    list(APPEND GPU_ARCHS 86)
-  endif()
-
-  message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${GPU_ARCHS}")
+  message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${CMAKE_CUDA_ARCHITECTURES}")
 endif()
 set(BERT_GENCODES)
 # Generate SASS for each architecture
-foreach(arch ${GPU_ARCHS})
+foreach(arch ${CMAKE_CUDA_ARCHITECTURES})
     if (${arch} GREATER_EQUAL 75)
         set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
     endif()
@@ -212,7 +198,7 @@ foreach(arch ${GPU_ARCHS})
 endforeach()
 
 # Generate PTX for the last architecture in the list.
-list(GET GPU_ARCHS -1 LATEST_SM)
+list(GET CMAKE_CUDA_ARCHITECTURES -1 LATEST_SM)
 set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
 if (${LATEST_SM} GREATER_EQUAL 75)
     set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")

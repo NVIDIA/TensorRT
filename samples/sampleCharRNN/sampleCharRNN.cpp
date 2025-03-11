@@ -223,7 +223,7 @@ private:
     //!
     bool transposeSubBuffers(void* data, int64_t height, int64_t width) noexcept;
 
-    std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr}; //!< The TensorRT runtime used to run the network
+    std::shared_ptr<nvinfer1::IRuntime> mRuntime{nullptr};   //!< The TensorRT runtime used to run the network
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
 };
 
@@ -417,7 +417,7 @@ std::map<std::string, nvinfer1::Weights> SampleCharRNNBase::loadWeights(const st
         std::istringstream shapeStream(shape);
         while (std::getline(shapeStream, temp, ','))
             wt.count *= std::stoul(temp);
-        size_t numOfBytes = samplesCommon::getElementSize(wt.type) * wt.count;
+        size_t numOfBytes = samplesCommon::getNbBytes(wt.type, wt.count);
 
         // skip reading of weights if name is not in the set of names requested for extraction
         if (mParams.weightNames.names.find(name) == mParams.weightNames.names.end())
@@ -641,10 +641,10 @@ nvinfer1::ILayer* SampleCharRNNLoop::addLSTMLayers(SampleUniquePtr<nvinfer1::INe
     auto extractWeights = [](nvinfer1::Weights weights, Dims start, Dims size) -> nvinfer1::Weights {
         const char* data = static_cast<const char*>(weights.values);
         int64_t shift = samplesCommon::volume(start);
-        const int sizeOfElement = samplesCommon::getElementSize(weights.type);
+        const int bufferSize = samplesCommon::getNbBytes(weights.type, shift);
         int64_t count = samplesCommon::volume(size);
         ASSERT(shift + count <= weights.count);
-        return nvinfer1::Weights{weights.type, data + shift * sizeOfElement, count};
+        return nvinfer1::Weights{weights.type, data + bufferSize, count};
     };
     for (int i = 0; i < mParams.layerCount; ++i)
     {
@@ -696,8 +696,8 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
     auto rnn = addLSTMLayers(network);
 
     // Transpose FC weights since TensorFlow's weights are transposed when compared to TensorRT
-    ASSERT(transposeSubBuffers((void*) mWeightMap[mParams.weightNames.FCW_NAME].values,
-        mParams.hiddenSize, mParams.vocabSize));
+    ASSERT(transposeSubBuffers(
+        (void*) mWeightMap[mParams.weightNames.FCW_NAME].values, mParams.hiddenSize, mParams.vocabSize));
 
     // add Constant layers for fully connected weights
     auto fcwts = network->addConstant(

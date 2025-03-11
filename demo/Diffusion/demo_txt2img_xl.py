@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +19,13 @@ import argparse
 
 from cuda import cudart
 
-from stable_diffusion_pipeline import StableDiffusionPipeline
-from utilities import PIPELINE_TYPE, TRT_LOGGER, add_arguments, process_pipeline_args
+from demo_diffusion import dd_argparse
+from demo_diffusion import pipeline as pipeline_module
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion XL Txt2Img Demo", conflict_handler='resolve')
-    parser = add_arguments(parser)
+    parser = dd_argparse.add_arguments(parser)
     parser.add_argument('--version', type=str, default="xl-1.0", choices=["xl-1.0", "xl-turbo"], help="Version of Stable Diffusion XL")
     parser.add_argument('--height', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
@@ -39,21 +40,24 @@ def parseArgs():
 
     return parser.parse_args()
 
-class StableDiffusionXLPipeline(StableDiffusionPipeline):
+
+class StableDiffusionXLPipeline(pipeline_module.StableDiffusionPipeline):
     def __init__(self, vae_scaling_factor=0.13025, enable_refiner=False, **kwargs):
         self.enable_refiner = enable_refiner
         self.nvtx_profile = kwargs['nvtx_profile']
-        self.base = StableDiffusionPipeline(
-            pipeline_type=PIPELINE_TYPE.XL_BASE,
+        self.base = pipeline_module.StableDiffusionPipeline(
+            pipeline_type=pipeline_module.PIPELINE_TYPE.XL_BASE,
             vae_scaling_factor=vae_scaling_factor,
             return_latents=self.enable_refiner,
-            **kwargs)
+            **kwargs,
+        )
         if self.enable_refiner:
-            self.refiner = StableDiffusionPipeline(
-                pipeline_type=PIPELINE_TYPE.XL_REFINER,
+            self.refiner = pipeline_module.StableDiffusionPipeline(
+                pipeline_type=pipeline_module.PIPELINE_TYPE.XL_REFINER,
                 vae_scaling_factor=vae_scaling_factor,
                 return_latents=False,
-                **kwargs)
+                **kwargs,
+            )
 
     def loadEngines(self, framework_model_dir, onnx_dir, engine_dir, onnx_refiner_dir='onnx_xl_refiner', engine_refiner_dir='engine_xl_refiner', **kwargs):
         self.base.loadEngines(engine_dir, framework_model_dir, onnx_dir, **kwargs)
@@ -121,11 +125,12 @@ class StableDiffusionXLPipeline(StableDiffusionPipeline):
         if self.enable_refiner:
             self.refiner.teardown()
 
+
 if __name__ == "__main__":
     print("[I] Initializing TensorRT accelerated StableDiffusionXL txt2img pipeline")
     args = parseArgs()
 
-    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
+    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = dd_argparse.process_pipeline_args(args)
 
     # Initialize demo
     demo = StableDiffusionXLPipeline(vae_scaling_factor=0.13025, enable_refiner=args.enable_refiner, **kwargs_init_pipeline)

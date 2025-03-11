@@ -26,23 +26,25 @@
 
 usage() {
     echo "Usage:"
-    echo "  $ source $BASH_SOURCE [--venv]"
-    OK=0
+    echo "  $ source $BASH_SOURCE [--full|--core] [--venv]"
+    OK=2
 }
 
 invalid_arg() {
     echo "Error: $ARG1 is not a valid argument." >&2
     usage
+    OK=0
 }
 
 too_many_args() {
     echo "Error: Too many arguments"
     usage
+    OK=0
 }
 
 install_venv() {
     VENV="env_trex"
-    sudo apt install --yes virtualenv
+    pip3 install virtualenv
     python3 -m virtualenv $VENV
     source ./$VENV/bin/activate
 }
@@ -75,29 +77,33 @@ install() {
 }
 
 parse_args() {
-    if [ $NARGS -gt 1 ]; then
+    if [ $NARGS -gt 2 ]; then
         too_many_args
         return
     fi
-    case $ARG1 in
-    ("-h" | "--h" | "-help" | "--help")
-        usage
-        ;;
-    ("--venv")
-        install_venv
-        ;;
-    ("-c" | "--core")
-        INSTALLATION_TYPE="core"
-        ;;
-    ("-f" | "--full")
-        INSTALLATION_TYPE="full"
-        ;;
-    ("")
-        ;;
-    (*)
-        invalid_arg
-        ;;
-    esac
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            "-h" | "--h" | "-help" | "--help")
+                usage
+                ;;
+            "--venv")
+                install_venv
+                ;;
+            "-c" | "--core")
+                INSTALLATION_TYPE="core"
+                ;;
+            "-f" | "--full")
+                INSTALLATION_TYPE="full"
+                ;;
+            "")
+                ;;
+            *)
+                invalid_arg
+                return
+                ;;
+        esac
+        shift  # Move to the next argument
+    done
 }
 
 
@@ -105,7 +111,7 @@ OK=1
 NARGS=$#
 ARG1=$1
 INSTALLATION_TYPE="full"
-parse_args
+parse_args "$@"
 
 if [ $OK -eq 1 ]; then
     install $INSTALLATION_TYPE

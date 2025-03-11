@@ -68,10 +68,17 @@ class SessionFromOnnx(BaseLoader):
         G_LOGGER.start(
             f"Creating ONNX-Runtime Inference Session with providers: {providers}"
         )
-        # ONNX Runtime tried to bind each thread to a logical CPU, but not all assigned cpu cores are available on some platforms. 
+        # ONNX Runtime tried to bind each thread to a logical CPU, but not all assigned cpu cores are available on some platforms.
         # Set the number of threads within each operator and between operators the number of usable CPUs to avoid crash in onnxruntime on those platforms.
         options = onnxrt.SessionOptions()
-        process_cpu_count = len(os.sched_getaffinity(0))
+        try:
+            # sched_getaffinity is only available on UNIX platforms
+            process_cpu_count = len(os.sched_getaffinity(0))
+        except AttributeError:
+            process_cpu_count = 1
+
         options.intra_op_num_threads = process_cpu_count
         options.inter_op_num_threads = process_cpu_count
-        return onnxrt.InferenceSession(model_bytes, providers=providers, sess_options=options)
+        return onnxrt.InferenceSession(
+            model_bytes, providers=providers, sess_options=options
+        )

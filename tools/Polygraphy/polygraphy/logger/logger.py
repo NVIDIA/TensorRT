@@ -243,8 +243,8 @@ class Logger:
         self._use_python_logging_system = False
         """
         A flag indicating whether to use the Python `logging` module for log emission.
-        By default, logs are emitted to `stdout` or `stderr`. When this flag is set to `True`, 
-        the logger uses the Python `logging` module instead of `stdout`/`stderr`. 
+        By default, logs are emitted to `stdout` or `stderr`. When this flag is set to `True`,
+        the logger uses the Python `logging` module instead of `stdout`/`stderr`.
         This allows logs to be integrated into a unified logging system which can be helpful
         in advanced cases like using multiprocessing or when the user wants one logging system
         to manage Polygraphy and other libraries logs.
@@ -299,13 +299,17 @@ class Logger:
     @property
     def use_python_logging_system(self):
         return self._use_python_logging_system
-    
+
     @use_python_logging_system.setter
     def use_python_logging_system(self, value):
         self._use_python_logging_system = value
         if value:
             self.python_logger = logging.getLogger("Polygraphy")
-            self.severity_level_mapping = { Logger.ULTRA_VERBOSE : 2, Logger.SUPER_VERBOSE: 4, Logger.EXTRA_VERBOSE: 6 }
+            self.severity_level_mapping = {
+                Logger.ULTRA_VERBOSE: 2,
+                Logger.SUPER_VERBOSE: 4,
+                Logger.EXTRA_VERBOSE: 6,
+            }
 
     def module_path(self, path):
         """
@@ -428,11 +432,11 @@ class Logger:
 
                     if color:
                         try:
-                            color = [colored.fg(color)]
-                        except AttributeError:
                             color = colored.fore(color)
+                        except:
+                            color = [colored.fg(color)]
 
-                    return colored.stylize(message, color) if color else message
+                        return colored.stylize(message, color)
                 return message
 
             prefix = get_prefix()
@@ -485,7 +489,9 @@ class Logger:
             level = severity if severity > 0 else self.severity_level_mapping[severity]
             self.python_logger.log(level=level, msg=message)
         else:
-            print(message, file=sys.stdout if severity < Logger.CRITICAL else sys.stderr)
+            print(
+                message, file=sys.stdout if severity < Logger.CRITICAL else sys.stderr
+            )
 
     def backtrace(self, depth=0, limit=None, severity=ERROR):
         limit = (

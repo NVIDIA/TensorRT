@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +14,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-file(GLOB SRCS *.cpp)
-set(PLUGIN_SOURCES ${PLUGIN_SOURCES} ${SRCS})
-set(PLUGIN_SOURCES
-    ${PLUGIN_SOURCES}
-    PARENT_SCOPE)
-file(GLOB CU_SRCS *.cu)
-set(PLUGIN_CU_SOURCES ${PLUGIN_CU_SOURCES} ${CU_SRCS})
-set(PLUGIN_CU_SOURCES
-    ${PLUGIN_CU_SOURCES}
-    PARENT_SCOPE)
+
+add_plugin_source(
+    allClassNMS.cu
+    bboxDeltas2Proposals.cu
+    common.cu
+    cropAndResizeKernel.cu
+    decodeBbox3DKernels.cu
+    decodeBBoxes.cu
+    detectionForward.cu
+    extractFgScores.cu
+    gatherTopDetections.cu
+    generateAnchors.cu
+    gridAnchorLayer.cu
+    kernel.cpp
+    kernel.h
+    lReLU.cu
+    maskRCNNKernels.cu
+    maskRCNNKernels.h
+    nmsLayer.cu
+    normalizeLayer.cu
+    permuteData.cu
+    pillarScatterKernels.cu
+    priorBoxLayer.cu
+    proposalKernel.cu
+    proposalsForward.cu
+    reducedMathPlugin.h
+    regionForward.cu
+    reorgForward.cu
+    roiPooling.cu
+    rproiInferenceFused.cu
+    saturate.h
+    sortScoresPerClass.cu
+    sortScoresPerImage.cu
+    voxelGeneratorKernels.cu
+)

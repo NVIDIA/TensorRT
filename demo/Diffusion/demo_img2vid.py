@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,16 +19,14 @@ import argparse
 
 from PIL import Image
 
-from stable_video_diffusion_pipeline import StableVideoDiffusionPipeline
-from utilities import (
-    PIPELINE_TYPE,
-    add_arguments,
-    download_image,
-)
+from demo_diffusion import dd_argparse
+from demo_diffusion import image as image_module
+from demo_diffusion import pipeline as pipeline_module
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Diffusion Img2Vid Demo", conflict_handler='resolve')
-    parser = add_arguments(parser)
+    parser = dd_argparse.add_arguments(parser)
     parser.add_argument('--version', type=str, default="svd-xt-1.1", choices=["svd-xt-1.1"], help="Version of Stable Video Diffusion")
     parser.add_argument('--input-image', type=str, default="", help="Path to the input image")
     parser.add_argument('--height', type=int, default=576, help="Height of image to generate (must be multiple of 8)")
@@ -44,7 +42,7 @@ def process_pipeline_args(args):
     if not args.input_image:
         args.input_image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/svd/rocket.png?download=true"
     if isinstance(args.input_image, str):
-        input_image = download_image(args.input_image).resize((args.width, args.height))
+        input_image = image_module.download_image(args.input_image).resize((args.width, args.height))
     elif isinstance(args.input_image, Image.Image):
         input_image = Image.open(args.input_image)
     else:
@@ -61,7 +59,7 @@ def process_pipeline_args(args):
         raise ValueError(f"Batch size {args.batch_size} is larger than allowed {max_batch_size}.")
 
     if not args.build_static_batch or args.build_dynamic_shape:
-        raise ValueError(f"Dynamic shapes not supported. Do not specify `--build-dynamic-shape`")
+        raise ValueError("Dynamic shapes not supported. Do not specify `--build-dynamic-shape`")
 
     if args.fp8:
         import torch
@@ -116,9 +114,9 @@ if __name__ == "__main__":
     args = parseArgs()
     kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
     # Initialize demo
-    demo = StableVideoDiffusionPipeline(
-        pipeline_type=PIPELINE_TYPE.IMG2VID,
-        **kwargs_init_pipeline)
+    demo = pipeline_module.StableVideoDiffusionPipeline(
+        pipeline_type=pipeline_module.PIPELINE_TYPE.IMG2VID, **kwargs_init_pipeline
+    )
     demo.loadEngines(
         args.engine_dir,
         args.framework_model_dir,

@@ -47,8 +47,6 @@
 namespace sample
 {
 
-size_t dataTypeSize(nvinfer1::DataType dataType);
-
 template <typename T>
 inline T roundUp(T m, T n)
 {
@@ -63,14 +61,17 @@ using samplesCommon::volume;
 nvinfer1::Dims toDims(std::vector<int32_t> const& vec);
 
 template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool> = true>
-void fillBuffer(void* buffer, int64_t volume, T min, T max);
+void fillBuffer(void* buffer, int64_t volume, int32_t min, int32_t max);
 
-template <typename T, typename std::enable_if_t<!std::is_integral_v<T>, int32_t> = 0>
-void fillBuffer(void* buffer, int64_t volume, T min, T max);
+template <typename T, typename std::enable_if_t<!std::is_integral_v<T>, bool> = true>
+void fillBuffer(void* buffer, int64_t volume, float min, float max);
 
 template <typename T>
 void dumpBuffer(void const* buffer, std::string const& separator, std::ostream& os, nvinfer1::Dims const& dims,
     nvinfer1::Dims const& strides, int32_t vectorDim, int32_t spv);
+
+void dumpInt4Buffer(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
+    Dims const& strides, int32_t vectorDim, int32_t spv);
 
 void loadFromFile(std::string const& fileName, char* dst, size_t size);
 

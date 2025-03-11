@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,32 +17,19 @@
 
 #include "sampleUtils.h"
 #include "bfloat16.h"
+#include "common.h"
 #include "half.h"
+#include <cuda.h>
 #include <type_traits>
+
+#if CUDA_VERSION >= 11060
+#include <cuda_fp8.h>
+#endif
 
 using namespace nvinfer1;
 
 namespace sample
 {
-
-size_t dataTypeSize(nvinfer1::DataType dataType)
-{
-    switch (dataType)
-    {
-    case nvinfer1::DataType::kINT64: return 8U;
-    case nvinfer1::DataType::kINT32:
-    case nvinfer1::DataType::kFLOAT: return 4U;
-    case nvinfer1::DataType::kBF16:
-    case nvinfer1::DataType::kHALF: return 2U;
-    case nvinfer1::DataType::kBOOL:
-    case nvinfer1::DataType::kUINT8:
-    case nvinfer1::DataType::kINT8:
-    case nvinfer1::DataType::kFP8: return 1U;
-    case nvinfer1::DataType::kINT4:
-    case nvinfer1::DataType::kFP4: ASSERT(false && "Element size is not implemented for sub-byte data-types.");
-    }
-    return 0;
-}
 
 int64_t volume(nvinfer1::Dims const& dims, nvinfer1::Dims const& strides, int32_t vecDim, int32_t comps, int32_t batch)
 {
@@ -179,8 +166,7 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
     TensorToLayer constO2L;
     TensorToLayer shuffleI2L;
     LayerToTensor shuffleL2O;
-    auto collectMappingInfo = [&](int32_t const idx)
-    {
+    auto collectMappingInfo = [&](int32_t const idx) {
         ILayer* l = network.getLayer(idx);
         switch (l->getType())
         {
@@ -224,8 +210,7 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
     auto isTranspose
         = [](nvinfer1::Permutation const& perm) -> bool { return (perm.order[0] == 1 && perm.order[1] == 0); };
     auto is2D = [](nvinfer1::Dims const& dims) -> bool { return dims.nbDims == 2; };
-    auto isIdenticalReshape = [](nvinfer1::Dims const& dims) -> bool
-    {
+    auto isIdenticalReshape = [](nvinfer1::Dims const& dims) -> bool {
         for (int32_t i = 0; i < dims.nbDims; ++i)
         {
             if (dims.d[i] != i || dims.d[i] != -1)
@@ -235,8 +220,7 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
         }
         return true;
     };
-    auto tensorReachedViaTranspose = [&](nvinfer1::ITensor* t, bool& needTranspose) -> ITensor*
-    {
+    auto tensorReachedViaTranspose = [&](nvinfer1::ITensor* t, bool& needTranspose) -> ITensor* {
         while (shuffleI2L.find(t) != shuffleI2L.end())
         {
             nvinfer1::IShuffleLayer* s = static_cast<nvinfer1::IShuffleLayer*>(shuffleI2L.at(t));
@@ -292,8 +276,7 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
     }
 
     // 3. Finally, sparsify the weights
-    auto sparsifyConstantWeights = [&sparseWeights](nvinfer1::IConstantLayer* layer, bool const needTranspose)
-    {
+    auto sparsifyConstantWeights = [&sparseWeights](nvinfer1::IConstantLayer* layer, bool const needTranspose) {
         Dims dims = layer->getOutput(0)->getDimensions();
         ASSERT(dims.nbDims == 2);
         int32_t const idxN = needTranspose ? 1 : 0;
@@ -378,8 +361,11 @@ void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int
     }
 
     sparsifyMatMulKernelWeights(network, sparseWeights);
-    sample::gLogVerbose << "--sparsity=force pruned " << sparseWeights.size() << " weights to be sparsity pattern." << std::endl;
-    sample::gLogVerbose << "--sparsity=force has been deprecated. Please use <polygraphy surgeon prune> to rewrite the weights to a sparsity pattern and then run with --sparsity=enable" << std::endl;
+    sample::gLogVerbose << "--sparsity=force pruned " << sparseWeights.size() << " weights to be sparsity pattern."
+                        << std::endl;
+    sample::gLogVerbose << "--sparsity=force has been deprecated. Please use <polygraphy surgeon prune> to rewrite the "
+                           "weights to a sparsity pattern and then run with --sparsity=enable"
+                        << std::endl;
 }
 
 void sparsify(Weights const& weights, int32_t k, int32_t trs, std::vector<int8_t>& sparseWeights)
@@ -422,35 +408,75 @@ void print(std::ostream& os, __half v)
     os << static_cast<float>(v);
 }
 
+#if CUDA_VERSION >= 11060
+void print(std::ostream& os, __nv_fp8_e4m3 v)
+{
+    os << static_cast<float>(v);
+}
+#endif
+
+int32_t dataOffsetFromDims(int64_t v, Dims const& dims, Dims const& strides, int32_t vectorDim, int32_t spv)
+{
+    int32_t dataOffset = 0;
+    for (int32_t dimIndex = dims.nbDims - 1; dimIndex >= 0; --dimIndex)
+    {
+        int32_t dimVal = v % dims.d[dimIndex];
+        if (dimIndex == vectorDim)
+        {
+            dataOffset += (dimVal / spv) * strides.d[dimIndex] * spv + dimVal % spv;
+        }
+        else
+        {
+            dataOffset += dimVal * strides.d[dimIndex] * (vectorDim == -1 ? 1 : spv);
+        }
+        v /= dims.d[dimIndex];
+        ASSERT(v >= 0);
+    }
+
+    return dataOffset;
+}
+
 template <typename T>
 void dumpBuffer(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
     Dims const& strides, int32_t vectorDim, int32_t spv)
 {
     auto const vol = volume(dims);
     T const* typedBuffer = static_cast<T const*>(buffer);
-    std::string sep;
     for (int64_t v = 0; v < vol; ++v)
     {
-        int64_t curV = v;
-        int32_t dataOffset = 0;
-        for (int32_t dimIndex = dims.nbDims - 1; dimIndex >= 0; --dimIndex)
+        int32_t dataOffset = dataOffsetFromDims(v, dims, strides, vectorDim, spv);
+        if (v > 0)
         {
-            int32_t dimVal = curV % dims.d[dimIndex];
-            if (dimIndex == vectorDim)
-            {
-                dataOffset += (dimVal / spv) * strides.d[dimIndex] * spv + dimVal % spv;
-            }
-            else
-            {
-                dataOffset += dimVal * strides.d[dimIndex] * (vectorDim == -1 ? 1 : spv);
-            }
-            curV /= dims.d[dimIndex];
-            ASSERT(curV >= 0);
+            os << separator;
+        }
+        print(os, typedBuffer[dataOffset]);
+    }
+}
+
+void dumpInt4Buffer(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
+    Dims const& strides, int32_t vectorDim, int32_t spv)
+{
+    auto const vol = volume(dims);
+    uint8_t const* typedBuffer = static_cast<uint8_t const*>(buffer);
+    for (int64_t v = 0; v < vol; ++v)
+    {
+        int32_t dataOffset = dataOffsetFromDims(v, dims, strides, vectorDim, spv);
+        if (v > 0)
+        {
+            os << separator;
         }
 
-        os << sep;
-        sep = separator;
-        print(os, typedBuffer[dataOffset]);
+        auto value = typedBuffer[dataOffset / 2];
+        if (dataOffset % 2 == 0)
+        {
+            os << (static_cast<int8_t>(value) >> 4);
+        }
+        else
+        {
+            // Cast to int8_t before right shift, so right-shift will sign-extend.
+            // Left shift on int8_t can be undefined behaviour, must perform left shift on uint8_t.
+            os << (static_cast<int8_t>(value << 4) >> 4);
+        }
     }
 }
 
@@ -467,6 +493,10 @@ template void dumpBuffer<__half>(void const* buffer, std::string const& separato
     Dims const& strides, int32_t vectorDim, int32_t spv);
 template void dumpBuffer<BFloat16>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
     Dims const& strides, int32_t vectorDim, int32_t spv);
+#if CUDA_VERSION >= 11060
+template void dumpBuffer<__nv_fp8_e4m3>(void const* buffer, std::string const& separator, std::ostream& os,
+    Dims const& dims, Dims const& strides, int32_t vectorDim, int32_t spv);
+#endif
 template void dumpBuffer<uint8_t>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
     Dims const& strides, int32_t vectorDim, int32_t spv);
 template void dumpBuffer<int64_t>(void const* buffer, std::string const& separator, std::ostream& os, Dims const& dims,
@@ -540,35 +570,38 @@ void transpose2DWeights(void* dst, void const* src, int32_t const m, int32_t con
 template void transpose2DWeights<float>(void* dst, void const* src, int32_t const m, int32_t const n);
 template void transpose2DWeights<half_float::half>(void* dst, void const* src, int32_t const m, int32_t const n);
 
-template <typename TType, typename std::enable_if_t<std::is_integral_v<TType>, bool>>
-void fillBuffer(void* buffer, int64_t volume, TType min, TType max)
+template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool>>
+void fillBuffer(void* buffer, int64_t volume, int32_t min, int32_t max)
 {
-    TType* typedBuffer = static_cast<TType*>(buffer);
+    T* typedBuffer = static_cast<T*>(buffer);
     std::default_random_engine engine;
     std::uniform_int_distribution<int32_t> distribution(min, max);
-    auto generator = [&engine, &distribution]() { return static_cast<TType>(distribution(engine)); };
+    auto generator = [&engine, &distribution]() { return static_cast<T>(distribution(engine)); };
     std::generate(typedBuffer, typedBuffer + volume, generator);
 }
 
-template <typename TType, typename std::enable_if_t<!std::is_integral_v<TType>, int32_t>>
-void fillBuffer(void* buffer, int64_t volume, TType min, TType max)
+template <typename T, typename std::enable_if_t<!std::is_integral_v<T>, bool>>
+void fillBuffer(void* buffer, int64_t volume, float min, float max)
 {
-    TType* typedBuffer = static_cast<TType*>(buffer);
+    T* typedBuffer = static_cast<T*>(buffer);
     std::default_random_engine engine;
     std::uniform_real_distribution<float> distribution(min, max);
-    auto generator = [&engine, &distribution]() { return static_cast<TType>(distribution(engine)); };
+    auto generator = [&engine, &distribution]() { return static_cast<T>(distribution(engine)); };
     std::generate(typedBuffer, typedBuffer + volume, generator);
 }
 
 // Explicit instantiation
-template void fillBuffer<bool>(void* buffer, int64_t volume, bool min, bool max);
-template void fillBuffer<float>(void* buffer, int64_t volume, float min, float max);
+template void fillBuffer<bool>(void* buffer, int64_t volume, int32_t min, int32_t max);
 template void fillBuffer<int32_t>(void* buffer, int64_t volume, int32_t min, int32_t max);
-template void fillBuffer<int64_t>(void* buffer, int64_t volume, int64_t min, int64_t max);
-template void fillBuffer<int8_t>(void* buffer, int64_t volume, int8_t min, int8_t max);
-template void fillBuffer<__half>(void* buffer, int64_t volume, __half min, __half max);
-template void fillBuffer<BFloat16>(void* buffer, int64_t volume, BFloat16 min, BFloat16 max);
-template void fillBuffer<uint8_t>(void* buffer, int64_t volume, uint8_t min, uint8_t max);
+template void fillBuffer<int8_t>(void* buffer, int64_t volume, int32_t min, int32_t max);
+template void fillBuffer<float>(void* buffer, int64_t volume, float min, float max);
+template void fillBuffer<__half>(void* buffer, int64_t volume, float min, float max);
+template void fillBuffer<BFloat16>(void* buffer, int64_t volume, float min, float max);
+#if CUDA_VERSION >= 11060
+template void fillBuffer<__nv_fp8_e4m3>(void* buffer, int64_t volume, float min, float max);
+#endif
+template void fillBuffer<uint8_t>(void* buffer, int64_t volume, int32_t min, int32_t max);
+template void fillBuffer<int64_t>(void* buffer, int64_t volume, int32_t min, int32_t max);
 
 bool matchStringWithOneWildcard(std::string const& pattern, std::string const& target)
 {

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,21 +20,15 @@ import os
 
 import controlnet_aux
 from cuda import cudart
-from flux_pipeline import FluxPipeline
 from PIL import Image
-from utilities import (
-    PIPELINE_TYPE,
-    VALID_OPTIMIZATION_LEVELS,
-    add_arguments,
-    process_pipeline_args,
-)
+
+from demo_diffusion import dd_argparse
+from demo_diffusion import pipeline as pipeline_module
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Options for Flux Img2Img Demo", conflict_handler="resolve"
-    )
-    parser = add_arguments(parser)
+    parser = argparse.ArgumentParser(description="Options for Flux Img2Img Demo", conflict_handler="resolve")
+    parser = dd_argparse.add_arguments(parser)
     parser.add_argument(
         "--version",
         type=str,
@@ -82,7 +76,7 @@ def parse_args():
         "--optimization-level",
         type=int,
         default=3,
-        help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {VALID_OPTIMIZATION_LEVELS}.",
+        help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {dd_argparse.VALID_OPTIMIZATION_LEVELS}.",
     )
     parser.add_argument(
         "--torch-fallback",
@@ -118,25 +112,6 @@ def parse_args():
         "--onnx-export-only",
         action="store_true",
         help="If set, only performs the export of models to ONNX, skipping engine build and inference.",
-    )
-
-    def _parse_kv_pairs(s: str):
-        """Parse a string of key-value pairs into a dictionary.
-        Expected format: key1:value1,key2:value2,...
-        """
-        result = {}
-        # Split by comma to get each pair
-        pairs = s.split(",")
-        for pair in pairs:
-            # Split by ':' to separate key and value
-            key, value = pair.split(":", 1)
-            result[key] = value
-        return result
-
-    parser.add_argument(
-        "--model-onnx-dirs",
-        type=_parse_kv_pairs,
-        help="Set directories for individual ONNX models. For example: --model-onnx-dirs=transformer:/path/to/transformer,vae:/path/to/vae,t5:/path/to/t5,clip:/path/to/clip",
     )
 
     parser.add_argument(
@@ -183,7 +158,9 @@ def process_demo_args(args):
         args.torch_fallback = args.torch_fallback.split(",")
 
     if args.torch_fallback and args.torch_inference:
-        print("[W] All models will run in PyTorch when --torch-inference is set. Parameter --torch-fallback will be ignored.")
+        print(
+            "[W] All models will run in PyTorch when --torch-inference is set. Parameter --torch-fallback will be ignored."
+        )
         args.torch_fallback = None
 
     controlnet_type = "depth" if "depth" in args.version else "canny" if "canny" in args.version else ""
@@ -253,31 +230,16 @@ if __name__ == "__main__":
     print("[I] Initializing Flux img2img demo using TensorRT")
     args = parse_args()
 
-    kwargs_init_pipeline, kwargs_load_engine, _ = process_pipeline_args(args)
+    _, kwargs_load_engine, _ = dd_argparse.process_pipeline_args(args)
     args_run_demo = process_demo_args(args)
 
     # Initialize demo
-    demo = FluxPipeline(
-        pipeline_type=PIPELINE_TYPE.IMG2IMG,
-        max_sequence_length=args.max_sequence_length,
-        bf16=args.bf16,
-        calibration_dataset=args.calibration_dataset,
-        low_vram=args.low_vram,
-        torch_fallback=args.torch_fallback,
-        weight_streaming=args.ws,
-        t5_weight_streaming_budget_percentage=args.t5_ws_percentage,
-        transformer_weight_streaming_budget_percentage=args.transformer_ws_percentage,
-        **kwargs_init_pipeline,
-    )
+    demo = pipeline_module.FluxPipeline.FromArgs(args, pipeline_type=pipeline_module.PIPELINE_TYPE.IMG2IMG)
 
     # Load TensorRT engines and pytorch modules
     demo.load_engines(
-        args.engine_dir,
-        args.framework_model_dir,
-        args.onnx_dir,
+        framework_model_dir=args.framework_model_dir,
         onnx_export_only=args.onnx_export_only,
-        model_onnx_dirs=args.model_onnx_dirs,
-        fp4=args.fp4,
         **kwargs_load_engine,
     )
 

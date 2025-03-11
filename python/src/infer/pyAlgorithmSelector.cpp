@@ -163,7 +163,7 @@ void bindAlgorithm(py::module& m)
         .def("get_shape", lambdas::get_shape, "index"_a, IAlgorithmContextDoc::get_shape)
         .def_property_readonly("num_inputs", &IAlgorithmContext::getNbInputs)
         .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs)
-               ;
+        ;
 
     // IAlgorithm
     py::class_<IAlgorithm, std::unique_ptr<IAlgorithm, py::nodelete>>(

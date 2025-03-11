@@ -25,7 +25,7 @@ TESTS_DIR := tests
 
 RUN_ALL_TESTS ?= 0
 EXTRA_PYTEST_OPTS ?=
-PYTEST_OPTS := $(EXTRA_PYTEST_OPTS) -v -x --durations=15 --failed-first --new-first --script-launch-mode=subprocess
+PYTEST_OPTS := $(EXTRA_PYTEST_OPTS) -v --durations=15 --failed-first --new-first --script-launch-mode=subprocess
 
 EXTRA_PYTEST_MARKERS :=
 

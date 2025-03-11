@@ -116,8 +116,13 @@ class EnginePlan:
             self.total_runtime = sum(
                 [avg_time for avg_time in self._df["latency.avg_time"]])
 
-        self.name = name or path_leaf(graph_file)
-        raw_layers, self.bindings = import_graph_file(graph_file, profile_id)
+        if isinstance(graph_file, str):
+            self.name = name or path_leaf(graph_file)
+            raw_layers, self.bindings = import_graph_file(graph_file, profile_id)
+        elif isinstance(graph_file, list):
+            self.name = ""
+            raw_layers, self.bindings = graph_file, [""]
+        raw_layers = [l for l in raw_layers if l['LayerType'] != "shape_call"]
         raw_layers = create_layers(self, raw_layers)
 
         self._df = None
@@ -133,6 +138,10 @@ class EnginePlan:
         self.performance_summary = get_performance_summary(profiling_metadata_file)
         self.builder_cfg = get_builder_config(build_metadata_file)
         assert self._df is not None, f"Failed parsing plan file {graph_file}"
+
+    @classmethod
+    def from_string(cls, log_string):
+        pass
 
     @property
     def df(self):

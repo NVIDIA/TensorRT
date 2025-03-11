@@ -169,18 +169,21 @@ class TestOnnxSaveArgs:
         assert arg_group.size_threshold is None
 
     def test_external_data(self):
-        model = onnx_from_path(ONNX_MODELS["const_foldable"].path)
+        model_path = ONNX_MODELS["const_foldable"].path
+        model = onnx_from_path(model_path)
         arg_group = ArgGroupTestHelper(
             OnnxSaveArgs(),
             deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
         )
-        with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
+        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(dir=".") as data:
+            # External data must be a relative path
+            rpath_name = os.path.basename(data.name)
             arg_group.parse_args(
                 [
                     "-o",
                     path.name,
                     "--save-external-data",
-                    data.name,
+                    rpath_name,
                     "--external-data-size-threshold=0",
                 ]
             )
@@ -195,13 +198,14 @@ class TestOnnxSaveArgs:
             OnnxSaveArgs(),
             deps=[ModelArgs(), OnnxLoadArgs(allow_shape_inference=False)],
         )
-        with util.NamedTemporaryFile() as path, util.NamedTemporaryFile() as data:
+        with tempfile.NamedTemporaryFile(dir=".") as path, tempfile.NamedTemporaryFile(dir=".") as data:
+            rpath_name = os.path.basename(data.name)
             arg_group.parse_args(
                 [
                     "-o",
                     path.name,
                     "--save-external-data",
-                    data.name,
+                    rpath_name,
                     "--external-data-size-threshold=1024",
                 ]
             )

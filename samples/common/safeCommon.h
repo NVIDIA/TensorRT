@@ -212,7 +212,8 @@ inline uint32_t elementSize(nvinfer1::DataType t)
     case nvinfer1::DataType::kINT8:
     case nvinfer1::DataType::kUINT8:
     case nvinfer1::DataType::kBOOL:
-    case nvinfer1::DataType::kFP8: return 1;
+    case nvinfer1::DataType::kFP8:
+        return 1;
     case nvinfer1::DataType::kINT4:
     case nvinfer1::DataType::kFP4: SAFE_ASSERT(false && "Element size is not implemented for sub-byte data-types");
     }
@@ -267,7 +268,8 @@ struct ComputeCapability
         int32_t minor{0};
         CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
         CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
-        // Map 12.1 to 12.0 due to known limitations in TensorRT.
+        // Redirect 12.1 to 12.0 to since dependencies do not support 12.1 yet and 12.1 can reuse 12.0 cubins to save
+        // lib size/compile time..
         if (major == 12 && minor == 1)
         {
             minor = 0;

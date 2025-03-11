@@ -2,6 +2,22 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.49.20 (2025-03-4)
+### Fixed
+- Fixed a bug where `colored` did not work for *older* versions of the `colored` package.
+
+
+## v0.49.19 (2025-03-04)
+### Added
+- Added support for int4 types in various ONNX tooling (e.g. `surgeon extract`).
+
+### Fixed
+- Fixed a bug where attempting to print layer information with `inspect model` would sometimes crash for
+    engines built with TensorRT 10.0 and newer.
+- Fixed a bug where logging colors did not work correctly with newer versions of the `colored` package.
+- Fixed a bug where `SessionFromOnnx` would try to use UNIX only `os` APIs on other platforms.
+- Fixed a bug where some Polygraphy commands would crash with Python 3.13.
+
 
 ## v0.49.18 (2025-01-07)
 ### Added

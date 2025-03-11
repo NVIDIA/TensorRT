@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -133,23 +133,11 @@ if(MSVC)
 endif()
 
 if(MSVC)
-    message(
-        STATUS
-            "include_dirs: ${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um ${NV_WDKSDK_INC}/shared"
-    )
-    message(
-        STATUS
-            "link dirs: ${PY_LIB_DIR} ${NV_WDKSDK_LIB}/um/x64 ${MSVC_COMPILER_DIR}/lib/amd64 ${MSVC_COMPILER_DIR}/../ucrt/lib/x64"
-    )
-    include_directories(${MSVC_COMPILER_DIR}/include ${MSVC_COMPILER_DIR}/../ucrt/include ${NV_WDKSDK_INC}/um
-                        ${NV_WDKSDK_INC}/shared)
-    link_directories(${PY_LIB_DIR} ${NV_WDKSDK_LIB}/um/x64 ${MSVC_COMPILER_DIR}/lib/amd64
-                     ${MSVC_COMPILER_DIR}/../ucrt/lib/x64)
-endif()
+    include_directories(SYSTEM BEFORE ${ADDITIONAL_PLATFORM_INCLUDE_DIRS})
+    link_libraries(${ADDITIONAL_PLATFORM_LIB_FLAGS})
+    link_directories(${PY_LIB_DIR})
 
-if(MSVC)
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /FS /bigobj")
+    list(APPEND CMAKE_CXX_FLAGS_DEBUG "/bigobj")
     if(${NV_GEN_PDB})
         # PDB is only useful in release mode.
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi /bigobj")
@@ -161,23 +149,6 @@ else()
     )
 endif()
 
-# remove md
-# Add the flags to enable MD-TRT.
-if("${ENABLE_MDTRT}" STREQUAL "1")
-    include_directories(${TENSORRT_ROOT}/optimizer)
-    include_directories(${TENSORRT_ROOT}/runtime)
-    include_directories(${TENSORRT_ROOT}/common)
-    include_directories(${TENSORRT_ROOT}/safety)
-    add_compile_definitions(ENABLE_MDTRT=1)
-endif()
-
-# enable long-term features
-if("${ENABLE_LONG_TERM}" STREQUAL "1")
-    add_compile_definitions(ENABLE_LONG_TERM=1)
-endif()
-if("${ENABLE_AOT_PLUGIN}" STREQUAL "1")
-    add_compile_definitions(ENABLE_AOT_PLUGIN=1)
-endif()
 
 # ---------- MODULE DEPENDENCIES ----------
 add_compile_definitions(TENSORRT_MODULE=${TENSORRT_MODULE})

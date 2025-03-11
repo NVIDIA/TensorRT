@@ -1,2 +1,6 @@
-sphinx
-sphinx_rtd_theme
+sphinx==4.4.0; python_version<"3.7"
+sphinx==7.1.2; python_version>="3.7"
+furo==2022.4.7; python_version<"3.7"
+furo==2024.8.6; python_version>="3.7"
+myst-parser==0.16.1; python_version<"3.7"
+myst-parser==3.0.1; python_version>="3.7"

@@ -99,7 +99,7 @@ def test_onnx_export(num_bits, per_channel_quantization, constant_folding, dtype
     if num_bits == 8 and dtype != torch.bfloat16:
         if f is not None:
             f.seek(0)
-        ort_session = onnxruntime.InferenceSession(f.read() if onnx_file_path is None else onnx_file_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+        ort_session = onnxruntime.InferenceSession(f.read() if onnx_file_path is None else onnx_file_path)
         ort_result = ort_session.run([], {"input": dummy_input.cpu().numpy()})
         ort_result = torch.tensor(ort_result[0]).cuda()
         torch_result = model(dummy_input)

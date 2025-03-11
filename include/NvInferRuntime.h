@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -899,6 +899,7 @@ public:
     //! \param shapeInputs Expressions for values of the shape tensor inputs
     //! \param nbShapeInputs The number of shape tensor inputs
     //! \param outputs Pre-allocated array to which the output dimensions must be written
+    //! \param nbOutputs Number of outputs.
     //! \param exprBuilder Object for generating new dimension expressions
     //!
     //! \note Any size tensor outputs must be declared to be 0D.
@@ -1384,13 +1385,14 @@ enum class TensorFormat : int32_t
     //! The stride of each dimension is the product of the dimensions after it.
     //! The last dimension has unit stride.
     //!
+    //! This format supports all TensorRT types.
     //! For DLA usage, the tensor sizes are limited to C,H,W in the range [1,8192].
     kLINEAR = 0,
 
     //! Vector-major format with two scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This format requires FP16 and at least three dimensions.
+    //! This format requires FP16 or BF16 and at least three dimensions.
     kCHW2 = 1,
 
     //! Vector-minor format with eight scalars per vector.
@@ -1401,7 +1403,7 @@ enum class TensorFormat : int32_t
     //! Vector-major format with four scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This format requires INT8 or FP16 and at least three dimensions.
+    //! This format requires INT8, FP16, or BF16 and at least three dimensions.
     //! For INT8, the length of the vector dimension must be a build-time constant.
     //!
     //! Deprecated usage:
@@ -1425,7 +1427,7 @@ enum class TensorFormat : int32_t
     //! Vector-major format with 32 scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This format requires at least three dimensions.
+    //! This format requires INT8, FP32, or FP16 and at least three dimensions.
     //!
     //! For DLA usage, this format maps to the native feature format for INT8,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
@@ -1445,7 +1447,7 @@ enum class TensorFormat : int32_t
 
     //! Vector-minor format where channel dimension is third to last and unpadded.
     //!
-    //! This format requires either FP32, FP16, UINT8, INT64 or BF16 and at least three dimensions.
+    //! This format requires either FP32 or UINT8 and at least three dimensions.
     kHWC = 8,
 
     //! DLA planar format. For a tensor with dimension {N, C, H, W}, the W axis
@@ -1858,7 +1860,8 @@ public:
     //! \param allocator Set the GPU allocator to be used by the runtime. All GPU memory acquired will use this
     //! allocator. If NULL is passed, the default allocator will be used.
     //!
-    //! Default: uses cudaMalloc/cudaFree.
+    //! Default: allocateAsync uses cudaMallocAsync if cudaDevAttrMemoryPoolsSupported returns true, otherwise falls
+    //! back to cudaMalloc. allocate always uses cudaMalloc.
     //!
     //! If nullptr is passed, the default allocator will be used.
     //!
@@ -1948,7 +1951,6 @@ public:
     //! weight streaming is enabled.
     //!
     //! \param streamReader a read-only stream from which TensorRT will deserialize a previously serialized engine.
-    //! \param stream The CUDA stream used when performing asynchronous I/O.
     //!
     //! \return The engine, or nullptr if it could not be deserialized. The pointer may not be valid immediately after
     //! the function returns.
@@ -3596,8 +3598,6 @@ public:
     //! \return hardwareCompatibilityLevel The level of hardware
     //!        compatibility.
     //!
-    //! This is only supported for Ampere and newer architectures.
-    //!
     HardwareCompatibilityLevel getHardwareCompatibilityLevel() const noexcept
     {
         return mImpl->getHardwareCompatibilityLevel();
@@ -5092,6 +5092,7 @@ inline IRuntime* createInferRuntime(ILogger& logger) noexcept
 //!
 //! \brief Create an instance of an IRefitter class.
 //!
+//! \param engine The engine class for the refitter.
 //! \param logger The logging class for the refitter.
 //!
 inline IRefitter* createInferRefitter(ICudaEngine& engine, ILogger& logger) noexcept

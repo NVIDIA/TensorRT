@@ -24,8 +24,8 @@ macro(configure_protobuf VERSION)
     set(Protobuf_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR})
     set(Protobuf_TARGET third_party.protobuf)
 
-    set(PROTOBUF_CFLAGS "-Dgoogle=google_private")
-    set(PROTOBUF_CXXFLAGS "-Dgoogle=google_private")
+    set(PROTOBUF_CFLAGS "-Dgoogle=google_trtrepack")
+    set(PROTOBUF_CXXFLAGS "-Dgoogle=google_trtrepack")
 
     ExternalProject_Add(${Protobuf_TARGET}
         PREFIX ${Protobuf_TARGET}

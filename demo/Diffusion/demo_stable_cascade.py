@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,18 +15,19 @@
 # limitations under the License.
 #
 
-import os
-import torch
 import argparse
+import os
 
+import torch
 from cuda import cudart
 
-from stable_cascade_pipeline import StableCascadePipeline
-from utilities import PIPELINE_TYPE, add_arguments, process_pipeline_args
+from demo_diffusion import dd_argparse
+from demo_diffusion import pipeline as pipeline_module
+
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="Options for Stable Cascade Txt2Img Demo", conflict_handler='resolve')
-    parser = add_arguments(parser)
+    parser = dd_argparse.add_arguments(parser)
     parser.add_argument('--version', type=str, default="cascade", choices=["cascade"], help="Version of Stable Cascade")
     parser.add_argument('--height', type=int, default=1024, help="Height of image to generate (must be multiple of 8)")
     parser.add_argument('--width', type=int, default=1024, help="Width of image to generate (must be multiple of 8)")
@@ -38,19 +39,19 @@ def parseArgs():
     return parser.parse_args()
 
 
-class StableCascadeDemoPipeline(StableCascadePipeline):
+class StableCascadeDemoPipeline(pipeline_module.StableCascadePipeline):
     def __init__(self, prior_denoising_steps, decoder_denoising_steps, prior_guidance_scale, decoder_guidance_scale, lite, **kwargs):
         self.nvtx_profile = kwargs['nvtx_profile']
-        self.prior = StableCascadePipeline(
-            pipeline_type=PIPELINE_TYPE.CASCADE_PRIOR,
+        self.prior = pipeline_module.StableCascadePipeline(
+            pipeline_type=pipeline_module.PIPELINE_TYPE.CASCADE_PRIOR,
             denoising_steps=prior_denoising_steps,
             guidance_scale=prior_guidance_scale,
             return_latents=True,
             lite=lite,
             **kwargs,
         )
-        self.decoder = StableCascadePipeline(
-            pipeline_type=PIPELINE_TYPE.CASCADE_DECODER,
+        self.decoder = pipeline_module.StableCascadePipeline(
+            pipeline_type=pipeline_module.PIPELINE_TYPE.CASCADE_DECODER,
             denoising_steps=decoder_denoising_steps,
             guidance_scale=decoder_guidance_scale,
             lite=lite,
@@ -122,11 +123,12 @@ class StableCascadeDemoPipeline(StableCascadePipeline):
         self.prior.teardown()
         self.decoder.teardown()
 
+
 if __name__ == "__main__":
     print("[I] Initializing StableCascade txt2img demo using TensorRT")
     args = parseArgs()
 
-    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = process_pipeline_args(args)
+    kwargs_init_pipeline, kwargs_load_engine, args_run_demo = dd_argparse.process_pipeline_args(args)
 
     # Initialize demo
     _ = kwargs_init_pipeline.pop('guidance_scale')

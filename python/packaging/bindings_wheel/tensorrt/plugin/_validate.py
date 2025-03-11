@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +18,13 @@
 import inspect
 import numpy as np
 import typing
+import types
 
 from ._utils import _is_numpy_array, _join_with, _infer_numpy_type, _is_npt_ndarray
-from ._tensor import TensorDesc, Tensor
+from ._tensor import TensorDesc, Tensor, SymExprs
+from ._export import IS_AOT_ENABLED
+if IS_AOT_ENABLED:
+    from ._tensor import KernelLaunchParams
 from ._autotune import AutoTuneCombination
 
 SERIALIZABLE_BUILTIN_TYPES = (int, float, bytes, bool, str)
@@ -93,7 +97,7 @@ def _parse_register_inputs(register_func, lazy_register):
             raise ValueError(
                 f"Argument {name} is not a positional-or-keyword or keyword-only arg"
             )
-        
+
         # Type annotations are manadatory for `tensorrt.plugin.register` args
         if param.annotation == inspect.Parameter.empty:
             raise ValueError(
@@ -105,7 +109,7 @@ def _parse_register_inputs(register_func, lazy_register):
             raise ValueError(
                 f"Argument {name} has a default value. Default values are not supported yet."
             )
-        
+
 
         if issubclass(param.annotation, TensorDesc):
             if saw_first_attr:
@@ -274,6 +278,120 @@ def _validate_impl(impl_func, plugin_def):
         raise ValueError("Return annotation should be None.")
 
     return impl_attr_names, found_tactic
+
+def _validate_aot_impl(aot_impl_func, plugin_def):
+    aot_impl_attr_names = []
+
+    sig = inspect.signature(aot_impl_func)
+    registered_attr_names = plugin_def.input_attrs.keys()
+
+    # input arg annotations are optional, but we will validate if provided
+    for name, param in sig.parameters.items():
+        if param.annotation != inspect.Parameter.empty:
+            if name == "outputs":
+                if typing.get_origin(param.annotation) is not tuple:
+                    raise ValueError(
+                        f"'outputs' should be of type Tuple[TensorDesc]. Received {param.annotation}."
+                    )
+                args = typing.get_args(param.annotation)
+                for arg in args:
+                    if not issubclass(arg, TensorDesc):
+                        raise ValueError(
+                            f"Argument for receiving output TensorDesc, '{name}' contains a {param.annotation}. '{name}' should be a Tuple[TensorDesc]."
+                        )
+            elif name == "tactic":
+                if not issubclass(param.annotation, int):
+                    raise ValueError("'tactic' input argument should be an int")
+            elif issubclass(param.annotation, TensorDesc):
+                if name not in plugin_def.input_tensor_names:
+                    raise ValueError(
+                        f"Unexpected tensor '{name}' specified in autotune function. Expected one of {plugin_def.input_tensor_names}."
+                    )
+            else:
+                if name not in plugin_def.input_attrs:
+                    raise ValueError(
+                        f"Unexpected attribute '{name}' specified in aot_impl function. Expected one of {list(registered_attr_names)}."
+                    )
+
+                if param.annotation != plugin_def.input_attrs[name]:
+                    raise ValueError(
+                        f"Attribute '{name}' has a type annotation different from the one specified at registration. Expected '{plugin_def.input_attrs[name]}'."
+                    )
+
+                aot_impl_attr_names.append(name)
+        else:
+            if name in plugin_def.input_attrs:
+                aot_impl_attr_names.append(name)
+
+    # Expected attribute schema should be constructed in the order they appeared in the register function
+    expected_attr_schema_chunks = [
+        n for n in registered_attr_names if n in aot_impl_attr_names
+    ]
+
+    expected_schema = (
+        "("
+        + _join_with(plugin_def.input_tensor_names)
+        + _join_with(expected_attr_schema_chunks, True)
+        + ", outputs, tactic)"
+    )
+
+    if f"({', '.join(sig.parameters.keys())})" != expected_schema:
+        raise ValueError(
+            f"Signature of the aot_impl function '{sig}' does not match the expected input arg schema: {expected_schema}"
+        )
+
+    ret_annotation = sig.return_annotation
+
+    if ret_annotation == inspect.Parameter.empty:
+        raise ValueError(
+            f"No return annotation found for aot_impl function. Received signature {sig}."
+        )
+
+    expected_return_schema = "tuple[str | bytes, str | bytes, tensorrt.plugin.KernelLaunchParams, tensorrt.plugin.SymIntExprs]"
+
+    # Return annotation is optional, but we will validate if one is specified
+    if ret_annotation != inspect.Parameter.empty:
+        if typing.get_origin(ret_annotation) is not tuple:
+            raise ValueError(
+                f"Return annotation is {ret_annotation}. Expected {expected_return_schema}."
+            )
+        else:
+            args = typing.get_args(ret_annotation)
+
+            if len(args) != 4:
+                raise ValueError(
+                    f"Return annotation is {ret_annotation}. Expected {expected_return_schema}."
+                )
+
+            def validate_union_str_or_bytes(index):
+                def validate_str_or_bytes(arg_):
+                    if (arg_ is not str) and (arg_ is not bytes):
+                        raise ValueError(
+                            f"Return annotation for argument at {index} is '{arg_}'. Expected 'str' or 'bytes'."
+                        )
+
+                orig = typing.get_origin(args[index])
+                # orig is `typing.Union` when annotation uses typing module (e.g, Union[str, bytes])
+                # orig is `types.UnionType` when annotation is of the new (3.10+) native syntax (e.g, str | bytes)
+                if orig is typing.Union or orig is types.UnionType:
+                    for a in typing.get_args(args[index]):
+                        validate_str_or_bytes(a)
+                else:
+                # when annoted with `str` or `bytes`
+                    validate_str_or_bytes(args[index])
+
+            # kernel name should be str or bytes encoding
+            validate_union_str_or_bytes(0)
+            # kernel PTX should be str or bytes encoding
+            validate_union_str_or_bytes(1)
+
+            if not issubclass(args[2], KernelLaunchParams):
+                raise ValueError(f"Argument at index 2 of return annotation is '{args[2]}'. Expected 'tensorrt.plugin.KernelLaunchParams'.")
+
+            if not issubclass(args[3], SymExprs):
+                raise ValueError(f"Argument at index 3 of return annotation is '{args[3]}'. Expected a descendent of tensorrt.plugin.SymExprs.")
+
+    return aot_impl_attr_names
 
 
 def _validate_autotune(autotune_func, plugin_def):

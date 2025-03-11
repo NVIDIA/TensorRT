@@ -796,6 +796,7 @@ class TrtConfigArgs(BaseArgs):
                 self.hardware_compatibility_level,
                 self.runtime_platform,
                 self.quantization_flags,
+                self.tiling_optimization_level,
             ]
         ):
             script.add_import(imports="tensorrt", imp_as="trt")

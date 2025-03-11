@@ -17,10 +17,10 @@ It is also able to partition and save supported and unsupported subgraphs from t
 
     ```
     [I] ===== Summary =====
-        Stack trace                       | Operator  | Node               | Reason
-        -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        OuterFunction -> NestedLocalFake2 | Fake_2    | nested_node_fake_2 | In node 0 with name: nested_node_fake_2 and operator: Fake_2 (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"
-        OuterFunction                     | Fake_1    | nested_node_fake_1 | In node 0 with name: nested_node_fake_1 and operator: Fake_1 (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"
+        Stack trace                                                                             | Operator  | Node               | Reason
+        -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+        onnx_graphsurgeon_node_1 (OuterFunction) -> onnx_graphsurgeon_node_1 (NestedLocalFake2) | Fake_2    | nested_node_fake_2 | In node 0 with name: nested_node_fake_2 and operator: Fake_2 (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"
+        onnx_graphsurgeon_node_1 (OuterFunction)                                                | Fake_1    | nested_node_fake_1 | In node 0 with name: nested_node_fake_1 and operator: Fake_1 (checkFallbackPluginImporter): INVALID_NODE: creator && "Plugin not found, are the plugin name, version, and namespace correct?"
     ```
 
 ## Understanding The Output
