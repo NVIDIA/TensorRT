@@ -189,7 +189,7 @@ def _compute_amax_entropy(calib_hist, calib_bin_edges, num_bits, unsigned, strid
     def _normalize_distr(distr):
         summ = np.sum(distr)
         if summ != 0:
-            distr = distr / summ
+            distr /= summ
 
     bins = calib_hist[:]
     bins[0] = bins[1]
