@@ -162,18 +162,18 @@ private:
 //!
 void SampleINT8API::getInputOutputNames()
 {
-    int32_t nbindings = mEngine.get()->getNbIOTensors();
+    int32_t nbindings = mEngine->getNbIOTensors();
     ASSERT(nbindings == 2);
     for (int32_t b = 0; b < nbindings; ++b)
     {
-        auto const bindingName = mEngine.get()->getIOTensorName(b);
-        nvinfer1::Dims dims = mEngine.get()->getTensorShape(bindingName);
-        if (mEngine.get()->getTensorIOMode(bindingName) == TensorIOMode::kINPUT)
+        auto const bindingName = mEngine->getIOTensorName(b);
+        nvinfer1::Dims dims = mEngine->getTensorShape(bindingName);
+        if (mEngine->getTensorIOMode(bindingName) == TensorIOMode::kINPUT)
         {
             if (mParams.verbose)
             {
                 sample::gLogInfo << "Found input: " << bindingName << " shape=" << dims
-                                 << " dtype=" << static_cast<int32_t>(mEngine.get()->getTensorDataType(bindingName))
+                                 << " dtype=" << static_cast<int32_t>(mEngine->getTensorDataType(bindingName))
                                  << std::endl;
             }
             mInOut["input"] = bindingName;
@@ -183,7 +183,7 @@ void SampleINT8API::getInputOutputNames()
             if (mParams.verbose)
             {
                 sample::gLogInfo << "Found output: " << bindingName << " shape=" << dims
-                                 << " dtype=" << static_cast<int32_t>(mEngine.get()->getTensorDataType(bindingName))
+                                 << " dtype=" << static_cast<int32_t>(mEngine->getTensorDataType(bindingName))
                                  << std::endl;
             }
             mInOut["output"] = bindingName;
@@ -577,8 +577,8 @@ sample::Logger::TestResult SampleINT8API::build()
     SampleUniquePtr<nvinfer1::ITimingCache> timingCache;
     if (!mParams.timingCacheFile.empty())
     {
-        timingCache = samplesCommon::buildTimingCacheFromFile(
-            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+        timingCache
+            = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
@@ -617,8 +617,8 @@ sample::Logger::TestResult SampleINT8API::build()
     // populates input output map structure
     getInputOutputNames();
 
-    mInputDims = mEngine.get()->getTensorShape(mInOut["input"].c_str());
-    mOutputDims = mEngine.get()->getTensorShape(mInOut["output"].c_str());
+    mInputDims = mEngine->getTensorShape(mInOut["input"].c_str());
+    mOutputDims = mEngine->getTensorShape(mInOut["output"].c_str());
 
     return sample::Logger::TestResult::kRUNNING;
 }
@@ -779,18 +779,18 @@ void validateInputParams(SampleINT8APIParams& params)
 {
     sample::gLogInfo << "Please follow README.md to generate missing input files." << std::endl;
     sample::gLogInfo << "Validating input parameters. Using following input files for inference." << std::endl;
-    params.modelFileName = locateFile(params.modelFileName, params.dataDirs);
+    params.modelFileName = samplesCommon::locateFile(params.modelFileName, params.dataDirs);
     sample::gLogInfo << "    Model File: " << params.modelFileName << std::endl;
     if (params.writeNetworkTensors)
     {
         sample::gLogInfo << "    Writing Network Tensors File to: " << params.networkTensorsFileName << std::endl;
         return;
     }
-    params.imageFileName = locateFile(params.imageFileName, params.dataDirs);
+    params.imageFileName = samplesCommon::locateFile(params.imageFileName, params.dataDirs);
     sample::gLogInfo << "    Image File: " << params.imageFileName << std::endl;
-    params.referenceFileName = locateFile(params.referenceFileName, params.dataDirs);
+    params.referenceFileName = samplesCommon::locateFile(params.referenceFileName, params.dataDirs);
     sample::gLogInfo << "    Reference File: " << params.referenceFileName << std::endl;
-    params.dynamicRangeFileName = locateFile(params.dynamicRangeFileName, params.dataDirs);
+    params.dynamicRangeFileName = samplesCommon::locateFile(params.dynamicRangeFileName, params.dataDirs);
     sample::gLogInfo << "    Dynamic Range File: " << params.dynamicRangeFileName << std::endl;
     return;
 }

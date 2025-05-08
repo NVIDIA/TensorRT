@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +19,7 @@
 #include "common/templates.h"
 #include <cstring>
 
-namespace nvinfer1
-{
-namespace plugin
+namespace nvinfer1::plugin
 {
 
 static char const* const kPLUGIN_VERSION{"1"};
@@ -292,5 +290,4 @@ char const* PillarScatterPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

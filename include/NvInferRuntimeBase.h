@@ -26,11 +26,7 @@
 // Items that are marked as deprecated will be removed in a future release.
 #if __cplusplus >= 201402L
 #define TRT_DEPRECATED [[deprecated]]
-#if __GNUC__ < 6
-#define TRT_DEPRECATED_ENUM
-#else
 #define TRT_DEPRECATED_ENUM TRT_DEPRECATED
-#endif
 #ifdef _MSC_VER
 #define TRT_DEPRECATED_API __declspec(dllexport)
 #else

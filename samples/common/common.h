@@ -22,7 +22,7 @@
 #include "NvInferPlugin.h"
 #endif
 #include "logger.h"
-#include "safeCommon.h"
+#include "sampleEntrypoints.h"
 #include "utils/timingCache.h"
 #include <algorithm>
 #include <cassert>
@@ -66,6 +66,8 @@
 #define ENABLE_DLA_API 1
 #endif
 
+using namespace nvinfer1;
+
 #define CHECK_RETURN_W_MSG(status, val, errMsg)                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -89,6 +91,21 @@
     } while (0)
 
 #define CHECK_RETURN(status, val) CHECK_RETURN_W_MSG(status, val, "")
+
+#undef CHECK_WITH_STREAM
+#define CHECK_WITH_STREAM(status, stream)                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if ((status) != cudaSuccess)                                                                                   \
+        {                                                                                                              \
+            stream << "Cuda failure at " << __FILE__ << ":" << __LINE__ << ": " << cudaGetErrorString(status)          \
+                   << std::endl;                                                                                       \
+            exit(EXIT_FAILURE);                                                                                        \
+        }                                                                                                              \
+    } while (0)
+
+#undef CHECK
+#define CHECK(status) CHECK_WITH_STREAM(status, std::cerr)
 
 constexpr long double operator"" _GiB(long double val)
 {
@@ -195,8 +212,19 @@ using nvinfer1::utils::loadTimingCacheFile;
 using nvinfer1::utils::buildTimingCacheFromFile;
 using nvinfer1::utils::saveTimingCacheFile;
 using nvinfer1::utils::updateTimingCacheFile;
+
+template <typename T>
+inline std::shared_ptr<T> infer_object(T* obj)
+{
+    if (!obj)
+    {
+        throw std::runtime_error("Failed to create object");
+    }
+    return std::shared_ptr<T>(obj);
+}
+
 // Swaps endianness of an integral type.
-template <typename T, typename std::enable_if_t<std::is_integral_v<T>, int> = 0>
+template <typename T, typename std::enable_if_t<std::is_integral<T>::value, int> = 0>
 inline T swapEndianness(const T& value)
 {
     uint8_t bytes[sizeof(T)];
@@ -551,6 +579,19 @@ inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
     ASSERT(false && "Unknown element type");
 }
 
+// Return least integer no less than exact value of m/n.
+template <typename A, typename B>
+inline auto divUp(A m, B n) -> typename std::enable_if_t<std::is_integral<A>::value && std::is_integral<B>::value, A>
+{
+    ASSERT(n > 0);
+    return (m + n - 1) / n;
+}
+
+inline int64_t volume(nvinfer1::Dims const& d)
+{
+    return std::accumulate(d.d, d.d + d.nbDims, int64_t{1}, std::multiplies<int64_t>{});
+}
+
 inline int64_t volume(nvinfer1::Dims const& dims, int32_t start, int32_t stop)
 {
     ASSERT(start >= 0);
@@ -560,6 +601,76 @@ inline int64_t volume(nvinfer1::Dims const& dims, int32_t start, int32_t stop)
     return std::accumulate(dims.d + start, dims.d + stop, int64_t{1}, std::multiplies<int64_t>{});
 }
 
+//! Locate path to file, given its filename or filepath suffix and possible dirs it might lie in.
+//! Function will also walk back MAX_DEPTH dirs from CWD to check for such a file path.
+inline std::string locateFile(
+    const std::string& filepathSuffix, const std::vector<std::string>& directories, bool reportError = true)
+{
+    const int MAX_DEPTH{10};
+    bool found{false};
+    std::string filepath;
+
+    for (auto& dir : directories)
+    {
+        if (!dir.empty() && dir.back() != '/')
+        {
+#ifdef _MSC_VER
+            filepath = dir + "\\" + filepathSuffix;
+#else
+            filepath = dir + "/" + filepathSuffix;
+#endif
+        }
+        else
+        {
+            filepath = dir + filepathSuffix;
+        }
+
+        for (int i = 0; i < MAX_DEPTH && !found; i++)
+        {
+            const std::ifstream checkFile(filepath);
+            found = checkFile.is_open();
+            if (found)
+            {
+                break;
+            }
+
+            filepath = "../" + filepath; // Try again in parent dir
+        }
+
+        if (found)
+        {
+            break;
+        }
+
+        filepath.clear();
+    }
+
+    // Could not find the file
+    if (filepath.empty())
+    {
+        const std::string dirList = std::accumulate(directories.begin() + 1, directories.end(), directories.front(),
+            [](const std::string& a, const std::string& b) { return a + "\n\t" + b; });
+        std::cout << "Could not find " << filepathSuffix << " in data directories:\n\t" << dirList << std::endl;
+
+        if (reportError)
+        {
+            std::cout << "&&&& FAILED" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    return filepath;
+}
+
+inline void readPGMFile(const std::string& fileName, uint8_t* buffer, int32_t inH, int32_t inW)
+{
+    std::ifstream infile(fileName, std::ifstream::binary);
+    ASSERT(infile.is_open() && "Attempting to read from a file that is not open.");
+    std::string magic, w, h, max;
+    infile >> magic >> w >> h >> max;
+    infile.seekg(1, infile.cur);
+    infile.read(reinterpret_cast<char*>(buffer), inH * inW);
+}
 template <int C, int H, int W>
 struct PPM
 {
@@ -886,6 +997,47 @@ inline std::unique_ptr<DynamicLibrary> loadLibrary(std::string const& path)
 {
     // make_unique not available until C++14 - we still need to support C++11 builds.
     return std::unique_ptr<DynamicLibrary>(new DynamicLibrary{path});
+}
+
+//! Represents the compute capability of a device.
+//! This pertains to virtual architectures represented by the intermediate PTX format.
+//! This is distinct from the SM version.
+//! See https://forums.developer.nvidia.com/t/how-should-i-use-correctly-the-sm-xx-and-compute-xx/219160
+struct ComputeCapability
+{
+    int32_t major{};
+    int32_t minor{};
+
+    //! \return the compute capability of the CUDA device with the given \p deviceIndex.
+    [[nodiscard]] static ComputeCapability forDevice(int32_t deviceIndex)
+    {
+        int32_t major{0};
+        int32_t minor{0};
+        CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
+        CHECK(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
+        // Redirect 12.1 to 12.0 to since dependencies do not support 12.1 yet and 12.1 can reuse 12.0 cubins to save
+        // lib size/compile time..
+        if (major == 12 && minor == 1)
+        {
+            minor = 0;
+        }
+        return {major, minor};
+    }
+};
+
+inline int32_t getSMVersion()
+{
+    int32_t deviceIndex = 0;
+    CHECK(cudaGetDevice(&deviceIndex));
+
+    auto const cc = ComputeCapability::forDevice(deviceIndex);
+    return ((cc.major << 8) | cc.minor);
+}
+
+inline bool isSMSafe()
+{
+    const int32_t smVersion = getSMVersion();
+    return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807;
 }
 
 inline int32_t getMaxPersistentCacheSize()

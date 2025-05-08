@@ -48,7 +48,7 @@ make build
 
 2. Install the wheel manually from **outside** the repository:
 ```
-python3 -m pip install onnx_graphsurgeon/dist/onnx_graphsurgeon-*-py2.py3-none-any.whl
+python3 -m pip install onnx-graphsurgeon/dist/onnx_graphsurgeon-*-py2.py3-none-any.whl
 ```
 
 

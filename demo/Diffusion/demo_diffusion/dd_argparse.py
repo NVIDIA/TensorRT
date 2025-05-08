@@ -123,6 +123,7 @@ def add_arguments(parser):
         default=None,
         help="Path to LoRA adaptor. Ex: 'latent-consistency/lcm-lora-sdv1-5'",
     )
+    parser.add_argument("--bf16", action="store_true", help="Run pipeline in BFloat16 precision")
 
     # ONNX export
     parser.add_argument(
@@ -145,6 +146,11 @@ def add_arguments(parser):
         ),
     )
     parser.add_argument(
+        "--onnx-export-only",
+        action="store_true",
+        help="If set, only performs the export of models to ONNX, skipping engine build and inference.",
+    )
+    parser.add_argument(
         "--download-onnx-models",
         action="store_true",
         help=("[FLUX only] Download pre-exported ONNX models"),
@@ -165,6 +171,29 @@ def add_arguments(parser):
             "<PipelineClass>.get_model_names(...) for the list of supported model names."
         ),
     )
+
+    parser.add_argument(
+        "--optimization-level",
+        type=int,
+        default=None,
+        help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {VALID_OPTIMIZATION_LEVELS}.",
+    )
+    parser.add_argument(
+        "--build-static-batch", action="store_true", help="Build TensorRT engines with fixed batch size."
+    )
+    parser.add_argument(
+        "--build-dynamic-shape", action="store_true", help="Build TensorRT engines with dynamic image shapes."
+    )
+    parser.add_argument(
+        "--build-enable-refit", action="store_true", help="Enable Refit option in TensorRT engines during build."
+    )
+    parser.add_argument(
+        "--build-all-tactics", action="store_true", help="Build TensorRT engines using all tactic sources."
+    )
+    parser.add_argument(
+        "--timing-cache", default=None, type=str, help="Path to the precached timing measurements to accelerate build."
+    )
+    parser.add_argument("--ws", action="store_true", help="Build TensorRT engines with weight streaming enabled.")
 
     # Quantization configuration.
     parser.add_argument("--int8", action="store_true", help="Apply int8 quantization.")
@@ -196,29 +225,7 @@ def add_arguments(parser):
         help="The number of steps to use for calibrating the model for quantization. Recommendation: 32, 64, 128 for SDXL",
     )
 
-    parser.add_argument(
-        "--optimization-level",
-        type=int,
-        default=None,
-        help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {VALID_OPTIMIZATION_LEVELS}.",
-    )
-    parser.add_argument(
-        "--build-static-batch", action="store_true", help="Build TensorRT engines with fixed batch size."
-    )
-    parser.add_argument(
-        "--build-dynamic-shape", action="store_true", help="Build TensorRT engines with dynamic image shapes."
-    )
-    parser.add_argument(
-        "--build-enable-refit", action="store_true", help="Enable Refit option in TensorRT engines during build."
-    )
-    parser.add_argument(
-        "--build-all-tactics", action="store_true", help="Build TensorRT engines using all tactic sources."
-    )
-    parser.add_argument(
-        "--timing-cache", default=None, type=str, help="Path to the precached timing measurements to accelerate build."
-    )
-
-    # TensorRT inference
+    # Inference
     parser.add_argument(
         "--num-warmup-runs", type=int, default=5, help="Number of warmup runs before benchmarking performance"
     )
@@ -229,7 +236,17 @@ def add_arguments(parser):
         default="",
         help="Run inference with PyTorch (using specified compilation mode) instead of TensorRT.",
     )
-
+    parser.add_argument(
+        "--torch-fallback",
+        default=None,
+        type=str,
+        help="[FLUX only] Comma separated list of models to be inferenced using torch instead of TRT. For example --torch-fallback t5,transformer. If --torch-inference set, this parameter will be ignored.",
+    )
+    parser.add_argument(
+        "--low-vram",
+        action="store_true",
+        help="[FLUX only] Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default.",
+    )
     parser.add_argument("--seed", type=int, default=None, help="Seed for random generator to get consistent results")
     parser.add_argument("--output-dir", default="output", help="Output directory for logs and image artifacts")
     parser.add_argument("--hf-token", type=str, help="HuggingFace API access token for downloading model checkpoints")
@@ -256,6 +273,8 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     device_info = torch.cuda.get_device_properties(0)
     sm_version = device_info.major * 10 + device_info.minor
 
+    is_flux = args.version.startswith("flux")
+
     if args.height % 8 != 0 or args.width % 8 != 0:
         raise ValueError(
             f"Image height and width have to be divisible by 8 but specified as: {args.image_height} and {args.width}."
@@ -273,7 +292,8 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # TensorRT builder optimization level
     if args.optimization_level is None:
-        if args.int8 or args.fp8:
+        # optimization level set to 3 for all Flux pipelines to reduce GPU memory usage
+        if args.int8 or args.fp8 and not is_flux:
             args.optimization_level = 4
         else:
             args.optimization_level = 3
@@ -285,13 +305,11 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # Quantized pipeline
     # int8 support
-    if args.int8 and not any(args.version.startswith(prefix) for prefix in ["xl", "1.4", "1.5", "2.1"]):
+    if args.int8 and not any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1")):
         raise ValueError("int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
 
     # fp8 support
-    if args.fp8 and not any(
-        args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1", "flux.1-dev", "flux.1-schnell")
-    ):
+    if args.fp8 and not (any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1")) or is_flux):
         raise ValueError("fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1 and FLUX pipelines.")
 
     if args.fp8 and args.int8:
@@ -306,13 +324,15 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     if args.quantization_level == 0.0:
         def override_quant_level(level: float, dtype_str: str):
             args.quantization_level = level
-            print(f"The default quantization level has been set to {level} for {dtype_str}.")
+            print(f"[W] The default quantization level has been set to {level} for {dtype_str}.")
 
         if args.fp8:
-            override_quant_level(3.0 if args.version in ("1.4", "1.5") else 4.0, "FP8")
             # L4 fp8 fMHA on Hopper not yet enabled.
-            if sm_version == 90 and args.version.startswith("flux"):
+            if sm_version == 90 and is_flux:
                 override_quant_level(3.0, "FP8")
+            else:
+                override_quant_level(3.0 if args.version in ("1.4", "1.5") else 4.0, "FP8")
+
         elif args.int8:
             override_quant_level(3.0, "INT8")
 
@@ -323,11 +343,12 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
         )
     if args.fp4:
         # FP4 precision is only supported for Flux Pipelines
-        assert args.version.startswith("flux"), "FP4 precision is only supported for Flux pipelines"
+        assert is_flux, "FP4 precision is only supported for Flux pipelines"
 
     # Handle LoRA
-    if args.lora_path and not any(args.version.startswith(prefix) for prefix in ("1.5", "2.1", "xl")):
-        raise ValueError("LoRA adapter support is only supported for SD1.5, SD2.1 and SDXL pipelines")
+    # FLUX canny and depth official LoRAs are not supported because they modify the transformer architecture, conflicting with refit
+    if args.lora_path and not any(args.version.startswith(prefix) for prefix in ("1.5", "2.1", "xl", "flux.1-dev", "flux.1-schnell")):
+        raise ValueError("LoRA adapter support is only supported for SD1.5, SD2.1, SDXL, FLUX.1-dev and FLUX.1-schnell pipelines")
 
     if args.lora_weight:
         for weight in (weight for weight in args.lora_weight if not 0 <= weight <= 1):
@@ -335,6 +356,28 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     if not 0 <= args.lora_scale <= 1:
         raise ValueError(f"LoRA scale value must be between 0 and 1, provided {args.lora_scale}")
+
+    # Force lora merge when fp8 or int8 is used with LoRA
+    if args.build_enable_refit and args.lora_path and (args.int8 or args.fp8):
+        raise ValueError(
+            "Engine refit should not be enabled for quantized models with LoRA. ModelOpt recommends fusing the LoRA to the model before quantization. \
+            See https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/examples/diffusers/quantization#lora"
+        )
+
+    # Torch-fallback and Torch-inference
+    if args.torch_fallback and not args.torch_inference:
+        assert is_flux, "PyTorch Fallback is only supported for Flux pipelines"
+        args.torch_fallback = args.torch_fallback.split(",")
+
+    if args.torch_fallback and args.torch_inference:
+        print(
+            "[W] All models will run in PyTorch when --torch-inference is set. Parameter --torch-fallback will be ignored."
+        )
+        args.torch_fallback = None
+
+    # low-vram
+    if args.low_vram:
+        assert is_flux, "low-vram mode is only supported for Flux pipelines"
 
     # Pack arguments
     kwargs_init_pipeline = {
@@ -373,6 +416,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
         "quantization_percentile": args.quantization_percentile,
         "quantization_alpha": args.quantization_alpha,
         "calibration_size": args.calibration_size,
+        "onnx_export_only": args.onnx_export_only,
         "download_onnx_models": args.download_onnx_models,
     }
 

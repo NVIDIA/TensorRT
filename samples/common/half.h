@@ -16,7 +16,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -873,7 +873,7 @@ template <std::float_round_style R, bool S, typename T>
 uint16 int2half_impl(T value)
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT && HALF_ENABLE_CPP11_TYPE_TRAITS
-    static_assert(std::is_integral_v<T>, "int to half conversion only supports builtin integer types");
+    static_assert(std::is_integral<T>::value, "int to half conversion only supports builtin integer types");
 #endif
     if (S)
         value = -value;
@@ -1249,7 +1249,7 @@ template <std::float_round_style R, bool E, typename T>
 T half2int_impl(uint16 value)
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT && HALF_ENABLE_CPP11_TYPE_TRAITS
-    static_assert(std::is_integral_v<T>, "half to int conversion only supports builtin integer types");
+    static_assert(std::is_integral<T>::value, "half to int conversion only supports builtin integer types");
 #endif
     uint32_t e = value & 0x7FFF;
     if (e >= 0x7C00)
@@ -2617,7 +2617,7 @@ template <typename U, std::float_round_style R>
 struct half_caster<half, U, R>
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT && HALF_ENABLE_CPP11_TYPE_TRAITS
-    static_assert(std::is_arithmetic_v<U>, "half_cast from non-arithmetic type unsupported");
+    static_assert(std::is_arithmetic<U>::value, "half_cast from non-arithmetic type unsupported");
 #endif
 
     static half cast(U arg)
@@ -2639,7 +2639,7 @@ template <typename T, std::float_round_style R>
 struct half_caster<T, half, R>
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT && HALF_ENABLE_CPP11_TYPE_TRAITS
-    static_assert(std::is_arithmetic_v<T>, "half_cast to non-arithmetic type unsupported");
+    static_assert(std::is_arithmetic<T>::value, "half_cast to non-arithmetic type unsupported");
 #endif
 
     static T cast(half arg)
@@ -2661,7 +2661,7 @@ template <typename T, std::float_round_style R>
 struct half_caster<T, expr, R>
 {
 #if HALF_ENABLE_CPP11_STATIC_ASSERT && HALF_ENABLE_CPP11_TYPE_TRAITS
-    static_assert(std::is_arithmetic_v<T>, "half_cast to non-arithmetic type unsupported");
+    static_assert(std::is_arithmetic<T>::value, "half_cast to non-arithmetic type unsupported");
 #endif
 
     static T cast(expr arg)

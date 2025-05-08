@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -88,18 +88,21 @@ struct PluginTensorDesc
 //!
 //! Tag for plug-in versions.  Used in upper byte of getTensorRTVersion().
 //!
+//! \deprecated Deprecated in TensorRT 10.10. PluginVersion is used only in relation to IPluginV2-descendent plugin
+//! interfaces, which are all deprecated.
+//!
 enum class PluginVersion : uint8_t
 {
     //! IPluginV2
-    kV2 = 0,
+    kV2 TRT_DEPRECATED_ENUM = 0,
     //! IPluginV2Ext
-    kV2_EXT = 1,
+    kV2_EXT TRT_DEPRECATED_ENUM = 1,
     //! IPluginV2IOExt
-    kV2_IOEXT = 2,
+    kV2_IOEXT TRT_DEPRECATED_ENUM = 2,
     //! IPluginV2DynamicExt
-    kV2_DYNAMICEXT = 3,
+    kV2_DYNAMICEXT TRT_DEPRECATED_ENUM = 3,
     //! IPluginV2DynamicExt-based Python plugins
-    kV2_DYNAMICEXT_PYTHON = kPLUGIN_VERSION_PYTHON_BIT | 3
+    kV2_DYNAMICEXT_PYTHON TRT_DEPRECATED_ENUM = kPLUGIN_VERSION_PYTHON_BIT | 3
 };
 
 //!
@@ -107,12 +110,15 @@ enum class PluginVersion : uint8_t
 //!
 //! \brief Enum to identify version of the plugin creator.
 //!
+//! \deprecated Deprecated in TensorRT 10.10. PluginCreatorVersion is used only in relation to plugin creators based
+//! off IPluginCreator, which is deprecated.
+//!
 enum class PluginCreatorVersion : int32_t
 {
     //! IPluginCreator
-    kV1 = 0,
+    kV1 TRT_DEPRECATED_ENUM = 0,
     //! IPluginCreator-based Python plugin creators
-    kV1_PYTHON = kPLUGIN_VERSION_PYTHON_BIT
+    kV1_PYTHON TRT_DEPRECATED_ENUM = kPLUGIN_VERSION_PYTHON_BIT
 };
 
 //!

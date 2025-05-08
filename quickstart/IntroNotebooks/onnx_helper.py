@@ -73,7 +73,7 @@ def convert_onnx_to_engine(onnx_filename, engine_filename = None, max_workspace_
     logger = trt.Logger(trt.Logger.WARNING)
     with trt.Builder(logger) as builder, builder.create_network() as network, trt.OnnxParser(network, logger) as parser, builder.create_builder_config() as builder_config:
         builder_config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, max_workspace_size)
-        if (fp16_mode):
+        if fp16_mode:
             builder_config.set_flag(trt.BuilderFlag.FP16)
 
         print("Parsing ONNX file.")

@@ -119,7 +119,7 @@ def filter_func(name):
     )
     return pattern.match(name) is not None
 
-def filter_func_no_proj_out(name): # used for Flux 
+def filter_func_no_proj_out(name): # used for Flux
     pattern = re.compile(
         r".*(time_emb_proj|time_embedding|conv_in|conv_out|conv_shortcut|add_embedding|pos_embed|time_text_embed|context_embedder|norm_out|x_embedder).*"
     )
@@ -329,8 +329,8 @@ def set_fmha(denoiser, is_flux=False):
             else:
                 module.set_processor(AttnProcessor())
 
-def check_lora(unet):
-    for name, module in unet.named_modules():
+def check_lora(model):
+    for name, module in model.named_modules():
         if isinstance(module, (LoRACompatibleConv, LoRACompatibleLinear)):
             assert (
                 module.lora_layer is None
@@ -465,14 +465,13 @@ def cast_resize_io(graph):
     After all activations and weights are converted to fp16, we will
     add cast nodes to Resize nodes I/O because Resize need to be run in fp32.
     """
-    nodes = graph.nodes
-    up_block_resize_regex = r"\/up_blocks.[0-2]\/upsamplers.0\/Resize"
-    up_block_resize_nodes = [_n for _n in nodes if re.match(up_block_resize_regex, _n.name)]
+    resize_nodes = [node for node in graph.nodes if node.op == "Resize"]
 
-    print(f"Found {len(up_block_resize_nodes)} Resize nodes to fix")
-    for resize_node in up_block_resize_nodes:
-        for input_tensor in resize_node.inputs:
-            if input_tensor.name:
+    print(f"Found {len(resize_nodes)} Resize nodes to fix")
+    for resize_node in resize_nodes:
+        for i, input_tensor in enumerate(resize_node.inputs):
+            SIZES_INPUT_INDEX = 3  # Optional input "sizes" at index 3 must be in INT64. Skip cast for this input.
+            if i != SIZES_INPUT_INDEX and input_tensor.name:
                 insert_cast(graph, input_tensor=input_tensor, attrs={"to": np.float32})
         for output_tensor in resize_node.outputs:
             if output_tensor.name:

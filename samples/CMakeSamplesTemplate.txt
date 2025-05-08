@@ -27,6 +27,7 @@ set_ifndef(CUDA_LIBS_REQUIRED False)
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 get_filename_component(SAMPLES_DIR ../ ABSOLUTE)
+get_filename_component(SHARED_DIR ../../shared ABSOLUTE)
 get_filename_component(SAMPLE_DIR_NAME ${TARGET_DIR} NAME)
 
 set_ifndef(CUDA_INSTALL_DIR /usr/local/cuda)
@@ -34,8 +35,8 @@ set_ifndef(CUDA_INSTALL_DIR /usr/local/cuda)
 # SAMPLES_COMMON_SOURCES
 set(SAMPLES_COMMON_SOURCES
     ${SAMPLES_DIR}/common/logger.cpp
-    ${SAMPLES_DIR}/utils/timingCache.cpp
-    ${SAMPLES_DIR}/utils/fileLock.cpp
+    ${SHARED_DIR}/utils/timingCache.cpp
+    ${SHARED_DIR}/utils/fileLock.cpp
 )
 
 if (MSVC)
@@ -82,6 +83,7 @@ target_include_directories(${TARGET_NAME}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
     PUBLIC ${ONNX_INCLUDE_DIR}
     PUBLIC ${CUDA_INSTALL_DIR}/include
+    PRIVATE ${SHARED_DIR}
     PRIVATE ${SAMPLES_DIR}
     PRIVATE ${SAMPLES_DIR}/common
     PRIVATE ${SAMPLES_DIR}/common/windows

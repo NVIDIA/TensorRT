@@ -188,7 +188,7 @@ nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string
         {"chw32", nvinfer1::TensorFormat::kCHW32}, {"dhwc8", nvinfer1::TensorFormat::kDHWC8},
         {"cdhw32", nvinfer1::TensorFormat::kCDHW32}, {"hwc", nvinfer1::TensorFormat::kHWC},
         {"dhwc", nvinfer1::TensorFormat::kDHWC}, {"dla_linear", nvinfer1::TensorFormat::kDLA_LINEAR},
-        {"dla_hwc4", nvinfer1::TensorFormat::kDLA_HWC4}};
+        {"hwc16", nvinfer1::TensorFormat::kHWC16}, {"dla_hwc4", nvinfer1::TensorFormat::kDLA_HWC4}};
     nvinfer1::TensorFormats formats{};
     for (auto f : optionStrings)
     {
@@ -918,6 +918,7 @@ std::string previewFeatureToString(PreviewFeature feature)
         break;
     }
     case PreviewFeature::kALIASED_PLUGIN_IO_10_03: return "kALIASED_PLUGIN_IO_10_03";
+    case PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10: return "kRUNTIME_ACTIVATION_RESIZE_10_10";
     }
     return "Invalid Preview Feature";
     // clang-format on
@@ -931,8 +932,7 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
         return os;
     }
 
-    auto const addFlag = [&](PreviewFeature feat)
-    {
+    auto const addFlag = [&](PreviewFeature feat) {
         int32_t featVal = static_cast<int32_t>(feat);
         if (options.previewFeatures.find(featVal) != options.previewFeatures.end())
         {
@@ -941,6 +941,7 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
     };
 
     addFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
+    addFlag(PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10);
 
     return os;
 }
@@ -1564,6 +1565,10 @@ void BuildOptions::parse(Arguments& arguments)
         {
             feat = PreviewFeature::kALIASED_PLUGIN_IO_10_03;
         }
+        else if (featureName == "runtimeActivationResize")
+        {
+            feat = PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10;
+        }
         else
         {
             throw std::invalid_argument(std::string("Unknown preview feature: ") + featureName);
@@ -1816,6 +1821,14 @@ void AllOptions::parse(Arguments& arguments)
         if (!build.load && model.baseModel.format == ModelFormat::kANY)
         {
             throw std::invalid_argument("Model missing or format not recognized");
+        }
+        if (system.DLACore >= 0 && inference.graph)
+        {
+            sample::gLogWarning << "CUDA graphs and DLA offloading are not simultaneously supported. "
+                                << "The CUDA graph option has been disabled (alternatively, you may run without the "
+                                   "`--useDLACore` option)."
+                                << std::endl;
+            inference.graph = false;
         }
         if (build.safe && system.DLACore >= 0)
         {
@@ -2621,6 +2634,7 @@ void BuildOptions::help(std::ostream& os)
         R"(                                     Preview Features: features ::= feature[","features])"                                               "\n"
           "                                                       feature  ::= (+|-)flag"                                                           "\n"
         R"(                                                       flag     ::= "aliasedPluginIO1003")"                                              "\n"
+        R"(                                                                    |"runtimeActivationResize")"                                         "\n"
         R"(                                                                    |"profileSharing0806")"                                              "\n"
           "  --builderOptimizationLevel         Set the builder optimization level. (default is 3)"                                                 "\n"
           "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
@@ -2659,10 +2673,13 @@ void BuildOptions::help(std::ostream& os)
           "  --allowWeightStreaming             Enable a weight streaming engine. Must be specified with --stronglyTyped. TensorRT will disable"    "\n"
           "                                     weight streaming at runtime unless --weightStreamingBudget is specified."                           "\n"
           "  --markDebug                        Specify list of names of tensors to be marked as debug tensors. Separate names with a comma"        "\n"
-          "  --tilingOptimizationLevel          Set the tiling optimization level. (default is 0)"                                                  "\n"
+          "  --tilingOptimizationLevel          Set the tiling optimization level. (default is " << defaultTilingOptimizationLevel << ")"           "\n"
           "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
-          "                                     Valid values include integers from 0 to the maximum tiling optimization level(4)."                  "\n"
-          "  --l2LimitForTiling                 Set the L2 cache usage limit for tiling optimization(default is -1)"                                      "\n"
+          "                                     Valid values include integers from " 
+                                                << static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kNONE) 
+                                                << " to the maximum tiling optimization level(" 
+                                                << static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kFULL) << ")."                           "\n"
+          "  --l2LimitForTiling                 Set the L2 cache usage limit for tiling optimization(default is -1)"                                "\n"
           ;
     // clang-format on
     os << std::flush;

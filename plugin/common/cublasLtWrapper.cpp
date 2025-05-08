@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,9 +37,7 @@ auto const kCUBLASLT_PLUGIN_LIBNAME
 auto const kCUBLASLT_PLUGIN_LIBNAME = std::string{"libcublasLt.so."} + std::to_string(nvinfer1::getCudaLibVersionMaj());
 #endif
 
-namespace nvinfer1
-{
-namespace pluginInternal
+namespace nvinfer1::pluginInternal
 {
 using namespace nvinfer1;
 
@@ -229,5 +227,4 @@ CublasLtWrapper& getCublasLtWrapper()
     return sGCublasLtWrapper;
 }
 
-} // namespace pluginInternal
-} // namespace nvinfer1
+} // namespace nvinfer1::pluginInternal

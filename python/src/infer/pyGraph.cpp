@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@
 
 // This file contains all bindings related to TensorRT INetworkDefinition.
 #include "ForwardDeclarations.h"
-#include "impl/plugin.h"
+#include "impl/NvInferPythonPlugin.h"
 #include "utils.h"
 #include <pybind11/stl.h>
 #include <tuple>

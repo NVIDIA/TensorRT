@@ -22,7 +22,7 @@ import inspect
 import os
 import time
 import warnings
-from typing import Any, List
+from typing import Any, List, Optional
 
 import numpy as np
 import tensorrt as trt
@@ -34,6 +34,7 @@ from huggingface_hub import snapshot_download
 from demo_diffusion import path as path_module
 from demo_diffusion.model import (
     CLIPModel,
+    FLUXLoraLoader,
     FluxTransformerModel,
     T5Model,
     VAEEncoderModel,
@@ -71,13 +72,12 @@ class FluxPipeline(DiffusionPipeline):
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
         guidance_scale=3.5,
         max_sequence_length=512,
-        bf16=False,
         calibration_dataset=None,
-        low_vram=False,
-        torch_fallback=None,
-        weight_streaming=False,
         t5_weight_streaming_budget_percentage=None,
         transformer_weight_streaming_budget_percentage=None,
+        lora_scale: float = 1.0,
+        lora_weight: Optional[List[float]] = None,
+        lora_path: Optional[List[str]] = None,
         **kwargs,
     ):
         """
@@ -91,10 +91,6 @@ class FluxPipeline(DiffusionPipeline):
                 Higher guidance scale encourages to generate images that are closely linked to the text prompt, usually at the expense of lower image quality.
             max_sequence_length (`int`, defaults to 512):
                 Maximum sequence length to use with the `prompt`.
-            bf16 (`bool`, defaults to False):
-                Whether to run the pipeline in BFloat16 precision.
-            weight_streaming (`bool`, defaults to False):
-                Whether to enable weight streaming during TensorRT engine build.
             t5_weight_streaming_budget_percentage (`int`, defaults to None):
                 Weight streaming budget as a percentage of the size of total streamable weights for the T5 model.
             transformer_weight_streaming_budget_percentage (`int`, defaults to None):
@@ -103,24 +99,22 @@ class FluxPipeline(DiffusionPipeline):
         super().__init__(
             version=version,
             pipeline_type=pipeline_type,
-            weight_streaming=weight_streaming,
             text_encoder_weight_streaming_budget_percentage=t5_weight_streaming_budget_percentage,
             denoiser_weight_streaming_budget_percentage=transformer_weight_streaming_budget_percentage,
             **kwargs,
         )
         self.guidance_scale = guidance_scale
         self.max_sequence_length = max_sequence_length
-        self.bf16=bf16
         self.calibration_dataset = calibration_dataset  # Currently supported for Flux ControlNet pipelines only
-        self.low_vram = low_vram
 
-        if torch_fallback:
-            assert type(torch_fallback) is list
-            for model_name in torch_fallback:
-                if model_name not in self.stages:
-                    raise ValueError(f'Model "{model_name}" set in --torch-fallback does not exist')
-                self.config[model_name.replace('-','_')+'_torch_fallback'] = True
-                print(f'[I] Setting torch_fallback for {model_name} model.')
+        # Initialize LoRA
+        self.lora_loader = None
+        if lora_path:
+            self.lora_weights = dict()
+            self.lora_loader = FLUXLoraLoader(lora_path, lora_weight, lora_scale)
+            assert len(lora_path) == len(lora_weight)
+            for i, path in enumerate(lora_path):
+                self.lora_weights[path] = lora_weight[i]
 
     @classmethod
     def FromArgs(cls, args: argparse.Namespace, pipeline_type: PIPELINE_TYPE) -> FluxPipeline:

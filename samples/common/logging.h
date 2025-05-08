@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -495,6 +495,8 @@ private:
 
     //!
     //! \brief generate a command line string from the given (argc, argv) values
+    //!        Note: It simply joins the arguments without proper escaping. If spaces is part
+    //!        of an argument, they will be joined with single space.
     //!
     static std::string genCmdlineString(int32_t argc, char const* const* argv)
     {

@@ -107,11 +107,12 @@ endif()
 set(trt_plugin_dependencies
     tensorrt
     CUDA::cudart_static
+    trt_global_definitions
 )
 
 if(NOT MSVC)
     list(APPEND trt_plugin_dependencies
-        Threads::Threads    
+        Threads::Threads
         CUDA::culibos
     )
 endif()
@@ -162,9 +163,10 @@ target_link_options(tensorrt_plugins_internal PRIVATE ${trt_plugins_internal_lin
 target_compile_options(tensorrt_plugins_internal PRIVATE ${trt_plugin_compile_options})
 
 set_target_properties(
-    tensorrt_plugins
+    tensorrt_plugins_internal
     PROPERTIES CXX_VISIBILITY_PRESET default
                VISIBILITY_INLINES_HIDDEN OFF
+               WINDOWS_EXPORT_ALL_SYMBOLS ON # Allows tests to reach internal symbols without __declspec(dllexport)
                OUTPUT_NAME nvinfer_plugin_internal
                VERSION ${TensorRT_VERSION}
                SOVERSION ${TRT_MAJOR}
@@ -208,9 +210,6 @@ endforeach()
 install(
     TARGETS tensorrt_plugins tensorrt_plugins_internal tensorrt_vc_plugins
     OPTIONAL
-    LIBRARY DESTINATION "."
-    ARCHIVE DESTINATION "."
-    RUNTIME DESTINATION "."
 )
 
 else() # TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW
@@ -467,8 +466,6 @@ add_dependencies(plugin ${SHARED_TARGET} ${STATIC_TARGET} ${VFC_SHARED_TARGET})
 
 install(
     TARGETS ${SHARED_TARGET} ${VFC_SHARED_TARGET}
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib)
+)
 
 endif()

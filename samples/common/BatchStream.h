@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,8 +45,8 @@ public:
         , mMaxBatches{maxBatches}
         , mDims{3, {1, 28, 28}} //!< We already know the dimensions of MNIST images.
     {
-        readDataFile(locateFile(dataFile, directories));
-        readLabelsFile(locateFile(labelsFile, directories));
+        readDataFile(samplesCommon::locateFile(dataFile, directories));
+        readLabelsFile(samplesCommon::locateFile(labelsFile, directories));
     }
 
     void reset(int firstBatch) override
@@ -161,7 +161,8 @@ public:
         , mSuffix(suffix)
         , mDataDir(directories)
     {
-        std::ifstream file(locateFile(mPrefix + std::string("0") + mSuffix, mDataDir).c_str(), std::ios::binary);
+        std::ifstream file(
+            samplesCommon::locateFile(mPrefix + std::string("0") + mSuffix, mDataDir).c_str(), std::ios::binary);
         ASSERT(file.good());
         int d[4];
         file.read(reinterpret_cast<char*>(d), 4 * sizeof(int32_t));
@@ -291,7 +292,8 @@ private:
     {
         if (mListFile.empty())
         {
-            std::string inputFileName = locateFile(mPrefix + std::to_string(mFileCount++) + mSuffix, mDataDir);
+            std::string inputFileName
+                = samplesCommon::locateFile(mPrefix + std::to_string(mFileCount++) + mSuffix, mDataDir);
             std::ifstream file(inputFileName.c_str(), std::ios::binary);
             if (!file)
             {
@@ -306,7 +308,7 @@ private:
         else
         {
             std::vector<std::string> fNames;
-            std::ifstream file(locateFile(mListFile, mDataDir), std::ios::binary);
+            std::ifstream file(samplesCommon::locateFile(mListFile, mDataDir), std::ios::binary);
             if (!file)
             {
                 return false;
@@ -332,7 +334,7 @@ private:
             std::vector<samplesCommon::PPM<imageC, imageH, imageW>> ppms(fNames.size());
             for (uint32_t i = 0; i < fNames.size(); ++i)
             {
-                readPPMFile(locateFile(fNames[i], mDataDir), ppms[i]);
+                readPPMFile(samplesCommon::locateFile(fNames[i], mDataDir), ppms[i]);
             }
 
             std::vector<float> data(samplesCommon::volume(mDims));

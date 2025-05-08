@@ -28,10 +28,6 @@ from typing import Dict
 class DDPath:
     """Data class that stores various paths used in DemoDiffusion."""
 
-    # Input paths.
-    # NOTE: Pre-resolved checkpoint paths are currently not used. Pipelines will be updated to using pre-resolved
-    # checkpoint paths soon in the future.
-    model_name_to_checkpoint_path: Dict[str, str] = dataclasses.field(default_factory=dict)
     model_name_to_optimized_onnx_path: Dict[str, str] = dataclasses.field(default_factory=dict)
     model_name_to_engine_path: Dict[str, str] = dataclasses.field(default_factory=dict)
 

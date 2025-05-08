@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -102,6 +102,12 @@ public:
     //!
     nvinfer1::ICudaEngine* get();
 
+    //! \overload nvinfer1::ICudaEngine* get();
+    [[nodiscard]] nvinfer1::ICudaEngine* operator->()
+    {
+        return this->get();
+    }
+
     //!
     //! \brief Get the pointer to the ICudaEngine and release the ownership.
     //!
@@ -120,7 +126,7 @@ public:
         {
             return EngineBlob{const_cast<void*>(static_cast<void const*>(mEngineBlob.data())), mEngineBlob.size()};
         }
-        if (mEngineBlobHostMemory.get() != nullptr && mEngineBlobHostMemory->size() > 0)
+        if (mEngineBlobHostMemory != nullptr && mEngineBlobHostMemory->size() > 0)
         {
             return EngineBlob{mEngineBlobHostMemory->data(), mEngineBlobHostMemory->size()};
         }

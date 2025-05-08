@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,16 +73,12 @@ using namespace nvinfer1::pluginInternal;
 
 using nvinfer1::plugin::RPROIParams;
 
-namespace nvinfer1
-{
-
-namespace plugin
+namespace nvinfer1::plugin
 {
 
 extern ILogger* gLogger;
 
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin
 
 namespace
 {

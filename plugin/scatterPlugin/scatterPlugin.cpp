@@ -19,9 +19,8 @@
 #include <cstring>
 #include <iostream>
 #include <sstream>
-namespace nvinfer1
-{
-namespace plugin
+
+namespace nvinfer1::plugin
 {
 
 namespace
@@ -300,5 +299,4 @@ IPluginV2Ext* ScatterNDPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

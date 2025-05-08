@@ -215,7 +215,7 @@ def run_circ_pad(
             var_x = gs.Variable(name="x", shape=inp_shape, dtype=np.float32)
             var_y = gs.Variable(name="y", dtype=np.float32)
             circ_pad_node = gs.Node(
-                name="circ_pad_plugin",
+                name="circ_pad_plugin 0",
                 op="circ_pad_plugin",
                 inputs=[var_x],
                 outputs=[var_y],

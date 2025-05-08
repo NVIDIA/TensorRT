@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -220,7 +220,7 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
     if (!mParams.timingCacheFile.empty())
     {
         timingCache = samplesCommon::buildTimingCacheFromFile(
-            sample::gLogger.getTRTLogger(), *preprocessorConfig, mParams.timingCacheFile, sample::gLogError);
+            sample::gLogger.getTRTLogger(), *preprocessorConfig, mParams.timingCacheFile);
     }
 
     SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan
@@ -280,8 +280,9 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     }
 
     auto parser = samplesCommon::infer_object(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
-    bool parsingSuccess = parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
-        static_cast<int>(sample::gLogger.getReportableSeverity()));
+    bool parsingSuccess
+        = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
+            static_cast<int>(sample::gLogger.getReportableSeverity()));
     if (!parsingSuccess)
     {
         sample::gLogError << "Failed to parse model." << std::endl;
@@ -342,8 +343,8 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
     {
-        timingCache = samplesCommon::buildTimingCacheFromFile(
-            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+        timingCache
+            = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
     // Build the prediction engine.
@@ -419,7 +420,7 @@ bool SampleDynamicReshape::infer()
     std::uniform_int_distribution<int> digitDistribution{0, 9};
     int digit = digitDistribution(generator);
 
-    Dims inputDims = loadPGMFile(locateFile(std::to_string(digit) + ".pgm", mParams.dataDirs));
+    Dims inputDims = loadPGMFile(samplesCommon::locateFile(std::to_string(digit) + ".pgm", mParams.dataDirs));
     mInput.deviceBuffer.resize(inputDims);
     CHECK(cudaMemcpy(
         mInput.deviceBuffer.data(), mInput.hostBuffer.data(), mInput.hostBuffer.nbBytes(), cudaMemcpyHostToDevice));

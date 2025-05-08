@@ -408,7 +408,7 @@ class VAEEncoderModel(base_model.BaseModel):
         return torch.randn(batch_size, 3, image_height, image_width, dtype=dtype, device=self.device)
 
 
-class SD3_VAEEncoderModel(VAEEncoderModel):
+class SD3_VAEEncoderModel(base_model.BaseModel):
     def __init__(
         self,
         version,
@@ -448,6 +448,15 @@ class SD3_VAEEncoderModel(VAEEncoderModel):
         model.forward = model.encode
         model = optimizer.optimize_checkpoint(model, torch_inference)
         return model
+
+    def get_input_names(self):
+        return ["images"]
+
+    def get_output_names(self):
+        return ["latent"]
+
+    def get_dynamic_axes(self):
+        return {"images": {0: "B", 2: "8H", 3: "8W"}, "latent": {0: "B", 2: "H", 3: "W"}}
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
         min_batch, max_batch, _, _, _, _, _, _, _, _ = self.get_minmax_dims(

@@ -18,23 +18,20 @@
 #include "timingCache.h"
 #include "NvInfer.h"
 #include "fileLock.h"
-#include "sampleUtils.h"
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-using namespace nvinfer1;
-namespace nvinfer1
-{
-namespace utils
+
+namespace nvinfer1::utils
 {
 std::vector<char> loadTimingCacheFile(ILogger& logger, std::string const& inFileName)
 {
     try
     {
-        FileLock const fileLock{logger, inFileName};
+        FileLock fileLock{logger, inFileName};
         std::ifstream iFile(inFileName, std::ios::in | std::ios::binary);
         if (!iFile)
         {
@@ -57,21 +54,31 @@ std::vector<char> loadTimingCacheFile(ILogger& logger, std::string const& inFile
     }
     catch (std::exception const& e)
     {
-        std::cerr << "Exception detected: " << e.what() << std::endl;
+        std::cerr << "Exception while loading timing cache file " << inFileName << ": " << e.what() << std::endl;
     }
     return {};
 }
 
 std::unique_ptr<ITimingCache> buildTimingCacheFromFile(
-    ILogger& logger, IBuilderConfig& config, std::string const& timingCacheFile, std::ostream& err)
+    ILogger& logger, IBuilderConfig& config, std::string const& timingCacheFile)
 {
     std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
-    auto timingCacheContents = loadTimingCacheFile(logger, timingCacheFile);
+    std::vector<char> timingCacheContents = loadTimingCacheFile(logger, timingCacheFile);
+
     timingCache.reset(config.createTimingCache(timingCacheContents.data(), timingCacheContents.size()));
-    SMP_RETVAL_IF_FALSE(timingCache != nullptr, "TimingCache creation failed", nullptr, err);
+    if (timingCache == nullptr)
+    {
+        logger.log(ILogger::Severity::kERROR, ("Failed to create ITimingCache from file " + timingCacheFile).c_str());
+        return nullptr;
+    }
+
     config.clearFlag(BuilderFlag::kDISABLE_TIMING_CACHE);
-    SMP_RETVAL_IF_FALSE(
-        config.setTimingCache(*timingCache, true), "IBuilderConfig setTimingCache failed", nullptr, err);
+    if (!config.setTimingCache(*timingCache, true))
+    {
+        logger.log(ILogger::Severity::kERROR,
+            ("IBuilderConfig#setTimingCache failed with timing cache from file " + timingCacheFile).c_str());
+        return nullptr;
+    }
     return timingCache;
 }
 
@@ -79,7 +86,7 @@ void saveTimingCacheFile(ILogger& logger, std::string const& outFileName, IHostM
 {
     try
     {
-        FileLock const fileLock{logger, outFileName};
+        FileLock fileLock{logger, outFileName};
         std::ofstream oFile(outFileName, std::ios::out | std::ios::binary);
         if (!oFile)
         {
@@ -96,7 +103,7 @@ void saveTimingCacheFile(ILogger& logger, std::string const& outFileName, IHostM
     }
     catch (std::exception const& e)
     {
-        std::cerr << "Exception detected: " << e.what() << std::endl;
+        std::cerr << "Exception while saving timing cache file " << outFileName << ": " << e.what() << std::endl;
     }
 }
 
@@ -105,35 +112,19 @@ void updateTimingCacheFile(nvinfer1::ILogger& logger, std::string const& fileNam
 {
     try
     {
-        // Prepare empty timingCache in case that there is no existing file to read
         std::unique_ptr<IBuilderConfig> config{builder.createBuilderConfig()};
-        std::unique_ptr<ITimingCache> fileTimingCache{config->createTimingCache(static_cast<void const*>(nullptr), 0)};
+        std::vector<char> timingCacheContents = loadTimingCacheFile(logger, fileName);
+        std::unique_ptr<ITimingCache> fileTimingCache{
+            config->createTimingCache(timingCacheContents.data(), timingCacheContents.size())};
 
-        FileLock const fileLock{logger, fileName};
-        std::ifstream iFile(fileName, std::ios::in | std::ios::binary);
-        if (iFile)
-        {
-            iFile.seekg(0, std::ifstream::end);
-            size_t fsize = iFile.tellg();
-            iFile.seekg(0, std::ifstream::beg);
-            std::vector<char> content(fsize);
-            iFile.read(content.data(), fsize);
-            iFile.close();
-            std::stringstream ss;
-            ss << "Loaded " << fsize << " bytes of timing cache from " << fileName;
-            logger.log(ILogger::Severity::kINFO, ss.str().c_str());
-            fileTimingCache.reset(config->createTimingCache(static_cast<void const*>(content.data()), content.size()));
-            if (!fileTimingCache)
-            {
-                throw std::runtime_error("Failed to create timingCache from " + fileName + "!");
-            }
-        }
         fileTimingCache->combine(*timingCache, false);
         std::unique_ptr<IHostMemory> blob{fileTimingCache->serialize()};
         if (!blob)
         {
-            throw std::runtime_error("Failed to serialize ITimingCache!");
+            throw std::runtime_error("Failed to serialize combined ITimingCache!");
         }
+
+        FileLock fileLock{logger, fileName};
         std::ofstream oFile(fileName, std::ios::out | std::ios::binary);
         if (!oFile)
         {
@@ -142,7 +133,8 @@ void updateTimingCacheFile(nvinfer1::ILogger& logger, std::string const& fileNam
             logger.log(ILogger::Severity::kWARNING, ss.str().c_str());
             return;
         }
-        oFile.write(reinterpret_cast<char*>(blob->data()), blob->size());
+
+        oFile.write(reinterpret_cast<char const*>(blob->data()), blob->size());
         oFile.close();
         std::stringstream ss;
         ss << "Saved " << blob->size() << " bytes of timing cache to " << fileName;
@@ -150,8 +142,7 @@ void updateTimingCacheFile(nvinfer1::ILogger& logger, std::string const& fileNam
     }
     catch (std::exception const& e)
     {
-        std::cerr << "Exception detected: " << e.what() << std::endl;
+        std::cerr << "Exception while updating timing cache file " << fileName << ": " << e.what() << std::endl;
     }
 }
-} // namespace utils
-} // namespace nvinfer1
+} // namespace nvinfer1::utils

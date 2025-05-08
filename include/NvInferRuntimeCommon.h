@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -298,6 +298,23 @@ public:
     //!   - Thread-safe: Yes; calls to this method will be synchronized by a mutex.
     //!
     virtual int32_t releasePluginResource(AsciiChar const* key) noexcept = 0;
+
+    //!
+    //! \brief Return all registered plugin creators by searching starting from the current registry and following
+    //! parent registries recursively as long as isParentSearchEnabled() returns true.
+    //!
+    //! \param[out] numCreators Pointer to an integer where the number of registered plugin creators will be stored.
+    //!
+    //! \return A pointer to an array of IPluginCreatorInterface pointers. Returns nullptr if no creators are found.
+    //!
+    //! \warning If any plugin creators are registered or deregistered after calling this function, the returned pointer
+    //! is not guaranteed to remain valid.
+    //!
+    //! \usage
+    //! - Allowed context for the API call
+    //!   - Thread-safe: No
+    //!
+    virtual IPluginCreatorInterface* const* getAllCreatorsRecursive(int32_t* const numCreators) noexcept = 0;
 };
 
 } // namespace nvinfer1
