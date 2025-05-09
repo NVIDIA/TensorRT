@@ -32,7 +32,7 @@ from demo_diffusion.model.diffusion_transformer import (
 )
 from demo_diffusion.model.gan import VQGANModel
 from demo_diffusion.model.load import unload_torch_model
-from demo_diffusion.model.lora import LoraLoader, merge_loras
+from demo_diffusion.model.lora import FLUXLoraLoader, SDLoraLoader, merge_loras
 from demo_diffusion.model.scheduler import make_scheduler
 from demo_diffusion.model.t5 import T5Model
 from demo_diffusion.model.tokenizer import make_tokenizer
@@ -70,7 +70,8 @@ __all__ = [
     # gan
     "VQGANModel",
     # lora
-    "LoraLoader",
+    "SDLoraLoader",
+    "FLUXLoraLoader",
     "merge_loras",
     # scheduler
     "make_scheduler",

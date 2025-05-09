@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +17,7 @@
 #include "regionPlugin.h"
 #include <cstring>
 
-namespace nvinfer1
-{
-namespace plugin
+namespace nvinfer1::plugin
 {
 namespace
 {
@@ -309,14 +307,14 @@ void Region::serialize(void* buffer) const noexcept
     write(d, num);
     write(d, classes);
     write(d, coords);
-    write(d, smTree.get() != nullptr);
-    write(d, smTree.get() != nullptr && smTree->leaf != nullptr);
-    write(d, smTree.get() != nullptr && smTree->parent != nullptr);
-    write(d, smTree.get() != nullptr && smTree->child != nullptr);
-    write(d, smTree.get() != nullptr && smTree->group != nullptr);
-    write(d, smTree.get() != nullptr && smTree->name != nullptr);
-    write(d, smTree.get() != nullptr && smTree->groupSize != nullptr);
-    write(d, smTree.get() != nullptr && smTree->groupOffset != nullptr);
+    write(d, smTree != nullptr);
+    write(d, smTree != nullptr && smTree->leaf != nullptr);
+    write(d, smTree != nullptr && smTree->parent != nullptr);
+    write(d, smTree != nullptr && smTree->child != nullptr);
+    write(d, smTree != nullptr && smTree->group != nullptr);
+    write(d, smTree != nullptr && smTree->name != nullptr);
+    write(d, smTree != nullptr && smTree->groupSize != nullptr);
+    write(d, smTree != nullptr && smTree->groupOffset != nullptr);
     // need to do a deep copy
     if (smTree)
     {
@@ -562,5 +560,4 @@ IPluginV2Ext* RegionPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

@@ -24,6 +24,8 @@ namespace tensorrt
 namespace CalibrationAlgoTypeDoc
 {
 constexpr const char* descr = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
+
     Version of calibration algorithm to use.
 )trtdoc";
 } // namespace CalibrationAlgoTypeDoc

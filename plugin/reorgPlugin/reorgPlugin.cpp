@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +16,7 @@
  */
 #include "reorgPlugin.h"
 
-namespace nvinfer1
-{
-namespace plugin
+namespace nvinfer1::plugin
 {
 static char const* const kREORG_PLUGIN_STATIC_VERSION{"1"};
 static char const* const kREORG_PLUGIN_DYNAMIC_VERSION{"2"};
@@ -403,5 +401,4 @@ IPluginV2Ext* ReorgPluginCreator<TPluginClass>::deserializePlugin(
 template class ReorgPluginCreator<ReorgStatic>;
 template class ReorgPluginCreator<ReorgDynamic>;
 
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

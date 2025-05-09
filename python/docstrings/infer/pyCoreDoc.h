@@ -1155,6 +1155,9 @@ constexpr char const* PROFILE_SHARING_0806 = R"trtdoc(
 constexpr char const* ALIASED_PLUGIN_IO_10_03 = R"trtdoc(
     Allows plugin I/O to be aliased when using IPluginV3OneBuildV2.
 )trtdoc";
+constexpr char const* RUNTIME_ACTIVATION_RESIZE_10_10 = R"trtdoc(
+    Allow update_device_memory_size_for_shapes to resize runner internal activation memory by changing the allocation algorithm. Using this feature can reduce runtime memory requirement when the actual input tensor shapes are smaller than the maximum input tensor dimensions.
+)trtdoc";
 } // namespace PreviewFeatureDoc
 
 namespace HardwareCompatibilityLevelDoc
@@ -1223,7 +1226,7 @@ constexpr char const* FULL = R"trtdoc(
 namespace NetworkDefinitionCreationFlagDoc
 {
 constexpr char const* descr
-    = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable explicit batch mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.STRONGLY_TYPED)`` to :func:`create_network` )trtdoc";
+    = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable strongly typed mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.STRONGLY_TYPED)`` to :func:`create_network` )trtdoc";
 constexpr char const* EXPLICIT_BATCH
     = R"trtdoc([DEPRECATED] Ignored because networks are always "explicit batch" in TensorRT 10.0.)trtdoc";
 constexpr char const* STRONGLY_TYPED
@@ -1889,15 +1892,13 @@ namespace RuntimeInspectorDoc
 {
 constexpr char const* descr = R"trtdoc(
     An engine inspector which prints out the layer information of an engine or an execution context.
-    The engine or the context must be set before get_layer_information() or get_engine_information() can be called.
 
     The amount of printed information depends on the profiling verbosity setting of the builder config when the engine is built.
     By default, the profiling verbosity is set to ProfilingVerbosity.LAYER_NAMES_ONLY, and only layer names will be printed.
     If the profiling verbosity is set to ProfilingVerbosity.DETAILED, layer names and layer parameters will be printed.
     If the profiling verbosity is set to ProfilingVerbosity.NONE, no layer information will be printed.
 
-    :ivar engine: :class:`ICudaEngine` Set or get the engine currently being inspected.
-    :ivar context: :class:`IExecutionContext` Set or get context currently being inspected.
+    :ivar execution_context: :class:`IExecutionContext` Set or get context currently being inspected.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
 )trtdoc";
 

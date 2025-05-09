@@ -420,8 +420,8 @@ bool SampleIOFormats::build(int32_t dataWidth)
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
     {
-        timingCache = samplesCommon::buildTimingCacheFromFile(
-            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+        timingCache
+            = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
@@ -476,7 +476,7 @@ bool SampleIOFormats::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& buil
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
     SampleUniquePtr<nvonnxparser::IParser>& parser)
 {
-    auto parsed = parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
+    auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
         static_cast<int32_t>(sample::gLogger.getReportableSeverity()));
     if (!parsed)
     {

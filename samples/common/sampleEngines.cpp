@@ -93,11 +93,11 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         else
         {
             mParentRuntime.reset(createRuntime());
-            ASSERT(mParentRuntime.get() != nullptr);
+            ASSERT(mParentRuntime != nullptr);
 
             mRuntime.reset(mParentRuntime->loadRuntime(mLeanDLLPath.c_str()));
         }
-        ASSERT(mRuntime.get() != nullptr);
+        ASSERT(mRuntime != nullptr);
 
         if (mVersionCompatible)
         {
@@ -646,6 +646,7 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
         }
     };
     setFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
+    setFlag(PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10);
 }
 
 [[nodiscard]] bool setupTilingSettings(BuildOptions const& build, IBuilderConfig& config, std::ostream& err)
@@ -1201,8 +1202,7 @@ bool networkToSerializedEngine(
     // Try to load cache from file. Create a fresh cache if the file doesn't exist
     if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
     {
-        timingCache
-            = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), *config, build.timingCacheFile, err);
+        timingCache = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), *config, build.timingCacheFile);
     }
 
     // CUDA stream used for profiling by the builder.

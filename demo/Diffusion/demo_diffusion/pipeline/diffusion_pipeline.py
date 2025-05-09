@@ -23,8 +23,9 @@ import gc
 import json
 import os
 import pathlib
+import sys
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import Any, List
 
 import modelopt.torch.opt as mto
 import modelopt.torch.quantization as mtq
@@ -48,7 +49,6 @@ from torch.utils.data import DataLoader
 import demo_diffusion.engine as engine_module
 import demo_diffusion.image as image_module
 from demo_diffusion.model import (
-    LoraLoader,
     make_scheduler,
     merge_loras,
     unload_torch_model,
@@ -120,12 +120,10 @@ class DiffusionPipeline(ABC):
         dd_path,
         version="1.5",
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
+        bf16=False,
         max_batch_size=16,
         denoising_steps=30,
         scheduler=None,
-        lora_scale: float = 1.0,
-        lora_weight: Optional[List[float]] = None,
-        lora_path: Optional[List[str]] = None,
         device="cuda",
         output_dir=".",
         hf_token=None,
@@ -134,7 +132,9 @@ class DiffusionPipeline(ABC):
         use_cuda_graph=False,
         framework_model_dir="pytorch_model",
         return_latents=False,
+        low_vram=False,
         torch_inference="",
+        torch_fallback=None,
         weight_streaming=False,
         text_encoder_weight_streaming_budget_percentage=None,
         denoiser_weight_streaming_budget_percentage=None,
@@ -150,6 +150,8 @@ class DiffusionPipeline(ABC):
                 Task performed by the current pipeline. Should be one of PIPELINE_TYPE.__members__.
             max_batch_size (int):
                 Maximum batch size for dynamic batch engine.
+            bf16 (`bool`, defaults to False):
+                Whether to run the pipeline in BFloat16 precision.
             denoising_steps (int):
                 The number of denoising steps.
                 More denoising steps usually lead to a higher quality image at the expense of slower inference.
@@ -177,8 +179,12 @@ class DiffusionPipeline(ABC):
                 cache directory for framework checkpoints.
             return_latents (bool):
                 Skip decoding the image and return latents instead.
+            low_vram (bool):
+                [FLUX only] Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default.
             torch_inference (str):
-                Run inference with PyTorch (using specified compilation mode) instead of TensorRT.
+                Run inference with PyTorch (using specified compilation mode) instead of TensorRT. The compilation mode specified should be one of ['eager', 'reduce-overhead', 'max-autotune'].
+            torch_fallback (str):
+                [FLUX only] Comma separated list of models to be inferenced using PyTorch instead of TRT. For example --torch-fallback t5,transformer. If --torch-inference set, this parameter will be ignored.
             weight_streaming (`bool`, defaults to False):
                 Whether to enable weight streaming during TensorRT engine build.
             text_encoder_ws_budget_percentage (`int`, defaults to None):
@@ -186,6 +192,7 @@ class DiffusionPipeline(ABC):
             denoiser_weight_streaming_budget_percentage (`int`, defaults to None):
                 Weight streaming budget as a percentage of the size of total streamable weights for the denoiser model.
         """
+        self.bf16 = bf16
         self.dd_path = dd_path
 
         self.denoising_steps = denoising_steps
@@ -207,11 +214,21 @@ class DiffusionPipeline(ABC):
         self.pipeline_type = pipeline_type
         self.return_latents = return_latents
 
+        self.low_vram = low_vram
         self.weight_streaming = weight_streaming
         self.text_encoder_weight_streaming_budget_percentage = text_encoder_weight_streaming_budget_percentage
         self.denoiser_weight_streaming_budget_percentage = denoiser_weight_streaming_budget_percentage
 
         self.stages = self.get_model_names(self.pipeline_type)
+        # config to store additional info
+        self.config = {}
+        if torch_fallback:
+            assert type(torch_fallback) is list
+            for model_name in torch_fallback:
+                if model_name not in self.stages:
+                    raise ValueError(f'Model "{model_name}" set in --torch-fallback does not exist')
+                self.config[model_name.replace("-", "_") + "_torch_fallback"] = True
+                print(f"[I] Setting torch_fallback for {model_name} model.")
 
         if not scheduler:
             scheduler = 'UniPC' if self.pipeline_type.is_controlnet() else self.SCHEDULER_DEFAULTS.get(version, 'DDIM')
@@ -250,15 +267,6 @@ class DiffusionPipeline(ABC):
         self.shape_dicts = {}
         self.shared_device_memory = None
 
-        # initialize lora loader and scales
-        self.lora_loader = None
-        self.lora_weights = dict()
-        if lora_path:
-            self.lora_loader = LoraLoader(lora_path, lora_weight, lora_scale)
-            assert len(lora_path) == len(lora_weight)
-            for i, path in enumerate(lora_path):
-                self.lora_weights[path] = lora_weight[i]
-
         # initialized in load_resources()
         self.events = {}
         self.generator = None
@@ -266,9 +274,6 @@ class DiffusionPipeline(ABC):
         self.seed = None
         self.stream = None
         self.tokenizer = None
-
-        # config to store additional info
-        self.config = {}
 
     @classmethod
     @abc.abstractmethod
@@ -338,17 +343,20 @@ class DiffusionPipeline(ABC):
 
         configs = {}
         for model_name in model_names:
+            # Initialize config
+            do_engine_refit = enable_refit and not self.pipeline_type.is_sd_xl_refiner() and any(model_name.startswith(prefix) for prefix in ("unet", "transformer"))
+            do_lora_merge = not enable_refit and self.lora_loader and any(model_name.startswith(prefix) for prefix in ("unet", "transformer"))
+
             config = {
-                "do_engine_refit": not self.pipeline_type.is_sd_xl_refiner()
-                and enable_refit
-                and model_name.startswith("unet"),
-                "do_lora_merge": not enable_refit and self.lora_loader and model_name.startswith("unet"),
+                "do_engine_refit": do_engine_refit,
+                "do_lora_merge": do_lora_merge,
                 "use_int8": False,
                 "use_fp8": False,
                 'use_fp4': False,
             }
 
             # TODO: Move this to when arguments are first being validated in dd_argparse.py
+            # 8-bit/4-bit precision inference
             if int8:
                 assert self.pipeline_type.is_sd_xl_base() or self.version in [
                     "1.5",
@@ -373,6 +381,7 @@ class DiffusionPipeline(ABC):
             elif fp4:
                 config['use_fp4'] = True
 
+            # Setup paths
             config["onnx_path"] = self.dd_path.model_name_to_unoptimized_onnx_path[model_name]
             config["onnx_opt_path"] = self.dd_path.model_name_to_optimized_onnx_path[model_name]
             config["engine_path"] = self.dd_path.model_name_to_engine_path[model_name]
@@ -386,7 +395,18 @@ class DiffusionPipeline(ABC):
 
         return configs
 
-    def _calibrate_and_save_model(self, pipeline, model, model_config, quantization_level, quantization_percentile, quantization_alpha, calibration_size, calib_batch_size, **kwargs):
+    def _calibrate_and_save_model(
+            self,
+            pipeline,
+            model,
+            model_config,
+            quantization_level,
+            quantization_percentile,
+            quantization_alpha,
+            calibration_size,
+            calib_batch_size,
+            enable_lora_merge = False,
+            **kwargs):
         print(f"[I] Calibrated weights not found, generating {model_config['state_dict_path']}")
 
         # TODO check size > calibration_size
@@ -445,7 +465,8 @@ class DiffusionPipeline(ABC):
                 collate_fn=custom_collate,
             )
         else:
-            calibration_file = os.path.join(os.getcwd(), 'calibration_data', 'calibration-prompts.txt')
+            root_dir = os.path.dirname(os.path.abspath(sys.modules["__main__"].__file__))
+            calibration_file = os.path.join(root_dir, "calibration_data", "calibration-prompts.txt")
             calibration_prompts = load_calib_prompts(calib_batch_size, calibration_file)
 
         def forward_loop(model):
@@ -489,13 +510,29 @@ class DiffusionPipeline(ABC):
             else:
                 quant_config = SD_FP8_FP16_DEFAULT_CONFIG
 
+        # Handle LoRA
+        if enable_lora_merge:
+            assert self.lora_loader is not None
+            model = merge_loras(model, self.lora_loader)
+
         check_lora(model)
+
         if self.version.startswith("flux.1"):
             set_quant_precision(quant_config, "BFloat16")
         mtq.quantize(model, quant_config, forward_loop)
         mto.save(model, model_config['state_dict_path'])
 
-    def _get_quantized_model(self, obj, model_config, quantization_level, quantization_percentile, quantization_alpha, calibration_size, calib_batch_size, **kwargs):
+    def _get_quantized_model(
+            self,
+            obj,
+            model_config,
+            quantization_level,
+            quantization_percentile,
+            quantization_alpha,
+            calibration_size,
+            calib_batch_size,
+            enable_lora_merge = False,
+            **kwargs):
         pipeline = obj.get_pipeline()
         is_flux = self.version.startswith("flux.1")
         model = pipeline.unet if self.version not in ("sd3", "flux.1-dev", "flux.1-schnell", "flux.1-dev-depth", "flux.1-dev-canny") else pipeline.transformer
@@ -503,7 +540,17 @@ class DiffusionPipeline(ABC):
             set_fmha(model, is_flux=is_flux)
 
         if not os.path.exists(model_config['state_dict_path']):
-            self._calibrate_and_save_model(pipeline, model, model_config, quantization_level, quantization_percentile, quantization_alpha, calibration_size, calib_batch_size, **kwargs)
+            self._calibrate_and_save_model(
+                pipeline,
+                model,
+                model_config,
+                quantization_level,
+                quantization_percentile,
+                quantization_alpha,
+                calibration_size,
+                calib_batch_size,
+                enable_lora_merge,
+                **kwargs)
         else:
             mto.restore(model, model_config['state_dict_path'])
 
@@ -563,11 +610,39 @@ class DiffusionPipeline(ABC):
 
         if do_export_onnx or do_export_weights_map:
             if not model_config['use_int8'] and not model_config['use_fp8']:
-                obj.export_onnx(model_config['onnx_path'], model_config['onnx_opt_path'], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=model_config['do_lora_merge'], static_shape=static_shape, lora_loader=self.lora_loader)
+                obj.export_onnx(
+                    model_config['onnx_path'],
+                    model_config['onnx_opt_path'],
+                    onnx_opset,
+                    opt_image_height,
+                    opt_image_width,
+                    enable_lora_merge=model_config['do_lora_merge'],
+                    static_shape=static_shape,
+                    lora_loader=self.lora_loader
+                )
             else:
                 print(f"[I] Generating quantized ONNX model: {model_config['onnx_path']}")
-                quantized_model = self._get_quantized_model(obj, model_config, quantization_level, quantization_percentile, quantization_alpha, calibration_size, calib_batch_size, height=opt_image_width, width=opt_image_width)
-                obj.export_onnx(model_config['onnx_path'], model_config['onnx_opt_path'], onnx_opset, opt_image_height, opt_image_width, custom_model=quantized_model, static_shape=static_shape)
+                quantized_model = self._get_quantized_model(
+                    obj,
+                    model_config,
+                    quantization_level,
+                    quantization_percentile,
+                    quantization_alpha,
+                    calibration_size,
+                    calib_batch_size,
+                    height=opt_image_width,
+                    width=opt_image_width,
+                    enable_lora_merge=model_config['do_lora_merge']
+                )
+                obj.export_onnx(
+                    model_config['onnx_path'],
+                    model_config['onnx_opt_path'],
+                    onnx_opset,
+                    opt_image_height,
+                    opt_image_width,
+                    custom_model=quantized_model,
+                    static_shape=static_shape
+                )
 
         # FIXME do_export_weights_map needs ONNX graph
         if do_export_weights_map:

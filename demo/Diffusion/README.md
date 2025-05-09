@@ -157,7 +157,11 @@ python3 demo_controlnet.py "A beautiful bird with rainbow colors" --controlnet-t
 ### Generate an image guided by a text prompt, and using specified LoRA model weight updates
 
 ```bash
+# FP16
 python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees and mountains" --version=xl-1.0 --lora-path "ostris/crayon_style_lora_sdxl" "ostris/watercolor_style_lora_sdxl" --lora-weight 0.3 0.7 --onnx-dir onnx-sdxl-lora --engine-dir engine-sdxl-lora --build-enable-refit
+
+# FP8
+python3 demo_txt2img_xl.py "Picture of a rustic Italian village with Olive trees and mountains" --version=xl-1.0 --lora-path "ostris/crayon_style_lora_sdxl" "ostris/watercolor_style_lora_sdxl" --lora-weight 0.3 0.7 --onnx-dir onnx-sdxl-lora --engine-dir engine-sdxl-lora --fp8
 ```
 
 ### Faster Text-to-image using SDXL INT8 & FP8 quantization using ModelOpt
@@ -277,7 +281,7 @@ python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a
 
 ##### Run Flux.1-Dev
 
-NOTE: Pass `--download-onnx-models` to avoid native ONNX export and download the ONNX models from (Black Forest Labs' collection)[https://huggingface.co/collections/black-forest-labs/flux1-onnx-679d06b7579583bd84c8ef83]. It is only supported for BF16, FP8, and FP4 pipelines.
+NOTE: Pass `--download-onnx-models` to avoid native ONNX export and download the ONNX models from [Black Forest Labs' collection](https://huggingface.co/collections/black-forest-labs/flux1-onnx-679d06b7579583bd84c8ef83). It is only supported for BF16, FP8, and FP4 pipelines.
 
 ```bash
 # FP16 (requires >48GB VRAM for native export)
@@ -287,7 +291,7 @@ python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry b
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --bf16 --download-onnx-models
 
 # FP8
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8 --download-onnx-models
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --quantization-level 4 --fp8 --download-onnx-models
 
 # FP4
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp4 --download-onnx-models
@@ -303,7 +307,7 @@ python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry b
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --bf16 --download-onnx-models
 
 # FP8
-python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp8 --download-onnx-models
+python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --quantization-level 4 --fp8 --download-onnx-models
 
 # FP4
 python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --version="flux.1-schnell" --fp4 --download-onnx-models
@@ -351,10 +355,10 @@ python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of d
 python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch
 
 # FP8 using native ONNX export
-rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30
+rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --quantization-level 4 --fp8 --denoising-steps 30
 
 # FP4
-python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp4 --denoising-steps 30 --download-onnx-models
+python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp4 --denoising-steps 30 --download-onnx-models --build-static-batch
 ```
 
 ##### Canny ControlNet
@@ -367,15 +371,26 @@ python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-ca
 python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch
 
 # FP8 using native ONNX export
-rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --denoising-steps 30 --calibration-dataset {custom/dataset/path}
+rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --quantization-level 4 --fp8 --denoising-steps 30 --calibration-dataset {custom/dataset/path}
 
 # FP4
 python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp4 --denoising-steps 30 --download-onnx-models
 ```
 
+#### 4. Generate an Image Using Flux LoRA
+
+FLUX supports loading LoRA for Flux.1-Dev and Flux.1-Schnell. Make sure the target lora is compatible with the transformer model. Below is an example of using a [water color Flux LoRA](https://huggingface.co/SebastianBodza/flux_lora_aquarel_watercolor)
+
+```bash
+# FP16
+python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latte art design, with the 'Coffee Creations' logo skillfully formed within the latte foam. In a watercolor style, AQUACOLTOK. White background." --hf-token=$HF_TOKEN --lora-path "SebastianBodza/flux_lora_aquarel_watercolor" --lora-weight 1.0 --onnx-dir=onnx-flux-lora --engine-dir=engine-flux-lora
+
+# FP8
+python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latte art design, with the 'Coffee Creations' logo skillfully formed within the latte foam. In a watercolor style, AQUACOLTOK. White background." --hf-token=$HF_TOKEN --lora-path "SebastianBodza/flux_lora_aquarel_watercolor" --lora-weight 1.0 --onnx-dir=onnx-flux-lora --engine-dir=engine-flux-lora --fp8
+```
 ---
 
-#### 4. Export ONNX Models Only (Skip Inference)
+#### 5. Export ONNX Models Only (Skip Inference)
 
 Use the `--onnx-export-only` flag to export ONNX models on a higher-VRAM device. The exported ONNX models can be used on a device with lower VRAM for the engine build and inference steps.
 
@@ -385,7 +400,7 @@ python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry b
 
 ---
 
-#### 5. Running Flux on GPUs with Limited Memory
+#### 6. Running Flux on GPUs with Limited Memory
 
 ##### Optimization Flags
 

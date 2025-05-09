@@ -1,5 +1,6 @@
 cupy-cuda12x
-triton; platform_system != "Windows"
+triton==3.1.0; (platform_system != "Windows" and python_version <= "3.8")
+triton==3.2.0; (platform_system != "Windows" and python_version >= "3.9")
 torch
 --extra-index-url https://pypi.ngc.nvidia.com
 polygraphy

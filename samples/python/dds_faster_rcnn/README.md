@@ -31,8 +31,8 @@ Here is a high-level overview of the workflow:
 
 By implementing the `IOutputAllocator` interface, developers can create custom memory allocation strategies that optimize performance, reduce memory fragmentation, and improve the overall efficiency of their model inference.
 
-## Setup 
-We recommend running these scripts on an environment with TensorRT >= 10.8.0. 
+## Setup
+We recommend running these scripts on an environment with TensorRT >= 10.8.0.
 
 Install TensorRT as per the [TensorRT Install Guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/installing-tensorrt/installing.html). You will need to make sure the Python bindings for TensorRT are also installed correctly, these are available by installing the `python3-libnvinfer` and `python3-libnvinfer-dev` packages on your TensorRT download.
 
@@ -88,11 +88,11 @@ Then, run the inference script using the following command:
 python3 infer.py \
     --engine ./fasterrcnn12_trt.engine \
     --input ./demo.jpg \
-    --output ./output_dir \ 
+    --output ./output_dir \
     --labels labels_coco_80.txt
 ```
 This will perform object detection on the test image and save the output to the specified directory (`output_dir` in this case).
 
-## Changelog
+## Changlog
 - Feb 2025
     - Initial release

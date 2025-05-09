@@ -15,10 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import os
 import pathlib
 import random
+import sys
 import time
 from typing import Optional
 
@@ -271,7 +271,8 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
                     if not os.path.exists(state_dict_path):
                         # Load calibration images
                         print(f"[I] Calibrated weights not found, generating {state_dict_path}")
-                        calibration_image_folder = os.path.join(os.getcwd(), 'calibration_data', 'calibration-images')
+                        root_dir = os.path.dirname(os.path.abspath(sys.modules["__main__"].__file__))
+                        calibration_image_folder = os.path.join(root_dir, "calibration_data", "calibration-images")
                         calibration_image_list = load_calibration_images(calibration_image_folder)
                         print("Number of images loaded:", len(calibration_image_list))
 

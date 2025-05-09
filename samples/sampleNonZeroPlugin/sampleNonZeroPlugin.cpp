@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -426,7 +426,7 @@ bool SampleNonZeroPlugin::build()
     }
 
     auto pluginCreator = std::make_unique<NonZeroPluginCreator>();
-    getPluginRegistry()->registerCreator(*pluginCreator.get(), "");
+    getPluginRegistry()->registerCreator(*pluginCreator, "");
 
     auto constructed = constructNetwork(builder, network, config);
     if (!constructed)
@@ -596,7 +596,8 @@ bool SampleNonZeroPlugin::processInput(samplesCommon::BufferManager const& buffe
     std::default_random_engine generator(mSeed);
     std::uniform_int_distribution<int32_t> distr(0, 9);
     auto const number = distr(generator);
-    readPGMFile(locateFile(std::to_string(number) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
+    samplesCommon::readPGMFile(
+        samplesCommon::locateFile(std::to_string(number) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
 
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     for (int32_t i = 0; i < inputH * inputW; ++i)

@@ -555,7 +555,7 @@ void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnviron
     // Print an warning about total per-layer latency when auxiliary streams are used.
     if (!iEnv.safe && (reporting.profile || !reporting.exportProfile.empty()))
     {
-        int32_t const nbAuxStreams = iEnv.engine.get()->getNbAuxStreams();
+        int32_t const nbAuxStreams = iEnv.engine->getNbAuxStreams();
         if (nbAuxStreams > 0)
         {
             sample::gLogWarning << "The engine uses " << nbAuxStreams << " auxiliary streams, so the \"Total\" latency "

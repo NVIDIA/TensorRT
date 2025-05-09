@@ -21,7 +21,7 @@
 #include "NvInfer.h"
 
 //!
-//! \file plugin.h
+//! \file NvInferPythonPlugin.h
 //!
 //! This file contains definitions for supporting the `tensorrt.plugin` Python module
 //!

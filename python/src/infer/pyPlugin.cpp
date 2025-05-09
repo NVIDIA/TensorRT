@@ -17,7 +17,7 @@
 
 // This file contains all bindings related to plugins.
 #include "ForwardDeclarations.h"
-#include "impl/plugin.h"
+#include "impl/NvInferPythonPlugin.h"
 #include "infer/pyPluginDoc.h"
 #include "utils.h"
 #include <cuda_runtime_api.h>
@@ -2968,9 +2968,11 @@ static const auto get_plugin_creator_list = [](IPluginRegistry& self) {
     return new std::vector<IPluginCreator*>(ptr, ptr + numCreators);
 };
 
-static const auto get_all_creators = [](IPluginRegistry& self) -> std::vector<py::object>* {
+std::vector<py::object>* getCreatorsUtil(
+    std::function<IPluginCreatorInterface* const*(int32_t* const)> getCreatorsFunc, std::string const& funcName)
+{
     int32_t numCreators{0};
-    IPluginCreatorInterface* const* ptr = self.getAllCreators(&numCreators);
+    IPluginCreatorInterface* const* ptr = getCreatorsFunc(&numCreators);
     // Python will free when done.
     auto vec = std::make_unique<std::vector<py::object>>(numCreators);
     try
@@ -2995,13 +2997,23 @@ static const auto get_all_creators = [](IPluginRegistry& self) -> std::vector<py
     }
     catch (std::exception const& e)
     {
-        std::cerr << "[ERROR] Exception caught in get_all_creators(): " << e.what() << std::endl;
+        std::cerr << "[ERROR] Exception caught in " << funcName << "(): " << e.what() << std::endl;
     }
     catch (...)
     {
-        std::cerr << "[ERROR] Exception caught in get_all_creators()" << std::endl;
+        std::cerr << "[ERROR] Exception caught in " << funcName << "()" << std::endl;
     }
     return nullptr;
+}
+
+static const auto get_all_creators = [](IPluginRegistry& self) -> std::vector<py::object>* {
+    return getCreatorsUtil(
+        std::bind(&IPluginRegistry::getAllCreators, &self, std::placeholders::_1), "get_all_creators");
+};
+
+static const auto get_all_creators_recursive = [](IPluginRegistry& self) -> std::vector<py::object>* {
+    return getCreatorsUtil(std::bind(&IPluginRegistry::getAllCreatorsRecursive, &self, std::placeholders::_1),
+        "get_all_creators_recursive");
 };
 
 static const auto get_capability_interface = [](IPluginV3& self, PluginCapabilityType type) -> py::object {
@@ -3063,7 +3075,11 @@ static const auto get_capability_interface = [](IPluginV3& self, PluginCapabilit
                 }
                 catch (py::cast_error const& e)
                 {
-                    return py::cast(static_cast<IPluginV3QuickRuntime*>(capability_interface));
+                    try
+                    {
+                        return py::cast(static_cast<IPluginV3QuickRuntime*>(capability_interface));
+                    }
+                    PLUGIN_API_CATCH_CAST("get_capability_interface", " a valid runtime capability interface")
                 }
             }
         }
@@ -3816,6 +3832,7 @@ void bindPlugin(py::module& m)
         m, "IPluginRegistry", IPluginRegistryDoc::descr, py::module_local())
         .def_property_readonly("plugin_creator_list", lambdas::get_plugin_creator_list)
         .def_property_readonly("all_creators", lambdas::get_all_creators)
+        .def_property_readonly("all_creators_recursive", lambdas::get_all_creators_recursive)
         .def("register_creator",
             py::overload_cast<IPluginCreator&, AsciiChar const* const>(&IPluginRegistry::registerCreator), "creator"_a,
             "plugin_namespace"_a = "", py::keep_alive<1, 2>{}, IPluginRegistryDoc::register_creator_iplugincreator)

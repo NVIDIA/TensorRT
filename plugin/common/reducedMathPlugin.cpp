@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +15,8 @@
  * limitations under the License.
  */
 #include <cstdint>
-namespace nvinfer1
-{
-namespace plugin
-{
-namespace detail
+
+namespace nvinfer1::plugin::detail
 {
 
 // Count leading zeros - start from most significant bit.
@@ -81,8 +78,4 @@ void findDivisor(int32_t denom, uint32_t& mul_coeff, uint32_t& shift_coeff)
     shift_coeff = p - 32;
 }
 
-} // namespace detail
-
-} // namespace plugin
-
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin::detail

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -186,8 +186,8 @@ bool SampleNamedDimensions::build()
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
     {
-        timingCache = samplesCommon::buildTimingCacheFromFile(
-            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+        timingCache
+            = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
@@ -229,7 +229,7 @@ bool SampleNamedDimensions::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
     SampleUniquePtr<nvonnxparser::IParser>& parser)
 {
-    auto parsed = parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
+    auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
         static_cast<int32_t>(sample::gLogger.getReportableSeverity()));
     if (!parsed)
     {

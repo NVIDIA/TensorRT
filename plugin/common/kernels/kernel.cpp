@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +17,8 @@
 
 #include "common/kernels/kernel.h"
 #include "common/plugin.h"
-namespace nvinfer1
-{
-namespace plugin
+
+namespace nvinfer1::plugin
 {
 size_t detectionInferenceWorkspaceSize(bool shareLocation, int32_t N, int32_t C1, int32_t C2, int32_t numClasses,
     int32_t numPredsPerClass, int32_t topK, DataType DT_BBOX, DataType DT_SCORE)
@@ -35,5 +34,4 @@ size_t detectionInferenceWorkspaceSize(bool shareLocation, int32_t N, int32_t C1
         sortScoresPerImageWorkspaceSize(N, numClasses * topK, DT_SCORE));
     return calculateTotalWorkspaceSize(wss, 7);
 }
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

@@ -1,5 +1,4 @@
-#
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-SET(SAMPLE_SOURCES
-     sampleAlgorithmSelector.cpp
+add_library(trt_shared STATIC)
+
+function(add_shared_source)
+    target_sources(trt_shared PRIVATE ${ARGN})
+endfunction()
+
+target_link_libraries(trt_shared PUBLIC
+    tensorrt
+    trt_global_definitions
+    CUDA::cudart_static
 )
 
-SET(SAMPLE_PARSERS "onnx")
+add_subdirectory(utils)
 
-include(../CMakeSamplesTemplate.txt)
+target_include_directories(trt_shared PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}
+)

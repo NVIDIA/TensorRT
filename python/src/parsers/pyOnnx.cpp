@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +17,8 @@
 
 // Implementation of PyBind11 Binding Code for OnnxParser
 #include "ForwardDeclarations.h"
-#include "onnx/NvOnnxParser.h"
-#include "onnx/errorHelpers.hpp"
+#include "NvOnnxParser.h"
+#include "errorHelpers.hpp"
 #include "parsers/pyOnnxDoc.h"
 #include "utils.h"
 #include <pybind11/stl.h>

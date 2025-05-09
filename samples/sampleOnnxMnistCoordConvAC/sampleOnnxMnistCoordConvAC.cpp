@@ -158,8 +158,8 @@ bool SampleOnnxMnistCoordConvAC::build()
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
     {
-        timingCache = samplesCommon::buildTimingCacheFromFile(
-            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+        timingCache
+            = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
     SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
@@ -214,7 +214,7 @@ bool SampleOnnxMnistCoordConvAC::constructNetwork(SampleUniquePtr<nvinfer1::IBui
     SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
     SampleUniquePtr<nvonnxparser::IParser>& parser)
 {
-    auto parsed = parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
+    auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
         static_cast<int>(sample::gLogger.getReportableSeverity()));
     if (!parsed)
     {
@@ -299,7 +299,7 @@ bool SampleOnnxMnistCoordConvAC::processInput(const samplesCommon::BufferManager
     srand(unsigned(time(nullptr)));
     std::vector<uint8_t> fileData(inputH * inputW);
     mNumber = 2;
-    readPGMFile(locateFile("2.pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
+    samplesCommon::readPGMFile(samplesCommon::locateFile("2.pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
 
     // Print an ascii representation
     sample::gLogInfo << "Input:" << std::endl;

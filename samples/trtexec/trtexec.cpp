@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -349,10 +349,9 @@ int main(int argc, char** argv)
 #if !TRT_WINML
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
-#endif
-
-        // When some options are enabled, engine deserialization is not supported on the platform that the engine was
-        // built.
+#endif // !TRT_WINML
+       // When some options are enabled, engine deserialization is not supported on the platform that the engine was
+       // built.
         bool const supportDeserialization = !options.build.safe && !options.build.buildDLAStandalone
             && options.build.runtimePlatform == nvinfer1::RuntimePlatform::kSAME_AS_BUILD;
 

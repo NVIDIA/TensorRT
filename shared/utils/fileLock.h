@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-#ifndef TENSORRT_SAMPLES_COMMON_FILELOCK_H_
-#define TENSORRT_SAMPLES_COMMON_FILELOCK_H_
+#ifndef TRT_SHARED_FILELOCK_H_
+#define TRT_SHARED_FILELOCK_H_
 #include "NvInfer.h"
 #ifdef _MSC_VER
 // Needed so that the max/min definitions in windows.h do not conflict with std::max/min.
@@ -29,18 +29,15 @@
 #endif
 #include <string>
 
-namespace nvinfer1
+namespace nvinfer1::utils
 {
-namespace utils
-{
-//!
-//! \brief RAII object that locks a the specified file.
+
+//! \brief RAII object that locks the specified file.
 //!
 //! The FileLock class uses a lock file to specify that the
 //! current file is being used by a TensorRT tool or sample
 //! so that things like the TimingCache can be updated across
 //! processes without having conflicts.
-//!
 class FileLock
 {
 public:
@@ -80,7 +77,7 @@ private:
     int32_t mDescriptor{-1};
 #endif
 }; // class FileLock
-} // namespace utils
-} // namespace nvinfer1
 
-#endif // TENSORRT_SAMPLES_COMMON_FILELOCK_H_
+} // namespace nvinfer1::utils
+
+#endif // TRT_SHARED_FILELOCK_H_

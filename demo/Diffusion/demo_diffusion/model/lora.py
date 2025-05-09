@@ -15,22 +15,39 @@
 # limitations under the License.
 #
 
-from diffusers.loaders import StableDiffusionLoraLoaderMixin
+from abc import ABC
+from diffusers.loaders import StableDiffusionLoraLoaderMixin, FluxLoraLoaderMixin
 
 
-class LoraLoader(StableDiffusionLoraLoaderMixin):
+class LoraLoader(ABC):
     def __init__(self, paths, weights, scale):
         self.paths = paths
         self.weights = weights
         self.scale = scale
 
 
+class SDLoraLoader(LoraLoader, StableDiffusionLoraLoaderMixin):
+    def __init__(self, paths, weights, scale):
+        super().__init__(paths, weights, scale)
+
+
+class FLUXLoraLoader(LoraLoader, FluxLoraLoaderMixin):
+    def __init__(self, paths, weights, scale):
+        super().__init__(paths, weights, scale)
+
+
 def merge_loras(model, lora_loader):
     paths, weights, scale = lora_loader.paths, lora_loader.weights, lora_loader.scale
     for i, path in enumerate(paths):
         print(f"[I] Loading LoRA: {path}, weight {weights[i]}")
-        state_dict, network_alphas = lora_loader.lora_state_dict(path, unet_config=model.config)
-        lora_loader.load_lora_into_unet(state_dict, network_alphas=network_alphas, unet=model, adapter_name=path)
+        if isinstance(lora_loader, SDLoraLoader):
+            state_dict, network_alphas = lora_loader.lora_state_dict(path, unet_config=model.config)
+            lora_loader.load_lora_into_unet(state_dict, network_alphas=network_alphas, unet=model, adapter_name=path)
+        elif isinstance(lora_loader, FLUXLoraLoader):
+            state_dict, network_alphas = lora_loader.lora_state_dict(path, return_alphas=True)
+            lora_loader.load_lora_into_transformer(state_dict, network_alphas=network_alphas, transformer=model, adapter_name=path)
+        else:
+            raise ValueError(f"Unsupported LoRA loader: {lora_loader}")
 
     model.set_adapters(paths, weights=weights)
     # NOTE: fuse_lora an experimental API in Diffusers

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +24,7 @@
 #include "scatterElementsPluginKernel.h"
 #include "scatterElementsPluginLegacy.h"
 
-namespace nvinfer1
-{
-namespace plugin
+namespace nvinfer1::plugin
 {
 
 std::unordered_map<std::string, ReductionType> const kREDUCE_STR_TO_ENUM{
@@ -312,5 +310,4 @@ IPluginV2DynamicExt* ScatterElementsPluginV2Creator::deserializePlugin(
     return plugin;
 }
 
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

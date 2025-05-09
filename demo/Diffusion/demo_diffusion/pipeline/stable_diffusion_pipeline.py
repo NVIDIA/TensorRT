@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import inspect
 import json
 import os
 import pathlib
+import sys
 import time
 from hashlib import md5
 from typing import List, Optional
@@ -47,7 +47,7 @@ import demo_diffusion.image as image_module
 from demo_diffusion.model import (
     CLIPModel,
     CLIPWithProjModel,
-    LoraLoader,
+    SDLoraLoader,
     UNetModel,
     UNetXLModel,
     UNetXLModelControlNet,
@@ -243,7 +243,7 @@ class StableDiffusionPipeline:
         self.lora_loader = None
         self.lora_weights = dict()
         if lora_path:
-            self.lora_loader = LoraLoader(lora_path, lora_weight, lora_scale)
+            self.lora_loader = SDLoraLoader(lora_path, lora_weight, lora_scale)
             assert len(lora_path) == len(lora_weight)
             for i, path in enumerate(lora_path):
                 self.lora_weights[path] = lora_weight[i]
@@ -494,7 +494,8 @@ class StableDiffusionPipeline:
                     state_dict_path = self.getStateDictPath(model_name, onnx_dir, suffix=model_suffix[model_name])
                     if not os.path.exists(state_dict_path):
                         print(f"[I] Calibrated weights not found, generating {state_dict_path}")
-                        calibration_file = os.path.join(os.getcwd(), 'calibration_data', 'calibration-prompts.txt')
+                        root_dir = os.path.dirname(os.path.abspath(sys.modules["__main__"].__file__))
+                        calibration_file = os.path.join(root_dir, "calibration_data", "calibration-prompts.txt")
                         calibration_prompts = load_calib_prompts(calib_batch_size, calibration_file)
                         # TODO check size > calibration_size
                         def do_calibrate(pipeline, calibration_prompts, **kwargs):
@@ -530,6 +531,11 @@ class StableDiffusionPipeline:
                             )
                         elif use_fp8[model_name]:
                             quant_config = SD_FP8_FP32_DEFAULT_CONFIG if self.version == "2.1" else SD_FP8_FP16_DEFAULT_CONFIG
+
+                        # Handle LoRA
+                        if do_lora_merge[model_name]:
+                            assert self.lora_loader is not None
+                            model = merge_loras(model, self.lora_loader)
                         check_lora(model)
                         mtq.quantize(model, quant_config, forward_loop)
                         mto.save(model, state_dict_path)

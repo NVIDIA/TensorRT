@@ -169,6 +169,28 @@ inline int64_t volume(nvinfer1::Dims const& d)
     return std::accumulate(d.d, d.d + d.nbDims, int64_t{1}, std::multiplies<int64_t>{});
 }
 
+//! Check if the hardware supports BERT Multi-Head Attention plugins
+//! The plugin calls precompiled cubins (compiled from fmha_v2/xmma kernels)
+//! that are SM-specific.
+inline bool doesHwSupportBertMHAPlugin() noexcept
+{
+    int32_t device{-1};
+    cudaGetDevice(&device);
+    int32_t smMajor{0};
+    int32_t smMinor{0};
+    cudaDeviceGetAttribute(&smMajor, cudaDevAttrComputeCapabilityMajor, device);
+    cudaDeviceGetAttribute(&smMinor, cudaDevAttrComputeCapabilityMinor, device);
+    int32_t smVersion = (smMajor << 4) | (smMinor);
+    // Turing and above
+    static constexpr int32_t kSM_TURING_HEX{0x75};
+    static constexpr int32_t kSM_BLACKWELL_100_HEX{0xA0};
+    static constexpr int32_t kSM_BLACKWELL_120_HEX{0xC0};
+    bool isSm100OrLower = smVersion >= kSM_TURING_HEX && smVersion <= kSM_BLACKWELL_100_HEX;
+    bool isHardwareSupported = isSm100OrLower || smVersion == kSM_BLACKWELL_120_HEX;
+
+    return isHardwareSupported;
+}
+
 template <typename IntType>
 constexpr IntType ceildiv(IntType a, IntType b)
 {

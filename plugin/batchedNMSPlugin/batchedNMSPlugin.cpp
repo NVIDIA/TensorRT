@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,9 +23,7 @@
 #include <sstream>
 #include <vector>
 
-namespace nvinfer1
-{
-namespace plugin
+namespace nvinfer1::plugin
 {
 
 #define NVBUG_3321606_WAR 1
@@ -166,7 +164,7 @@ Dims BatchedNMSPlugin::getOutputDimensions(int32_t index, Dims const* inputs, in
         // nmsed_boxes
         if (index == 1)
         {
-            return DimsHW(param.keepTopK, 4);
+            return Dims{2, {param.keepTopK, 4}};
         }
         // nmsed_scores or nmsed_classes
         Dims dim1{};
@@ -897,5 +895,4 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::deserializePlugin(
     }
     return nullptr;
 }
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -383,7 +383,7 @@ constexpr const char* ipluginv3_descr = R"trtdoc(
 
     :ivar num_outputs: :class:`int` The number of outputs from the plugin. This is used by the implementations of :class:`INetworkDefinition` and :class:`Builder`. In particular, it is called prior to any call to :func:`initialize`.
     :ivar tensorrt_version: :class:`int` [READ ONLY] The API version with which this plugin was built.
-    :ivar plugin_type: :class:`str` The plugin type. Should match the plugin name returned by the corresponding plugin creator.
+    :ivar plugin_name: :class:`str` The plugin name. Should match the plugin name returned by the corresponding plugin creator.
     :ivar plugin_version: :class:`str` The plugin version. Should match the plugin version returned by the corresponding plugin creator.
     :ivar plugin_namespace: :class:`str` The namespace that this plugin object belongs to. Ideally, all plugin objects from the same plugin library should have the same namespace.
     :ivar serialization_size: :class:`int` [READ ONLY] The size of the serialization buffer required.
@@ -403,7 +403,7 @@ constexpr const char* ipluginv3onecore_descr = R"trtdoc(
         Every attribute must be explicitly initialized on Python-based plugins.
         These attributes will be read-only when accessed through a C++-based plugin.
 
-    :ivar plugin_type: :class:`str` The plugin type. Should match the plugin name returned by the corresponding plugin creator.
+    :ivar plugin_name: :class:`str` The plugin name. Should match the plugin name returned by the corresponding plugin creator.
     :ivar plugin_version: :class:`str` The plugin version. Should match the plugin version returned by the corresponding plugin creator.
     :ivar plugin_namespace: :class:`str` The namespace that this plugin object belongs to. Ideally, all plugin objects from the same plugin library should have the same namespace.
 )trtdoc";
@@ -418,6 +418,10 @@ constexpr const char* ipluginv3onebuild_descr = R"trtdoc(
         These attributes will be read-only when accessed through a C++-based plugin.
 
     :ivar num_outputs: :class:`int` The number of outputs from the plugin. This is used by the implementations of :class:`INetworkDefinition` and :class:`Builder`.
+    :ivar format_combination_limit: :class:`int` The maximum number of format combinations that the plugin supports.
+    :ivar metadata_string: :class:`str` The metadata string for the plugin.
+    :ivar timing_cache_id: :class:`str` The timing cache ID for the plugin.
+
 )trtdoc";
 
 constexpr const char* ipluginv3onebuildv2_descr = R"trtdoc(
@@ -929,7 +933,9 @@ namespace IPluginRegistryDoc
 constexpr const char* descr = R"trtdoc(
     Registers plugin creators.
 
-    :ivar plugin_creator_list: All the registered plugin creators.
+    :ivar plugin_creator_list: [DEPRECATED] Deprecated in TensorRT 10.0. List of IPluginV2-descendent plugin creators in current registry.
+    :ivar all_creators: List of all registered plugin creators of current registry.
+    :ivar all_creators_recursive: List of all registered plugin creators of current registry and its parents (if :attr:`parent_search_enabled` is True).
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar parent_search_enabled: bool variable indicating whether parent search is enabled. Default is True.
 )trtdoc";

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +20,9 @@
 #include <stdexcept>
 #include <string>
 
-namespace nvinfer1
+namespace nvinfer1::utils
 {
-namespace utils
-{
+
 FileLock::FileLock(ILogger& logger, std::string const& fileName)
     : mLogger(logger)
     , mFileName(fileName)
@@ -42,8 +41,7 @@ FileLock::FileLock(ILogger& logger, std::string const& fileName)
         throw std::runtime_error("Failed to lock " + lockFileName + "!");
     }
 #elif defined(__QNX__)
-    // We once enabled the file lock on QNX, lockf(F_TLOCK) return -1 and the reported error is
-    // The error generated was 89, which means that the function is not implemented.
+    // Calling lockf(F_TLOCK) on QNX returns -1; the reported error is 89 (function not implemented).
 #else
     mHandle = fopen(lockFileName.c_str(), "wb+");
     if (mHandle == nullptr)
@@ -75,9 +73,7 @@ FileLock::~FileLock()
         CloseHandle(mHandle);
     }
 #elif defined(__QNX__)
-    // We once enabled the file lock on QNX, lockf(F_TLOCK) return -1 and the reported error is
-    // The error generated was 89
-    // That means : Function not implemented
+    // Calling lockf(F_TLOCK) on QNX returns -1; the reported error is 89 (function not implemented).
 #else
     if (mDescriptor != -1)
     {
@@ -96,5 +92,5 @@ FileLock::~FileLock()
     }
 #endif
 }
-} // namespace utils
-} // namespace nvinfer1
+
+} // namespace nvinfer1::utils

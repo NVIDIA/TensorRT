@@ -4565,7 +4565,7 @@ public:
     //!
     //! \brief Add an If-conditional input.
     //!
-    //! \param input An input to the conditional that can be used by either or both of the conditional’s subgraphs.
+    //! \param input An input to the conditional that can be used by either or both of the conditional's subgraphs.
     //!
     //! \see IIfConditionalInputLayer
     //!
@@ -5594,7 +5594,7 @@ protected:
 //! \brief A network layer to perform dynamic quantization.
 //!
 //! This layer accepts a floating-point input tensor and computes the block scale factors needed to
-//! quantize the input’s data. It outputs the quantized tensor as its first output and
+//! quantize the input's data. It outputs the quantized tensor as its first output and
 //! the scale factors as its second output.
 //!
 //! Use ILayer::setInput to add an input for the double-quantization scale factor.
@@ -5622,11 +5622,11 @@ public:
     using ILayer::setInput;
 
     //!
-    //! \brief Set DynamicQuantizeLayer’s quantized output type.
+    //! \brief Set DynamicQuantizeLayer's quantized output type.
     //!
     //! \param toType The data type of the quantized output tensor.
     //!
-    //! Set the type of the dynamic quantization layer’s quantized output. Currently the only valid
+    //! Set the type of the dynamic quantization layer's quantized output. Currently the only valid
     //! value is DataType::kFP4. If the network is strongly typed, setToType must be used to set
     //! the output type, and use of setOutputType is an error. Otherwise, types passed to setOutputType
     //! and setToType must be the same.
@@ -5639,7 +5639,7 @@ public:
     }
 
     //!
-    //! \brief Return DynamicQuantizeLayer’s quantized output type.
+    //! \brief Return DynamicQuantizeLayer's quantized output type.
     //!
     //! \return toType parameter set during layer creation or by setToType().
     //!
@@ -5971,6 +5971,7 @@ public:
 
 protected:
     apiv::VOneHotLayer* mImpl;
+    virtual ~IOneHotLayer() noexcept = default;
 };
 
 //!
@@ -8092,10 +8093,10 @@ protected:
 //!
 enum class CalibrationAlgoType : int32_t
 {
-    kLEGACY_CALIBRATION = 0,    //!< Legacy calibration
-    kENTROPY_CALIBRATION = 1,   //!< Legacy entropy calibration
-    kENTROPY_CALIBRATION_2 = 2, //!< Entropy calibration
-    kMINMAX_CALIBRATION = 3,    //!< Minmax calibration
+    kLEGACY_CALIBRATION TRT_DEPRECATED_ENUM = 0,    //!< Legacy calibration
+    kENTROPY_CALIBRATION TRT_DEPRECATED_ENUM = 1,   //!< Legacy entropy calibration
+    kENTROPY_CALIBRATION_2 TRT_DEPRECATED_ENUM = 2, //!< Entropy calibration
+    kMINMAX_CALIBRATION TRT_DEPRECATED_ENUM = 3,    //!< Minmax calibration
 };
 
 //!
@@ -8802,7 +8803,8 @@ enum class BuilderFlag : int32_t
     kDIRECT_IO TRT_DEPRECATED_ENUM = 11,
 
     //! Fail if IAlgorithmSelector::selectAlgorithms returns an empty set of algorithms.
-    kREJECT_EMPTY_ALGORITHMS = 12,
+    //! \deprecated Deprecated in TensorRT 10.10. Unneeded API due to IAlgorithmSelector deprecation.
+    kREJECT_EMPTY_ALGORITHMS TRT_DEPRECATED_ENUM = 12,
 
     //! Restrict to lean runtime operators to provide version forward compatibility
     //! for the plan.
@@ -8861,7 +8863,7 @@ enum class BuilderFlag : int32_t
     //! for the default memory budget when this flag is enabled.
     //!
     //! Enabling this feature changes the behavior of
-    //! IRuntime::deserializeCudaEngine to allocate the entire network’s weights
+    //! IRuntime::deserializeCudaEngine to allocate the entire network's weights
     //! on the CPU DRAM instead of GPU memory. Then,
     //! ICudaEngine::createExecutionContext will determine the optimal split of
     //! weights between the CPU and GPU and place weights accordingly.
@@ -9178,7 +9180,14 @@ enum class PreviewFeature : int32_t
     //!
     //! Allows plugin I/O to be aliased when using IPluginV3OneBuildV2
     //!
-    kALIASED_PLUGIN_IO_10_03 = 1
+    kALIASED_PLUGIN_IO_10_03 = 1,
+
+    //!
+    //! Allows IExecutionContext::updateDeviceMemorySizeForShapes to resize runner internal activation memory.
+    //! Using this feature can reduce runtime memory requirement when the actual input tensor shapes are smaller than
+    //! the maximum input tensor dimensions.
+    //!
+    kRUNTIME_ACTIVATION_RESIZE_10_10 = 2
 };
 
 namespace impl
@@ -9191,7 +9200,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<PreviewFeature>
 {
-    static constexpr int32_t kVALUE = 2;
+    static constexpr int32_t kVALUE = 3;
 };
 } // namespace impl
 
@@ -9782,7 +9791,9 @@ public:
     //!
     //! \see getQuantizationFlags()
     //!
-    void setQuantizationFlags(QuantizationFlags flags) noexcept
+    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED void setQuantizationFlags(QuantizationFlags flags) noexcept
     {
         mImpl->setQuantizationFlags(flags);
     }
@@ -9794,7 +9805,9 @@ public:
     //!
     //! \see setQuantizationFlag()
     //!
-    QuantizationFlags getQuantizationFlags() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED QuantizationFlags getQuantizationFlags() const noexcept
     {
         return mImpl->getQuantizationFlags();
     }
@@ -9806,7 +9819,9 @@ public:
     //!
     //! \see setQuantizationFlags()
     //!
-    void clearQuantizationFlag(QuantizationFlag flag) noexcept
+    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED void clearQuantizationFlag(QuantizationFlag flag) noexcept
     {
         mImpl->clearQuantizationFlag(flag);
     }
@@ -9818,7 +9833,9 @@ public:
     //!
     //! \see setQuantizationFlags()
     //!
-    void setQuantizationFlag(QuantizationFlag flag) noexcept
+    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED void setQuantizationFlag(QuantizationFlag flag) noexcept
     {
         mImpl->setQuantizationFlag(flag);
     }
@@ -9830,7 +9847,9 @@ public:
     //!
     //! \return True if quantization flag is set, false if unset.
     //!
-    bool getQuantizationFlag(QuantizationFlag flag) const noexcept
+    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
+    //!
+    TRT_DEPRECATED bool getQuantizationFlag(QuantizationFlag flag) const noexcept
     {
         return mImpl->getQuantizationFlag(flag);
     }
@@ -9875,9 +9894,10 @@ public:
     //!
     //! \brief Create timing cache
     //!
-    //! Create ITimingCache instance from serialized raw data. The created timing cache doesn’t belong to
+    //! Create ITimingCache instance from serialized raw data. The created timing cache doesn't belong to
     //! a specific IBuilderConfig. It can be shared by multiple builder instances. Call setTimingCache()
     //! before launching a builder to attach cache to builder instance.
+    //! The lifetime of the ITimingCache must exceed the lifetime of all builders that use it.
     //!
     //! \param blob A pointer to the raw data that contains serialized timing cache
     //! \param size The size in bytes of the serialized timing cache. Size 0 means create a new cache from scratch
@@ -10419,6 +10439,10 @@ public:
     //!
     //! \brief Create a builder configuration object.
     //!
+    //! The caller owns the new IBuilderConfig, which must be destroyed with operator delete
+    //! before this IBuilder is destroyed. Destroying this IBuilder before destroying the
+    //! IBuilderConfig causes undefined behavior.
+    //!
     //! \see IBuilderConfig
     //!
     nvinfer1::IBuilderConfig* createBuilderConfig() noexcept
@@ -10438,8 +10462,12 @@ public:
     //! createNetworkV2 with NetworkDefinitionCreationFlag::kSTRONGLY_TYPED flag supports creating a strongly typed plan
     //! where tensor data types are inferred from network input types and operator type specification.
     //!
-    //! \param flags Bitset of NetworkDefinitionCreationFlags specifying network properties combined with bitwise OR.
-    //!             e.g., 1U << NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
+    //! The caller owns the new INetworkDefinition, which must be destroyed with operator delete
+    //! before this IBuilder is destroyed. Destroying this IBuilder before destroying the
+    //! INetworkDefinition causes undefined behavior.
+    //!
+    //! \param flags Bitset of NetworkDefinitionCreationFlags specifying network properties combined with bitwise OR,
+    //!              e.g., 1U << NetworkDefinitionCreationFlag::kSTRONGLY_TYPED.
     //!
     //! \see INetworkDefinition, NetworkDefinitionCreationFlags
     //!

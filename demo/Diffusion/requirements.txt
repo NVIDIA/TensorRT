@@ -10,7 +10,7 @@ matplotlib
 nvtx
 onnx==1.17.0
 onnxruntime==1.19.2
-opencv-python==4.8.0.74
+opencv-python-headless==4.8.0.74
 scipy
 transformers==4.42.2
 --extra-index-url https://pypi.nvidia.com

@@ -361,7 +361,7 @@ def _register_plugin_creator(name: str, namespace: str, attrs_types):
     plg_creator = _TemplatePluginCreator(name, namespace, attrs_types)
     plg_registry.register_creator(plg_creator, namespace)
     plg_creator = plg_registry.get_creator(name, "1", namespace)
-    QDP_CREATORS[f"{name}::{namespace}"] = plg_creator
+    QDP_CREATORS[f"{namespace}::{name}"] = plg_creator
     return plg_creator
 
 

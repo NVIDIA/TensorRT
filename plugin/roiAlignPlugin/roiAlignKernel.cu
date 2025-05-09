@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,17 +13,17 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * ************************************************************************
  * Modified from Pytorch
  * Copyright (c) 2016-present, Facebook, Inc.
  *
- * See https://github.com/pytorch/pytorch/blob/master/LICENSE for details
+ * See https://github.com/pytorch/pytorch/blob/main/LICENSE for details
  * ************************************************************************
  * Modified from ONNX Runtime
  * Copyright (c) Microsoft Corporation
- * 
- * See https://github.com/microsoft/onnxruntime/blob/master/LICENSE for details
+ *
+ * See https://github.com/microsoft/onnxruntime/blob/main/LICENSE for details
  * ************************************************************************
  */
 
@@ -248,7 +248,7 @@ cudaError_t RoiAlignImpl(cudaStream_t stream, int32_t const maxThreadsPerBlock, 
     int32_t const outputSize = numRois * channels * pooledHeight * pooledWidth;
 
     int32_t blocksPerGrid = static_cast<int32_t>(ceil(static_cast<float>(outputSize)
-        / maxThreadsPerBlock)); 
+        / maxThreadsPerBlock));
 
     RoIAlignForward<T><<<blocksPerGrid, maxThreadsPerBlock, 0, stream>>>(outputSize,// nthreads
         bottomData,                                                                 // bottomData

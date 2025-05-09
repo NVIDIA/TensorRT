@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -729,8 +729,8 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
     SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
     if (!mParams.timingCacheFile.empty())
     {
-        timingCache = samplesCommon::buildTimingCacheFromFile(
-            sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile, sample::gLogError);
+        timingCache
+            = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
     sample::gLogInfo << "Done constructing network..." << std::endl;
@@ -934,7 +934,7 @@ SampleCharRNNParams initializeSampleParams(const samplesCommon::Args& args)
     params.dataSize = params.hiddenSize;
     params.vocabSize = 65;
     params.outputSize = 1;
-    params.weightFileName = locateFile("char-rnn.wts", params.dataDirs);
+    params.weightFileName = samplesCommon::locateFile("char-rnn.wts", params.dataDirs);
     params.saveEngine = args.saveEngine;
     params.loadEngine = args.loadEngine;
     params.timingCacheFile = args.timingCacheFile;

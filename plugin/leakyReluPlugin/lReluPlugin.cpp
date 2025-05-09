@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +18,7 @@
 #include "common/checkMacrosPlugin.h"
 #include "common/kernels/kernel.h"
 
-namespace nvinfer1
-{
-namespace plugin
+namespace nvinfer1::plugin
 {
 static char const* const kLRELU_PLUGIN_VERSION{"1"};
 static char const* const kLRELU_PLUGIN_NAME{"LReLU_TRT"};
@@ -202,6 +200,6 @@ IPluginV2* LReluPluginCreator::deserializePlugin(char const* name, void const* s
     }
     return nullptr;
 }
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin
+
 // LeakReLU }}}

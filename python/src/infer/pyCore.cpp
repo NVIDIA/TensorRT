@@ -1625,13 +1625,16 @@ void bindCore(py::module& m)
     py::enum_<PreviewFeature>(m, "PreviewFeature", PreviewFeatureDoc::descr, py::module_local())
         .value("PROFILE_SHARING_0806", PreviewFeature::kPROFILE_SHARING_0806, PreviewFeatureDoc::PROFILE_SHARING_0806)
         .value("ALIASED_PLUGIN_IO_10_03", PreviewFeature::kALIASED_PLUGIN_IO_10_03,
-            PreviewFeatureDoc::ALIASED_PLUGIN_IO_10_03);
+            PreviewFeatureDoc::ALIASED_PLUGIN_IO_10_03)
+        .value("RUNTIME_ACTIVATION_RESIZE_10_10", PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10,
+            PreviewFeatureDoc::RUNTIME_ACTIVATION_RESIZE_10_10);
 
     py::enum_<HardwareCompatibilityLevel>(
         m, "HardwareCompatibilityLevel", HardwareCompatibilityLevelDoc::descr, py::module_local())
         .value("NONE", HardwareCompatibilityLevel::kNONE, HardwareCompatibilityLevelDoc::NONE)
         .value("AMPERE_PLUS", HardwareCompatibilityLevel::kAMPERE_PLUS, HardwareCompatibilityLevelDoc::AMPERE_PLUS)
-        .value("SAME_COMPUTE_CAPABILITY", HardwareCompatibilityLevel::kSAME_COMPUTE_CAPABILITY, HardwareCompatibilityLevelDoc::SAME_COMPUTE_CAPABILITY);
+        .value("SAME_COMPUTE_CAPABILITY", HardwareCompatibilityLevel::kSAME_COMPUTE_CAPABILITY,
+            HardwareCompatibilityLevelDoc::SAME_COMPUTE_CAPABILITY);
 
     py::enum_<RuntimePlatform>(m, "RuntimePlatform", RuntimePlatformDoc::descr, py::module_local())
         .value("SAME_AS_BUILD", RuntimePlatform::kSAME_AS_BUILD, RuntimePlatformDoc::SAME_AS_BUILD)

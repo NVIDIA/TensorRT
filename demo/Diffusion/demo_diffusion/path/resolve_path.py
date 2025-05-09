@@ -130,10 +130,6 @@ def _resolve_default_path(
         path (dd_path.DDPath): Path object. This object is modified in-place to store all resolved default paths.
     """
     for model_name, model_uri in model_name_to_model_uri.items():
-        # Resolve input paths.
-        # NOTE: `checkpoint_path` is the only exception where the path points to a directory instead of a file, because
-        # the HF download-save-load round trip requires a directory.
-        path.model_name_to_checkpoint_path[model_name] = os.path.join(args.framework_model_dir, model_uri)
         path.model_name_to_optimized_onnx_path[model_name] = os.path.join(
             args.onnx_dir, model_uri, "model_optimized.onnx"
         )

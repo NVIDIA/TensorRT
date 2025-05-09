@@ -2,6 +2,12 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.5.7 (2025-03-24)
+
+### Fixed
+
+- Pinned ONNX version to max 1.16.1 to avoid DLL initialization issue on Windows. See https://github.com/onnx/onnx/issues/6267
+
 ## v0.5.6 (2025-03-04)
 
 ### Fixed

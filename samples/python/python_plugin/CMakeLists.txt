@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -82,6 +82,12 @@ if(NOT MSVC)
         cuda_ge(11 ${minor} ${result_var})
     endforeach()
 
+    # Add checks for CUDA 12.x versions
+    foreach(minor RANGE 0 9)
+        set(result_var "CUDA_GE_12_${minor}")
+        cuda_ge(12 ${minor} ${result_var})
+    endforeach()
+
     set(SAMPLE_SMS "75")
 
     if(CUDA_GE_11_0)
@@ -100,7 +106,12 @@ if(NOT MSVC)
         list(APPEND SAMPLE_SMS "89" "90")
     endif()
 
-    set(NON_HFC_SMS "89" "90")
+    # Blackwell support
+    if(CUDA_GE_12_8)
+        list(APPEND SAMPLE_SMS "100" "101" "120")
+    endif()
+
+    set(NON_HFC_SMS "89" "90" "100" "101" "120")
 
     if(NOT DEFINED GENCODES)
         set(GENCODES "")

@@ -1,5 +1,25 @@
 # TensorRT OSS Release Changelog
 
+## 10.10.0 GA - 2025-4-28
+
+Key Features and Updates:
+
+- Plugin changes
+  - Deprecated the enum classes [PluginVersion](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/c-api/namespacenvinfer1.html#a6fb3932a2896d82a94c8783e640afb34) & [PluginCreatorVersion](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/c-api/namespacenvinfer1.html#a43c4159a19c23f74234f3c34124ea0c5). `PluginVersion` & `PluginCreatorVersion` are used only in relation to `IPluginV2`-descendent plugin interfaces, which are all deprecated.
+  - Added the following APIs that enable users to obtain a list of all Plugin Creators hierarchically registered to a TensorRT `IPluginRegistry` (`C++`, `Python`) instance.
+    - C++ API: `IPluginRegistry::getAllCreatorsRecursive()`
+    - Python API: `IPluginRegistry.all_creators_recursive`
+- Demo changes
+  - demoDiffusion
+    - Added FP16 and FP8 LoRA support for the SDXL and FLUX pipelines.
+    - Added FP16 ControlNet support for the SDXL pipeline.
+- Sample changes
+  - Added support for the [python_plugin](https://github.com/NVIDIA/TensorRT/tree/release/10.9/samples/python/python_plugin) sample to compile targets to Blackwell.
+- Parser changes
+  - Cleaned up log spam when the ONNX network contained a mixture of Plugins and LocalFunctions.
+  - UINT8 constants are now properly imported for `QuantizeLinear` & `DequantizeLinear` nodes.
+  - Plugin fallback importer now also reads its namespace from a Node's domain field.
+
 ## 10.9.0 GA - 2025-3-10
 
 Key Features and Updates:

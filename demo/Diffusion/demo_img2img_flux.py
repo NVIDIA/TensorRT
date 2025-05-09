@@ -66,27 +66,6 @@ def parse_args():
         type=int,
         help="Maximum sequence length to use with the prompt. Can be up to 512 for the dev and 256 for the schnell variant.",
     )
-    parser.add_argument("--bf16", action="store_true", help="Run pipeline in BFloat16 precision")
-    parser.add_argument(
-        "--low-vram",
-        action="store_true",
-        help="Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default.",
-    )
-    parser.add_argument(
-        "--optimization-level",
-        type=int,
-        default=3,
-        help=f"Set the builder optimization level to build the engine with. A higher level allows TensorRT to spend more building time for more optimization options. Must be one of {dd_argparse.VALID_OPTIMIZATION_LEVELS}.",
-    )
-    parser.add_argument(
-        "--torch-fallback",
-        default=None,
-        type=str,
-        help="Name list of models to be inferenced using torch instead of TRT. For example --torch-fallback t5,transformer. If --torch-inference set, this parameter will be ignored.",
-    )
-
-    parser.add_argument("--ws", action="store_true", help="Build TensorRT engines with weight streaming enabled.")
-
     parser.add_argument(
         "--t5-ws-percentage",
         type=int,
@@ -108,12 +87,6 @@ def parse_args():
         default=1.0,
         help="Indicates extent to transform the reference `image`. Must be between 0 and 1. A value of 1 essentially ignores the input image.",
     )
-    parser.add_argument(
-        "--onnx-export-only",
-        action="store_true",
-        help="If set, only performs the export of models to ONNX, skipping engine build and inference.",
-    )
-
     parser.add_argument(
         "--calibration-dataset",
         type=str,
@@ -153,15 +126,6 @@ def process_demo_args(args):
             )
     else:
         args.max_sequence_length = max_seq_supported_by_model
-
-    if args.torch_fallback and not args.torch_inference:
-        args.torch_fallback = args.torch_fallback.split(",")
-
-    if args.torch_fallback and args.torch_inference:
-        print(
-            "[W] All models will run in PyTorch when --torch-inference is set. Parameter --torch-fallback will be ignored."
-        )
-        args.torch_fallback = None
 
     controlnet_type = "depth" if "depth" in args.version else "canny" if "canny" in args.version else ""
     if controlnet_type:
@@ -213,17 +177,20 @@ def process_demo_args(args):
     if args.fp4 and not controlnet_type:
         raise ValueError("--fp4 is currently not supported for Flux img2img pipelines.")
 
-    args_run_demo = (
-        prompt,
-        prompt2,
-        args.height,
-        args.width,
-        args.batch_count,
-        args.num_warmup_runs,
-        args.use_cuda_graph,
-    )
+    kwargs_run_demo = {
+        "prompt": prompt,
+        "prompt2": prompt2,
+        "height": args.height,
+        "width": args.width,
+        "batch_count": args.batch_count,
+        "num_warmup_runs": args.num_warmup_runs,
+        "use_cuda_graph": args.use_cuda_graph,
+        "control_image": args.control_image,
+        "input_image": args.input_image,
+        "image_strength": args.image_strength,
+    }
 
-    return args_run_demo
+    return kwargs_run_demo
 
 
 if __name__ == "__main__":
@@ -231,7 +198,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     _, kwargs_load_engine, _ = dd_argparse.process_pipeline_args(args)
-    args_run_demo = process_demo_args(args)
+    kwargs_run_demo = process_demo_args(args)
 
     # Initialize demo
     demo = pipeline_module.FluxPipeline.FromArgs(args, pipeline_type=pipeline_module.PIPELINE_TYPE.IMG2IMG)
@@ -239,12 +206,11 @@ if __name__ == "__main__":
     # Load TensorRT engines and pytorch modules
     demo.load_engines(
         framework_model_dir=args.framework_model_dir,
-        onnx_export_only=args.onnx_export_only,
         **kwargs_load_engine,
     )
 
     if args.onnx_export_only:
-        print("[I] ONNX export finished")
+        print("[I] ONNX export completed. Exiting...")
         demo.teardown()
         exit(0)
 
@@ -259,11 +225,6 @@ if __name__ == "__main__":
     demo.load_resources(args.height, args.width, args.batch_size, args.seed)
 
     # Run inference
-    demo.run(
-        *args_run_demo,
-        control_image=args.control_image,
-        input_image=args.input_image,
-        image_strength=args.image_strength,
-    )
+    demo.run(**kwargs_run_demo)
 
     demo.teardown()
