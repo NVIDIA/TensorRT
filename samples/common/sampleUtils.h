@@ -19,6 +19,7 @@
 #define TRT_SAMPLE_UTILS_H
 
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -74,6 +75,8 @@ void dumpInt4Buffer(void const* buffer, std::string const& separator, std::ostre
     Dims const& strides, int32_t vectorDim, int32_t spv);
 
 void loadFromFile(std::string const& fileName, char* dst, size_t size);
+
+bool canWriteFile(const std::string& path);
 
 std::vector<std::string> splitToStringVec(std::string const& option, char separator, int64_t maxSplit = -1);
 
