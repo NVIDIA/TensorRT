@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-#include "disentangledAttentionPlugin.h"
+#include "disentangledAttentionCommon.h"
 #include <cuda_fp16.h>
 #include <stdio.h>
+#include <assert.h>
 
 #define IND(i, j, k, dim)                                                                                              \
     ((i) *dim.y * dim.z + (j) *dim.z + (k)) // caveat: must use brackets around var name! otherwise IND(i,j+3,k,dim) =

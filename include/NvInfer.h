@@ -176,8 +176,6 @@ struct EnumMaxImpl<ActivationType>
 //! must be less than 1GB in size to fit into a single subgraph. If the build option kGPU_FALLBACK is specified, then
 //! multiple subgraphs can be created, with each subgraph limited to less than 1GB of internal tensors data.
 //!
-//! \warning The volume of the tensor must be less than 2^31 elements. If the tensor is a shape tensor,
-//! its volume must not exceed 64.
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and
 //! ABI.
 //!
@@ -224,7 +222,7 @@ public:
     //! in the network, the dimensions of all dependent tensors will be recomputed.
     //!
     //! This call is only legal for network input tensors, since the dimensions of layer output tensors are inferred
-    //! based on layer inputs and parameters. The volume must be less than 2^31 elements.
+    //! based on layer inputs and parameters.
     //!
     //! \param dimensions The dimensions of the tensor.
     //!
@@ -252,12 +250,31 @@ public:
     //!
     //! \brief Set the data type of a tensor.
     //!
-    //! \param type The data type of the tensor.
+    //! \param type The data type of the tensor when the type is not inferred.
     //!
-    //! The type is unchanged if the tensor is not a network input tensor, or marked as an output tensor or shape
-    //! output tensor.
+    //! For strongly typed networks, this method should be used only for network inputs,
+    //! since the types of all other tensors are inferred. Setting the type of a network
+    //! output is tolerated if the type equals the inferred type, otherwise an error occurs
+    //! and the type is not updated.
+    //!
+    //! For weakly typed networks, this method can be used for network outputs too, but
+    //! the type merely has to be implicitly convertible from the inferred type to the
+    //! specified type. In this case it does not matter whether the type is set first
+    //! or the tensor is marked as an output first (via `INetworkDefinition::markOutput`
+    //! or `INetworkDefinition::markOutputForShapes`).
+    //!
+    //! However, marking it first has two advantages:
+    //!
+    //!     * It avoids warnings that the tensor is not yet a network I/O tensor.
+    //!     * It causes method `getType()` to return the type that was set instead of the inferred type.
     //!
     //! \see getType()
+    //!
+    //! \note This function does more than just set the type, so `t.setType(t.getType())` is not necessarily a no-op,
+    //! particularly for input and output tensors!
+    //!
+    //! \note Repeated consecutive applications of `t.setType(t.getType())`
+    //! would be idempotent, provided the state of the `ITensor` isn't changed between calls.
     //!
     void setType(DataType type) noexcept
     {
@@ -268,6 +285,9 @@ public:
     //! \brief Get the data type of a tensor.
     //!
     //! \return The data type of the tensor.
+    //!
+    //! The type is the type set by `setType` if the tensor is a network input or output.
+    //! Otherwise the type is the inferred type.
     //!
     //! \see setType()
     //!
@@ -3768,6 +3788,15 @@ protected:
 //!
 //! \brief A layer that represents the identity function.
 //!
+//! For a strongly typed network, the layer is an identity function, i.e. the output
+//! tensor elements are identical to the input tensor elements, possibly with a change
+//! in layout. For example, if a network consists of a single IIdentityLayer, the network
+//! input and output must have the same type, but the input can have NCHW layout and
+//! the output can have NHWC layout.
+//!
+//! If the network is weakly typed, the layer is additionally permitted some type conversions
+//! as described below.
+//!
 //! If the output type is explicitly specified via setOutputType, IIdentityLayer can be
 //! used to convert from one type to another. Other than conversions between the same
 //! type (kFLOAT -> kFLOAT for example), the only valid conversions are:
@@ -3783,10 +3812,18 @@ protected:
 //!
 //! Two types are compatible if they are identical, or are both in {kFLOAT, kHALF}.
 //! Implicit conversion between incompatible types, i.e. without using setOutputType,
-//! is recognized as incorrect as of TensorRT 8.4, but is retained for API compatibility
-//! within TensorRT 8.x releases. TensorRT 10.0 onwards it is an error if the network output tensor type is incompatible
-//! with the layer output type. E.g., implicit conversion from kFLOAT to kINT32 is not allowed, Use
-//! setOutputType(DataType::kINT32) to explict convert kFLOAT to kINT32.
+//! was recognized as incorrect as of TensorRT 8.4, but was retained for API compatibility
+//! within TensorRT 8.x releases. In TensorRT 10.0 onwards it is an error if the network
+//! output tensor type is incompatible with the layer output type. E.g., implicit conversion
+//! from kFLOAT to kINT32 is not allowed.
+//!
+//! To explicitly convert kFLOAT to kINT32:
+//!
+//! * Preferred: use ICastLayer.
+//!
+//! * Legacy alternative: use IIdentityLayer and setOutputType(DataType::kINT32).
+//!
+//! Similar advice applies for explicit conversion in the other direction.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -4525,8 +4562,9 @@ protected:
 //! The following constraints apply to If-conditionals:
 //! - Both the trueSubgraph and falseSubgraph must be defined.
 //! - The number of output tensors in both subgraphs is the same.
-//! - Corresponding output tensors from the true/false subgraphs have the same type and shape.
+//! - Corresponding output tensors from the true/false subgraphs have the same type and rank.
 //!
+//! The subgraphs may directly use tensors defined outside of the IIfConditional.
 class IIfConditional : public INoCopy
 {
 public:
@@ -4553,7 +4591,7 @@ public:
     //! Each output layer of an IIfConditional represents a single output of either the true-subgraph or the
     //! false-subgraph of an IIfConditional, depending on which subgraph was executed.
     //!
-    //! The shapes of the two tensors must be equal unless the condition is a build-time constant.
+    //! The ranks of the two tensors must be equal unless the condition is a build-time constant.
     //!
     //! \see IIfConditionalOutputLayer
     //!
@@ -4815,6 +4853,7 @@ protected:
 //! which are crucial for iterative computations, such as RNNs for natural language processing and
 //! time-series analysis.
 //!
+//! The subgraph may directly use tensors defined outside of the ILoop.
 class ILoop : public INoCopy
 {
 public:
@@ -6639,7 +6678,6 @@ public:
     //! \brief Add an input tensor to the network.
     //!
     //! Each input and output tensor must have a unique name.
-    //! The volume must be less than 2^31 elements.
     //!
     //! For networks with wildcard dimensions, the volume
     //! is based on the maxima specified by an IOptimizationProfile.Dimensions are normally non-negative integers. The

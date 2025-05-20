@@ -14,6 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
+
+add_executable(sample_editable_timing_cache sampleEditableTimingCache.cpp)
+target_link_libraries(sample_editable_timing_cache PRIVATE trt_samples_common)
+add_dependencies(tensorrt_samples sample_editable_timing_cache)
+
+install(
+    TARGETS sample_editable_timing_cache
+    OPTIONAL
+)
+
+else()
+
 set(SAMPLE_SOURCES sampleEditableTimingCache.cpp)
 set(SAMPLE_PARSERS "onnx")
 include(../CMakeSamplesTemplate.txt)
+
+endif()

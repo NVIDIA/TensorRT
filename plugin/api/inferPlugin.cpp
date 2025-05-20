@@ -19,7 +19,6 @@
 #include "common/checkMacrosPlugin.h"
 #include "common/plugin.h"
 #include "roiAlignPlugin/roiAlignPlugin.h"
-#if !TRT_WINML
 #include "batchTilePlugin/batchTilePlugin.h"
 #include "batchedNMSPlugin/batchedNMSPlugin.h"
 #include "clipPlugin/clipPlugin.h"
@@ -37,9 +36,11 @@
 #include "instanceNormalizationPlugin/instanceNormalizationPluginLegacy.h"
 #include "leakyReluPlugin/lReluPlugin.h"
 #include "modulatedDeformConvPlugin/modulatedDeformConvPlugin.h"
+#include "modulatedDeformConvPlugin/modulatedDeformConvPluginLegacy.h"
 #include "multilevelCropAndResizePlugin/multilevelCropAndResizePlugin.h"
 #include "multilevelProposeROI/multilevelProposeROIPlugin.h"
 #include "multiscaleDeformableAttnPlugin/multiscaleDeformableAttnPlugin.h"
+#include "multiscaleDeformableAttnPlugin/multiscaleDeformableAttnPluginLegacy.h"
 #include "nmsPlugin/nmsPlugin.h"
 #include "normalizePlugin/normalizePlugin.h"
 #include "nvFasterRCNN/nvFasterRCNNPlugin.h"
@@ -59,7 +60,6 @@
 #include "specialSlicePlugin/specialSlicePlugin.h"
 #include "splitPlugin/split.h"
 #include "voxelGeneratorPlugin/voxelGenerator.h"
-#endif
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -180,7 +180,6 @@ extern "C"
     bool initLibNvInferPlugins(void* logger, char const* libNamespace)
     {
         initializePlugin<nvinfer1::plugin::ROIAlignV3PluginCreator>(logger, libNamespace);
-#if !TRT_WINML
         initializePlugin<nvinfer1::plugin::BatchedNMSDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::BatchedNMSPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::BatchTilePluginCreator>(logger, libNamespace);
@@ -203,9 +202,11 @@ extern "C"
         initializePlugin<nvinfer1::plugin::InstanceNormalizationV3PluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::LReluPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ModulatedDeformableConvPluginDynamicCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::ModulatedDeformableConvPluginDynamicLegacyCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultilevelCropAndResizePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultilevelProposeROIPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultiscaleDeformableAttnPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::MultiscaleDeformableAttnPluginCreatorLegacy>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::NMSDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::NMSPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::NormalizePluginCreator>(logger, libNamespace);
@@ -227,7 +228,6 @@ extern "C"
         initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::SplitPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::VoxelGeneratorPluginCreator>(logger, libNamespace);
-#endif
         return true;
     }
 } // extern "C"

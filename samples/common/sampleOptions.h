@@ -239,6 +239,7 @@ public:
     bool stripWeights{false};
     bool versionCompatible{false};
     bool pluginInstanceNorm{false};
+    bool enableUInt8AsymmetricQuantizationDLA{false};
     bool excludeLeanRuntime{false};
     bool disableCompilationCache{false};
     bool enableMonitorMemory{false};
@@ -437,6 +438,7 @@ std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options);
 std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype);
 
 std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType);
+
 
 inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
 {

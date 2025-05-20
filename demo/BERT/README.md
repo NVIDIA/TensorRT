@@ -73,8 +73,8 @@ The following software version configuration has been tested:
 | Software | Version |
 | -------- | ------- |
 | Python   | >=3.8   |
-| TensorRT | 10.9    |
-| CUDA     | 12.8    |
+| TensorRT | 10.11   |
+| CUDA     | 12.9    |
 
 ## Setup
 

@@ -185,8 +185,10 @@ inline bool doesHwSupportBertMHAPlugin() noexcept
     static constexpr int32_t kSM_TURING_HEX{0x75};
     static constexpr int32_t kSM_BLACKWELL_100_HEX{0xA0};
     static constexpr int32_t kSM_BLACKWELL_120_HEX{0xC0};
+    static constexpr int32_t kSM_ORIN_HEX{0x87};
+    bool isAuto = smVersion == kSM_ORIN_HEX;
     bool isSm100OrLower = smVersion >= kSM_TURING_HEX && smVersion <= kSM_BLACKWELL_100_HEX;
-    bool isHardwareSupported = isSm100OrLower || smVersion == kSM_BLACKWELL_120_HEX;
+    bool isHardwareSupported = (isSm100OrLower || smVersion == kSM_BLACKWELL_120_HEX) && !isAuto;
 
     return isHardwareSupported;
 }

@@ -270,6 +270,7 @@ WeightStreamingBudget stringToValue<WeightStreamingBudget>(std::string const& op
     return budget;
 }
 
+
 template <typename T>
 std::pair<std::string, T> splitNameAndValue(const std::string& s)
 {
@@ -1200,9 +1201,7 @@ void BuildOptions::parse(Arguments& arguments)
         fp16 = true;
 
         // BF16 only supported on Ampere+
-#if !TRT_WINML
         if (samplesCommon::getSMVersion() >= 0x0800)
-#endif
         {
             bf16 = true;
         }
@@ -1228,15 +1227,14 @@ void BuildOptions::parse(Arguments& arguments)
         getAndDelOption(arguments, "--versionCompatible", versionCompatible);
     }
 
-#if !TRT_WINML
     // --pi and --pluginInstanceNorm are synonyms
     getAndDelOption(arguments, "--pi", pluginInstanceNorm);
     if (!pluginInstanceNorm)
     {
         getAndDelOption(arguments, "--pluginInstanceNorm", pluginInstanceNorm);
     }
-#endif
 
+    getAndDelOption(arguments, "--uint8AsymmetricQuantizationDLA", enableUInt8AsymmetricQuantizationDLA);
     getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
     getAndDelOption(arguments, "--noCompilationCache", disableCompilationCache);
     getAndDelOption(arguments, "--monitorMemory", enableMonitorMemory);
@@ -1275,9 +1273,7 @@ void BuildOptions::parse(Arguments& arguments)
     }
 
     // Print a message to tell users that --noTF32 can be added to improve accuracy with performance cost.
-#if !TRT_WINML
     if (samplesCommon::getSMVersion() >= 0x0800)
-#endif
     {
         if (!(stronglyTyped || fp16 || bf16 || int8 || fp8 || int4))
         {
@@ -1623,7 +1619,6 @@ void SystemOptions::parse(Arguments& arguments)
 {
     getAndDelOption(arguments, "--device", device);
     getAndDelOption(arguments, "--useDLACore", DLACore);
-#if !TRT_WINML
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
     {
@@ -1643,7 +1638,6 @@ void SystemOptions::parse(Arguments& arguments)
         dynamicPlugins.emplace_back(pluginName);
     }
     getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
-#endif
 }
 
 constexpr int64_t WeightStreamingBudget::kDISABLE;
@@ -1724,6 +1718,7 @@ void InferenceOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--saveDebugTensors", debugTensorList);
     std::vector<std::string> fileNames{splitToStringVec(debugTensorList, ',')};
     splitInsertKeyValue(fileNames, debugTensorFileNames);
+
 }
 
 void ReportingOptions::parse(Arguments& arguments)
@@ -1876,6 +1871,10 @@ void AllOptions::parse(Arguments& arguments)
                 throw std::invalid_argument("GPU fallback (--allowGPUFallback) not allowed for DLA standalone mode");
             }
         }
+        if (system.DLACore < 0 && build.enableUInt8AsymmetricQuantizationDLA)
+        {
+            throw std::invalid_argument("--uint8AsymmetricQuantizationDLA is not supported without DLA cores.");
+        }
     }
 }
 
@@ -1913,7 +1912,6 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--int8", int8);
     getAndDelOption(arguments, "--calib", calibFile);
     getAndDelOption(arguments, "--std", standard);
-#if !TRT_WINML
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
     {
@@ -1924,7 +1922,6 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     {
         plugins.emplace_back(pluginName);
     }
-#endif
     bool noBuilderCache{false};
     getAndDelOption(arguments, "--noBuilderCache", noBuilderCache);
     getAndDelOption(arguments, "--timingCacheFile", timingCacheFile);
@@ -2148,6 +2145,7 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType)
     return os;
 }
 
+
 std::ostream& operator<<(std::ostream& os, nvinfer1::RuntimePlatform platform)
 {
     switch (platform)
@@ -2232,9 +2230,8 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
           "Strip weights: "     << boolToEnabled(options.stripWeights)                                                  << std::endl <<
           "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
-#if !TRT_WINML
           "ONNX Plugin InstanceNorm: " << boolToEnabled(options.pluginInstanceNorm)                                     << std::endl <<
-#endif
+          "ONNX kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA flag: " << boolToEnabled(options.enableUInt8AsymmetricQuantizationDLA) << std::endl <<
           "TensorRT runtime: " << options.useRuntime                                                                    << std::endl <<
           "Lean DLL Path: " << options.leanDLLPath                                                                      << std::endl <<
           "Tempfile Controls: "; printTempfileControls(os, options.tempfileControls)                                    << std::endl <<
@@ -2298,7 +2295,6 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
 
           "Device: "  << options.device                                                           << std::endl <<
           "DLACore: " << (options.DLACore != -1 ? std::to_string(options.DLACore) : "")           << std::endl;
-#if !TRT_WINML
     os << "Plugins:";
 
     for (const auto& p : options.plugins)
@@ -2325,7 +2321,6 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
 
     os << "ignoreParsedPluginLibs: " << options.ignoreParsedPluginLibs << std::endl;
     os << std::endl;
-#endif
     return os;
     // clang-format on
 }
@@ -2458,13 +2453,11 @@ std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
 
     printIOFormats(os, "Input(s)", options.inputFormats);
     printIOFormats(os, "Output(s)", options.outputFormats);
-#if !TRT_WINML
     os << "Plugins:";
     for (const auto& p : options.plugins)
     {
         os << " " << p;
     }
-#endif
     os << "timingCacheMode: ";
     printTimingCache(os, options.timingCacheMode) << std::endl;
     os << "timingCacheFile: " << options.timingCacheFile << std::endl;
@@ -2545,10 +2538,12 @@ void BuildOptions::help(std::ostream& os)
           "  --weightless                       [Deprecated] this knob has been deprecated. Please use --stripWeights"                              "\n"
           "  --versionCompatible, --vc          Mark the engine as version compatible. This allows the engine to be used with newer versions"       "\n"
           "                                     of TensorRT on the same host OS, as well as TensorRT's dispatch and lean runtimes."                 "\n"
-#if !TRT_WINML
           "  --pluginInstanceNorm, --pi         Set `kNATIVE_INSTANCENORM` to false in the ONNX parser. This will cause the ONNX parser to use"     "\n"
           "                                     a plugin InstanceNorm implementation over the native implementation when parsing."                  "\n"
-#endif
+          "  --uint8AsymmetricQuantizationDLA   Set `kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA` to true in the ONNX parser. This directs the"   "\n"
+          "                                     onnx parser to allow UINT8 as a quantization data type and import zero point values directly"       "\n"
+          "                                     without converting to float type or all-zero values. Should only be set with DLA software version"  "\n"
+          "                                     >= 3.16."                                                                                           "\n"
         R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"        "\n"
           "                                     not support building an engine."                                                                    "\n"
         R"(                                         runtime::= "full"|"lean"|"dispatch")"                                                           "\n"
@@ -2691,16 +2686,12 @@ void SystemOptions::help(std::ostream& os)
     os << "=== System Options ==="                                                                         << std::endl <<
           "  --device=N                  Select cuda device N (default = "         << defaultDevice << ")" << std::endl <<
           "  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)"   << std::endl <<
-#if TRT_WINML
-          std::endl;
-#else
           "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl <<
           "  --dynamicPlugins            Plugin library (.so) to load dynamically and may be serialized with the engine if they are included in --setPluginsToSerialize (can be specified multiple times)" << std::endl <<
           "  --setPluginsToSerialize     Plugin library (.so) to be serialized with the engine (can be specified multiple times)" << std::endl <<
           "  --ignoreParsedPluginLibs    By default, when building a version-compatible engine, plugin libraries specified by the ONNX parser " << std::endl <<
           "                              are implicitly serialized with the engine (unless --excludeLeanRuntime is specified) and loaded dynamically. " << std::endl <<
           "                              Enable this flag to ignore these plugin libraries instead." << std::endl;
-#endif
     // clang-format on
 }
 
@@ -2772,6 +2763,7 @@ void InferenceOptions::help(std::ostream& os)
           "                                           Requires the '%' character."                                                   << std::endl <<
           "                                  >=0B: The exact amount of streamable weights that reside on the GPU. Supports the "     << std::endl <<
           "                                       following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                  << std::endl;
+
     // clang-format on
 }
 
@@ -2867,9 +2859,7 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
           "  --serialized=<file>         Save the serialized network"                                                                        << std::endl <<
-#if !TRT_WINML
           "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)"                          << std::endl <<
-#endif
           "  --verbose or -v             Use verbose logging (default = false)"                                                              << std::endl <<
           "  --help or -h                Print this message"                                                                                 << std::endl <<
           "  --noBuilderCache            Disable timing cache in builder (default is to enable timing cache)"                                << std::endl <<

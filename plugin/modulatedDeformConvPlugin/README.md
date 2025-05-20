@@ -39,7 +39,7 @@ This plugin generates one output tensor of shape `[batch_size, output_channels, 
 ## Parameters
 
 This plugin has the plugin creator class `ModulatedDeformableConvPluginDynamicCreator` and the plugin class `ModulatedDeformableConvPluginDynamic`.
-  
+
 The following parameters are used to create a `ModulatedDeformableConvPluginDynamic` instance:
 
 | Type    | Parameter         | Description
@@ -63,9 +63,8 @@ The following resources provide a deeper understanding of the `modulatedDeformCo
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 ## Changelog
-
-Jan 2023:
-This is the first release of this `README.md` file.
+- April 2025: Added version 2 of the plugin that uses the IPluginV3 interface. The version 1 (using IPluginV2DynamicExt interface) is now deprecated. The version 2 mirrors version 1 in IO and attributes.
+- Jan 2023: Initial release of IPluginV2DynamicExt implementation.
 
 
 ## Known issues

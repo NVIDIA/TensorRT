@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,118 +15,107 @@
  * limitations under the License.
  */
 
+/*
+ * V3 version of the plugin using IPluginV3 interfaces.
+ * This implementation follows TensorRT's plugin V3 API.
+ */
+
 #ifndef TRT_MULTISCALE_DEFORMABLE_ATTN_PLUGIN_H
 #define TRT_MULTISCALE_DEFORMABLE_ATTN_PLUGIN_H
 
-// For loadLibrary
-#ifdef _MSC_VER
-// Needed so that the max/min definitions in windows.h do not conflict with
-// std::max/min.
-#define NOMINMAX
-#include <windows.h>
-#undef NOMINMAX
-#else
-#include <dlfcn.h>
-#endif
-
+// Standard library includes
 #include <memory>
 #include <string>
 #include <vector>
 
-#include <cuda_runtime_api.h>
-
-#include "NvInfer.h"
 #include "NvInferPlugin.h"
-#include "NvInferVersion.h"
 
+// TensorRT includes
 #include "common/plugin.h"
-
-#if NV_TENSORRT_MAJOR > 7
-#define PLUGIN_NOEXCEPT noexcept
-#else
-#define PLUGIN_NOEXCEPT
-#endif
-
-using namespace nvinfer1::plugin;
 
 namespace nvinfer1
 {
 namespace plugin
 {
-class MultiscaleDeformableAttnPlugin : public nvinfer1::IPluginV2DynamicExt
+
+// Forward declarations
+class MultiscaleDeformableAttnPlugin;
+class MultiscaleDeformableAttnPluginCreator;
+
+// V3 Plugin implementation
+class MultiscaleDeformableAttnPlugin : public IPluginV3,
+                                       public IPluginV3OneCore,
+                                       public IPluginV3OneBuild,
+                                       public IPluginV3OneRuntime
 {
 public:
+    // Constructors/destructors
     MultiscaleDeformableAttnPlugin();
+    ~MultiscaleDeformableAttnPlugin() = default;
 
-    MultiscaleDeformableAttnPlugin(void const* data, size_t length);
+    // IPluginV3 methods
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override;
 
-    // IPluginV2DynamicExt methods
-    nvinfer1::IPluginV2DynamicExt* clone() const PLUGIN_NOEXCEPT override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-        nvinfer1::IExprBuilder& exprBuilder) PLUGIN_NOEXCEPT override;
-    bool supportsFormatCombination(int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs,
-        int32_t nbOutputs) PLUGIN_NOEXCEPT override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) PLUGIN_NOEXCEPT override;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const PLUGIN_NOEXCEPT override;
-    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) PLUGIN_NOEXCEPT override;
-    void attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext,
-        nvinfer1::IGpuAllocator* gpuAllocator) PLUGIN_NOEXCEPT override;
-    void detachFromContext() PLUGIN_NOEXCEPT override;
+    // IPluginV3OneCore methods
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+    int32_t getNbOutputs() const noexcept override;
+    IPluginV3* clone() noexcept override;
 
-    // IPluginV2Ext Methods
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const PLUGIN_NOEXCEPT override;
+    // IPluginV3OneBuild methods
+    bool supportsFormatCombination(
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override;
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override;
 
-    // IPluginV2 Methods
-    char const* getPluginType() const PLUGIN_NOEXCEPT override;
-    char const* getPluginVersion() const PLUGIN_NOEXCEPT override;
-    int32_t getNbOutputs() const PLUGIN_NOEXCEPT override;
-    int32_t initialize() PLUGIN_NOEXCEPT override;
-    void terminate() PLUGIN_NOEXCEPT override;
-    size_t getSerializationSize() const PLUGIN_NOEXCEPT override;
-    void serialize(void* buffer) const PLUGIN_NOEXCEPT override;
-    void destroy() PLUGIN_NOEXCEPT override;
-    void setPluginNamespace(char const* pluginNamespace) PLUGIN_NOEXCEPT override;
-    char const* getPluginNamespace() const PLUGIN_NOEXCEPT override;
+    // IPluginV3OneRuntime methods
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
+        void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override;
+    int32_t onShapeChange(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
+        int32_t nbOutputs) noexcept override;
 
 private:
-    std::string mNamespace;
+    // Serialization helpers
+    std::vector<PluginField> mDataToSerialize;
+    PluginFieldCollection mFCToSerialize;
 
-#if NV_TENSORRT_MAJOR < 8
-    using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
-    using nvinfer1::IPluginV2DynamicExt::enqueue;
-    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
-    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
-    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
-#endif
+    // Plugin namespace
+    std::string mNamespace;
 };
 
-class MultiscaleDeformableAttnPluginCreator : public nvinfer1::IPluginCreator
+// Plugin creator class
+class MultiscaleDeformableAttnPluginCreator : public IPluginCreatorV3One
 {
 public:
+    // Constructor
     MultiscaleDeformableAttnPluginCreator();
-    char const* getPluginName() const PLUGIN_NOEXCEPT override;
-    char const* getPluginVersion() const PLUGIN_NOEXCEPT override;
-    nvinfer1::PluginFieldCollection const* getFieldNames() PLUGIN_NOEXCEPT override;
-    nvinfer1::IPluginV2* createPlugin(
-        char const* name, nvinfer1::PluginFieldCollection const* fc) PLUGIN_NOEXCEPT override;
-    nvinfer1::IPluginV2* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) PLUGIN_NOEXCEPT override;
-    void setPluginNamespace(char const* pluginNamespace) PLUGIN_NOEXCEPT override;
-    char const* getPluginNamespace() const PLUGIN_NOEXCEPT override;
+
+    // IPluginCreatorV3One methods
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    PluginFieldCollection const* getFieldNames() noexcept override;
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+    char const* getPluginNamespace() const noexcept override;
 
 private:
-    nvinfer1::PluginFieldCollection mFC;
-    std::vector<nvinfer1::PluginField> mPluginAttributes;
+    // Plugin fields and namespace
+    PluginFieldCollection mFC;
+    std::vector<PluginField> mPluginAttributes;
     std::string mNamespace;
 };
 
 } // namespace plugin
 } // namespace nvinfer1
 
-#endif
+#endif // TRT_MULTISCALE_DEFORMABLE_ATTN_PLUGIN_H

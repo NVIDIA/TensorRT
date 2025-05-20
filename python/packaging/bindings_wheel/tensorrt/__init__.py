@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,9 @@ except (ImportError, ModuleNotFoundError):
 else:
     _libs_wheel_imported = True
 
+_trt_lib_suffix = ""
+if "##TENSORRT_NVINFER_NAME##".strip() == "tensorrt_rtx":
+    _trt_lib_suffix = "_##TENSORRT_MINOR##"
 
 if not _libs_wheel_imported and sys.platform.startswith("win"):
     log_found_dlls = bool(int(os.environ.get("TRT_LOG_FOUND_DLLS", 0)))
@@ -48,6 +51,9 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
                     print(f"Found {name} in path: {libpath}")
                 return libpath
 
+        if ##TENSORRT_PLUGIN_DISABLED## and name.startswith("nvinfer_plugin"):
+            return None
+
         if name.startswith("nvinfer_builder_resource"):
             return None
 
@@ -58,9 +64,9 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
     # Order matters here because of dependencies
     LIBRARIES = {
         "tensorrt": [
-            "nvinfer_##TENSORRT_MAJOR##.dll",
+            f"##TENSORRT_NVINFER_NAME##_##TENSORRT_MAJOR##{_trt_lib_suffix}.dll",
             "nvinfer_plugin_##TENSORRT_MAJOR##.dll",
-            "nvonnxparser_##TENSORRT_MAJOR##.dll",
+            f"##TENSORRT_ONNXPARSER_NAME##_##TENSORRT_MAJOR##{_trt_lib_suffix}.dll",
             "nvinfer_builder_resource_##TENSORRT_MAJOR##.dll",
         ],
         "tensorrt_dispatch": [
@@ -79,6 +85,7 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
         ctypes.CDLL(lib_path)
 
 del _libs_wheel_imported
+del _trt_lib_suffix
 
 from .##TENSORRT_MODULE## import *
 

@@ -36,14 +36,15 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
          -DCUDA_INCLUDE_DIRS=${CUDA_ROOT}/include \
          -DTENSORRT_ROOT=${ROOT_PATH} \
          -DTENSORRT_MODULE=${TENSORRT_MODULE} \
-         -DTENSORRT_LIBPATH=${TRT_LIBPATH}
+         -DTENSORRT_LIBPATH=${TRT_LIBPATH} \
+         -DTRT_ONNXPARSER_NAME=nvonnxparser
 make -j12
 
 # Generate wheel
-TRT_MAJOR=$(awk '/^\#define NV_TENSORRT_MAJOR/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
-TRT_MINOR=$(awk '/^\#define NV_TENSORRT_MINOR/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
-TRT_PATCH=$(awk '/^\#define NV_TENSORRT_PATCH/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
-TRT_BUILD=$(awk '/^\#define NV_TENSORRT_BUILD/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
+TRT_MAJOR=$(awk '/^\#define TRT_MAJOR_ENTERPRISE/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
+TRT_MINOR=$(awk '/^\#define TRT_MINOR_ENTERPRISE/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
+TRT_PATCH=$(awk '/^\#define TRT_PATCH_ENTERPRISE/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
+TRT_BUILD=$(awk '/^\#define TRT_BUILD_ENTERPRISE/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
 TRT_VERSION=${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}.${TRT_BUILD}
 TRT_MAJMINPATCH=${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}
 
@@ -55,6 +56,7 @@ expand_vars_cp () {
         -e "s|\#\#TENSORRT_MAJMINPATCH\#\#|${TRT_MAJMINPATCH}|g" \
         -e "s|\#\#TENSORRT_PYTHON_VERSION\#\#|${TRT_MAJMINPATCH}|g" \
         -e "s|\#\#TENSORRT_MODULE\#\#|${TENSORRT_MODULE}|g" \
+        -e "s/##TENSORRT_PLUGIN_DISABLED##/false/g" \
         ${1} > ${2}
 }
 

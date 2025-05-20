@@ -496,7 +496,7 @@ def str_from_config(config, network):
             add_line("Preview Features", f"{str_from_list(feature_vals)}")
 
     # Calibrator
-    if config.int8_calibrator:
+    if hasattr(config, "int8_calibrator") and config.int8_calibrator:
         add_line("Calibrator", f"{config.int8_calibrator}")
 
     # Quantization Flags
@@ -595,7 +595,10 @@ def try_setup_polygraphy_calibrator(config, network, calib_profile=None):
     Tries to call setup methods specific to Polygraphy calibrators.
     Returns early if there is no calibrator or if it is not a Polygraphy calibrator.
     """
-    calibrator = config.int8_calibrator
+    try:
+        calibrator = config.int8_calibrator
+    except AttributeError:
+        return
     if calibrator is None or not (
         hasattr(calibrator, "is_polygraphy_calibrator")
         and calibrator.is_polygraphy_calibrator

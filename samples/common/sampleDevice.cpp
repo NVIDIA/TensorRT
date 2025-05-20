@@ -105,7 +105,6 @@ void setCudaDevice(int32_t device, std::ostream& os)
     // clang-format on
 }
 
-#if !TRT_WINML
 int32_t getCudaDriverVersion()
 {
     int32_t version{-1};
@@ -119,6 +118,5 @@ int32_t getCudaRuntimeVersion()
     CHECK(cudaRuntimeGetVersion(&version));
     return version;
 }
-#endif
 
 } // namespace sample

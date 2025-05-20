@@ -128,12 +128,6 @@ struct ComputeCapability
         int32_t minor{0};
         PLUGIN_CUASSERT(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, deviceIndex));
         PLUGIN_CUASSERT(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, deviceIndex));
-        // Redirect 12.1 to 12.0 to since dependencies do not support 12.1 yet and 12.1 can reuse 12.0 cubins to save
-        // lib size/compile time..
-        if (major == 12 && minor == 1)
-        {
-            minor = 0;
-        }
         return {major, minor};
     }
 };

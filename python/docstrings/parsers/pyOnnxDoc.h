@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -225,6 +225,11 @@ constexpr const char* NATIVE_INSTANCENORM = R"trtdoc(
    This flag is required when building version-compatible or hardware-compatible engines.
    The flag is ON by default.
 )trtdoc";
+constexpr const char* ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA = R"trtdoc(
+    Enable UINT8 as a quantization data type and asymmetric quantization with non-zero zero-point values in Quantize and Dequantize nodes.
+    This flag is set to be OFF by default.
+    The resulting engine must be built targeting DLA version >= 3.16.
+ )trtdoc";
 } // namespace OnnxParserFlagDoc
 
 namespace ParserErrorDoc

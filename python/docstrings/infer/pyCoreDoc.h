@@ -214,7 +214,7 @@ constexpr char const* set_shape_input = R"trtdoc(
     Set the minimum/optimum/maximum values for a shape input tensor.
 
     This function must be called for every input tensor ``t`` that is a shape tensor (``t.is_shape`` == ``True``).
-    This implies that the datatype of ``t`` is ``int32``, the rank is either 0 or 1, and the dimensions of ``t``
+    This implies that the datatype of ``t`` is ``int64`` or ``int32``, the rank is either 0 or 1, and the dimensions of ``t``
     are fixed at network definition time. This function must NOT be called for any input tensor that is not a
     shape tensor.
 
@@ -610,6 +610,12 @@ constexpr char const* set_all_tensors_debug_state = R"trtdoc(
 
     :arg flag: True if turning on debug state of tensor. False if turning off.
 )trtdoc";
+
+constexpr char const* get_runtime_config = R"trtdoc(
+    Get the runtime configuration. From the execution context.
+
+    :returns: The runtime configuration.
+)trtdoc";
 } // namespace IExecutionContextDoc
 
 namespace IDebugListenerDoc
@@ -697,6 +703,27 @@ constexpr char const* phase_finish = R"trtdoc(
 )trtdoc";
 } // namespace IProgressMonitorDoc
 
+namespace IRuntimeConfigDoc
+{
+constexpr char const* descr = R"trtdoc(
+    A runtime configuration for an :class:`ICudaEngine` .
+)trtdoc";
+
+constexpr char const* set_execution_context_allocation_strategy = R"trtdoc(
+    Set the execution context allocation strategy.
+
+    :arg strategy: The execution context allocation strategy.
+)trtdoc";
+
+constexpr char const* get_execution_context_allocation_strategy = R"trtdoc(
+    Get the execution context allocation strategy.
+
+    :returns: The execution context allocation strategy.
+)trtdoc";
+
+} // namespace IRuntimeConfigDoc
+
+
 namespace ICudaEngineDoc
 {
 constexpr char const* descr = R"trtdoc(
@@ -745,6 +772,19 @@ constexpr char const* create_execution_context_without_device_memory = R"trtdoc(
     The memory for execution of this device context must be supplied by the application.
 
     :returns: An :class:`IExecutionContext` without device memory allocated.
+)trtdoc";
+
+constexpr char const* create_execution_context_with_runtime_config = R"trtdoc(
+    Create an :class:`IExecutionContext` with a runtime configuration.
+
+    :arg runtime_config: The runtime configuration.
+    :returns: The newly created :class:`IExecutionContext` .
+)trtdoc";
+
+constexpr char const* create_runtime_config = R"trtdoc(
+    Create a runtime configuration.
+
+    :returns: The newly created :class:`IRuntimeConfig` .
 )trtdoc";
 
 constexpr char const* get_tensor_profile_values = R"trtdoc(
@@ -1721,6 +1761,7 @@ constexpr char const* STATIC = R"trtdoc(Default static allocation with the maxim
 constexpr char const* ON_PROFILE_CHANGE = R"trtdoc(Reallocate for a profile when it's selected.)trtdoc";
 constexpr char const* USER_MANAGED = R"trtdoc(The user supplies custom allocation to the execution context.)trtdoc";
 } // namespace ExecutionContextAllocationStrategyDoc
+
 
 namespace BuilderDoc
 {

@@ -1327,3 +1327,93 @@ def where():
         "numpy": lambda cond, lhs, rhs: np.where(cond, lhs, rhs),
         "torch": lambda cond, lhs, rhs: torch.where(cond, lhs, rhs),
     }
+
+
+@mod.export()
+@dispatch(num_arrays=2)
+def power():
+    """
+    Computes the element-wise power of an array to the given exponent.
+
+    Args:
+        obj (Union[torch.Tensor, numpy.ndarray]):
+                The base array or tensor.
+        exponent (Union[int, float, torch.Tensor, numpy.ndarray]):
+                The exponent value or array.
+
+    Returns:
+        Union[torch.Tensor, numpy.ndarray]: The power result.
+
+    Raises:
+        PolygraphyException: if the input is of an unrecognized type.
+    """
+    return {
+        "numpy": lambda obj, exponent: np.power(obj, exponent),
+        "torch": lambda obj, exponent: torch.pow(obj, exponent),
+    }
+
+
+@mod.export()
+@dispatch()
+def sum():
+    """
+    Computes the sum of all elements in the array.
+
+    Args:
+        obj (Union[torch.Tensor, numpy.ndarray]): The array or tensor.
+
+    Returns:
+        Union[Number, torch.Tensor, numpy.ndarray]: The sum of all elements.
+
+    Raises:
+        PolygraphyException: if the input is of an unrecognized type.
+    """
+    return {
+        "numpy": lambda obj: np.sum(obj),
+        "torch": lambda obj: torch.sum(obj),
+    }
+
+
+@mod.export()
+@dispatch()
+def sqrt():
+    """
+    Computes the element-wise square root of an array.
+
+    Args:
+        obj (Union[torch.Tensor, numpy.ndarray]): The array or tensor.
+
+    Returns:
+        Union[torch.Tensor, numpy.ndarray]: The square root results.
+
+    Raises:
+        PolygraphyException: if the input is of an unrecognized type.
+    """
+    return {
+        "numpy": lambda obj: np.sqrt(obj),
+        "torch": lambda obj: torch.sqrt(obj),
+    }
+
+
+@mod.export()
+@dispatch(num_arrays=2)
+def multiply():
+    """
+    Computes the element-wise multiplication of two arrays.
+
+    Args:
+        lhs (Union[torch.Tensor, numpy.ndarray]):
+                The first array or tensor.
+        rhs (Union[torch.Tensor, numpy.ndarray]):
+                The second array or tensor.
+
+    Returns:
+        Union[torch.Tensor, numpy.ndarray]: The element-wise product.
+
+    Raises:
+        PolygraphyException: if the input is of an unrecognized type.
+    """
+    return {
+        "numpy": lambda lhs, rhs: np.multiply(lhs, rhs),
+        "torch": lambda lhs, rhs: torch.mul(lhs, rhs),
+    }

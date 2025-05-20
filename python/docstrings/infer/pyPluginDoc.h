@@ -381,12 +381,6 @@ constexpr const char* ipluginv3_descr = R"trtdoc(
         Every attribute must be explicitly initialized on Python-based plugins.
         These attributes will be read-only when accessed through a C++-based plugin.
 
-    :ivar num_outputs: :class:`int` The number of outputs from the plugin. This is used by the implementations of :class:`INetworkDefinition` and :class:`Builder`. In particular, it is called prior to any call to :func:`initialize`.
-    :ivar tensorrt_version: :class:`int` [READ ONLY] The API version with which this plugin was built.
-    :ivar plugin_name: :class:`str` The plugin name. Should match the plugin name returned by the corresponding plugin creator.
-    :ivar plugin_version: :class:`str` The plugin version. Should match the plugin version returned by the corresponding plugin creator.
-    :ivar plugin_namespace: :class:`str` The namespace that this plugin object belongs to. Ideally, all plugin objects from the same plugin library should have the same namespace.
-    :ivar serialization_size: :class:`int` [READ ONLY] The size of the serialization buffer required.
 )trtdoc";
 
 constexpr const char* iplugincapability_descr = R"trtdoc(
@@ -844,8 +838,7 @@ constexpr const char* descr = R"trtdoc(
     Contains plugin attribute field names and associated data.
     This information can be parsed to decode necessary plugin metadata
 
-    :ivar num_fields: :class:`int`  Number of :class:`PluginField` entries.
-    :ivar fields: :class:`list` PluginField entries.
+    The collection behaves like a Python iterable.
 )trtdoc";
 } // namespace PluginFieldCollectionDoc
 
@@ -861,7 +854,6 @@ namespace IPluginCreatorDoc
 constexpr const char* descr = R"trtdoc(
     Plugin creator class for user implemented layers
 
-    :ivar tensorrt_version: :class:`int`  Number of :class:`PluginField` entries.
     :ivar name: :class:`str` Plugin name.
     :ivar plugin_version: :class:`str` Plugin version.
     :ivar field_names: :class:`list` List of fields that needs to be passed to :func:`create_plugin` .
@@ -911,7 +903,6 @@ namespace IPluginCreatorV3OneDoc
 constexpr const char* descr = R"trtdoc(
     Plugin creator class for user implemented layers
 
-    :ivar tensorrt_version: :class:`int`  Number of :class:`PluginField` entries.
     :ivar name: :class:`str` Plugin name.
     :ivar plugin_version: :class:`str` Plugin version.
     :ivar field_names: :class:`list` List of fields that needs to be passed to :func:`create_plugin` .

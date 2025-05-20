@@ -71,6 +71,8 @@ def add_arguments(parser):
             "xl-turbo",
             "svd-xt-1.1",
             "sd3",
+            "3.5-medium",
+            "3.5-large",
             "cascade",
             "flux.1-dev",
             "flux.1-schnell",
@@ -274,6 +276,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     sm_version = device_info.major * 10 + device_info.minor
 
     is_flux = args.version.startswith("flux")
+    is_sd35 = args.version.startswith("3.5")
 
     if args.height % 8 != 0 or args.width % 8 != 0:
         raise ValueError(
@@ -336,7 +339,6 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
         elif args.int8:
             override_quant_level(3.0, "INT8")
 
-
     if args.quantization_level == 3.0 and args.download_onnx_models:
         raise ValueError(
             "Transformer ONNX model for Quantization level 3 is not available for download. Please export the quantized Transformer model natively with the removal of --download-onnx-models."
@@ -366,7 +368,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # Torch-fallback and Torch-inference
     if args.torch_fallback and not args.torch_inference:
-        assert is_flux, "PyTorch Fallback is only supported for Flux pipelines"
+        assert is_flux or is_sd35, "PyTorch Fallback is only supported for Flux and Stable Diffusion 3.5 pipelines."
         args.torch_fallback = args.torch_fallback.split(",")
 
     if args.torch_fallback and args.torch_inference:
@@ -377,7 +379,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # low-vram
     if args.low_vram:
-        assert is_flux, "low-vram mode is only supported for Flux pipelines"
+        assert is_flux or is_sd35, "low-vram mode is only supported for Flux and Stable Diffusion 3.5 pipelines."
 
     # Pack arguments
     kwargs_init_pipeline = {

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +14,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
+
+add_executable(sample_onnx_mnist_coord_conv_ac sampleOnnxMnistCoordConvAC.cpp)
+target_link_libraries(sample_onnx_mnist_coord_conv_ac PRIVATE trt_samples_common)
+add_dependencies(tensorrt_samples sample_onnx_mnist_coord_conv_ac)
+
+if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
+    target_link_libraries(sample_onnx_mnist_coord_conv_ac PRIVATE
+        tensorrt_plugins_static
+    )
+else()
+    target_link_libraries(sample_onnx_mnist_coord_conv_ac PRIVATE
+        tensorrt_plugins
+    )
+endif()
+
+install(
+    TARGETS sample_onnx_mnist_coord_conv_ac
+    OPTIONAL
+)
+
+else()
+
 set(SAMPLE_SOURCES sampleOnnxMnistCoordConvAC.cpp)
 
 set(SAMPLE_PARSERS "onnx")
 set(PLUGINS_NEEDED ON)
 
 include(../CMakeSamplesTemplate.txt)
+
+endif()

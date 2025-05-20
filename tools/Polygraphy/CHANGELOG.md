@@ -2,7 +2,21 @@
 
 Dates are in YYYY-MM-DD format.
 
-## v0.49.20 (2025-03-4)
+
+## v0.49.22 (2025-05-09)
+### Changed
+- Updated TensorRT loaders to handle some missing attributes more gracefully.
+
+
+## v0.49.21 (2025-05-08)
+### Added
+- Added new comparison functions to `CompareFunc`
+
+### Changed
+- Updated `Comparator` to avoid making deep copies of outputs where possible.
+
+
+## v0.49.20 (2025-03-04)
 ### Fixed
 - Fixed a bug where `colored` did not work for *older* versions of the `colored` package.
 

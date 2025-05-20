@@ -33,8 +33,8 @@ set(TRT_BUILD_PYTHON_PY_VERSIONS 3.8 3.9 3.10 3.11 3.12 3.13 CACHE STRING "The l
 set(TRT_PYTHON_MODULE_NAMES
     "tensorrt"
     "tensorrt_lean"
-    "tensorrt_dispatch"
 )
+    list(APPEND TRT_PYTHON_MODULE_NAMES "tensorrt_dispatch")
 
 if (${TRT_BUILD_ENABLE_NEW_PYTHON_FLOW})
 
@@ -91,7 +91,7 @@ function(createBindingLibrary moduleName pyVersion)
     # Create an indirect refernce to the add_${libName}_source function which can be called by the subdirectories.
     # This allows each subdir to add files to the individual targets with unique binary dirs on each call.
     set(ADD_SOURCES_FUNCTION add_${libName}_source)
-    set(SUBDIR_BINARY_DIR_PREFIX ${libName})
+    set(SUBDIR_BINARY_DIR_PREFIX subbuild/${libName})
     add_subdirectory(src ${SUBDIR_BINARY_DIR_PREFIX}/src)
 
     target_link_libraries(${libName} PRIVATE
@@ -235,6 +235,8 @@ function(processWheelTemplates moduleName pyVersion)
                 --trt-py-version ${TensorRT_VERSION}
                 --cuda-version ${TRT_CUDA_VERSION}
                 --trt-version ${TensorRT_VERSION}
+                --trt-nvinfer-name ${TRT_NVINFER_NAME}
+                --trt-onnxparser-name ${TRT_ONNXPARSER_NAME}
             DEPENDS
                 scripts/process_wheel_template.py
                 ${CMAKE_CURRENT_LIST_DIR}/packaging/bindings_wheel/tensorrt/${filePath}
@@ -438,21 +440,22 @@ else()
 endif()
 
 if(MSVC)
-    set(nvinfer_lib_name "nvinfer_${TENSORRT_MAJOR_VERSION}")
+    set(nvinfer_lib_name "${TRT_NVINFER_NAME}_${TENSORRT_MAJOR_VERSION}${TRT_LIB_SUFFIX}")
     set(nvinfer_plugin_lib_name "nvinfer_plugin_${TENSORRT_MAJOR_VERSION}")
-    set(nvonnxparser_lib_name "nvonnxparser_${TENSORRT_MAJOR_VERSION}")
+    set(nvonnxparser_lib_name "${TRT_ONNXPARSER_NAME}_${TENSORRT_MAJOR_VERSION}${TRT_LIB_SUFFIX}")
     set(nvinfer_lean_lib_name "nvinfer_lean_${TENSORRT_MAJOR_VERSION}${vfc_suffix}")
     set(nvinfer_dispatch_lib_name "nvinfer_dispatch_${TENSORRT_MAJOR_VERSION}${vfc_suffix}")
 else()
-    set(nvinfer_lib_name "nvinfer")
+    set(nvinfer_lib_name "${TRT_NVINFER_NAME}")
     set(nvinfer_plugin_lib_name "nvinfer_plugin")
-    set(nvonnxparser_lib_name "nvonnxparser")
+    set(nvonnxparser_lib_name "${TRT_ONNXPARSER_NAME}")
     set(nvinfer_lean_lib_name "nvinfer_lean${vfc_suffix}")
     set(nvinfer_dispatch_lib_name "nvinfer_dispatch${vfc_suffix}")
 endif()
 
 if(${TENSORRT_MODULE} STREQUAL "tensorrt")
-    set(TRT_LIBS ${nvinfer_lib_name} ${nvonnxparser_lib_name} ${nvinfer_plugin_lib_name})
+    set(TRT_LIBS ${nvinfer_lib_name} ${nvonnxparser_lib_name})
+        list(APPEND TRT_LIBS ${nvinfer_plugin_lib_name})
 elseif(${TENSORRT_MODULE} STREQUAL "tensorrt_lean")
     set(TRT_LIBS ${nvinfer_lean_lib_name})
 elseif(${TENSORRT_MODULE} STREQUAL "tensorrt_dispatch")

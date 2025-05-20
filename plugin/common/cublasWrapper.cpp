@@ -19,9 +19,6 @@
 #include "common/checkMacrosPlugin.h"
 #include "cudaDriverWrapper.h"
 
-namespace nvinfer1::pluginInternal
-{
-
 #if defined(_WIN32)
 #if !defined(WIN32_LEAN_AND_MEAN)
 #define WIN32_LEAN_AND_MEAN
@@ -33,14 +30,16 @@ namespace nvinfer1::pluginInternal
 #define dllGetSym(handle, name) GetProcAddress(static_cast<HMODULE>(handle), name)
 auto const kCUBLAS_PLUGIN_LIBNAME
     = std::string{"cublas64_"} + std::to_string(nvinfer1::getCudaLibVersionMaj()) + ".dll";
-#else
+#else // defined(_WIN32)
 #include <dlfcn.h>
 #define dllOpen(name) dlopen(name, RTLD_LAZY)
 #define dllClose(handle) dlclose(handle)
 #define dllGetSym(handle, name) dlsym(handle, name)
 auto const kCUBLAS_PLUGIN_LIBNAME = std::string{"libcublas.so."} + std::to_string(nvinfer1::getCudaLibVersionMaj());
-#endif
+#endif // defined(_WIN32)
 
+namespace nvinfer1::pluginInternal
+{
 using namespace nvinfer1;
 
 // If tryLoadingCublas failed, the CublasWrapper object won't be created.
@@ -87,7 +86,10 @@ CublasWrapper::~CublasWrapper()
         mHandle = nullptr;
     }
 
-    dllClose(mLibrary);
+    if (mLibrary != nullptr)
+    {
+        dllClose(mLibrary);
+    }
 }
 
 void* CublasWrapper::tryLoadingCublas()

@@ -16,7 +16,10 @@
 #
 
 add_plugin_source(
+    disentangledAttentionCommon.h
     disentangledAttentionPlugin.cpp
     disentangledAttentionPlugin.h
+    disentangledAttentionPluginLegacy.cpp
+    disentangledAttentionPluginLegacy.h
     disentangledKernel.cu
 )

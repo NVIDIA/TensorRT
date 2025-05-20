@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include "NvInferPlugin.h"
 #include <cuda_fp16.h>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 
 using namespace nvinfer1;
@@ -34,10 +35,14 @@ REGISTER_TENSORRT_PLUGIN(DisentangledAttentionPluginCreator);
 namespace
 {
 constexpr char const* kDEBERTA_PLUGIN_NAME{"DisentangledAttention_TRT"};
-constexpr char const* kDEBERTA_PLUGIN_VERSION{"1"};
+constexpr char const* kDEBERTA_PLUGIN_VERSION{"2"};
 } // namespace
 
-DisentangledAttentionPlugin::DisentangledAttentionPlugin() {}
+DisentangledAttentionPlugin::DisentangledAttentionPlugin()
+    : mSpan(0)
+    , mFactor(0.0f)
+{
+}
 
 DisentangledAttentionPlugin::DisentangledAttentionPlugin(int32_t span, float factor)
     : mSpan(span)
@@ -45,24 +50,14 @@ DisentangledAttentionPlugin::DisentangledAttentionPlugin(int32_t span, float fac
 {
 }
 
-DisentangledAttentionPlugin::DisentangledAttentionPlugin(void const* serialData, size_t serialLength)
-{
-    // Deserialize in the same order as serialization
-    deserialize_value(&serialData, &serialLength, &mSpan);
-    deserialize_value(&serialData, &serialLength, &mFactor);
-}
+// IPluginV3OneCore methods
 
 int32_t DisentangledAttentionPlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-int32_t DisentangledAttentionPlugin::initialize() noexcept
-{
-    return 0;
-}
-
-char const* DisentangledAttentionPlugin::getPluginType() const noexcept
+char const* DisentangledAttentionPlugin::getPluginName() const noexcept
 {
     return kDEBERTA_PLUGIN_NAME;
 }
@@ -72,31 +67,182 @@ char const* DisentangledAttentionPlugin::getPluginVersion() const noexcept
     return kDEBERTA_PLUGIN_VERSION;
 }
 
-// IPluginV2DynamicExt Methods
-nvinfer1::DimsExprs DisentangledAttentionPlugin::getOutputDimensions(
-    int32_t index, nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+IPluginV3* DisentangledAttentionPlugin::clone() noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(index == 0); // Only one output
-        return inputs[0];
+        auto* plugin = new DisentangledAttentionPlugin(mSpan, mFactor);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin;
     }
     catch (std::exception const& e)
     {
         caughtError(e);
     }
-    return nvinfer1::DimsExprs{};
+    return nullptr;
 }
 
-template <typename TDataType>
-void DisentangledAttentionPlugin::enqueueType(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, cudaStream_t stream,
-    TDataType factor)
+void DisentangledAttentionPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
 {
-    nvinfer1::Dims dims0 = inputDesc[0].dims;
-    nvinfer1::Dims dims1 = inputDesc[1].dims;
-    nvinfer1::Dims dims2 = inputDesc[2].dims;
+    try
+    {
+        mNamespace = pluginNamespace;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+}
+
+char const* DisentangledAttentionPlugin::getPluginNamespace() const noexcept
+{
+    return mNamespace.c_str();
+}
+
+IPluginCapability* DisentangledAttentionPlugin::getCapabilityInterface(PluginCapabilityType type) noexcept
+{
+    try
+    {
+        if (type == PluginCapabilityType::kBUILD)
+        {
+            return static_cast<IPluginV3OneBuild*>(this);
+        }
+        if (type == PluginCapabilityType::kRUNTIME)
+        {
+            return static_cast<IPluginV3OneRuntime*>(this);
+        }
+        PLUGIN_ASSERT(type == PluginCapabilityType::kCORE);
+        return static_cast<IPluginV3OneCore*>(this);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+PluginFieldCollection const* DisentangledAttentionPlugin::getFieldsToSerialize() noexcept
+{
+    try
+    {
+        mDataToSerialize.clear();
+
+        mDataToSerialize.emplace_back("span", &mSpan, PluginFieldType::kINT32, 1);
+        mDataToSerialize.emplace_back("factor", &mFactor, PluginFieldType::kFLOAT32, 1);
+
+        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.fields = mDataToSerialize.data();
+
+        return &mFCToSerialize;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+// IPluginV3OneBuild methods
+
+int32_t DisentangledAttentionPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
+    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& exprBuilder) noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(inputs != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 3);
+        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(nbOutputs == 1);
+
+        // Output has the same shape as the first input
+        outputs[0] = inputs[0];
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
+}
+
+int32_t DisentangledAttentionPlugin::configurePlugin(
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(in != nullptr && out != nullptr && nbInputs == 3 && nbOutputs == 1);
+
+        // Validate input and output shapes
+        for (int32_t i = 0; i < nbInputs; i++)
+        {
+            PLUGIN_VALIDATE(in[i].desc.dims.nbDims == in[0].desc.dims.nbDims);
+        }
+
+        // Check data types are consistent
+        PLUGIN_VALIDATE(in[0].desc.type == in[1].desc.type && in[0].desc.type == in[2].desc.type);
+        PLUGIN_VALIDATE(out[0].desc.type == in[0].desc.type);
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
+}
+
+int32_t DisentangledAttentionPlugin::getOutputDataTypes(
+    DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(inputTypes != nullptr && outputTypes != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 3 && nbOutputs == 1);
+
+        // Output has the same data type as the first input
+        outputTypes[0] = inputTypes[0];
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
+}
+
+bool DisentangledAttentionPlugin::supportsFormatCombination(
+    int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+{
+    try
+    {
+        PLUGIN_ASSERT(inOut && pos < (nbInputs + nbOutputs));
+
+        // All inputs and outputs should have the same precision type
+        bool const consistentFloatPrecision = (inOut[pos].desc.type == inOut[0].desc.type);
+
+        return (inOut[pos].desc.type == DataType::kINT8 || inOut[pos].desc.type == DataType::kHALF
+                   || inOut[pos].desc.type == DataType::kFLOAT)
+            && inOut[pos].desc.format == PluginFormat::kLINEAR && consistentFloatPrecision;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return false;
+}
+
+// IPluginV3OneRuntime methods
+
+template <typename TDataType>
+void DisentangledAttentionPlugin::enqueueType(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, cudaStream_t stream, TDataType factor)
+{
+    Dims dims0 = inputDesc[0].dims;
+    Dims dims1 = inputDesc[1].dims;
+    Dims dims2 = inputDesc[2].dims;
     dim3 dimData0(dims0.d[0], dims0.d[1], dims0.d[2]);
     dim3 dimData1(dims1.d[0], dims1.d[1], dims1.d[2]);
     dim3 dimData2(dims2.d[0], dims2.d[1], dims2.d[2]);
@@ -114,9 +260,8 @@ void DisentangledAttentionPlugin::enqueueType(nvinfer1::PluginTensorDesc const* 
         dimData0, dimData1, dimData2, dimResult, factor, mSpan, blockOptimized, gridOptimized, stream);
 }
 
-int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs,
-    void* /* workspace */, cudaStream_t stream) noexcept
+int32_t DisentangledAttentionPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* /* workspace */, cudaStream_t stream) noexcept
 {
     try
     {
@@ -124,13 +269,11 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
 
         switch (inputDesc[0].type)
         {
-        case nvinfer1::DataType::kFLOAT:
-            enqueueType<float>(inputDesc, outputDesc, inputs, outputs, stream, mFactor);
-            break;
-        case nvinfer1::DataType::kHALF:
+        case DataType::kFLOAT: enqueueType<float>(inputDesc, outputDesc, inputs, outputs, stream, mFactor); break;
+        case DataType::kHALF:
             enqueueType<__half>(inputDesc, outputDesc, inputs, outputs, stream, __float2half(mFactor));
             break;
-        case nvinfer1::DataType::kINT8:
+        case DataType::kINT8:
             enqueueType<int8_t>(inputDesc, outputDesc, inputs, outputs, stream, static_cast<int8_t>(mFactor));
             break;
         default: PLUGIN_VALIDATE(false, "Unsupported Datatype"); break;
@@ -144,46 +287,46 @@ int32_t DisentangledAttentionPlugin::enqueue(nvinfer1::PluginTensorDesc const* i
     }
 }
 
-size_t DisentangledAttentionPlugin::getSerializationSize() const noexcept
+size_t DisentangledAttentionPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    return sizeof(mSpan) + sizeof(mFactor);
+    return 0;
 }
 
-void DisentangledAttentionPlugin::serialize(void* buffer) const noexcept
-{
-    serialize_value(&buffer, mSpan);
-    serialize_value(&buffer, mFactor);
-}
-
-bool DisentangledAttentionPlugin::supportsFormatCombination(
-    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
-{
-
-    PLUGIN_ASSERT(inOut && pos < (nbInputs + nbOutputs));
-
-    bool const consistentFloatPrecision
-        = (inOut[pos].type == inOut[0].type); // all inputs & outputs should have the same precision type
-
-    return (inOut[pos].type == nvinfer1::DataType::kINT8 || inOut[pos].type == nvinfer1::DataType::kHALF
-               || inOut[pos].type == nvinfer1::DataType::kFLOAT)
-        && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR && consistentFloatPrecision;
-}
-
-void DisentangledAttentionPlugin::terminate() noexcept {}
-
-void DisentangledAttentionPlugin::destroy() noexcept
-{
-    // This gets called when the network containing plugin is destroyed
-    delete this;
-}
-
-IPluginV2DynamicExt* DisentangledAttentionPlugin::clone() const noexcept
+int32_t DisentangledAttentionPlugin::onShapeChange(
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
 {
     try
     {
-        auto* plugin = new DisentangledAttentionPlugin(mSpan, mFactor);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        PLUGIN_VALIDATE(inputs != nullptr && outputs != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 3 && nbOutputs == 1);
+
+        // Check that all inputs have the same data type
+        DataType dataType = inputs[0].type;
+        PLUGIN_VALIDATE(inputs[1].type == dataType && inputs[2].type == dataType);
+
+        // Check that output has the same data type
+        PLUGIN_VALIDATE(outputs[0].type == dataType);
+
+        // Validate dimensions
+        PLUGIN_VALIDATE(inputs[0].dims.nbDims == inputs[1].dims.nbDims);
+        PLUGIN_VALIDATE(inputs[0].dims.nbDims == inputs[2].dims.nbDims);
+        PLUGIN_VALIDATE(outputs[0].dims.nbDims == inputs[0].dims.nbDims);
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
+}
+
+IPluginV3* DisentangledAttentionPlugin::attachToContext(IPluginResourceContext* context) noexcept
+{
+    try
+    {
+        return this->clone();
     }
     catch (std::exception const& e)
     {
@@ -192,91 +335,11 @@ IPluginV2DynamicExt* DisentangledAttentionPlugin::clone() const noexcept
     return nullptr;
 }
 
-void DisentangledAttentionPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
-{
-    try
-    {
-        // inputs
-        PLUGIN_VALIDATE(nbInputs == 3); // 3 inputs
-
-        // check for valid input dimensions
-        PLUGIN_VALIDATE(in[0].desc.dims.nbDims == 3);
-        PLUGIN_VALIDATE(in[1].desc.dims.nbDims == 3);
-        PLUGIN_VALIDATE(in[2].desc.dims.nbDims == 3);
-
-        // check BN (batch_size * num_heads) dimension consistency
-        PLUGIN_VALIDATE(in[0].desc.dims.d[0] == in[1].desc.dims.d[0]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[0] == in[2].desc.dims.d[0]);
-
-        // check S (sequence_length) dimension consistency
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == in[1].desc.dims.d[1]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == in[2].desc.dims.d[1]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == in[0].desc.dims.d[2]);
-
-        // check K (2 * span) dimension consistency for in[1] and in[2]
-        PLUGIN_VALIDATE(in[1].desc.dims.d[2] == 2 * mSpan);
-        PLUGIN_VALIDATE(in[2].desc.dims.d[2] == 2 * mSpan);
-
-        // Outputs (same dimension as in[0])
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        PLUGIN_VALIDATE(out[0].desc.dims.nbDims == 3);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[0] == out[0].desc.dims.d[0]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[1] == out[0].desc.dims.d[1]);
-        PLUGIN_VALIDATE(in[0].desc.dims.d[2] == out[0].desc.dims.d[2]);
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-}
-
-nvinfer1::DataType DisentangledAttentionPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
-{
-    try
-    {
-        PLUGIN_VALIDATE(inputTypes != nullptr);
-        PLUGIN_VALIDATE(nbInputs > 0);
-        PLUGIN_VALIDATE(index == 0);
-        return inputTypes[0]; // version 1, same as data1; version 2, same as data0
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nvinfer1::DataType{};
-}
-
-size_t DisentangledAttentionPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
-{
-    return 0;
-}
-
-void DisentangledAttentionPlugin::setPluginNamespace(char const* libNamespace) noexcept
-{
-    try
-    {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
-        mNamespace = libNamespace;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-}
-
-char const* DisentangledAttentionPlugin::getPluginNamespace() const noexcept
-{
-    return mNamespace.c_str();
-}
+// -------------------- Creator class Implementation --------------------
 
 DisentangledAttentionPluginCreator::DisentangledAttentionPluginCreator()
 {
     mPluginAttributes.clear();
-
-    // consistent with the ONNX model attr fields
     mPluginAttributes.emplace_back(PluginField("span", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("factor", nullptr, PluginFieldType::kFLOAT32, 1));
 
@@ -299,53 +362,40 @@ PluginFieldCollection const* DisentangledAttentionPluginCreator::getFieldNames()
     return &mFC;
 }
 
-char const* DisentangledAttentionPluginCreator::getPluginNamespace() const noexcept
-{
-    return mNamespace.c_str();
-}
-
-void DisentangledAttentionPluginCreator::setPluginNamespace(char const* libNamespace) noexcept
-{
-    try
-    {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
-        mNamespace = libNamespace;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-}
-
-IPluginV2DynamicExt* DisentangledAttentionPluginCreator::createPlugin(
-    char const* /*name*/, PluginFieldCollection const* fc) noexcept
+IPluginV3* DisentangledAttentionPluginCreator::createPlugin(
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
     try
     {
         PLUGIN_VALIDATE(fc != nullptr);
+        PluginField const* fields = fc->fields;
+        std::optional<int32_t> span;
+        std::optional<float> factor;
 
-        // Set default invalid values (for assert in case when attributes are missing)
-        int32_t span = 0;
-        float factor = 0.F;
-        for (int32_t i = 0; i < fc->nbFields; i++)
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            std::string fieldName = fc->fields[i].name;
-            if (fieldName.compare("span") == 0)
+            char const* attrName = fields[i].name;
+            if (!strcmp(attrName, "span"))
             {
-                span = *static_cast<int32_t const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+                span = *static_cast<int32_t const*>(fields[i].data);
             }
-            if (fieldName.compare("factor") == 0)
+            else if (!strcmp(attrName, "factor"))
             {
-                factor = *static_cast<float const*>(fc->fields[i].data);
+                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
+                factor = *static_cast<float const*>(fields[i].data);
             }
         }
 
-        PLUGIN_VALIDATE(span >= 0);
-        PLUGIN_VALIDATE(factor > 0.F && factor < 1.F); // factor is 1/sqrt(3d), therefore must less than 1
+        // Validate that all required fields were found
+        PLUGIN_VALIDATE(span.has_value(), "Required attribute 'span' not found");
+        PLUGIN_VALIDATE(factor.has_value(), "Required attribute 'factor' not found");
+        PLUGIN_VALIDATE(span.value() >= 0);
+        PLUGIN_VALIDATE(
+            factor.value() > 0.F && factor.value() < 1.F); // factor is 1/sqrt(3d), therefore must less than 1
 
-        DisentangledAttentionPlugin* plugin = new DisentangledAttentionPlugin(span, factor);
+        auto* plugin = new DisentangledAttentionPlugin(span.value(), factor.value());
         plugin->setPluginNamespace(mNamespace.c_str());
-
         return plugin;
     }
     catch (std::exception const& e)
@@ -355,19 +405,19 @@ IPluginV2DynamicExt* DisentangledAttentionPluginCreator::createPlugin(
     return nullptr;
 }
 
-IPluginV2DynamicExt* DisentangledAttentionPluginCreator::deserializePlugin(
-    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
+void DisentangledAttentionPluginCreator::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     try
     {
-        DisentangledAttentionPlugin* plugin = new DisentangledAttentionPlugin(serialData, serialLength);
-        plugin->setPluginNamespace(mNamespace.c_str());
-
-        return plugin;
+        mNamespace = pluginNamespace;
     }
     catch (std::exception const& e)
     {
         caughtError(e);
     }
-    return nullptr;
+}
+
+char const* DisentangledAttentionPluginCreator::getPluginNamespace() const noexcept
+{
+    return mNamespace.c_str();
 }

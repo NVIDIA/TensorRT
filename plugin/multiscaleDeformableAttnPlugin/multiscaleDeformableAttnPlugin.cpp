@@ -19,27 +19,73 @@
 #include "multiscaleDeformableAttn.h"
 
 using namespace nvinfer1;
-using namespace plugin;
+using namespace nvinfer1::plugin;
+
+namespace
+{
+static char const* DMHA_VERSION{"2"};
+static char const* DMHA_NAME{"MultiscaleDeformableAttnPlugin_TRT"};
+} // namespace
 
 namespace nvinfer1::plugin
 {
 
-namespace
-{
-static char const* DMHA_VERSION{"1"};
-static char const* DMHA_NAME{"MultiscaleDeformableAttnPlugin_TRT"};
-} // namespace
-
 MultiscaleDeformableAttnPlugin::MultiscaleDeformableAttnPlugin() {}
 
-MultiscaleDeformableAttnPlugin::MultiscaleDeformableAttnPlugin(void const* data, size_t length) {}
-
-nvinfer1::IPluginV2DynamicExt* MultiscaleDeformableAttnPlugin::clone() const PLUGIN_NOEXCEPT
+IPluginCapability* MultiscaleDeformableAttnPlugin::getCapabilityInterface(PluginCapabilityType type) noexcept
 {
     try
     {
-        MultiscaleDeformableAttnPlugin* plugin = new MultiscaleDeformableAttnPlugin();
-        plugin->setPluginNamespace(getPluginNamespace());
+        if (type == PluginCapabilityType::kBUILD)
+        {
+            return static_cast<IPluginV3OneBuild*>(this);
+        }
+        if (type == PluginCapabilityType::kRUNTIME)
+        {
+            return static_cast<IPluginV3OneRuntime*>(this);
+        }
+        PLUGIN_ASSERT(type == PluginCapabilityType::kCORE);
+        return static_cast<IPluginV3OneCore*>(this);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+// IPluginV3OneCore methods
+char const* MultiscaleDeformableAttnPlugin::getPluginName() const noexcept
+{
+    return DMHA_NAME;
+}
+
+char const* MultiscaleDeformableAttnPlugin::getPluginVersion() const noexcept
+{
+    return DMHA_VERSION;
+}
+
+int32_t MultiscaleDeformableAttnPlugin::getNbOutputs() const noexcept
+{
+    return 1;
+}
+
+void MultiscaleDeformableAttnPlugin::setPluginNamespace(char const* pluginNamespace) noexcept
+{
+    mNamespace = pluginNamespace;
+}
+
+char const* MultiscaleDeformableAttnPlugin::getPluginNamespace() const noexcept
+{
+    return mNamespace.c_str();
+}
+
+IPluginV3* MultiscaleDeformableAttnPlugin::clone() noexcept
+{
+    try
+    {
+        auto* plugin = new MultiscaleDeformableAttnPlugin();
+        plugin->setPluginNamespace(mNamespace.c_str());
         return plugin;
     }
     catch (std::exception const& e)
@@ -49,171 +95,277 @@ nvinfer1::IPluginV2DynamicExt* MultiscaleDeformableAttnPlugin::clone() const PLU
     return nullptr;
 }
 
-nvinfer1::DimsExprs MultiscaleDeformableAttnPlugin::getOutputDimensions(int32_t outputIndex,
-    nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) PLUGIN_NOEXCEPT
+// IPluginV3OneBuild methods
+int32_t MultiscaleDeformableAttnPlugin::getOutputDataTypes(
+    DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
-    nvinfer1::DimsExprs ret;
-    ret.nbDims = 4;
-    ret.d[0] = inputs[0].d[0];
-    ret.d[1] = inputs[3].d[1];
-    ret.d[2] = inputs[0].d[2];
-    ret.d[3] = inputs[0].d[3];
+    try
+    {
+        PLUGIN_VALIDATE(outputTypes != nullptr, "outputTypes pointer is null");
+        PLUGIN_VALIDATE(nbOutputs > 0, "nbOutputs is not positive");
+        PLUGIN_VALIDATE(inputTypes != nullptr, "inputTypes pointer is null");
+        PLUGIN_VALIDATE(nbInputs > 0, "nbInputs is not positive");
 
-    return ret;
+        // Output type is the same as the first input type
+        std::fill_n(outputTypes, nbOutputs, inputTypes[0]);
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
+}
+
+int32_t MultiscaleDeformableAttnPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
+    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& exprBuilder) noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(outputs != nullptr, "outputs pointer is null");
+        PLUGIN_VALIDATE(nbOutputs > 0, "nbOutputs is not positive");
+        PLUGIN_VALIDATE(inputs != nullptr, "inputs pointer is null");
+        PLUGIN_VALIDATE(nbInputs == 5, "Expected 5 inputs");
+
+        // Output shape: [N, Lq, M, D]
+        outputs[0].nbDims = 4;
+        outputs[0].d[0] = inputs[0].d[0]; // Batch size
+        outputs[0].d[1] = inputs[3].d[1]; // Lq (query length)
+        outputs[0].d[2] = inputs[0].d[2]; // Number of heads
+        outputs[0].d[3] = inputs[0].d[3]; // Hidden dimension per head
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
 }
 
 bool MultiscaleDeformableAttnPlugin::supportsFormatCombination(
-    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) PLUGIN_NOEXCEPT
+    int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    PLUGIN_ASSERT((nbInputs == 5));
-    PLUGIN_ASSERT((nbOutputs == 1));
-
-    if (inOut[pos].format == nvinfer1::TensorFormat::kLINEAR)
+    try
     {
-        if ((pos == 1) || (pos == 2))
+        PLUGIN_VALIDATE(inOut != nullptr, "inOut pointer is null");
+        PLUGIN_VALIDATE(nbInputs == 5, "Expected 5 inputs");
+        PLUGIN_VALIDATE(nbOutputs == 1, "Expected 1 output");
+
+        // Check format
+        PluginTensorDesc const& desc = inOut[pos].desc;
+        if (desc.format != TensorFormat::kLINEAR)
         {
-            return (inOut[pos].type == nvinfer1::DataType::kINT32);
+            return false;
         }
-        return ((inOut[pos].type == inOut[0].type)
-            && ((inOut[pos].type == nvinfer1::DataType::kFLOAT) || (inOut[pos].type == nvinfer1::DataType::kHALF)));
+
+        // Special handling for spatial_shapes and level_start_index (inputs 1 and 2)
+        if (pos == 1 || pos == 2)
+        {
+            return desc.type == DataType::kINT32;
+        }
+
+        // Other inputs and output must have the same type, either FP32 or FP16
+        if (pos == 0 || pos == 3 || pos == 4 || pos == nbInputs)
+        {
+            // Check that the data type matches input[0]
+            bool const isFloatType = desc.type == DataType::kFLOAT || desc.type == DataType::kHALF;
+            if (pos == 0) // First tensor, just check if it's a supported type
+            {
+                return isFloatType;
+            }
+            // Other tensors must match the first
+            return desc.type == inOut[0].desc.type && isFloatType;
+        }
+
+        return false;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
     }
     return false;
 }
 
-void MultiscaleDeformableAttnPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) PLUGIN_NOEXCEPT
+int32_t MultiscaleDeformableAttnPlugin::configurePlugin(
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
-    // Check for valid input dimensions
-    PLUGIN_ASSERT(inputs[0].desc.dims.nbDims == 4);
-    PLUGIN_ASSERT(inputs[1].desc.dims.nbDims == 2);
-    PLUGIN_ASSERT(inputs[2].desc.dims.nbDims == 1);
-    PLUGIN_ASSERT(inputs[3].desc.dims.nbDims == 6);
-    PLUGIN_ASSERT(inputs[4].desc.dims.nbDims == 5);
-
-    // Check M dimensions consistency
-    PLUGIN_ASSERT(inputs[0].desc.dims.d[2] == inputs[3].desc.dims.d[2]);
-    PLUGIN_ASSERT(inputs[0].desc.dims.d[2] == inputs[4].desc.dims.d[2]);
-
-    // Check L dimensions consistency
-    PLUGIN_ASSERT(inputs[1].desc.dims.d[0] == inputs[2].desc.dims.d[0]);
-    PLUGIN_ASSERT(inputs[1].desc.dims.d[0] == inputs[3].desc.dims.d[3]);
-    PLUGIN_ASSERT(inputs[1].desc.dims.d[0] == inputs[4].desc.dims.d[3]);
-
-    // Check P dimensions consistency
-    PLUGIN_ASSERT(inputs[3].desc.dims.d[4] == inputs[4].desc.dims.d[4]);
-
-    // Check Lq dimensions consistency
-    PLUGIN_ASSERT(inputs[3].desc.dims.d[1] == inputs[4].desc.dims.d[1]);
-}
-
-size_t MultiscaleDeformableAttnPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const PLUGIN_NOEXCEPT
-{
-    return 0;
-}
-
-int32_t MultiscaleDeformableAttnPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* /* outputDesc */, void const* const* inputs, void* const* outputs,
-    void* /* workSpace */, cudaStream_t stream) PLUGIN_NOEXCEPT
-{
-    PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
-
-    int32_t const batch = inputDesc[0].dims.d[0];
-    int32_t spatial_size = inputDesc[0].dims.d[1];
-    int32_t num_heads = inputDesc[0].dims.d[2];
-    int32_t channels = inputDesc[0].dims.d[3];
-    int32_t num_levels = inputDesc[1].dims.d[0];
-    int32_t num_query = inputDesc[3].dims.d[1];
-    int32_t num_point = inputDesc[3].dims.d[4];
-    int32_t rc = 0;
-    if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
+    try
     {
-        float const* value = static_cast<float const*>(inputs[0]);
-        int32_t const* spatialShapes = static_cast<int32_t const*>(inputs[1]);
-        int32_t const* levelStartIndex = static_cast<int32_t const*>(inputs[2]);
-        float const* samplingLoc = static_cast<float const*>(inputs[3]);
-        float const* attnWeight = static_cast<float const*>(inputs[4]);
-        float* output = static_cast<float*>(outputs[0]);
+        PLUGIN_VALIDATE(in != nullptr, "in pointer is null");
+        PLUGIN_VALIDATE(out != nullptr, "out pointer is null");
+        PLUGIN_VALIDATE(nbInputs == 5, "Expected 5 inputs");
+        PLUGIN_VALIDATE(nbOutputs == 1, "Expected 1 output");
 
-        rc = ms_deform_attn_cuda_forward(stream, value, spatialShapes, levelStartIndex, samplingLoc, attnWeight, output,
-            batch, spatial_size, num_heads, channels, num_levels, num_query, num_point);
+        // Check for valid input dimensions
+        PLUGIN_VALIDATE(in[0].desc.dims.nbDims == 4, "First input must have 4 dimensions");
+        PLUGIN_VALIDATE(in[1].desc.dims.nbDims == 2, "Second input must have 2 dimensions");
+        PLUGIN_VALIDATE(in[2].desc.dims.nbDims == 1, "Third input must have 1 dimension");
+        PLUGIN_VALIDATE(in[3].desc.dims.nbDims == 6, "Fourth input must have 6 dimensions");
+        PLUGIN_VALIDATE(in[4].desc.dims.nbDims == 5, "Fifth input must have 5 dimensions");
+
+        // Check M dimensions consistency
+        PLUGIN_VALIDATE(in[0].desc.dims.d[2] == in[3].desc.dims.d[2], "Inconsistent dimensions for number of heads");
+        PLUGIN_VALIDATE(in[0].desc.dims.d[2] == in[4].desc.dims.d[2], "Inconsistent dimensions for number of heads");
+
+        // Check L dimensions consistency
+        PLUGIN_VALIDATE(in[1].desc.dims.d[0] == in[2].desc.dims.d[0], "Inconsistent dimensions for number of levels");
+        PLUGIN_VALIDATE(in[1].desc.dims.d[0] == in[3].desc.dims.d[3], "Inconsistent dimensions for number of levels");
+        PLUGIN_VALIDATE(in[1].desc.dims.d[0] == in[4].desc.dims.d[3], "Inconsistent dimensions for number of levels");
+
+        // Check P dimensions consistency
+        PLUGIN_VALIDATE(in[3].desc.dims.d[4] == in[4].desc.dims.d[4], "Inconsistent dimensions for number of points");
+
+        // Check Lq dimensions consistency
+        PLUGIN_VALIDATE(in[3].desc.dims.d[1] == in[4].desc.dims.d[1], "Inconsistent dimensions for query length");
+
+        return STATUS_SUCCESS;
     }
-    else if (inputDesc[0].type == nvinfer1::DataType::kHALF)
+    catch (std::exception const& e)
     {
-        __half const* value = static_cast<__half const*>(inputs[0]);
-        int32_t const* spatialShapes = static_cast<int32_t const*>(inputs[1]);
-        int32_t const* levelStartIndex = static_cast<int32_t const*>(inputs[2]);
-        __half const* samplingLoc = static_cast<__half const*>(inputs[3]);
-        __half const* attnWeight = static_cast<__half const*>(inputs[4]);
-        __half* output = static_cast<__half*>(outputs[0]);
-
-        rc = ms_deform_attn_cuda_forward(stream, value, spatialShapes, levelStartIndex, samplingLoc, attnWeight, output,
-            batch, spatial_size, num_heads, channels, num_levels, num_query, num_point);
+        caughtError(e);
     }
-
-    return rc;
+    return STATUS_FAILURE;
 }
 
-void MultiscaleDeformableAttnPlugin::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) PLUGIN_NOEXCEPT
+PluginFieldCollection const* MultiscaleDeformableAttnPlugin::getFieldsToSerialize() noexcept
 {
+    try
+    {
+        mDataToSerialize.clear();
+        // This plugin has no fields to serialize
+        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.fields = mDataToSerialize.data();
+        return &mFCToSerialize;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-void MultiscaleDeformableAttnPlugin::detachFromContext() PLUGIN_NOEXCEPT {}
-
-// IPluginV2Ext Methods
-nvinfer1::DataType MultiscaleDeformableAttnPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const PLUGIN_NOEXCEPT
+// IPluginV3OneRuntime methods
+size_t MultiscaleDeformableAttnPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    return inputTypes[0];
-}
-
-// IPluginV2 Methods
-char const* MultiscaleDeformableAttnPlugin::getPluginType() const PLUGIN_NOEXCEPT
-{
-    return DMHA_NAME;
-}
-
-char const* MultiscaleDeformableAttnPlugin::getPluginVersion() const PLUGIN_NOEXCEPT
-{
-    return DMHA_VERSION;
-}
-
-int32_t MultiscaleDeformableAttnPlugin::getNbOutputs() const PLUGIN_NOEXCEPT
-{
-    return 1;
-}
-
-int32_t MultiscaleDeformableAttnPlugin::initialize() PLUGIN_NOEXCEPT
-{
+    // No workspace needed for this plugin
     return 0;
 }
 
-void MultiscaleDeformableAttnPlugin::terminate() PLUGIN_NOEXCEPT {}
-
-size_t MultiscaleDeformableAttnPlugin::getSerializationSize() const PLUGIN_NOEXCEPT
+int32_t MultiscaleDeformableAttnPlugin::onShapeChange(
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
 {
-    return 0;
+    try
+    {
+        PLUGIN_VALIDATE(inputs != nullptr, "inputs pointer is null");
+        PLUGIN_VALIDATE(outputs != nullptr, "outputs pointer is null");
+        PLUGIN_VALIDATE(nbInputs == 5, "Expected 5 inputs");
+        PLUGIN_VALIDATE(nbOutputs == 1, "Expected 1 output");
+
+        // Check for valid input dimensions
+        PLUGIN_VALIDATE(inputs[0].dims.nbDims == 4, "First input must have 4 dimensions");
+        PLUGIN_VALIDATE(inputs[1].dims.nbDims == 2, "Second input must have 2 dimensions");
+        PLUGIN_VALIDATE(inputs[2].dims.nbDims == 1, "Third input must have 1 dimension");
+        PLUGIN_VALIDATE(inputs[3].dims.nbDims == 6, "Fourth input must have 6 dimensions");
+        PLUGIN_VALIDATE(inputs[4].dims.nbDims == 5, "Fifth input must have 5 dimensions");
+
+        // Check M dimensions consistency
+        PLUGIN_VALIDATE(inputs[0].dims.d[2] == inputs[3].dims.d[2], "Inconsistent dimensions for number of heads");
+        PLUGIN_VALIDATE(inputs[0].dims.d[2] == inputs[4].dims.d[2], "Inconsistent dimensions for number of heads");
+
+        // Check L dimensions consistency
+        PLUGIN_VALIDATE(inputs[1].dims.d[0] == inputs[2].dims.d[0], "Inconsistent dimensions for number of levels");
+        PLUGIN_VALIDATE(inputs[1].dims.d[0] == inputs[3].dims.d[3], "Inconsistent dimensions for number of levels");
+        PLUGIN_VALIDATE(inputs[1].dims.d[0] == inputs[4].dims.d[3], "Inconsistent dimensions for number of levels");
+
+        // Check P dimensions consistency
+        PLUGIN_VALIDATE(inputs[3].dims.d[4] == inputs[4].dims.d[4], "Inconsistent dimensions for number of points");
+
+        // Check Lq dimensions consistency
+        PLUGIN_VALIDATE(inputs[3].dims.d[1] == inputs[4].dims.d[1], "Inconsistent dimensions for query length");
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
 }
 
-void MultiscaleDeformableAttnPlugin::serialize(void* buffer) const PLUGIN_NOEXCEPT {}
-
-void MultiscaleDeformableAttnPlugin::destroy() PLUGIN_NOEXCEPT
+IPluginV3* MultiscaleDeformableAttnPlugin::attachToContext(IPluginResourceContext* context) noexcept
 {
-    delete this;
+    try
+    {
+        // No resources need to be attached
+        return clone();
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
-void MultiscaleDeformableAttnPlugin::setPluginNamespace(char const* pluginNamespace) PLUGIN_NOEXCEPT
+int32_t MultiscaleDeformableAttnPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
 {
-    mNamespace = pluginNamespace;
-}
-char const* MultiscaleDeformableAttnPlugin::getPluginNamespace() const PLUGIN_NOEXCEPT
-{
-    return mNamespace.c_str();
+    try
+    {
+        PLUGIN_VALIDATE(
+            inputDesc != nullptr && inputs != nullptr && outputs != nullptr, "Null pointers found in enqueue");
+
+        int32_t const batch = inputDesc[0].dims.d[0];
+        int32_t spatialSize = inputDesc[0].dims.d[1];
+        int32_t numHeads = inputDesc[0].dims.d[2];
+        int32_t channels = inputDesc[0].dims.d[3];
+        int32_t numLevels = inputDesc[1].dims.d[0];
+        int32_t numQuery = inputDesc[3].dims.d[1];
+        int32_t numPoint = inputDesc[3].dims.d[4];
+        int32_t rc = 0;
+
+        if (inputDesc[0].type == DataType::kFLOAT)
+        {
+            auto const* value = static_cast<float const*>(inputs[0]);
+            auto const* spatialShapes = static_cast<int32_t const*>(inputs[1]);
+            auto const* levelStartIndex = static_cast<int32_t const*>(inputs[2]);
+            auto const* samplingLoc = static_cast<float const*>(inputs[3]);
+            auto const* attnWeight = static_cast<float const*>(inputs[4]);
+            auto* output = static_cast<float*>(outputs[0]);
+
+            rc = ms_deform_attn_cuda_forward(stream, value, spatialShapes, levelStartIndex, samplingLoc, attnWeight,
+                output, batch, spatialSize, numHeads, channels, numLevels, numQuery, numPoint);
+        }
+        else if (inputDesc[0].type == DataType::kHALF)
+        {
+            auto const* value = static_cast<__half const*>(inputs[0]);
+            auto const* spatialShapes = static_cast<int32_t const*>(inputs[1]);
+            auto const* levelStartIndex = static_cast<int32_t const*>(inputs[2]);
+            auto const* samplingLoc = static_cast<__half const*>(inputs[3]);
+            auto const* attnWeight = static_cast<__half const*>(inputs[4]);
+            auto* output = static_cast<__half*>(outputs[0]);
+
+            rc = ms_deform_attn_cuda_forward(stream, value, spatialShapes, levelStartIndex, samplingLoc, attnWeight,
+                output, batch, spatialSize, numHeads, channels, numLevels, numQuery, numPoint);
+        }
+        else
+        {
+            PLUGIN_VALIDATE(false, "Unsupported data type");
+        }
+
+        return rc;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
 }
 
-// Pluginv1 Creator
-
+// Plugin Creator Implementation
 MultiscaleDeformableAttnPluginCreator::MultiscaleDeformableAttnPluginCreator()
 {
     mPluginAttributes.clear();
@@ -221,28 +373,28 @@ MultiscaleDeformableAttnPluginCreator::MultiscaleDeformableAttnPluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-char const* MultiscaleDeformableAttnPluginCreator::getPluginName() const PLUGIN_NOEXCEPT
+char const* MultiscaleDeformableAttnPluginCreator::getPluginName() const noexcept
 {
     return DMHA_NAME;
 }
 
-char const* MultiscaleDeformableAttnPluginCreator::getPluginVersion() const PLUGIN_NOEXCEPT
+char const* MultiscaleDeformableAttnPluginCreator::getPluginVersion() const noexcept
 {
     return DMHA_VERSION;
 }
 
-nvinfer1::PluginFieldCollection const* MultiscaleDeformableAttnPluginCreator::getFieldNames() PLUGIN_NOEXCEPT
+PluginFieldCollection const* MultiscaleDeformableAttnPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2* MultiscaleDeformableAttnPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) PLUGIN_NOEXCEPT
+IPluginV3* MultiscaleDeformableAttnPluginCreator::createPlugin(
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
     try
     {
-        MultiscaleDeformableAttnPlugin* plugin = new MultiscaleDeformableAttnPlugin();
-        return plugin;
+        // This plugin doesn't have any configurable parameters
+        return new MultiscaleDeformableAttnPlugin();
     }
     catch (std::exception const& e)
     {
@@ -251,28 +403,12 @@ IPluginV2* MultiscaleDeformableAttnPluginCreator::createPlugin(
     return nullptr;
 }
 
-IPluginV2* MultiscaleDeformableAttnPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) PLUGIN_NOEXCEPT
-{
-    try
-    {
-        auto plugin = new MultiscaleDeformableAttnPlugin(serialData, serialLength);
-        plugin->setPluginNamespace(getPluginNamespace());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-void MultiscaleDeformableAttnPluginCreator::setPluginNamespace(char const* pluginNamespace) PLUGIN_NOEXCEPT
+void MultiscaleDeformableAttnPluginCreator::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     mNamespace = pluginNamespace;
 }
 
-char const* MultiscaleDeformableAttnPluginCreator::getPluginNamespace() const PLUGIN_NOEXCEPT
+char const* MultiscaleDeformableAttnPluginCreator::getPluginNamespace() const noexcept
 {
     return mNamespace.c_str();
 }

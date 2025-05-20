@@ -25,9 +25,8 @@ import os
 import sys
 from typing import List, Optional
 
-import torch
-
 import onnx
+import torch
 
 
 def onnx_graph_needs_external_data(onnx_graph: onnx.ModelProto) -> bool:
@@ -74,6 +73,10 @@ def get_path(version: str, pipeline: "pipeline.DiffusionPipeline", controlnets: 
         return "stabilityai/sdxl-turbo"
     elif version == "sd3":
         return "stabilityai/stable-diffusion-3-medium"
+    elif version == "3.5-medium":
+        return "stabilityai/stable-diffusion-3.5-medium"
+    elif version == "3.5-large":
+        return "stabilityai/stable-diffusion-3.5-large"
     elif version == "svd-xt-1.1" and pipeline.is_img2vid():
         return "stabilityai/stable-video-diffusion-img2vid-xt-1-1"
     elif version == "cascade":

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +14,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
+
+add_executable(sample_progress_monitor sampleProgressMonitor.cpp)
+target_link_libraries(sample_progress_monitor PRIVATE trt_samples_common)
+add_dependencies(tensorrt_samples sample_progress_monitor)
+
+install(
+    TARGETS sample_progress_monitor
+    OPTIONAL
+)
+
+else()
 
 set(SAMPLE_SOURCES sampleProgressMonitor.cpp)
 
 set(SAMPLE_PARSERS "onnx")
 
 include(../CMakeSamplesTemplate.txt)
+
+endif()
