@@ -1,11 +1,10 @@
 # TensorRT OSS Release Changelog
 
-## 10.11.0 GA - 2025-5-20
+## 10.11.0 GA - 2025-5-21
 
 Key Features and Updates:
 
 - Plugin changes
-  - Migrated `IPluginV2`-descendent version 1 of `cropAndResizePluginDynamic`, to version 2, which implements `IPluginV3`.
   - Migrated `IPluginV2`-descendent version 1 of `DisentangledAttention_TRT`, to version 2, which implements `IPluginV3`.
   - Migrated `IPluginV2`-descendent version 1 of `MultiscaleDeformableAttnPlugin_TRT`, to version 2, which implements `IPluginV3`.
   - Note: The newer versions preserve the attributes and I/O of the corresponding older plugin version. The older plugin versions are deprecated and will be removed in a future release.
