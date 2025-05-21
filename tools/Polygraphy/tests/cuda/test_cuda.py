@@ -156,7 +156,7 @@ class TestDeviceBuffer:
             copy_from_time = time_func(lambda: dev_buf.copy_from(host_buf))
 
         print(f"memcpy time: {memcpy_time}, copy_from time: {copy_from_time}")
-        assert copy_from_time <= (memcpy_time * 1.08)
+        assert copy_from_time <= (memcpy_time * 1.12)
 
     @pytest.mark.flaky
     @pytest.mark.serial
@@ -175,7 +175,7 @@ class TestDeviceBuffer:
             copy_to_time = time_func(lambda: dev_buf.copy_to(host_buf))
 
         print(f"memcpy time: {memcpy_time}, copy_to time: {copy_to_time}")
-        assert copy_to_time <= (memcpy_time * 1.08)
+        assert copy_to_time <= (memcpy_time * 1.12)
 
     def test_raw(self):
         with DeviceArray.raw((25,)) as buf:

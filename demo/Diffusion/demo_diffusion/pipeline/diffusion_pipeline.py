@@ -54,6 +54,7 @@ from demo_diffusion.model import (
     unload_torch_model,
 )
 from demo_diffusion.pipeline.calibrate import load_calib_prompts
+from demo_diffusion.pipeline.model_memory_manager import ModelMemoryManager
 from demo_diffusion.pipeline.type import PIPELINE_TYPE
 from demo_diffusion.utils_modelopt import (
     SD_FP8_BF16_FLUX_MMDIT_BMM2_FP8_OUTPUT_CONFIG,
@@ -91,11 +92,13 @@ class DiffusionPipeline(ABC):
         "xl-turbo",
         "svd-xt-1.1",
         "sd3",
+        "3.5-medium",
+        "3.5-large",
         "cascade",
         "flux.1-dev",
         "flux.1-dev-canny",
         "flux.1-dev-depth",
-        "flux.1-schnell"
+        "flux.1-schnell",
     )
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
@@ -105,14 +108,16 @@ class DiffusionPipeline(ABC):
         "2.0": "DDIM",
         "2.1-base": "PNDM",
         "2.1": "DDIM",
-        "xl-1.0" : "Euler",
+        "xl-1.0": "Euler",
         "xl-turbo": "EulerA",
+        "3.5-large": "FlowMatchEuler",
+        "3.5-medium": "FlowMatchEuler",
         "svd-xt-1.1": "Euler",
         "cascade": "DDPMWuerstchen",
         "flux.1-dev": "FlowMatchEuler",
         "flux.1-dev-canny": "FlowMatchEuler",
         "flux.1-dev-depth": "FlowMatchEuler",
-        "flux.1-schnell": "FlowMatchEuler"
+        "flux.1-schnell": "FlowMatchEuler",
     }
 
     def __init__(
@@ -266,6 +271,7 @@ class DiffusionPipeline(ABC):
         self.engine = {}
         self.shape_dicts = {}
         self.shared_device_memory = None
+        self.lora_loader = None
 
         # initialized in load_resources()
         self.events = {}
@@ -274,6 +280,9 @@ class DiffusionPipeline(ABC):
         self.seed = None
         self.stream = None
         self.tokenizer = None
+
+    def model_memory_manager(self, model_names, low_vram=False):
+        return ModelMemoryManager(self, model_names, low_vram)
 
     @classmethod
     @abc.abstractmethod
@@ -288,16 +297,16 @@ class DiffusionPipeline(ABC):
         raise NotImplementedError("get_model_names cannot be called from the abstract base class.")
 
     @classmethod
-    def _get_pipeline_uid(cls, pipeline_type: PIPELINE_TYPE, version: str) -> str:
+    def _get_pipeline_uid(cls, version: str) -> str:
         """Return the unique ID of this pipeline.
 
         This is typically used to determine the default path for things like engine files, artifacts caches, etc.
         """
-        return f"{cls.__name__}_{pipeline_type.name}_{version}"
+        return f"{cls.__name__}_{version}"
 
-    def profile_start(self, name, color='blue'):
+    def profile_start(self, name, color="blue", domain=None):
         if self.nvtx_profile:
-            self.markers[name] = nvtx.start_range(message=name, color=color)
+            self.markers[name] = nvtx.start_range(message=name, color=color, domain=domain)
         if name in self.events:
             cudart.cudaEventRecord(self.events[name][0], 0)
 
@@ -658,24 +667,24 @@ class DiffusionPipeline(ABC):
         weight_streaming = getattr(obj, 'weight_streaming', False)
         int8amp = model_config.get('use_int8', False)
         precision_constraints = 'prefer' if int8amp else 'none'
-        engine.build(model_config['onnx_opt_path'],
+        engine.build(
+            model_config["onnx_opt_path"],
             strongly_typed=strongly_typed,
             fp16=fp16amp,
             tf32=tf32amp,
             bf16=bf16amp,
             int8=int8amp,
             input_profile=obj.get_input_profile(
-                opt_batch_size, opt_image_height, opt_image_width,
-                static_batch=static_batch, static_shape=static_shape
+                opt_batch_size, opt_image_height, opt_image_width, static_batch=static_batch, static_shape=static_shape
             ),
-            enable_refit=model_config['do_engine_refit'],
+            enable_refit=model_config["do_engine_refit"],
             enable_all_tactics=enable_all_tactics,
             timing_cache=timing_cache,
             update_output_names=update_output_names,
             weight_streaming=weight_streaming,
             verbose=self.verbose,
             builder_optimization_level=optimization_level,
-            precision_constraints=precision_constraints
+            precision_constraints=precision_constraints,
         )
 
     def _refit_engine(self, obj, model_name, model_config):
@@ -903,7 +912,6 @@ class DiffusionPipeline(ABC):
         del self.stream
 
     def initialize_latents(self, batch_size, unet_channels, latent_height, latent_width, latents_dtype=torch.float32):
-        latents_dtype = latents_dtype # text_embeddings.dtype
         latents_shape = (batch_size, unet_channels, latent_height, latent_width)
         latents = torch.randn(latents_shape, device=self.device, dtype=latents_dtype, generator=self.generator)
         # Scale the initial noise by the standard deviation required by the scheduler

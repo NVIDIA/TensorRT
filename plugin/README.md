@@ -15,7 +15,8 @@
 | [cropAndResizePlugin](cropAndResizePlugin) | CropAndResizeDynamic | 1 |
 | [decodeBbox3DPlugin](decodeBbox3DPlugin) | DecodeBbox3DPlugin | 1 |
 | [detectionLayerPlugin](detectionLayerPlugin) | DetectionLayer_TRT | 1 |
-| [disentangledAttentionPlugin](disentangledAttentionPlugin) | DisentangledAttention_TRT | 1 |
+| [disentangledAttentionPlugin](disentangledAttentionPlugin) [DEPRECATED] | DisentangledAttention_TRT | 1 |
+| [disentangledAttentionPlugin](disentangledAttentionPlugin) | DisentangledAttention_TRT | 2 |
 | [efficientNMSPlugin](efficientNMSPlugin) | EfficientNMS_TRT | 1 |
 | [efficientNMSONNXPlugin](efficientNMSPlugin) [DEPRECATED] | EfficientNMS_ONNX_TRT | 1 |
 | [embLayerNormPlugin](embLayerNormPlugin) [DEPRECATED]| CustomEmbLayerNormPluginDynamic | 1, 2, 3 |
@@ -33,7 +34,8 @@
 | [modulatedDeformConvPlugin](modulatedDeformConvPlugin) | ModulatedDeformConv2d | 1 |
 | [multilevelCropAndResizePlugin](multilevelCropAndResizePlugin) | MultilevelCropAndResize_TRT | 1 |
 | [multilevelProposeROI](multilevelProposeROI) | MultilevelProposeROI_TRT | 1 |
-| [multiscaleDeformableAttnPlugin](multiscaleDeformableAttnPlugin) | MultiscaleDeformableAttnPlugin_TRT | 1 |
+| [multiscaleDeformableAttnPlugin](multiscaleDeformableAttnPlugin) [DEPRECATED] | MultiscaleDeformableAttnPlugin_TRT | 1 |
+| [multiscaleDeformableAttnPlugin](multiscaleDeformableAttnPlugin) | MultiscaleDeformableAttnPlugin_TRT | 2 |
 | [nmsPlugin](nmsPlugin) [DEPRECATED] | NMS_TRT | 1 |
 | [nmsPlugin](nmsPlugin) [DEPRECATED] | NMSDynamic_TRT | 1 |
 | [normalizePlugin](normalizePlugin) [DEPRECATED] | Normalize_TRT | 1 |

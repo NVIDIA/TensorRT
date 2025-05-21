@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -264,7 +264,7 @@ cudaError_t ModulatedDeformConvForwardCUDAKernelLauncher(TScalar const* input, T
             TScalar* colStart = columns + g * colGStep;
             TScalar* outBufferStart = output + b * outStep + g * outGroupStep;
 
-            cublasGemmWrap<TScalar>(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, colStart, n, weightStart,
+            cublasGemmWrap<TScalar>(cublasHandle, stream, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, colStart, n, weightStart,
                 k, &beta, outBufferStart, n);
 
             PLUGIN_CHECK_CUDA(cudaPeekAtLastError());

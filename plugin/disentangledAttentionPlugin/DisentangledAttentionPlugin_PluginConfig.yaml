@@ -1,0 +1,170 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+---
+name: "DisentangledAttention_TRT"
+versions:
+  "2":  # Current version (v3 implementation)
+    interface: "IPluginV3"  # Interface type for the new version
+    inputs:
+      - data0
+      - data1
+      - data2
+    outputs:
+      - output
+    attributes:
+      - span
+      - factor
+    attribute_types:
+      span: int32
+      factor: float32
+    attribute_length:
+      span: 1
+      factor: 1
+    attribute_options:
+      span:
+        min: "1"
+        max: "=pinf"
+      factor:
+        min: "0.0"
+        max: "=pinf"
+    attributes_required:
+      - span
+      - factor
+    golden_io_path: "plugin/disentangledAttentionPlugin/DisentangledAttention_PluginGoldenIO.json"
+    abs_tol: 1e-5
+    rel_tol: 1e-5
+    fp16_atol: 1e-2
+    fp16_rtol: 1e-2
+    configs:
+      config1:
+        input_types:
+          data0: float32
+          data1: float32
+          data2: float32
+        attribute_options:
+          "span":
+            value: 4
+            shape: "1"
+          "factor":
+            value: 0.1
+            shape: "1"
+        output_types:
+          output: float32
+      config2:
+        input_types:
+          data0: float32
+          data1: float32
+          data2: float32
+        attribute_options:
+          "span":
+            value: 8
+            shape: "1"
+          "factor":
+            value: 0.05
+            shape: "1"
+        output_types:
+          output: float32
+      config_fp16:
+        input_types:
+          data0: float16
+          data1: float16
+          data2: float16
+        attribute_options:
+          "span":
+            value: 4
+            shape: "1"
+          "factor":
+            value: 0.1
+            shape: "1"
+        output_types:
+          output: float16
+  "1":  # Legacy version (v2 implementation)
+    interface: "IPluginV2DynamicExt"  # Interface type for the new version
+    inputs:
+      - data0
+      - data1
+      - data2
+    outputs:
+      - output
+    attributes:
+      - span
+      - factor
+    attribute_types:
+      span: int32
+      factor: float32
+    attribute_length:
+      span: 1
+      factor: 1
+    attribute_options:
+      span:
+        min: "1"
+        max: "=pinf"
+      factor:
+        min: "0.0"
+        max: "=pinf"
+    attributes_required:
+      - span
+      - factor
+    golden_io_path: "plugin/disentangledAttentionPlugin/DisentangledAttention_PluginGoldenIO.json"
+    abs_tol: 1e-5
+    rel_tol: 1e-5
+    fp16_atol: 1e-2
+    fp16_rtol: 1e-2
+    configs:
+      config1:
+        input_types:
+          data0: float32
+          data1: float32
+          data2: float32
+        attribute_options:
+          "span":
+            value: 4
+            shape: "1"
+          "factor":
+            value: 0.1
+            shape: "1"
+        output_types:
+          output: float32
+      config2:
+        input_types:
+          data0: float32
+          data1: float32
+          data2: float32
+        attribute_options:
+          "span":
+            value: 8
+            shape: "1"
+          "factor":
+            value: 0.05
+            shape: "1"
+        output_types:
+          output: float32
+      config_fp16:
+        input_types:
+          data0: float16
+          data1: float16
+          data2: float16
+        attribute_options:
+          "span":
+            value: 4
+            shape: "1"
+          "factor":
+            value: 0.1
+            shape: "1"
+        output_types:
+          output: float16

@@ -22,15 +22,16 @@ import warnings
 from collections import OrderedDict, defaultdict
 
 import numpy as np
-import onnx
 import tensorrt as trt
 import torch
 from cuda import cudart
-from onnx import numpy_helper
 from polygraphy.backend.common import bytes_from_path
 from polygraphy.backend.trt import (
     engine_from_bytes,
 )
+
+import onnx
+from onnx import numpy_helper
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 

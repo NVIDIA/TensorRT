@@ -37,7 +37,9 @@ def main():
     parser.add_argument("--trt-py-version", help="The version string for the python bindings being built. Usually `major.minor.patch.build`.", required=True)
     parser.add_argument("--cuda-version", help="The Cuda version (major.minor).", required=True)
     parser.add_argument("--trt-version", help="The TensorRT version (major.minor.patch).", required=True)
-
+    parser.add_argument("--plugin-disabled", help="Whether the plugin is disabled.",  type=int, choices=[0,1], default=0, required=False)
+    parser.add_argument("--trt-nvinfer-name", help="The name of the nvinfer library.", required=True)
+    parser.add_argument("--trt-onnxparser-name", help="The name of the onnxparser library.", required=True)
     args, _ = parser.parse_known_args()
 
     if not os.path.isdir(args.src_dir):
@@ -57,6 +59,10 @@ def main():
         contents = contents.replace("##TENSORRT_PYTHON_VERSION##", args.trt_py_version)
         contents = contents.replace("##CUDA_MAJOR##", args.cuda_version.split(".")[0])
         contents = contents.replace("##TENSORRT_MAJOR##", args.trt_version.split(".")[0])
+        contents = contents.replace("##TENSORRT_MINOR##", args.trt_version.split(".")[1])
+        contents = contents.replace("##TENSORRT_PLUGIN_DISABLED##", "True" if args.plugin_disabled is 1 else "False")
+        contents = contents.replace("##TENSORRT_NVINFER_NAME##", args.trt_nvinfer_name)
+        contents = contents.replace("##TENSORRT_ONNXPARSER_NAME##", args.trt_onnxparser_name)   
 
         dest_path = os.path.join(args.dst_dir, args.filepath)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)

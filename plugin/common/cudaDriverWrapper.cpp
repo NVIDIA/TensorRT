@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,12 +24,12 @@
 #define dllOpen(name) (void*) LoadLibraryA("nv" name ".dll")
 #define dllClose(handle) FreeLibrary(static_cast<HMODULE>(handle))
 #define dllGetSym(handle, name) GetProcAddress(static_cast<HMODULE>(handle), name)
-#else
+#else // defined(_WIN32)
 #include <dlfcn.h>
 #define dllOpen(name) dlopen("lib" name ".so.1", RTLD_LAZY)
 #define dllClose(handle) dlclose(handle)
 #define dllGetSym(handle, name) dlsym(handle, name)
-#endif
+#endif // defined(_WIN32)
 
 #include "common/cudaDriverWrapper.h"
 #include "common/plugin.h"

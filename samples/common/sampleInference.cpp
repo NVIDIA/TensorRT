@@ -22,14 +22,12 @@
 #include <functional>
 #include <iterator>
 #include <limits>
-#include <memory>
 #include <mutex>
 #include <numeric>
 #include <set>
 #include <sstream>
 #include <thread>
 #include <utility>
-#include <vector>
 
 #if defined(__QNX__)
 #include <sys/neutrino.h>
@@ -42,12 +40,8 @@
 #include "bfloat16.h"
 #include "common.h"
 #include "logger.h"
-#include "sampleDevice.h"
-#include "sampleEngines.h"
 #include "sampleInference.h"
 #include "sampleOptions.h"
-#include "sampleReporting.h"
-#include "sampleUtils.h"
 #include <cuda.h>
 
 #if CUDA_VERSION >= 11060
@@ -256,18 +250,24 @@ void stretchInt32ToInt64(std::vector<int32_t>& shapeData)
 
 } // namespace
 
+//! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
+auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
+    return s == MemoryAllocationStrategy::kSTATIC
+        // Let TRT pre-allocate and manage the memory.
+        ? ExecutionContextAllocationStrategy::kSTATIC
+        // Allocate based on the current profile or runtime shapes.
+        : ExecutionContextAllocationStrategy::kUSER_MANAGED;
+};
+
+
 bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
-#if TRT_WINML
-    int32_t const isIntegrated{};
-#else
     int32_t device{};
     CHECK(cudaGetDevice(&device));
 
     cudaDeviceProp properties;
     CHECK(cudaGetDeviceProperties(&properties, device));
     int32_t const isIntegrated{properties.integrated};
-#endif
     // Use managed memory on integrated devices when transfers are skipped
     // and when it is explicitly requested on the commandline.
     bool useManagedMemory{(inference.skipTransfers && isIntegrated) || inference.useManaged};
@@ -281,10 +281,6 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     // Release serialized blob to save memory space.
     iEnv.engine.releaseBlob();
 
-#if TRT_WINML
-    // Start JIT Compilation time after engine deserialization
-    auto jitCompileBegin = std::chrono::high_resolution_clock::now();
-#endif
 
     // Setup weight streaming if enabled
     if (engine->getStreamableWeightsSize() > 0)
@@ -355,16 +351,8 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     for (int32_t s = 0; s < inference.infStreams; ++s)
     {
         IExecutionContext* ec{nullptr};
-        if (inference.memoryAllocationStrategy == MemoryAllocationStrategy::kSTATIC)
-        {
-            // Let TRT pre-allocate and manage the memory.
-            ec = engine->createExecutionContext();
-        }
-        else
-        {
-            // Allocate based on the current profile or runtime shapes.
-            ec = engine->createExecutionContext(ExecutionContextAllocationStrategy::kUSER_MANAGED);
-        }
+
+        ec = engine->createExecutionContext(getExecutionContextAllocationStrategy(inference.memoryAllocationStrategy));
         if (ec == nullptr)
         {
             sample::gLogError << "Unable to create execution context for stream " << s << "." << std::endl;
@@ -372,12 +360,10 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
         }
         ec->setNvtxVerbosity(inference.nvtxVerbosity);
 
-#if !TRT_WINML
         int32_t const persistentCacheLimit
             = samplesCommon::getMaxPersistentCacheSize() * inference.persistentCacheRatio;
         sample::gLogInfo << "Setting persistentCacheLimit to " << persistentCacheLimit << " bytes." << std::endl;
         ec->setPersistentCacheLimit(persistentCacheLimit);
-#endif
 
         auto setProfile = ec->setOptimizationProfileAsync(inference.optProfileIndex, setOptProfileStream);
         CHECK(cudaStreamSynchronize(setOptProfileStream));
@@ -543,12 +529,6 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     bool fillBindingsSuccess = FillStdBindings(
         engine, context, inference.inputs, iEnv.bindings, 1, endBindingIndex, inference.optProfileIndex)();
 
-#if TRT_WINML
-    // Stop JIT Compile Time when setup for inference is complete
-    auto jitCompileEnd = std::chrono::high_resolution_clock::now();
-    sample::gLogInfo << "JIT Compilation in " << std::chrono::duration<float>(jitCompileEnd - jitCompileBegin).count()
-                     << " sec." << std::endl;
-#endif
 
     return fillBindingsSuccess;
 }
@@ -1139,6 +1119,7 @@ bool runInference(
         th.join();
     }
 
+
     CHECK(cudaProfilerStop());
 
     auto cmpTrace = [](InferenceTrace const& a, InferenceTrace const& b) { return a.h2dStart < b.h2dStart; };
@@ -1219,12 +1200,10 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
 
         SMP_RETVAL_IF_FALSE(!iEnv.safe, "Safe inference is not supported!", false, sample::gLogError);
 
-#if !TRT_WINML
         for (auto const& pluginPath : sys.dynamicPlugins)
         {
             rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
-#endif
         auto& reader = iEnv.engine.getFileReader();
         auto& asyncReader = iEnv.engine.getAsyncFileReader();
         ASSERT(reader.isOpen() || asyncReader.isOpen());

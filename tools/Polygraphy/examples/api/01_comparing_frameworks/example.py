@@ -57,6 +57,30 @@ def main():
         )
     )
 
+    # Use distance metrics comparison for more comprehensive evaluation
+    assert bool(
+        Comparator.compare_accuracy(
+            run_results,
+            compare_func=CompareFunc.distance_metrics(
+                l2_tolerance=1e-5,                    # Maximum allowed L2 norm (Euclidean distance)
+                cosine_similarity_threshold=0.99,     # Minimum cosine similarity (angular similarity)
+            )
+        )
+    )
+    print("All outputs matched using distance metrics (L2 norm, Cosine Similarity)")
+    
+    # Use quality metrics for signal quality evaluation
+    assert bool(
+        Comparator.compare_accuracy(
+            run_results,
+            compare_func=CompareFunc.quality_metrics(
+                psnr_tolerance=50.0,                  # Minimum Peak Signal-to-Noise Ratio in dB
+                snr_tolerance=25.0                    # Minimum Signal-to-Noise Ratio in dB
+            )
+        )
+    )
+    print("All outputs matched using quality metrics (PSNR, SNR)")
+
     # We can use `RunResults.save()` method to save the inference results to a JSON file.
     # This can be useful if you want to generate and compare results separately.
     run_results.save("inference_results.json")

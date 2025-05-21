@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,16 +26,19 @@
 
 #ifndef TRT_MODULATED_DEFORM_CONV_PLUGIN_H
 #define TRT_MODULATED_DEFORM_CONV_PLUGIN_H
-#include <cstdint>
 
+#include <cstdint>
+#include <cuda.h>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "common/bertCommon.h"
 #include "common/checkMacrosPlugin.h"
+#include "common/cublasWrapper.h"
 #include "common/plugin.h"
 #include "common/serialize.hpp"
+
 #include "modulatedDeformConvCudaHelper.h"
 
 namespace nvinfer1
@@ -43,50 +46,58 @@ namespace nvinfer1
 namespace plugin
 {
 
-class ModulatedDeformableConvPluginDynamic : public nvinfer1::IPluginV2DynamicExt
+class ModulatedDeformableConvPluginDynamic final : public nvinfer1::IPluginV3,
+                                                   public nvinfer1::IPluginV3OneCore,
+                                                   public nvinfer1::IPluginV3OneBuild,
+                                                   public nvinfer1::IPluginV3OneRuntime
 {
 public:
-    ModulatedDeformableConvPluginDynamic(std::string const& name, const nvinfer1::Dims stride,
-        const nvinfer1::Dims padding, const nvinfer1::Dims dilation, int32_t const deformableGroup,
+    ModulatedDeformableConvPluginDynamic(std::string const& name, nvinfer1::Dims const stride,
+        nvinfer1::Dims const padding, nvinfer1::Dims const dilation, int32_t const deformableGroup,
         int32_t const group);
-
-    ModulatedDeformableConvPluginDynamic(const std::string name, void const* data, size_t length);
 
     ModulatedDeformableConvPluginDynamic() = delete;
 
     ~ModulatedDeformableConvPluginDynamic() override;
 
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-    nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
-    bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
-    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
-    void attachToContext(cudnnContext* cudnnContext, cublasContext* cublasContext,
-        nvinfer1::IGpuAllocator* gpuAllocator) noexcept override;
-    void detachFromContext() noexcept override;
-
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
-
-    char const* getPluginType() const noexcept override;
+    // --- IPluginV3 methods ---
+    nvinfer1::IPluginV3* clone() noexcept override;
+    char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
+    nvinfer1::IPluginCapability* getCapabilityInterface(nvinfer1::PluginCapabilityType type) noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldsToSerialize() noexcept override;
+
+    // --- IPluginV3OneCore methods ---
     int32_t getNbOutputs() const noexcept override;
-    int32_t initialize() noexcept override;
-    void terminate() noexcept override;
-    size_t getSerializationSize() const noexcept override;
-    void serialize(void* buffer) const noexcept override;
-    void destroy() noexcept override;
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
     char const* getPluginNamespace() const noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
+
+    // --- IPluginV3OneBuild methods ---
+    bool supportsFormatCombination(int32_t pos, nvinfer1::DynamicPluginTensorDesc const* inOut, int32_t nbInputs,
+        int32_t nbOutputs) noexcept override;
+    int32_t configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    size_t getWorkspaceSize(nvinfer1::DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t getOutputDataTypes(nvinfer1::DataType* outputTypes, int32_t nbOutputs, nvinfer1::DataType const* inputTypes,
+        int32_t nbInputs) const noexcept override;
+    int32_t getOutputShapes(nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, nvinfer1::DimsExprs* outputs, int32_t nbOutputs,
+        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
+
+    // --- IPluginV3OneRuntime methods ---
+    int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDescs, nvinfer1::PluginTensorDesc const* outputDescs,
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
+    IPluginV3* attachToContext(nvinfer1::IPluginResourceContext* context) noexcept override;
+    int32_t onShapeChange(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) noexcept override;
 
 private:
-    const std::string mLayerName;
+    // Helper method to manage cuBLAS resources
+    void setCublasResources(std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> cublasWrapper);
+
+private:
+    std::string const mLayerName;
     std::string mNamespace;
 
     nvinfer1::Dims mStride;
@@ -94,28 +105,30 @@ private:
     nvinfer1::Dims mDilation;
     int32_t mDeformableGroup;
     int32_t mGroup;
-    bool mWithBias;
+    int32_t mWithBias;
 
     nvinfer1::pluginInternal::cublasHandle_t mCublasHandle{nullptr};
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
+
+    static nvinfer1::PluginFieldCollection mFCToSerialize;
+    static std::vector<nvinfer1::PluginField> mDataToSerialize;
 };
 
-class ModulatedDeformableConvPluginDynamicCreator : public nvinfer1::IPluginCreator
+class ModulatedDeformableConvPluginDynamicCreator final : public nvinfer1::IPluginCreatorV3One
 {
 public:
     ModulatedDeformableConvPluginDynamicCreator();
+    ~ModulatedDeformableConvPluginDynamicCreator() override = default;
 
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;
     nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2* createPlugin(char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    nvinfer1::IPluginV3* createPlugin(
+        char const* name, nvinfer1::PluginFieldCollection const* fc, nvinfer1::TensorRTPhase phase) noexcept override;
 
-    nvinfer1::IPluginV2* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
     char const* getPluginNamespace() const noexcept override;
 
 private:

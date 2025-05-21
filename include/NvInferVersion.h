@@ -23,10 +23,14 @@
 #ifndef NV_INFER_VERSION_H
 #define NV_INFER_VERSION_H
 
-#define NV_TENSORRT_MAJOR 10 //!< TensorRT major version.
-#define NV_TENSORRT_MINOR 10 //!< TensorRT minor version.
-#define NV_TENSORRT_PATCH 0  //!< TensorRT patch version.
-#define NV_TENSORRT_BUILD 31 //!< TensorRT build number.
+#define TRT_MAJOR_ENTERPRISE 10
+#define TRT_MINOR_ENTERPRISE 11
+#define TRT_PATCH_ENTERPRISE 0
+#define TRT_BUILD_ENTERPRISE 33
+#define NV_TENSORRT_MAJOR TRT_MAJOR_ENTERPRISE //!< TensorRT major version.
+#define NV_TENSORRT_MINOR TRT_MINOR_ENTERPRISE //!< TensorRT minor version.
+#define NV_TENSORRT_PATCH TRT_PATCH_ENTERPRISE //!< TensorRT patch version.
+#define NV_TENSORRT_BUILD TRT_BUILD_ENTERPRISE //!< TensorRT build number.
 
 #define NV_TENSORRT_LWS_MAJOR 0 //!< TensorRT LWS major version.
 #define NV_TENSORRT_LWS_MINOR 0 //!< TensorRT LWS minor version.

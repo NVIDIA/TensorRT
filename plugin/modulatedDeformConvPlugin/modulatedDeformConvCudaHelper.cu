@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -102,27 +102,31 @@ template void memcpyPermute<half>(
     half* dst, half const* src, int32_t* srcSize, int32_t* permute, int32_t srcDim, cudaStream_t stream);
 
 template <typename TScalar>
-cublasStatus_t cublasGemmWrap(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
+cublasStatus_t cublasGemmWrap(cublasHandle_t handle, cudaStream_t stream, cublasOperation_t transa, cublasOperation_t transb, int32_t m,
     int32_t n, int32_t k, TScalar const* alpha, TScalar const* A, int32_t lda, TScalar const* B, int32_t ldb,
     TScalar const* beta, TScalar* C, int32_t ldc)
 {
-    return CUBLAS_STATUS_INTERNAL_ERROR;
+        return CUBLAS_STATUS_INTERNAL_ERROR;
 }
 
 template <>
-cublasStatus_t cublasGemmWrap<float>(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb,
+cublasStatus_t cublasGemmWrap<float>(cublasHandle_t handle, cudaStream_t stream, cublasOperation_t transa, cublasOperation_t transb,
     int32_t m, int32_t n, int32_t k, float const* alpha, float const* A, int32_t lda, float const* B, int32_t ldb,
     float const* beta, float* C, int32_t ldc)
 {
     CublasWrapper& wrapper = getCublasWrapper();
+    // bind the stream to cublas handle to prevent usage of default stream
+    wrapper.cublasSetStream(handle, stream);
     return wrapper.cublasSgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
 }
 
 template <>
-cublasStatus_t cublasGemmWrap<half>(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb,
+cublasStatus_t cublasGemmWrap<half>(cublasHandle_t handle, cudaStream_t stream, cublasOperation_t transa, cublasOperation_t transb,
     int32_t m, int32_t n, int32_t k, half const* alpha, half const* A, int32_t lda, half const* B, int32_t ldb,
     half const* beta, half* C, int32_t ldc)
 {
     CublasWrapper& wrapper = getCublasWrapper();
+    // bind the stream to cublas handle to prevent usage of default stream
+    wrapper.cublasSetStream(handle, stream);
     return wrapper.cublasHgemm(handle, transa, transb, m, n, k, alpha, A, lda, B, ldb, beta, C, ldc);
 }

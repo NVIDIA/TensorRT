@@ -26,6 +26,7 @@
 // Items that are marked as deprecated will be removed in a future release.
 #if __cplusplus >= 201402L
 #define TRT_DEPRECATED [[deprecated]]
+#define TRT_DEPRECATED_BECAUSE(REASON) [[deprecated(REASON)]]
 #define TRT_DEPRECATED_ENUM TRT_DEPRECATED
 #ifdef _MSC_VER
 #define TRT_DEPRECATED_API __declspec(dllexport)
@@ -42,6 +43,19 @@
 #define TRT_DEPRECATED_ENUM
 #define TRT_DEPRECATED_API __attribute__((deprecated, visibility("default")))
 #endif
+#define TRT_DEPRECATED_BECAUSE(REASON) TRT_DEPRECATED
+#endif
+
+//! A stand-in for `[[nodiscard]]` and `[[nodiscard(REASON)]]` that works with older compilers.
+#if __cplusplus >= 201907L
+#define TRT_NODISCARD [[nodiscard]]
+#define TRT_NODISCARD_BECAUSE(REASON) [[nodiscard(REASON)]]
+#elif __cplusplus >= 201603L
+#define TRT_NODISCARD [[nodiscard]]
+#define TRT_NODISCARD_BECAUSE(REASON) [[nodiscard]]
+#else
+#define TRT_NODISCARD
+#define TRT_NODISCARD_BECAUSE(REASON)
 #endif
 
 // Defines which symbols are exported

@@ -79,11 +79,9 @@ std::vector<std::string> splitToStringVec(std::string const& option, char separa
 
 bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings, bool isInput = true);
 
-#if !TRT_WINML
 int32_t getCudaDriverVersion();
 
 int32_t getCudaRuntimeVersion();
-#endif
 
 void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights);
 void sparsify(nvinfer1::Weights const& weights, int32_t k, int32_t rs, std::vector<int8_t>& sparseWeights);

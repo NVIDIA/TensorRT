@@ -431,7 +431,8 @@ def build_engine(batch_sizes, workspace_size, sequence_length, config, weights_d
         network_creation_flag = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
 
     with trt.Builder(TRT_LOGGER) as builder, builder.create_network(network_creation_flag) as network, builder.create_builder_config() as builder_config:
-        builder_config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace_size * (1024 * 1024))
+        if workspace_size is not None:
+            builder_config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace_size * (1024 * 1024))
         builder_config.avg_timing_iterations = 8
         if config.use_fp16:
             builder_config.set_flag(trt.BuilderFlag.FP16)
@@ -571,8 +572,7 @@ def main():
     parser.add_argument(
         "-w",
         "--workspace-size",
-        default=2500,
-        help="Workspace size in MiB for building the BERT engine (default: 2500)",
+	help="Workspace size in MiB for building the BERT engine (default: unlimited)",
         type=int,
     )
     parser.add_argument(

@@ -102,7 +102,7 @@ def _resolve_model_uri(
     if _is_quantized():
         if args.int8 or args.fp8:
             quantization_config_uid = (
-                f"{'int8' if args.int8 else 'fp8'}.l{args.quantization_level}.bs2.s{args.denoising_steps}"
+                f"{'int8' if args.int8 else 'fp8'}.l{args.quantization_level}.bs2"
                 f".c{args.calibration_size}.p{args.quantization_percentile}.a{args.quantization_alpha}"
             )
         else:

@@ -3452,6 +3452,7 @@ int32_t getAliasedInput(int32_t outputIndex)
 
 } // namespace pluginDoc
 
+
 void bindPlugin(py::module& m)
 {
     py::class_<IDimensionExpr, PyIDimensionExprImpl, std::unique_ptr<IDimensionExpr, py::nodelete>>(
@@ -3923,7 +3924,6 @@ void bindPlugin(py::module& m)
         .def("__len__", &ISymExprs::getNbSymExprs)
         .def("__getitem__", &ISymExprs::getSymExpr)
         .def("__setitem__", &ISymExprs::setSymExpr);
-
 #if EXPORT_ALL_BINDINGS
     m.def("get_builder_plugin_registry", &getBuilderPluginRegistry, py::return_value_policy::reference,
         FreeFunctionsDoc::get_builder_plugin_registry);

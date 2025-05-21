@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -76,7 +76,7 @@ def _createDirIfNeeded(path):
             raise
 
 
-def download(data_dir, yaml_path, overwrite=False):
+def download(data_dir, yaml_path, retries, overwrite=False):
     """Download the data files specified in YAML file to a directory.
 
     Return false if the downloaded file or the local copy (if not overwrite) has a different checksum.
@@ -84,13 +84,13 @@ def download(data_dir, yaml_path, overwrite=False):
     sample_data = _loadYAML(yaml_path)
     logger.info("Downloading data for %s", sample_data.sample)
 
-    def _downloadFile(path, url):
+    def _downloadFile(path, url, retries):
         logger.info("Downloading %s from %s", path, url)
         import requests
         from requests.adapters import HTTPAdapter, Retry
 
         session = requests.Session()
-        retries = Retry(total=10, backoff_factor=0.5)
+        retries = Retry(total=retries, backoff_factor=0.5)
         session.mount("http://", HTTPAdapter(max_retries=retries))
         session.mount("https://", HTTPAdapter(max_retries=retries))
         try:
@@ -137,7 +137,7 @@ def download(data_dir, yaml_path, overwrite=False):
                     allGood = False
                     continue
         _createDirIfNeeded(fpath)
-        assert _downloadFile(fpath, f.url)
+        assert _downloadFile(fpath, f.url, retries=retries)
         if not _checkMD5(fpath, f.checksum):
             logger.error("The downloaded file %s has a different checksum!", fpath)
             allGood = False
@@ -174,7 +174,13 @@ def _parseArgs():
         action="store_true",
         default=False,
     )
-
+    parser.add_argument(
+        "-r",
+        "--retries",
+        help="Number of retries for download",
+        type=int,
+        default=10,
+    )
     args, _ = parser.parse_known_args()
     data = os.environ.get("TRT_DATA_DIR", None) if args.data is None else args.data
     if data is None:
@@ -218,7 +224,7 @@ def main():
     if args.verify:
         ret = verifyChecksum(data, args.file)
     else:
-        ret = download(data, args.file, args.overwrite)
+        ret = download(data, args.file, args.retries, args.overwrite)
 
     if not ret:
         # Error of downloading or checksum

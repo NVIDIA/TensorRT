@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,8 +47,8 @@ void memcpyPermute(
 
 template <typename TScalar>
 nvinfer1::pluginInternal::cublasStatus_t cublasGemmWrap(nvinfer1::pluginInternal::cublasHandle_t handle,
-    nvinfer1::pluginInternal::cublasOperation_t transa, nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m,
-    int32_t n, int32_t k, TScalar const* alpha, TScalar const* A, int32_t lda, TScalar const* B, int32_t ldb,
-    TScalar const* beta, TScalar* C, int32_t ldc);
+    cudaStream_t stream, nvinfer1::pluginInternal::cublasOperation_t transa,
+    nvinfer1::pluginInternal::cublasOperation_t transb, int32_t m, int32_t n, int32_t k, TScalar const* alpha,
+    TScalar const* A, int32_t lda, TScalar const* B, int32_t ldb, TScalar const* beta, TScalar* C, int32_t ldc);
 
 #endif // TRT_MODULATED_DEFORM_CONV_CUDA_HELPER_H

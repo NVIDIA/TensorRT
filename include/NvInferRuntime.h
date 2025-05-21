@@ -983,7 +983,7 @@ public:
     //! For each format combination provided through configurePlugin(), up to a maximum of getFormatCombinationLimit(),
     //! the plugin will be timed for each tactic advertised through this method for that format combination. i.e. The
     //! plugin will be timed \f$N = \sum_{i=0}^{i<getFormatCombinationLimit()} (T(f[i]))\f$ times. If \f$N = 1\f$, the
-    //! plugin may not be timed. In peudocode, the timing protocol appears as the following:
+    //! plugin may not be timed. In pseudocode, the timing protocol appears as the following:
     //!
     //! counter = 0
     //! for each supported format combination
@@ -1524,7 +1524,7 @@ struct EnumMaxImpl<AllocatorFlag>
 using AllocatorFlags = uint32_t;
 
 //! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
-//! The name v_1_0 may change in future versions of TensoRT.
+//! The name v_1_0 may change in future versions of TensorRT.
 
 //!
 //! \class ILogger
@@ -2572,7 +2572,7 @@ protected:
 //!        The minimum and maximum specify the permitted range that is supported at runtime, while the optimum value
 //!        is used for the kernel selection. This should be the "typical" value that is expected to occur at runtime.
 //!
-//! \see IOptimizationProfile::setDimensions(), IOptimizationProfile::setShapeValues()
+//! \see IOptimizationProfile::setDimensions(), IOptimizationProfile::setShapeValuesV2(), IOptimizationProfile::setShapeValues()
 //!
 enum class OptProfileSelector : int32_t
 {
@@ -2674,7 +2674,7 @@ public:
     //! i = 0, ..., nbValues - 1. Execution of the network must be valid for the optVals.
     //!
     //! Shape tensors are tensors that contribute to shape calculations in some way. While input shape tensors can be
-    //! type kINT32 or kINT64, the values used to set the minimum, optimium, and maximum values must fit in int32_t.
+    //! type kINT32 or kINT64, the values used to set the minimum, optimum, and maximum values must fit in int32_t.
     //!
     //! Examples:
     //!
@@ -2703,7 +2703,12 @@ public:
     //!
     //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    bool setShapeValues(
+    //! \warning When setShapeValuesV2 is called after setShapeValues, a following call to getShapeValues will
+    //! return nullptr. Vice versa, a call to setShapeValues undoes the effects of setShapeValuesV2.
+    //!
+    //! \deprecated Deprecated in TensorRT 10.11. Superseded by setShapeValuesV2().
+    //!
+    TRT_DEPRECATED bool setShapeValues(
         char const* inputName, OptProfileSelector select, int32_t const* values, int32_t nbValues) noexcept
     {
         return mImpl->setShapeValues(inputName, select, values, nbValues);
@@ -2729,7 +2734,9 @@ public:
     //!
     //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    int32_t const* getShapeValues(char const* inputName, OptProfileSelector select) const noexcept
+    //! \deprecated Deprecated in TensorRT 10.11. Superseded by getShapeValuesV2().
+    //!
+    TRT_DEPRECATED int32_t const* getShapeValues(char const* inputName, OptProfileSelector select) const noexcept
     {
         return mImpl->getShapeValues(inputName, select);
     }
@@ -2779,6 +2786,69 @@ public:
     bool isValid() const noexcept
     {
         return mImpl->isValid();
+    }
+
+    //!
+    //! \brief Set the minimum / optimum / maximum values for an input shape tensor.
+    //!
+    //! This function must be called three times for every input tensor t that is a shape tensor (t.isShape() == true).
+    //! This implies that the dimensions of t are fixed at network definition time and the volume does not exceed 64.
+    //! This function must not be called for any input tensor that is not a shape tensor.
+    //!
+    //! Each time this function is called for the same input tensor, the same nbValues must be supplied (either 1
+    //! if the tensor rank is 0, or dims.d[0] if the rank is 1). Furthermore, if minVals, optVals, maxVals are the
+    //! minimum, optimum, and maximum values, it must be true that minVals[i] <= optVals[i] <= maxVals[i] for
+    //! i = 0, ..., nbValues - 1. Execution of the network must be valid for the optVals.
+    //!
+    //! Shape tensors are tensors that contribute to shape calculations in some way. While input shape tensors can be
+    //! type kINT32 or kINT64, the values used to set the minimum, optimum, and maximum values must fit in int64_t.
+    //!
+    //! Examples:
+    //!
+    //! * A shape tensor used as the second input to IShuffleLayer can contain a -1 wildcard.
+    //!   The corresponding minVal[i] should be -1.
+    //!
+    //! * A shape tensor used as the stride input to ISliceLayer can contain any valid strides.
+    //!   The values could be positive, negative, or zero.
+    //!
+    //! * A shape tensor subtracted from zero to compute the size input of an ISliceLayer can
+    //!   contain any non-positive values that yield a valid slice operation.
+    //!
+    //! Tightening the minVals and maxVals bounds to cover only values that are necessary may help optimization.
+    //!
+    //! \param inputName The input tensor name
+    //! \param select Whether to set the minimum, optimum, or maximum input values.
+    //! \param values An array of length nbValues containing the minimum, optimum, or maximum shape tensor elements.
+    //!               For multidimensional tensors, the array is in row-major order.
+    //! \param nbValues The length of the value array, which must equal the number of shape tensor elements (>= 1)
+    //!
+    //! \return false if an inconsistency was detected (e.g. nbValues does not match a previous call for the same
+    //!         tensor), else true. As for setDimensions(), a full validation can only be performed at engine build
+    //!         time.
+    //!
+    //! \warning If run on DLA, minimum, optimum, and maximum shape values must to be the same.
+    //!
+    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \warning When setShapeValues is called after setShapeValuesV2, input shape would be overwritten as 32 bit
+    //! and getShapeValuesV2 would return nullptr.
+    //!
+    bool setShapeValuesV2(
+        char const* inputName, OptProfileSelector select, int64_t const* values, int32_t nbValues) noexcept
+    {
+        return mImpl->setShapeValuesV2(inputName, select, values, nbValues);
+    }
+
+    //!
+    //! \brief Get the minimum / optimum / maximum values for an input shape tensor.
+    //!
+    //! If the shape values have not been set previously with setShapeValuesV2(), this returns nullptr.
+    //!
+    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    int64_t const* getShapeValuesV2(char const* inputName, OptProfileSelector select) const noexcept
+    {
+        return mImpl->getShapeValuesV2(inputName, select);
     }
 
 protected:
@@ -2993,6 +3063,43 @@ constexpr inline int32_t EnumMax<ExecutionContextAllocationStrategy>() noexcept
     return 3;
 }
 
+
+//! \class IRuntimeConfig
+//!
+//! \brief A class for runtime configuration. This class is used during execution context creation.
+//!
+//! \see IRuntime, IBuilderConfig
+//!
+class IRuntimeConfig : public INoCopy
+{
+public:
+    virtual ~IRuntimeConfig() noexcept = default;
+
+    //!
+    //! \brief Set the execution context allocation strategy. Default value is kSTATIC.
+    //!
+    //! \param strategy The execution context allocation strategy.
+    //!
+    void setExecutionContextAllocationStrategy(ExecutionContextAllocationStrategy strategy) noexcept
+    {
+        return mImpl->setExecutionContextAllocationStrategy(strategy);
+    }
+
+    //!
+    //! \brief Get the execution context allocation strategy.
+    //!
+    //! \return The execution context allocation strategy.
+    //!
+    ExecutionContextAllocationStrategy getExecutionContextAllocationStrategy() const noexcept
+    {
+        return mImpl->getExecutionContextAllocationStrategy();
+    }
+
+
+protected:
+    apiv::VRuntimeConfig* mImpl;
+}; // class IRuntimeConfig
+
 //!
 //! \class ICudaEngine
 //!
@@ -3142,6 +3249,31 @@ public:
     TRT_DEPRECATED IExecutionContext* createExecutionContextWithoutDeviceMemory() noexcept
     {
         return mImpl->createExecutionContextWithoutDeviceMemory();
+    }
+
+    //!
+    //! \brief Create an execution context with TensorRT JIT runtime config.
+    //!
+    //! \param runtimeConfig The runtime config for TensorRT JIT.
+    //!
+    //! \see IRuntimeConfig
+    //!
+    IExecutionContext* createExecutionContext(IRuntimeConfig* runtimeConfig) noexcept
+    {
+        return mImpl->createExecutionContextWithRuntimeConfig(runtimeConfig);
+    }
+
+    //!
+    //! \brief Create a runtime config for TensorRT JIT.
+    //!        The caller is responsible for ownership of the returned IRuntimeConfig object.
+    //!
+    //! \return A IRuntimeConfig object.
+    //!
+    //! \see IRuntimeConfig
+    //!
+    IRuntimeConfig* createRuntimeConfig() noexcept
+    {
+        return mImpl->createRuntimeConfig();
     }
 
     //!
@@ -3460,8 +3592,11 @@ public:
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    int32_t const* getProfileTensorValues(char const* tensorName, int32_t profileIndex, OptProfileSelector select) const
-        noexcept
+    //! \deprecated Deprecated in TensorRT 10.11. Superseded by getProfileTensorValuesV2().
+    //! \warning If input shapes are set with setShapeValuesV2, getProfileTensorValues will return nullptr
+    //!
+    TRT_DEPRECATED int32_t const* getProfileTensorValues(
+        char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept
     {
         return mImpl->getProfileTensorValues(tensorName, profileIndex, select);
     }
@@ -3677,7 +3812,7 @@ public:
     //!
     //! \return true if the memory limit is valid and the call was successful, false otherwise.
     //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superceded by setWeightStreamingBudgetV2().
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by setWeightStreamingBudgetV2().
     //!
     //! \see BuilderFlag::kWEIGHT_STREAMING
     //! \see getWeightStreamingBudget()
@@ -3697,7 +3832,7 @@ public:
     //! \returns The weight streaming budget in bytes. Please see setWeightStreamingBudget() for the possible
     //!          values.
     //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superceded by getWeightStreamingBudgetV2().
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by getWeightStreamingBudgetV2().
     //!
     //! \see BuilderFlag::kWEIGHT_STREAMING,
     //! \see setWeightStreamingBudget()
@@ -3875,6 +4010,31 @@ public:
         return mImpl->isDebugTensor(name);
     }
 
+    //!
+    //! \brief Get the minimum / optimum / maximum values (not dimensions) for an input tensor given
+    //! its name under an optimization profile. These correspond to the values set using
+    //! IOptimizationProfile::setShapeValuesV2 when the engine was built.
+    //!
+    //! \param tensorName The name of an input tensor.
+    //!
+    //! \param profileIndex The profile index, which must be between 0 and getNbOptimizationProfiles()-1.
+    //!
+    //! \param select Whether to query the minimum, optimum, or maximum values for this input tensor.
+    //!
+    //! \return The minimum / optimum / maximum values for an input tensor in this profile. If the profileIndex is
+    //! invalid or the provided name does not map to an input tensor, or the tensor is not a shape binding, return
+    //! nullptr.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \warning If input shapes are set with setShapeValues, getProfileTensorValuesV2 will return nullptr
+    //!
+    int64_t const* getProfileTensorValuesV2(
+        char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept
+    {
+        return mImpl->getProfileTensorValuesV2(tensorName, profileIndex, select);
+    }
+
 protected:
     apiv::VCudaEngine* mImpl;
 };
@@ -3898,7 +4058,7 @@ public:
     //!        If currentMemory is known to be big enough, one option is to return currentMemory.
     //!
     //! \param tensorName name of the output tensor.
-    //! \param currentMemory points to the address set by IExectionContext::setTensorAddress.
+    //! \param currentMemory points to the address set by IExecutionContext::setTensorAddress.
     //! \param size number of bytes required. Always positive, even for an empty tensor.
     //! \param alignment required alignment of the allocation.
     //!
@@ -4605,7 +4765,7 @@ public:
     //!
     //! \param event The CUDA event that is triggered after all input tensors have been consumed.
     //!
-    //! \warning The set event must be valid during the inferece.
+    //! \warning The set event must be valid during the inference.
     //!
     //! \return True on success, false if error occurred.
     //!
@@ -4886,6 +5046,16 @@ public:
     bool getDebugState(char const* name) const noexcept
     {
         return mImpl->getDebugState(name);
+    }
+
+    //!
+    //! \brief Get the runtime config object used during execution context creation.
+    //!
+    //! \return The runtime config object.
+    //!
+    IRuntimeConfig* getRuntimeConfig() const noexcept
+    {
+        return mImpl->getRuntimeConfig();
     }
 
 protected:

@@ -19,8 +19,8 @@ function(add_shared_source)
     target_sources(trt_shared PRIVATE ${ARGN})
 endfunction()
 
-target_link_libraries(trt_shared PUBLIC
-    tensorrt
+target_link_libraries(trt_shared PRIVATE
+    $<COMPILE_ONLY:tensorrt>
     trt_global_definitions
     CUDA::cudart_static
 )

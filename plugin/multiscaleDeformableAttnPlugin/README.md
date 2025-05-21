@@ -11,13 +11,13 @@
 
 ## Description
 
-The `multiscaleDeformableAttnPlugin` is used to perform attention computation over a small set of key sampling points around a reference point rather than looking over all possible spatial locations. It makes use of multiscale feature maps to effectively represent objects at different scales. It helps to achieve faster convergence and better performance on small objects. 
+The `multiscaleDeformableAttnPlugin` is used to perform attention computation over a small set of key sampling points around a reference point rather than looking over all possible spatial locations. It makes use of multiscale feature maps to effectively represent objects at different scales. It helps to achieve faster convergence and better performance on small objects.
 
 ### Structure
 
 The `multiscaleDeformableAttnPlugin` takes 5 inputs in the following order :  `value`, `spatial_shapes`, `level_start_index`, `sampling_locations`, and `atttention_weights`.
 
-`value` 
+`value`
 The input feature maps from different scales concatenated to provide the input feature vector. The shape of this tensor is `[N, S, M, D]` where `N` is batch size, `S` is the length of the feature maps, `M` is the number of attentions heads, `D` is hidden_dim/num_heads.
 
 `spatial_shapes`
@@ -53,11 +53,15 @@ The following resources provide a deeper understanding of the `multiscaleDeforma
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html)
 documentation.
 
-## Changelog 
+## Changelog
 
-Feb 2022 
+Apr 2025
+Added version 2 of the plugin that uses the IPluginV3 interface. The version 1 (using IPluginV2DynamicExt interface) is now deprecated. The version 2 mirrors version 1 in IO and attributes.
+
+Feb 2022
 This is the first release of this `README.md` file.
 
-## Known issues 
+
+## Known issues
 
 There are no known issues in this plugin.

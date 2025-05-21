@@ -129,7 +129,7 @@ class FluxPipeline(DiffusionPipeline):
 
         # Resolve all paths.
         dd_path = path_module.resolve_path(
-            cls.get_model_names(pipeline_type), args, pipeline_type, cls._get_pipeline_uid(pipeline_type, args.version)
+            cls.get_model_names(pipeline_type), args, pipeline_type, cls._get_pipeline_uid(args.version)
         )
 
         return cls(
@@ -704,42 +704,6 @@ class FluxPipeline(DiffusionPipeline):
             torch.cuda.synchronize()
             e2e_tic = time.perf_counter()
 
-            class LoadModelContext:
-                def __init__(ctx, model_names, low_vram=False):
-                    ctx.model_names = model_names
-                    ctx.low_vram = low_vram
-                def __enter__(ctx):
-                    if not ctx.low_vram:
-                        return
-                    for model_name in ctx.model_names:
-                        if not self.torch_fallback[model_name]:
-                            # creating engine object (load from plan file)
-                            self.engine[model_name].load()
-                            # allocate device memory
-                            _, shared_device_memory = cudart.cudaMalloc(self.device_memory_sizes[model_name])
-                            self.shared_device_memory = shared_device_memory
-                            # creating context
-                            self.engine[model_name].activate(device_memory=self.shared_device_memory)
-                            # creating input and output buffer
-                            self.engine[model_name].allocate_buffers(shape_dict=self.shape_dicts[model_name], device=self.device)
-                        else:
-                            print(f"[I] Reloading torch model {model_name} from cpu.")
-                            self.torch_models[model_name] = self.torch_models[model_name].to('cuda')
-
-                def __exit__(ctx, exc_type, exc_val, exc_tb):
-                    if not ctx.low_vram:
-                        return
-                    for model_name in ctx.model_names:
-                        if not self.torch_fallback[model_name]:
-                            self.engine[model_name].deallocate_buffers()
-                            self.engine[model_name].deactivate()
-                            self.engine[model_name].unload()
-                            cudart.cudaFree(self.shared_device_memory)
-                        else:
-                            print(f"[I] Offloading torch model {model_name} to cpu.")
-                            self.torch_models[model_name] = self.torch_models[model_name].to('cpu')
-                            torch.cuda.empty_cache()
-
             num_channels_latents = self.models["transformer"].config["in_channels"] // 4
             if control_image:
                 num_channels_latents = self.models["transformer"].config["in_channels"] // 8
@@ -756,7 +720,7 @@ class FluxPipeline(DiffusionPipeline):
                 )
 
                 if control_image.ndim == 4:
-                    with LoadModelContext(["vae_encoder"], low_vram=self.low_vram):
+                    with self.model_memory_manager(["vae_encoder"], low_vram=self.low_vram):
                         control_image = self.encode_image(control_image)
 
                     height_control_image, width_control_image = control_image.shape[2:]
@@ -769,7 +733,7 @@ class FluxPipeline(DiffusionPipeline):
                     )
 
             # CLIP and T5 text encoder(s)
-            with LoadModelContext(["clip","t5"], low_vram=self.low_vram):
+            with self.model_memory_manager(["clip", "t5"], low_vram=self.low_vram):
                 pooled_embeddings = self.encode_prompt(prompt, pooled_output=True)
                 text_embeddings = self.encode_prompt(
                     prompt2, encoder="t5", max_sequence_length=self.max_sequence_length
@@ -809,7 +773,7 @@ class FluxPipeline(DiffusionPipeline):
             # Pre-process input image and timestep for the img2img pipeline
             if input_image:
                 input_image = self.image_processor.preprocess(input_image, height=image_height, width=image_width).to(self.device)
-                with LoadModelContext(["vae_encoder"], low_vram=self.low_vram):
+                with self.model_memory_manager(["vae_encoder"], low_vram=self.low_vram):
                     image_latents = self.encode_image(input_image)
 
                 timesteps, num_inference_steps = self.get_timesteps(self.denoising_steps, image_strength)
@@ -833,7 +797,7 @@ class FluxPipeline(DiffusionPipeline):
             )
 
             # DiT denoiser
-            with LoadModelContext(["transformer"], low_vram=self.low_vram):
+            with self.model_memory_manager(["transformer"], low_vram=self.low_vram):
                 latents = self.denoise_latent(
                     latents,
                     timesteps,
@@ -845,7 +809,7 @@ class FluxPipeline(DiffusionPipeline):
                 )
 
             # VAE decode latent
-            with LoadModelContext(["vae"], low_vram=self.low_vram):
+            with self.model_memory_manager(["vae"], low_vram=self.low_vram):
                 latents = self._unpack_latents(
                     latents, image_height, image_width, self.vae_scale_factor
                 )

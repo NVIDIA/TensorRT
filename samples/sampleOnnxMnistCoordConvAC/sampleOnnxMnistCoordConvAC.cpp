@@ -35,6 +35,7 @@
 #include "parserOnnxConfig.h"
 
 #include "NvInfer.h"
+#include "NvInferPlugin.h"
 #include <cuda_runtime_api.h>
 
 #include <cstdlib>

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
+
+add_executable(sample_non_zero_plugin
+    sampleNonZeroPlugin.cpp
+    nonZeroKernel.cu
+)
+target_link_libraries(sample_non_zero_plugin PRIVATE trt_samples_common)
+add_dependencies(tensorrt_samples sample_non_zero_plugin)
+
+install(
+    TARGETS sample_non_zero_plugin
+    OPTIONAL
+)
+
+else()
+
 set(SAMPLE_SOURCES sampleNonZeroPlugin.cpp nonZeroKernel.cu)
 
 set(SAMPLE_PARSERS "onnx")
@@ -21,3 +37,5 @@ set(SAMPLE_PARSERS "onnx")
 set(CUDA_LIBS_REQUIRED True)
 
 include(../CMakeSamplesTemplate.txt)
+
+endif()

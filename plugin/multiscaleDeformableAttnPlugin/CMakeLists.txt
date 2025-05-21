@@ -20,5 +20,7 @@ add_plugin_source(
     multiscaleDeformableAttn.h
     multiscaleDeformableAttnPlugin.cpp
     multiscaleDeformableAttnPlugin.h
+    multiscaleDeformableAttnPluginLegacy.cpp
+    multiscaleDeformableAttnPluginLegacy.h
     multiscaleDeformableIm2ColCuda.cuh
 )

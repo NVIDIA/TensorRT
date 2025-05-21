@@ -152,7 +152,10 @@ void bindOnnx(py::module& m)
         .def("__del__", &utils::doNothingDel<IParser>);
 
     py::enum_<OnnxParserFlag>(m, "OnnxParserFlag", OnnxParserFlagDoc::descr, py::module_local())
-        .value("NATIVE_INSTANCENORM", OnnxParserFlag::kNATIVE_INSTANCENORM, OnnxParserFlagDoc::NATIVE_INSTANCENORM);
+        .value("NATIVE_INSTANCENORM", OnnxParserFlag::kNATIVE_INSTANCENORM, OnnxParserFlagDoc::NATIVE_INSTANCENORM)
+        .value("ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA",
+            OnnxParserFlag::kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA,
+            OnnxParserFlagDoc::ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA);
 
     py::enum_<ErrorCode>(m, "ErrorCode", ErrorCodeDoc::descr, py::module_local())
         .value("SUCCESS", ErrorCode::kSUCCESS)

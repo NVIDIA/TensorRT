@@ -9,13 +9,13 @@
   - [Additional Resources](#additional-resources)
   - [License](#license)
   - [Changelog](#changelog)
-  
+
 ## Description
 This TensorRT plugin implements an efficient algorithm to perform the calculation of disentangled attention matrices for DeBERTa-variant types of Transformers.
 
-Unlike [BERT](https://arxiv.org/abs/1810.04805) where each word is represented by one vector that sums the content embedding and position embedding, [DeBERTa](https://arxiv.org/abs/2006.03654) design first proposed the concept of disentangled attention, which uses two vectors to encode content and position respectively and forms attention weights by summing disentangled matrices. Performance gap has been identified between the new attention scheme and the original self-attention, mainly due to extra indexing and gather opertaions. Major optimizations implemented in this plugin includes: (i) fusion of gather and pointwise operataions (ii) utilizing the pattern of relative position matrix and shortcuting out-of-boundary index calculation (iii) parallel index calculation. 
+Unlike [BERT](https://arxiv.org/abs/1810.04805) where each word is represented by one vector that sums the content embedding and position embedding, [DeBERTa](https://arxiv.org/abs/2006.03654) design first proposed the concept of disentangled attention, which uses two vectors to encode content and position respectively and forms attention weights by summing disentangled matrices. Performance gap has been identified between the new attention scheme and the original self-attention, mainly due to extra indexing and gather operations. Major optimizations implemented in this plugin includes: (i) fusion of gather and pointwise operations (ii) utilizing the pattern of relative position matrix and shortcuting out-of-boundary index calculation (iii) parallel index calculation (iv) log tables for relative position index calculation (used for DeBERTa-V2, enabling capture of long-range dependencies without significantly increasing the number of position embeddings).
 
-This TensorRT plugin is primarily intended to be used together with DeBERTa network (with HuggingFace [DeBERTa](https://huggingface.co/docs/transformers/model_doc/deberta) and [DeBERTa-V2](https://huggingface.co/docs/transformers/model_doc/deberta-v2) implementation), but also applies to generic architectures that adopt disentangeld attention.
+This TensorRT plugin is primarily intended to be used together with DeBERTa network (with HuggingFace [DeBERTa](https://huggingface.co/docs/transformers/model_doc/deberta) and [DeBERTa-V2](https://huggingface.co/docs/transformers/model_doc/deberta-v2) implementation), but also applies to generic architectures that adopt disentangled attention.
 
 ## Structure
 This plugin works for network with graph node named `DisentangledAttention_TRT`. The corresponding graph modification script can be found under the `demo/DeBERTa` folder of TensorRT OSS.
@@ -26,7 +26,7 @@ This plugin takes three inputs:
 * `data0`: Content-to-content ("c2c") Attention Matrix
 
   > **Input Shape:** `[batch_size*number_heads, sequence_length, sequence_length]`
-  > 
+  >
   > **Data Type:** `float32` or `float16` or `int8`
 
   This is the content-to-content attention, Q<sub>c</sub>K<sub>c</sub><sup>T</sup>, which is essentially the BERT self-attention.
@@ -34,7 +34,7 @@ This plugin takes three inputs:
 * `data1`: Content-to-position ("c2p") Attention Matrix
 
   > **Input Shape:** `[batch_size*number_heads, sequence_length, relative_distance*2]`
-  > 
+  >
   > **Data Type:** `float32` or `float16` or `int8`
 
   This is the content-to-position attention, Q<sub>c</sub>K<sub>r</sub><sup>T</sup>.
@@ -42,7 +42,7 @@ This plugin takes three inputs:
 * `data2`: Position-to-content ("p2c") Attention Matrix
 
   > **Input Shape:** `[batch_size*number_heads, sequence_length,  relative_distance*2]`
-  > 
+  >
   > **Data Type:** `float32` or `float16` or `int8`
 
    This is the position-to-content attention, K<sub>c</sub>Q<sub>r</sub><sup>T</sup>. Relative distance is the distance span `k` for disentangled attention.
@@ -53,7 +53,7 @@ This plugin generates one output.
 * `result`: Disentangled Attention Matrix
 
   > **Input Shape:** `[batch_size*number_heads, sequence_length, sequence_length]`
-  > 
+  >
   > **Data Type:** `float32` or `float16` or `int8`
 
   This is the disentangled attention matrix after applying the scaling factor.
@@ -69,11 +69,12 @@ This plugin generates one output.
 - [DeBERTa](https://arxiv.org/abs/2006.03654)
 - [DeBERTa HuggingFace Implementation](https://github.com/huggingface/transformers/tree/main/src/transformers/models/deberta)
 - [DeBERTa-V2 HuggingFace Implementation](https://github.com/huggingface/transformers/tree/main/src/transformers/models/deberta_v2)
-  
+
 ## License
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html)
 documentation.
 
 ## Changelog
-- 2022.04: This is the first release of this `README` file.
+- 2024.03: Migrated to IPluginV3 interface. The legacy plugin (version 1) using IPluginV2DynamicExt interface is maintained for backward compatibility.
 - 2022.07: Added log bucket for the relative position index calculation (since DeBERTa V2).
+- 2022.04: This is the first release of this `README` file.

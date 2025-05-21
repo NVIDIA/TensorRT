@@ -124,7 +124,7 @@ class Comparator:
                 # Then, actual iterations.
                 index = 0
                 iteration_results = []
-
+                iterations_num = len(loader_cache)
                 total_runtime = 0
                 for index, feed_dict in enumerate(loader_cache):
                     G_LOGGER.info(
@@ -139,10 +139,13 @@ class Comparator:
 
                     runtime = active_runner.last_inference_time()
                     total_runtime += runtime
-                    # Without a deep copy here, outputs will always reference the output of the last run
+
+                    # Only make a deep copy if we have more than one iteration.
+                    # For single iteration case, we can use the outputs directly since they won't be reused.
+                    # This allows running with a large number of outputs (e.g. for accuracy debugging) without memory explosion.
                     iteration_results.append(
                         IterationResult(
-                            outputs=copy.deepcopy(outputs),
+                            outputs=copy.deepcopy(outputs) if iterations_num > 1 else outputs,
                             runtime=runtime,
                             runner_name=active_runner.name,
                         )

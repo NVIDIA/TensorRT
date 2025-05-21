@@ -29,6 +29,7 @@ from demo_diffusion.model.clip import (
 from demo_diffusion.model.diffusion_transformer import (
     FluxTransformerModel,
     SD3_MMDiTModel,
+    SD3TransformerModel,
 )
 from demo_diffusion.model.gan import VQGANModel
 from demo_diffusion.model.load import unload_torch_model
@@ -67,6 +68,7 @@ __all__ = [
     # diffusion_transformer
     "SD3_MMDiTModel",
     "FluxTransformerModel",
+    "SD3TransformerModel",
     # gan
     "VQGANModel",
     # lora

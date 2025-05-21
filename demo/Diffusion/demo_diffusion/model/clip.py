@@ -36,12 +36,16 @@ from demo_diffusion.utils_sd3.other_impls import (
 )
 
 
-def get_clipwithproj_embedding_dim(version: str, pipeline: str) -> int:
+def get_clipwithproj_embedding_dim(version: str, subfolder: str) -> int:
     """Return the embedding dimension of a CLIP with projection model."""
     if version in ("xl-1.0", "xl-turbo", "cascade"):
         return 1280
+    elif version in {"3.5-medium", "3.5-large"} and subfolder == "text_encoder":
+        return 768
+    elif version in {"3.5-medium", "3.5-large"} and subfolder == "text_encoder_2":
+        return 1280
     else:
-        raise ValueError(f"Invalid version {version} + pipeline {pipeline}")
+        raise ValueError(f"Invalid version {version} + subfolder {subfolder}")
 
 
 def get_clip_embedding_dim(version, pipeline):
@@ -186,7 +190,6 @@ class CLIPModel(base_model.BaseModel):
         opt.info(self.name + ": finished")
         return opt_onnx_graph
 
-
 class CLIPWithProjModel(CLIPModel):
     def __init__(
         self,
@@ -213,13 +216,13 @@ class CLIPWithProjModel(CLIPModel):
             fp16=fp16,
             bf16=bf16,
             max_batch_size=max_batch_size,
-            embedding_dim=get_clipwithproj_embedding_dim(version, pipeline),
+            embedding_dim=get_clipwithproj_embedding_dim(version, subfolder),
             output_hidden_states=output_hidden_states,
         )
         self.subfolder = subfolder
 
     def get_model(self, torch_inference=""):
-        model_opts = {"variant": "bf16", "torch_dtype": torch.bfloat16} if self.bf16 else {}
+        model_opts = {"variant": "fp16", "torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16}
         clip_model_dir = load.get_checkpoint_dir(self.framework_model_dir, self.version, self.pipeline, self.subfolder)
         if not load.is_model_cached(clip_model_dir, model_opts, self.hf_safetensor, model_name="model"):
             model = CLIPTextModelWithProjection.from_pretrained(
@@ -243,7 +246,11 @@ class CLIPWithProjModel(CLIPModel):
         return ["text_embeddings"]
 
     def get_dynamic_axes(self):
-        return {"input_ids": {0: "B"}, "attention_mask": {0: "B"}, "text_embeddings": {0: "B"}}
+        return {
+            "input_ids": {0: "B"},
+            "attention_mask": {0: "B"},
+            "text_embeddings": {0: "B"},
+        }
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
         self.check_dims(batch_size, image_height, image_width)
@@ -276,7 +283,6 @@ class CLIPWithProjModel(CLIPModel):
             torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device),
             torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device),
         )
-
 
 class SD3_CLIPGModel(CLIPModel):
     def __init__(

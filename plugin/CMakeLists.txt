@@ -19,6 +19,18 @@ if (${TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW})
 
 option(TRT_BUILD_INCLUDE_BERT_QKV_PLUGIN "Build the BERT QKV to Context Plugin and related plugins." ON)
 
+# Create the main object library, which is shared between plugin, plugin_internal, and plugin_static.
+add_library(trt_plugins OBJECT)
+function(add_plugin_source)
+    target_sources(trt_plugins PRIVATE ${ARGN})
+endfunction()
+
+# Create the VC object lib, used by vc and vc_static.
+add_library(trt_vc_plugins OBJECT)
+function(add_vc_plugin_source)
+    target_sources(trt_vc_plugins PRIVATE ${ARGN})
+endfunction()
+
 set(TRT_PLUGIN_NAMES
     batchedNMSPlugin
     batchTilePlugin
@@ -69,20 +81,6 @@ if(${TRT_BUILD_INCLUDE_BERT_QKV_PLUGIN})
     )
 endif()
 
-add_library(tensorrt_plugins SHARED)
-add_library(tensorrt_plugins_internal SHARED)
-
-function(add_plugin_source)
-    target_sources(tensorrt_plugins PRIVATE ${ARGN})
-    target_sources(tensorrt_plugins_internal PRIVATE ${ARGN})
-endfunction()
-
-add_library(tensorrt_vc_plugins SHARED)
-
-function(add_vc_plugin_source)
-    target_sources(tensorrt_vc_plugins PRIVATE ${ARGN})
-endfunction()
-
 add_subdirectory(api)
 add_subdirectory(vc)
 add_subdirectory(common)
@@ -90,6 +88,46 @@ add_subdirectory(common)
 foreach(PLUGIN_NAME IN LISTS TRT_PLUGIN_NAMES)
     add_subdirectory(${PLUGIN_NAME})
 endforeach()
+
+set(trt_plugin_include_dirs
+    ${TensorRT_SOURCE_DIR}/externals
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+
+target_include_directories(trt_plugins PUBLIC ${trt_plugin_include_dirs})
+target_include_directories(trt_vc_plugins PUBLIC ${trt_plugin_include_dirs})
+
+# Use the compile-time dependencies of TRT when compiling the objects before the link stage.
+# The final targets will be responsible for selecting the target TRT distribution to use.
+target_link_libraries(trt_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
+target_link_libraries(trt_vc_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
+
+# Use true link dependencies on the global definitions and cudart_static.
+target_link_libraries(trt_plugins PUBLIC trt_global_definitions CUDA::cudart_static)
+target_link_libraries(trt_vc_plugins PUBLIC trt_global_definitions CUDA::cudart_static)
+
+foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
+    target_compile_definitions(trt_plugins PUBLIC "ENABLE_SM${SM}")
+    target_compile_definitions(trt_vc_plugins PUBLIC "ENABLE_SM${SM}")
+endforeach()
+
+target_compile_options(trt_plugins PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+target_compile_options(trt_vc_plugins PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+
+# Create all the library targets, reusing the objects we've compiled in the first step.
+add_library(tensorrt_plugins SHARED $<TARGET_OBJECTS:trt_plugins>)
+add_library(tensorrt_plugins_internal SHARED $<TARGET_OBJECTS:trt_plugins>)
+add_library(tensorrt_plugins_static STATIC $<TARGET_OBJECTS:trt_plugins>)
+add_library(tensorrt_vc_plugins SHARED $<TARGET_OBJECTS:trt_vc_plugins>)
+add_library(tensorrt_vc_plugins_static STATIC $<TARGET_OBJECTS:trt_vc_plugins>)
+
+target_compile_definitions(tensorrt_vc_plugins PRIVATE
+    COMPILE_VFC_PLUGIN=1
+)
+
+target_compile_definitions(tensorrt_vc_plugins_static PRIVATE
+    COMPILE_VFC_PLUGIN=1
+)
 
 if (NOT MSVC)
     set(trt_plugins_link_options
@@ -117,20 +155,9 @@ if(NOT MSVC)
     )
 endif()
 
-set(trt_plugin_include_dirs
-    ${TensorRT_SOURCE_DIR}/externals
-    ${CMAKE_CURRENT_LIST_DIR}
-)
-
-set(trt_plugin_compile_options
-    $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-)
-
-# Target properties for tensorrt_plugins
-target_include_directories(tensorrt_plugins PRIVATE ${trt_plugin_include_dirs})
+### TRT Plugin Setup
 target_link_libraries(tensorrt_plugins PRIVATE ${trt_plugin_dependencies})
 target_link_options(tensorrt_plugins PRIVATE ${trt_plugins_link_options})
-target_compile_options(tensorrt_plugins PRIVATE ${trt_plugin_compile_options})
 
 set_target_properties(
     tensorrt_plugins
@@ -155,12 +182,11 @@ else()
     set(trt_plugins_internal_link_options)
 endif()
 
-# Target properties for tensorrt_plugins_internal
+### Internal Plugin Setup
 # This library is effectively the same as tensorrt_plugins, but without stripped symbols.
 target_include_directories(tensorrt_plugins_internal PUBLIC ${trt_plugin_include_dirs})
 target_link_libraries(tensorrt_plugins_internal PRIVATE ${trt_plugin_dependencies})
 target_link_options(tensorrt_plugins_internal PRIVATE ${trt_plugins_internal_link_options})
-target_compile_options(tensorrt_plugins_internal PRIVATE ${trt_plugin_compile_options})
 
 set_target_properties(
     tensorrt_plugins_internal
@@ -172,6 +198,33 @@ set_target_properties(
                SOVERSION ${TRT_MAJOR}
                LINK_DEPENDS ${TensorRT_SOURCE_DIR}/Exports-plugin_internal.map)
 
+
+### Static Plugin Setup
+set(trt_plugin_static_dependencies
+    tensorrt_static
+    CUDA::cudart_static
+    trt_global_definitions
+)
+
+target_include_directories(tensorrt_plugins_static PRIVATE ${trt_plugin_include_dirs})
+target_link_libraries(tensorrt_plugins_static PRIVATE ${trt_plugin_static_dependencies})
+
+set_target_properties(
+    tensorrt_plugins_static
+    PROPERTIES CXX_VISIBILITY_PRESET hidden
+               VISIBILITY_INLINES_HIDDEN ON
+               OUTPUT_NAME nvinfer_plugin_static
+               VERSION ${TensorRT_VERSION}
+               SOVERSION ${TRT_MAJOR}
+               LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports.map)
+
+if(NOT ${TRT_BUILD_ENABLE_STATIC_LIBS})
+    set_target_properties(tensorrt_plugins_static
+        PROPERTIES EXCLUDE_FROM_ALL ON
+    )
+endif()
+
+### VC Plugin Setup
 if (NOT MSVC)
     set(trt_vc_plugins_link_options
         "LINKER:--version-script=${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map"
@@ -190,7 +243,6 @@ endif()
 target_include_directories(tensorrt_vc_plugins PRIVATE ${trt_plugin_include_dirs})
 target_link_libraries(tensorrt_vc_plugins PRIVATE ${trt_plugin_dependencies})
 target_link_options(tensorrt_vc_plugins PRIVATE ${trt_vc_plugins_link_options})
-target_compile_options(tensorrt_vc_plugins PRIVATE ${trt_plugin_compile_options})
 
 set_target_properties(
     tensorrt_vc_plugins
@@ -201,14 +253,27 @@ set_target_properties(
                 SOVERSION ${TRT_MAJOR}
                 LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map)
 
-foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
-    target_compile_definitions(tensorrt_plugins PRIVATE "ENABLE_SM${SM}")
-    target_compile_definitions(tensorrt_plugins_internal PRIVATE "ENABLE_SM${SM}")
-    target_compile_definitions(tensorrt_vc_plugins PRIVATE "ENABLE_SM${SM}")
-endforeach()
+### VC Plugin Static Setup
+target_include_directories(tensorrt_vc_plugins_static PRIVATE ${trt_plugin_include_dirs})
+target_link_libraries(tensorrt_vc_plugins_static PRIVATE ${trt_plugin_static_dependencies})
+
+set_target_properties(
+    tensorrt_vc_plugins_static
+    PROPERTIES CXX_VISIBILITY_PRESET hidden
+                VISIBILITY_INLINES_HIDDEN ON
+                OUTPUT_NAME nvinfer_vc_plugin_static
+                VERSION ${TensorRT_VERSION}
+                SOVERSION ${TRT_MAJOR}
+                LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map)
+
+if(NOT ${TRT_BUILD_ENABLE_STATIC_LIBS})
+    set_target_properties(tensorrt_vc_plugins_static
+        PROPERTIES EXCLUDE_FROM_ALL ON
+    )
+endif()
 
 install(
-    TARGETS tensorrt_plugins tensorrt_plugins_internal tensorrt_vc_plugins
+    TARGETS tensorrt_plugins tensorrt_plugins_static tensorrt_plugins_internal tensorrt_vc_plugins tensorrt_vc_plugins_static
     OPTIONAL
 )
 

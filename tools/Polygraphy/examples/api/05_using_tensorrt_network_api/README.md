@@ -33,4 +33,4 @@ loader to seamlessly integrate a network defined using TensorRT APIs with Polygr
 ## Further Reading
 
 For more information on the TensorRT Network API, see the
-[TensorRT API documentation](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/Graph/pyGraph.html)
+[TensorRT API documentation](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/infer/Graph/Network.html)

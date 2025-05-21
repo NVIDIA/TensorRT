@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -2000,7 +2000,7 @@ constexpr const char* add_input = R"trtdoc(
 
     :arg name: The name of the tensor. Each input and output tensor must have a unique name.
     :arg dtype: The data type of the tensor.
-    :arg shape: The dimensions of the tensor. The total volume must be less than 2^31 elements.
+    :arg shape: The dimensions of the tensor.
 
     :returns: The newly added Tensor.
 )trtdoc";

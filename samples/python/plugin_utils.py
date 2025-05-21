@@ -73,9 +73,6 @@ def checkCudaErrors(result):
 def getComputeCapacity(devID):
     major = checkCudaErrors(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMajor, devID))
     minor = checkCudaErrors(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMinor, devID))
-    # Redirect 12.1 to 12.0 since 12.1 can reuse 12.0 cubins and this can save lib size and compile time.
-    if major == 12 and minor == 1:
-        minor = 0
     return (major, minor)
 
 

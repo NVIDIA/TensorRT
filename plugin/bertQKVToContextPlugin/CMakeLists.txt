@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+include(ShouldCompileKernel)
+
 add_plugin_source(
     mhaRunner.cu
     mhaRunner.h
@@ -40,33 +42,6 @@ set(BERT_QKV_SUPPORTED_SMS
     100
     120
 )
-
-# Certain cubins are binary compatible between different SM versions, so they are reused.
-# This function checks if a SM-named file should be compiled based on current SM enablement.
-# Specifically, the SM80 files are compiled if either 80, 86, or 89 are enabled.
-function(should_compile_kernel SM OUT_VAR)
-    # If the target SM is any of 80/86/89, we need to check if any of those are enabled in CMAKE_CUDA_ARCHITECTURES.
-    if((${SM} EQUAL 80) OR (${SM} EQUAL 86) OR (${SM} EQUAL 89))
-        list(FIND CMAKE_CUDA_ARCHITECTURES 80 SM80_INDEX)
-        list(FIND CMAKE_CUDA_ARCHITECTURES 86 SM86_INDEX)
-        list(FIND CMAKE_CUDA_ARCHITECTURES 89 SM89_INDEX)
-        if((NOT ${SM80_INDEX} EQUAL -1) OR
-           (NOT ${SM86_INDEX} EQUAL -1) OR
-           (NOT ${SM89_INDEX} EQUAL -1)
-        )
-            set(${OUT_VAR} TRUE PARENT_SCOPE)
-        else()
-            set(${OUT_VAR} FALSE PARENT_SCOPE)
-        endif()
-    else()
-        list(FIND CMAKE_CUDA_ARCHITECTURES ${SM} SM_INDEX)
-        if (NOT ${SM_INDEX} EQUAL -1)
-            set(${OUT_VAR} TRUE PARENT_SCOPE)
-        else()
-            set(${OUT_VAR} FALSE PARENT_SCOPE)
-        endif()
-    endif()
-endfunction()
 
 add_subdirectory(fused_multihead_attention)
 add_subdirectory(fused_multihead_attention_v2)

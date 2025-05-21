@@ -2,6 +2,12 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.5.8 (2025-04-08)
+
+### Fixed
+
+- Unpin ONNX version <= 1.16.1
+
 ## v0.5.7 (2025-03-24)
 
 ### Fixed

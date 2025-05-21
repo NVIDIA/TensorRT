@@ -424,6 +424,10 @@ class DataLoaderCache:
         self.save_inputs_path = save_inputs_path
 
     @func.constantmethod
+    def __len__(self):
+        return len(self.cache)
+
+    @func.constantmethod
     def __getitem__(self, iteration):
         """
         Load the specified iteration from the cache if present, or load it from the data loader.

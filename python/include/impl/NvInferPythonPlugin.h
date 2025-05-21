@@ -51,7 +51,6 @@ enum class PluginArgDataType : int32_t
     //! 32-bit signed integer
     kINT32 = 2,
 };
-
 //! \class ISymExpr
 //! \brief Generic interface for a scalar symbolic expression implementable by a Python plugin / TensorRT Python backend
 class ISymExpr
@@ -115,6 +114,7 @@ protected:
     ISymExprsImpl* mImpl{nullptr};
     virtual ~ISymExprs() noexcept = default;
 };
+
 
 //! \enum QuickPluginCreationRequest
 //! \brief Communicates preference when a quickly deployable plugin is to be added to the network

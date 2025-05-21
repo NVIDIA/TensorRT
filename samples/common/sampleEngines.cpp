@@ -118,12 +118,10 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
             mRuntime->setDLACore(mDLACore);
         }
         mRuntime->setErrorRecorder(&gRecorder);
-#if !TRT_WINML
         for (auto const& pluginPath : mDynamicPlugins)
         {
             mRuntime->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
-#endif
 
         if (getFileReader().isOpen())
         {
@@ -212,20 +210,21 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         using namespace nvonnxparser;
         parser.onnxParser.reset(createONNXParser(network));
         ASSERT(parser.onnxParser != nullptr);
-#if !TRT_WINML
         // kNATIVE_INSTANCENORM is ON by default in the parser and must be cleared to use the plugin implementation.
         if (build.pluginInstanceNorm)
         {
             parser.onnxParser->clearFlag(OnnxParserFlag::kNATIVE_INSTANCENORM);
         }
-#endif
+        if (build.enableUInt8AsymmetricQuantizationDLA)
+        {
+            parser.onnxParser->setFlag(OnnxParserFlag::kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA);
+        }
         if (!parser.onnxParser->parseFromFile(
                 model.baseModel.model.c_str(), static_cast<int>(sample::gLogger.getReportableSeverity())))
         {
             err << "Failed to parse onnx file" << std::endl;
             parser.onnxParser.reset();
         }
-#if !TRT_WINML
         if (vcPluginLibrariesUsed && parser.onnxParser.get())
         {
             int64_t nbPluginLibs;
@@ -245,7 +244,6 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
                                     << std::endl;
             }
         }
-#endif
         break;
     }
     case ModelFormat::kANY: break;
@@ -908,7 +906,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     {
         config.setFlag(BuilderFlag::kVERSION_COMPATIBLE);
     }
-#if !TRT_WINML
     std::vector<char const*> pluginPaths;
     for (auto const& pluginPath : sys.setPluginsToSerialize)
     {
@@ -919,7 +916,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     {
         config.setPluginsToSerialize(pluginPaths.data(), pluginPaths.size());
     }
-#endif
     if (build.excludeLeanRuntime)
     {
         config.setFlag(BuilderFlag::kEXCLUDE_LEAN_RUNTIME);
@@ -1206,11 +1202,9 @@ bool networkToSerializedEngine(
     }
 
     // CUDA stream used for profiling by the builder.
-#if !TRT_WINML
     auto profileStream = samplesCommon::makeCudaStream();
     SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
     config->setProfileStream(*profileStream);
-#endif
 
     auto const tBegin = std::chrono::high_resolution_clock::now();
     std::unique_ptr<IHostMemory> serializedEngine{builder.buildSerializedNetwork(*env.network, *config)};
@@ -1243,12 +1237,10 @@ bool modelToBuildEnv(
     auto networkFlags = (build.stronglyTyped)
         ? 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)
         : 0U;
-#if !TRT_WINML
     for (auto const& pluginPath : sys.dynamicPlugins)
     {
         env.builder->getPluginRegistry().loadLibrary(pluginPath.c_str());
     }
-#endif
     env.network.reset(env.builder->createNetworkV2(networkFlags));
 
     std::vector<std::string> vcPluginLibrariesUsed;
@@ -1257,7 +1249,6 @@ bool modelToBuildEnv(
         = modelToNetwork(model, build, *env.network, err, build.versionCompatible ? &vcPluginLibrariesUsed : nullptr);
     SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
 
-#if !TRT_WINML
     if (build.versionCompatible && !sys.ignoreParsedPluginLibs && !vcPluginLibrariesUsed.empty())
     {
         sample::gLogInfo << "The following plugin libraries were identified by the parser as required for a "
@@ -1286,7 +1277,6 @@ bool modelToBuildEnv(
 
         sample::gLogInfo << "Use --ignoreParsedPluginLibs to disable this behavior." << std::endl;
     }
-#endif
 
     SMP_RETVAL_IF_FALSE(
         networkToSerializedEngine(build, sys, *env.builder, env, err), "Building engine failed", false, err);

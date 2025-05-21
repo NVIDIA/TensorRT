@@ -226,7 +226,7 @@ You can find complete code examples that use the Polygraphy Python API [here](..
 
 ## Python API Reference Documentation
 
-For more details, see the [Polygraphy Python API reference documentation](https://docs.nvidia.com/deeplearning/tensorrt/polygraphy/docs/index.html).
+For more details, see the [Polygraphy Python API reference documentation](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/polygraphy/index.html).
 
 ### Building Python API Documentation Locally
 

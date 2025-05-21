@@ -19,9 +19,6 @@
 #include "common/checkMacrosPlugin.h"
 #include "common/plugin.h"
 
-namespace nvinfer1::pluginInternal
-{
-
 #define CUDNN_MAJOR 8
 #if defined(_WIN32)
 #if !defined(WIN32_LEAN_AND_MEAN)
@@ -33,14 +30,16 @@ namespace nvinfer1::pluginInternal
 #define dllClose(handle) FreeLibrary(static_cast<HMODULE>(handle))
 #define dllGetSym(handle, name) GetProcAddress(static_cast<HMODULE>(handle), name)
 auto const kCUDNN_PLUGIN_LIBNAME = std::string("cudnn64_") + std::to_string(CUDNN_MAJOR) + ".dll";
-#else
+#else // defined(_WIN32)
 #include <dlfcn.h>
 #define dllOpen(name) dlopen(name, RTLD_LAZY)
 #define dllClose(handle) dlclose(handle)
 #define dllGetSym(handle, name) dlsym(handle, name)
 auto const kCUDNN_PLUGIN_LIBNAME = std::string("libcudnn.so.") + std::to_string(CUDNN_MAJOR);
-#endif
+#endif // defined(_WIN32)
 
+namespace nvinfer1::pluginInternal
+{
 // If tryLoadingCudnn failed, the CudnnWrapper object won't be created.
 CudnnWrapper::CudnnWrapper(bool initHandle, char const* callerPluginName)
     : mLibrary(tryLoadingCudnn(callerPluginName))
@@ -80,7 +79,10 @@ CudnnWrapper::~CudnnWrapper()
         mHandle = nullptr;
     }
 
-    dllClose(mLibrary);
+    if (mLibrary != nullptr)
+    {
+        dllClose(mLibrary);
+    }
 }
 
 void* CudnnWrapper::tryLoadingCudnn(char const* callerPluginName)

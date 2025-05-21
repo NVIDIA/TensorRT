@@ -27,9 +27,7 @@ from demo_diffusion.utils_sd3.other_impls import load_into
 from demo_diffusion.utils_sd3.sd3_impls import BaseModel as BaseModelSD3
 
 # List of models to import from diffusers.models
-models_to_import = [
-    "FluxTransformer2DModel",
-]
+models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel"]
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, "diffusers.models")
 
@@ -324,3 +322,203 @@ class FluxTransformerModel(base_model.BaseModel):
         if self.int8:
             return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
         return super().optimize(onnx_graph)
+
+
+class UpcastLayer(torch.nn.Module):
+    def __init__(self, base_layer: torch.nn.Module, upcast_to: torch.dtype):
+        super().__init__()
+        self.output_dtype = next(base_layer.parameters()).dtype
+        self.upcast_to = upcast_to
+
+        base_layer = base_layer.to(dtype=self.upcast_to)
+        self.base_layer = base_layer
+
+    def forward(self, *inputs, **kwargs):
+        casted_inputs = tuple(
+            in_val.to(self.upcast_to) if isinstance(in_val, torch.Tensor) else in_val for in_val in inputs
+        )
+
+        kwarg_casted = {}
+        for name, val in kwargs.items():
+            kwarg_casted[name] = val.to(dtype=self.upcast_to) if isinstance(val, torch.Tensor) else val
+
+        output = self.base_layer(*casted_inputs, **kwarg_casted)
+        if isinstance(output, tuple):
+            output = tuple(out.to(self.output_dtype) if isinstance(out, torch.Tensor) else out for out in output)
+        else:
+            output = output.to(dtype=self.output_dtype)
+        return output
+
+
+class SD3TransformerModel(base_model.BaseModel):
+
+    def __init__(
+        self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        fp16=False,
+        tf32=False,
+        bf16=False,
+        max_batch_size=16,
+        text_maxlen=256,
+        build_strongly_typed=False,
+        weight_streaming=False,
+        weight_streaming_budget_percentage=None,
+        do_classifier_free_guidance=False,
+    ):
+        super(SD3TransformerModel, self).__init__(
+            version,
+            pipeline,
+            device=device,
+            hf_token=hf_token,
+            verbose=verbose,
+            framework_model_dir=framework_model_dir,
+            fp16=fp16,
+            tf32=tf32,
+            bf16=bf16,
+            max_batch_size=max_batch_size,
+            text_maxlen=text_maxlen,
+        )
+        self.subfolder = "transformer"
+        self.transformer_model_dir = load.get_checkpoint_dir(
+            self.framework_model_dir, self.version, self.pipeline, self.subfolder
+        )
+        if not os.path.exists(self.transformer_model_dir):
+            self.config = SD3Transformer2DModel.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load SD3Transformer2DModel config from: {self.transformer_model_dir}")
+            self.config = SD3Transformer2DModel.load_config(self.transformer_model_dir)
+        self.build_strongly_typed = build_strongly_typed
+        self.weight_streaming = weight_streaming
+        self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
+        self.out_channels = self.config.get("out_channels")
+        self.xB = 2 if do_classifier_free_guidance else 1  # batch multiplier
+
+    def get_model(self, torch_inference=""):
+        model_opts = (
+            {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
+        )
+        if not load.is_model_cached(self.transformer_model_dir, model_opts, self.hf_safetensor):
+            model = SD3Transformer2DModel.from_pretrained(
+                self.path,
+                subfolder=self.subfolder,
+                use_safetensors=self.hf_safetensor,
+                token=self.hf_token,
+                **model_opts,
+            ).to(self.device)
+            model.save_pretrained(self.transformer_model_dir, **model_opts)
+        else:
+            print(f"[I] Load SD3Transformer2DModel model from: {self.transformer_model_dir}")
+            model = SD3Transformer2DModel.from_pretrained(self.transformer_model_dir, **model_opts).to(self.device)
+
+        if self.version == "3.5-large":
+            model.transformer_blocks[35] = UpcastLayer(model.transformer_blocks[35], torch.float32)
+
+        if torch_inference:
+            model.to(memory_format=torch.channels_last)
+        model = optimizer.optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_names(self):
+        return [
+            "hidden_states",
+            "encoder_hidden_states",
+            "pooled_projections",
+            "timestep",
+        ]
+
+    def get_output_names(self):
+        return ["latent"]
+
+    def get_dynamic_axes(self):
+        xB = "2B" if self.xB == 2 else "B"
+        dynamic_axes = {
+            "hidden_states": {0: xB, 2: "H", 3: "W"},
+            "encoder_hidden_states": {0: xB},
+            "pooled_projections": {0: xB},
+            "timestep": {0: xB},
+            "latent": {0: xB, 2: "H", 3: "W"},
+        }
+        return dynamic_axes
+
+    def get_input_profile(
+        self,
+        batch_size: int,
+        image_height: int,
+        image_width: int,
+        static_batch: bool,
+        static_shape: bool,
+    ):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        (
+            min_batch,
+            max_batch,
+            _,
+            _,
+            _,
+            _,
+            min_latent_height,
+            max_latent_height,
+            min_latent_width,
+            max_latent_width,
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+
+        input_profile = {
+            "hidden_states": [
+                (self.xB * min_batch, self.config["in_channels"], min_latent_height, min_latent_width),
+                (self.xB * batch_size, self.config["in_channels"], latent_height, latent_width),
+                (self.xB * max_batch, self.config["in_channels"], max_latent_height, max_latent_width),
+            ],
+            "encoder_hidden_states": [
+                (self.xB * min_batch, self.text_maxlen, self.config["joint_attention_dim"]),
+                (self.xB * batch_size, self.text_maxlen, self.config["joint_attention_dim"]),
+                (self.xB * max_batch, self.text_maxlen, self.config["joint_attention_dim"]),
+            ],
+            "pooled_projections": [
+                (self.xB * min_batch, self.config["pooled_projection_dim"]),
+                (self.xB * batch_size, self.config["pooled_projection_dim"]),
+                (self.xB * max_batch, self.config["pooled_projection_dim"]),
+            ],
+            "timestep": [(self.xB * min_batch,), (self.xB * batch_size,), (self.xB * max_batch,)],
+        }
+        return input_profile
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        shape_dict = {
+            "hidden_states": (self.xB * batch_size, self.config["in_channels"], latent_height, latent_width),
+            "encoder_hidden_states": (self.xB * batch_size, self.text_maxlen, self.config["joint_attention_dim"]),
+            "pooled_projections": (self.xB * batch_size, self.config["pooled_projection_dim"]),
+            "timestep": (self.xB * batch_size,),
+            "latent": (self.xB * batch_size, self.out_channels, latent_height, latent_width),
+        }
+        return shape_dict
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        assert not (self.fp16 and self.bf16), "fp16 and bf16 cannot be enabled simultaneously"
+        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        sample_input = (
+            torch.randn(
+                self.xB * batch_size,
+                self.config["in_channels"],
+                latent_height,
+                latent_width,
+                dtype=dtype,
+                device=self.device,
+            ),
+            torch.randn(
+                self.xB * batch_size,
+                self.text_maxlen,
+                self.config["joint_attention_dim"],
+                dtype=dtype,
+                device=self.device,
+            ),
+            torch.randn(self.xB * batch_size, self.config["pooled_projection_dim"], dtype=dtype, device=self.device),
+            torch.randn(self.xB * batch_size, dtype=torch.float32, device=self.device),
+        )
+        return sample_input

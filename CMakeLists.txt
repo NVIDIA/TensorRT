@@ -18,6 +18,7 @@
 cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 include(cmake/modules/set_ifndef.cmake)
 include(cmake/modules/find_library_create_target.cmake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 
 set_ifndef(TRT_LIB_DIR ${CMAKE_BINARY_DIR})
 set_ifndef(TRT_OUT_DIR ${CMAKE_BINARY_DIR})
@@ -47,10 +48,10 @@ else()
     set(STATIC_LIB_EXT "a")
 endif()
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define NV_TENSORRT_.*")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define TRT_.*_ENTERPRISE")
 
 foreach(TYPE MAJOR MINOR PATCH BUILD)
-    string(REGEX MATCH "NV_TENSORRT_${TYPE} [0-9]+" TRT_TYPE_STRING ${VERSION_STRINGS})
+    string(REGEX MATCH "TRT_${TYPE}_ENTERPRISE [0-9]+" TRT_TYPE_STRING ${VERSION_STRINGS})
     string(REGEX MATCH "[0-9]+" TRT_${TYPE} ${TRT_TYPE_STRING})
 endforeach(TYPE)
 
@@ -143,20 +144,25 @@ if(BUILD_PARSERS)
     configure_protobuf(${PROTOBUF_VERSION})
 endif()
 
+# Define library names
+set(TRT_NVINFER_NAME "nvinfer")
+set(TRT_ONNXPARSER_NAME "nvonnxparser")
+
 # Windows library names have major version appended.
 if (MSVC)
-    set(nvinfer_lib_name "nvinfer_${TRT_SOVERSION}")
+    set(nvinfer_lib_name "${TRT_NVINFER_NAME}_${TRT_SOVERSION}${TRT_LIB_SUFFIX}")
     set(nvinfer_plugin_lib_name "nvinfer_plugin_${TRT_SOVERSION}")
     set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin_${TRT_SOVERSION}")
-    set(nvonnxparser_lib_name "nvonnxparser_${TRT_SOVERSION}")
+    set(nvonnxparser_lib_name "${TRT_ONNXPARSER_NAME}_${TRT_SOVERSION}${TRT_LIB_SUFFIX}")
+
 else()
-    set(nvinfer_lib_name "nvinfer")
+    set(nvinfer_lib_name ${TRT_NVINFER_NAME})
     set(nvinfer_plugin_lib_name "nvinfer_plugin")
     set(nvinfer_vc_plugin_lib_name "nvinfer_vc_plugin")
-    set(nvonnxparser_lib_name "nvonnxparser")
+    set(nvonnxparser_lib_name ${TRT_ONNXPARSER_NAME})
 endif()
 
-find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED ${TRT_LIB_DIR})
+find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED "${TRT_LIB_DIR}")
 
 if (DEFINED USE_CUGFX)
     find_library(CUDART_LIB cugfx_dll HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
@@ -217,13 +223,13 @@ endif()
 if(BUILD_PLUGINS)
     add_subdirectory(plugin)
 else()
-    find_library_create_target(nvinfer_plugin ${nvinfer_plugin_lib_name} SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
+    find_library_create_target(nvinfer_plugin ${nvinfer_plugin_lib_name} SHARED "${TRT_OUT_DIR}" "${TRT_LIB_DIR}")
 endif()
 
 if(BUILD_PARSERS)
     add_subdirectory(parsers)
 else()
-    find_library_create_target(nvonnxparser ${nvonnxparser_lib_name} SHARED ${TRT_OUT_DIR} ${TRT_LIB_DIR})
+    find_library_create_target(nvonnxparser ${nvonnxparser_lib_name} SHARED "${TRT_OUT_DIR}" "${TRT_LIB_DIR}")
 endif()
 
 if(BUILD_SAMPLES)

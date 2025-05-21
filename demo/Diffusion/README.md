@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.9 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.11 --single-branch
 cd TensorRT
 ```
 
@@ -49,7 +49,7 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.9.0.34
+tensorrt            10.11.0.33
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -199,12 +199,19 @@ Even faster image generation than LCM, producing coherent images in just 1 step.
 python3 demo_txt2img_xl.py "Einstein" --version xl-turbo --onnx-dir onnx-sdxl-turbo --engine-dir engine-sdxl-turbo --denoising-steps 1 --scheduler EulerA --guidance-scale 0.0 --width 512 --height 512
 ```
 
-### Generate an image guided by a text prompt using Stable Diffusion 3
+### Generate an image guided by a text prompt using Stable Diffusion 3 and its variants
 
-Run the command below to generate an image using Stable Diffusion 3
+Run the command below to generate an image using Stable Diffusion 3 and Stable Diffusion 3.5
 
 ```bash
+# Stable Diffusion 3
 python3 demo_txt2img_sd3.py "A vibrant street wall covered in colorful graffiti, the centerpiece spells \"SD3 MEDIUM\", in a storm of colors" --version sd3 --hf-token=$HF_TOKEN
+
+# Stable Diffusion 3.5-medium
+python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-medium --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN
+
+# Stable Diffusion 3.5-large
+python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-large --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN
 ```
 
 You can also specify an input image conditioning as shown below
@@ -212,6 +219,7 @@ You can also specify an input image conditioning as shown below
 ```bash
 wget https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png -O dog-on-bench.png
 
+# Stable Diffusion 3
 python3 demo_txt2img_sd3.py "dog wearing a sweater and a blue collar" --version sd3 --input-image dog-on-bench.png --hf-token=$HF_TOKEN
 ```
 
@@ -352,7 +360,7 @@ You can use the `--calibraton-dataset` flag to specify the path, which is set to
 python3 demo_img2img_flux.py "A robot made of exotic candies and chocolates of different kinds. The background is filled with confetti and celebratory gifts." --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --bf16 --denoising-steps 30  --download-onnx-models
 
 # FP8 using pre-exported ONNX models
-python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch
+python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch --quantization-level 4
 
 # FP8 using native ONNX export
 rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-dev-depth" --hf-token=$HF_TOKEN --guidance-scale 10 --control-image robot.png --quantization-level 4 --fp8 --denoising-steps 30
@@ -368,13 +376,13 @@ python3 demo_img2img_flux.py "A robot made of exotic candies" --version="flux.1-
 python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --bf16 --denoising-steps 30 --download-onnx-models
 
 # FP8 using pre-exported ONNX models
-python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp8 --denoising-steps 30 --download-onnx-models --build-static-batch --quantization-level 4
 
 # FP8 using native ONNX export
 rm -rf onnx/* engine/* && python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --quantization-level 4 --fp8 --denoising-steps 30 --calibration-dataset {custom/dataset/path}
 
 # FP4
-python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp4 --denoising-steps 30 --download-onnx-models
+python3 demo_img2img_flux.py "a robot made out of gold" --version="flux.1-dev-canny" --hf-token=$HF_TOKEN --guidance-scale 30 --control-image robot.png --fp4 --denoising-steps 30 --download-onnx-models --build-static-batch
 ```
 
 #### 4. Generate an Image Using Flux LoRA

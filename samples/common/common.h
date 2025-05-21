@@ -18,9 +18,7 @@
 #ifndef TENSORRT_COMMON_H
 #define TENSORRT_COMMON_H
 #include "NvInfer.h"
-#if !TRT_WINML
 #include "NvInferPlugin.h"
-#endif
 #include "logger.h"
 #include "sampleEntrypoints.h"
 #include "utils/timingCache.h"
@@ -1046,7 +1044,7 @@ inline int32_t getMaxPersistentCacheSize()
     CHECK(cudaGetDevice(&deviceIndex));
 
     int32_t maxPersistentL2CacheSize{};
-#if CUDART_VERSION >= 11030 && !TRT_WINML
+#if CUDART_VERSION >= 11030
     CHECK(cudaDeviceGetAttribute(&maxPersistentL2CacheSize, cudaDevAttrMaxPersistingL2CacheSize, deviceIndex));
 #endif
 

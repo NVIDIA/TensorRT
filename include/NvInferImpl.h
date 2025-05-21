@@ -110,6 +110,7 @@ class IPluginFactory;
 class IPluginLayer;
 class IPluginRegistry;
 class IPluginV2Layer;
+class IRuntimeConfig;
 
 namespace v_1_0
 {
@@ -207,6 +208,7 @@ enum class HardwareCompatibilityLevel : int32_t;
 enum class ExecutionContextAllocationStrategy : int32_t;
 enum class RuntimePlatform : int32_t;
 enum class TilingOptimizationLevel : int32_t;
+
 
 using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
@@ -331,6 +333,11 @@ public:
     virtual bool setExtraMemoryTarget(float target) noexcept = 0;
     virtual float getExtraMemoryTarget() const noexcept = 0;
     virtual bool isValid() const noexcept = 0;
+    // Added in TensorRT 10.11
+    TRT_NODISCARD virtual bool setShapeValuesV2(
+        char const* inputName, OptProfileSelector select, int64_t const* values, int32_t nbValues) noexcept = 0;
+    TRT_NODISCARD virtual int64_t const* getShapeValuesV2(
+        char const* inputName, OptProfileSelector select) const noexcept = 0;
 };
 
 class VCudaEngine : public VRoot
@@ -397,6 +404,12 @@ public:
     virtual int64_t getWeightStreamingScratchMemorySize() const noexcept = 0;
     virtual int64_t getDeviceMemorySizeV2() const noexcept = 0;
     virtual int64_t getDeviceMemorySizeForProfileV2(int32_t profileIndex) const noexcept = 0;
+    // Added in TensorRT 10.11
+    TRT_NODISCARD virtual int64_t const* getProfileTensorValuesV2(
+        char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept = 0;
+    TRT_NODISCARD virtual IExecutionContext* createExecutionContextWithRuntimeConfig(
+        IRuntimeConfig* runtimeConfig) noexcept = 0;
+    TRT_NODISCARD virtual IRuntimeConfig* createRuntimeConfig() noexcept = 0;
 };
 
 class VExecutionContext : public VRoot
@@ -452,6 +465,7 @@ public:
 
     // Added in TensorRT 10.1
     virtual void setDeviceMemoryV2(void* memory, int64_t size) noexcept = 0;
+    TRT_NODISCARD virtual IRuntimeConfig* getRuntimeConfig() const noexcept = 0;
 };
 
 class VEngineInspector : public VRoot
@@ -1283,6 +1297,15 @@ public:
     virtual IPluginRegistry& getPluginRegistry() noexcept = 0;
     virtual ICudaEngine* buildEngineWithConfig(INetworkDefinition& network, IBuilderConfig& config) noexcept = 0;
 };
+
+class VRuntimeConfig : public VRoot
+{
+public:
+    virtual IRuntimeConfig* getPImpl() noexcept = 0;
+    virtual void setExecutionContextAllocationStrategy(ExecutionContextAllocationStrategy strategy) noexcept = 0;
+    virtual ExecutionContextAllocationStrategy getExecutionContextAllocationStrategy() const noexcept = 0;
+};
+
 
 } // namespace apiv
 } // namespace nvinfer1

@@ -57,29 +57,29 @@ static const auto opt_profile_get_shape
 };
 
 static const auto opt_profile_set_shape_input = [](IOptimizationProfile& self, std::string const& inputName,
-                                                    std::vector<int32_t> const& min, std::vector<int32_t> const& opt,
-                                                    std::vector<int32_t> const& max) {
-    PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMIN, min.data(), min.size()),
+                                                    std::vector<int64_t> const& min, std::vector<int64_t> const& opt,
+                                                    std::vector<int64_t> const& max) {
+    PY_ASSERT_RUNTIME_ERROR(self.setShapeValuesV2(inputName.c_str(), OptProfileSelector::kMIN, min.data(), min.size()),
         "min input provided for shape tensor is inconsistent with other inputs.");
-    PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kOPT, opt.data(), opt.size()),
+    PY_ASSERT_RUNTIME_ERROR(self.setShapeValuesV2(inputName.c_str(), OptProfileSelector::kOPT, opt.data(), opt.size()),
         "opt input provided for shape tensor is inconsistent with other inputs.");
-    PY_ASSERT_RUNTIME_ERROR(self.setShapeValues(inputName.c_str(), OptProfileSelector::kMAX, max.data(), max.size()),
+    PY_ASSERT_RUNTIME_ERROR(self.setShapeValuesV2(inputName.c_str(), OptProfileSelector::kMAX, max.data(), max.size()),
         "max input provided for shape tensor is inconsistent with other inputs.");
 };
 
 static const auto opt_profile_get_shape_input
-    = [](IOptimizationProfile& self, std::string const& inputName) -> std::vector<std::vector<int32_t>> {
-    std::vector<std::vector<int32_t>> shapes{};
+    = [](IOptimizationProfile& self, std::string const& inputName) -> std::vector<std::vector<int64_t>> {
+    std::vector<std::vector<int64_t>> shapes{};
     int32_t const shapeSize = self.getNbShapeValues(inputName.c_str());
-    int32_t const* shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kMIN);
+    int64_t const* shapePtr = self.getShapeValuesV2(inputName.c_str(), OptProfileSelector::kMIN);
     // In the Python bindings, it is impossible to set only one shape in an optimization profile.
     if (shapePtr && shapeSize >= 0)
     {
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
-        shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kOPT);
+        shapePtr = self.getShapeValuesV2(inputName.c_str(), OptProfileSelector::kOPT);
         PY_ASSERT_RUNTIME_ERROR(shapePtr != nullptr, "Invalid shape for OPT.");
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
-        shapePtr = self.getShapeValues(inputName.c_str(), OptProfileSelector::kMAX);
+        shapePtr = self.getShapeValuesV2(inputName.c_str(), OptProfileSelector::kMAX);
         PY_ASSERT_RUNTIME_ERROR(shapePtr != nullptr, "Invalid shape for MAX.");
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
     }
@@ -189,7 +189,7 @@ std::vector<Dims> get_tensor_profile_shape(ICudaEngine& self, std::string const&
     return shapes;
 };
 
-std::vector<std::vector<int32_t>> get_tensor_profile_values(
+std::vector<std::vector<int64_t>> get_tensor_profile_values(
     ICudaEngine& self, int32_t profileIndex, std::string const& tensorName)
 {
     char const* const name = tensorName.c_str();
@@ -199,16 +199,16 @@ std::vector<std::vector<int32_t>> get_tensor_profile_values(
     PY_ASSERT_RUNTIME_ERROR(shape.nbDims >= 0, "Missing shape for input shape tensor");
     auto const shapeSize{utils::volume(shape)};
     PY_ASSERT_RUNTIME_ERROR(shapeSize >= 0, "Negative volume for input shape tensor");
-    std::vector<std::vector<int32_t>> shapes{};
+    std::vector<std::vector<int64_t>> shapes{};
 
     // In the Python bindings, it is impossible to set only one shape in an optimization profile.
-    int32_t const* shapePtr{self.getProfileTensorValues(name, profileIndex, OptProfileSelector::kMIN)};
+    int64_t const* shapePtr{self.getProfileTensorValuesV2(name, profileIndex, OptProfileSelector::kMIN)};
     if (shapePtr)
     {
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
-        shapePtr = self.getProfileTensorValues(name, profileIndex, OptProfileSelector::kOPT);
+        shapePtr = self.getProfileTensorValuesV2(name, profileIndex, OptProfileSelector::kOPT);
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
-        shapePtr = self.getProfileTensorValues(name, profileIndex, OptProfileSelector::kMAX);
+        shapePtr = self.getProfileTensorValuesV2(name, profileIndex, OptProfileSelector::kMAX);
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
     }
     return shapes;
@@ -1326,7 +1326,7 @@ void bindCore(py::module& m)
         .def("get_debug_state", &IExecutionContext::getDebugState, "name"_a, IExecutionContextDoc::get_debug_state)
         .def("set_all_tensors_debug_state", &IExecutionContext::setAllTensorsDebugState, "flag"_a,
             IExecutionContextDoc::set_all_tensors_debug_state)
-        ;
+        .def("get_runtime_config", &IExecutionContext::getRuntimeConfig, IExecutionContextDoc::get_runtime_config);
 
     py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
         ExecutionContextAllocationStrategyDoc::descr, py::module_local())
@@ -1335,6 +1335,7 @@ void bindCore(py::module& m)
             ExecutionContextAllocationStrategyDoc::ON_PROFILE_CHANGE)
         .value("USER_MANAGED", ExecutionContextAllocationStrategy::kUSER_MANAGED,
             ExecutionContextAllocationStrategyDoc::USER_MANAGED);
+
 
     py::enum_<SerializationFlag>(
         m, "SerializationFlag", py::arithmetic{}, SerializationFlagDoc::descr, py::module_local())
@@ -1380,6 +1381,16 @@ void bindCore(py::module& m)
         .value("INPUT", TensorIOMode::kINPUT, TensorIOModeDoc::INPUT)
         .value("OUTPUT", TensorIOMode::kOUTPUT, TensorIOModeDoc::OUTPUT);
 
+    py::class_<IRuntimeConfig>(m, "IRuntimeConfig", IRuntimeConfigDoc::descr, py::module_local())
+        .def("set_execution_context_allocation_strategy", &IRuntimeConfig::setExecutionContextAllocationStrategy,
+            IRuntimeConfigDoc::set_execution_context_allocation_strategy,
+            py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
+        .def("get_execution_context_allocation_strategy", &IRuntimeConfig::getExecutionContextAllocationStrategy,
+            IRuntimeConfigDoc::get_execution_context_allocation_strategy, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{});
+
+
     py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr, py::module_local())
         .def("__getitem__", lambdas::engine_getitem)
         .def_property_readonly("has_implicit_batch_dimension",
@@ -1391,9 +1402,10 @@ void bindCore(py::module& m)
             ICudaEngineDoc::create_serialization_config, py::keep_alive<0, 1>{})
         .def("serialize_with_config", &ICudaEngine::serializeWithConfig, ICudaEngineDoc::serialize_with_config,
             py::call_guard<py::gil_scoped_release>{})
-        .def("create_execution_context", &ICudaEngine::createExecutionContext, ICudaEngineDoc::create_execution_context,
-            py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC, py::keep_alive<0, 1>{},
-            py::call_guard<py::gil_scoped_release>{})
+        .def("create_execution_context",
+            py::overload_cast<ExecutionContextAllocationStrategy>(&ICudaEngine::createExecutionContext),
+            ICudaEngineDoc::create_execution_context, py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC,
+            py::keep_alive<0, 1>{}, py::call_guard<py::gil_scoped_release>{})
         .def("create_execution_context_without_device_memory",
             utils::deprecateMember(&ICudaEngine::createExecutionContextWithoutDeviceMemory, "create_execution_context"),
             ICudaEngineDoc::create_execution_context_without_device_memory, py::keep_alive<0, 1>{},
@@ -1522,6 +1534,11 @@ void bindCore(py::module& m)
             "weight_streaming_scratch_memory_size", &ICudaEngine::getWeightStreamingScratchMemorySize)
         // End weight streaming APIs
         .def("is_debug_tensor", &ICudaEngine::isDebugTensor, "name"_a, ICudaEngineDoc::is_debug_tensor)
+        .def("create_execution_context", py::overload_cast<IRuntimeConfig*>(&ICudaEngine::createExecutionContext),
+            ICudaEngineDoc::create_execution_context, py::arg("runtime_config") = nullptr, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
+        .def("create_runtime_config", &ICudaEngine::createRuntimeConfig, ICudaEngineDoc::create_runtime_config,
+            py::keep_alive<0, 1>{}, py::call_guard<py::gil_scoped_release>{})
 
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 

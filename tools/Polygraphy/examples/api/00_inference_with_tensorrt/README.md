@@ -45,4 +45,4 @@ engine to a file and see how you can load it again and run inference.
 ## Further Reading
 
 For more details on the Polygraphy Python API, see the
-[Polygraphy API reference](https://docs.nvidia.com/deeplearning/tensorrt/polygraphy/docs/index.html).
+[Polygraphy API reference](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/polygraphy/index.html).

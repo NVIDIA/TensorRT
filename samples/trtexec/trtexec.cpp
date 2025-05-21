@@ -31,9 +31,7 @@
 #include <vector>
 
 #include "NvInfer.h"
-#if !TRT_WINML
 #include "NvInferPlugin.h"
-#endif
 
 #include "buffers.h"
 #include "common.h"
@@ -52,17 +50,28 @@ namespace
 {
 using LibraryPtr = std::unique_ptr<DynamicLibrary>;
 
+std::string const TRT_NVINFER_NAME = "nvinfer";
+std::string const TRT_ONNXPARSER_NAME = "nvonnxparser";
+std::string const TRT_LIB_SUFFIX = "";
+
 #if !TRT_STATIC
 #if defined(_WIN32)
-std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"nvinfer_plugin_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
-std::string const kNVINFER_LIBNAME = std::string{"nvinfer_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
-std::string const kNVONNXPARSER_LIBNAME = std::string{"nvonnxparser_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
-std::string const kNVINFER_LEAN_LIBNAME = std::string{"nvinfer_lean_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
-std::string const kNVINFER_DISPATCH_LIBNAME = std::string{"nvinfer_dispatch_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVINFER_PLUGIN_LIBNAME
+    = std::string{"nvinfer_plugin_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVINFER_LIBNAME = std::string(TRT_NVINFER_NAME) + std::string{"_"}
+    + std::to_string(NV_TENSORRT_MAJOR) + TRT_LIB_SUFFIX + std::string{".dll"};
+std::string const kNVONNXPARSER_LIBNAME = std::string(TRT_ONNXPARSER_NAME) + std::string{"_"}
+    + std::to_string(NV_TENSORRT_MAJOR) + TRT_LIB_SUFFIX + std::string{".dll"};
+std::string const kNVINFER_LEAN_LIBNAME
+    = std::string{"nvinfer_lean_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
+std::string const kNVINFER_DISPATCH_LIBNAME
+    = std::string{"nvinfer_dispatch_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
 #else
 std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"libnvinfer_plugin.so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVINFER_LIBNAME = std::string{"libnvinfer.so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVONNXPARSER_LIBNAME = std::string{"libnvonnxparser.so."} + std::to_string(NV_TENSORRT_MAJOR);
+std::string const kNVINFER_LIBNAME
+    = std::string{"lib"} + std::string(TRT_NVINFER_NAME) + std::string{".so."} + std::to_string(NV_TENSORRT_MAJOR);
+std::string const kNVONNXPARSER_LIBNAME
+    = std::string{"lib"} + std::string(TRT_ONNXPARSER_NAME) + std::string{".so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_LEAN_LIBNAME = std::string{"libnvinfer_lean.so."} + std::to_string(NV_TENSORRT_MAJOR);
 std::string const kNVINFER_DISPATCH_LIBNAME
     = std::string{"libnvinfer_dispatch.so."} + std::to_string(NV_TENSORRT_MAJOR);
@@ -272,19 +281,14 @@ int main(int argc, char** argv)
         {
             sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
         }
-#if TRT_WINML
-        std::string const jitInVersion = " JIT";
-#else
         std::string const jitInVersion;
         setCudaDevice(options.system.device, sample::gLogInfo);
-#endif
         sample::gLogInfo << std::endl;
         sample::gLogInfo << "TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "."
                          << NV_TENSORRT_PATCH << jitInVersion << std::endl;
 
         // Record specified runtime
         gUseRuntime = options.build.useRuntime;
-#if !TRT_WINML
 #if !TRT_STATIC
         LibraryPtr nvinferPluginLib{};
 #endif
@@ -311,7 +315,6 @@ int main(int argc, char** argv)
         {
             throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
         }
-#endif // !TRT_WINML
         if (options.build.safe && !sample::hasSafeRuntime())
         {
             sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
@@ -336,20 +339,9 @@ int main(int argc, char** argv)
             return sample::gLogger.reportPass(sampleTest);
         }
 
-#if TRT_WINML
-        if (options.build.skipInference)
-        {
-            sample::gLogInfo << "Skipped inference phase since --skipInference is added." << std::endl;
-            return sample::gLogger.reportPass(sampleTest);
-        }
 
-        setCudaDevice(options.system.device, sample::gLogInfo);
-#endif
-
-#if !TRT_WINML
         // dynamicPlugins may have been updated by getEngineBuildEnv above
         bEnv->engine.setDynamicPlugins(options.system.dynamicPlugins);
-#endif // !TRT_WINML
        // When some options are enabled, engine deserialization is not supported on the platform that the engine was
        // built.
         bool const supportDeserialization = !options.build.safe && !options.build.buildDLAStandalone
@@ -446,7 +438,6 @@ int main(int argc, char** argv)
         if (profilerEnabled && !options.inference.rerun)
         {
             iEnv->profiler.reset(new Profiler);
-#if !TRT_WINML
             if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
             {
                 options.inference.graph = false;
@@ -455,7 +446,6 @@ int main(int argc, char** argv)
                        "and disabled CUDA graph."
                     << std::endl;
             }
-#endif
         }
 
         if (!setUpInference(*iEnv, options.inference, options.system))
@@ -501,7 +491,6 @@ int main(int argc, char** argv)
             iEnv->profiler.reset(profiler);
             iEnv->contexts.front()->setProfiler(profiler);
             iEnv->contexts.front()->setEnqueueEmitsProfile(false);
-#if !TRT_WINML
             if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
             {
                 options.inference.graph = false;
@@ -510,7 +499,6 @@ int main(int argc, char** argv)
                        "and disabled CUDA graph."
                     << std::endl;
             }
-#endif
             if (!runInference(options.inference, *iEnv, options.system.device, trace))
             {
                 sample::gLogError << "Error occurred during inference" << std::endl;

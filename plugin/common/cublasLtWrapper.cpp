@@ -29,13 +29,13 @@
 #define dllGetSym(handle, name) GetProcAddress(static_cast<HMODULE>(handle), name)
 auto const kCUBLASLT_PLUGIN_LIBNAME
     = std::string{"cublasLt64_"} + std::to_string(nvinfer1::getCudaLibVersionMaj()) + ".dll";
-#else
+#else // defined(_WIN32)
 #include <dlfcn.h>
 #define dllOpen(name) dlopen(name, RTLD_LAZY)
 #define dllClose(handle) dlclose(handle)
 #define dllGetSym(handle, name) dlsym(handle, name)
 auto const kCUBLASLT_PLUGIN_LIBNAME = std::string{"libcublasLt.so."} + std::to_string(nvinfer1::getCudaLibVersionMaj());
-#endif
+#endif // defined(_WIN32)
 
 namespace nvinfer1::pluginInternal
 {
