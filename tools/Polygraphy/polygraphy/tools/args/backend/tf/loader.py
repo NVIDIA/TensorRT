@@ -190,11 +190,11 @@ class TfLoadArgs(BaseArgs):
         model_file = self.arg_groups[ModelArgs].path
         model_type = self.arg_groups[ModelArgs].model_type
 
+        G_LOGGER.verbose(
+            f"Loading a TensorFlow checkpoint from {model_file}. Please ensure you are not using the --use-subprocess flag",
+            mode=LogMode.ONCE,
+        )
         if model_type == "ckpt":
-            G_LOGGER.verbose(
-                f"Loading a TensorFlow checkpoint from {model_file}. Please ensure you are not using the --use-subprocess flag",
-                mode=LogMode.ONCE,
-            )
             script.add_import(imports=["GraphFromCkpt"], frm="polygraphy.backend.tf")
             loader_id = "load_ckpt"
             loader_str = make_invocable("GraphFromCkpt", model_file, self.ckpt)
