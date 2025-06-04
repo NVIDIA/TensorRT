@@ -1,0 +1,39 @@
+name: Label New Issues
+
+on:
+  issues:
+    types: [opened] 
+
+permissions:
+  issues: write 
+  contents: read 
+
+jobs:
+  label-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private action repository
+        uses: actions/checkout@v4
+        with:
+          repository: poweiw/goggles_action
+          path: ./.github/actions/ai_labeler_action # local path to store the action
+          token: ${{ secrets.ACTION_REPO_PAT }} # token to access poweiw/goggles_action
+          ref: main 
+
+      - name: AI Label Issue
+        uses: ./.github/actions/ai_labeler_action/action_llm_label 
+        with:
+          ACTION_REPO_PAT: ${{ secrets.ACTION_REPO_PAT }}
+          LLM_MODEL_NAME: ${{ secrets.LLM_MODEL_NAME }}
+          LLM_TOKEN_SERVER_URL: ${{ secrets.LLM_TOKEN_SERVER_URL }}
+          LLM_TOKEN_CLIENT_ID: ${{ secrets.LLM_TOKEN_CLIENT_ID }}
+          LLM_TOKEN_CLIENT_SECRET: ${{ secrets.LLM_TOKEN_CLIENT_SECRET }}
+          LLM_GENERATE_URL: ${{ secrets.LLM_GENERATE_URL }}
+          LLM_TOKEN_SCOPE: ${{ secrets.LLM_TOKEN_SCOPE }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          ACTIONS_STEP_VERBOSE: false 
