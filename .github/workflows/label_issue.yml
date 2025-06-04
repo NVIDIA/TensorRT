@@ -23,7 +23,7 @@ jobs:
       - name: AI Label Issue
         uses: ./.github/actions/ai_labeler_action/action_llm_label 
         with:
-          ACTION_REPO_PAT: ${{ secrets.ACTION_REPO_PAT }}
+          ACTION_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LLM_MODEL_NAME: ${{ secrets.LLM_MODEL_NAME }}
           LLM_TOKEN_SERVER_URL: ${{ secrets.LLM_TOKEN_SERVER_URL }}
           LLM_TOKEN_CLIENT_ID: ${{ secrets.LLM_TOKEN_CLIENT_ID }}
