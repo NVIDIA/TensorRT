@@ -16,12 +16,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: poweiw/goggles_action
-          path: ./.github/actions/ai_labeler_action # local path to store the action
+          path: ./.github/actions/goggles_action # local path to store the action
           token: ${{ secrets.ACTION_REPO_PAT }} # token to access poweiw/goggles_action
           ref: main 
 
       - name: AI Label Issue
-        uses: ./.github/actions/ai_labeler_action/action_llm_label 
+        uses: ./.github/actions/goggles_action/actions/llm_label 
         with:
           ACTION_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LLM_MODEL_NAME: ${{ secrets.LLM_MODEL_NAME }}
