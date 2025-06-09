@@ -18,7 +18,7 @@ jobs:
           repository: poweiw/goggles_action
           path: ./.github/actions/goggles_action # local path to store the action
           token: ${{ secrets.ACTION_REPO_PAT }} # token to access poweiw/goggles_action
-          ref: main 
+          ref: v1.0.0
 
       - name: AI Label Issue
         uses: ./.github/actions/goggles_action/actions/llm_label 
