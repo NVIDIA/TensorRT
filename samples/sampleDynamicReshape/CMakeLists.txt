@@ -23,6 +23,7 @@ add_dependencies(tensorrt_samples sample_dynamic_reshape)
 install(
     TARGETS sample_dynamic_reshape
     OPTIONAL
+    COMPONENT full
 )
 
 else()

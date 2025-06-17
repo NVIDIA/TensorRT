@@ -9,6 +9,7 @@ ftfy
 matplotlib
 nvtx
 onnx==1.17.0
+onnxconverter-common
 onnxruntime==1.19.2
 opencv-python-headless==4.8.0.74
 scipy

@@ -17,9 +17,10 @@
 from pathlib import Path
 
 from polygraphy import mod, util
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.logger import G_LOGGER
 
-trt = mod.lazy_import("tensorrt>=10.0")
+trt = lazy_import_trt()
 
 @mod.export()
 def FileReader(

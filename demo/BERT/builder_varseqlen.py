@@ -572,7 +572,7 @@ def main():
     parser.add_argument(
         "-w",
         "--workspace-size",
-	help="Workspace size in MiB for building the BERT engine (default: unlimited)",
+        help="Workspace size in MiB for building the BERT engine (default: unlimited)",
         type=int,
     )
     parser.add_argument(

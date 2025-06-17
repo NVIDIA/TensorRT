@@ -150,22 +150,24 @@ inline void caughtError(std::exception const& e)
 } // namespace nvinfer1
 
 #define PLUGIN_API_CHECK(condition)                                                                                    \
+    do                                                                                                                 \
     {                                                                                                                  \
         if ((condition) == false)                                                                                      \
         {                                                                                                              \
             nvinfer1::plugin::logError(#condition, __FILE__, FN_NAME, __LINE__);                                       \
             return;                                                                                                    \
         }                                                                                                              \
-    }
+    } while (0)
 
 #define PLUGIN_API_CHECK_RETVAL(condition, retval)                                                                     \
+    do                                                                                                                 \
     {                                                                                                                  \
         if ((condition) == false)                                                                                      \
         {                                                                                                              \
             nvinfer1::plugin::logError(#condition, __FILE__, FN_NAME, __LINE__);                                       \
             return retval;                                                                                             \
         }                                                                                                              \
-    }
+    } while (0)
 
 #define PLUGIN_API_CHECK_ENUM_RANGE(Type, val) PLUGIN_API_CHECK(int32_t(val) >= 0 && int32_t(val) < EnumMax<Type>())
 #define PLUGIN_API_CHECK_ENUM_RANGE_RETVAL(Type, val, retval)                                                          \
@@ -182,6 +184,7 @@ inline void caughtError(std::exception const& e)
     } while (0)
 
 #define PLUGIN_CUASSERT(status_)                                                                                       \
+    do                                                                                                                 \
     {                                                                                                                  \
         auto s_ = status_;                                                                                             \
         if (s_ != cudaSuccess)                                                                                         \
@@ -189,7 +192,7 @@ inline void caughtError(std::exception const& e)
             char const* msg = cudaGetErrorString(s_);                                                                  \
             nvinfer1::plugin::throwCudaError(__FILE__, FN_NAME, __LINE__, s_, msg);                                    \
         }                                                                                                              \
-    }
+    } while (0)
 
 #define GET_MACRO(_1, _2, NAME, ...) NAME
 #define PLUGIN_VALIDATE(...) GET_MACRO(__VA_ARGS__, PLUGIN_VALIDATE_MSG, PLUGIN_VALIDATE_DEFAULT, )(__VA_ARGS__)
@@ -198,36 +201,41 @@ inline void caughtError(std::exception const& e)
 // PLUGIN_ASSERT will eventually perform this function, at which point PLUGIN_VALIDATE
 // will be removed.
 #define PLUGIN_VALIDATE_DEFAULT(condition)                                                                             \
+    do                                                                                                                 \
     {                                                                                                                  \
         if (!(condition))                                                                                              \
         {                                                                                                              \
             nvinfer1::plugin::throwPluginError(__FILE__, FN_NAME, __LINE__, 0, #condition);                            \
         }                                                                                                              \
-    }
+    } while (0)
 
 #define PLUGIN_VALIDATE_MSG(condition, msg)                                                                            \
+    do                                                                                                                 \
     {                                                                                                                  \
         if (!(condition))                                                                                              \
         {                                                                                                              \
             nvinfer1::plugin::throwPluginError(__FILE__, FN_NAME, __LINE__, 0, msg);                                   \
         }                                                                                                              \
-    }
+    } while (0)
 
+// Consider wrapping in do{...} while(0)
 // Logs failed assertion and aborts.
 // Aborting is undesirable and will be phased-out from the plugin module, at which point
 // PLUGIN_ASSERT will perform the same function as PLUGIN_VALIDATE.
 #define PLUGIN_ASSERT(assertion)                                                                                       \
+    do                                                                                                                 \
     {                                                                                                                  \
         if (!(assertion))                                                                                              \
         {                                                                                                              \
             nvinfer1::plugin::reportAssertion(#assertion, __FILE__, __LINE__);                                         \
         }                                                                                                              \
-    }
+    } while (0)
 
 #define PLUGIN_FAIL(msg)                                                                                               \
+    do                                                                                                                 \
     {                                                                                                                  \
         nvinfer1::plugin::reportAssertion(msg, __FILE__, __LINE__);                                                    \
-    }
+    } while (0)
 
 #define PLUGIN_ERROR(msg)                                                                                              \
     {                                                                                                                  \
@@ -235,10 +243,11 @@ inline void caughtError(std::exception const& e)
     }
 
 #define PLUGIN_CUERROR(status_)                                                                                        \
+    do                                                                                                                 \
     {                                                                                                                  \
         auto s_ = status_;                                                                                             \
         if (s_ != 0)                                                                                                   \
             nvinfer1::plugin::logError(#status_ " failure.", __FILE__, FN_NAME, __LINE__);                             \
-    }
+    } while (0)
 
 #endif /*VC_CHECK_MACROS_PLUGIN_H*/

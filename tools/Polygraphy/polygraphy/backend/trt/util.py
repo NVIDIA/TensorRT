@@ -20,12 +20,13 @@ import os
 import signal
 
 from polygraphy import config, mod, util, cuda
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.common import TensorMetadata
 from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER, LogMode
 
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 np = mod.lazy_import("numpy")
 
 

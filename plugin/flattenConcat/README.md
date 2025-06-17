@@ -1,4 +1,6 @@
-# flattenConcat
+# flattenConcat Plugin [DEPRECATED]
+
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. `IConcatenationLayer` can be used as an alternative as appropriate to replace its functionality.**
 
 **Table Of Contents**
 - [Description](#description)
@@ -167,6 +169,9 @@ documentation.
 
 
 ## Changelog
+
+May 2025
+Add deprecation note.
 
 May 2019
 This is the first release of this `README.md` file.

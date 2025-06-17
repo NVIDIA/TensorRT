@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+include(ShouldCompileKernel)
+
 if (${TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW})
 
 option(TRT_BUILD_INCLUDE_BERT_QKV_PLUGIN "Build the BERT QKV to Context Plugin and related plugins." ON)
@@ -102,11 +104,12 @@ target_include_directories(trt_vc_plugins PUBLIC ${trt_plugin_include_dirs})
 target_link_libraries(trt_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
 target_link_libraries(trt_vc_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
 
-# Use true link dependencies on the global definitions and cudart_static.
-target_link_libraries(trt_plugins PUBLIC trt_global_definitions CUDA::cudart_static)
-target_link_libraries(trt_vc_plugins PUBLIC trt_global_definitions CUDA::cudart_static)
+# Use true link dependencies on the global definitions and cudart.
+target_link_libraries(trt_plugins PUBLIC trt_global_definitions TRT::cudart)
+target_link_libraries(trt_vc_plugins PUBLIC trt_global_definitions TRT::cudart)
 
 foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
+    get_numeric_sm(${SM} "SM")
     target_compile_definitions(trt_plugins PUBLIC "ENABLE_SM${SM}")
     target_compile_definitions(trt_vc_plugins PUBLIC "ENABLE_SM${SM}")
 endforeach()
@@ -144,7 +147,7 @@ endif()
 
 set(trt_plugin_dependencies
     tensorrt
-    CUDA::cudart_static
+    TRT::cudart
     trt_global_definitions
 )
 
@@ -202,7 +205,7 @@ set_target_properties(
 ### Static Plugin Setup
 set(trt_plugin_static_dependencies
     tensorrt_static
-    CUDA::cudart_static
+    TRT::cudart
     trt_global_definitions
 )
 
@@ -273,8 +276,15 @@ if(NOT ${TRT_BUILD_ENABLE_STATIC_LIBS})
 endif()
 
 install(
-    TARGETS tensorrt_plugins tensorrt_plugins_static tensorrt_plugins_internal tensorrt_vc_plugins tensorrt_vc_plugins_static
+    TARGETS tensorrt_plugins tensorrt_plugins_static tensorrt_vc_plugins tensorrt_vc_plugins_static
     OPTIONAL
+    COMPONENT release
+)
+
+install(
+    TARGETS tensorrt_plugins_internal
+    OPTIONAL
+    COMPONENT full
 )
 
 else() # TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW
@@ -295,7 +305,8 @@ if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
 endif()
 
 foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
-  set(ENABLED_SMS "${ENABLED_SMS} -DENABLE_SM${SM}")
+    get_numeric_sm(${SM} "SM")
+    set(ENABLED_SMS "${ENABLED_SMS} -DENABLE_SM${SM}")
 endforeach()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ENABLED_SMS}")

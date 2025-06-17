@@ -1,4 +1,4 @@
-# Efficient NMS Plugin
+# Efficient NMS Plugin [DEPRECATED]
 
 #### Table of Contents
 - [Description](#description)
@@ -16,7 +16,7 @@
 
 ## Description
 
-> NOTE: `EfficientNMSONNXPlugin` is deprecated since TensorRT 9.0. Its functionality has been superseded by the `INMSLayer`.
+> NOTE: `EfficientNMSONNXPlugin` is deprecated since TensorRT 9.0. Its functionality has been superseded by the `INMSLayer`. `EfficientNMS_TRT` is deprecated since TensorRT 10.12; `INMSLayer` can be used as appropriate to replace its functionality.
 
 This TensorRT plugin implements an efficient algorithm to perform Non Maximum Suppression for object detection networks.
 
@@ -172,6 +172,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 documentation.
 
 ## Changelog
+
+May 2025
+Add deprecation note for the `EfficientNMS_TRT` plugin.
 
 June 2023
 Add deprecation note for the `EfficientNMSONNXPlugin` plugin.

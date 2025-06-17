@@ -148,7 +148,7 @@ int32_t ScatterElementsPluginV3::onShapeChange(
     PLUGIN_ASSERT(in[1].dims.nbDims == rank);
     // rank and shape of updates should be same as indices
     PLUGIN_ASSERT(in[2].dims.nbDims == rank);
-    PLUGIN_VALIDATE(std::equal(in[2].dims.d, in[2].dims.d + rank, in[1].dims.d))
+    PLUGIN_VALIDATE(std::equal(in[2].dims.d, in[2].dims.d + rank, in[1].dims.d));
     return pluginStatus_t::STATUS_SUCCESS;
 }
 

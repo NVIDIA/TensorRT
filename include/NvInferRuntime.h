@@ -1377,7 +1377,8 @@ using TempfileControlFlags = uint32_t;
 //! In interfaces that refer to "components per element", that's the value of V above.
 //!
 //! For more information about data formats, see the topic "Data Format Description" located in the
-//! TensorRT Developer Guide. https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#data-format-desc
+//! TensorRT Developer Guide.
+//! https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/advanced.html#i-o-formats
 //!
 enum class TensorFormat : int32_t
 {
@@ -1403,7 +1404,7 @@ enum class TensorFormat : int32_t
     //! Vector-major format with four scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This format requires INT8, FP16, or BF16 and at least three dimensions.
+    //! This format requires INT8 and at least three dimensions.
     //! For INT8, the length of the vector dimension must be a build-time constant.
     //!
     //! Deprecated usage:
@@ -1418,9 +1419,8 @@ enum class TensorFormat : int32_t
     //! Vector-major format with 16 scalars per vector.
     //! Vector dimension is third to last.
     //!
-    //! This format requires FP16 and at least three dimensions.
-    //!
-    //! For DLA usage, this format maps to the native feature format for FP16,
+    //! This format is only supported by DLA and requires FP16 and at least three dimensions.
+    //! This format maps to the native feature format for FP16,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
     kCHW16 = 4,
 
@@ -1909,6 +1909,9 @@ public:
     //!
     //! If an error recorder has been set for the runtime, it will also be passed to the engine.
     //!
+    //! \warning Destroying the IRuntime before destroying all associated ICudaEngine instances results in undefined
+    //! behavior.
+    //!
     //! \param blob The memory that holds the serialized engine.
     //! \param size The size of the memory.
     //!
@@ -1926,6 +1929,9 @@ public:
     //! engine.
     //!
     //! This deserialization path will reduce host memory usage when weight streaming is enabled.
+    //!
+    //! \warning Destroying the IRuntime before destroying all associated ICudaEngine instances results in undefined
+    //! behavior.
     //!
     //! \param streamReader a read-only stream from which TensorRT will deserialize a
     //!        previously serialized engine.
@@ -1949,6 +1955,9 @@ public:
     //!
     //! This deserialization path will reduce engine load time when applied with GDS (GPU Direct storage), or when
     //! weight streaming is enabled.
+    //!
+    //! \warning Destroying the IRuntime before destroying all associated ICudaEngine instances results in undefined
+    //! behavior.
     //!
     //! \param streamReader a read-only stream from which TensorRT will deserialize a previously serialized engine.
     //!
@@ -4083,7 +4092,7 @@ public:
     //!        If currentMemory is known to be big enough, one option is to return currentMemory.
     //!
     //! \param tensorName name of the output tensor.
-    //! \param currentMemory points to the address set by IExectionContext::setTensorAddress.
+    //! \param currentMemory points to the address set by IExecutionContext::setTensorAddress.
     //! \param size number of bytes required. Always positive, even for an empty tensor.
     //! \param alignment required alignment of the allocation.
     //! \param stream The stream in which to execute the kernels.
@@ -4270,7 +4279,7 @@ public:
     //! Releasing or otherwise using the memory for other purposes, including using it in another execution context
     //! running in parallel, during this time will result in undefined behavior.
     //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superceded by setDeviceMemoryV2().
+    //! \deprecated Deprecated in TensorRT 10.1. Superseded by setDeviceMemoryV2().
     //!
     //! \warning Weight streaming related scratch memory will be allocated by TensorRT if the memory is set by this API.
     //!          Please use setDeviceMemoryV2() instead.
@@ -5026,20 +5035,9 @@ public:
     }
 
     //!
-    //! Turn the debug state of all debug tensors on or off.
+    //! \brief Get the debug state.
     //!
-    //! \param flag true if turning on debug state, false if turning off debug state.
-    //!
-    //! \return true if successful, false otherwise.
-    //!
-    //! The default is off.
-    bool setAllTensorsDebugState(bool flag) noexcept
-    {
-        return mImpl->setAllTensorsDebugState(flag);
-    }
-
-    //!
-    //! Get the debug state.
+    //! \param name Name of target tensor.
     //!
     //! \return true if there is a debug tensor with the given name and it has debug state turned on.
     //!
@@ -5056,6 +5054,45 @@ public:
     IRuntimeConfig* getRuntimeConfig() const noexcept
     {
         return mImpl->getRuntimeConfig();
+    }
+
+    //! \brief Turn the debug state of all debug tensors on or off.
+    //!
+    //! \param flag true if turning on debug state, false if turning off debug state.
+    //!
+    //! \return true if successful, false otherwise.
+    //!
+    //! The default is off.
+    //!
+    bool setAllTensorsDebugState(bool flag) noexcept
+    {
+        return mImpl->setAllTensorsDebugState(flag);
+    }
+
+    //!
+    //! \brief Turn the debug state of unfused tensors on or off.
+    //!
+    //! The default is off.
+    //!
+    //! \param flag true if turning on debug state, false if turning off debug state.
+    //!
+    //! \return true if successful, false otherwise.
+    //!
+    //! \see INetworkDefinition::markUnfusedTensorsAsDebugTensors()
+    //!
+    bool setUnfusedTensorsDebugState(bool flag) noexcept
+    {
+        return mImpl->setUnfusedTensorsDebugState(flag);
+    }
+
+    //!
+    //! \brief Get the debug state of unfused tensors.
+    //!
+    //! \return true if unfused tensors debug state is on. False if unfused tensors debug state is off.
+    //!
+    bool getUnfusedTensorsDebugState() const noexcept
+    {
+        return mImpl->getUnfusedTensorsDebugState();
     }
 
 protected:
@@ -5329,7 +5366,7 @@ protected:
 };
 
 //! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
-//! The name v_1_0 may change in future versions of TensoRT.
+//! The name v_1_0 may change in future versions of TensorRT.
 namespace v_1_0
 {
 
@@ -5413,7 +5450,8 @@ public:
     //!         If an allocation request cannot be satisfied, nullptr must be returned.
     //!         If a non-null address is returned, it is guaranteed to have the specified alignment.
     //!
-    //! \note The implementation must guarantee thread safety for concurrent allocateAsync/deallocateAsync/reallocate requests.
+    //! \note The implementation must guarantee thread safety for concurrent allocateAsync/deallocateAsync/reallocate
+    //! requests.
     //!
     //! \usage
     //! - Allowed context for the API call

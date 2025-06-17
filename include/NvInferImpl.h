@@ -34,11 +34,13 @@ class IProgressMonitor;
 }
 using IProgressMonitor = v_1_0::IProgressMonitor;
 
+#if !STRIP_TRT_RTX_INTERNAL_API
 namespace v_1_0
 {
 class IAlgorithmSelector;
 }
 using IAlgorithmSelector = v_1_0::IAlgorithmSelector;
+#endif // !STRIP_TRT_RTX_INTERNAL_API
 
 namespace v_1_0
 {
@@ -59,10 +61,12 @@ class IDebugListener;
 using IDebugListener = v_1_0::IDebugListener;
 
 class IActivationLayer;
+#if !STRIP_TRT_RTX_INTERNAL_API
 class IAlgorithm;
 class IAlgorithmContext;
 class IAlgorithmIOInfo;
 class IAlgorithmVariant;
+#endif // !STRIP_TRT_RTX_INTERNAL_API
 class IAssertionLayer;
 class IBuilder;
 class IBuilderConfig;
@@ -89,7 +93,9 @@ class ICastLayer;
 class IIfConditional;
 class IIfConditionalInputLayer;
 class IIfConditionalOutputLayer;
+#if !STRIP_TRT_RTX_INTERNAL_API
 class IInt8Calibrator;
+#endif // !STRIP_TRT_RTX_INTERNAL_API
 class IIteratorLayer;
 class ILayer;
 class ILoop;
@@ -169,7 +175,9 @@ class Weights;
 enum class ActivationType : int32_t;
 enum class BoundingBoxFormat : int32_t;
 enum class BuilderFlag : int32_t;
+#if !STRIP_TRT_RTX_INTERNAL_API
 enum class CalibrationAlgoType : int32_t;
+#endif // !STRIP_TRT_RTX_INTERNAL_API
 enum class CumulativeOperation : int32_t;
 enum class DeviceType : int32_t;
 enum class DimensionOperation : int32_t;
@@ -462,10 +470,10 @@ public:
     virtual bool getDebugState(char const* name) const noexcept = 0;
     virtual bool setAllTensorsDebugState(bool flag) noexcept = 0;
     virtual size_t updateDeviceMemorySizeForShapes() noexcept = 0;
-
-    // Added in TensorRT 10.1
     virtual void setDeviceMemoryV2(void* memory, int64_t size) noexcept = 0;
     TRT_NODISCARD virtual IRuntimeConfig* getRuntimeConfig() const noexcept = 0;
+    virtual bool setUnfusedTensorsDebugState(bool flag) noexcept = 0;
+    virtual bool getUnfusedTensorsDebugState() const noexcept = 0;
 };
 
 class VEngineInspector : public VRoot
@@ -507,6 +515,7 @@ public:
     virtual void setDimensionName(int32_t index, char const* name) noexcept = 0;
     virtual char const* getDimensionName(int32_t index) const noexcept = 0;
 };
+
 class VLayer : public VRoot
 {
 public:
@@ -1147,8 +1156,11 @@ public:
         ITensor& input, int32_t axis, int32_t blockSize, DataType toType, DataType scaleType) noexcept = 0;
     virtual ICumulativeLayer* addCumulative(
         ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept = 0;
+    virtual bool markUnfusedTensorsAsDebugTensors() noexcept = 0;
+    virtual bool unmarkUnfusedTensorsAsDebugTensors() noexcept = 0;
 };
 
+#if !STRIP_TRT_RTX_INTERNAL_API
 class VAlgorithmIOInfo : public VRoot
 {
 public:
@@ -1182,6 +1194,8 @@ public:
     virtual std::size_t getWorkspaceSize() const noexcept = 0;
     virtual IAlgorithmIOInfo const* getAlgorithmIOInfoByIndex(int32_t index) const noexcept = 0;
 };
+
+#endif // !STRIP_TRT_RTX_INTERNAL_API
 
 class VTimingCache : public VRoot
 {

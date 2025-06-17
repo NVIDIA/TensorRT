@@ -48,6 +48,36 @@ class TestSessionFromOnnx:
         assert isinstance(sess, onnxrt.InferenceSession)
         assert sess.get_providers() == expected
 
+    @pytest.mark.skipif(
+        "TensorrtExecutionProvider" not in onnxrt.get_available_providers(),
+        reason="Skip test if TensorrtExecutionProvider is not available",
+    )
+    @pytest.mark.parametrize(
+        "providers,expected_dict",
+        [
+            # Searches for 'tensorrt' as the execution provider's name
+            (["tensorrt", "cpu"], {"TensorrtExecutionProvider": {}, "CPUExecutionProvider": {}}),
+            # Searches for the execution provider's name if the item is a tuple in the format (EP name, EP options)
+            (
+                    [("TensorrtExecutionProvider", {"trt_op_types_to_exclude": "Add"}), "CPUExecutionProvider"],
+                    {"TensorrtExecutionProvider": {"trt_op_types_to_exclude": "Add"}, "CPUExecutionProvider": {}}
+            ),
+        ],
+    )
+    def test_provider_with_options(self, providers, expected_dict):
+        model = ONNX_MODELS["identity"]
+        loader = SessionFromOnnx(model.loader, providers=providers)
+        sess = loader()
+
+        assert sess
+        assert isinstance(sess, onnxrt.InferenceSession)
+        assert sess.get_providers() == list(expected_dict.keys())
+
+        provider_options = sess.get_provider_options()
+        for k, v in provider_options.items():
+            if expected_dict.get(k, None):
+                assert set(expected_dict[k].items()).issubset(v.items())
+
     def test_invalid_providers_raise_errors(self):
         model = ONNX_MODELS["identity"]
         loader = SessionFromOnnx(model.loader, providers=["cpu", "not_a_real_provider"])

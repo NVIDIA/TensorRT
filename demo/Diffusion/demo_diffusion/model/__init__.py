@@ -30,6 +30,7 @@ from demo_diffusion.model.diffusion_transformer import (
     FluxTransformerModel,
     SD3_MMDiTModel,
     SD3TransformerModel,
+    SD3TransformerModelControlNet,
 )
 from demo_diffusion.model.gan import VQGANModel
 from demo_diffusion.model.load import unload_torch_model
@@ -38,6 +39,7 @@ from demo_diffusion.model.scheduler import make_scheduler
 from demo_diffusion.model.t5 import T5Model
 from demo_diffusion.model.tokenizer import make_tokenizer
 from demo_diffusion.model.unet import (
+    UNet2DConditionControlNetModel,
     UNetCascadeModel,
     UNetModel,
     UNetTemporalModel,
@@ -69,6 +71,7 @@ __all__ = [
     "SD3_MMDiTModel",
     "FluxTransformerModel",
     "SD3TransformerModel",
+    "SD3TransformerModelControlNet",
     # gan
     "VQGANModel",
     # lora
@@ -85,6 +88,7 @@ __all__ = [
     "UNetModel",
     "UNetXLModel",
     "UNetXLModelControlNet",
+    "UNet2DConditionControlNetModel",
     "UNetTemporalModel",
     "UNetCascadeModel",
     # vae

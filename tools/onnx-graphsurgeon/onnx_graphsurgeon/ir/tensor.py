@@ -171,6 +171,10 @@ class Tensor(object):
 class Variable(Tensor):
     @staticmethod
     def empty():
+        """
+        Creates a variable tensor with no name.
+        This can be used to represent an omitted optional input of a node.
+        """
         return Variable(name="")
 
     def __init__(
@@ -196,7 +200,11 @@ class Variable(Tensor):
         self.shape = misc.default_value(shape, None)
         self.type = type
 
-    def to_constant(self, values: np.ndarray, export_dtype: Union[np.dtype, "onnx.TensorProto.DataType"] = None):
+    def to_constant(
+        self,
+        values: np.ndarray,
+        export_dtype: Union[np.dtype, "onnx.TensorProto.DataType"] = None,
+    ):
         del self.dtype
         del self.shape
 
@@ -365,7 +373,9 @@ class Constant(Tensor):
         self.data_location = data_location
         self._export_dtype = export_dtype
 
-    def to_variable(self, dtype: np.dtype = None, shape: Sequence[Union[int, str]] = []):
+    def to_variable(
+        self, dtype: np.dtype = None, shape: Sequence[Union[int, str]] = []
+    ):
         var_dtype = self.export_dtype
 
         del self._export_dtype

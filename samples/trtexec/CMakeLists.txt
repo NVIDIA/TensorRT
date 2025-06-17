@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
-
 add_executable(trtexec trtexec.cpp)
 target_link_libraries(trtexec PRIVATE trt_samples_common)
-add_dependencies(tensorrt_samples trtexec)
+if (TRT_BUILD_SAMPLES)
+    add_dependencies(tensorrt_samples trtexec)
+endif()
 
 install(
     TARGETS trtexec
     OPTIONAL
+    COMPONENT release
 )
 
 else()
@@ -35,10 +37,17 @@ set(SAMPLE_SOURCES
     ../common/sampleReporting.cpp
     ../common/sampleUtils.cpp
     ../common/bfloat16.cpp
+    ../common/debugTensorWriter.cpp
     trtexec.cpp)
 
 set(SAMPLE_PARSERS "onnx")
 
 include(../CMakeSamplesTemplate.txt)
+
+# Change the file name if TRT_WINML variable is set
+if (${TRT_BUILD_WINML})
+    set_target_properties(trtexec PROPERTIES
+        OUTPUT_NAME tensorrt_rtx)
+endif()
 
 endif()

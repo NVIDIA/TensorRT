@@ -18,11 +18,12 @@
 import math
 
 from polygraphy import mod
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import ModelArgs, TrtConfigArgs
 from polygraphy.tools.debug.subtool.base import BaseCheckerSubtool
 
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
 
 

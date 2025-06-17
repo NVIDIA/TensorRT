@@ -187,6 +187,8 @@ enum class DataType : int32_t
     //! 1 bit sign, 2 bit exponent, 1 bit mantissa
     kFP4 = 10,
 
+    //! Unsigned representation of exponent-only 8-bit floating point type for quantization scales
+    kE8M0 = 11,
 };
 
 namespace impl
@@ -195,8 +197,8 @@ namespace impl
 template <>
 struct EnumMaxImpl<DataType>
 {
-//! Declaration of kVALUE that represents the maximum number of elements in the DataType enum.
-    static constexpr int32_t kVALUE = 11;
+    //! Declaration of kVALUE that represents the maximum number of elements in the DataType enum.
+    static constexpr int32_t kVALUE = 12;
 };
 } // namespace impl
 

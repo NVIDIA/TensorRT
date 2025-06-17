@@ -52,7 +52,7 @@ int64_t volume(nvinfer1::Dims const& dims, nvinfer1::Dims const& strides, int32_
     return maxNbElems * batch * (vecDim < 0 ? 1 : comps);
 }
 
-nvinfer1::Dims toDims(std::vector<int32_t> const& vec)
+nvinfer1::Dims toDims(std::vector<int64_t> const& vec)
 {
     int32_t limit = static_cast<int32_t>(nvinfer1::Dims::MAX_DIMS);
     if (static_cast<int32_t>(vec.size()) > limit)
@@ -389,6 +389,7 @@ void sparsify(Weights const& weights, int32_t k, int32_t trs, std::vector<int8_t
     case DataType::kFP8:
     case DataType::kINT64:
     case DataType::kFP4: ASSERT(false && "Unsupported data type");
+    case DataType::kE8M0: ASSERT(false && "E8M0 is not supported");
     }
 }
 
@@ -469,13 +470,13 @@ void dumpInt4Buffer(void const* buffer, std::string const& separator, std::ostre
         auto value = typedBuffer[dataOffset / 2];
         if (dataOffset % 2 == 0)
         {
-            os << (static_cast<int8_t>(value) >> 4);
-        }
-        else
-        {
             // Cast to int8_t before right shift, so right-shift will sign-extend.
             // Left shift on int8_t can be undefined behaviour, must perform left shift on uint8_t.
             os << (static_cast<int8_t>(value << 4) >> 4);
+        }
+        else
+        {
+            os << (static_cast<int8_t>(value) >> 4);
         }
     }
 }

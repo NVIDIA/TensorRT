@@ -20,6 +20,7 @@ import os
 from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
 from polygraphy.logger import G_LOGGER, LogMode
+from polygraphy.mod.trt_importer import tensorrt_module_and_version_string
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.backend.trt.helper import make_trt_enum_val
 from polygraphy.tools.args.base import BaseArgs
@@ -746,7 +747,7 @@ class TrtConfigArgs(BaseArgs):
             script.add_import(imports=["DataLoader"], frm="polygraphy.comparator")
             data_loader_name = self.arg_groups[DataLoaderArgs].add_to_script(script)
             if self.calibration_base_class:
-                script.add_import(imports="tensorrt", imp_as="trt")
+                script.add_import(imports=tensorrt_module_and_version_string(), imp_as="trt")
 
             if (
                 self.arg_groups[DataLoaderArgs].is_using_random_data()
@@ -799,7 +800,7 @@ class TrtConfigArgs(BaseArgs):
                 self.tiling_optimization_level,
             ]
         ):
-            script.add_import(imports="tensorrt", imp_as="trt")
+            script.add_import(imports=tensorrt_module_and_version_string(), imp_as="trt")
 
         if self.trt_config_script is not None:
             script.add_import(

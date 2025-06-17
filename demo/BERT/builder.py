@@ -70,6 +70,7 @@ class BertConfig:
         use_qat,
         use_sparsity,
         timing_cache,
+        distributive_independence = False,
         use_deprecated_plugins=False,
     ):
         with open(bert_config_path, "r") as f:
@@ -90,7 +91,7 @@ class BertConfig:
             self.use_sparsity = use_sparsity
             self.timing_cache = timing_cache
             self.use_deprecated_plugins = use_deprecated_plugins
-
+            self.distributive_independence = distributive_independence
 
 def set_tensor_name(tensor, prefix, name):
     tensor.name = prefix + name
@@ -338,7 +339,18 @@ def emb_layernorm(builder, network, config, weights_dict, builder_config, sequen
     # Specify profiles for the batch sizes we're interested in.
     # Make sure the profile also works for all sizes not covered by the previous profile.
 
-    if len(sequence_lengths) > 1 or len(batch_sizes) > 1:
+    # When distributive independence is enabled, only one profile can be used.
+    if config.distributive_independence:
+        max_batch_size = max(batch_sizes)
+        max_sequence_length = max(sequence_lengths)
+        profile = builder.create_optimization_profile()
+        min_shape = (1, max_sequence_length)
+        shape = (max_batch_size, max_sequence_length)
+        profile.set_shape("input_ids", min=min_shape, opt=shape, max=shape)
+        profile.set_shape("segment_ids", min=min_shape, opt=shape, max=shape)
+        profile.set_shape("input_mask", min=min_shape, opt=shape, max=shape)
+        builder_config.add_optimization_profile(profile)
+    elif len(sequence_lengths) > 1 or len(batch_sizes) > 1:
         for batch_size in sorted(batch_sizes):
             if len(sequence_lengths) == 1:
                 profile = builder.create_optimization_profile()
@@ -420,7 +432,8 @@ def build_engine(batch_sizes, workspace_size, sequence_lengths, config, weights_
 
         if verbose:
             builder_config.profiling_verbosity = trt.ProfilingVerbosity.DETAILED
-
+        if config.distributive_independence:
+            builder_config.set_flag(trt.BuilderFlag.DISTRIBUTIVE_INDEPENDENCE)
         if config.use_sparsity:
             TRT_LOGGER.log(TRT_LOGGER.INFO, "Setting sparsity flag on builder_config.")
             builder_config.set_flag(trt.BuilderFlag.SPARSE_WEIGHTS)
@@ -627,6 +640,13 @@ def main():
         required=False,
     )
     parser.add_argument(
+        "--distributive_independence",
+        default=False,
+        action="store_true",
+        help="Enable TensorRT's distributive independence builder flag (default: false)",
+        required=False,
+    )
+    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Turn on verbose logger and set profiling verbosity to DETAILED (default: false)",
@@ -672,6 +692,7 @@ def main():
         args.int8 and args.onnx != None,
         args.sparse,
         args.timing_cache_file,
+        args.distributive_independence,
         args.use_deprecated_plugins,
     )
 

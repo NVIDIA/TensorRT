@@ -61,7 +61,7 @@ namespace tensorrt
         // For permutation
         static const auto permutation_vector_constructor = [] (std::vector<int32_t> const& in) {
             // Static casts are required here, so that MAX_DIMS is resolved at compile/link time.
-            int32_t const maxDims{static_cast<int32_t const>(Dims::MAX_DIMS)};
+            int32_t const maxDims{static_cast<int32_t>(Dims::MAX_DIMS)};
             PY_ASSERT_VALUE_ERROR(in.size() <= maxDims,
                 "Invalid input length. Max expected length is " + std::to_string(maxDims));
             Permutation* self = new Permutation{};
@@ -71,7 +71,7 @@ namespace tensorrt
         };
 
         static const auto permutation_to_str = [] (Permutation const& self) {
-            int32_t const maxDims = static_cast<int32_t const>(Dims::MAX_DIMS);
+            int32_t const maxDims = static_cast<int32_t>(Dims::MAX_DIMS);
             std::string temp = "(";
             for (int32_t i = 0; i < maxDims - 1; ++i)
                 temp += std::to_string(self.order[i]) + ", ";
@@ -81,23 +81,23 @@ namespace tensorrt
 
         // TODO: Add slicing support?
         static const auto permutation_getter = [] (Permutation const& self, int32_t const pyIndex) {
-            PY_ASSERT_INDEX_ERROR(pyIndex < static_cast<int32_t const>(Dims::MAX_DIMS));
-            int32_t const index{(pyIndex < 0) ? static_cast<int32_t const>(Dims::MAX_DIMS) + pyIndex : pyIndex};
+            PY_ASSERT_INDEX_ERROR(pyIndex < static_cast<int32_t>(Dims::MAX_DIMS));
+            int32_t const index{(pyIndex < 0) ? static_cast<int32_t>(Dims::MAX_DIMS) + pyIndex : pyIndex};
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            PY_ASSERT_INDEX_ERROR(index >= 0 && index < static_cast<int32_t const>(Dims::MAX_DIMS));
+            PY_ASSERT_INDEX_ERROR(index >= 0 && index < static_cast<int32_t>(Dims::MAX_DIMS));
             return self.order[index];
         };
 
         static const auto permutation_setter = [] (Permutation& self, int32_t const pyIndex, int32_t const item) {
-            PY_ASSERT_INDEX_ERROR(pyIndex < static_cast<int32_t const>(Dims::MAX_DIMS));
-            int32_t const index = (pyIndex < 0) ? static_cast<int32_t const>(Dims::MAX_DIMS) + pyIndex : pyIndex;
+            PY_ASSERT_INDEX_ERROR(pyIndex < static_cast<int32_t>(Dims::MAX_DIMS));
+            int32_t const index = (pyIndex < 0) ? static_cast<int32_t>(Dims::MAX_DIMS) + pyIndex : pyIndex;
             // Static cast is REQUIRED here, or chaos ensues as MAX_DIMS is not pulled in at link time.
-            PY_ASSERT_INDEX_ERROR(index >= 0 && index < static_cast<int32_t const>(Dims::MAX_DIMS));
+            PY_ASSERT_INDEX_ERROR(index >= 0 && index < static_cast<int32_t>(Dims::MAX_DIMS));
             self.order[index] = item;
         };
 
         static const auto permutation_len = [] (Permutation const& self) {
-            return static_cast<int32_t const>(Dims::MAX_DIMS);
+            return static_cast<int32_t>(Dims::MAX_DIMS);
         };
 
         // For INetworkDefinition
@@ -154,7 +154,7 @@ namespace tensorrt
         IGridSampleLayer* add_grid_sample(INetworkDefinition& self, ITensor& input, ITensor& grid)
         {
             return self.addGridSample(input, grid);
-        };
+        }
 
         static const auto add_scale = [](INetworkDefinition& self, ITensor& input, ScaleMode mode, Weights* shift, Weights* scale, Weights* power)
         {
@@ -166,15 +166,6 @@ namespace tensorrt
             return self.addScaleNd(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power), channelAxis);
         };
 
-        static const auto add_quantize = [](INetworkDefinition& self, ITensor& input, ITensor& scale)
-        {
-            return self.addQuantize(input, scale);
-        };
-
-        static const auto add_dequantize = [](INetworkDefinition& self, ITensor& input, ITensor& scale)
-        {
-            return self.addDequantize(input, scale);
-        };
         static const auto add_dynamic_quantize = [](INetworkDefinition& self, ITensor& input, int32_t axis, int32_t block_size, DataType output_type, DataType scale_type)
         {
             return self.addDynamicQuantize(input, axis, block_size, output_type, scale_type);
@@ -368,7 +359,7 @@ namespace tensorrt
         py::class_<ITensor, std::unique_ptr<ITensor, py::nodelete>>(m, "ITensor", ITensorDoc::descr, py::module_local())
             .def_property("name", &ITensor::getName, &ITensor::setName)
             .def_property("shape", &ITensor::getDimensions, &ITensor::setDimensions)
-            .def_property("dtype", &ITensor::getType, &ITensor::setType)
+            .def_property("dtype", &ITensor::getType, utils::deprecateMember(&ITensor::setType, "Deprecated in TensorRT 10.12. Superseded by strong typing."))
             .def_property("broadcast_across_batch", utils::deprecateMember(&ITensor::getBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"), utils::deprecateMember(&ITensor::setBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"))
             .def_property("location", &ITensor::getLocation, &ITensor::setLocation)
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
@@ -377,8 +368,8 @@ namespace tensorrt
             .def_property_readonly("is_shape_tensor", &ITensor::isShapeTensor)
             .def_property_readonly("is_execution_tensor", &ITensor::isExecutionTensor)
             // Using a plus sign converts the lambda function into a function pointer.
-            .def_property("dynamic_range", utils::deprecate(+lambdas::get_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), utils::deprecate(+lambdas::set_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."))
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
+            .def_property("dynamic_range", utils::deprecate(+lambdas::get_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), utils::deprecate(+lambdas::set_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."))
             .def("set_dynamic_range", utils::deprecateMember(&ITensor::setDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), "min"_a, "max"_a, ITensorDoc::set_dynamic_range)
             .def("reset_dynamic_range", utils::deprecateMember(&ITensor::resetDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), ITensorDoc::reset_dynamic_range)
             .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
@@ -391,16 +382,16 @@ namespace tensorrt
             .def_property_readonly("type", &ILayer::getType)
             .def_property_readonly("num_inputs", &ILayer::getNbInputs)
             .def_property_readonly("num_outputs", &ILayer::getNbOutputs)
-            .def_property("precision", &ILayer::getPrecision, &ILayer::setPrecision)
-            .def_property_readonly("precision_is_set", &ILayer::precisionIsSet)
+            .def_property("precision", &ILayer::getPrecision, utils::deprecateMember(&ILayer::setPrecision, "Deprecated in TensorRT 10.12. Superseded by strong typing."))
+            .def_property_readonly("precision_is_set", utils::deprecateMember(&ILayer::precisionIsSet, "Deprecated in TensorRT 10.12. Superseded by strong typing."))
             .def("set_input", &ILayer::setInput, "index"_a, "tensor"_a, ILayerDoc::set_input)
             .def("get_input", &ILayer::getInput, "index"_a, ILayerDoc::get_input)
             .def("get_output", &ILayer::getOutput, "index"_a, ILayerDoc::get_output)
-            .def("reset_precision", &ILayer::resetPrecision, ILayerDoc::reset_precision)
-            .def("set_output_type", &ILayer::setOutputType, "index"_a, "dtype"_a, ILayerDoc::set_output_type)
+            .def("reset_precision", utils::deprecateMember(&ILayer::resetPrecision, "Deprecated in TensorRT 10.12. Superseded by strong typing."), ILayerDoc::reset_precision)
+            .def("set_output_type", utils::deprecateMember(&ILayer::setOutputType, "Deprecated in TensorRT 10.12. Superseded by strong typing."), "index"_a, "dtype"_a, ILayerDoc::set_output_type)
             .def("get_output_type", &ILayer::getOutputType, "index"_a, ILayerDoc::get_output_type)
-            .def("output_type_is_set", &ILayer::outputTypeIsSet, "index"_a, ILayerDoc::output_type_is_set)
-            .def("reset_output_type", &ILayer::resetOutputType, "index"_a, ILayerDoc::reset_output_type)
+            .def("output_type_is_set", utils::deprecateMember(&ILayer::outputTypeIsSet, "Deprecated in TensorRT 10.12. Superseded by strong typing."), "index"_a, ILayerDoc::output_type_is_set)
+            .def("reset_output_type", utils::deprecateMember(&ILayer::resetOutputType, "Deprecated in TensorRT 10.12. Superseded by strong typing."), "index"_a, ILayerDoc::reset_output_type)
         ;
 
         py::enum_<PaddingMode>(m, "PaddingMode", PaddingModeDoc::descr, py::module_local())
@@ -987,8 +978,8 @@ namespace tensorrt
                   INetworkDefinitionDoc::add_grid_sample, py::return_value_policy::reference_internal)
             .def("add_nms", &INetworkDefinition::addNMS, "boxes"_a,
                 "scores"_a, "max_output_boxes_per_class"_a, INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
-            .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims const&, FillOperation)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
             .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims const&, FillOperation, DataType)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, "output_type"_a, INetworkDefinitionDoc::add_fill)
+            .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims const&, FillOperation)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
             .def("add_quantize",  static_cast<IQuantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&)>(&INetworkDefinition::addQuantize), "input"_a, "scale"_a,
                 INetworkDefinitionDoc::add_quantize, py::return_value_policy::reference_internal)
             .def("add_dequantize", static_cast<IDequantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&)>(&INetworkDefinition::addDequantize), "input"_a, "scale"_a,
@@ -1035,6 +1026,8 @@ namespace tensorrt
             .def("mark_debug", &INetworkDefinition::markDebug, "tensor"_a, INetworkDefinitionDoc::mark_debug)
             .def("unmark_debug", &INetworkDefinition::unmarkDebug, "tensor"_a, INetworkDefinitionDoc::unmark_debug)
             .def("is_debug_tensor", &INetworkDefinition::isDebugTensor, "tensor"_a, INetworkDefinitionDoc::is_debug_tensor)
+            .def("mark_unfused_tensors_as_debug_tensors", &INetworkDefinition::markUnfusedTensorsAsDebugTensors, INetworkDefinitionDoc::mark_unfused_tensors_as_debug_tensors)
+            .def("unmark_unfused_tensors_as_debug_tensors", &INetworkDefinition::unmarkUnfusedTensorsAsDebugTensors, INetworkDefinitionDoc::unmark_unfused_tensors_as_debug_tensors)
             .def("add_squeeze", &INetworkDefinition::addSqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
             .def("add_unsqueeze", &INetworkDefinition::addUnsqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_unsqueeze, py::return_value_policy::reference_internal)
 #if ENABLE_INETWORK_SERIALIZE

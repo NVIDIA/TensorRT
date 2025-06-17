@@ -27,62 +27,19 @@ namespace nvinfer1::plugin
 // Plugin-specific constants
 namespace
 {
-char const* const kCROP_AND_RESIZE_PLUGIN_VERSION{"1"};
-char const* const kCROP_AND_RESIZE_DYNAMIC_PLUGIN_VERSION{"1"};
-char const* const kCROP_AND_RESIZE_PLUGIN_NAME{"CropAndResize"};
+char const* const kCROP_AND_RESIZE_DYNAMIC_PLUGIN_VERSION{"2"};
 char const* const kCROP_AND_RESIZE_DYNAMIC_PLUGIN_NAME{"CropAndResizeDynamic"};
 } // namespace
 
 // Static class fields initialization
-PluginFieldCollection CropAndResizeBasePluginCreator::mFC{};
-std::vector<PluginField> CropAndResizeBasePluginCreator::mPluginAttributes;
-
-CropAndResizePlugin::CropAndResizePlugin(int32_t cropWidth, int32_t cropHeight)
-    : mCropWidth(cropWidth)
-    , mCropHeight(cropHeight)
-{
-}
+PluginFieldCollection CropAndResizeDynamicPlugin::mFCToSerialize{};
+std::vector<PluginField> CropAndResizeDynamicPlugin::mDataToSerialize{};
+PluginFieldCollection CropAndResizeDynamicPluginCreator::mFC{};
+std::vector<PluginField> CropAndResizeDynamicPluginCreator::mPluginAttributes;
 
 CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(int32_t cropWidth, int32_t cropHeight)
     : mCropWidth(cropWidth)
     , mCropHeight(cropHeight)
-{
-}
-
-CropAndResizePlugin::CropAndResizePlugin(void const* serialBuf, size_t serialSize)
-{
-    auto const* d = toPointer<uint8_t const>(serialBuf);
-    auto const* a = d;
-    mCropWidth = readFromBuffer<int32_t>(d);
-    mCropHeight = readFromBuffer<int32_t>(d);
-    mInputWidth = readFromBuffer<int32_t>(d);
-    mInputHeight = readFromBuffer<int32_t>(d);
-    mDepth = readFromBuffer<int32_t>(d);
-    mNumBoxes = readFromBuffer<int32_t>(d);
-    PLUGIN_ASSERT(d == a + sizeof(int32_t) * 6);
-}
-
-CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(void const* serialBuf, size_t serialSize)
-{
-    auto const* d = reinterpret_cast<uint8_t const*>(serialBuf);
-    auto const* a = d;
-    mCropWidth = readFromBuffer<int32_t>(d);
-    mCropHeight = readFromBuffer<int32_t>(d);
-    mInputWidth = readFromBuffer<int32_t>(d);
-    mInputHeight = readFromBuffer<int32_t>(d);
-    mDepth = readFromBuffer<int32_t>(d);
-    mNumBoxes = readFromBuffer<int32_t>(d);
-    PLUGIN_ASSERT(d == a + sizeof(int32_t) * 6);
-}
-
-CropAndResizePlugin::CropAndResizePlugin(
-    int32_t cropWidth, int32_t cropHeight, int32_t depth, int32_t inputWidth, int32_t inputHeight, int32_t maxBoxNum)
-    : mCropWidth(cropWidth)
-    , mCropHeight(cropHeight)
-    , mDepth(depth)
-    , mInputWidth(inputWidth)
-    , mInputHeight(inputHeight)
-    , mNumBoxes(maxBoxNum)
 {
 }
 
@@ -97,23 +54,11 @@ CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(
 {
 }
 
-CropAndResizePlugin::~CropAndResizePlugin() {}
-
 CropAndResizeDynamicPlugin::~CropAndResizeDynamicPlugin() noexcept {}
 
-char const* CropAndResizePlugin::getPluginType() const noexcept
-{
-    return kCROP_AND_RESIZE_PLUGIN_NAME;
-}
-
-char const* CropAndResizeDynamicPlugin::getPluginType() const noexcept
+char const* CropAndResizeDynamicPlugin::getPluginName() const noexcept
 {
     return kCROP_AND_RESIZE_DYNAMIC_PLUGIN_NAME;
-}
-
-char const* CropAndResizePlugin::getPluginVersion() const noexcept
-{
-    return kCROP_AND_RESIZE_PLUGIN_VERSION;
 }
 
 char const* CropAndResizeDynamicPlugin::getPluginVersion() const noexcept
@@ -121,88 +66,32 @@ char const* CropAndResizeDynamicPlugin::getPluginVersion() const noexcept
     return kCROP_AND_RESIZE_DYNAMIC_PLUGIN_VERSION;
 }
 
-int32_t CropAndResizePlugin::getNbOutputs() const noexcept
-{
-    return 1;
-}
-
 int32_t CropAndResizeDynamicPlugin::getNbOutputs() const noexcept
 {
     return 1;
 }
 
-Dims CropAndResizePlugin::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
+int32_t CropAndResizeDynamicPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
+    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& exprBuilder) noexcept
 {
     try
     {
-        PLUGIN_VALIDATE(index == 0);
-        PLUGIN_VALIDATE(nbInputDims == 2);
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(inputs->nbDims == 3);
-        int32_t channels = inputs->d[0];
-        int32_t height = mCropHeight;
-        int32_t width = mCropWidth;
-        int32_t roiBatch = inputs[1].d[0];
-        return Dims4(roiBatch, channels, height, width);
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return Dims{};
-}
-
-DimsExprs CropAndResizeDynamicPlugin::getOutputDimensions(
-    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
-{
-    try
-    {
-        PLUGIN_VALIDATE(outputIndex == 0);
+        PLUGIN_VALIDATE(outputs != nullptr);
+        PLUGIN_VALIDATE(nbOutputs == 1);
         PLUGIN_VALIDATE(nbInputs == 2);
         PLUGIN_VALIDATE(inputs != nullptr);
         PLUGIN_VALIDATE(inputs[0].nbDims == 4);
-        DimsExprs outDim;
+
         // 5D output (N, R, C, H, W)
-        outDim.nbDims = 5;
-        outDim.d[0] = inputs[0].d[0]; // N(batch)
-        outDim.d[1] = inputs[1].d[1]; // R(MaxBoxNum)
-        outDim.d[2] = inputs[0].d[1]; // C(channel)
-        outDim.d[3] = exprBuilder.constant(mCropHeight);
-        outDim.d[4] = exprBuilder.constant(mCropWidth);
-        return outDim;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return DimsExprs{};
-}
+        outputs[0].nbDims = 5;
+        outputs[0].d[0] = inputs[0].d[0]; // N(batch)
+        outputs[0].d[1] = inputs[1].d[1]; // R(MaxBoxNum)
+        outputs[0].d[2] = inputs[0].d[1]; // C(channel)
+        outputs[0].d[3] = exprBuilder.constant(mCropHeight);
+        outputs[0].d[4] = exprBuilder.constant(mCropWidth);
 
-int32_t CropAndResizePlugin::initialize() noexcept
-{
-    return STATUS_SUCCESS;
-}
-
-int32_t CropAndResizeDynamicPlugin::initialize() noexcept
-{
-    return STATUS_SUCCESS;
-}
-
-int32_t CropAndResizePlugin::enqueue(
-    int32_t batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
-{
-    try
-    {
-        PLUGIN_VALIDATE(inputs != nullptr);
-        PLUGIN_VALIDATE(outputs != nullptr);
-
-        // Our plugin outputs only one tensor
-        void* output = outputs[0];
-
-        // Launch CUDA kernel wrapper and save its return value
-        int32_t status = cropAndResizeInference(stream, mDepth * mInputHeight * mInputWidth * batchSize, inputs[0],
-            inputs[1], batchSize, mInputHeight, mInputWidth, mNumBoxes, mCropHeight, mCropWidth, mDepth, output);
-        return status;
+        return STATUS_SUCCESS;
     }
     catch (std::exception const& e)
     {
@@ -221,7 +110,6 @@ int32_t CropAndResizeDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, P
         // Our plugin outputs only one tensor
         void* output = outputs[0];
 
-        // Launch CUDA kernel wrapper and save its return value
         int32_t batchSize = inputDesc[0].dims.d[0];
         int32_t status = cropAndResizeInference(stream, mDepth * mInputHeight * mInputWidth * batchSize, inputs[0],
             inputs[1], batchSize, mInputHeight, mInputWidth, mNumBoxes, mCropHeight, mCropWidth, mDepth, output);
@@ -234,55 +122,129 @@ int32_t CropAndResizeDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, P
     return STATUS_FAILURE;
 }
 
-size_t CropAndResizePlugin::getSerializationSize() const noexcept
+size_t CropAndResizeDynamicPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
 {
-    return 6 * sizeof(int32_t);
+    return 0;
 }
 
-size_t CropAndResizeDynamicPlugin::getSerializationSize() const noexcept
+IPluginV3* CropAndResizeDynamicPlugin::clone() noexcept
 {
-    return 6 * sizeof(int32_t);
-}
-
-void CropAndResizePlugin::serialize(void* buffer) const noexcept
-{
-    auto* d = reinterpret_cast<uint8_t*>(buffer);
-    auto* const a = d;
-    writeToBuffer<int32_t>(d, mCropWidth);
-    writeToBuffer<int32_t>(d, mCropHeight);
-    writeToBuffer<int32_t>(d, mInputWidth);
-    writeToBuffer<int32_t>(d, mInputHeight);
-    writeToBuffer<int32_t>(d, mDepth);
-    writeToBuffer<int32_t>(d, mNumBoxes);
-    PLUGIN_ASSERT(d == a + getSerializationSize());
-}
-
-void CropAndResizeDynamicPlugin::serialize(void* buffer) const noexcept
-{
-    auto* d = reinterpret_cast<uint8_t*>(buffer);
-    auto* const a = d;
-    writeToBuffer<int32_t>(d, mCropWidth);
-    writeToBuffer<int32_t>(d, mCropHeight);
-    writeToBuffer<int32_t>(d, mInputWidth);
-    writeToBuffer<int32_t>(d, mInputHeight);
-    writeToBuffer<int32_t>(d, mDepth);
-    writeToBuffer<int32_t>(d, mNumBoxes);
-    PLUGIN_ASSERT(d == a + getSerializationSize());
-}
-
-bool CropAndResizePlugin::supportsFormat(DataType type, PluginFormat format) const noexcept
-{
-    // This plugin only supports ordinary floats, and NCHW input format
-    if (type == DataType::kFLOAT && format == PluginFormat::kLINEAR)
+    try
     {
-        return true;
+        auto plugin = std::make_unique<CropAndResizeDynamicPlugin>(
+            mCropWidth, mCropHeight, mDepth, mInputWidth, mInputHeight, mNumBoxes);
+        plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin.release();
     }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
 
-    return false;
+IPluginCapability* CropAndResizeDynamicPlugin::getCapabilityInterface(PluginCapabilityType type) noexcept
+{
+    try
+    {
+        if (type == PluginCapabilityType::kBUILD)
+        {
+            return static_cast<IPluginV3OneBuild*>(this);
+        }
+        if (type == PluginCapabilityType::kRUNTIME)
+        {
+            return static_cast<IPluginV3OneRuntime*>(this);
+        }
+        PLUGIN_ASSERT(type == PluginCapabilityType::kCORE);
+        return static_cast<IPluginV3OneCore*>(this);
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+PluginFieldCollection const* CropAndResizeDynamicPlugin::getFieldsToSerialize() noexcept
+{
+    try
+    {
+        mDataToSerialize.clear();
+        mDataToSerialize.emplace_back(PluginField("crop_width", &mCropWidth, PluginFieldType::kINT32, 1));
+        mDataToSerialize.emplace_back(PluginField("crop_height", &mCropHeight, PluginFieldType::kINT32, 1));
+
+        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.fields = mDataToSerialize.data();
+        return &mFCToSerialize;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
+}
+
+int32_t CropAndResizeDynamicPlugin::getOutputDataTypes(
+    DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(inputTypes != nullptr);
+        PLUGIN_VALIDATE(nbInputs == 2);
+        // One output
+        PLUGIN_VALIDATE(nbOutputs == 1);
+        PLUGIN_VALIDATE(outputTypes != nullptr);
+        outputTypes[0] = DataType::kFLOAT;
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
+}
+
+int32_t CropAndResizeDynamicPlugin::onShapeChange(
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+{
+    try
+    {
+        PLUGIN_VALIDATE(nbInputs == 2);
+        PLUGIN_VALIDATE(nbOutputs == 1);
+        PLUGIN_VALIDATE(inputs != nullptr);
+
+        // Re-validate dimensions and update internal state if needed
+        // Here we can update mDepth, mInputHeight, mInputWidth, mNumBoxes if they change
+        mDepth = inputs[0].dims.d[1];
+        mInputHeight = inputs[0].dims.d[2];
+        mInputWidth = inputs[0].dims.d[3];
+        mNumBoxes = inputs[1].dims.d[1];
+
+        return STATUS_SUCCESS;
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return STATUS_FAILURE;
+}
+
+IPluginV3* CropAndResizeDynamicPlugin::attachToContext(IPluginResourceContext* context) noexcept
+{
+    try
+    {
+        return clone(); // Simple clone is sufficient since no context resources are needed
+    }
+    catch (std::exception const& e)
+    {
+        caughtError(e);
+    }
+    return nullptr;
 }
 
 bool CropAndResizeDynamicPlugin::supportsFormatCombination(
-    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+    int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
     try
     {
@@ -291,16 +253,18 @@ bool CropAndResizeDynamicPlugin::supportsFormatCombination(
         PLUGIN_VALIDATE(inOut != nullptr);
         auto const* in = inOut;
         auto const* out = inOut + nbInputs;
-        bool const consistentFloatPrecision = (in[0].type == in[pos].type);
+        bool const consistentFloatPrecision = (in[0].desc.type == in[pos].desc.type);
         switch (pos)
         {
         case 0:
-            return in[0].type == DataType::kFLOAT && in[0].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+            return (in[0].desc.type == DataType::kFLOAT && in[0].desc.format == PluginFormat::kLINEAR
+                && consistentFloatPrecision);
         case 1:
-            return in[1].type == DataType::kFLOAT && in[1].format == PluginFormat::kLINEAR && consistentFloatPrecision;
+            return (in[1].desc.type == DataType::kFLOAT && in[1].desc.format == PluginFormat::kLINEAR
+                && consistentFloatPrecision);
         case 2:
-            return out[0].type == DataType::kFLOAT && out[0].format == PluginFormat::kLINEAR
-                && consistentFloatPrecision;
+            return (out[0].desc.type == DataType::kFLOAT && out[0].desc.format == PluginFormat::kLINEAR
+                && consistentFloatPrecision);
         }
     }
     catch (std::exception const& e)
@@ -308,78 +272,6 @@ bool CropAndResizeDynamicPlugin::supportsFormatCombination(
         caughtError(e);
     }
     return false;
-}
-
-void CropAndResizePlugin::terminate() noexcept {}
-
-void CropAndResizeDynamicPlugin::terminate() noexcept {}
-
-size_t CropAndResizePlugin::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
-{
-    return 0;
-}
-
-size_t CropAndResizeDynamicPlugin::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
-{
-    return 0;
-}
-
-void CropAndResizePlugin::destroy() noexcept
-{
-    // This gets called when the network containing plugin is destroyed
-    delete this;
-}
-
-void CropAndResizeDynamicPlugin::destroy() noexcept
-{
-    // This gets called when the network containing plugin is destroyed
-    delete this;
-}
-
-IPluginV2Ext* CropAndResizePlugin::clone() const noexcept
-{
-    try
-    {
-        IPluginV2Ext* plugin
-            = new CropAndResizePlugin(mCropWidth, mCropHeight, mDepth, mInputWidth, mInputHeight, mNumBoxes);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-IPluginV2DynamicExt* CropAndResizeDynamicPlugin::clone() const noexcept
-{
-    try
-    {
-        IPluginV2DynamicExt* plugin
-            = new CropAndResizeDynamicPlugin(mCropWidth, mCropHeight, mDepth, mInputWidth, mInputHeight, mNumBoxes);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-void CropAndResizePlugin::setPluginNamespace(char const* libNamespace) noexcept
-{
-    try
-    {
-        PLUGIN_VALIDATE(libNamespace != nullptr);
-        mNamespace = libNamespace;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
 }
 
 void CropAndResizeDynamicPlugin::setPluginNamespace(char const* libNamespace) noexcept
@@ -395,88 +287,12 @@ void CropAndResizeDynamicPlugin::setPluginNamespace(char const* libNamespace) no
     }
 }
 
-char const* CropAndResizePlugin::getPluginNamespace() const noexcept
-{
-    return mNamespace.c_str();
-}
-
-char const* CropAndResizeDynamicPlugin::getPluginNamespace() const noexcept
-{
-    return mNamespace.c_str();
-}
-
-// Return the DataType of the plugin output at the requested index.
-DataType CropAndResizePlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
-{
-    try
-    {
-        // One output.
-        PLUGIN_VALIDATE(index == 0);
-        return DataType::kFLOAT;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return DataType{};
-}
-
-DataType CropAndResizeDynamicPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
-{
-    try
-    {
-        // One output.
-        PLUGIN_VALIDATE(index == 0);
-        return DataType::kFLOAT;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return DataType{};
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool CropAndResizePlugin::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool CropAndResizePlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
-}
-
-void CropAndResizePlugin::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
-    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
-{
-    try
-    {
-        PLUGIN_VALIDATE(inputTypes[0] == DataType::kFLOAT && inputTypes[1] == DataType::kFLOAT
-            && floatFormat == PluginFormat::kLINEAR);
-        PLUGIN_VALIDATE(nbInputs == 2);
-        PLUGIN_VALIDATE(nbOutputs == 1);
-        mDepth = inputDims[0].d[0];
-        mInputHeight = inputDims[0].d[1];
-        mInputWidth = inputDims[0].d[2];
-        mNumBoxes = inputDims[1].d[0];
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-}
-
-void CropAndResizeDynamicPlugin::configurePlugin(
+int32_t CropAndResizeDynamicPlugin::configurePlugin(
     DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
     try
     {
+        // Validate input/output counts and update internal state based on input dimensions
         PLUGIN_VALIDATE(nbInputs == 2);
         PLUGIN_VALIDATE(nbOutputs == 1);
         mDepth = in[0].desc.dims.d[1];
@@ -487,18 +303,17 @@ void CropAndResizeDynamicPlugin::configurePlugin(
     catch (std::exception const& e)
     {
         caughtError(e);
+        return STATUS_FAILURE;
     }
+    return STATUS_SUCCESS;
 }
-// Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void CropAndResizePlugin::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+
+char const* CropAndResizeDynamicPlugin::getPluginNamespace() const noexcept
 {
+    return mNamespace.c_str();
 }
 
-// Detach the plugin object from its execution context.
-void CropAndResizePlugin::detachFromContext() noexcept {}
-
-CropAndResizeBasePluginCreator::CropAndResizeBasePluginCreator()
+CropAndResizeDynamicPluginCreator::CropAndResizeDynamicPluginCreator()
 {
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("crop_width", nullptr, PluginFieldType::kINT32, 1));
@@ -507,107 +322,58 @@ CropAndResizeBasePluginCreator::CropAndResizeBasePluginCreator()
     mFC.fields = mPluginAttributes.data();
 }
 
-CropAndResizePluginCreator::CropAndResizePluginCreator()
+char const* CropAndResizeDynamicPluginCreator::getPluginName() const noexcept
 {
-    mPluginName = kCROP_AND_RESIZE_PLUGIN_NAME;
-    mPluginVersion = kCROP_AND_RESIZE_PLUGIN_VERSION;
+    return kCROP_AND_RESIZE_DYNAMIC_PLUGIN_NAME;
 }
 
-CropAndResizeDynamicPluginCreator::CropAndResizeDynamicPluginCreator()
+char const* CropAndResizeDynamicPluginCreator::getPluginVersion() const noexcept
 {
-    mPluginName = kCROP_AND_RESIZE_DYNAMIC_PLUGIN_NAME;
-    mPluginVersion = kCROP_AND_RESIZE_DYNAMIC_PLUGIN_VERSION;
+    return kCROP_AND_RESIZE_DYNAMIC_PLUGIN_VERSION;
 }
 
-char const* CropAndResizeBasePluginCreator::getPluginName() const noexcept
-{
-    return mPluginName.c_str();
-}
-
-char const* CropAndResizeBasePluginCreator::getPluginVersion() const noexcept
-{
-    return mPluginVersion.c_str();
-}
-
-PluginFieldCollection const* CropAndResizeBasePluginCreator::getFieldNames() noexcept
+PluginFieldCollection const* CropAndResizeDynamicPluginCreator::getFieldNames() noexcept
 {
     return &mFC;
 }
 
-IPluginV2Ext* CropAndResizePluginCreator::createPlugin(char const* /* name */, PluginFieldCollection const* fc) noexcept
-{
-    try
-    {
-        gLogWarning << "CropAndResizePlugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
-                       "CropAndResizeDynamic plugin."
-                    << std::endl;
-        PLUGIN_VALIDATE(fc != nullptr);
-        PluginField const* fields = fc->fields;
-        int32_t nbFields = fc->nbFields;
-        int32_t cropWidth = 0;
-        int32_t cropHeight = 0;
-
-        validateRequiredAttributesExist({"crop_width", "crop_height"}, fc);
-
-        for (int32_t i = 0; i < nbFields; ++i)
-        {
-            PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-
-            if (!strcmp(fields[i].name, "crop_width"))
-            {
-                cropWidth = *(reinterpret_cast<int32_t const*>(fields[i].data));
-            }
-
-            if (!strcmp(fields[i].name, "crop_height"))
-            {
-                cropHeight = *(reinterpret_cast<int32_t const*>(fields[i].data));
-            }
-        }
-
-        PLUGIN_VALIDATE(cropWidth > 0 && cropHeight > 0);
-        IPluginV2Ext* plugin = new CropAndResizePlugin(cropWidth, cropHeight);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(
-    char const* /*name */, PluginFieldCollection const* fc) noexcept
+IPluginV3* CropAndResizeDynamicPluginCreator::createPlugin(
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
     try
     {
         PLUGIN_VALIDATE(fc != nullptr);
-        PluginField const* fields = fc->fields;
-        int32_t nbFields = fc->nbFields;
-        int32_t cropWidth = 0;
-        int32_t cropHeight = 0;
+        PLUGIN_VALIDATE(fc->fields != nullptr);
 
         validateRequiredAttributesExist({"crop_width", "crop_height"}, fc);
 
-        for (int32_t i = 0; i < nbFields; ++i)
+        int32_t cropWidth = 0;
+        int32_t cropHeight = 0;
+
+        for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
+            PluginField const& field = fc->fields[i];
+            PLUGIN_VALIDATE(field.type == PluginFieldType::kINT32);
 
-            if (!strcmp(fields[i].name, "crop_width"))
+            std::string_view const fieldName{field.name};
+            auto const value = *static_cast<int32_t const*>(field.data);
+
+            if (fieldName == "crop_width")
             {
-                cropWidth = *(reinterpret_cast<int32_t const*>(fields[i].data));
+                cropWidth = value;
             }
-
-            if (!strcmp(fields[i].name, "crop_height"))
+            else if (fieldName == "crop_height")
             {
-                cropHeight = *(reinterpret_cast<int32_t const*>(fields[i].data));
+                cropHeight = value;
             }
         }
 
-        PLUGIN_VALIDATE(cropWidth > 0 && cropHeight > 0);
-        IPluginV2DynamicExt* plugin = new CropAndResizeDynamicPlugin(cropWidth, cropHeight);
+        PLUGIN_VALIDATE(cropWidth > 0);
+        PLUGIN_VALIDATE(cropHeight > 0);
+
+        auto plugin = std::make_unique<CropAndResizeDynamicPlugin>(cropWidth, cropHeight);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -616,40 +382,22 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::createPlugin(
     return nullptr;
 }
 
-IPluginV2Ext* CropAndResizePluginCreator::deserializePlugin(
-    char const* /* name */, void const* serialData, size_t serialLength) noexcept
+void CropAndResizeDynamicPluginCreator::setPluginNamespace(char const* pluginNamespace) noexcept
 {
     try
     {
-        gLogWarning << "CropAndResizePlugin (implementing IPluginV2Ext) is deprecated since TensorRT 9.0. Use "
-                       "CropAndResizeDynamic plugin."
-                    << std::endl;
-        // This object will be deleted when the network is destroyed,
-        IPluginV2Ext* plugin = new CropAndResizePlugin(serialData, serialLength);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        PLUGIN_VALIDATE(pluginNamespace != nullptr);
+        mNamespace = pluginNamespace;
     }
     catch (std::exception const& e)
     {
         caughtError(e);
     }
-    return nullptr;
 }
 
-IPluginV2DynamicExt* CropAndResizeDynamicPluginCreator::deserializePlugin(
-    char const* /* name */, void const* serialData, size_t serialLength) noexcept
+char const* CropAndResizeDynamicPluginCreator::getPluginNamespace() const noexcept
 {
-    try
-    {
-        // This object will be deleted when the network is destroyed,
-        IPluginV2DynamicExt* plugin = new CropAndResizeDynamicPlugin(serialData, serialLength);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
+    return mNamespace.c_str();
 }
+
 } // namespace nvinfer1::plugin

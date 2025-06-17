@@ -24,6 +24,7 @@ add_dependencies(tensorrt_samples sample_int8_api)
 install(
     TARGETS sample_int8_api
     OPTIONAL
+    COMPONENT full
 )
 
 else()

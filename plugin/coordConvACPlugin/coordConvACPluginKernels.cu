@@ -101,6 +101,7 @@ int CoordConvACPlugin::enqueue(
     case DataType::kINT64:
     case DataType::kINT4:
     case DataType::kFP4:
+    case DataType::kE8M0:
         PLUGIN_FAIL("Unsupported data type");
     }
     return 1;

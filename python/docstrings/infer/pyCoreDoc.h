@@ -1080,9 +1080,15 @@ namespace BuilderFlagDoc
 constexpr char const* descr
     = R"trtdoc(Valid modes that the builder can enable when creating an engine from a network definition.)trtdoc";
 
-constexpr char const* FP16 = R"trtdoc(Enable FP16 layer selection)trtdoc";
-constexpr char const* BF16 = R"trtdoc(Enable BF16 layer selection)trtdoc";
-constexpr char const* INT8 = R"trtdoc(Enable Int8 layer selection)trtdoc";
+constexpr char const* FP16
+     = R"trtdoc(Enable FP16 layer selection.
+                [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
+constexpr char const* BF16
+    = R"trtdoc(Enable BF16 layer selection.
+               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
+constexpr char const* INT8
+    = R"trtdoc(Enable Int8 layer selection.
+               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* DEBUG = R"trtdoc(Enable debugging of layers via synchronizing after every layer)trtdoc";
 constexpr char const* GPU_FALLBACK
     = R"trtdoc(Enable layers marked to execute on GPU if layer cannot execute on DLA)trtdoc";
@@ -1097,9 +1103,11 @@ constexpr char const* SPARSE_WEIGHTS
 constexpr char const* SAFETY_SCOPE
     = R"trtdoc(Change the allowed parameters in the EngineCapability.STANDARD flow to match the restrictions that EngineCapability.SAFETY check against for DeviceType.GPU and EngineCapability.DLA_STANDALONE check against the DeviceType.DLA case. This flag is forced to true if EngineCapability.SAFETY at build time if it is unset.)trtdoc";
 constexpr char const* OBEY_PRECISION_CONSTRAINTS
-    = R"trtdoc(Require that layers execute in specified precisions. Build fails otherwise.)trtdoc";
+    = R"trtdoc(Require that layers execute in specified precisions. Build fails otherwise.
+               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* PREFER_PRECISION_CONSTRAINTS
-    = R"trtdoc(Prefer that layers execute in specified precisions. Fall back (with warning) to another precision if build would otherwise fail.)trtdoc";
+    = R"trtdoc(Prefer that layers execute in specified precisions. Fall back (with warning) to another precision if build would otherwise fail.
+               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* DIRECT_IO
     = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ``ITensor.allowed_formats`` was set. Build fails if a reformat is required for functional correctness.
                [DEPRECATED] Deprecated in TensorRT 10.7.))trtdoc";
@@ -1108,7 +1116,9 @@ constexpr char const* REJECT_EMPTY_ALGORITHMS
 constexpr char const* VERSION_COMPATIBLE
     = R"trtdoc(Restrict to lean runtime operators to provide version forward compatibility for the plan files.)trtdoc";
 constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
-constexpr char const* FP8 = R"trtdoc(Enable plugins with FP8 input/output)trtdoc";
+constexpr char const* FP8
+ = R"trtdoc(Enable plugins with FP8 input/output
+    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* ERROR_ON_TIMING_CACHE_MISS
     = R"trtdoc(Emit error when a tactic being timed is not present in the timing cache.)trtdoc";
 constexpr char const* DISABLE_COMPILATION_CACHE
@@ -1124,11 +1134,16 @@ constexpr char const* REFIT_INDIVIDUAL
     = R"trtdoc(Create a refittable engine and allows the users to specify which weights are refittable and which are not.)trtdoc";
 constexpr char const* WEIGHT_STREAMING
     = R"trtdoc(Enable building with the ability to stream varying amounts of weights during Runtime. This decreases GPU memory of TRT at the expense of performance.)trtdoc";
-constexpr char const* INT4 = R"trtdoc(Enable plugins with INT4 input/output)trtdoc";
+constexpr char const* INT4
+    = R"trtdoc(Enable plugins with INT4 input/output
+               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* STRICT_NANS
     = R"trtdoc(Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are not true when x is a NaN or Inf, and thus might hide propagation or generation of NaNs.)trtdoc";
-constexpr char const* FP4 = R"trtdoc(Enable plugins with FP4 input/output)trtdoc";
+constexpr char const* FP4
+    = R"trtdoc(Enable plugins with FP4 input/output
+               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* MONITOR_MEMORY = R"trtdoc(Enable memory monitor during build time.)trtdoc";
+constexpr char const* DISTRIBUTIVE_INDEPENDENCE = R"trtdoc(Enable distributive independence.)trtdoc";
 } // namespace BuilderFlagDoc
 
 namespace MemoryPoolTypeDoc
@@ -1199,6 +1214,7 @@ constexpr char const* RUNTIME_ACTIVATION_RESIZE_10_10 = R"trtdoc(
     Allow update_device_memory_size_for_shapes to resize runner internal activation memory by changing the allocation algorithm. Using this feature can reduce runtime memory requirement when the actual input tensor shapes are smaller than the maximum input tensor dimensions.
 )trtdoc";
 } // namespace PreviewFeatureDoc
+
 
 namespace HardwareCompatibilityLevelDoc
 {
@@ -1557,6 +1573,27 @@ constexpr char const* get_memory_pool_limit = R"trtdoc(
         :arg pool: The memory pool to get the limit for.
 
         :returns: The size of the memory limit, in bytes, for the corresponding pool.
+    )trtdoc";
+
+constexpr char const* num_compute_capabilities = R"trtdoc(
+        :ivar num_compute_capabilities: The number of target compute capabilities for building the engine.
+    )trtdoc";
+
+constexpr char const* get_compute_capability = R"trtdoc(
+        Get one target compute capability for building the engine.
+
+        :arg index: The index of the compute capability to get. Must be between 0 and the number of compute capabilities - 1.
+
+        :returns: The compute capability at the specified index.
+    )trtdoc";
+
+constexpr char const* set_compute_capability = R"trtdoc(
+        Set one target compute capability for building the engine.
+
+        :arg compute_capability: The compute capability to set. Cannot be kNONE. When set to kCURRENT, the index must be 0 and there must be only one compute capability.
+        :arg index: The index at which to set the compute capability. Must be between 0 and the number of compute capabilities - 1.
+
+        :returns: True if successful, false otherwise.
     )trtdoc";
 
 constexpr char const* clear_flag = R"trtdoc(

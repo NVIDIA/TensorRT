@@ -16,7 +16,7 @@
 # Note: This subdirectory is added multiple times, once for each binding library target.
 
 # Indirectly call the current ADD_SOURCES_FUNCTION to populate target sources on the bindings lib that currently being setup.
-# The parser is only included by the full "tensorrt" binding module.
+# The parser is only included by the full "tensorrt" or "tensorrt_rtx" binding module.
 if(${TRT_PYTHON_IS_FULL_BINDINGS})
     cmake_language(CALL ${ADD_SOURCES_FUNCTION}
         pyOnnx.cpp

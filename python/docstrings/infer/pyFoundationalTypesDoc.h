@@ -56,6 +56,7 @@ constexpr char const* fp8 = R"trtdoc(
 constexpr char const* int4 = R"trtdoc(Signed 4-bit integer representing a quantized floating-point value.)trtdoc";
 constexpr char const* fp4
     = R"trtdoc(Signed 4-bit floating point with 1 sign bit, 2 exponent bits and 1 mantissa bits.)trtdoc";
+constexpr char const* e8m0 = R"trtdoc(Unsigned 8-bit exponent-only floating point.)trtdoc";
 
 } // namespace DataTypeDoc
 

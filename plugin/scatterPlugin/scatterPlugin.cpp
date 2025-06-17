@@ -160,7 +160,7 @@ int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc c
     case DataType::kINT64:
     case DataType::kINT4:
     case DataType::kFP4:
-        PLUGIN_FAIL("Unsupported data type");
+    case DataType::kE8M0: PLUGIN_FAIL("Unsupported data type");
     }
 
     for (int32_t i = indexRank; i < dataDims.nbDims; i++)

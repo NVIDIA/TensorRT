@@ -154,7 +154,7 @@ inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
     case nvinfer1::DataType::kFP8: return 1;
     case nvinfer1::DataType::kINT4:
     case nvinfer1::DataType::kFP4:
-        PLUGIN_FAIL("Element size is not implemented for sub-byte data-types");
+    case nvinfer1::DataType::kE8M0: PLUGIN_FAIL("Element size is not implemented for sub-byte data-types");
     }
     return 0;
 }

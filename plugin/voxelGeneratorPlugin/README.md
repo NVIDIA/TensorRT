@@ -1,4 +1,6 @@
-# voxelGenerator Plugin
+# voxelGenerator Plugin [DEPRECATED]
+
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. No alternatives are planned to be provided.**
 
 **Table Of Contents**
 - [Description](#description)
@@ -75,6 +77,9 @@ documentation.
 
 
 ## Changelog
+
+May 2025
+Add deprecation note.
 
 Dec 2021
 This is the first release of this `README.md` file.

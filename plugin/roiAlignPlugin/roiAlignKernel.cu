@@ -145,7 +145,7 @@ __global__ void RoIAlignForward(int32_t const nthreads, T const* bottomData, T c
         T roiWidth = roiEndW - roiStartW;
         T roiHeight = roiEndH - roiStartH;
         if (!continuousCoordinate)
-        { // backward compatiblity
+        { // backward compatibility
             // Force malformed ROIs to be 1x1
             roiWidth = floatMax(roiWidth, static_cast<T>(1.));
             roiHeight = floatMax(roiHeight, static_cast<T>(1.));

@@ -20,7 +20,7 @@ ARG CUDA_VERSION=12.9.0
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
-ENV TRT_VERSION 10.11.0.33
+ENV TRT_VERSION 10.12.0.36
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -71,7 +71,7 @@ RUN apt-get install -y --no-install-recommends \
 # Install TensorRT. This will also pull in CUDNN
 RUN ver="${CUDA_VERSION%.*}" &&\
     if [ "${ver%.*}" = "12" ] ; then \
-    ver="12.9"; \
+    ver="12.8"; \
     fi &&\
     v="${TRT_VERSION}-1+cuda${ver}" &&\
     apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/3bf863cc.pub &&\
@@ -92,8 +92,6 @@ RUN cd /tmp && \
 # Install PyPI packages
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools>=41.0.0
-COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install -r /tmp/requirements.txt
 RUN pip3 install jupyter jupyterlab
 # Workaround to remove numpy installed with tensorflow
 RUN pip3 install --upgrade numpy

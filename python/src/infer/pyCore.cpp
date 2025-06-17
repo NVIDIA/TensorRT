@@ -171,6 +171,7 @@ static const auto reader_v2_read = [](IStreamReaderV2& self, void* destination, 
 };
 
 
+
 // For ICudaEngine
 // TODO: Add slicing support?
 static const auto engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
@@ -187,7 +188,7 @@ std::vector<Dims> get_tensor_profile_shape(ICudaEngine& self, std::string const&
     shapes.emplace_back(self.getProfileShape(tensorName.c_str(), profileIndex, OptProfileSelector::kOPT));
     shapes.emplace_back(self.getProfileShape(tensorName.c_str(), profileIndex, OptProfileSelector::kMAX));
     return shapes;
-};
+}
 
 std::vector<std::vector<int64_t>> get_tensor_profile_values(
     ICudaEngine& self, int32_t profileIndex, std::string const& tensorName)
@@ -212,7 +213,7 @@ std::vector<std::vector<int64_t>> get_tensor_profile_values(
         shapes.emplace_back(shapePtr, shapePtr + shapeSize);
     }
     return shapes;
-};
+}
 
 // For IGpuAllocator
 void* allocate_async(
@@ -1319,14 +1320,17 @@ void bindCore(py::module& m)
         .def("set_aux_streams", lambdas::set_aux_streams, "aux_streams"_a, IExecutionContextDoc::set_aux_streams)
         .def("__del__", &utils::doNothingDel<IExecutionContext>)
         .def("set_debug_listener", &IExecutionContext::setDebugListener, "listener"_a,
-            IExecutionContextDoc::set_debug_listener)
+            IExecutionContextDoc::set_debug_listener, py::keep_alive<1, 2>{})
         .def("get_debug_listener", &IExecutionContext::getDebugListener, IExecutionContextDoc::get_debug_listener)
         .def("set_tensor_debug_state", &IExecutionContext::setTensorDebugState, "name"_a, "flag"_a,
             IExecutionContextDoc::set_tensor_debug_state)
         .def("get_debug_state", &IExecutionContext::getDebugState, "name"_a, IExecutionContextDoc::get_debug_state)
         .def("set_all_tensors_debug_state", &IExecutionContext::setAllTensorsDebugState, "flag"_a,
             IExecutionContextDoc::set_all_tensors_debug_state)
-        .def("get_runtime_config", &IExecutionContext::getRuntimeConfig, IExecutionContextDoc::get_runtime_config);
+        .def_property("unfused_tensors_debug_state", &IExecutionContext::getUnfusedTensorsDebugState,
+            &IExecutionContext::setUnfusedTensorsDebugState)
+        .def("get_runtime_config", &IExecutionContext::getRuntimeConfig, IExecutionContextDoc::get_runtime_config,
+            py::keep_alive<1, 0>{}, py::call_guard<py::gil_scoped_release>{});
 
     py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
         ExecutionContextAllocationStrategyDoc::descr, py::module_local())
@@ -1380,8 +1384,14 @@ void bindCore(py::module& m)
         .value("NONE", TensorIOMode::kNONE, TensorIOModeDoc::NONE)
         .value("INPUT", TensorIOMode::kINPUT, TensorIOModeDoc::INPUT)
         .value("OUTPUT", TensorIOMode::kOUTPUT, TensorIOModeDoc::OUTPUT);
-
     py::class_<IRuntimeConfig>(m, "IRuntimeConfig", IRuntimeConfigDoc::descr, py::module_local())
+        .def("set_execution_context_allocation_strategy", &IRuntimeConfig::setExecutionContextAllocationStrategy,
+            IRuntimeConfigDoc::set_execution_context_allocation_strategy,
+            py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
+        .def("get_execution_context_allocation_strategy", &IRuntimeConfig::getExecutionContextAllocationStrategy,
+            IRuntimeConfigDoc::get_execution_context_allocation_strategy, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
         .def("set_execution_context_allocation_strategy", &IRuntimeConfig::setExecutionContextAllocationStrategy,
             IRuntimeConfigDoc::set_execution_context_allocation_strategy,
             py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC, py::keep_alive<0, 1>{},
@@ -1414,11 +1424,11 @@ void bindCore(py::module& m)
             utils::deprecateMember(&ICudaEngine::getDeviceMemorySizeForProfile,
                 "Deprecated in TensorRT 10.1. Superseded by get_device_memory_size_for_profile_v2"),
             "profile_index"_a, ICudaEngineDoc::get_device_memory_size_for_profile)
-        .def("get_device_memory_size_for_profile_v2", &ICudaEngine::getDeviceMemorySizeForProfile, "profile_index"_a,
-            ICudaEngineDoc::get_device_memory_size_for_profile_v2)
         .def_property_readonly("device_memory_size",
             utils::deprecateMember(&ICudaEngine::getDeviceMemorySize,
                 "Deprecated in TensorRT 10.1. Superseded by get_device_memory_size_v2"))
+        .def("get_device_memory_size_for_profile_v2", &ICudaEngine::getDeviceMemorySizeForProfileV2, "profile_index"_a,
+            ICudaEngineDoc::get_device_memory_size_for_profile_v2)
         .def_property_readonly("device_memory_size_v2", &ICudaEngine::getDeviceMemorySizeV2)
         .def_property_readonly("refittable", &ICudaEngine::isRefittable)
         .def_property_readonly("name", &ICudaEngine::getName)
@@ -1518,11 +1528,11 @@ void bindCore(py::module& m)
                 "Deprecated in TensorRT 10.1. Superseded by weight_streaming_budget_v2"),
             utils::deprecateMember(&ICudaEngine::setWeightStreamingBudget,
                 "Deprecated in TensorRT 10.1. Superseded by weight_streaming_budget_v2"))
-        .def_property("weight_streaming_budget_v2", &ICudaEngine::getWeightStreamingBudgetV2,
-            &ICudaEngine::setWeightStreamingBudgetV2)
         .def_property_readonly("minimum_weight_streaming_budget",
             utils::deprecateMember(
                 &ICudaEngine::getMinimumWeightStreamingBudget, "Deprecated in TensorRT 10.1. Not required by V2 APIs."))
+        .def_property("weight_streaming_budget_v2", &ICudaEngine::getWeightStreamingBudgetV2,
+            &ICudaEngine::setWeightStreamingBudgetV2)
         .def_property_readonly("streamable_weights_size", &ICudaEngine::getStreamableWeightsSize)
         // We keep this as a method so that future TRT versions may overload if the automatic budgeting algorithm ever
         // requires additional arguments.
@@ -1551,12 +1561,12 @@ void bindCore(py::module& m)
         .def("allocate",
             utils::deprecateMember(&IGpuAllocator::allocate, "Deprecated in TensorRT 10.0. Superseded by allocate"),
             "size"_a, "alignment"_a, "flags"_a, GpuAllocatorDoc::allocate)
-        .def("reallocate", &IGpuAllocator::reallocate, "address"_a, "alignment"_a, "new_size"_a,
-            GpuAllocatorDoc::reallocate)
         .def("deallocate",
             utils::deprecateMember(
                 &IGpuAllocator::deallocate, "Deprecated in TensorRT 10.0. Superseded by deallocate_async"),
             "memory"_a, GpuAllocatorDoc::deallocate)
+        .def("reallocate", &IGpuAllocator::reallocate, "address"_a, "alignment"_a, "new_size"_a,
+            GpuAllocatorDoc::reallocate)
         .def("allocate_async", &lambdas::allocate_async, "size"_a, "alignment"_a, "flags"_a, "stream"_a,
             GpuAllocatorDoc::allocate_async)
         .def("deallocate_async", &lambdas::deallocate_async, "memory"_a, "stream"_a, GpuAllocatorDoc::deallocate_async);
@@ -1625,7 +1635,9 @@ void bindCore(py::module& m)
         .value("REFIT_INDIVIDUAL", BuilderFlag::kREFIT_INDIVIDUAL, BuilderFlagDoc::REFIT_INDIVIDUAL)
         .value("STRICT_NANS", BuilderFlag::kSTRICT_NANS, BuilderFlagDoc::STRICT_NANS)
         .value("MONITOR_MEMORY", BuilderFlag::kMONITOR_MEMORY, BuilderFlagDoc::MONITOR_MEMORY)
-        .value("FP4", BuilderFlag::kFP4, BuilderFlagDoc::FP4);
+        .value("FP4", BuilderFlag::kFP4, BuilderFlagDoc::FP4)
+        .value("DISTRIBUTIVE_INDEPENDENCE", BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE,
+            BuilderFlagDoc::DISTRIBUTIVE_INDEPENDENCE);
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1652,6 +1664,7 @@ void bindCore(py::module& m)
         .value("AMPERE_PLUS", HardwareCompatibilityLevel::kAMPERE_PLUS, HardwareCompatibilityLevelDoc::AMPERE_PLUS)
         .value("SAME_COMPUTE_CAPABILITY", HardwareCompatibilityLevel::kSAME_COMPUTE_CAPABILITY,
             HardwareCompatibilityLevelDoc::SAME_COMPUTE_CAPABILITY);
+
 
     py::enum_<RuntimePlatform>(m, "RuntimePlatform", RuntimePlatformDoc::descr, py::module_local())
         .value("SAME_AS_BUILD", RuntimePlatform::kSAME_AS_BUILD, RuntimePlatformDoc::SAME_AS_BUILD)
@@ -1708,12 +1721,6 @@ void bindCore(py::module& m)
     py::class_<IBuilderConfig>(m, "IBuilderConfig", IBuilderConfigDoc::descr, py::module_local())
         .def_property(
             "avg_timing_iterations", &IBuilderConfig::getAvgTimingIterations, &IBuilderConfig::setAvgTimingIterations)
-        .def_property("int8_calibrator",
-            utils::deprecateMember(&IBuilderConfig::getInt8Calibrator,
-                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setInt8Calibrator,
-                                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-                py::keep_alive<1, 2>{}))
         .def_property("engine_capability", &IBuilderConfig::getEngineCapability, &IBuilderConfig::setEngineCapability)
         .def("set_memory_pool_limit", &IBuilderConfig::setMemoryPoolLimit, "pool"_a, "pool_size"_a,
             IBuilderConfigDoc::set_memory_pool_limit)
@@ -1726,7 +1733,17 @@ void bindCore(py::module& m)
         .def("clear_flag", &IBuilderConfig::clearFlag, "flag"_a, IBuilderConfigDoc::clear_flag)
         .def("set_flag", &IBuilderConfig::setFlag, "flag"_a, IBuilderConfigDoc::set_flag)
         .def("get_flag", &IBuilderConfig::getFlag, "flag"_a, IBuilderConfigDoc::get_flag)
-        .def_property(
+        .def("reset", &IBuilderConfig::reset, IBuilderConfigDoc::reset)
+        .def_property("profile_stream", lambdas::netconfig_get_profile_stream, lambdas::netconfig_set_profile_stream)
+        .def("add_optimization_profile", &IBuilderConfig::addOptimizationProfile, "profile"_a,
+            IBuilderConfigDoc::add_optimization_profile)
+        .def_property("int8_calibrator",
+            utils::deprecateMember(&IBuilderConfig::getInt8Calibrator,
+                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
+            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setInt8Calibrator,
+                                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
+                py::keep_alive<1, 2>{}))
+         .def_property(
             "quantization_flags", &IBuilderConfig::getQuantizationFlags, &IBuilderConfig::setQuantizationFlags)
         .def("clear_quantization_flag", &IBuilderConfig::clearQuantizationFlag, "flag"_a,
             IBuilderConfigDoc::clear_quantization_flag)
@@ -1734,10 +1751,6 @@ void bindCore(py::module& m)
             IBuilderConfigDoc::set_quantization_flag)
         .def("get_quantization_flag", &IBuilderConfig::getQuantizationFlag, "flag"_a,
             IBuilderConfigDoc::get_quantization_flag)
-        .def("reset", &IBuilderConfig::reset, IBuilderConfigDoc::reset)
-        .def_property("profile_stream", lambdas::netconfig_get_profile_stream, lambdas::netconfig_set_profile_stream)
-        .def("add_optimization_profile", &IBuilderConfig::addOptimizationProfile, "profile"_a,
-            IBuilderConfigDoc::add_optimization_profile)
         .def("set_calibration_profile",
             utils::deprecateMember(&IBuilderConfig::setCalibrationProfile,
                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
@@ -1746,6 +1759,12 @@ void bindCore(py::module& m)
             utils::deprecateMember(&IBuilderConfig::getCalibrationProfile,
                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
             IBuilderConfigDoc::get_calibration_profile)
+        .def_property("algorithm_selector",
+            utils::deprecateMember(&IBuilderConfig::getAlgorithmSelector,
+                "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
+            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setAlgorithmSelector,
+                                 "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
+                py::keep_alive<1, 2>{}))
         .def_property_readonly("num_optimization_profiles", &IBuilderConfig::getNbOptimizationProfiles)
         .def("set_device_type", &IBuilderConfig::setDeviceType, "layer"_a, "device_type"_a,
             IBuilderConfigDoc::set_device_type)
@@ -1755,12 +1774,6 @@ void bindCore(py::module& m)
         .def("can_run_on_DLA", &IBuilderConfig::canRunOnDLA, "layer"_a, IBuilderConfigDoc::can_run_on_DLA)
         .def_property(
             "profiling_verbosity", &IBuilderConfig::getProfilingVerbosity, &IBuilderConfig::setProfilingVerbosity)
-        .def_property("algorithm_selector",
-            utils::deprecateMember(&IBuilderConfig::getAlgorithmSelector,
-                "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
-            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setAlgorithmSelector,
-                                 "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
-                py::keep_alive<1, 2>{}))
         .def("set_tactic_sources", &IBuilderConfig::setTacticSources, "tactic_sources"_a,
             IBuilderConfigDoc::set_tactic_sources)
         .def("get_tactic_sources", &IBuilderConfig::getTacticSources, IBuilderConfigDoc::get_tactic_sources)
@@ -1786,6 +1799,7 @@ void bindCore(py::module& m)
         .def_property("tiling_optimization_level", &IBuilderConfig::getTilingOptimizationLevel,
             &IBuilderConfig::setTilingOptimizationLevel)
         .def_property("l2_limit_for_tiling", &IBuilderConfig::getL2LimitForTiling, &IBuilderConfig::setL2LimitForTiling)
+
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},

@@ -336,6 +336,11 @@ public:
     public:
         TestAtom(TestAtom&&) = default;
 
+        std::string getCmdline() const
+        {
+            return mCmdline;
+        }
+
     private:
         friend class Logger;
 

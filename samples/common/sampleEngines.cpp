@@ -24,7 +24,6 @@
 #include <random>
 #include <set>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "NvInfer.h"
@@ -32,7 +31,6 @@
 
 #include "ErrorRecorder.h"
 #include "common.h"
-#include "half.h"
 #include "logger.h"
 #include "sampleDevice.h"
 #include "sampleEngines.h"
@@ -98,7 +96,6 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
             mRuntime.reset(mParentRuntime->loadRuntime(mLeanDLLPath.c_str()));
         }
         ASSERT(mRuntime != nullptr);
-
         if (mVersionCompatible)
         {
             // Application needs to opt into allowing deserialization of engines with embedded lean runtime.
@@ -111,7 +108,6 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         }
 
         mRuntime->setTempfileControlFlags(mTempfileControls);
-
         SMP_RETVAL_IF_FALSE(mRuntime != nullptr, "runtime creation failed", nullptr, sample::gLogError);
         if (mDLACore != -1)
         {
@@ -123,13 +119,13 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
             mRuntime->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
 
-        if (getFileReader().isOpen())
-        {
-            mEngine.reset(mRuntime->deserializeCudaEngine(getFileReader()));
-        }
-        else if (getAsyncFileReader().isOpen())
+        if (getAsyncFileReader().isOpen())
         {
             mEngine.reset(mRuntime->deserializeCudaEngine(getAsyncFileReader()));
+        }
+        else if (getFileReader().isOpen())
+        {
+            mEngine.reset(mRuntime->deserializeCudaEngine(getFileReader()));
         }
         else
         {
@@ -375,8 +371,7 @@ bool setTensorDynamicRange(INetworkDefinition const& network, float inRange = 2.
                 if (!input->setDynamicRange(-dynRange, dynRange))
                 {
                     return false;
-                }
-            }
+                }}
         }
         for (int32_t o = 0; o < layer->getNbOutputs(); o++)
         {
@@ -410,7 +405,6 @@ bool isNonActivationType(nvinfer1::DataType const type)
     return type == nvinfer1::DataType::kINT32 || type == nvinfer1::DataType::kINT64 || type == nvinfer1::DataType::kBOOL
         || type == nvinfer1::DataType::kUINT8;
 }
-
 void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& layerPrecisions)
 {
     bool hasLayerPrecisionSkipped{false};
@@ -592,7 +586,6 @@ void markDebugTensors(INetworkDefinition& network, StringSet const& debugTensors
         }
     }
 }
-
 void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
 {
     auto const roundToBytes = [](double const size, bool fromMB = true) {
@@ -738,7 +731,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                 if (shape == optShapes.end())
                 {
                     constexpr int32_t kDEFAULT_DIMENSION{1};
-                    std::vector<int32_t> staticDims;
+                    std::vector<int64_t> staticDims;
                     if (input->isShapeTensor())
                     {
                         if (isScalar)
@@ -767,19 +760,19 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                     shapes = shape->second;
                 }
 
-                std::vector<int> profileDims{};
+                std::vector<int64_t> profileDims{};
                 if (input->isShapeTensor())
                 {
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMIN)];
-                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(tensorName, OptProfileSelector::kMIN,
+                    SMP_RETVAL_IF_FALSE(profile->setShapeValuesV2(tensorName, OptProfileSelector::kMIN,
                                             profileDims.data(), static_cast<int>(profileDims.size())),
                         "Error in set shape values MIN", false, err);
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kOPT)];
-                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(tensorName, OptProfileSelector::kOPT,
+                    SMP_RETVAL_IF_FALSE(profile->setShapeValuesV2(tensorName, OptProfileSelector::kOPT,
                                             profileDims.data(), static_cast<int>(profileDims.size())),
                         "Error in set shape values OPT", false, err);
                     profileDims = shapes[static_cast<size_t>(OptProfileSelector::kMAX)];
-                    SMP_RETVAL_IF_FALSE(profile->setShapeValues(tensorName, OptProfileSelector::kMAX,
+                    SMP_RETVAL_IF_FALSE(profile->setShapeValuesV2(tensorName, OptProfileSelector::kMAX,
                                             profileDims.data(), static_cast<int>(profileDims.size())),
                         "Error in set shape values MAX", false, err);
                     sample::gLogInfo << "Set input shape tensor " << tensorName << " for optimization profile " << i
@@ -935,9 +928,13 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setFlag(BuilderFlag::kMONITOR_MEMORY);
     }
 
+    if (build.distributiveIndependence)
+    {
+        config.setFlag(BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE);
+    }
+
     config.setProfilingVerbosity(build.profilingVerbosity);
     config.setAvgTimingIterations(build.avgTiming);
-
     if (build.fp16)
     {
         config.setFlag(BuilderFlag::kFP16);
@@ -970,7 +967,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                "specifying --fp16 or --best"
             << std::endl;
     }
-
     auto isInt8 = [](const IOFormat& format) { return format.first == DataType::kINT8; };
     auto int8IO = std::count_if(build.inputFormats.begin(), build.inputFormats.end(), isInt8)
         + std::count_if(build.outputFormats.begin(), build.outputFormats.end(), isInt8);
@@ -1013,6 +1009,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                 return false;
             }
         }
+
         IOptimizationProfile* profileCalib{nullptr};
         if (!build.shapesCalib.empty())
         {
@@ -1107,6 +1104,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         markDebugTensors(network, build.debugTensors);
     }
 
+    if (build.markUnfusedTensorsAsDebugTensors)
+    {
+        network.markUnfusedTensorsAsDebugTensors();
+    }
+
     if (build.safe && sys.DLACore == -1)
     {
         config.setEngineCapability(EngineCapability::kSAFETY);
@@ -1148,7 +1150,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             return false;
         }
     }
-
     if (build.enabledTactics || build.disabledTactics)
     {
         TacticSources tacticSources = config.getTacticSources();
@@ -1158,6 +1159,8 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     }
 
     config.setHardwareCompatibilityLevel(build.hardwareCompatibilityLevel);
+
+
     config.setRuntimePlatform(build.runtimePlatform);
 
     if (build.maxAuxStreams != defaultMaxAuxStreams)
@@ -1534,7 +1537,8 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
         case DataType::kFP8:
         case DataType::kINT4:
         case DataType::kFP4:
-       // Refit not supported for these types.
+        case DataType::kE8M0:
+            // Refit not supported for these types.
             break;
         }
         break;

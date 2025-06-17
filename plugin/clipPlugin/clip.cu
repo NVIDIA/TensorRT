@@ -100,6 +100,7 @@ int clipInference(
     case nvinfer1::DataType::kINT64:
     case nvinfer1::DataType::kINT4:
     case nvinfer1::DataType::kFP4:
+    case nvinfer1::DataType::kE8M0:
         PLUGIN_FAIL("Unsupported data type");
     }
 

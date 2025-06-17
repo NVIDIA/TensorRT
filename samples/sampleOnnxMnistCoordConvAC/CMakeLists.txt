@@ -33,6 +33,7 @@ endif()
 install(
     TARGETS sample_onnx_mnist_coord_conv_ac
     OPTIONAL
+    COMPONENT full
 )
 
 else()

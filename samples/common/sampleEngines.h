@@ -239,8 +239,10 @@ struct BuildEnvironment
     BuildEnvironment(BuildEnvironment const& other) = delete;
     BuildEnvironment(BuildEnvironment&& other) = delete;
     BuildEnvironment(bool isSafe, bool versionCompatible, int32_t DLACore, std::string const& tempdir,
-        nvinfer1::TempfileControlFlags tempfileControls, std::string const& leanDLLPath = "")
+        nvinfer1::TempfileControlFlags tempfileControls, std::string const& leanDLLPath = "",
+        std::string const& cmdline = "")
         : engine(isSafe, versionCompatible, DLACore, tempdir, tempfileControls, leanDLLPath)
+        , cmdline(cmdline)
     {
     }
 
@@ -263,6 +265,9 @@ struct BuildEnvironment
 
     //! The engine.
     LazilyDeserializedEngine engine;
+
+    //! The command line string.
+    std::string cmdline;
     //!@}
 };
 

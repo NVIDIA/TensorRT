@@ -51,6 +51,7 @@ from demo_diffusion.model import (
     UNetModel,
     UNetXLModel,
     UNetXLModelControlNet,
+    UNet2DConditionControlNetModel,
     VAEEncoderModel,
     VAEModel,
     get_clip_embedding_dim,
@@ -487,7 +488,10 @@ class StableDiffusionPipeline:
                     obj.export_onnx(onnx_path[model_name], onnx_opt_path[model_name], onnx_opset, opt_image_height, opt_image_width, enable_lora_merge=do_lora_merge[model_name], static_shape=static_shape, lora_loader=self.lora_loader)
                 else:
                     pipeline = obj.get_pipeline()
-                    model = pipeline.unet
+                    if self.pipeline_type.is_controlnet():
+                        model = UNet2DConditionControlNetModel(pipeline.unet, pipeline.controlnet.nets)
+                    else:
+                        model = pipeline.unet
                     if use_fp8[model_name] and quantization_level == 4.0:
                         set_fmha(model)
 
@@ -497,22 +501,39 @@ class StableDiffusionPipeline:
                         root_dir = os.path.dirname(os.path.abspath(sys.modules["__main__"].__file__))
                         calibration_file = os.path.join(root_dir, "calibration_data", "calibration-prompts.txt")
                         calibration_prompts = load_calib_prompts(calib_batch_size, calibration_file)
+                        if self.pipeline_type.is_controlnet():
+                            calibration_image_canny = image_module.download_image(
+                                "https://huggingface.co/diffusers/controlnet-canny-sdxl-1.0/resolve/main/out_bird.png"
+                            )
+                            # "out_bird.png" has 5 images combined in a row. We pick the first image which is the input image.
+                            calibration_image_canny = calibration_image_canny.crop(
+                                (0, 0, calibration_image_canny.width / 5, calibration_image_canny.height)
+                            )
+                            calibration_images = [calibration_image_canny]
+
                         # TODO check size > calibration_size
                         def do_calibrate(pipeline, calibration_prompts, **kwargs):
                             for i_th, prompts in enumerate(calibration_prompts):
                                 if i_th >= kwargs["calib_size"]:
                                     return
-                                pipeline(
-                                    prompt=prompts,
-                                    num_inference_steps=kwargs["n_steps"],
-                                    negative_prompt=[
+                                pipeline_call_kwargs = {
+                                    "prompt": prompts,
+                                    "num_inference_steps": kwargs["n_steps"],
+                                    "negative_prompt": [
                                         "normal quality, low quality, worst quality, low res, blurry, nsfw, nude"
                                     ]
                                     * len(prompts),
-                                ).images
+                                }
+                                if self.pipeline_type.is_controlnet():
+                                    pipeline_call_kwargs["image"] = calibration_images
+                                pipeline(**pipeline_call_kwargs).images
 
                         def forward_loop(model):
-                            pipeline.unet = model
+                            if self.pipeline_type.is_controlnet():
+                                pipeline.unet = model.unet
+                                pipeline.controlnet.nets = model.controlnets
+                            else:
+                                pipeline.unet = model
                             do_calibrate(
                                 pipeline=pipeline,
                                 calibration_prompts=calibration_prompts,

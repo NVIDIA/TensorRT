@@ -155,7 +155,7 @@ def add_arguments(parser):
     parser.add_argument(
         "--download-onnx-models",
         action="store_true",
-        help=("[FLUX only] Download pre-exported ONNX models"),
+        help=("[FLUX and Stable Diffusion 3.5-large only] Download pre-exported ONNX models"),
     )
 
     # Framework model ckpt
@@ -312,8 +312,16 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
         raise ValueError("int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
 
     # fp8 support
-    if args.fp8 and not (any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1")) or is_flux):
-        raise ValueError("fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1 and FLUX pipelines.")
+    if args.fp8 and not (
+        any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1", "3.5-large")) or is_flux
+    ):
+        raise ValueError(
+            "fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1, SD3.5-large and FLUX pipelines."
+        )
+
+    if args.fp8 and hasattr(args, "controlnet_type"):
+        if args.version != "xl-1.0":
+            raise ValueError("fp8 controlnet quantization is only supported for SDXL.")
 
     if args.fp8 and args.int8:
         raise ValueError("Cannot apply both int8 and fp8 quantization, please choose only one.")
@@ -339,7 +347,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
         elif args.int8:
             override_quant_level(3.0, "INT8")
 
-    if args.quantization_level == 3.0 and args.download_onnx_models:
+    if args.version.startswith("flux") and args.quantization_level == 3.0 and args.download_onnx_models:
         raise ValueError(
             "Transformer ONNX model for Quantization level 3 is not available for download. Please export the quantized Transformer model natively with the removal of --download-onnx-models."
         )

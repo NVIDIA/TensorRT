@@ -1,0 +1,28 @@
+name: Label and close inactive issues
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          stale-issue-message: 'Issue has not received an update in over 14 days. Adding stale label.  Please note the issue will be closed in 14 days after being marked stale if there is no update.'
+          stale-pr-message: 'PR has not received an update in over 14 days. Adding stale label.  Please note the PR will be closed in 14 days after being marked stale if there is no update.'
+          close-issue-message: 'This issue was closed because it has been 14 days without activity since it has been marked as stale.'
+          close-pr-message: 'This PR was closed because it has been 14 days without activity since it has been marked as stale.'
+          days-before-issue-stale: 14
+          days-before-close: 14
+          only-labels: 'waiting for feedback'
+          labels-to-add-when-unstale: 'investigating'
+          labels-to-remove-when-unstale: 'stale,waiting for feedback'
+          stale-issue-label: 'stale'
+          stale-pr-label: 'stale'

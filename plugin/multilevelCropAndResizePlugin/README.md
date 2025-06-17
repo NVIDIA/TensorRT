@@ -1,5 +1,6 @@
+# MultilevelCropAndResize [DEPRECATED]
 
-# MultilevelCropAndResize
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. Note alternatives are planned to be provided.**
 
 **Table Of Contents**
 - [Description](#description)
@@ -46,6 +47,8 @@ documentation.
 
 
 ## Changelog
+
+May 2025: Add deprecation note.
 
 March 2022: This is the second release of this `README.md` file.
 

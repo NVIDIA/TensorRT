@@ -100,7 +100,7 @@ constexpr const char* LINEAR = R"trtdoc(
 constexpr const char* CHW2 = R"trtdoc(
     Two wide channel vectorized row major format.
 
-    This format is bound to FP16. It is only available for dimensions >= 3.
+    This format is bound to FP16 and BF16. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+1)/2][H][W][2], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/2][h][w][c%2].
 )trtdoc";
@@ -115,7 +115,7 @@ constexpr const char* HWC8 = R"trtdoc(
 
 constexpr const char* CHW4 = R"trtdoc(
     Four wide channel vectorized row major format.
-    This format is bound to FP16 and INT8. It is only available for dimensions >= 3.
+    This format is bound to INT8. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+3)/4][H][W][4], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/4][h][w][c%4].
 )trtdoc";
@@ -123,7 +123,7 @@ constexpr const char* CHW4 = R"trtdoc(
 constexpr const char* CHW16 = R"trtdoc(
     Sixteen wide channel vectorized row major format.
 
-    This format is bound to FP16. It is only available for dimensions >= 3.
+    This format is only supported by DLA and requires FP16. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+15)/16][H][W][16], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/16][h][w][c%16].
 )trtdoc";
@@ -293,10 +293,12 @@ constexpr const char* get_output = R"trtdoc(
 )trtdoc";
 
 constexpr const char* reset_precision = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Reset the computation precision of the layer.
 )trtdoc";
 
 constexpr const char* set_output_type = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Constraint layer to generate output data with given type.
     Note that this method cannot be used to set the data type
     of the second output tensor of the topK layer. The data
@@ -315,6 +317,7 @@ constexpr const char* get_output_type = R"trtdoc(
 )trtdoc";
 
 constexpr const char* output_type_is_set = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Whether the output type has been set for this layer.
 
     :arg index: The index of the output.
@@ -323,6 +326,7 @@ constexpr const char* output_type_is_set = R"trtdoc(
 )trtdoc";
 
 constexpr const char* reset_output_type = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Reset output type of this layer.
 
     :arg index: The index of the output.
@@ -1617,7 +1621,7 @@ constexpr const char* descr = R"trtdoc(
     The output size is the same as the input size.
 
     IQuantizeLayer supports tensorrt.float32, tensorrt.float16 and tensorrt.bfloat16 precision and will default to tensorrt.float32 precision during instantiation.
-    IQuantizeLayer supports tensorrt.int8 and tensorrt.float8 output.
+    IQuantizeLayer supports tensorrt.int8, tensorrt.float8, tensorrt.int4 and tensorrt.fp4 output.
 
     :ivar axis: :class:`int` The axis along which quantization occurs. The quantization axis is in reference to the input tensor's dimensions.
 
@@ -1651,7 +1655,7 @@ constexpr const char* descr = R"trtdoc(
     constrained to tensorrt.float32, tensorrt.float16 or tensorrt.bfloat16.
     The output size is the same as the input size.
 
-    IDequantizeLayer supports tensorrt.int8 and tensorrt.float8 precision and will default to tensorrt.int8 precision during instantiation.
+    IDequantizeLayer supports tensorrt.int8, tensorrt.float8, tensorrt.int4 and tensorrt.fp4 precision and will default to tensorrt.int8 precision during instantiation.
     IDequantizeLayer supports tensorrt.float32, tensorrt.float16 and tensorrt.bfloat16 output.
 
     :ivar axis: :class:`int` The axis along which dequantization occurs. The dequantization axis is in reference to the input tensor's dimensions.
@@ -1666,7 +1670,7 @@ constexpr const char* descr = R"trtdoc(
     A DynamicQuantize layer in an :class:`INetworkDefinition` .
 
     This layer performs dynamic block quantization of its input tensor and outputs the quantized data and the computed block scale-factors.
-    The block size is currently limited to 16 and the size of the blocked axis must be divisible by 16.
+    The size of the blocked axis must be divisible by the block size.
 
     The first input (index 0) is the tensor to be quantized. Its data type must be one of DataType::kFLOAT,
     DataType::kHALF, or DataType::kBF16. Currently only 2D and 3D inputs are supported.
@@ -1674,9 +1678,9 @@ constexpr const char* descr = R"trtdoc(
     The second input (index 1) is the double quantization scale factor. It is a scalar scale factor used to quantize the computed block scales-factors.
 
     :ivar axis: :class:`int` The axis that is sliced into blocks. The axis must be the last dimension or the second to last dimension.
-    :ivar block_size: :class:`int` The number of elements that are quantized using a shared scale factor. Currently only blocks of 16 elements are supported.
-    :ivar output_type: :class:`DataType` The data type of the quantized output tensor, must be DataType::kFP4.
-    :ivar scale_type: :class:`DataType` The data type of the scale factor used for quantizing the input data, must be DataType::kFP8.
+    :ivar block_size: :class:`int` The number of elements that are quantized using a shared scale factor. Supports block sizes of 16 with NVFP4 quantization and 32 with MXFP8 quantization.
+    :ivar output_type: :class:`DataType` The data type of the quantized output tensor, must be either DataType::kFP4 (NVFP4 quantization) or DataType::kFP8 (MXFP8 quantization).
+    :ivar scale_type: :class:`DataType` The data type of the scale factor used for quantizing the input data, must be DataType::kFP8 (NVFP4 quantization) or DataType::kE8M0 (MXFP8 quantization).
 )trtdoc";
 } // namespace IDynamicQuantizeLayerDoc
 
@@ -1684,10 +1688,10 @@ namespace ISplitToRaggedLayerDoc
 {
 constexpr const char* descr = R"trtdoc(
     A SplitToRagged layer in an :class:`INetworkDefinition` .
-    
-    Split a tensor into a ragged tensor along the specified 'axis'. 
 
-    :ivar axis: :class:`int` 
+    Split a tensor into a ragged tensor along the specified 'axis'.
+
+    :ivar axis: :class:`int`
 
 )trtdoc";
 } // namespace ISplitToRaggedLayerDoc
@@ -1697,9 +1701,9 @@ namespace IConcatFromRaggedLayerDoc
 constexpr const char* descr = R"trtdoc(
     A ConcatFromRagged layer in an :class:`INetworkDefinition` .
 
-    Concatenate a ragged tensor to a regular tensor. 
+    Concatenate a ragged tensor to a regular tensor.
 
-    :ivar axis: :class:`int` 
+    :ivar axis: :class:`int`
 )trtdoc";
 } // namespace IConcatFromRaggedLayerDoc
 
@@ -2049,6 +2053,30 @@ constexpr const char* is_debug_tensor = R"trtdoc(
     Check if a tensor is marked as debug.
 
     :arg tensor: The tensor to be checked.
+)trtdoc";
+
+constexpr const char* mark_unfused_tensors_as_debug_tensors = R"trtdoc(
+    Mark unfused tensors as debug tensors.
+
+    Debug tensors can be optionally emitted at runtime.
+    Tensors that are fused by the optimizer will not be emitted.
+    Tensors marked this way will not prevent fusion like mark_debug() does, thus preserving performance.
+
+    Tensors marked this way cannot be detected by is_debug_tensor().
+    DebugListener can only get internal tensor names instead of the original tensor names in the NetworkDefinition for tensors marked this way. 
+    But the names correspond to the names obtained by IEngineInspector.
+    There is no guarantee that all unfused tensors are marked.
+
+    :returns: True if tensors were successfully marked (or were already marked), false otherwise.
+
+)trtdoc";
+
+constexpr const char* unmark_unfused_tensors_as_debug_tensors = R"trtdoc(
+    Undo the marking of unfused tensor as debug tensors.
+
+    This has no effect on tensors marked by mark_debug().
+
+    :returns: True if tensor successfully unmarked (or was already unmarked), false otherwise.
 )trtdoc";
 
 constexpr const char* add_convolution_nd = R"trtdoc(

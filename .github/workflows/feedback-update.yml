@@ -1,0 +1,16 @@
+name: Remove feedback label on comment
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  remove_label:
+    runs-on: ubuntu-latest
+    if: github.event.issue.user.id == github.event.comment.user.id
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: "waiting for feedback"

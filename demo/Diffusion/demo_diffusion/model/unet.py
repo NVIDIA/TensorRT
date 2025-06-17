@@ -23,6 +23,7 @@ import torch
 
 from demo_diffusion.dynamic_import import import_from_diffusers
 from demo_diffusion.model import base_model, load, optimizer
+from diffusers import StableDiffusionXLControlNetPipeline
 
 # List of models to import from diffusers.models
 models_to_import = [
@@ -465,6 +466,26 @@ class UNetXLModelControlNet(UNetXLModel):
             do_classifier_free_guidance=do_classifier_free_guidance,
         )
         self.controlnets = load.get_path(version, pipeline, controlnets) if controlnets else None
+
+    def get_pipeline(self):
+        cnet_model_opts = {"torch_dtype": torch.float16} if self.fp16 else {}
+        controlnets = [
+            ControlNetModel.from_pretrained(path, **cnet_model_opts).to(self.device) for path in self.controlnets
+        ]
+        if self.bf16:
+            model_opts = {"torch_dtype": torch.bfloat16}
+        elif self.fp16:
+            model_opts = {"variant": "fp16", "torch_dtype": torch.float16}
+        else:
+            model_opts = {}
+        pipeline = StableDiffusionXLControlNetPipeline.from_pretrained(
+            self.path,
+            use_safetensors=self.hf_safetensor,
+            token=self.hf_token,
+            controlnet=controlnets,
+            **model_opts,
+        ).to(self.device)
+        return pipeline
 
     def get_model(self, torch_inference=""):
         model_opts = {"variant": "fp16", "torch_dtype": torch.float16} if self.fp16 else {}

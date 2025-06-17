@@ -49,7 +49,7 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.11.0.33
+tensorrt            10.12.0.36
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -154,6 +154,8 @@ python3 demo_controlnet.py "A beautiful bird with rainbow colors" --controlnet-t
 
 > NOTE: Currently only `--controlnet-type canny` is supported. `--input-image` must be a pre-processed image corresponding to `--controlnet-type canny`. If unspecified, a sample image will be downloaded.
 
+> NOTE: FP8 quantization (`--fp8`) is supported.
+
 ### Generate an image guided by a text prompt, and using specified LoRA model weight updates
 
 ```bash
@@ -208,10 +210,13 @@ Run the command below to generate an image using Stable Diffusion 3 and Stable D
 python3 demo_txt2img_sd3.py "A vibrant street wall covered in colorful graffiti, the centerpiece spells \"SD3 MEDIUM\", in a storm of colors" --version sd3 --hf-token=$HF_TOKEN
 
 # Stable Diffusion 3.5-medium
-python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-medium --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN
+python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-medium --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN --bf16
 
 # Stable Diffusion 3.5-large
-python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-large --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN
+python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-large --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN --bf16 --download-onnx-models
+
+# Stable Diffusion 3.5-large FP8
+python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-large --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN --fp8 --download-onnx-models --onnx-dir onnx_35_fp8/ --engine-dir engine_35_fp8/
 ```
 
 You can also specify an input image conditioning as shown below
@@ -224,6 +229,19 @@ python3 demo_txt2img_sd3.py "dog wearing a sweater and a blue collar" --version 
 ```
 
 Note that a denosing-percentage is applied to the number of denoising-steps when an input image conditioning is provided. Its default value is set to 0.6. This parameter can be updated using `--denoising-percentage`
+
+### Generate an image with Stable Diffusion v3.5-large with ControlNet guided by an image and a text prompt
+
+```bash
+# Depth
+python3 demo_controlnet_sd35.py "a photo of a man" --controlnet-type depth --hf-token=$HF_TOKEN --denoising-steps 40 --guidance-scale 4.5 --bf16
+
+# Canny
+python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16
+
+# Blur
+python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in an action shot close-up, surfing the humongous waves, inside the tube, in the style of Kelly Slater" --controlnet-type blur --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16
+```
 
 ### Generate a video guided by an initial image using Stable Video Diffusion
 
@@ -442,3 +460,7 @@ Custom override paths to pre-built engine files can be provided using `--custom-
 - To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
+
+### Known Issues
+
+The Stable Diffusion XL pipeline is currently not supported on RTX 5090 due to memory constraints. This issue will be resolved in an upcoming release.

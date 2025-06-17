@@ -26,6 +26,7 @@ add_dependencies(tensorrt_samples sample_non_zero_plugin)
 install(
     TARGETS sample_non_zero_plugin
     OPTIONAL
+    COMPONENT full
 )
 
 else()

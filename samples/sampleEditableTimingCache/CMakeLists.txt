@@ -23,6 +23,7 @@ add_dependencies(tensorrt_samples sample_editable_timing_cache)
 install(
     TARGETS sample_editable_timing_cache
     OPTIONAL
+    COMPONENT full
 )
 
 else()
