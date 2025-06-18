@@ -19,15 +19,10 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
-#include <fstream>
 #include <functional>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <sstream>
-#include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <vector>
 
 #include "NvInfer.h"
@@ -291,7 +286,7 @@ int main(int argc, char** argv)
         gUseRuntime = options.build.useRuntime;
 #if !TRT_STATIC
         LibraryPtr nvinferPluginLib{};
-#endif
+#endif /* TRT_STATIC */
         std::vector<LibraryPtr> pluginLibs;
         if (gUseRuntime == RuntimeMode::kFULL)
         {
@@ -300,9 +295,9 @@ int main(int argc, char** argv)
             nvinferPluginLib = loadLibrary(kNVINFER_PLUGIN_LIBNAME);
             auto pInitLibNvinferPlugins
                 = nvinferPluginLib->symbolAddress<bool(void*, char const*)>("initLibNvInferPlugins");
-#else
+#else /* TRT_STATIC */
             auto pInitLibNvinferPlugins = initLibNvInferPlugins;
-#endif
+#endif /* TRT_STATIC */
             ASSERT(pInitLibNvinferPlugins != nullptr);
             pInitLibNvinferPlugins(&sample::gLogger.getTRTLogger(), "");
             for (auto const& pluginPath : options.system.plugins)
@@ -320,10 +315,10 @@ int main(int argc, char** argv)
             sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
             return sample::gLogger.reportFail(sampleTest);
         }
-
         // Start engine building phase.
         std::unique_ptr<BuildEnvironment> bEnv(new BuildEnvironment(options.build.safe, options.build.versionCompatible,
-            options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath));
+            options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath,
+            sampleTest.getCmdline()));
 
         bool buildPass = getEngineBuildEnv(options.model, options.build, options.system, *bEnv, sample::gLogError);
 
@@ -385,7 +380,6 @@ int main(int argc, char** argv)
 
         // Start inference phase.
         std::unique_ptr<InferenceEnvironment> iEnv(new InferenceEnvironment(*bEnv));
-
         // We avoid re-loading some dynamic plugins while deserializing
         // if they were already serialized with `setPluginsToSerialize`.
         std::vector<std::string> dynamicPluginsNotSerialized;
@@ -400,7 +394,6 @@ int main(int argc, char** argv)
         }
 
         iEnv->engine.setDynamicPlugins(dynamicPluginsNotSerialized);
-
         // Delete build environment.
         bEnv.reset();
 
@@ -412,7 +405,6 @@ int main(int argc, char** argv)
             }
             return sample::gLogger.reportPass(sampleTest);
         }
-
         if (options.build.safe && options.system.DLACore >= 0)
         {
             sample::gLogInfo << "Safe DLA capability is detected. Please save DLA loadable with --saveEngine option, "
@@ -421,11 +413,9 @@ int main(int argc, char** argv)
                              << std::endl;
             return sample::gLogger.reportFail(sampleTest);
         }
-
         bool const profilerEnabled = options.reporting.profile || !options.reporting.exportProfile.empty();
 
         bool const layerInfoEnabled = options.reporting.layerInfo || !options.reporting.exportLayerInfo.empty();
-
         if (iEnv->safe && (profilerEnabled || layerInfoEnabled))
         {
             sample::gLogError << "Safe runtime does not support --dumpProfile or --exportProfile=<file> or "
@@ -434,7 +424,6 @@ int main(int argc, char** argv)
                               << std::endl;
             return sample::gLogger.reportFail(sampleTest);
         }
-
         if (profilerEnabled && !options.inference.rerun)
         {
             iEnv->profiler.reset(new Profiler);
@@ -459,11 +448,10 @@ int main(int argc, char** argv)
             printLayerInfo(options.reporting, iEnv->engine.get(), iEnv->contexts.front().get());
             printOptimizationProfileInfo(options.reporting, iEnv->engine.get());
         }
-
         std::vector<InferenceTrace> trace;
         sample::gLogInfo << "Starting inference" << std::endl;
 
-        if (!runInference(options.inference, *iEnv, options.system.device, trace))
+        if (!runInference(options.inference, *iEnv, options.system.device, trace, options.reporting))
         {
             sample::gLogError << "Error occurred during inference" << std::endl;
             return sample::gLogger.reportFail(sampleTest);
@@ -499,7 +487,7 @@ int main(int argc, char** argv)
                        "and disabled CUDA graph."
                     << std::endl;
             }
-            if (!runInference(options.inference, *iEnv, options.system.device, trace))
+            if (!runInference(options.inference, *iEnv, options.system.device, trace, options.reporting))
             {
                 sample::gLogError << "Error occurred during inference" << std::endl;
                 return sample::gLogger.reportFail(sampleTest);

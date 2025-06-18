@@ -58,7 +58,8 @@ class SessionFromOnnx(BaseLoader):
         available_providers = onnxrt.get_available_providers()
         providers = []
         for prov in self.providers:
-            matched_prov = util.find_str_in_iterable(prov, available_providers)
+            matched_prov_name = util.find_str_in_iterable(prov[0] if isinstance(prov, tuple) else prov, available_providers)
+            matched_prov = (matched_prov_name, prov[1]) if isinstance(prov, tuple) else matched_prov_name
             if matched_prov is None:
                 G_LOGGER.critical(
                     f"Could not find specified ONNX-Runtime execution provider.\nNote: Requested provider was: {prov}, but available providers are: {available_providers}"

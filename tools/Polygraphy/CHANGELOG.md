@@ -3,6 +3,16 @@
 Dates are in YYYY-MM-DD format.
 
 
+## v0.49.24 (2025-05-27)
+### Fixed
+- Fixed various version checks to account for TRT-RTX versions.
+
+
+## v0.49.23 (2025-05-22)
+### Fixed
+- Fixed various issues with loading TRT-RTX.
+
+
 ## v0.49.22 (2025-05-09)
 ### Changed
 - Updated TensorRT loaders to handle some missing attributes more gracefully.

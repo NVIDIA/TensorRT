@@ -20,7 +20,7 @@ ARG CUDA_VERSION=12.9.0
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu20.04
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.11.0.33
+ENV TRT_VERSION 10.12.0.36
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -70,15 +70,15 @@ RUN apt-get install -y --no-install-recommends \
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.11.0/tars/TensorRT-10.11.0.33.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-    && tar -xf TensorRT-10.11.0.33.Linux.x86_64-gnu.cuda-11.8.tar.gz \
-    && cp -a TensorRT-10.11.0.33/lib/*.so* /usr/lib/x86_64-linux-gnu \
-    && pip install TensorRT-10.11.0.33/python/tensorrt-10.11.0.33-cp38-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.12.0/tars/TensorRT-10.12.0.36.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+    && tar -xf TensorRT-10.12.0.36.Linux.x86_64-gnu.cuda-11.8.tar.gz \
+    && cp -a TensorRT-10.12.0.36/lib/*.so* /usr/lib/x86_64-linux-gnu \
+    && pip install TensorRT-10.12.0.36/python/tensorrt-10.12.0.36-cp38-none-linux_x86_64.whl ;\
     elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.11.0/tars/TensorRT-10.11.0.33.Linux.x86_64-gnu.cuda-12.9.tar.gz \
-    && tar -xf TensorRT-10.11.0.33.Linux.x86_64-gnu.cuda-12.9.tar.gz \
-    && cp -a TensorRT-10.11.0.33/lib/*.so* /usr/lib/x86_64-linux-gnu \
-    && pip install TensorRT-10.11.0.33/python/tensorrt-10.11.0.33-cp38-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.12.0/tars/TensorRT-10.12.0.36.Linux.x86_64-gnu.cuda-12.9.tar.gz \
+    && tar -xf TensorRT-10.12.0.36.Linux.x86_64-gnu.cuda-12.9.tar.gz \
+    && cp -a TensorRT-10.12.0.36/lib/*.so* /usr/lib/x86_64-linux-gnu \
+    && pip install TensorRT-10.12.0.36/python/tensorrt-10.12.0.36-cp38-none-linux_x86_64.whl ;\
     else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \
@@ -87,8 +87,6 @@ RUN if [ "${CUDA_VERSION:0:2}" = "11" ]; then \
 # Install PyPI packages
 RUN pip3 install --upgrade pip
 RUN pip3 install setuptools>=41.0.0
-COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install -r /tmp/requirements.txt
 RUN pip3 install jupyter jupyterlab
 # Workaround to remove numpy installed with tensorflow
 RUN pip3 install --upgrade numpy

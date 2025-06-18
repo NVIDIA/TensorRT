@@ -20,6 +20,7 @@ import os
 
 from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
+from polygraphy.mod.trt_importer import tensorrt_module_and_version_string
 from polygraphy.tools.args import util as args_util
 from polygraphy.tools.args.backend.onnx.loader import OnnxLoadArgs
 from polygraphy.tools.args.backend.trt.config import TrtConfigArgs
@@ -361,7 +362,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                 plugin_instancenorm,
             ]
         ):
-            script.add_import(imports="tensorrt", imp_as="trt")
+            script.add_import(imports=tensorrt_module_and_version_string(), imp_as="trt")
 
         if model_type == "trt-network-script":
             script.add_import(

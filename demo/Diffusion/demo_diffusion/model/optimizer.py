@@ -21,7 +21,7 @@ import tempfile
 
 import onnx_graphsurgeon as gs
 import torch
-from onnxmltools.utils.float16_converter import convert_float_to_float16
+from onnxconverter_common.float16 import convert_float_to_float16
 from polygraphy.backend.onnx.loader import fold_constants
 
 import onnx

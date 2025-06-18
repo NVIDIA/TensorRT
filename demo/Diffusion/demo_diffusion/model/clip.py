@@ -191,6 +191,7 @@ class CLIPModel(base_model.BaseModel):
         return opt_onnx_graph
 
 class CLIPWithProjModel(CLIPModel):
+
     def __init__(
         self,
         version,

@@ -20,15 +20,16 @@ import ctypes
 import time
 from typing import Callable, Union
 
-from polygraphy import constants, mod, util
+from polygraphy import config, constants, mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.trt import FileReader
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.backend.trt.config import CreateConfig
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
 
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 gs = mod.lazy_import("onnx_graphsurgeon")
 np = mod.lazy_import("numpy")
 
@@ -159,7 +160,7 @@ class BaseNetworkFromOnnx(BaseLoader):
         trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
         parser = trt.OnnxParser(network, trt_util.get_trt_logger())
         # Set flags if applicable.
-        if mod.version(trt.__version__) >= mod.version("8.6"):
+        if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("8.6"):
             if self.flags:
                 masked_flags = 0
                 for f in self.flags:

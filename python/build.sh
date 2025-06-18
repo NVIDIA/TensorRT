@@ -47,6 +47,7 @@ TRT_PATCH=$(awk '/^\#define TRT_PATCH_ENTERPRISE/ {print $3}' ${ROOT_PATH}/inclu
 TRT_BUILD=$(awk '/^\#define TRT_BUILD_ENTERPRISE/ {print $3}' ${ROOT_PATH}/include/NvInferVersion.h)
 TRT_VERSION=${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}.${TRT_BUILD}
 TRT_MAJMINPATCH=${TRT_MAJOR}.${TRT_MINOR}.${TRT_PATCH}
+PLUGIN_DISABLED_STR="0"
 
 echo "Generating python ${PYTHON_MAJOR_VERSION}.${PYTHON_MINOR_VERSION} bindings for TensorRT ${TRT_VERSION}"
 
@@ -56,7 +57,7 @@ expand_vars_cp () {
         -e "s|\#\#TENSORRT_MAJMINPATCH\#\#|${TRT_MAJMINPATCH}|g" \
         -e "s|\#\#TENSORRT_PYTHON_VERSION\#\#|${TRT_MAJMINPATCH}|g" \
         -e "s|\#\#TENSORRT_MODULE\#\#|${TENSORRT_MODULE}|g" \
-        -e "s/##TENSORRT_PLUGIN_DISABLED##/false/g" \
+        -e "s|##TENSORRT_PLUGIN_DISABLED##|${PLUGIN_DISABLED_STR}|g" \
         ${1} > ${2}
 }
 

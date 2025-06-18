@@ -59,7 +59,7 @@ inline size_t typeSize(const nvinfer1::DataType type)
     case nvinfer1::DataType::kFP8:
     case nvinfer1::DataType::kINT4:
     case nvinfer1::DataType::kFP4:
-        PLUGIN_FAIL("Unsupported data type");
+    case nvinfer1::DataType::kE8M0: PLUGIN_FAIL("Unsupported data type");
     }
     return 0;
 }

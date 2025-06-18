@@ -27,7 +27,7 @@ from demo_diffusion.utils_sd3.other_impls import load_into
 from demo_diffusion.utils_sd3.sd3_impls import BaseModel as BaseModelSD3
 
 # List of models to import from diffusers.models
-models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel"]
+models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel", "SD3ControlNetModel"]
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, "diffusers.models")
 
@@ -324,11 +324,57 @@ class FluxTransformerModel(base_model.BaseModel):
         return super().optimize(onnx_graph)
 
 
+class Transformer3DControlNetModel(torch.nn.Module):
+    def __init__(self, transformer, controlnets) -> None:
+        super().__init__()
+        self.transformer = transformer
+        self.controlnets = controlnets
+
+    def forward(
+        self,
+        hidden_states,
+        encoder_hidden_states,
+        pooled_projections,
+        timestep,
+        controlnet_image,
+        controlnet_scales,
+    ):
+        for i, (scale, controlnet) in enumerate(zip(controlnet_scales, self.controlnets)):
+            block_samples = controlnet(
+                hidden_states=hidden_states,
+                timestep=timestep,
+                pooled_projections=pooled_projections,
+                controlnet_cond=controlnet_image,
+                conditioning_scale=scale,
+                return_dict=False,
+            )[0]
+
+            # merge samples
+            if i == 0:
+                control_block_samples = block_samples
+            else:
+                control_block_samples = [
+                    control_block_sample + block_sample
+                    for control_block_sample, block_sample in zip(control_block_samples[0], block_samples[0])
+                ]
+                control_block_samples = (tuple(control_block_samples),)
+
+        noise_pred = self.transformer(
+            hidden_states=hidden_states,
+            timestep=timestep,
+            encoder_hidden_states=encoder_hidden_states,
+            pooled_projections=pooled_projections,
+            block_controlnet_hidden_states=control_block_samples,
+        )
+        return noise_pred
+
+
 class UpcastLayer(torch.nn.Module):
     def __init__(self, base_layer: torch.nn.Module, upcast_to: torch.dtype):
         super().__init__()
         self.output_dtype = next(base_layer.parameters()).dtype
         self.upcast_to = upcast_to
+        self.context_pre_only = base_layer.context_pre_only
 
         base_layer = base_layer.to(dtype=self.upcast_to)
         self.base_layer = base_layer
@@ -521,4 +567,130 @@ class SD3TransformerModel(base_model.BaseModel):
             torch.randn(self.xB * batch_size, self.config["pooled_projection_dim"], dtype=dtype, device=self.device),
             torch.randn(self.xB * batch_size, dtype=torch.float32, device=self.device),
         )
+        return sample_input
+
+
+class SD3TransformerModelControlNet(SD3TransformerModel):
+    def __init__(
+        self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        fp16=False,
+        tf32=False,
+        bf16=False,
+        max_batch_size=16,
+        text_maxlen=256,
+        build_strongly_typed=False,
+        weight_streaming=False,
+        weight_streaming_budget_percentage=None,
+        do_classifier_free_guidance=False,
+        controlnets=None,
+    ):
+        super(SD3TransformerModelControlNet, self).__init__(
+            version,
+            pipeline,
+            device=device,
+            hf_token=hf_token,
+            verbose=verbose,
+            framework_model_dir=framework_model_dir,
+            fp16=fp16,
+            tf32=tf32,
+            bf16=bf16,
+            max_batch_size=max_batch_size,
+            text_maxlen=text_maxlen,
+            build_strongly_typed=build_strongly_typed,
+            weight_streaming=weight_streaming,
+            weight_streaming_budget_percentage=weight_streaming_budget_percentage,
+            do_classifier_free_guidance=do_classifier_free_guidance,
+        )
+        self.controlnets = load.get_path(version, pipeline, controlnets) if controlnets else None
+
+    def get_model(self, torch_inference=""):
+        model = super().get_model(torch_inference)
+        cnet_model_opts = {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
+        controlnets = torch.nn.ModuleList(
+            [SD3ControlNetModel.from_pretrained(path, **cnet_model_opts, use_safetensors=self.hf_safetensor).to(self.device) for path in self.controlnets]
+        )
+        for controlnet in controlnets:
+            if hasattr(controlnet.config, "use_pos_embed") and controlnet.config.use_pos_embed is False:
+                pos_embed = controlnet._get_pos_embed_from_transformer(model)
+                controlnet.pos_embed = pos_embed.to(controlnet.dtype).to(controlnet.device)
+        model = Transformer3DControlNetModel(model, controlnets)
+        model = optimizer.optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_names(self):
+        return super().get_input_names() + ["controlnet_image", "controlnet_scales"]
+
+    def get_dynamic_axes(self):
+        xB = "2B" if self.xB == 2 else "B"
+        dynamic_axes = super().get_dynamic_axes()
+        dynamic_axes.update({
+            "controlnet_image": {0: xB, 2: "H", 3: "W"},
+            "controlnet_scales": {0: "S"}
+        })
+        return dynamic_axes
+
+    def get_input_profile(
+        self,
+        batch_size: int,
+        image_height: int,
+        image_width: int,
+        static_batch: bool,
+        static_shape: bool,
+    ):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        (
+            min_batch,
+            max_batch,
+            _,
+            _,
+            _,
+            _,
+            min_latent_height,
+            max_latent_height,
+            min_latent_width,
+            max_latent_width,
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+
+        input_profile = super().get_input_profile(batch_size, image_height, image_width, static_batch, static_shape)
+        input_profile.update({
+            "controlnet_image": [
+                (self.xB * min_batch, self.config["in_channels"], min_latent_height, min_latent_width),
+                (self.xB * batch_size, self.config["in_channels"], latent_height, latent_width),
+                (self.xB * max_batch, self.config["in_channels"], max_latent_height, max_latent_width),
+            ],
+            "controlnet_scales": [(len(self.controlnets) * min_batch,), (len(self.controlnets) * batch_size,), (len(self.controlnets) * max_batch,)],
+        })
+        return input_profile
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        shape_dict = super().get_shape_dict(batch_size, image_height, image_width)
+        shape_dict.update({
+            "controlnet_image": (self.xB * batch_size, self.config["in_channels"], latent_height, latent_width),
+            "controlnet_scales": (len(self.controlnets),),
+        })
+        return shape_dict
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        sample_input = super().get_sample_input(batch_size, image_height, image_width, static_shape)
+        sample_input += (
+            torch.randn(
+                self.xB * batch_size,
+                self.config["in_channels"],
+                latent_height,
+                latent_width,
+                dtype=dtype,
+                device=self.device,
+            ),
+            torch.randn(len(self.controlnets), dtype=dtype, device=self.device),
+        )
+
         return sample_input

@@ -21,9 +21,10 @@ from polygraphy import mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.backend.trt.profile import Profile
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.logger import G_LOGGER
 
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 
 
 @mod.export(funcify=True)

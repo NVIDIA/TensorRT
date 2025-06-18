@@ -162,12 +162,6 @@ class DiffusionPipeline(ABC):
                 More denoising steps usually lead to a higher quality image at the expense of slower inference.
             scheduler (str):
                 The scheduler to guide the denoising process. Must be one of the values listed in DiffusionPipeline.SCHEDULER_DEFAULTS.values().
-            lora_scale (float):
-                Controls how much to influence the outputs with the LoRA parameters. (must between 0 and 1).
-            lora_weight (float):
-                The LoRA adapter(s) weights to use with the UNet. (must between 0 and 1).
-            lora_path (str):
-                Path to LoRA adaptor. Ex: 'latent-consistency/lcm-lora-sdv1-5'.
             device (str):
                 PyTorch device to run inference. Default: 'cuda'.
             output_dir (str):
@@ -236,7 +230,7 @@ class DiffusionPipeline(ABC):
                 print(f"[I] Setting torch_fallback for {model_name} model.")
 
         if not scheduler:
-            scheduler = 'UniPC' if self.pipeline_type.is_controlnet() else self.SCHEDULER_DEFAULTS.get(version, 'DDIM')
+            scheduler = 'UniPC' if self.pipeline_type.is_controlnet() and not self.version == "3.5-large" else self.SCHEDULER_DEFAULTS.get(version, 'DDIM')
             print(f"[I] Autoselected scheduler: {scheduler}")
 
         scheduler_class_map = {
@@ -380,10 +374,14 @@ class DiffusionPipeline(ABC):
                     self.pipeline_type.is_sd_xl()
                     or self.version in ["1.5", "2.1", "2.1-base"]
                     or self.version.startswith("flux.1")
-                ), "fp8 quantization only supported for SDXL, SD1.5, SD2.1 and FLUX pipeline"
+                    or self.version.startswith("3.5-large")
+                ), "fp8 quantization only supported for SDXL, SD1.5, SD2.1, SD3.5-large and FLUX pipelines"
                 if (
                     (self.pipeline_type.is_sd_xl() and model_name == "unetxl")
-                    or ((self.version.startswith("flux.1")) and model_name == "transformer")
+                    or (
+                        (self.version.startswith("flux.1") or self.version.startswith("3.5-large"))
+                        and model_name == "transformer"
+                    )
                     or (model_name == "unet")
                 ):
                     config["use_fp8"] = True

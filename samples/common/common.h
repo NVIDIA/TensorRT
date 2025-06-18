@@ -571,6 +571,12 @@ inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
 #else
         return vol;
 #endif
+    case nvinfer1::DataType::kE8M0:
+#if CUDA_VERSION < 12080
+        ASSERT(false && "E8M0 is not supported");
+#else
+        return vol;
+#endif // CUDA_VERSION < 12080
     case nvinfer1::DataType::kINT4:
     case nvinfer1::DataType::kFP4: return (vol + 1) / 2;
     }
@@ -1071,6 +1077,19 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
         os << (i ? ", " : "") << dims.d[i];
     }
     return os << ")";
+}
+
+[[nodiscard]] inline std::string genFilenameSafeString(std::string_view s)
+{
+    static constexpr std::string_view kALLOWED{"._-,"};
+    std::string res;
+    res.reserve(s.size()); // avoid repeated reallocations
+
+    for (char c : s)
+    {
+        res += (std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos) ? c : '_';
+    }
+    return res;
 }
 
 #endif // TENSORRT_COMMON_H

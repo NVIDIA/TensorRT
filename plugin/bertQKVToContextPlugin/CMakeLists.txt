@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-include(ShouldCompileKernel)
-
 add_plugin_source(
     mhaRunner.cu
     mhaRunner.h

@@ -1,4 +1,6 @@
-# MultilevelProposeROI
+# MultilevelProposeROI Plugin [DEPRECATED]
+
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. No alternatives are planned to be provided.**
 
 **Table Of Contents**
 - [Description](#description)
@@ -67,6 +69,9 @@ documentation.
 
 
 ## Changelog
+
+May 2025
+Add deprecation note.
 
 January 2022: The [Limitations](#limitations) section was added to this `README.md` file to document limitations of the plugin related to the maximum number of anchors it can support. 
 

@@ -23,6 +23,7 @@ add_dependencies(tensorrt_samples sample_io_formats)
 install(
     TARGETS sample_io_formats
     OPTIONAL
+    COMPONENT full
 )
 
 else()

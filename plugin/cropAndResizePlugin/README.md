@@ -11,16 +11,15 @@
 
 ## Description
 
-> NOTE: The `IPluginV2Ext` version of this plugin is deprecated since TensorRT 9.0. `IPluginV2DynamicExt`-based `CropAndResizeDynamic` is recommended instead.
+> NOTE: The `IPluginV2Ext` and `IPluginV2DynamicExt` versions of this plugin are deprecated since TensorRT 9.0 and 10.11 respectively. The `IPluginV3`-based `CropAndResizeDynamic` (version: 2) is recommended instead. See [Plugin versions](#plugin-versions) for more details.
 
 The `cropAndResizePlugin` performs object detection for the Faster R-CNN model. This plugin is included in TensorRT.
 
-`cropAndResizePlugin` implements the TensorFlow style of ROIPooling(a.k.a. CropAndResize). It crops multiple region of interests(ROIs) from the input image with given ROI coordinates and then (bilinearly) resizes the cropped patches to a target spatial(width and height) size. 
+`cropAndResizePlugin` implements the TensorFlow style of ROIPooling(a.k.a. CropAndResize). It crops multiple region of interests(ROIs) from the input image with given ROI coordinates and then (bilinearly) resizes the cropped patches to a target spatial(width and height) size.
 
 Note this implementation is different from the original Caffe implement of ROIPooling. Also, this implementation doesn't fuse the ROIPooling layer and the Proposal layer into a single layer as the `nvFasterRCNN` plugin does.
 
 This plugin is optimized for the above steps and it allows you to do Faster R-CNN inference in TensorRT.
-
 
 ### Structure
 
@@ -53,6 +52,17 @@ The parameters are defined below and consists of the following attributes:
 |`int`     |`crop_width`                |The height of the output in pixels after ROI pooling on the feature map.
 |`int`     |`crop_height`               |The width of the output in pixels after ROI pooling on the feature map.
 
+## Plugin versions
+
+It is recommended to use the `IPluginV3`-based `CropAndResizeDynamic` (version: 2) instead of the previous versions.
+The below table summarizes the plugin metadata, their differences,and their deprecation status. All versions share the same I/O and attributes.
+
+| Plugin Name | Version | Parent Interface Class | Deprecated | Supports Dynamic Shapes |
+|-------------|---------|------------------------|------------|-------------------------|
+| CropAndResize | 1 | IPluginV2Ext | Yes (TensorRT 9.0) | No |
+| CropAndResizeDynamic | 1 | IPluginV2DynamicExt | Yes (TensorRT 10.11) | Yes |
+| CropAndResizeDynamic | 2 | IPluginV3 | No (Recommended) | Yes |
+
 ## Additional resources
 
 The following resources provide a deeper understanding of the `cropAndResizePlugin` plugin:
@@ -63,15 +73,18 @@ The following resources provide a deeper understanding of the `cropAndResizePlug
 **Documentation:**
 -   [Original ROI Pooling Definition from Fast R-CNN](https://arxiv.org/abs/1504.08083)
 -   [CropAndResize Op in TensorFlow](https://www.tensorflow.org/api_docs/cc/class/tensorflow/ops/crop-and-resize)
--   [tf.image.crop_and_resize API](https://www.tensorflow.org/api_docs/python/tf/image/crop_and_resize) 
+-   [tf.image.crop_and_resize API](https://www.tensorflow.org/api_docs/python/tf/image/crop_and_resize)
 
 ## License
 
-For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) 
+For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html)
 documentation.
 
 
 ## Changelog
+
+April 2025
+Migrated the CropAndResizeDynamic plugin to use IPluginV3 interface (Version "2"). Legacy implementation (Version "1") is deprecated, and is maintained for backward compatibility.
 
 June 2023
 Add deprecation note for `IPluginV2Ext` version of the plugin.

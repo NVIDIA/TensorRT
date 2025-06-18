@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -570,21 +570,24 @@ class TFODGraphSurgeon:
             ],
         )
 
-        # Create the CropandResize Plugin node with the selected inputs.
-        # Two inputs are given to the CropAndResize TensorRT node:
+        # Create the CropandResizeDynamic Plugin node with the selected inputs.
+        # Two inputs are given to the CropAndResizeDynamic TensorRT node:
         # - The feature_maps (from the relu_node_outputs): [batch_size, channel_num, height, width]
         # - The rois (clipped and normalized detection boxes resulting from NMS): [batch_size, featuremap, 4, 1]
+        plg_version = "2" # ver 1 uses IPluginV2DynamicExt (deprecated), ver 2 uses IPluginV3
+        plg_name = "CropAndResizeDynamic" # CropAndResize is deprecated
         self.graph.plugin(
-            op="CropAndResize",
+            op=plg_name,
             name="cnr/crop_and_resize_" + cnr_num,
             inputs=[feature_maps, rois],
             outputs=[cnr_pfmap],
             attrs={
+                "plugin_version": plg_version,
                 "crop_width": self.first_stage_crop_size,
                 "crop_height": self.first_stage_crop_size,
             },
         )
-        log.info("Created {} CropAndResize plugin".format(cnr_num))
+        log.info("Created {} {} plugin (version: {})".format(cnr_num, plg_name, plg_version))
 
         # Reshape node that is preparing CropAndResize's pfmap output shape for MaxPool node that comes next.
         reshape_shape = np.asarray(

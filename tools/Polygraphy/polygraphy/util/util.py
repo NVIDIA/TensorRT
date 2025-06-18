@@ -30,10 +30,11 @@ from typing import Union
 from fnmatch import fnmatch
 
 from polygraphy import constants, mod
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
-trt = mod.lazy_import("tensorrt")
+trt = lazy_import_trt()
 
 # These modules are not cross-platform so any usage should be guarded
 fcntl = mod.lazy_import("fcntl")

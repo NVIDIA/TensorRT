@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,11 @@ if IS_STANDALONE:
 
 plugin_import_package_name = f"{import_package_name}.plugin"
 
+trt_packages = [import_package_name]
+
+if not ##TENSORRT_PLUGIN_DISABLED##:
+    trt_packages.append(plugin_import_package_name)
+
 setup(
     name=distribution_package_name,
     version="##TENSORRT_PYTHON_VERSION##",
@@ -43,7 +48,7 @@ setup(
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[import_package_name, plugin_import_package_name],
+    packages=trt_packages,
     extras_require={"numpy": "numpy"},
     package_data={import_package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,

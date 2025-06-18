@@ -18,6 +18,7 @@ import os
 
 from collections import OrderedDict
 from polygraphy import mod
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.common.interface import TypedDict
 from polygraphy.logger import G_LOGGER
 from polygraphy.tools.args import (
@@ -32,7 +33,7 @@ common_backend = mod.lazy_import("polygraphy.backend.common")
 gs = mod.lazy_import("onnx_graphsurgeon")
 onnx_backend = mod.lazy_import("polygraphy.backend.onnx")
 onnx_util = mod.lazy_import("polygraphy.backend.onnx.util")
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
 trt_util = mod.lazy_import("polygraphy.backend.trt.util")
 util = mod.lazy_import("polygraphy.util")

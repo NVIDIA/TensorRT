@@ -18,6 +18,7 @@ import contextlib
 
 from polygraphy import mod, util
 from polygraphy.logger import G_LOGGER
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.tools.args import (
     DataLoaderArgs,
     ModelArgs,
@@ -38,7 +39,7 @@ from polygraphy.tools.debug.subtool.iterative_debug_args import (
 )
 
 trt_backend = mod.lazy_import("polygraphy.backend.trt")
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 
 
 class BaseCheckerSubtool(Tool):

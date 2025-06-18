@@ -23,6 +23,7 @@ add_dependencies(tensorrt_samples sample_progress_monitor)
 install(
     TARGETS sample_progress_monitor
     OPTIONAL
+    COMPONENT full
 )
 
 else()

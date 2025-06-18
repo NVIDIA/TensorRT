@@ -188,7 +188,7 @@ void bindFoundationalTypes(py::module& m)
         .value("FP8", DataType::kFP8, DataTypeDoc::fp8)
         .value("INT4", DataType::kINT4, DataTypeDoc::int4)
         .value("FP4", DataType::kFP4, DataTypeDoc::fp4)
-        ; // DataType
+        .value("E8M0", DataType::kE8M0, DataTypeDoc::e8m0); // DataType
 
     // Also create direct mappings (so we can call trt.float32, for example).
     m.attr("float32") = DataType::kFLOAT;
@@ -202,6 +202,7 @@ void bindFoundationalTypes(py::module& m)
     m.attr("fp8") = DataType::kFP8;
     m.attr("int4") = DataType::kINT4;
     m.attr("fp4") = DataType::kFP4;
+    m.attr("e8m0") = DataType::kE8M0;
 
     py::enum_<WeightsRole>(m, "WeightsRole", WeightsRoleDoc::descr, py::module_local())
         .value("KERNEL", WeightsRole::kKERNEL, WeightsRoleDoc::KERNEL)
@@ -236,8 +237,7 @@ void bindFoundationalTypes(py::module& m)
         .def(py::init(lambdas::dims_vector_constructor), "shape"_a)
         // static_cast is required here, or MAX_DIMS does not get pulled in until LOAD time.
         .def_property_readonly_static(
-            "MAX_DIMS", [](py::object /*self*/) { return static_cast<int32_t const>(Dims::MAX_DIMS); },
-            DimsDoc::MAX_DIMS)
+            "MAX_DIMS", [](py::object /*self*/) { return static_cast<int32_t>(Dims::MAX_DIMS); }, DimsDoc::MAX_DIMS)
         // Allow for string representations (displays like a python tuple).
         .def("__str__", lambdas::dims_to_str)
         .def("__repr__", lambdas::dims_to_str)

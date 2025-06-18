@@ -17,13 +17,14 @@
 
 from polygraphy import func, mod, util, constants
 from polygraphy.backend.trt import util as trt_util
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.common.interface import TypedDict
 from polygraphy.json import Decoder, Encoder, add_json_methods
 from polygraphy.logger import G_LOGGER, LogMode
 
 from typing import Sequence
 
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 
 
 ##

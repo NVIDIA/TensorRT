@@ -69,6 +69,12 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
             f"##TENSORRT_ONNXPARSER_NAME##_##TENSORRT_MAJOR##{_trt_lib_suffix}.dll",
             "nvinfer_builder_resource_##TENSORRT_MAJOR##.dll",
         ],
+        "tensorrt_rtx": [
+             f"##TENSORRT_NVINFER_NAME##_##TENSORRT_MAJOR##{_trt_lib_suffix}.dll",
+            "nvinfer_plugin_##TENSORRT_MAJOR##.dll",
+            f"##TENSORRT_ONNXPARSER_NAME##_##TENSORRT_MAJOR##{_trt_lib_suffix}.dll",
+            "nvinfer_builder_resource_##TENSORRT_MAJOR##.dll",
+        ],
         "tensorrt_dispatch": [
             "nvinfer_dispatch_##TENSORRT_MAJOR##.dll",
         ],
@@ -126,7 +132,7 @@ Runtime.__exit__ = common_exit
 IHostMemory.__enter__ = common_enter
 IHostMemory.__exit__ = common_exit
 
-if "##TENSORRT_MODULE##" == "tensorrt":
+if "##TENSORRT_MODULE##" == "tensorrt" or "##TENSORRT_MODULE##" == "tensorrt_rtx":
     Builder.__enter__ = common_enter
     Builder.__exit__ = common_exit
 

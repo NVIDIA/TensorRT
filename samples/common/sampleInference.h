@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #ifndef TRT_SAMPLE_INFERENCE_H
 #define TRT_SAMPLE_INFERENCE_H
 
+#include "debugTensorWriter.h"
 #include "sampleDevice.h"
 #include "sampleEngines.h"
 #include "sampleReporting.h"
@@ -33,22 +34,6 @@
 namespace sample
 {
 
-// IDebugListener class for writing debug tensors to output file.
-class DebugTensorWriter : public nvinfer1::IDebugListener
-{
-public:
-    DebugTensorWriter(std::unordered_map<std::string, std::string> fileNames)
-        : mDebugTensorFileNames(fileNames)
-    {
-    }
-
-    bool processDebugTensor(void const* addr, nvinfer1::TensorLocation location, nvinfer1::DataType type,
-        nvinfer1::Dims const& shape, char const* name, cudaStream_t stream) override;
-
-private:
-    std::unordered_map<std::string, std::string> mDebugTensorFileNames;
-};
-
 struct InferenceEnvironment
 {
     InferenceEnvironment() = delete;
@@ -57,6 +42,7 @@ struct InferenceEnvironment
     InferenceEnvironment(BuildEnvironment& bEnv)
         : engine(std::move(bEnv.engine))
         , safe(bEnv.engine.isSafe())
+        , cmdline(bEnv.cmdline)
     {
     }
 
@@ -70,6 +56,7 @@ struct InferenceEnvironment
     bool error{false};
 
     bool safe{false};
+    std::string cmdline;
 
     inline nvinfer1::IExecutionContext* getContext(int32_t streamIdx);
 
@@ -82,7 +69,7 @@ struct InferenceEnvironment
     //! The input shape tensors could alternatively be handled via member bindings,
     //! but it simplifies control-flow to store the data here since it's shared across
     //! the bindings.
-    std::list<std::vector<int32_t>> inputShapeTensorValues;
+    std::list<std::vector<int64_t>> inputShapeTensorValues;
 };
 
 inline nvinfer1::IExecutionContext* InferenceEnvironment::getContext(int32_t streamIdx)
@@ -104,7 +91,8 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys);
 //! \brief Run inference and collect timing, return false if any error hit during inference
 //!
 bool runInference(
-    InferenceOptions const& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace);
+    InferenceOptions const& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace,
+    ReportingOptions const& reporting);
 
 //!
 //! \brief Get layer information of the engine.
@@ -246,9 +234,11 @@ private:
 
 struct TaskInferenceEnvironment
 {
-    TaskInferenceEnvironment(std::string engineFile, InferenceOptions inference, int32_t deviceId = 0,
+    TaskInferenceEnvironment(std::string engineFile, InferenceOptions const& inference,
+        ReportingOptions const& reporting, int32_t deviceId = 0,
         int32_t DLACore = -1, int32_t bs = batchNotProvided);
     InferenceOptions iOptions{};
+    ReportingOptions rOptions{};
     int32_t device{defaultDevice};
     int32_t batch{batchNotProvided};
     std::unique_ptr<InferenceEnvironment> iEnv;

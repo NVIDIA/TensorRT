@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +58,7 @@ int64_t volume(nvinfer1::Dims const& dims, nvinfer1::Dims const& strides, int32_
 
 using samplesCommon::volume;
 
-nvinfer1::Dims toDims(std::vector<int32_t> const& vec);
+nvinfer1::Dims toDims(std::vector<int64_t> const& vec);
 
 template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool> = true>
 void fillBuffer(void* buffer, int64_t volume, int32_t min, int32_t max);

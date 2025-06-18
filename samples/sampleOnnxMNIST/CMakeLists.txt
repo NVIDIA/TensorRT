@@ -23,6 +23,7 @@ add_dependencies(tensorrt_samples sample_onnx_mnist)
 install(
     TARGETS sample_onnx_mnist
     OPTIONAL
+    COMPONENT full
 )
 
 else()

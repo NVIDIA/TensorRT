@@ -331,6 +331,7 @@ class VAEEncoderModel(base_model.BaseModel):
         tf32=False,
         bf16=False,
         max_batch_size=16,
+        do_classifier_free_guidance=False
     ):
         super(VAEEncoderModel, self).__init__(
             version,
@@ -353,6 +354,7 @@ class VAEEncoderModel(base_model.BaseModel):
         else:
             print(f"[I] Load AutoencoderKL (encoder) config from: {self.vae_encoder_model_dir}")
             self.config = AutoencoderKL.load_config(self.vae_encoder_model_dir)
+        self.xB = 2 if do_classifier_free_guidance else 1  # batch multiplier
 
     def get_model(self, torch_inference=""):
         vae_encoder = TorchVAEEncoder(
@@ -376,7 +378,8 @@ class VAEEncoderModel(base_model.BaseModel):
         return ["latent"]
 
     def get_dynamic_axes(self):
-        return {"images": {0: "B", 2: "8H", 3: "8W"}, "latent": {0: "B", 2: "H", 3: "W"}}
+        xB = "2B" if self.xB == 2 else "B"
+        return {"images": {0: xB, 2: "8H", 3: "8W"}, "latent": {0: xB, 2: "H", 3: "W"}}
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
         assert batch_size >= self.min_batch and batch_size <= self.max_batch
@@ -389,23 +392,23 @@ class VAEEncoderModel(base_model.BaseModel):
 
         return {
             "images": [
-                (min_batch, 3, min_image_height, min_image_width),
-                (batch_size, 3, image_height, image_width),
-                (max_batch, 3, max_image_height, max_image_width),
+                (self.xB * min_batch, 3, min_image_height, min_image_width),
+                (self.xB * batch_size, 3, image_height, image_width),
+                (self.xB * max_batch, 3, max_image_height, max_image_width),
             ],
         }
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
         return {
-            "images": (batch_size, 3, image_height, image_width),
-            "latent": (batch_size, self.config["latent_channels"], latent_height, latent_width),
+            "images": (self.xB * batch_size, 3, image_height, image_width),
+            "latent": (self.xB * batch_size, self.config["latent_channels"], latent_height, latent_width),
         }
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         self.check_dims(batch_size, image_height, image_width)
         dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
-        return torch.randn(batch_size, 3, image_height, image_width, dtype=dtype, device=self.device)
+        return torch.randn(self.xB * batch_size, 3, image_height, image_width, dtype=dtype, device=self.device)
 
 
 class SD3_VAEEncoderModel(base_model.BaseModel):

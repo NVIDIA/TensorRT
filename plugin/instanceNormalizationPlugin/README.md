@@ -11,6 +11,8 @@
 
 ## Description
 
+> NOTE: `InstanceNormalization_TRT` version 1 is deprecated since TensorRT 10.3. `InstanceNormalization_TRT` version 2 is deprecated since TensorRT 10.12. Please use `InstanceNormalization_TRT` version 3. Alternatively, the native `INormalizationLayer` can also be used as appropriate to replace their functionality.
+
 The `InstanceNormalizePlugin` is used for the InstanceNormalization layer, which is generally used in deep learning models that perform image generation. This plugin is based off the [ONNX opset 6 definition](https://github.com/onnx/onnx/blob/master/docs/Operators.md#InstanceNormalization), and is used in any ONNX model that uses this operation.
 
 Specifically, given an array of values `x = [x_0, x_1, ..., x_n]` , a scale factor, a bias factor, and an epsilon,  the InstanceNormalization of x is  `scale * (x-mean) / sqrt(variance + epsilon) + bias` where the mean and variance are computed per instance per channel.
@@ -49,6 +51,12 @@ documentation.
 
 
 ## Changelog
+
+May 2025
+Deprecated version 2 of this plugin.
+
+July 2024
+Deprecated version 1 of this plugin.
 
 September 2019
 This is the first release of this `README.md` file.

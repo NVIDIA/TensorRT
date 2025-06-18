@@ -36,7 +36,7 @@ std::vector<char> loadTimingCacheFile(nvinfer1::ILogger& logger, std::string con
 //! timing cache to the builder config. If the file is blank, or cannot be read, a new timing cache will be created from
 //! scratch.
 //!
-//! \returns The newly created timing cache, or nullptr if an error occured during creation.
+//! \returns The newly created timing cache, or nullptr if an error occurred during creation.
 std::unique_ptr<ITimingCache> buildTimingCacheFromFile(
     ILogger& logger, IBuilderConfig& config, std::string const& timingCacheFile);
 

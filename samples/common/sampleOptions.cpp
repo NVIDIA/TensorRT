@@ -18,7 +18,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
-#include <functional>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -26,10 +25,10 @@
 #include <vector>
 
 #include "NvInfer.h"
-
 #include "logger.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
+
 using namespace nvinfer1;
 namespace sample
 {
@@ -132,9 +131,9 @@ bool stringToValue<bool>(const std::string& option)
 }
 
 template <>
-std::vector<int32_t> stringToValue<std::vector<int32_t>>(const std::string& option)
+std::vector<int64_t> stringToValue<std::vector<int64_t>>(const std::string& option)
 {
-    std::vector<int32_t> shape;
+    std::vector<int64_t> shape;
     if (option == "scalar")
     {
         return shape;
@@ -142,7 +141,7 @@ std::vector<int32_t> stringToValue<std::vector<int32_t>>(const std::string& opti
     std::vector<std::string> dimsStrings = splitToStringVec(option, 'x');
     for (const auto& d : dimsStrings)
     {
-        shape.push_back(stringToValue<int32_t>(d));
+        shape.push_back(stringToValue<int64_t>(d));
     }
     return shape;
 }
@@ -224,7 +223,11 @@ template <>
 SparsityFlag stringToValue<SparsityFlag>(std::string const& option)
 {
     std::unordered_map<std::string, SparsityFlag> const table{
-        {"disable", SparsityFlag::kDISABLE}, {"enable", SparsityFlag::kENABLE}, {"force", SparsityFlag::kFORCE}};
+        {"disable", SparsityFlag::kDISABLE}, {"enable", SparsityFlag::kENABLE},
+        {
+            "force", SparsityFlag::kFORCE
+        }
+    };
     auto search = table.find(option);
     if (search == table.end())
     {
@@ -236,7 +239,6 @@ SparsityFlag stringToValue<SparsityFlag>(std::string const& option)
                             << "Please use <polygraphy surgeon prune> to rewrite the weights to a sparsity pattern "
                             << "and then run with --sparsity=enable" << std::endl;
     }
-
     return search->second;
 }
 
@@ -454,13 +456,13 @@ bool getAndDelRepeatedOption(Arguments& arguments, const std::string& option, st
 }
 
 void insertShapesBuild(BuildOptions::ShapeProfile& shapes, nvinfer1::OptProfileSelector selector,
-    const std::string& name, const std::vector<int32_t>& dims)
+    const std::string& name, const std::vector<int64_t>& dims)
 {
     shapes[name][static_cast<size_t>(selector)] = dims;
 }
 
 void insertShapesInference(
-    InferenceOptions::ShapeProfile& shapes, std::string const& name, std::vector<int32_t> const& dims)
+    InferenceOptions::ShapeProfile& shapes, std::string const& name, std::vector<int64_t> const& dims)
 {
     shapes[name] = dims;
 }
@@ -535,7 +537,7 @@ void getLayerDeviceTypes(Arguments& arguments, char const* argument, LayerDevice
     }
 }
 
-void getStringsSet(Arguments& arguments, char const* argument, StringSet& stringSet)
+void getAndDelStringsSet(Arguments& arguments, char const* argument, StringSet& stringSet)
 {
     std::string list;
     if (!getAndDelOption(arguments, argument, list))
@@ -550,7 +552,6 @@ void getStringsSet(Arguments& arguments, char const* argument, StringSet& string
         stringSet.insert(s);
     }
 }
-
 bool getShapesBuild(Arguments& arguments, BuildOptions::ShapeProfile& shapes, char const* argument,
     nvinfer1::OptProfileSelector selector)
 {
@@ -559,7 +560,7 @@ bool getShapesBuild(Arguments& arguments, BuildOptions::ShapeProfile& shapes, ch
     std::vector<std::string> shapeList{splitToStringVec(list, ',')};
     for (const auto& s : shapeList)
     {
-        auto nameDimsPair = splitNameAndValue<std::vector<int32_t>>(s);
+        auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
         auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
         auto dims = nameDimsPair.second;
         insertShapesBuild(shapes, selector, tensorName, dims);
@@ -574,7 +575,7 @@ bool getShapesInference(Arguments& arguments, InferenceOptions::ShapeProfile& sh
     std::vector<std::string> shapeList{splitToStringVec(list, ',')};
     for (const auto& s : shapeList)
     {
-        auto nameDimsPair = splitNameAndValue<std::vector<int32_t>>(s);
+        auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
         auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
         auto dims = nameDimsPair.second;
         insertShapesInference(shapes, tensorName, dims);
@@ -685,17 +686,16 @@ bool getOptimizationProfiles(
     size_t profileIndex{};
 
     auto getShapes
-        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector)
-    {
-        std::vector<std::string> shapeList{splitToStringVec(list, ',')};
-        for (auto const& s : shapeList)
-        {
-            auto nameDimsPair = splitNameAndValue<std::vector<int32_t>>(s);
-            auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
-            auto dims = nameDimsPair.second;
-            insertShapesBuild(shapes, selector, tensorName, dims);
-        }
-    };
+        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector) {
+              std::vector<std::string> shapeList{splitToStringVec(list, ',')};
+              for (auto const& s : shapeList)
+              {
+                  auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
+                  auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
+                  auto dims = nameDimsPair.second;
+                  insertShapesBuild(shapes, selector, tensorName, dims);
+              }
+          };
 
     while (getAndDelOptionWithPosition(arguments, argument, profileIndex, pos))
     {
@@ -854,7 +854,6 @@ std::ostream& printTempfileControls(std::ostream& os, TempfileControlFlags const
 
     return os;
 }
-
 std::ostream& printTimingCache(std::ostream& os, TimingCacheMode const& timingCacheMode)
 {
     switch (timingCacheMode)
@@ -1103,13 +1102,11 @@ void BuildOptions::parse(Arguments& arguments)
         processShapes(shapes, minShapes, optShapes, maxShapes, false);
         optProfiles.emplace_back(shapes);
     }
-
     if (calibProfile >= optProfiles.size())
     {
         throw std::invalid_argument(
             std::string("--calibProfile shouldn't greater than the size of optimization profile."));
     }
-
     BuildOptions::ShapeProfile dummyShapes;
 
     bool remainingMinShapes = getShapesBuild(arguments, dummyShapes, "--minShapes", nvinfer1::OptProfileSelector::kMIN);
@@ -1133,7 +1130,6 @@ void BuildOptions::parse(Arguments& arguments)
             + std::string(" conversion failure: failed to parse minShapesCalib/optShapesCalib/maxShapesCalib. Please "
                           "double check your input string."));
     }
-
     processShapes(shapesCalib, minShapesCalib, optShapesCalib, maxShapesCalib, true);
 
     std::string memPoolSizes;
@@ -1245,6 +1241,7 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--fp8", fp8);
     getAndDelOption(arguments, "--int4", int4);
     getAndDelOption(arguments, "--stronglyTyped", stronglyTyped);
+    getAndDelOption(arguments, "--distributiveIndependence", distributiveIndependence);
 
     if (best && stronglyTyped)
     {
@@ -1332,10 +1329,10 @@ void BuildOptions::parse(Arguments& arguments)
                             << R"(flag is set to "none".)" << std::endl;
     }
 
-    getStringsSet(arguments, "--markDebug", debugTensors);
+    getAndDelStringsSet(arguments, "--markDebug", debugTensors);
+    getAndDelOption(arguments, "--markUnfusedTensorsAsDebugTensors", markUnfusedTensorsAsDebugTensors);
 
     getAndDelOption(arguments, "--sparsity", sparsity);
-
     bool calibCheck = getAndDelOption(arguments, "--calib", calibration);
     if (int8 && calibCheck && !optProfiles[calibProfile].empty() && shapesCalib.empty())
     {
@@ -1347,7 +1344,6 @@ void BuildOptions::parse(Arguments& arguments)
             << "--calibProfile have no effect when --minShapesCalib/--optShapesCalib/--maxShapesCalib is set."
             << std::endl;
     }
-
     std::string profilingVerbosityString;
 
     getAndDelOption(arguments, "--profilingVerbosity", profilingVerbosityString);
@@ -1433,7 +1429,8 @@ void BuildOptions::parse(Arguments& arguments)
             {
                 source = nvinfer1::TacticSource::kCUBLAS_LT;
             }
-            else if (t == "CUDNN")
+            else
+            if (t == "CUDNN")
             {
                 source = nvinfer1::TacticSource::kCUDNN;
             }
@@ -1522,16 +1519,13 @@ void BuildOptions::parse(Arguments& arguments)
         throw std::invalid_argument(std::string("Unknown hardwareCompatibilityLevel: ") + hardwareCompatibleArgs
             + ". Valid options: none, ampere+, sameComputeCapability.");
     }
-
     if (pluginInstanceNorm
         && (versionCompatible || hardwareCompatibilityLevel == HardwareCompatibilityLevel::kAMPERE_PLUS))
     {
         throw std::invalid_argument(
             "Plugin InstanceNorm cannot be used with version compatible or hardware compatible engines!");
     }
-
     getAndDelOption(arguments, "--maxAuxStreams", maxAuxStreams);
-
     std::string previewFeaturesBuf;
     getAndDelOption(arguments, "--preview", previewFeaturesBuf);
     std::vector<std::string> previewFeaturesVec{splitToStringVec(previewFeaturesBuf, ',')};
@@ -1607,7 +1601,6 @@ void BuildOptions::parse(Arguments& arguments)
     }
 
     getAndDelOption(arguments, "--leanDLLPath", leanDLLPath);
-
     // Don't delete the option because the inference option parser requires it
     getOption(arguments, "--allowWeightStreaming", allowWeightStreaming);
 
@@ -1713,12 +1706,14 @@ void InferenceOptions::parse(Arguments& arguments)
                                "--weightStreamingBudget unset or set to "
                             << WeightStreamingBudget::kDISABLE << "." << std::endl;
     }
-
     std::string debugTensorList;
     getAndDelOption(arguments, "--saveDebugTensors", debugTensorList);
     std::vector<std::string> fileNames{splitToStringVec(debugTensorList, ',')};
     splitInsertKeyValue(fileNames, debugTensorFileNames);
 
+    std::string debugFormats;
+    getAndDelOption(arguments, "--saveAllDebugTensors", debugFormats);
+    dumpAlldebugTensorFormats = splitToStringVec(debugFormats, ',');
 }
 
 void ReportingOptions::parse(Arguments& arguments)
@@ -1890,8 +1885,7 @@ void TaskInferenceOptions::parse(Arguments& arguments)
 
 void SafeBuilderOptions::parse(Arguments& arguments)
 {
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument)
-    {
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -1900,7 +1894,6 @@ void SafeBuilderOptions::parse(Arguments& arguments)
             formatsVector.push_back(stringToValue<IOFormat>(f));
         }
     };
-
     getAndDelOption(arguments, "--serialized", serialized);
     getAndDelOption(arguments, "--onnx", onnxModelFile);
     getAndDelOption(arguments, "--help", help);
@@ -2036,6 +2029,11 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype)
     case nvinfer1::DataType::kFP4:
     {
         os << "fp4";
+        break;
+    }
+    case nvinfer1::DataType::kE8M0:
+    {
+        os << "e8m0";
         break;
     }
     }
@@ -2259,11 +2257,12 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Calibration Profile Index: " << options.calibProfile                                                         << std::endl <<
           "Weight Streaming: " << boolToEnabled(options.allowWeightStreaming)                                           << std::endl <<
           "Runtime Platform: " << options.runtimePlatform                                                               << std::endl <<
-          "Debug Tensors: " << options.debugTensors                                                                     << std::endl;
+          "Debug Tensors: " << options.debugTensors                                                                     << std::endl <<
+          "Distributive Independence: " << boolToEnabled(options.distributiveIndependence)                      << std::endl <<
+          "Mark Unfused Tensors As Debug Tensors: " << boolToEnabled(options.markUnfusedTensorsAsDebugTensors)   << std::endl;
     // clang-format on
 
-    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats)
-    {
+    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
         if (formats.empty())
         {
             os << direction << "s format: fp32:CHW" << std::endl;
@@ -2385,6 +2384,11 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
     for (auto const& fileName : options.debugTensorFileNames)
     {
         os << fileName.first << ": " << fileName.second << std::endl;
+    }
+    os << "Dump All Debug Tensor in Formats: " << std::endl;
+    for (auto const& format : options.dumpAlldebugTensorFormats)
+    {
+        os << format << std::endl;
     }
 
     return os;
@@ -2513,15 +2517,15 @@ void BuildOptions::help(std::ostream& os)
         R"(                                     IO Formats: spec  ::= IOfmt[","spec])"                                                              "\n"
           "                                                 IOfmt ::= type:fmt"                                                                     "\n"
         R"(                                                 type  ::= "fp32"|"fp16"|"bf16"|"int32"|"int64"|"int8"|"uint8"|"bool")"                  "\n"
-        R"(                                                 fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
-        R"(                                                            "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                            "\n"
+        R"(                                                 fmt   ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        "\n"
+        R"(                                                            "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"fmt])"             "\n"
           "  --memPoolSize=poolspec             Specify the size constraints of the designated memory pool(s)"                                      "\n"
           "                                     Supports the following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                      "\n"
           "                                     If none of suffixes is appended, the defualt unit is in MiB."                                       "\n"
           "                                     Note: Also accepts decimal sizes, e.g. 0.25M. Will be rounded down to the nearest integer bytes."   "\n"
           "                                     In particular, for dlaSRAM the bytes will be rounded down to the nearest power of 2."               "\n"
         R"(                                     Pool constraint: poolspec ::= poolfmt[","poolspec])"                                                "\n"
-          "                                                      poolfmt ::= pool:size"                                                             "\n"
+          "                                                      poolfmt ::= pool:size\n"                                                             
         R"(                                                      pool ::= "workspace"|"dlaSRAM"|"dlaLocalDRAM"|"dlaGlobalDRAM"|"tacticSharedMem")"  "\n"
           "  --profilingVerbosity=mode          Specify profiling verbosity. mode ::= layer_names_only|detailed|none (default = layer_names_only)." "\n"
           "                                     Please only assign once."                                                                           "\n"
@@ -2609,7 +2613,7 @@ void BuildOptions::help(std::ostream& os)
           "  --restricted                       Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
           "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
           "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
-          "  --asyncFileReader=<file>           Load a serialized engine using async stream reader"                                                 "\n"
+          "  --asyncFileReader                  Load a serialized engine using async stream reader. Should be combined with --loadEngine."          "\n"
           "  --getPlanVersionOnly               Print TensorRT version when loaded plan was created. Works without deserialization of the plan."    "\n"
           "                                     Use together with --loadEngine. Supported only for engines created with 8.6 and forward."           "\n"
           "  --tacticSources=tactics            Specify the tactics to be used by adding (+) or removing (-) tactics from the default "             "\n"
@@ -2668,6 +2672,7 @@ void BuildOptions::help(std::ostream& os)
           "  --allowWeightStreaming             Enable a weight streaming engine. Must be specified with --stronglyTyped. TensorRT will disable"    "\n"
           "                                     weight streaming at runtime unless --weightStreamingBudget is specified."                           "\n"
           "  --markDebug                        Specify list of names of tensors to be marked as debug tensors. Separate names with a comma"        "\n"
+          "  --markUnfusedTensorsAsDebugTensors Mark unfused tensors as debug tensors"                                                              "\n"
           "  --tilingOptimizationLevel          Set the tiling optimization level. (default is " << defaultTilingOptimizationLevel << ")"           "\n"
           "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
           "                                     Valid values include integers from " 
@@ -2726,7 +2731,9 @@ void InferenceOptions::help(std::ostream& os)
           "  --infStreams=N              Instantiate N execution contexts to run inference concurrently "
                                                                                              "(default = " << defaultStreams << ")"  << std::endl <<
           "  --exposeDMA                 Serialize DMA transfers to and from device (default = disabled)."                           << std::endl <<
-          "  --noDataTransfers           Disable DMA transfers to and from device (default = enabled)."                              << std::endl <<
+          "  --noDataTransfers           Disable DMA transfers to and from device (default = enabled). Note some device-to-host"     << std::endl <<
+          "                              data transfers will remain if output dumping is enabled via the --dumpOutput or"           << std::endl <<
+          "                              --exportOutput flags."                                                                     << std::endl <<
           "  --useManagedMemory          Use managed memory instead of separate host and device allocations (default = disabled)."   << std::endl <<
           "  --useSpinWait               Actively synchronize on GPU events. This option may decrease synchronization time but "
                                                                              "increase CPU usage and power (default = disabled)"     << std::endl <<
@@ -2745,7 +2752,7 @@ void InferenceOptions::help(std::ostream& os)
           "  --useProfile                Set the optimization profile for the inference context "
                                                                                    "(default = " << defaultOptProfileIndex << " )."  << std::endl <<
           "  --allocationStrategy=spec   Specify how the internal device memory for inference is allocated."                         << std::endl <<
-        R"(                              Strategy: spec ::= "static"|"profile"|"runtime")"                                         << std::endl <<
+        R"(                              Strategy: spec ::= "static"|"profile"|"runtime")"                                           << std::endl <<
           "                                  static = Allocate device memory based on max size across all profiles."                 << std::endl <<
           "                                  profile = Allocate device memory based on max size of the current profile."             << std::endl <<
           "                                  runtime = Allocate device memory based on the actual input shapes."                     << std::endl <<
@@ -2754,6 +2761,11 @@ void InferenceOptions::help(std::ostream& os)
           "                              These tensors must be specified as debug tensors during build time."                        << std::endl <<
         R"(                              Input values spec ::= Ival[","spec])"                                                       << std::endl <<
         R"(                                           Ival ::= name":"file)"                                                         << std::endl <<
+          "  --saveAllDebugTensors       Save all debug tensors to files. "                                                          << std::endl <<
+          "                              Including debug tensors marked by --markDebug and --markUnfusedTensorsAsDebugTensors"       << std::endl <<
+          "                              Multiple file formats can be saved simultaneously."                                         << std::endl <<
+        R"(                              Input values spec   ::= format[","format])"                                                 << std::endl <<
+        R"(                                           format ::= "summary"|"numpy"|"string"|"raw")"                                  << std::endl <<
           "  --weightStreamingBudget     Set the maximum amount of GPU memory TensorRT is allowed to use for weights."               << std::endl <<
           "                              It can take on the following values:"                                                       << std::endl <<
           "                                  -2: (default) Disable weight streaming at runtime."                                     << std::endl <<
@@ -2853,8 +2865,8 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
         R"(                              IO Formats: spec  ::= IOfmt[","spec])"                                                              << std::endl <<
           "                                          IOfmt ::= type:fmt"                                                                     << std::endl <<
         R"(                                          type  ::= "fp32"|"fp16"|"int32"|"int8")"                                                << std::endl <<
-        R"(                                          fmt   ::= ("chw"|"chw2"|"chw4"|"hwc8"|"chw16"|"chw32"|"dhwc8"|)"                        << std::endl <<
-        R"(                                                   "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4")["+"fmt])"                              << std::endl <<
+        R"(                                          fmt   ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        << std::endl <<
+        R"(                                                   "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"fmt])"               << std::endl <<
           "  --int8                      Enable int8 precision, in addition to fp16 (default = disabled)"                                    << std::endl <<
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<

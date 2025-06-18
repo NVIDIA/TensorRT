@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +41,7 @@ using ssize_t = int64_t;
 // We need to avoid making copies of PluginField because it does not own any of it's members.
 // When there are multiple PluginFields pointing to the same data in Python, bad things happen.
 // Making this opaque allows us to create lists of PluginFields without creating unwanted copies.
-PYBIND11_MAKE_OPAQUE(std::vector<nvinfer1::PluginField>);
+PYBIND11_MAKE_OPAQUE(std::vector<nvinfer1::PluginField>)
 
 namespace tensorrt
 {

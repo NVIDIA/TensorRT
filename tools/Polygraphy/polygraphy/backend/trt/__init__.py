@@ -4,5 +4,6 @@ from polygraphy.backend.trt.config import *
 from polygraphy.backend.trt.file_reader import *
 from polygraphy.backend.trt.loader import *
 from polygraphy.backend.trt.profile import *
+from polygraphy.mod.trt_importer import *
 from polygraphy.backend.trt.runner import *
 from polygraphy.backend.trt.util import *

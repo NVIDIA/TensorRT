@@ -1,4 +1,6 @@
-# proposal Plugin
+# proposal Plugin [DEPRECATED]
+
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. No alternatives are planned to be provided.**
 
 **Table Of Contents**
 - [Description](#description)
@@ -77,6 +79,9 @@ documentation.
 
 
 ## Changelog
+
+May 2025
+Add deprecation note.
 
 June 2023
 Add deprecation note for `IPluginV2Ext` version of the plugin.

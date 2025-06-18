@@ -1,17 +1,55 @@
 # TensorRT OSS Release Changelog
 
-## 10.11.0 GA - 2025-5-21
+## 10.12.0 GA - 2025-6-10
+- Plugin changes
+  - Migrated `IPluginV2`-descendent version 1 of `cropAndResizeDynamic`, to version 2, which implements `IPluginV3`.
+  - Note: The newer versions preserve the attributes and I/O of the corresponding older plugin version. The older plugin versions are deprecated and will be removed in a future release
+  - Deprecated the listed versions of the following plugins:
+    - `DecodeBbox3DPlugin` (version 1)
+    - `DetectionLayer_TRT` (version 1)
+    - `EfficientNMS_TRT` (version 1)
+    - `FlattenConcat_TRT` (version 1)
+    - `GenerateDetection_TRT` (version 1)
+    - `GridAnchor_TRT` (version 1)
+    - `GroupNormalizationPlugin` (version 1)
+    - `InstanceNormalization_TRT` (version 2)
+    - `ModulatedDeformConv2d` (version 1)
+    - `MultilevelCropAndResize_TRT` (version 1)
+    - `MultilevelProposeROI_TRT` (version 1)
+    - `RPROI_TRT` (version 1)
+    - `PillarScatterPlugin` (version 1)
+    - `PriorBox_TRT` (version 1)
+    - `ProposalLayer_TRT` (version 1)
+    - `ProposalDynamic` (version 1)
+    - `Region_TRT` (version 1)
+    - `Reorg_TRT` (version 2)
+    - `ResizeNearest_TRT` (version 1)
+    - `ScatterND` (version 1)
+    - `VoxelGeneratorPlugin` (version 1)
+- Demo changes
+  - Added [Image-to-Image](demo/Diffusion#generate-an-image-with-stable-diffusion-v35-large-with-controlnet-guided-by-an-image-and-a-text-prompt) support for Stable Diffusion v3.5-large ControlNet models.
+  - Enabled download of [pre-exported ONNX models](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-tensorrt) for the Stable Diffusion v3.5-large pipeline.
+- Sample changes
+  - Added two refactored python samples [1_run_onnx_with_tensorrt](samples/python/refactored/1_run_onnx_with_tensorrt) and [2_construct_network_with_layer_apis](samples/python/refactored/2_construct_network_with_layer_apis) 
+- Parser changes
+  - Added support for integer-typed base tensors for `Pow` operations
+  - Added support for custom `MXFP8` quantization operations
+  - Added support for ellipses, diagonal, and broadcasting in `Einsum` operations
+
+
+## 10.11.0 GA - 2025-5-16
 
 Key Features and Updates:
 
 - Plugin changes
-  - Migrated `IPluginV2`-descendent version 1 of `modulatedDeformConvPlugin`, to version 2, which implements `IPluginV3`.
+  - Migrated `IPluginV2`-descendent version 1 of `cropAndResizePluginDynamic`, to version 2, which implements `IPluginV3`.
   - Migrated `IPluginV2`-descendent version 1 of `DisentangledAttention_TRT`, to version 2, which implements `IPluginV3`.
   - Migrated `IPluginV2`-descendent version 1 of `MultiscaleDeformableAttnPlugin_TRT`, to version 2, which implements `IPluginV3`.
   - Note: The newer versions preserve the attributes and I/O of the corresponding older plugin version. The older plugin versions are deprecated and will be removed in a future release.
 - Demo changes
   - demoDiffusion
     - Added support for Stable Diffusion 3.5-medium and 3.5-large pipelines in BF16 and FP16 precisions.
+    - Added support for Stable Diffusion 3.5-large pipeline in FP8 precision.
 - Parser changes
   - Added `kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA` parser flag to enable UINT8 asymmetric quantization on engines targeting DLA.
   - Removed restriction that inputs to `RandomNormalLike` and `RandomUniformLike` must be tensors.

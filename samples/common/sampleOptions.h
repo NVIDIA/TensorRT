@@ -19,10 +19,8 @@
 #define TRT_SAMPLE_OPTIONS_H
 
 
-#include <algorithm>
 #include <array>
 #include <iostream>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -139,7 +137,7 @@ using Arguments = std::unordered_multimap<std::string, std::pair<std::string, in
 
 using IOFormat = std::pair<nvinfer1::DataType, nvinfer1::TensorFormats>;
 
-using ShapeRange = std::array<std::vector<int32_t>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
+using ShapeRange = std::array<std::vector<int64_t>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
 
 using LayerPrecisions = std::unordered_map<std::string, nvinfer1::DataType>;
 using LayerOutputTypes = std::unordered_map<std::string, std::vector<nvinfer1::DataType>>;
@@ -226,6 +224,7 @@ public:
     LayerOutputTypes layerOutputTypes;
     LayerDeviceTypes layerDeviceTypes;
     StringSet debugTensors;
+    bool markUnfusedTensorsAsDebugTensors{false};
     StringSet debugTensorStates;
     bool safe{false};
     bool buildDLAStandalone{false};
@@ -275,6 +274,7 @@ public:
 
     int32_t tilingOptimizationLevel{defaultTilingOptimizationLevel};
     int64_t l2LimitForTiling{-1};
+    bool distributiveIndependence{false};
 
     void parse(Arguments& arguments) override;
 
@@ -319,12 +319,12 @@ public:
     bool timeRefit{false};
     bool setOptProfile{false};
     std::unordered_map<std::string, std::string> inputs;
-    using ShapeProfile = std::unordered_map<std::string, std::vector<int32_t>>;
+    using ShapeProfile = std::unordered_map<std::string, std::vector<int64_t>>;
     ShapeProfile shapes;
     nvinfer1::ProfilingVerbosity nvtxVerbosity{nvinfer1::ProfilingVerbosity::kLAYER_NAMES_ONLY};
     MemoryAllocationStrategy memoryAllocationStrategy{MemoryAllocationStrategy::kSTATIC};
     std::unordered_map<std::string, std::string> debugTensorFileNames;
-
+    std::vector<std::string> dumpAlldebugTensorFormats;
     WeightStreamingBudget weightStreamingBudget;
 
     void parse(Arguments& arguments) override;
@@ -487,7 +487,7 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::WeightsRole ro
     return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const std::vector<int32_t>& vec)
+inline std::ostream& operator<<(std::ostream& os, const std::vector<int64_t>& vec)
 {
     for (int32_t i = 0, e = static_cast<int32_t>(vec.size()); i < e; ++i)
     {

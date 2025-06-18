@@ -116,13 +116,13 @@ inline int32_t getTrtSMVersionDec(int32_t majorVersion, int32_t minorVersion)
 //! This pertains to virtual architectures represented by the intermediate PTX format.
 //! This is distinct from the SM version.
 //! See https://forums.developer.nvidia.com/t/how-should-i-use-correctly-the-sm-xx-and-compute-xx/219160
-struct ComputeCapability
+struct DeviceComputeCapability
 {
     int32_t major{};
     int32_t minor{};
 
     //! \return the compute capability of the CUDA device with the given \p deviceIndex.
-    [[nodiscard]] static ComputeCapability forDevice(int32_t deviceIndex)
+    [[nodiscard]] static DeviceComputeCapability forDevice(int32_t deviceIndex)
     {
         int32_t major{0};
         int32_t minor{0};
@@ -136,7 +136,7 @@ inline int32_t getSMVersion()
 {
     int32_t device{-1};
     PLUGIN_CHECK_CUDA(cudaGetDevice(&device));
-    auto const cc = ComputeCapability::forDevice(device);
+    auto const cc = DeviceComputeCapability::forDevice(device);
     return getTrtSMVersionDec(cc.major, cc.minor);
 }
 

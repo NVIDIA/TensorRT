@@ -2925,7 +2925,7 @@ static std::unique_ptr<bool[]> makeBoolArray(std::vector<bool> const& v)
     int32_t const n{static_cast<int32_t>(v.size())};
     std::unique_ptr<bool[]> result(n > 0 ? new bool[n] : nullptr);
     std::copy_n(v.begin(), n, result.get());
-    return std::move(result);
+    return result;
 }
 
 static const auto configure_plugin
@@ -3320,7 +3320,7 @@ py::bytes serialize(PyIPluginV2DynamicExt& self)
 DataType getOutputDataType(PyIPluginV2DynamicExt& self, int32_t index, std::vector<DataType> const& inputTypes)
 {
     return DataType{};
-};
+}
 
 PyIPluginV2DynamicExt* deserializePlugin(
     PyIPluginV2DynamicExt& self, std::string const& name, py::bytes const& serializedPlugin)
@@ -3379,7 +3379,7 @@ size_t getSerializationSize(PyIPluginV2DynamicExt& self)
 std::vector<DataType> getOutputDataTypes(IPluginV3& self, std::vector<DataType> const& inputTypes)
 {
     return {};
-};
+}
 
 std::vector<DimsExprs> getOutputShapes(IPluginV3& self, std::vector<DimsExprs> const& inputs,
     std::vector<DimsExprs> const& shapeInputs, IExprBuilder& exprBuilder)

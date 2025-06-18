@@ -18,16 +18,17 @@ import math
 import time
 from collections import OrderedDict
 
-from polygraphy import cuda, mod, util
+from polygraphy import config, cuda, mod, util
 from polygraphy.backend.base import BaseRunner
 from polygraphy.backend.trt import util as trt_util
+from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.common import FormattedArray
 from polygraphy.datatype import DataType
 from polygraphy.logger import G_LOGGER
 
 np = mod.lazy_import("numpy")
 torch = mod.lazy_import("torch>=1.13.0")
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 
 
 def _make_debug_listener():
@@ -326,7 +327,7 @@ class TrtRunner(BaseRunner):
             if self.allocation_strategy == "profile":
                 # Perform per-profile allocation.
                 size_to_allocate = 0
-                if mod.version(trt.__version__) >= mod.version("10.1"):
+                if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("10.1"):
                     size_to_allocate = self.engine.get_device_memory_size_for_profile_v2(
                         self.context.active_optimization_profile
                     )
@@ -342,7 +343,7 @@ class TrtRunner(BaseRunner):
                 self.context_memory_buffer = cuda.DeviceArray.raw((size_to_allocate,))
 
             self.context_memory_buffer.resize((size_to_allocate,))
-            if mod.version(trt.__version__) >= mod.version("10.1"):
+            if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("10.1"):
                 self.context.set_device_memory(self.context_memory_buffer.ptr, self.context_memory_buffer.allocated_nbytes)
             else:
                 self.context.device_memory = self.context_memory_buffer.ptr
@@ -465,7 +466,7 @@ class TrtRunner(BaseRunner):
         if self.weight_streaming_budget is not None:
             assert self.weight_streaming_budget == -2 or self.weight_streaming_budget == -1 or self.weight_streaming_budget >= 0
 
-        if mod.version(trt.__version__) >= mod.version("10.1"):
+        if config.USE_TENSORRT_RTX or mod.version(trt.__version__) >= mod.version("10.1"):
             self._set_weight_streaming_budget_v2()
         else:
             self._set_weight_streaming_budget_v1()
@@ -483,7 +484,12 @@ class TrtRunner(BaseRunner):
             if self.weight_streaming_percent == 0:
                 budget_bytes = 0  # Disable weight streaming
             else:
-                min_budget = self.engine.minimum_weight_streaming_budget
+                try:
+                    min_budget = self.engine.minimum_weight_streaming_budget
+                except AttributeError:
+                    # minimum_weight_streaming_budget is deprecated in TensorRT 10.1 and removed in
+                    # TensorRT RTX 1.0. For the new / V2 path, the minimum budget is 0.
+                    min_budget = 0
                 max_budget = self.engine.streamable_weights_size
                 budget_bytes = (1 - self.weight_streaming_percent / 100.0) * (max_budget - min_budget) + min_budget
 

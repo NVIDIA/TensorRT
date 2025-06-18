@@ -23,6 +23,7 @@ add_dependencies(tensorrt_samples sample_char_rnn)
 install(
     TARGETS sample_char_rnn
     OPTIONAL
+    COMPONENT full
 )
 
 else()

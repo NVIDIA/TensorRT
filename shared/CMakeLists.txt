@@ -22,7 +22,7 @@ endfunction()
 target_link_libraries(trt_shared PRIVATE
     $<COMPILE_ONLY:tensorrt>
     trt_global_definitions
-    CUDA::cudart_static
+    TRT::cudart
 )
 
 add_subdirectory(utils)

@@ -276,7 +276,9 @@ public:
     //! \note Repeated consecutive applications of `t.setType(t.getType())`
     //! would be idempotent, provided the state of the `ITensor` isn't changed between calls.
     //!
-    void setType(DataType type) noexcept
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED void setType(DataType type) noexcept
     {
         mImpl->setType(type);
     }
@@ -690,7 +692,9 @@ public:
     //!
     //! \see getPrecision() precisionIsSet() resetPrecision()
     //!
-    void setPrecision(DataType dataType) noexcept
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED void setPrecision(DataType dataType) noexcept
     {
         mLayer->setPrecision(dataType);
     }
@@ -714,7 +718,9 @@ public:
     //!
     //! \see setPrecision() getPrecision() resetPrecision()
     //!
-    bool precisionIsSet() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED bool precisionIsSet() const noexcept
     {
         return mLayer->precisionIsSet();
     }
@@ -724,7 +730,9 @@ public:
     //!
     //! \see setPrecision() getPrecision() precisionIsSet()
     //!
-    void resetPrecision() noexcept
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED void resetPrecision() noexcept
     {
         mLayer->resetPrecision();
     }
@@ -763,6 +771,7 @@ public:
     //!
     //! * ICastLayer
     //! * IDequantizeLayer
+    //! * IDynamicQuantizeLayer
     //! * IFillLayer
     //! * IQuantizeLayer
     //!
@@ -771,7 +780,9 @@ public:
     //!
     //! \see getOutputType() outputTypeIsSet() resetOutputType()
     //!
-    void setOutputType(int32_t index, DataType dataType) noexcept
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED void setOutputType(int32_t index, DataType dataType) noexcept
     {
         mLayer->setOutputType(index, dataType);
     }
@@ -800,7 +811,9 @@ public:
     //!
     //! \see setOutputType() getOutputType() resetOutputType()
     //!
-    bool outputTypeIsSet(int32_t index) const noexcept
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED bool outputTypeIsSet(int32_t index) const noexcept
     {
         return mLayer->outputTypeIsSet(index);
     }
@@ -812,7 +825,9 @@ public:
     //!
     //! \see setOutputType() getOutputType() outputTypeIsSet()
     //!
-    void resetOutputType(int32_t index) noexcept
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED void resetOutputType(int32_t index) noexcept
     {
         return mLayer->resetOutputType(index);
     }
@@ -2427,8 +2442,6 @@ protected:
 //! \brief Enumerates the binary operations that may be performed by an ElementWise layer.
 //!
 //! Operations kAND, kOR, and kXOR must have inputs of DataType::kBOOL.
-//!
-//! Operation kPOW must have inputs of floating-point type or DataType::kINT8.
 //!
 //! All other operations must have inputs of floating-point type, DataType::kINT8, DataType::kINT32, or
 //! DataType::kINT64.
@@ -4951,7 +4964,7 @@ protected:
 //! \brief Select elements from two data tensors based on a condition tensor.
 //!
 //! The select layer makes elementwise selections from two data tensors based on a condition tensor,
-//! behaving similarly to the numpy.where function with three parameters.
+//! behaving similarly to the `numpy.where` function with three parameters.
 //! The three input tensors must share the same rank. Multidirectional broadcasting is supported.
 //! The output tensor has the dimensions of the inputs AFTER applying the broadcast rule.
 //!
@@ -5399,7 +5412,7 @@ protected:
 //!
 //! IQuantizeLayer supports DataType::kFLOAT, DataType::kHALF, or DataType::kBF16 precision and will default to
 //! DataType::kFLOAT precision during instantiation. For strongly typed networks, \p input data type must match the
-//! \p scale data type.
+//! \p scale data type, with the exception of MXFP8 quantization, where the scale data type must be DataType::kE8M0.
 //!
 //! IQuantizeLayer supports DataType::kINT8, DataType::kFP8, or DataType::kINT4 output.
 //!
@@ -5505,9 +5518,9 @@ protected:
 //! dequantize the input according to:
 //! \p output = (\p input - \p zeroPt) * \p scale
 //!
-//! The first input (index 0) is the tensor to be quantized.
+//! The first input (index 0) is the tensor to be dequantized.
 //! The second (index 1) and third (index 2) are the scale and zero point respectively.
-//! \p scale and \p zeroPt should have identical dimensions, and rank lower or equal to 2.
+//! \p scale and \p zeroPt should have identical dimensions, and a rank that is lower or equal to 2.
 //!
 //! The \p zeroPt tensor is optional, and if not set, will be assumed to be zero. Its data type must be identical to
 //! the input's data type. \p zeroPt must only contain zero-valued coefficients, because only symmetric quantization is
@@ -5529,8 +5542,8 @@ protected:
 //! DataType::kINT8 precision during instantiation. For strongly typed networks, \p input data type must be same as
 //! \p zeroPt data type.
 //!
-//! IDequantizeLayer supports DataType::kFLOAT, DataType::kHALF, or DataType::kBF16 output. For strongly typed
-//! networks, \p output data type is inferred from \p scale data type.
+//! IDequantizeLayer supports DataType::kFLOAT, DataType::kHALF, or DataType::kBF16 output. The output data type must
+//! be configured explicitly using \p setToType.
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
@@ -5599,7 +5612,7 @@ public:
     //!
     //! \param toType The DataType of the output tensor.
     //!
-    //! Set the output type of the dequantize layer. Valid values are DataType::kFLOAT and DataType::kHALF.
+    //! Set the output type of the dequantize layer. Valid values are DataType::kFLOAT, DataType::kHALF and DataType::kBF16.
     //! If the network is strongly typed, setToType must be used to set the output type, and use of setOutputType
     //! is an error. Otherwise, types passed to setOutputType and setToType must be the same.
     //!
@@ -5665,10 +5678,10 @@ public:
     //!
     //! \param toType The data type of the quantized output tensor.
     //!
-    //! Set the type of the dynamic quantization layer's quantized output. Currently the only valid
-    //! value is DataType::kFP4. If the network is strongly typed, setToType must be used to set
-    //! the output type, and use of setOutputType is an error. Otherwise, types passed to setOutputType
-    //! and setToType must be the same.
+    //! Set the type of the dynamic quantization layer's quantized output.If the network is strongly typed, setToType
+    //! must be used to set the output type, and use of setOutputType is an error. Otherwise, types passed to
+    //! setOutputType and setToType must be the same.
+    //! Valid values for \p toType are DataType::kFP4 (NVFP4 quantization) and DataType::kFP8 (MXFP8 quantization).
     //!
     //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
     //!
@@ -5695,7 +5708,8 @@ public:
     //!
     //! \param scaleType The scale factors data type.
     //!
-    //! Set the scale-factors type. Currently the only valid value is DataType::kFP8.
+    //! Set the scale-factors type.
+    //! Valid values are DataType::kFP8 (NVFP4 quantization) and DataType::kE8M0 (MXFP8 quantization).
     //!
     void setScaleType(DataType scaleType) noexcept
     {
@@ -5742,7 +5756,7 @@ public:
     //! \brief Set the size of the quantization block.
     //!
     //! Note: The block size must divide the input in the blocked axis without remainder.
-    //! Currently only 16-element blocks are supported.
+    //! Valid values are 16 (NVFP4 quantization) and 32 (MXFP8 quantization).
     //!
     //! \see getBlockSize()
     //!
@@ -5797,8 +5811,6 @@ protected:
 //! Matrix-Vector Multiplication: ik,k->i
 //! Batch Matrix Multiplication:  ijk,ikl->ijl
 //! Batch Diagonal:               ...ii->...i
-//!
-//! \note TensorRT does not support ellipsis, diagonal operations or more than two inputs for Einsum.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -6770,6 +6782,42 @@ public:
     bool isDebugTensor(nvinfer1::ITensor const& tensor) const noexcept
     {
         return mImpl->isDebugTensor(tensor);
+    }
+
+    //!
+    //! \brief Mark unfused tensors as debug tensors.
+    //!
+    //! Debug tensors can be optionally emitted at runtime.
+    //! Tensors that are fused by the optimizer will not be emitted.
+    //! Tensors marked this way will not prevent fusion like markDebug() does, thus preserving performance.
+    //!
+    //! \warning Tensors marked this way cannot be detected by isDebugTensor().
+    //! \warning DebugListener can only get internal tensor names instead of the original tensor
+    //!          names in the NetworkDefinition for tensors marked this way. But the names correspond to the
+    //!          names obtained by IEngineInspector.
+    //! \warning There is no guarantee that all unfused tensors are marked.
+    //!
+    //! \return True if tensors were successfully marked (or were already marked), false otherwise.
+    //!
+    //! \see unmarkUnfusedTensorsAsDebugTensors(), markDebug(), IExecutionContext::setDebugListener()
+    //!
+    bool markUnfusedTensorsAsDebugTensors() noexcept
+    {
+        return mImpl->markUnfusedTensorsAsDebugTensors();
+    }
+
+    //!
+    //! \brief Undo the marking of unfused tensors as debug tensors.
+    //!
+    //! This has no effect on tensors marked by markDebug().
+    //!
+    //! \return True if tensor successfully unmarked (or was already unmarked), false otherwise.
+    //!
+    //! \see markUnfusedTensorsAsDebugTensors(), IExecutionContext::setDebugListener()
+    //!
+    bool unmarkUnfusedTensorsAsDebugTensors() noexcept
+    {
+        return mImpl->unmarkUnfusedTensorsAsDebugTensors();
     }
 
     //!
@@ -7898,10 +7946,12 @@ public:
     //! DataType::kHALF, or DataType::kBF16. Currently only 2D and 3D inputs are supported.
     //! \param axis The axis that is sliced into blocks. The axis must be the last or second to last dimension.
     //! \param blockSize The number of elements that are quantized using a shared scale factor.
-    //! Currently only blocks of 16 elements are supported.
-    //! \param outputType The data type of the quantized output tensor, must be DataType::kFP4. Future calls to set output
-    //! type using setToType or setOutputType must be consistent.
-    //! \param scaleType The data type of the scale factor used for quantizing the input data, must be DataType::kFP8.
+    //! Valid values are 16 (NVFP4 quantization) and 32 (MXFP8 quantization).
+    //! \param outputType The data type of the quantized output tensor, must be DataType::kFP4 (NVFP4 quantization) or
+    //! DataType::kFP8 (MXFP8 quantization). Future calls to set output type using setToType or setOutputType must be
+    //! consistent.
+    //! \param scaleType The data type of the scale factor used for quantizing the input data, must be DataType::kFP8
+    //! (NVFP4 quantization) or DataType::kE8M0 (MXFP8 quantization).
     //!
     //! \return The new dynamic quantization layer, or nullptr if it could not be created.
     //!
@@ -8103,7 +8153,7 @@ public:
     //! \param input The input tensor to the layer.
     //! \param axes The axes to add unit dimensions.
     //!
-    //! \see IUnsqueezeLauyer
+    //! \see IUnsqueezeLayer
     //!
     //! Axes must be resolvable to a constant Int32 or Int64 shape tensor.
     //! Values in axes must be unique and in the range of [-r_final, r_final-1], where r_final
@@ -8122,6 +8172,7 @@ protected:
     apiv::VNetworkDefinition* mImpl;
 };
 
+#if !STRIP_TRT_RTX_INTERNAL_API
 //!
 //! \enum CalibrationAlgoType
 //!
@@ -8689,7 +8740,7 @@ public:
 //!
 //! \brief Interface implemented by application for selecting and reporting algorithms of a layer provided by the
 //!        builder.
-//! \note A layer in context of algorithm selection may be different from ILayer in INetworkDefiniton.
+//! \note A layer in context of algorithm selection may be different from ILayer in INetworkDefinition.
 //!       For example, an algorithm might be implementing a conglomeration of multiple ILayers in INetworkDefinition.
 //! \note To ensure compatibility of source code with future versions of TensorRT, use IAlgorithmSelector, not
 //!       v_1_0::IAlgorithmSelector
@@ -8734,6 +8785,7 @@ constexpr inline int32_t EnumMax<QuantizationFlag>() noexcept
     return 1;
 }
 
+#endif  // !STRIP_TRT_RTX_INTERNAL_API
 //!
 //! \enum RuntimePlatform
 //!
@@ -8794,10 +8846,12 @@ using BuilderFlags = uint32_t;
 enum class BuilderFlag : int32_t
 {
     //! Enable FP16 layer selection, with FP32 fallback.
-    kFP16 = 0,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kFP16 TRT_DEPRECATED_ENUM = 0,
 
     //! Enable Int8 layer selection, with FP32 fallback with FP16 fallback if kFP16 also specified.
-    kINT8 = 1,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kINT8 TRT_DEPRECATED_ENUM = 1,
 
     //! Enable debugging of layers via synchronizing after every layer.
     kDEBUG = 2,
@@ -8828,11 +8882,13 @@ enum class BuilderFlag : int32_t
     kSAFETY_SCOPE = 8,
 
     //! Require that layers execute in specified precisions. Build fails otherwise.
-    kOBEY_PRECISION_CONSTRAINTS = 9,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kOBEY_PRECISION_CONSTRAINTS TRT_DEPRECATED_ENUM = 9,
 
     //! Prefer that layers execute in specified precisions.
     //! Fall back (with warning) to another precision if build would otherwise fail.
-    kPREFER_PRECISION_CONSTRAINTS = 10,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kPREFER_PRECISION_CONSTRAINTS TRT_DEPRECATED_ENUM = 10,
 
     //! Require that no reformats be inserted between a layer and a network I/O tensor
     //! for which ITensor::setAllowedFormats was called.
@@ -8862,7 +8918,8 @@ enum class BuilderFlag : int32_t
     //! This flag is not supported when HardwareCompatibilityLevel::kAMPERE_PLUS is enabled.
     //!
     //! \see HardwareCompatibilityLevel
-    kFP8 = 15,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kFP8 TRT_DEPRECATED_ENUM = 15,
 
     //! Emit error when a tactic being timed is not present in the timing cache.
     //! This flag has an effect only when IBuilderConfig has an associated ITimingCache.
@@ -8870,7 +8927,8 @@ enum class BuilderFlag : int32_t
 
     //! Enable DataType::kBF16 layer selection, with FP32 fallback.
     //! This flag is only supported by NVIDIA Ampere and later GPUs.
-    kBF16 = 17,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kBF16 TRT_DEPRECATED_ENUM = 17,
 
     //! Disable caching of JIT-compilation results during engine build.
     //! By default, JIT-compiled code will be serialized as part of the timing cache, which may significantly increase
@@ -8920,7 +8978,8 @@ enum class BuilderFlag : int32_t
     kWEIGHT_STREAMING = 21,
 
     //! Enable plugins with INT4 input/output.
-    kINT4 = 22,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kINT4 TRT_DEPRECATED_ENUM = 22,
 
     //! Enable building a refittable engine and provide fine-grained control. This allows
     //! control over which weights are refittable or not using INetworkDefinition::markWeightsRefittable and
@@ -8942,10 +9001,23 @@ enum class BuilderFlag : int32_t
     kMONITOR_MEMORY = 25,
 
     //! Enable plugins with FP4 input/output.
-    kFP4 = 26,
+    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
+    kFP4 TRT_DEPRECATED_ENUM = 26,
 
     //! Enable editable timing cache.
     kEDITABLE_TIMING_CACHE = 27,
+
+    //! Enable distributive independence.
+    //! When BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE is set and a layer documents axis i of an output as a distributive
+    //! axis, then the layer behaves exactly as if each evaluation across axis i was done using identical operations.
+    //! The definition of distributive axis is as follows:
+    //! For IMatrixMultiplyLayer:
+    //! All axes that are not one of the vector or matrix dimensions are distributive axes.
+    //! For layers that perform reduction:
+    //! All non-reduction axes are distributive axes.
+    //! For layers that perform einsum:
+    //! Let n be the leftmost reduction axis. The axes to the left of n are distributive axes.
+    kDISTRIBUTIVE_INDEPENDENCE = 28,
 };
 
 //!
@@ -8956,7 +9028,7 @@ enum class BuilderFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
 {
-    return 28;
+    return 29;
 }
 
 namespace v_1_0
@@ -9071,7 +9143,7 @@ public:
     //! \param capacity The capacity of the buffer.
     //!
     //! \return The count of entries in the cache and fill keys if keyBuffer is non-null.
-    //!         If an error occurrs, -1 will be returned.
+    //!         If an error occurs, -1 will be returned.
     //!
     //! Query the count of entries in the cache and write out cache keys if keyBuffer is provided.
     //! Any key entries exceeding the capacity of the keyBuffer will not be copied.
@@ -9293,6 +9365,7 @@ struct EnumMaxImpl<HardwareCompatibilityLevel>
     static constexpr int32_t kVALUE = 3;
 };
 } // namespace impl
+
 
 //!
 //! \enum TilingOptimizationLevel
@@ -10133,7 +10206,7 @@ public:
     //! \return hardwareCompatibilityLevel The level of hardware
     //!        compatibility.
     //!
-    //! \see setHardwareCompatiblityLevel()
+    //! \see setHardwareCompatibilityLevel()
     //!
     HardwareCompatibilityLevel getHardwareCompatibilityLevel() const noexcept
     {
@@ -10348,6 +10421,7 @@ public:
     {
         return mImpl->getL2LimitForTiling();
     }
+
 
 protected:
     apiv::VBuilderConfig* mImpl;

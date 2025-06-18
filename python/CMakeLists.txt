@@ -21,6 +21,8 @@ project(TRTPyBinds LANGUAGES CXX)
 
 option(TRT_BUILD_ENABLE_NEW_PYTHON_FLOW "Use new build logic based on the main CMake build." OFF)
 
+if (${TRT_BUILD_ENABLE_NEW_PYTHON_FLOW})
+
 if(MSVC)
     set(DEFAULT_PY_EXT_PATH "${TOOLS_BASE}/win32")
 else()
@@ -30,13 +32,15 @@ set(TRT_BUILD_PYTHON_EXTERNALS_PATH ${DEFAULT_PY_EXT_PATH} CACHE PATH "Path to t
 
 set(TRT_BUILD_PYTHON_PY_VERSIONS 3.8 3.9 3.10 3.11 3.12 3.13 CACHE STRING "The list of python versions to build bindings for.")
 
-set(TRT_PYTHON_MODULE_NAMES
-    "tensorrt"
-    "tensorrt_lean"
-)
-    list(APPEND TRT_PYTHON_MODULE_NAMES "tensorrt_dispatch")
 
-if (${TRT_BUILD_ENABLE_NEW_PYTHON_FLOW})
+if(NOT ${TRT_BUILD_WINML})
+    set(TRT_PYTHON_MODULE_NAMES
+        "tensorrt"
+        "tensorrt_lean"
+        "tensorrt_dispatch")
+else()
+    set(TRT_PYTHON_MODULE_NAMES "tensorrt_rtx")
+endif()
 
 # The "main" tensorrt bindings depend on the parser, so if we aren't building it, we need to skip it.
 if(NOT ${TRT_BUILD_ONNX_PARSER})
@@ -75,7 +79,7 @@ function(createBindingLibrary moduleName pyVersion)
 
     # Set options unique to the "full" bindings.
     # The subdirs will use the value of TRT_PYTHON_IS_FULL_BINDINGS to set sources appropriately.
-    if(${moduleName} STREQUAL "tensorrt")
+    if(${moduleName} STREQUAL "tensorrt" OR ${moduleName} STREQUAL "tensorrt_rtx")
         target_compile_definitions(${libName} PRIVATE
             tensorrt_EXPORTS=1
         )
@@ -151,9 +155,15 @@ function(createBindingLibrary moduleName pyVersion)
         "docstrings"
     )
 
+
     # Setup links against the TRT Libraries.
     if(${moduleName} STREQUAL "tensorrt")
-        set(TRT_LIBS tensorrt nvonnxparser tensorrt_plugins)
+        set(TRT_LIBS tensorrt nvonnxparser)
+        if(${TRT_BUILD_PLUGINS})
+            list(APPEND TRT_LIBS tensorrt_plugins)
+        endif()
+    elseif(${moduleName} STREQUAL "tensorrt_rtx")
+        set(TRT_LIBS tensorrt nvonnxparser)
     elseif(${moduleName} STREQUAL "tensorrt_lean")
         set(TRT_LIBS tensorrt_lean_runtime)
     elseif(${moduleName} STREQUAL "tensorrt_dispatch")
@@ -161,32 +171,40 @@ function(createBindingLibrary moduleName pyVersion)
     else()
         message(FATAL_ERROR "Unknown TensorRT module " ${moduleName})
     endif()
+    message(STATUS "TRT LIBS: ${TRT_LIBS}")
 
     find_package(CUDAToolkit REQUIRED)
 
     target_link_libraries(${libName} PRIVATE
         ${TRT_LIBS}
-        $<COMPILE_ONLY:CUDA::cudart_static>
+        $<COMPILE_ONLY:TRT::cudart> # We need the cuda headers to compile, but we don't link against them.
+        $<COMPILE_ONLY:trt_global_definitions>
     )
 
     # Tell the files what module they are currently building.
     target_compile_definitions(${libName} PRIVATE
         TENSORRT_MODULE=${moduleName}
     )
-
     # Remove the `lib` prefix from the binding .so's and correct the output name.
     set_target_properties(${libName}
         PROPERTIES PREFIX ""
                    CXX_VISIBILITY_PRESET hidden
                    VISIBILITY_INLINES_HIDDEN ON
                    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${moduleName}_bindings-py${pyVersion}
+                   RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${moduleName}_bindings-py${pyVersion}
+                   ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${moduleName}_bindings-py${pyVersion}
                    OUTPUT_NAME ${moduleName}
     )
 
     add_dependencies(tensorrt_python_bindings ${libName})
 
-    # Setup some final MSVC-exclusive settings
-    if(MSVC)
+    if(NOT MSVC)
+        # Disable warnings exclusive to the python bindings
+        target_compile_options(${libName} PRIVATE
+            -Wno-sign-compare
+            -Wno-unused-function
+        )
+    else()
         # Prevent pybind11 from sharing resources with other, potentially ABI incompatible modules
         # https://github.com/pybind/pybind11/issues/2898
         add_definitions(-DPYBIND11_COMPILER_TYPE="_${PROJECT_NAME}_abi")
@@ -232,7 +250,7 @@ function(processWheelTemplates moduleName pyVersion)
                 --dst-dir ${outputDir}
                 --filepath ${filePath}
                 --trt-module ${moduleName}
-                --trt-py-version ${TensorRT_VERSION}
+                --trt-py-version ${TensorRT_PACKAGE_VERSION}
                 --cuda-version ${TRT_CUDA_VERSION}
                 --trt-version ${TensorRT_VERSION}
                 --trt-nvinfer-name ${TRT_NVINFER_NAME}
@@ -249,42 +267,41 @@ endfunction()
 
 add_custom_target(trt_python_wheel_files)
 
-# Expands all template files for the bindings for the target module and python version.
-# Each call to this function creates a new custom target, and makes trt_python_wheel_files depend on the new target.
-#
-# \param moduleName The module name to create the bindings for. One of "tensorrt", "tensorrt_dispatch", or "tensorrt_lean".
-# \param pyVersion  The python version to create bindings for, i.e. "3.12".
-function(expandWheelTemplates moduleName pyVersion)
-    set(wheelTarget trt_wheel_files_${moduleName}_${pyVersion})
-
-    processWheelTemplates(${moduleName} ${pyVersion}
-        __init__.py
-        plugin/__init__.py
-        plugin/_autotune.py
-        plugin/_export.py
-        plugin/_lib.py
-        plugin/_plugin_class.py
-        plugin/_tensor.py
-        plugin/_top_level.py
-        plugin/_utils.py
-        plugin/_validate.py
-    )
-
-    add_custom_target(${wheelTarget} DEPENDS ${generatedWheelFiles})
-    add_dependencies(trt_python_wheel_files ${wheelTarget})
-endfunction()
-
 # Enumerate all the combinations and create the per-python per-module targets.
 foreach(moduleName IN LISTS TRT_PYTHON_MODULE_NAMES)
     foreach(pyVersion IN LISTS TRT_BUILD_PYTHON_PY_VERSIONS)
         createBindingLibrary(${moduleName} ${pyVersion})
-        expandWheelTemplates(${moduleName} ${pyVersion})
-        # TODO: Add custom targets to run copy_standalone_libs.py and build the wheels.
-        # We should be able to generate a pyproject.toml from the current config and setup a custom command to build the wheel directly.
     endforeach()
 endforeach()
 
+# Enter the packaging subdir to actually build the wheels.
+add_subdirectory(packaging)
+
+if(${TRT_BUILD_PLUGINS})
+    install(
+        FILES include/impl/NvInferPythonPlugin.h
+        TYPE INCLUDE
+        COMPONENT release
+    )
+endif()
+
 else() # TRT_BUILD_ENABLE_NEW_PYTHON_FLOW - old flow is below this line
+
+set(TRT_BUILD_WINML OFF)
+if (${TENSORRT_MODULE} STREQUAL "tensorrt_rtx")
+    # The "old" flow doesn't already have TRT_BUILD_WINML set, because it's
+    # coming from the legacy make build. So if we get the tensorrt_rtx module,
+    # we assume we're in the TensorRT-RTX build.
+    set(TRT_BUILD_WINML ON)
+endif()
+
+# Ensure TRT_WINML is either 0 or 1
+if (NOT TRT_WINML)
+    set(TRT_WINML 0)
+    if (TRT_BUILD_WINML)
+        set(TRT_WINML 1)
+    endif()
+endif()
 
 # Sets variable to a value if variable is unset.
 macro(set_ifndef var val)
@@ -339,9 +356,10 @@ message(STATUS "ONNX_INC_DIR: ${ONNX_INC_DIR}")
 message(STATUS "PYBIND11_DIR: ${PYBIND11_DIR}")
 
 # Source Files
-if(${TENSORRT_MODULE} STREQUAL "tensorrt")
+if(${TENSORRT_MODULE} STREQUAL "tensorrt" OR ${TENSORRT_MODULE} STREQUAL "tensorrt_rtx")
     # tensorrt full dependencies
     file(GLOB_RECURSE SOURCE_FILES src/*.cpp)
+    set(_NEED_EXPORTS_DEF ON)
 else()
     # tensorrt_lean and tensorrt_dispatch dependencies
     set(SOURCE_FILES src/pyTensorRT.cpp src/utils.cpp src/infer/pyCore.cpp src/infer/pyPlugin.cpp
@@ -356,6 +374,7 @@ message(STATUS "TENSORRT_MODULE: ${TENSORRT_MODULE}")
 set(PY_MODULE_NAME ${TENSORRT_MODULE})
 
 # Find headers
+set(LIBPATH_SUFFIX lib)
 if(MSVC)
     find_path(
         PY_INCLUDE Python.h
@@ -366,7 +385,7 @@ if(MSVC)
     find_path(
         PY_LIB_DIR ${PYTHON_LIB_NAME}.lib
         HINTS ${WIN_EXTERNALS}/${PYTHON} ${EXT_PATH}/${PYTHON}
-        PATH_SUFFIXES lib
+        PATH_SUFFIXES ${LIBPATH_SUFFIX}
         REQUIRED
     )
     message(STATUS "PY_LIB_DIR: ${PY_LIB_DIR}")
@@ -439,6 +458,7 @@ else()
     set(vfc_suffix "")
 endif()
 
+
 if(MSVC)
     set(nvinfer_lib_name "${TRT_NVINFER_NAME}_${TENSORRT_MAJOR_VERSION}${TRT_LIB_SUFFIX}")
     set(nvinfer_plugin_lib_name "nvinfer_plugin_${TENSORRT_MAJOR_VERSION}")
@@ -446,14 +466,20 @@ if(MSVC)
     set(nvinfer_lean_lib_name "nvinfer_lean_${TENSORRT_MAJOR_VERSION}${vfc_suffix}")
     set(nvinfer_dispatch_lib_name "nvinfer_dispatch_${TENSORRT_MAJOR_VERSION}${vfc_suffix}")
 else()
-    set(nvinfer_lib_name "${TRT_NVINFER_NAME}")
+    if(${TRT_BUILD_WINML})
+        set(nvinfer_lib_name "-l:lib${TRT_NVINFER_NAME}.so")
+    else()
+        set(nvinfer_lib_name "${TRT_NVINFER_NAME}")
+    endif()
     set(nvinfer_plugin_lib_name "nvinfer_plugin")
     set(nvonnxparser_lib_name "${TRT_ONNXPARSER_NAME}")
     set(nvinfer_lean_lib_name "nvinfer_lean${vfc_suffix}")
     set(nvinfer_dispatch_lib_name "nvinfer_dispatch${vfc_suffix}")
 endif()
+message(STATUS "NVInferLib = ${nvinfer_lib_name}")
+message(STATUS "NVOnnxParserLib = ${nvonnx_parser_lib_name}")
 
-if(${TENSORRT_MODULE} STREQUAL "tensorrt")
+if(${TENSORRT_MODULE} STREQUAL "tensorrt" OR ${TENSORRT_MODULE} STREQUAL "tensorrt_rtx")
     set(TRT_LIBS ${nvinfer_lib_name} ${nvonnxparser_lib_name})
         list(APPEND TRT_LIBS ${nvinfer_plugin_lib_name})
 elseif(${TENSORRT_MODULE} STREQUAL "tensorrt_lean")
@@ -465,16 +491,23 @@ else()
 endif()
 
 # -------- BUILDING --------
-
 set(LIB_NAME ${PY_MODULE_NAME})
 
 # Set up target
 add_library(${LIB_NAME} SHARED ${SOURCE_FILES})
+if(_NEED_EXPORTS_DEF)
+    target_compile_definitions(${LIB_NAME} PRIVATE
+        tensorrt_EXPORTS=1
+    )
+endif()
+message(STATUS "Python library name ${LIB_NAME}")
 target_include_directories(${LIB_NAME} BEFORE PUBLIC ${PY_CONFIG_INCLUDE} ${PY_INCLUDE})
 if(MSVC)
     # For some reason, we must explicitly link against the Python library on Windows.
+    message(STATUS "Dependencies ${TRT_LIBS} ${PYTHON_LIB_NAME}")
     target_link_libraries(${LIB_NAME} PRIVATE ${TRT_LIBS} ${PYTHON_LIB_NAME})
 else()
+    message(STATUS "Dependencies ${TRT_LIBS} ")
     target_link_libraries(${LIB_NAME} PRIVATE ${TRT_LIBS})
 endif()
 

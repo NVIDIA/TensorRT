@@ -17,6 +17,8 @@ target_sources(trt_samples_common PRIVATE
     bfloat16.h
     buffers.h
     common.h
+    debugTensorWriter.cpp
+    debugTensorWriter.h
     EntropyCalibrator.h
     ErrorRecorder.h
     getOptions.cpp
@@ -27,8 +29,6 @@ target_sources(trt_samples_common PRIVATE
     logger.h
     logging.h
     parserOnnxConfig.h
-    safeCommon.h
-    safeErrorRecorder.h
     sampleConfig.h
     sampleDevice.cpp
     sampleDevice.h
@@ -67,9 +67,16 @@ endif()
 
 target_link_libraries(trt_samples_common PUBLIC
     trt_global_definitions
-    CUDA::cudart_static
+    TRT::cudart
     trt_shared
+    dl
 )
+
+if(NOT MSVC)
+    target_link_libraries(trt_samples_common PUBLIC
+        Threads::Threads
+    )
+endif()
 
 target_include_directories(trt_samples_common PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}

@@ -18,31 +18,28 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cuda.h>
 #include <cuda_profiler_api.h>
 #include <functional>
-#include <iterator>
-#include <limits>
+#include <memory>
 #include <mutex>
-#include <numeric>
-#include <set>
-#include <sstream>
 #include <thread>
-#include <utility>
+#include <vector>
 
 #if defined(__QNX__)
 #include <sys/neutrino.h>
 #include <sys/syspage.h>
 #endif
 
-#include "NvInfer.h"
-
-#include "ErrorRecorder.h"
+#include "NvInferRuntime.h"
 #include "bfloat16.h"
 #include "common.h"
+#include "debugTensorWriter.h"
 #include "logger.h"
 #include "sampleInference.h"
 #include "sampleOptions.h"
-#include <cuda.h>
+#include "sampleReporting.h"
+#include "sampleUtils.h"
 
 #if CUDA_VERSION >= 11060
 #include <cuda_fp8.h>
@@ -233,31 +230,25 @@ bool allocateContextMemory(InferenceEnvironment& iEnv, InferenceOptions const& i
     return true;
 }
 
-//! \brief Transform shapeData so that it can be type-punned to array of int64_t.
+//! \brief Transform shapeData so that it can be type-punned to array of int32_t.
 //!
-//! Transform shapeData so if data() is type-punned to (int64_t*), the sequence
-//! of values are equal to the original elements of shapeData. The code relies
-//! on std::vector<int32_t>::data either being aligned on 8 byte boundaries or
-//! the CPU tolerating misaligned accesses. The latter is true of x86 and ARM64.
-void stretchInt32ToInt64(std::vector<int32_t>& shapeData)
+//! Transform shapeData so if data() is type-punned to (int32_t*), the sequence
+//! of values are equal to the original elements of shapeData.
+void contractInt64ToInt32(std::vector<int64_t>& shapeData)
 {
     int64_t const size = shapeData.size();
-    shapeData.resize((sizeof(int64_t) / sizeof(int32_t)) * size);
-    int32_t const* src = shapeData.data();
-    int64_t* dst = reinterpret_cast<int64_t*>(shapeData.data());
-    std::copy_backward(src, src + size, dst + size);
+    for (int64_t const& val : shapeData)
+    {
+        ASSERT(val <= std::numeric_limits<int32_t>::max() && val >= std::numeric_limits<int32_t>::min()
+            && "Value out of range for int32_t conversion");
+    }
+    int64_t const* src = shapeData.data();
+    int32_t* dst = reinterpret_cast<int32_t*>(shapeData.data());
+    std::copy(src, src + size, dst);
+    shapeData.resize((size + 1) / 2);
 }
 
 } // namespace
-
-//! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
-auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
-    return s == MemoryAllocationStrategy::kSTATIC
-        // Let TRT pre-allocate and manage the memory.
-        ? ExecutionContextAllocationStrategy::kSTATIC
-        // Allocate based on the current profile or runtime shapes.
-        : ExecutionContextAllocationStrategy::kUSER_MANAGED;
-};
 
 
 bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inference, SystemOptions const& system)
@@ -352,6 +343,15 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     {
         IExecutionContext* ec{nullptr};
 
+        //! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
+        auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
+            return s == MemoryAllocationStrategy::kSTATIC
+                // Let TRT pre-allocate and manage the memory.
+                ? ExecutionContextAllocationStrategy::kSTATIC
+                // Allocate based on the current profile or runtime shapes.
+                : ExecutionContextAllocationStrategy::kUSER_MANAGED;
+        };
+
         ec = engine->createExecutionContext(getExecutionContextAllocationStrategy(inference.memoryAllocationStrategy));
         if (ec == nullptr)
         {
@@ -418,7 +418,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
             {
                 // Set shapeData to either dimensions of the input (if it has a dynamic shape)
                 // or set to values of the input (if it is an input shape tensor).
-                std::vector<int32_t> shapeData;
+                std::vector<int64_t> shapeData;
 
                 if (shape == inference.shapes.end())
                 {
@@ -455,7 +455,7 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                     shapeData = shape->second;
                 }
 
-                int32_t* shapeTensorData{nullptr};
+                int64_t* shapeTensorData{nullptr};
                 if (isShapeInferenceIO)
                 {
                     // Save the data in iEnv, in a way that its address does not change
@@ -463,8 +463,8 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
                     DataType const type = engine->getTensorDataType(name);
                     switch (type)
                     {
-                    case DataType::kINT64: stretchInt32ToInt64(shapeData); break;
-                    case DataType::kINT32: break;
+                    case DataType::kINT64: break;
+                    case DataType::kINT32: contractInt64ToInt32(shapeData); break;
                     default:
                         sample::gLogError << "Shape tensor " << name << " has unexpected type " << type << std::endl;
                         return false;
@@ -510,13 +510,18 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
     }
 
     // Create Debug Listener and turn on debug states if client requested dumping debug tensors.
-    if (!inference.debugTensorFileNames.empty())
+    if (!inference.debugTensorFileNames.empty() || !inference.dumpAlldebugTensorFormats.empty())
     {
-        iEnv.listener = std::make_unique<DebugTensorWriter>(inference.debugTensorFileNames);
+        iEnv.listener = std::make_unique<DebugTensorWriter>(
+            inference.debugTensorFileNames, inference.dumpAlldebugTensorFormats, engine->getName(), iEnv.cmdline);
         iEnv.contexts.front()->setDebugListener(iEnv.listener.get());
         for (auto const& s : inference.debugTensorFileNames)
         {
             iEnv.contexts.front()->setTensorDebugState(s.first.c_str(), true);
+        }
+        if (!inference.dumpAlldebugTensorFormats.empty())
+        {
+            iEnv.contexts.front()->setUnfusedTensorsDebugState(true);
         }
     }
 
@@ -534,8 +539,10 @@ bool setUpInference(InferenceEnvironment& iEnv, InferenceOptions const& inferenc
 }
 
 TaskInferenceEnvironment::TaskInferenceEnvironment(
-    std::string engineFile, InferenceOptions inference, int32_t deviceId, int32_t DLACore, int32_t bs)
+    std::string engineFile, InferenceOptions const& inference, ReportingOptions const& reporting,
+    int32_t deviceId, int32_t DLACore, int32_t bs)
     : iOptions(inference)
+    , rOptions(reporting)
     , device(deviceId)
     , batch(bs)
 {
@@ -1016,7 +1023,7 @@ bool inferenceLoop(std::vector<std::unique_ptr<Iteration>>& iStreams, TimePoint 
 
 void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment& iEnv, SyncStruct& sync,
     int32_t const threadIdx, int32_t const streamsPerThread, int32_t device,
-    std::vector<InferenceTrace>& trace) noexcept
+    std::vector<InferenceTrace>& trace, ReportingOptions const& reporting) noexcept
 {
     try
     {
@@ -1060,7 +1067,8 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
             iEnv.error = true;
         }
 
-        if (inference.skipTransfers)
+        auto const needOutput = reporting.output || !reporting.exportOutput.empty();
+        if (inference.skipTransfers && needOutput)
         {
             for (auto& s : iStreams)
             {
@@ -1081,16 +1089,18 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironment&
 }
 
 inline std::thread makeThread(InferenceOptions const& inference, InferenceEnvironment& iEnv, SyncStruct& sync,
-    int32_t threadIdx, int32_t streamsPerThread, int32_t device, std::vector<InferenceTrace>& trace)
+    int32_t threadIdx, int32_t streamsPerThread, int32_t device, std::vector<InferenceTrace>& trace,
+    ReportingOptions const& reporting)
 {
     return std::thread(inferenceExecution, std::cref(inference), std::ref(iEnv), std::ref(sync), threadIdx,
-        streamsPerThread, device, std::ref(trace));
+        streamsPerThread, device, std::ref(trace), std::cref(reporting));
 }
 
 } // namespace
 
 bool runInference(
-    InferenceOptions const& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace)
+    InferenceOptions const& inference, InferenceEnvironment& iEnv, int32_t device, std::vector<InferenceTrace>& trace,
+    ReportingOptions const& reporting)
 {
     SMP_RETVAL_IF_FALSE(!iEnv.safe, "Safe inference is not supported!", false, sample::gLogError);
     CHECK(cudaProfilerStart());
@@ -1112,18 +1122,17 @@ bool runInference(
     std::vector<std::thread> threads;
     for (int32_t threadIdx = 0; threadIdx < numThreads; ++threadIdx)
     {
-        threads.emplace_back(makeThread(inference, iEnv, sync, threadIdx, streamsPerThread, device, trace));
+        threads.emplace_back(makeThread(inference, iEnv, sync, threadIdx, streamsPerThread, device, trace, reporting));
     }
     for (auto& th : threads)
     {
         th.join();
     }
-
-
     CHECK(cudaProfilerStop());
 
     auto cmpTrace = [](InferenceTrace const& a, InferenceTrace const& b) { return a.h2dStart < b.h2dStart; };
     std::sort(trace.begin(), trace.end(), cmpTrace);
+
 
     return !iEnv.error;
 }
@@ -1144,7 +1153,8 @@ bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment
     {
         auto& tEnv = tEnvList[i];
         threads.emplace_back(makeThread(
-            tEnv->iOptions, *(tEnv->iEnv), sync, /*threadIdx*/ 0, /*streamsPerThread*/ 1, tEnv->device, tEnv->trace));
+            tEnv->iOptions, *(tEnv->iEnv), sync, /*threadIdx*/ 0, /*streamsPerThread*/ 1, tEnv->device, tEnv->trace,
+            tEnv->rOptions));
     }
     for (auto& th : threads)
     {
@@ -1217,8 +1227,6 @@ bool timeDeserialize(InferenceEnvironment& iEnv, SystemOptions const& sys)
             reader.reset();
             engine.reset(rt->deserializeCudaEngine(reader));
         }
-        deserializeOK = (engine != nullptr);
-
         deserializeOK = (engine != nullptr);
         auto endClock = std::chrono::high_resolution_clock::now();
         // return NAN if deserialization failed.
@@ -1356,6 +1364,7 @@ void Binding::fill()
         break;
     }
     case DataType::kFP4: ASSERT(false && "FP4 is not supported");
+    case DataType::kE8M0: ASSERT(false && "E8M0 is not supported");
     }
 }
 
@@ -1431,6 +1440,7 @@ void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim,
         break;
     }
     case nvinfer1::DataType::kFP4: ASSERT(false && "FP4 is not supported");
+    case nvinfer1::DataType::kE8M0: ASSERT(false && "E8M0 is not supported");
     }
 }
 
@@ -1545,20 +1555,6 @@ void Bindings::dumpBindingValues(nvinfer1::IExecutionContext const& context, int
 namespace
 {
 
-std::string genFilenameSafeString(std::string const& s)
-{
-    std::string res = s;
-    static std::string const allowedSpecialChars{"._-,"};
-    for (auto& c : res)
-    {
-        if (!isalnum(c) && allowedSpecialChars.find(c) == std::string::npos)
-        {
-            c = '_';
-        }
-    }
-    return res;
-}
-
 Dims getBindingDimensions(nvinfer1::IExecutionContext const& context, std::string const& name)
 {
     return context.getTensorShape(name.c_str());
@@ -1655,30 +1651,6 @@ bool Bindings::setTensorAddresses(nvinfer1::IExecutionContext& context) const
             }
         }
     }
-    return true;
-}
-
-bool DebugTensorWriter::processDebugTensor(void const* addr, nvinfer1::TensorLocation location, nvinfer1::DataType type,
-    nvinfer1::Dims const& shape, char const* name, cudaStream_t stream)
-{
-    CHECK(cudaStreamSynchronize(stream));
-    // Store data from callback.
-    auto volume = std::accumulate(shape.d, shape.d + shape.nbDims, 1LL, std::multiplies<int64_t>{});
-    int64_t size = samplesCommon::getNbBytes(type, volume);
-    std::vector<char> hostDataOut(size, 0);
-    CHECK(cudaMemcpy(hostDataOut.data(), addr, size, cudaMemcpyDeviceToHost));
-
-    auto it = mDebugTensorFileNames.find(name);
-    ASSERT(it != mDebugTensorFileNames.end());
-    std::string fileName = it->second;
-
-    std::ofstream f(fileName, std::ios::out | std::ios::binary);
-    ASSERT(f && "Cannot open file for write");
-    sample::gLogInfo << "Writing to file " << fileName << " for debug tensor " << name << std::endl;
-    f.write(hostDataOut.data(), size);
-    f.close();
-
-    CHECK(cudaStreamSynchronize(stream));
     return true;
 }
 

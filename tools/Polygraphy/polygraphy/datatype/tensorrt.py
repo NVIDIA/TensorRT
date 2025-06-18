@@ -21,8 +21,9 @@ from polygraphy.datatype.datatype import (
     register_dtype_importer,
     register_dtype_exporter,
 )
+from polygraphy.mod.trt_importer import lazy_import_trt
 
-trt = mod.lazy_import("tensorrt>=8.5")
+trt = lazy_import_trt()
 
 
 def _get_mapping():

@@ -23,6 +23,7 @@ add_dependencies(tensorrt_samples sample_named_dimensions)
 install(
     TARGETS sample_named_dimensions
     OPTIONAL
+    COMPONENT full
 )
 
 else()

@@ -57,3 +57,9 @@ A negative value disables swapping and a value of 0 causes all arrays to be save
 Disabled by default.
 This can be configured by setting the 'POLYGRAPHY_ARRAY_SWAP_THRESHOLD_MB' environment variable.
 """
+
+USE_TENSORRT_RTX = bool(os.environ.get("POLYGRAPHY_USE_TENSORRT_RTX", "0") != "0")
+"""
+bool: Whether to use TensorRT RTX as the TensorRT backend.
+This can be configured by setting the 'POLYGRAPHY_USE_TENSORRT_RTX' environment variable.
+"""

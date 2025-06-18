@@ -1,4 +1,6 @@
-# GroupNormalizationPlugin
+# GroupNormalizationPlugin [DEPRECATED]
+
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. No alternatives are planned to be provided.**
 
 **Table Of Contents**
 - [Description](#description)
@@ -59,6 +61,8 @@ Key differences from Instance Normalization:
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html).
 
 ## Changelog
+- **May 2025**: Add deprecation note.
+
 - **Feb 2025**: Initial release of this README, Deprecation and non-support notice added.
 
 ## Known Issues
