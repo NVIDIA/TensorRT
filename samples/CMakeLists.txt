@@ -16,7 +16,7 @@
 #
 
 # Require the ONNX parser to build samples or trtexec.
-if((${TRT_BUILD_SAMPLES} OR ${TRT_BUILD_TRTEXEC}) AND NOT ${TRT_BUILD_ONNX_PARSER})
+if((TRT_BUILD_SAMPLES OR TRT_BUILD_TRTEXEC) AND NOT TRT_BUILD_ONNX_PARSER)
     message(FATAL_ERROR "Building trtexec and/or the other samples requires that TRT_BUILD_ONNX_PARSER=ON")
 endif()
 
