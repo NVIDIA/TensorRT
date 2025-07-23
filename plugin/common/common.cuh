@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +25,7 @@
 #endif // CUDA_VERSION
 
 #include "common/cublasWrapper.h"
-#include <cub/cub.cuh>
+#include "common/cubCcclCompat.h"
 #include <cfloat>
 
 #define HDI inline __host__ __device__
@@ -333,7 +333,7 @@ __device__ inline void scaledSoftmaxSmall(
         threadData = input[idx];
     }
 
-    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
+    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, compat::getCudaMaxOp());
     if (threadIdx.x == 0)
     {
         fMax = maxElem;
@@ -389,7 +389,7 @@ __device__ inline void scaledSoftmax(
         threadData = max(static_cast<float>(input[idx]), threadData);
     }
 
-    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, cub::Max());
+    const float maxElem = BlockReduce(tmpStorage).Reduce(threadData, compat::getCudaMaxOp());
     if (threadIdx.x == 0)
     {
         fMax = maxElem;

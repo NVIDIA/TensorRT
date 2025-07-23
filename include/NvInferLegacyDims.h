@@ -19,7 +19,7 @@
 #define NV_INFER_LEGACY_DIMS_H
 
 #define NV_INFER_INTERNAL_INCLUDE 1
-#include "NvInferRuntimeBase.h"
+#include "NvInferRuntimeBase.h" // IWYU pragma: exports
 #undef NV_INFER_INTERNAL_INCLUDE
 
 //!

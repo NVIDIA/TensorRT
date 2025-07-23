@@ -20,7 +20,7 @@ add_executable(sample_char_rnn sampleCharRNN.cpp)
 target_link_libraries(sample_char_rnn PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_char_rnn)
 
-install(
+installLibraries(
     TARGETS sample_char_rnn
     OPTIONAL
     COMPONENT full

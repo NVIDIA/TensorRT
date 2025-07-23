@@ -37,6 +37,11 @@
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
+#if ENABLE_UNIFIED_BUILDER
+#include "NvInferConsistency.h"
+#include "safeErrorRecorder.h"
+#endif
+
 using namespace nvinfer1;
 
 namespace sample
@@ -44,6 +49,35 @@ namespace sample
 
 namespace
 {
+class FileStreamWriter final : public nvinfer1::IStreamWriter
+{
+protected:
+    std::ofstream mStream;
+    int64_t mTotalWrittenSize;
+
+public:
+    FileStreamWriter(std::string const& path)
+        : mStream(path, std::ios::binary)
+        , mTotalWrittenSize(0)
+    {
+    }
+
+    virtual int64_t write(void const* data, int64_t nbBytes) final
+    {
+        SMP_RETVAL_IF_FALSE(
+            (mStream.is_open() && mStream.good()), "Cannot write to FileStreamWriter", -1, sample::gLogError);
+        auto const* src = reinterpret_cast<char const*>(data);
+        mStream.write(src, nbBytes);
+        mTotalWrittenSize += nbBytes;
+        return nbBytes;
+    }
+
+    int64_t finalize()
+    {
+        mStream.close();
+        return mTotalWrittenSize;
+    }
+};
 
 std::map<std::string, float> readScalesFromCalibrationCache(std::string const& calibrationFile)
 {
@@ -145,6 +179,16 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
 nvinfer1::ICudaEngine* LazilyDeserializedEngine::release()
 {
     return mEngine.release();
+}
+
+bool LazilyDeserializedEngine::checkDLASafe()
+{
+    ASSERT(sample::hasSafeRuntime());
+
+    SMP_RETVAL_IF_FALSE(mDLACore == -1, "Safe DLA engine built with kDLA_STANDALONE should not be run via TRT!", false,
+        sample::gLogError);
+
+    return true;
 }
 
 void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::vector<IOFormat> const& inputFormats,
@@ -276,7 +320,7 @@ public:
         return 1;
     }
 
-    const void* readCalibrationCache(size_t& length) noexcept override;
+    void const* readCalibrationCache(size_t& length) noexcept override;
 
     void writeCalibrationCache(void const*, size_t) noexcept override {}
 
@@ -338,7 +382,7 @@ bool RndInt8Calibrator::getBatch(void* bindings[], char const* names[], int32_t 
     return true;
 }
 
-const void* RndInt8Calibrator::readCalibrationCache(size_t& length) noexcept
+void const* RndInt8Calibrator::readCalibrationCache(size_t& length) noexcept
 {
     mCalibrationCache.clear();
     std::ifstream input(mCacheFile, std::ios::binary);
@@ -660,8 +704,6 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
     return true;
 }
 
-} // namespace
-
 bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
     INetworkDefinition& network, IBuilderConfig& config, std::unique_ptr<nvinfer1::IInt8Calibrator>& calibrator,
     std::ostream& err, std::vector<std::vector<int8_t>>& sparseWeights)
@@ -967,7 +1009,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
                "specifying --fp16 or --best"
             << std::endl;
     }
-    auto isInt8 = [](const IOFormat& format) { return format.first == DataType::kINT8; };
+    auto isInt8 = [](IOFormat const& format) { return format.first == DataType::kINT8; };
     auto int8IO = std::count_if(build.inputFormats.begin(), build.inputFormats.end(), isInt8)
         + std::count_if(build.outputFormats.begin(), build.outputFormats.end(), isInt8);
 
@@ -1178,8 +1220,12 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         return false;
     }
 
+    config.setRemoteAutoTuningConfig(build.remoteAutoTuningConfig.c_str());
+
     return true;
 }
+
+} // namespace
 
 //!
 //! \brief Create a serialized engine for a network defintion
@@ -1210,14 +1256,62 @@ bool networkToSerializedEngine(
     config->setProfileStream(*profileStream);
 
     auto const tBegin = std::chrono::high_resolution_clock::now();
-    std::unique_ptr<IHostMemory> serializedEngine{builder.buildSerializedNetwork(*env.network, *config)};
-    SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
+
+    if (!(build.safe || build.buildDLAStandalone) && build.save)
+    {
+        auto const engineFile = build.engine;
+        FileStreamWriter writer(engineFile);
+        builder.buildSerializedNetworkToStream(*env.network, *config, writer);
+        auto const engineSize = writer.finalize();
+        std::vector<uint8_t> streamEngine(engineSize, 0);
+        std::ifstream reader(engineFile, std::ios::binary);
+        SMP_RETVAL_IF_FALSE((reader.is_open() && reader.good()), "Failed to open engine file for reading", false, err);
+        reader.read(reinterpret_cast<char*>(streamEngine.data()), engineSize);
+        SMP_RETVAL_IF_FALSE((!reader.fail()), "Error when reading engine file", false, err);
+        reader.close();
+        sample::gLogInfo << "Created engine with size: " << (engineSize / 1.0_MiB) << " MiB" << std::endl;
+        env.engine.setBlob(std::move(streamEngine));
+    }
+    else
+    {
+        IHostMemory* serializedEngine{nullptr};
+        if (build.safe && build.save && build.dumpKernelText)
+        {
+            IHostMemory* kernelText{nullptr};
+            serializedEngine = builder.buildSerializedNetwork(*env.network, *config, kernelText);
+            if (kernelText != nullptr && kernelText->size() > 0)
+            {
+                std::unique_ptr<IHostMemory> kernelTextPtr(kernelText);
+                env.kernelText.setBlob(kernelTextPtr);
+                sample::gLogInfo << "Created kernel CPP with size: " << (kernelText->size() / 1.0_MiB) << " MiB"
+                                 << std::endl;
+            }
+            else
+            {
+                sample::gLogError << "Failed to create kernel CPP." << std::endl;
+            }
+        }
+        else
+        {
+            serializedEngine = builder.buildSerializedNetwork(*env.network, *config);
+        }
+        SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
+        sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
+
+        if (build.safe && build.consistency)
+        {
+            if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size()))
+            {
+                return false;
+            }
+        }
+        std::unique_ptr<IHostMemory> serializedEnginePtr(serializedEngine);
+        env.engine.setBlob(serializedEnginePtr);
+    }
+
     auto const tEnd = std::chrono::high_resolution_clock::now();
     float const buildTime = std::chrono::duration<float>(tEnd - tBegin).count();
     sample::gLogInfo << "Engine built in " << buildTime << " sec." << std::endl;
-    sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
-
-    env.engine.setBlob(serializedEngine);
 
     if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
     {
@@ -1342,7 +1436,8 @@ bool loadAsyncStreamingEngineToBuildEnv(std::string const& filepath, BuildEnviro
 }
 
 
-bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err)
+bool loadEngineToBuildEnv(
+    std::string const& filepath, BuildEnvironment& env, std::ostream& err, bool const enableConsistency)
 {
     auto const tBegin = std::chrono::high_resolution_clock::now();
     std::ifstream engineFile(filepath, std::ios::binary);
@@ -1358,6 +1453,15 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
     float const loadTime = std::chrono::duration<float>(tEnd - tBegin).count();
     sample::gLogInfo << "Engine loaded in " << loadTime << " sec." << std::endl;
     sample::gLogInfo << "Loaded engine with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
+
+    if (enableConsistency)
+    {
+        if (!checkSafeEngine(engineBlob.data(), fsize))
+        {
+            sample::gLogError << "Consistency validation is not enabled." << std::endl;
+            return false;
+        }
+    }
 
     env.engine.setBlob(std::move(engineBlob));
 
@@ -1429,10 +1533,10 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
 ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream& err)
 {
     BuildEnvironment env(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
-    return loadEngineToBuildEnv(engine, env, err) ? env.engine.release() : nullptr;
+    return loadEngineToBuildEnv(engine, env, err, false) ? env.engine.release() : nullptr;
 }
 
-bool saveEngine(const ICudaEngine& engine, std::string const& fileName, std::ostream& err)
+bool saveEngine(ICudaEngine const& engine, std::string const& fileName, std::ostream& err)
 {
     std::ofstream engineFile(fileName, std::ios::binary);
     if (!engineFile)
@@ -1453,7 +1557,7 @@ bool saveEngine(const ICudaEngine& engine, std::string const& fileName, std::ost
 }
 
 bool getEngineBuildEnv(
-    const ModelOptions& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
+    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
 {
     bool createEngineSuccess{false};
 
@@ -1461,7 +1565,7 @@ bool getEngineBuildEnv(
     {
         if (build.safe)
         {
-            createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err);
+            createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err, build.safe && build.consistency);
         }
         else
         {
@@ -1498,7 +1602,6 @@ bool getEngineBuildEnv(
         engineFile.close();
         if (!build.safe)
         {
-            env.engine.releaseBlob();
             if (build.asyncFileReader)
             {
                 SMP_RETVAL_IF_FALSE(loadAsyncStreamingEngineToBuildEnv(build.engine, env, err),
@@ -1510,19 +1613,31 @@ bool getEngineBuildEnv(
                     "Reading engine file via stream reader failed.", false, err);
             }
         }
+        if (build.safe && build.dumpKernelText)
+        {
+            auto& kernelTextBlob = env.kernelText.getBlob();
+            if (kernelTextBlob.data != nullptr)
+            {
+                std::ofstream engineTextFile(build.engine + ".txt");
+                engineTextFile.write(static_cast<char const*>(kernelTextBlob.data), kernelTextBlob.size);
+                SMP_RETVAL_IF_FALSE(!engineTextFile.fail(), "Saving engine kernel text to file failed.", false, err);
+                engineTextFile.close();
+            }
+        }
+        env.engine.releaseBlob();
     }
 
     return true;
 }
 
 // There is not a getWeightsName API, so we need to use WeightsRole.
-std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const ILayer& l)
+std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer const& l)
 {
     switch (l.getType())
     {
     case LayerType::kCONSTANT:
     {
-        auto const& layer = static_cast<const nvinfer1::IConstantLayer&>(l);
+        auto const& layer = static_cast<nvinfer1::IConstantLayer const&>(l);
         auto const weights = layer.getWeights();
         switch (weights.type)
         {
@@ -1545,19 +1660,19 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(const IL
     }
     case LayerType::kCONVOLUTION:
     {
-        auto const& layer = static_cast<const nvinfer1::IConvolutionLayer&>(l);
+        auto const& layer = static_cast<nvinfer1::IConvolutionLayer const&>(l);
         return {std::make_pair(WeightsRole::kKERNEL, layer.getKernelWeights()),
             std::make_pair(WeightsRole::kBIAS, layer.getBiasWeights())};
     }
     case LayerType::kDECONVOLUTION:
     {
-        auto const& layer = static_cast<const nvinfer1::IDeconvolutionLayer&>(l);
+        auto const& layer = static_cast<nvinfer1::IDeconvolutionLayer const&>(l);
         return {std::make_pair(WeightsRole::kKERNEL, layer.getKernelWeights()),
             std::make_pair(WeightsRole::kBIAS, layer.getBiasWeights())};
     }
     case LayerType::kSCALE:
     {
-        auto const& layer = static_cast<const nvinfer1::IScaleLayer&>(l);
+        auto const& layer = static_cast<nvinfer1::IScaleLayer const&>(l);
         return {std::make_pair(WeightsRole::kSCALE, layer.getScale()),
             std::make_pair(WeightsRole::kSHIFT, layer.getShift())};
     }
@@ -1722,6 +1837,20 @@ void* initSafeRuntime()
     return handle;
 }
 
+void* initConsistencyCheckerLibrary()
+{
+    void* handle{nullptr};
+#if !defined(_WIN32)
+    std::string const dllName{"libnvinfer_checker_shared.so"};
+#if SANITIZER_BUILD
+    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
+#else
+    handle = dlopen(dllName.c_str(), RTLD_LAZY);
+#endif
+#endif
+    return handle;
+}
+
 #if !defined(_WIN32)
 struct DllDeleter
 {
@@ -1734,16 +1863,90 @@ struct DllDeleter
     }
 };
 const std::unique_ptr<void, DllDeleter> safeRuntimeLibrary{initSafeRuntime()};
+const std::unique_ptr<void, DllDeleter> consistencyCheckerLibrary{initConsistencyCheckerLibrary()};
 #endif
 } // namespace
 
 bool hasSafeRuntime()
 {
-    bool ret{false};
-#if !defined(_WIN32)
-    ret = (safeRuntimeLibrary != nullptr);
+#if defined(_WIN32)
+    return false;
+#else
+    return (safeRuntimeLibrary != nullptr);
 #endif
-    return ret;
+}
+
+bool hasConsistencyChecker()
+{
+#if defined(_WIN32)
+    return false;
+#else
+    return (consistencyCheckerLibrary != nullptr);
+#endif
+}
+
+#if ENABLE_UNIFIED_BUILDER
+
+nvinfer2::safe::consistency::IConsistencyChecker* createConsistencyChecker(
+    sample::SampleSafeRecorder& recorder, void const* serializedEngine, int32_t const engineSize) noexcept
+{
+    nvinfer2::safe::consistency::IConsistencyChecker* checker{nullptr};
+
+    if (serializedEngine == nullptr || engineSize == 0)
+    {
+        return checker;
+    }
+
+#if !defined(_WIN32)
+    constexpr char symbolName[] = "createConsistencyChecker";
+    typedef ErrorCode (*CreateCheckerFn)(nvinfer2::safe::consistency::IConsistencyChecker * &checker,
+        sample::SampleSafeRecorder & recorder, void const* data, size_t size);
+    if (hasSafeRuntime())
+    {
+        auto createFn = reinterpret_cast<CreateCheckerFn>(dlsym(consistencyCheckerLibrary.get(), symbolName));
+        if (createFn != nullptr)
+        {
+            ErrorCode errorCode = createFn(checker, recorder, serializedEngine, engineSize);
+            if (errorCode != ErrorCode::kSUCCESS)
+            {
+                return nullptr;
+            }
+        }
+    }
+#endif
+    return checker;
+}
+#endif
+
+bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize)
+{
+    if (!hasConsistencyChecker())
+    {
+        sample::gLogError << "Cannot perform consistency check because the checker is not loaded.." << std::endl;
+        return false;
+    }
+
+#if ENABLE_UNIFIED_BUILDER
+    sample::SampleSafeRecorder recorder{nvinfer2::safe::Severity::kINFO};
+
+    auto checker = std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker>(
+        createConsistencyChecker(recorder, serializedEngine, engineSize));
+    if (checker.get() == nullptr)
+    {
+        sample::gLogError << "Failed to create consistency checker." << std::endl;
+        return false;
+    }
+    sample::gLogInfo << "Start consistency checking." << std::endl;
+    if (!checker->validate())
+    {
+        sample::gLogError << "Consistency validation failed." << std::endl;
+        return false;
+    }
+    sample::gLogInfo << "Consistency validation passed." << std::endl;
+    return true;
+#else
+    return false;
+#endif
 }
 
 } // namespace sample

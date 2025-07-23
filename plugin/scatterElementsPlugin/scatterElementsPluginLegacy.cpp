@@ -35,10 +35,6 @@ std::unordered_map<std::string, ReductionType> const kREDUCE_STR_TO_ENUM{
     {"max", ReductionType::kMAX},
 };
 
-// Static class fields initialization
-PluginFieldCollection ScatterElementsPluginV2Creator::gFC{};
-std::vector<PluginField> ScatterElementsPluginV2Creator::gPluginAttributes;
-
 namespace
 {
 constexpr char const* kSCATTER_ELEMENTS_NAME{"ScatterElements"};

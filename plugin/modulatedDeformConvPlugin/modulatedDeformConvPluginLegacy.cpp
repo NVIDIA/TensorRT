@@ -51,9 +51,6 @@ static char const* PLUGIN_VERSION{"1"};
 static char const* PLUGIN_NAME{"ModulatedDeformConv2d"};
 } // namespace
 
-nvinfer1::PluginFieldCollection ModulatedDeformableConvPluginDynamicLegacyCreator::mFC{};
-std::vector<nvinfer1::PluginField> ModulatedDeformableConvPluginDynamicLegacyCreator::mPluginAttributes;
-
 ModulatedDeformableConvPluginDynamicLegacy::ModulatedDeformableConvPluginDynamicLegacy(std::string const& name,
     nvinfer1::Dims const stride, nvinfer1::Dims const padding, nvinfer1::Dims const dilation,
     int32_t const deformableGroup, int32_t const group)

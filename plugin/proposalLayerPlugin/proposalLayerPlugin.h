@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -133,11 +133,11 @@ public:
     IPluginV2Ext* deserializePlugin(char const* name, void const* data, size_t length) noexcept override;
 
 private:
-    static PluginFieldCollection mFC;
+    PluginFieldCollection mFC;
     int32_t mPreNMSTopK;
     int32_t mKeepTopK;
     float mIOUThreshold;
-    static std::vector<PluginField> mPluginAttributes;
+    std::vector<PluginField> mPluginAttributes;
 };
 } // namespace plugin
 } // namespace nvinfer1

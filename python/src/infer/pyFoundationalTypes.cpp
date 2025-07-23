@@ -51,7 +51,7 @@ static const auto weights_numpy_constructor = [](py::array& arr) {
 template <typename DimsType, typename PyIterable>
 bool dimsEqual(DimsType const& self, PyIterable& other)
 {
-    if (other.size() != self.nbDims)
+    if (static_cast<int64_t>(other.size()) != self.nbDims)
     {
         return false;
     }
@@ -74,7 +74,7 @@ static const auto dims_vector_constructor = [](std::vector<int64_t> const& in) {
     // Create the Dims object.
     Dims* self = new Dims{};
     self->nbDims = in.size();
-    for (int32_t i = 0; i < in.size(); ++i)
+    for (int32_t i = 0; static_cast<size_t>(i) < in.size(); ++i)
         self->d[i] = in[i];
     return self;
 };
@@ -104,7 +104,7 @@ static const auto dims_getter = [](Dims const& self, int32_t const pyIndex) -> i
 };
 
 static const auto dims_getter_slice = [](Dims const& self, py::slice slice) {
-    size_t start, stop, step, slicelength;
+    int64_t start, stop, step, slicelength;
     PY_ASSERT_VALUE_ERROR(
         slice.compute(self.nbDims, &start, &stop, &step, &slicelength), "Incorrect getter slice dims");
     // Disallow out-of-bounds things.
@@ -123,7 +123,7 @@ static const auto dims_setter = [](Dims& self, int32_t const pyIndex, int64_t co
 };
 
 static const auto dims_setter_slice = [](Dims& self, py::slice slice, Dims const& other) {
-    size_t start, stop, step, slicelength;
+    int64_t start, stop, step, slicelength;
     PY_ASSERT_VALUE_ERROR(
         slice.compute(self.nbDims, &start, &stop, &step, &slicelength), "Incorrect setter slice dims");
     // Disallow out-of-bounds things.

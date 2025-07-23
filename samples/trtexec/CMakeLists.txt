@@ -21,7 +21,7 @@ if (TRT_BUILD_SAMPLES)
     add_dependencies(tensorrt_samples trtexec)
 endif()
 
-install(
+installLibraries(
     TARGETS trtexec
     OPTIONAL
     COMPONENT release

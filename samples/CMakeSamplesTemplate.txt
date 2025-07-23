@@ -35,7 +35,7 @@ set_ifndef(CUDA_INSTALL_DIR /usr/local/cuda)
 # SAMPLES_COMMON_SOURCES
 set(SAMPLES_COMMON_SOURCES
     ${SAMPLES_DIR}/common/logger.cpp
-    ${SHARED_DIR}/utils/timingCache.cpp
+    ${SHARED_DIR}/utils/cacheUtils.cpp
     ${SHARED_DIR}/utils/fileLock.cpp
 )
 

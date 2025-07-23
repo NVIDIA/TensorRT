@@ -26,7 +26,7 @@
 
 #include "NvInferImpl.h"
 #define NV_INFER_INTERNAL_INCLUDE 1
-#include "NvInferPluginBase.h"
+#include "NvInferPluginBase.h" // IWYU pragma: exports
 #undef NV_INFER_INTERNAL_INCLUDE
 #include "NvInferRuntimeCommon.h"
 
@@ -661,6 +661,42 @@ protected:
     IStreamReader& operator=(IStreamReader const&) & = default;
     IStreamReader& operator=(IStreamReader&&) & = default;
 };
+
+class IStreamWriter : public IVersionedInterface
+{
+public:
+    //!
+    //! TensorRT never calls the destructor for an IStreamWriter defined by the
+    //! application.
+    //!
+    ~IStreamWriter() override = default;
+    IStreamWriter() = default;
+
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept final
+    {
+        return InterfaceInfo{"IStreamWriter", 1, 0};
+    }
+
+    //!
+    //! \brief write nbBytes of data into the stream.
+    //!
+    //! \param data The data to be written to stream
+    //! \param nbBytes The number of bytes to write
+    //!
+    //! \returns The number of bytes written. A value that is negative or less than nBytes indicates that an error
+    //! occurred and TensorRT will give up on writing to the stream.
+    //!
+    virtual int64_t write(void const* data, int64_t nbBytes) = 0;
+
+protected:
+    IStreamWriter(IStreamWriter const&) = default;
+    IStreamWriter(IStreamWriter&&) = default;
+    IStreamWriter& operator=(IStreamWriter const&) & = default;
+    IStreamWriter& operator=(IStreamWriter&&) & = default;
+};
 } // namespace v_1_0
 
 //!
@@ -672,6 +708,16 @@ protected:
 //!       v_1_0::IStreamReader
 //!
 using IStreamReader = v_1_0::IStreamReader;
+
+//!
+//! \class IStreamWriter
+//!
+//! \brief Application-implemented class for writing data in a stream-based manner.
+//!
+//! \note To ensure compatibility of source code with future versions of TensorRT, use IStreamWriter, not
+//!       v_1_0::IStreamWriter
+//!
+using IStreamWriter = v_1_0::IStreamWriter;
 
 //!
 //! \enum SeekPosition

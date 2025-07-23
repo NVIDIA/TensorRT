@@ -65,8 +65,8 @@ namespace tensorrt
             PY_ASSERT_VALUE_ERROR(in.size() <= maxDims,
                 "Invalid input length. Max expected length is " + std::to_string(maxDims));
             Permutation* self = new Permutation{};
-            for (int32_t i = 0; i < in.size(); ++i)
-                self->order[i] = in[i];
+            for (size_t i = 0; i < in.size(); ++i)
+                self->order[i] = static_cast<int32_t>(in[i]);
             return self;
         };
 
@@ -166,17 +166,6 @@ namespace tensorrt
             return self.addScaleNd(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power), channelAxis);
         };
 
-        static const auto add_dynamic_quantize = [](INetworkDefinition& self, ITensor& input, int32_t axis, int32_t block_size, DataType output_type, DataType scale_type)
-        {
-            return self.addDynamicQuantize(input, axis, block_size, output_type, scale_type);
-        };
-
-
-        static const auto add_scatter = [](INetworkDefinition& self, ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode)
-        {
-            return self.addScatter(data, indices, updates, mode);
-        };
-
         static const auto add_deconvolution_nd = [](INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
             return self.addDeconvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
@@ -210,7 +199,7 @@ namespace tensorrt
         // TODO: Add slicing support?
         static const auto network_getitem = [](INetworkDefinition& self, int32_t pyIndex) {
             // Support python's negative indexing
-            size_t index = (pyIndex < 0) ? self.getNbLayers() + pyIndex : pyIndex;
+            int32_t index = (pyIndex < 0) ? self.getNbLayers() + pyIndex : pyIndex;
             PY_ASSERT_INDEX_ERROR(index < self.getNbLayers());
             return self.getLayer(index);
         };
@@ -218,7 +207,7 @@ namespace tensorrt
         static const auto resize_set_scales = [](IResizeLayer& self, const std::vector<float>& scales) { self.setScales(scales.data(), scales.size()); };
         static const auto resize_get_scales = [](IResizeLayer& self)
         {
-            size_t nbScales = self.getScales(0, nullptr);
+            int32_t nbScales = self.getScales(0, nullptr);
             // nbScales of -1 signifies that scales are unused for resize caluclation. Return an empty vector here.
             if (nbScales == -1)
             {

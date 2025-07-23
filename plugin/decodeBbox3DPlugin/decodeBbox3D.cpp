@@ -33,10 +33,6 @@ static char const* const kPLUGIN_VERSION{"1"};
 static char const* const kPLUGIN_NAME{"DecodeBbox3DPlugin"};
 } // namespace
 
-// Static class fields initialization
-PluginFieldCollection DecodeBbox3DPluginCreator::mFC{};
-std::vector<PluginField> DecodeBbox3DPluginCreator::mPluginAttributes;
-
 DecodeBbox3DPlugin::DecodeBbox3DPlugin(float xMin, float xMax, float yMin, float yMax, float zMin, float zMax,
     int32_t numDirBins, float dirOffset, float dirLimitOffset, std::vector<float> const& anchorBottomHeight,
     std::vector<float> const& anchors, float scoreThreshold)

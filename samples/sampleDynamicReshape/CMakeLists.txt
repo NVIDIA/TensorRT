@@ -20,7 +20,7 @@ add_executable(sample_dynamic_reshape sampleDynamicReshape.cpp)
 target_link_libraries(sample_dynamic_reshape PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_dynamic_reshape)
 
-install(
+installLibraries(
     TARGETS sample_dynamic_reshape
     OPTIONAL
     COMPONENT full

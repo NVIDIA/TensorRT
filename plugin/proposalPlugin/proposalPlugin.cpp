@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,9 +38,6 @@ static char const* const kPROPOSAL_PLUGIN_NAMES[] = {"Proposal", "ProposalDynami
 static constexpr float kRPN_STD_SCALING{1.0F};
 } // namespace
 
-// Static class fields initialization
-PluginFieldCollection ProposalBasePluginCreator::mFC{};
-std::vector<PluginField> ProposalBasePluginCreator::mPluginAttributes;
 ProposalPlugin::ProposalPlugin(int32_t inputHeight, int32_t inputWidth, int32_t rpnHeight, int32_t rpnWidth,
     float rpnStdScaling, int32_t rpnStride, float bboxMinSize, float nmsIouThreshold, int32_t preNmsTopN,
     int32_t maxBoxNum, float const* anchorSizes, int32_t ancSizeNum, float const* anchorRatios, int32_t ancRatioNum)

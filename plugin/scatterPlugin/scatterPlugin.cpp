@@ -30,8 +30,6 @@ char const* const kSCATTERND_PLUGIN_VERSION{"1"};
 char const* const kSCATTERND_PLUGIN_NAME{"ScatterND"};
 } // namespace
 
-PluginFieldCollection ScatterNDPluginCreator::mFC{};
-
 ScatterND::ScatterND() {}
 
 int32_t ScatterND::getNbOutputs() const noexcept

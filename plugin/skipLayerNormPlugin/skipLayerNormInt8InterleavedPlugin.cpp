@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION &
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -85,10 +85,6 @@ void buildBetaAndGamma(PluginFieldCollection const* fc, Weights& beta, Weights& 
     PLUGIN_VALIDATE(gamma.count > 0, "SkipLayerNorm: invalid gamma");
 }
 } // namespace
-
-// Static class fields initialization
-PluginFieldCollection SkipLayerNormInterleavedPluginBaseCreator::mFC{};
-std::vector<PluginField> SkipLayerNormInterleavedPluginBaseCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormInterleavedPluginHFaceCreator);
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormInterleavedPluginMTronCreator);

@@ -26,11 +26,11 @@
 namespace nvinfer1::utils
 {
 
-//! \brief Loads the binary contents of a timing cache file into a char vector.
+//! \brief Loads the binary contents of a cache file into a char vector. Used for both timing cache and runtime cache.
 //!
-//! \note This is a blocking operation, as this method will acquire an exclusive file lock on the timing cache file for
+//! \note This is a blocking operation, as this method will acquire an exclusive file lock on the cache file for
 //! the duration of the read. \returns The binary data from the file, or an empty vector if an error occurred.
-std::vector<char> loadTimingCacheFile(nvinfer1::ILogger& logger, std::string const& inFileName);
+std::vector<char> loadCacheFile(nvinfer1::ILogger& logger, std::string const& inFileName);
 
 //! \brief Helper method to load a timing cache from a file, build an ITimingCache with the data, and then set the new
 //! timing cache to the builder config. If the file is blank, or cannot be read, a new timing cache will be created from
@@ -40,11 +40,11 @@ std::vector<char> loadTimingCacheFile(nvinfer1::ILogger& logger, std::string con
 std::unique_ptr<ITimingCache> buildTimingCacheFromFile(
     ILogger& logger, IBuilderConfig& config, std::string const& timingCacheFile);
 
-//! \brief Saves the contents of a timing cache to a binary file.
+//! \brief Saves the contents of a cache object to a binary file.
 //!
-//! \note This is a blocking operation, as this method will acquire an exclusive file lock on the timing cache file for
+//! \note This is a blocking operation, as this method will acquire an exclusive file lock on the cache file for
 //! the duration of the write.
-void saveTimingCacheFile(nvinfer1::ILogger& logger, std::string const& outFileName, nvinfer1::IHostMemory const* blob);
+void saveCacheFile(nvinfer1::ILogger& logger, std::string const& outFileName, nvinfer1::IHostMemory const* blob);
 
 //! \brief Updates the contents of a timing cache binary file.
 //! This operation loads the timing cache file, combines it with the passed timingCache, and serializes the combined

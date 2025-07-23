@@ -118,7 +118,7 @@ using AsciiChar = char_t;
 namespace v_1_0
 {
 class IErrorRecorder;
-}
+} // namespace v_1_0
 using IErrorRecorder = v_1_0::IErrorRecorder;
 
 namespace impl

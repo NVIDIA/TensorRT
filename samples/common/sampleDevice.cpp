@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,8 +97,12 @@ void setCudaDevice(int32_t device, std::ostream& os)
     os << "Shared Memory per SM: " << (properties.sharedMemPerMultiprocessor >> 10) << " KiB"       << std::endl;
     os << "Memory Bus Width: "     << properties.memoryBusWidth << " bits"
                         << " (ECC " << (properties.ECCEnabled != 0 ? "enabled" : "disabled") << ")" << std::endl;
-    os << "Application Compute Clock Rate: "   << properties.clockRate / 1000000.0F << " GHz"       << std::endl;
-    os << "Application Memory Clock Rate: "    << properties.memoryClockRate / 1000000.0F << " GHz" << std::endl;
+    int32_t clockRate = 0;
+    int32_t memoryClockRate = 0;
+    CHECK(cudaDeviceGetAttribute(&clockRate, cudaDevAttrClockRate, device));
+    CHECK(cudaDeviceGetAttribute(&memoryClockRate, cudaDevAttrMemoryClockRate, device));
+    os << "Application Compute Clock Rate: "   << clockRate / 1000000.0F << " GHz"       << std::endl;
+    os << "Application Memory Clock Rate: "    << memoryClockRate / 1000000.0F << " GHz" << std::endl;
     os << std::endl;
     os << "Note: The application clock rates do not reflect the actual clock rates that the GPU is "
                                                                          << "currently running at." << std::endl;

@@ -27,9 +27,6 @@ char const* const kRPROI_PLUGIN_VERSION{"1"};
 char const* const kRPROI_PLUGIN_NAME{"RPROI_TRT"};
 } // namespace
 
-PluginFieldCollection RPROIPluginCreator::mFC{};
-std::vector<PluginField> RPROIPluginCreator::mPluginAttributes;
-
 RPROIPlugin::RPROIPlugin(RPROIParams params, float const* anchorsRatios, float const* anchorsScales)
     : params(params)
 {

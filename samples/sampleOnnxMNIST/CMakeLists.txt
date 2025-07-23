@@ -20,7 +20,7 @@ add_executable(sample_onnx_mnist sampleOnnxMNIST.cpp)
 target_link_libraries(sample_onnx_mnist PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_onnx_mnist)
 
-install(
+installLibraries(
     TARGETS sample_onnx_mnist
     OPTIONAL
     COMPONENT full

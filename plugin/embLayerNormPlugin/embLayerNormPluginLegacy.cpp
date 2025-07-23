@@ -36,10 +36,6 @@ char const* gEmbLayerNormVersion{"1"};
 char const* gEmbLayerNormName{"CustomEmbLayerNormPluginDynamic"};
 } // namespace
 
-// Static class fields initialization
-PluginFieldCollection EmbLayerNormPluginDynamicLegacyCreator::mFC{};
-std::vector<PluginField> EmbLayerNormPluginDynamicLegacyCreator::mPluginAttributes;
-
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormPluginDynamicLegacyCreator);
 
 EmbLayerNormPluginDynamicLegacy::EmbLayerNormPluginDynamicLegacy(std::string const& name, DataType const type,

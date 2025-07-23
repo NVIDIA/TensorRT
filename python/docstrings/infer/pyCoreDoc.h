@@ -593,7 +593,7 @@ constexpr char const* set_tensor_debug_state = R"trtdoc(
     :arg flag: True if turning on debug state of tensor. False if turning off.
 )trtdoc";
 
-constexpr const char* get_debug_state = R"trtdoc(
+constexpr char const* get_debug_state = R"trtdoc(
     Get the debug state of the tensor.
 
     :arg name: The name of the tensor.
@@ -1066,6 +1066,32 @@ constexpr char const* seek = R"trtdoc(
 )trtdoc";
 } // namespace StreamReaderV2Doc
 
+namespace StreamWriterDoc
+{
+constexpr char const* descr = R"trtdoc(
+Application-implemented class for writing data to a stream.
+
+To implement a custom stream writer, ensure that you explicitly instantiate the base class in :func:`__init__` :
+::
+
+    class MyStreamWriter(trt.IStreamWriter):
+        def __init__(self):
+            trt.IStreamWriter.__init__(self)
+
+        def write(self, data: bytes) -> int:
+            ... # Your implementation here
+
+)trtdoc";
+
+constexpr char const* write = R"trtdoc(
+    A callback implemented by the application to write a particular chunk of memory.
+
+    :arg data: The data to be written out in bytes.
+
+    :returns: The total bytes actually be written.
+)trtdoc";
+} // namespace StreamWriterDoc
+
 namespace SeekPositionDoc
 {
 constexpr char const* descr
@@ -1532,6 +1558,7 @@ constexpr char const* descr = R"trtdoc(
         :ivar progress_monitor: The :class:`IProgressMonitor` to use.
         :ivar tiling_optimization_level: The optimization level of tiling strategies. A Higher level allows TensorRT to spend more time searching for better optimization strategy.
         :ivar l2_limit_for_tiling: The target L2 cache usage for tiling optimization.
+        :ivar remote_auto_tuning_config: The config string to be used during remote auto-tuning. Remote auto-tuning is only enabled for engines built with EngineCapability.SAFETY.
 
         Below are the descriptions about each builder optimization level:
 
@@ -1854,6 +1881,18 @@ constexpr char const* build_serialized_network = R"trtdoc(
     :returns: A pointer to a :class:`IHostMemory` object that contains a serialized network.
 )trtdoc";
 
+constexpr char const* build_serialized_network_to_stream = R"trtdoc(
+    Builds and serializes a network for the given :class:`INetworkDefinition` and :class:`IBuilderConfig` and write the serialized network to a writer stream.
+
+    This function allows building and serialization of a network without creating an engine.
+
+    :arg network: Network definition.
+    :arg config: Builder configuration.
+    :arg writer: Output stream writer.
+
+    :returns: True if build succeed, otherwise False.
+)trtdoc";
+
 constexpr char const* build_engine_with_config = R"trtdoc(
     Builds a network for the given :class:`INetworkDefinition` and :class:`IBuilderConfig` .
 
@@ -2007,10 +2046,10 @@ constexpr char const* clear_inspection_source = R"trtdoc(
 
 namespace TensorLocationDoc
 {
-constexpr const char* descr = R"trtdoc(The physical location of the data.)trtdoc";
+constexpr char const* descr = R"trtdoc(The physical location of the data.)trtdoc";
 
-constexpr const char* DEVICE = R"trtdoc(Data is stored on the device.)trtdoc";
-constexpr const char* HOST = R"trtdoc(Data is stored on the host.)trtdoc";
+constexpr char const* DEVICE = R"trtdoc(Data is stored on the device.)trtdoc";
+constexpr char const* HOST = R"trtdoc(Data is stored on the host.)trtdoc";
 } // namespace TensorLocationDoc
 
 namespace RefitterDoc

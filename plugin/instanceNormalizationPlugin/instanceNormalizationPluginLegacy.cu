@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,9 +36,6 @@ constexpr char const* gInstancePluginVersion{"1"};
 constexpr char const* gInstancePluginVersionV2{"2"};
 constexpr char const* gInstancePluginName{"InstanceNormalization_TRT"};
 } // namespace
-
-PluginFieldCollection InstanceNormalizationPluginCreator::mFC{};
-std::vector<PluginField> InstanceNormalizationPluginCreator::mPluginAttributes;
 
 InstanceNormalizationPlugin::InstanceNormalizationPlugin(
     float epsilon, std::vector<float> const& scale, std::vector<float> const& bias, int32_t relu, float alpha)

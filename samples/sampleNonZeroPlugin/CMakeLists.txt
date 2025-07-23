@@ -23,7 +23,7 @@ add_executable(sample_non_zero_plugin
 target_link_libraries(sample_non_zero_plugin PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_non_zero_plugin)
 
-install(
+installLibraries(
     TARGETS sample_non_zero_plugin
     OPTIONAL
     COMPONENT full

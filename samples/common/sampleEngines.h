@@ -114,6 +114,11 @@ public:
     nvinfer1::ICudaEngine* release();
 
     //!
+    //! \brief Check Safe DLA engine built with kDLA_STANDALONE should not be run via TRT
+    //!
+    bool checkDLASafe();
+
+    //!
     //! \brief Get the underlying blob storing serialized engine.
     //!
     EngineBlob const getBlob() const
@@ -242,6 +247,7 @@ struct BuildEnvironment
         nvinfer1::TempfileControlFlags tempfileControls, std::string const& leanDLLPath = "",
         std::string const& cmdline = "")
         : engine(isSafe, versionCompatible, DLACore, tempdir, tempfileControls, leanDLLPath)
+        , kernelText(false, false, -1, "", tempfileControls, "")
         , cmdline(cmdline)
     {
     }
@@ -266,19 +272,13 @@ struct BuildEnvironment
     //! The engine.
     LazilyDeserializedEngine engine;
 
+    //! The kernel CPP text.
+    LazilyDeserializedEngine kernelText;
+
     //! The command line string.
     std::string cmdline;
     //!@}
 };
-
-//!
-//! \brief Set up network and config
-//!
-//! \return boolean Return true if network and config were successfully set
-//!
-bool setupNetworkAndConfig(const BuildOptions& build, const SystemOptions& sys, nvinfer1::IBuilder& builder,
-    nvinfer1::INetworkDefinition& network, nvinfer1::IBuilderConfig& config, std::ostream& err,
-    std::vector<std::vector<char>>& sparseWeights);
 
 //!
 //! \brief Log refittable layers and weights of a refittable engine
@@ -344,9 +344,15 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
 //!
 bool hasSafeRuntime();
 
+//!
+//! \brief Run consistency check on serialized engine.
+//!
+bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize);
+
 bool loadStreamingEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
 
-bool loadEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
+bool loadEngineToBuildEnv(
+    std::string const& engine, BuildEnvironment& env, std::ostream& err, bool const enableConsistency);
 } // namespace sample
 
 #endif // TRT_SAMPLE_ENGINES_H

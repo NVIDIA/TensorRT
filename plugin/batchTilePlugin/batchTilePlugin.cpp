@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,8 +30,6 @@ namespace
 static char const* const kBATCH_TILE_PLUGIN_VERSION{"1"};
 static char const* const kBATCH_TILE_PLUGIN_NAME{"BatchTilePlugin_TRT"};
 } // namespace
-
-PluginFieldCollection BatchTilePluginCreator::mFC{};
 
 BatchTilePlugin::BatchTilePlugin(std::string const& name)
     : mLayerName(name)

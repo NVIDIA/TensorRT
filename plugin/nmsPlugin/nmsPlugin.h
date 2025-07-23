@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -152,10 +152,10 @@ public:
     PluginFieldCollection const* getFieldNames() noexcept override;
 
 protected:
-    static PluginFieldCollection mFC;
+    PluginFieldCollection mFC;
     // Parameters for DetectionOutput
     DetectionOutputParameters params;
-    static std::vector<PluginField> mPluginAttributes;
+    std::vector<PluginField> mPluginAttributes;
     std::string mPluginName;
     int32_t mScoreBits;
 };

@@ -198,13 +198,7 @@ function(createBindingLibrary moduleName pyVersion)
 
     add_dependencies(tensorrt_python_bindings ${libName})
 
-    if(NOT MSVC)
-        # Disable warnings exclusive to the python bindings
-        target_compile_options(${libName} PRIVATE
-            -Wno-sign-compare
-            -Wno-unused-function
-        )
-    else()
+    if(MSVC)
         # Prevent pybind11 from sharing resources with other, potentially ABI incompatible modules
         # https://github.com/pybind/pybind11/issues/2898
         add_definitions(-DPYBIND11_COMPILER_TYPE="_${PROJECT_NAME}_abi")
@@ -242,6 +236,9 @@ function(processWheelTemplates moduleName pyVersion)
         set(outputDir ${CMAKE_CURRENT_BINARY_DIR}/${moduleName}_bindings-py${pyVersion}/$<CONFIG>)
         set(outputFile ${outputDir}/${filePath})
 
+        get_target_property(TRT_OUTPUT_NAME tensorrt OUTPUT_NAME)
+        get_target_property(PARSER_OUTPUT_NAME nvonnxparser OUTPUT_NAME)
+
         add_custom_command(
             OUTPUT ${outputFile}
             COMMAND
@@ -253,8 +250,8 @@ function(processWheelTemplates moduleName pyVersion)
                 --trt-py-version ${TensorRT_PACKAGE_VERSION}
                 --cuda-version ${TRT_CUDA_VERSION}
                 --trt-version ${TensorRT_VERSION}
-                --trt-nvinfer-name ${TRT_NVINFER_NAME}
-                --trt-onnxparser-name ${TRT_ONNXPARSER_NAME}
+                --trt-nvinfer-name ${TRT_OUTPUT_NAME}
+                --trt-onnxparser-name ${PARSER_OUTPUT_NAME}
             DEPENDS
                 scripts/process_wheel_template.py
                 ${CMAKE_CURRENT_LIST_DIR}/packaging/bindings_wheel/tensorrt/${filePath}
@@ -264,8 +261,6 @@ function(processWheelTemplates moduleName pyVersion)
     endforeach()
     set(generatedWheelFiles ${generatedFiles} PARENT_SCOPE)
 endfunction()
-
-add_custom_target(trt_python_wheel_files)
 
 # Enumerate all the combinations and create the per-python per-module targets.
 foreach(moduleName IN LISTS TRT_PYTHON_MODULE_NAMES)

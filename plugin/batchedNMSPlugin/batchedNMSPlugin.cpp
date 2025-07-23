@@ -50,9 +50,6 @@ void write<NMSParameters>(char*& buffer, NMSParameters const& val)
     buffer += sizeof(NMSParameters);
 }
 
-PluginFieldCollection BatchedNMSBasePluginCreator::mFC{};
-std::vector<PluginField> BatchedNMSBasePluginCreator::mPluginAttributes;
-
 static inline pluginStatus_t checkParams(NMSParameters const& param)
 {
     // NMS plugin supports maximum thread blocksize of 512 and upto 8 blocks at once.

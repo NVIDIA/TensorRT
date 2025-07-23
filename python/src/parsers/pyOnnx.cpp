@@ -18,7 +18,6 @@
 // Implementation of PyBind11 Binding Code for OnnxParser
 #include "ForwardDeclarations.h"
 #include "NvOnnxParser.h"
-#include "errorHelpers.hpp"
 #include "parsers/pyOnnxDoc.h"
 #include "utils.h"
 #include <pybind11/stl.h>
@@ -35,11 +34,15 @@ namespace lambdas
 {
 static const auto parse = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
+
+    py::gil_scoped_release releaseGil{};
     return self.parse(info.ptr, info.size * info.itemsize, path);
 };
 
 static const auto parse_with_weight_descriptors = [](IParser& self, py::buffer const& model) {
     py::buffer_info info = model.request();
+
+    py::gil_scoped_release releaseGil{};
     return self.parseWithWeightDescriptors(info.ptr, info.size * info.itemsize);
 };
 
@@ -88,6 +91,15 @@ static const auto get_used_vc_plugin_libraries = [](IParser& self) {
     return vcPluginLibs;
 };
 
+static const auto pLoadModelProto = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
+    py::buffer_info info = model.request();
+    return self.loadModelProto(info.ptr, info.size * info.itemsize, path);
+};
+
+static const auto pLoadInitializer = [](IParser& self, std::string const& name, size_t const ptr, size_t const count) {
+    return self.loadInitializer(name.c_str(), reinterpret_cast<void*>(ptr), count);
+};
+
 static const auto get_local_function_stack = [](IParserError& self) {
     std::vector<std::string> localFunctionStack;
     int32_t localFunctionStackSize = self.localFunctionStackSize();
@@ -105,13 +117,65 @@ static const auto get_local_function_stack = [](IParserError& self) {
 
 static const auto refitFromBytes = [](IParserRefitter& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
+    py::gil_scoped_release releaseGil{};
     return self.refitFromBytes(info.ptr, info.size * info.itemsize, path);
 };
 
 static const auto refitFromFile
     = [](IParserRefitter& self, std::string const& model) { return self.refitFromFile(model.c_str()); };
 
+static const auto rLoadModelProto = [](IParserRefitter& self, py::buffer const& model, char const* path = nullptr) {
+    py::buffer_info info = model.request();
+    return self.loadModelProto(info.ptr, info.size * info.itemsize, path);
+};
+
+static const auto rLoadInitializer = [](IParserRefitter& self, std::string const& name, size_t const ptr, size_t const count) {
+    return self.loadInitializer(name.c_str(), reinterpret_cast<void*>(ptr), count);
+};
+
 } // namespace lambdas
+
+// Copies of functions from ONNX Parser code used for the Python Bindings.
+namespace pyonnx2trt
+{
+
+inline char const* errorCodeStr(ErrorCode code)
+{
+    switch (code)
+    {
+    case ErrorCode::kSUCCESS: return "SUCCESS";
+    case ErrorCode::kINTERNAL_ERROR: return "INTERNAL_ERROR";
+    case ErrorCode::kMEM_ALLOC_FAILED: return "MEM_ALLOC_FAILED";
+    case ErrorCode::kMODEL_DESERIALIZE_FAILED: return "MODEL_DESERIALIZE_FAILED";
+    case ErrorCode::kINVALID_VALUE: return "INVALID_VALUE";
+    case ErrorCode::kINVALID_GRAPH: return "INVALID_GRAPH";
+    case ErrorCode::kINVALID_NODE: return "INVALID_NODE";
+    case ErrorCode::kUNSUPPORTED_GRAPH: return "UNSUPPORTED_GRAPH";
+    case ErrorCode::kUNSUPPORTED_NODE: return "UNSUPPORTED_NODE";
+    case ErrorCode::kUNSUPPORTED_NODE_ATTR: return "UNSUPPORTED_NODE_ATTR";
+    case ErrorCode::kUNSUPPORTED_NODE_INPUT: return "UNSUPPORTED_NODE_INPUT";
+    case ErrorCode::kUNSUPPORTED_NODE_DATATYPE: return "UNSUPPORTED_NODE_DATATYPE";
+    case ErrorCode::kUNSUPPORTED_NODE_DYNAMIC: return "UNSUPPORTED_NODE_DYNAMIC";
+    case ErrorCode::kUNSUPPORTED_NODE_SHAPE: return "UNSUPPORTED_NODE_SHAPE";
+    case ErrorCode::kREFIT_FAILED: return "REFIT_FAILED";
+    }
+    return "UNKNOWN";
+}
+
+inline std::string const parserErrorStr(nvonnxparser::IParserError const* error)
+{
+    std::string const nodeInfo = "In node " + std::to_string(error->node()) + " with name: " + error->nodeName()
+        + " and operator: " + error->nodeOperator() + " ";
+    std::string const errorInfo
+        = std::string("(") + error->func() + "): " + errorCodeStr(error->code()) + ": " + error->desc();
+    if (error->code() == ErrorCode::kMODEL_DESERIALIZE_FAILED || error->code() == ErrorCode::kREFIT_FAILED)
+    {
+        return errorInfo.c_str();
+    }
+    return (nodeInfo + errorInfo).c_str();
+}
+
+} // namespace pyonnx2trt
 
 void bindOnnx(py::module& m)
 {
@@ -125,10 +189,9 @@ void bindOnnx(py::module& m)
             return nvonnxparser::createParser(network, logger);
         }),
             "network"_a, "logger"_a, OnnxParserDoc::init, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
-        .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse,
-            py::call_guard<py::gil_scoped_release>{})
+        .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse)
         .def("parse_with_weight_descriptors", lambdas::parse_with_weight_descriptors, "model"_a,
-            OnnxParserDoc::parse_with_weight_descriptors, py::call_guard<py::gil_scoped_release>{})
+            OnnxParserDoc::parse_with_weight_descriptors)
         .def("parse_from_file", lambdas::parseFromFile, "model"_a, OnnxParserDoc::parse_from_file,
             py::call_guard<py::gil_scoped_release>{})
         .def("supports_operator", &IParser::supportsOperator, "op_name"_a, OnnxParserDoc::supports_operator)
@@ -149,7 +212,12 @@ void bindOnnx(py::module& m)
             OnnxParserDoc::get_layer_output_tensor)
         .def("get_used_vc_plugin_libraries", lambdas::get_used_vc_plugin_libraries,
             OnnxParserDoc::get_used_vc_plugin_libraries)
-        .def("__del__", &utils::doNothingDel<IParser>);
+        .def("__del__", &utils::doNothingDel<IParser>)
+        .def("load_model_proto", lambdas::pLoadModelProto, "model"_a, "path"_a = nullptr,
+            OnnxParserDoc::load_model_proto, py::call_guard<py::gil_scoped_release>{})
+        .def("load_initializer", lambdas::pLoadInitializer, "name"_a, "data"_a, "size"_a,
+            OnnxParserDoc::load_initializer)
+        .def("parse_model_proto", &IParser::parseModelProto, OnnxParserDoc::parse_model_proto);
 
     py::enum_<OnnxParserFlag>(m, "OnnxParserFlag", OnnxParserFlagDoc::descr, py::module_local())
         .value("NATIVE_INSTANCENORM", OnnxParserFlag::kNATIVE_INSTANCENORM, OnnxParserFlagDoc::NATIVE_INSTANCENORM)
@@ -173,8 +241,8 @@ void bindOnnx(py::module& m)
         .value("UNSUPPORTED_NODE_DYNAMIC", ErrorCode::kUNSUPPORTED_NODE_DYNAMIC)
         .value("UNSUPPORTED_NODE_SHAPE", ErrorCode::kUNSUPPORTED_NODE_SHAPE)
         .value("REFIT_FAILED", ErrorCode::kREFIT_FAILED)
-        .def("__str__", &onnx2trt::errorCodeStr)
-        .def("__repr__", &onnx2trt::errorCodeStr);
+        .def("__str__", &pyonnx2trt::errorCodeStr)
+        .def("__repr__", &pyonnx2trt::errorCodeStr);
 
     py::class_<IParserError, std::unique_ptr<IParserError, py::nodelete>>(m, "ParserError", py::module_local())
         .def("code", &IParserError::code, ParserErrorDoc::code)
@@ -188,8 +256,8 @@ void bindOnnx(py::module& m)
         .def("local_function_stack", lambdas::get_local_function_stack, ParserErrorDoc::local_function_stack)
         .def("local_function_stack_size", &IParserError::localFunctionStackSize,
             ParserErrorDoc::local_function_stack_size)
-        .def("__str__", &onnx2trt::parserErrorStr)
-        .def("__repr__", &onnx2trt::parserErrorStr);
+        .def("__str__", &pyonnx2trt::parserErrorStr)
+        .def("__repr__", &pyonnx2trt::parserErrorStr);
 
     py::class_<IParserRefitter>(m, "OnnxParserRefitter", OnnxParserRefitterDoc::descr, py::module_local())
         // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
@@ -199,12 +267,17 @@ void bindOnnx(py::module& m)
         }),
             "refitter"_a, "logger"_a, OnnxParserRefitterDoc::init, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
         .def("refit_from_bytes", lambdas::refitFromBytes, "model"_a, "path"_a = nullptr,
-            OnnxParserRefitterDoc::refit_from_bytes, py::call_guard<py::gil_scoped_release>{})
+            OnnxParserRefitterDoc::refit_from_bytes)
         .def("refit_from_file", lambdas::refitFromFile, "model"_a, OnnxParserRefitterDoc::refit_from_file,
             py::call_guard<py::gil_scoped_release>{})
         .def_property_readonly("num_errors", &IParserRefitter::getNbErrors)
         .def("get_error", &IParserRefitter::getError, "index"_a, OnnxParserRefitterDoc::get_error)
-        .def("clear_errors", &IParserRefitter::clearErrors, OnnxParserRefitterDoc::clear_errors);
+        .def("clear_errors", &IParserRefitter::clearErrors, OnnxParserRefitterDoc::clear_errors)
+        .def("load_model_proto", lambdas::rLoadModelProto, "model"_a, "path"_a = nullptr,
+            OnnxParserRefitterDoc::load_model_proto, py::call_guard<py::gil_scoped_release>{})
+        .def("load_initializer", lambdas::rLoadInitializer, "name"_a, "data"_a, "size"_a,
+            OnnxParserRefitterDoc::load_initializer)
+        .def("refit_model_proto", &IParserRefitter::refitModelProto, OnnxParserRefitterDoc::refit_model_proto);
 
     // Free functions.
     m.def("get_nv_onnx_parser_version", &getNvOnnxParserVersion, get_nv_onnx_parser_version);

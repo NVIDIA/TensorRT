@@ -28,10 +28,6 @@
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
 
-// Static class fields initialization
-PluginFieldCollection DisentangledAttentionPluginCreatorLegacy::mFC{};
-std::vector<PluginField> DisentangledAttentionPluginCreatorLegacy::mPluginAttributes;
-
 REGISTER_TENSORRT_PLUGIN(DisentangledAttentionPluginCreatorLegacy);
 
 namespace

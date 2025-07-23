@@ -432,14 +432,14 @@ template <typename T>
 void writeTensorString(
     T const* data, nvinfer1::Dims const& shape, std::string_view tensorName, std::string const& fileName)
 {
+    sample::gLogVerbose << "Writing debug tensor '" << tensorName << "' to file '" << fileName << "'" << std::endl;
+
     std::ofstream f(fileName, std::ios::out);
     if (!f)
     {
         sample::gLogError << "Cannot open file for write: " << fileName << std::endl;
         return;
     }
-
-    sample::gLogVerbose << "Writing debug tensor '" << tensorName << "' to file '" << fileName << "'" << std::endl;
 
     if (shape.nbDims == 0)
     {
@@ -722,15 +722,15 @@ void DebugTensorWriter::writeSummary(std::string_view name, nvinfer1::Dims const
 bool writeNumpyFile(void const* addr_host, std::string_view dtype, nvinfer1::Dims const& shape, int64_t size,
     std::string_view tensorName, std::string const& fileName)
 {
+    sample::gLogVerbose << "Writing debug tensor '" << tensorName << "' to numpy file '" << fileName << "'"
+                        << std::endl;
+
     std::ofstream f(fileName, std::ios::out | std::ios::binary);
     if (!f)
     {
         sample::gLogError << "Cannot open file for write: " << fileName << std::endl;
         return false;
     }
-
-    sample::gLogVerbose << "Writing debug tensor '" << tensorName << "' to numpy file '" << fileName << "'"
-                        << std::endl;
 
     // Write numpy magic string and version
     char magic[] = {'\x93', 'N', 'U', 'M', 'P', 'Y'};
@@ -771,7 +771,7 @@ bool writeNumpyFile(void const* addr_host, std::string_view dtype, nvinfer1::Dim
 std::string writeNumpy(nvinfer1::DataType type, void const* addr_host, int64_t volume, nvinfer1::Dims const& shape,
     std::string const& name, std::string const& prefix)
 {
-    std::string fileName = genFilenameSafeString(prefix + name);
+    std::string fileName = prefix + name;
     std::string_view dtype = "";
     void const* data = addr_host;
     int64_t size = samplesCommon::getNbBytes(type, volume);
@@ -840,7 +840,9 @@ std::string writeNumpy(nvinfer1::DataType type, void const* addr_host, int64_t v
 
     if (!dtype.empty())
     {
+
         fileName += ".npy";
+        fileName = genFilenameSafeString(fileName);
         writeNumpyFile(data, dtype, shape, size, name, fileName);
         return fileName;
     }
@@ -890,9 +892,9 @@ bool DebugTensorWriter::processDebugTensor(void const* addr, nvinfer1::TensorLoc
     if (std::find(mDebugTensorFormats.begin(), mDebugTensorFormats.end(), "raw") != mDebugTensorFormats.end())
     {
         rawFileName = genFilenameSafeString(prefix + name + ".raw");
+        sample::gLogVerbose << "Writing debug tensor '" << name << "' to raw file '" << rawFileName << "'" << std::endl;
         std::ofstream f(rawFileName, std::ios::out | std::ios::binary);
         ASSERT(f && "Cannot open file for write");
-        sample::gLogVerbose << "Writing debug tensor '" << name << "' to raw file '" << rawFileName << "'" << std::endl;
         f.write(static_cast<char const*>(addrHost), size);
         f.close();
     }

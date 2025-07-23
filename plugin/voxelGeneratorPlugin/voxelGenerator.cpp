@@ -35,10 +35,6 @@ char const* const kVOXEL_GENERATOR_PLUGIN_NAME{"VoxelGeneratorPlugin"};
 size_t constexpr kSERIALIZATION_SIZE{9 * sizeof(float) + 7 * sizeof(int32_t)};
 } // namespace
 
-// Static class fields initialization
-PluginFieldCollection VoxelGeneratorPluginCreator::mFC{};
-std::vector<PluginField> VoxelGeneratorPluginCreator::mPluginAttributes;
-
 // Mimic np.round as in voxel generator in spconv implementation
 int32_t npRound(float x)
 {

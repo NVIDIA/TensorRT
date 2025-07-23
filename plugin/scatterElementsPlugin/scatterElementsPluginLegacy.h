@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,8 +104,8 @@ public:
     char const* getPluginNamespace() const noexcept override;
 
 private:
-    static nvinfer1::PluginFieldCollection gFC;
-    static std::vector<nvinfer1::PluginField> gPluginAttributes;
+    nvinfer1::PluginFieldCollection gFC;
+    std::vector<nvinfer1::PluginField> gPluginAttributes;
     std::string mNamespace;
 };
 

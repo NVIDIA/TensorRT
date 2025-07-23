@@ -41,37 +41,16 @@ using namespace nvinfer1;
 using namespace sample;
 using namespace samplesCommon;
 
+#if ENABLE_UNIFIED_BUILDER
+using namespace nvinfer2::safe;
+__attribute__((weak)) std::shared_ptr<sample::SampleSafeRecorder> gSafeRecorder
+    = std::make_shared<sample::SampleSafeRecorder>(nvinfer2::safe::Severity::kINFO);
+#endif
+
 namespace
 {
 using LibraryPtr = std::unique_ptr<DynamicLibrary>;
 
-std::string const TRT_NVINFER_NAME = "nvinfer";
-std::string const TRT_ONNXPARSER_NAME = "nvonnxparser";
-std::string const TRT_LIB_SUFFIX = "";
-
-#if !TRT_STATIC
-#if defined(_WIN32)
-std::string const kNVINFER_PLUGIN_LIBNAME
-    = std::string{"nvinfer_plugin_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
-std::string const kNVINFER_LIBNAME = std::string(TRT_NVINFER_NAME) + std::string{"_"}
-    + std::to_string(NV_TENSORRT_MAJOR) + TRT_LIB_SUFFIX + std::string{".dll"};
-std::string const kNVONNXPARSER_LIBNAME = std::string(TRT_ONNXPARSER_NAME) + std::string{"_"}
-    + std::to_string(NV_TENSORRT_MAJOR) + TRT_LIB_SUFFIX + std::string{".dll"};
-std::string const kNVINFER_LEAN_LIBNAME
-    = std::string{"nvinfer_lean_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
-std::string const kNVINFER_DISPATCH_LIBNAME
-    = std::string{"nvinfer_dispatch_"} + std::to_string(NV_TENSORRT_MAJOR) + std::string{".dll"};
-#else
-std::string const kNVINFER_PLUGIN_LIBNAME = std::string{"libnvinfer_plugin.so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVINFER_LIBNAME
-    = std::string{"lib"} + std::string(TRT_NVINFER_NAME) + std::string{".so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVONNXPARSER_LIBNAME
-    = std::string{"lib"} + std::string(TRT_ONNXPARSER_NAME) + std::string{".so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVINFER_LEAN_LIBNAME = std::string{"libnvinfer_lean.so."} + std::to_string(NV_TENSORRT_MAJOR);
-std::string const kNVINFER_DISPATCH_LIBNAME
-    = std::string{"libnvinfer_dispatch.so."} + std::to_string(NV_TENSORRT_MAJOR);
-#endif
-#endif // !TRT_STATIC
 std::function<void*(void*, int32_t)> pCreateInferRuntimeInternal{};
 std::function<void*(void*, void*, int32_t)> pCreateInferRefitterInternal{};
 std::function<void*(void*, int32_t)> pCreateInferBuilderInternal{};
@@ -80,47 +59,6 @@ std::function<void*(void*, void*, int)> pCreateNvOnnxParserInternal{};
 //! Track runtime used for the execution of trtexec.
 //! Must be tracked as a global variable due to how library init functions APIs are organized.
 RuntimeMode gUseRuntime = RuntimeMode::kFULL;
-
-#if !TRT_STATIC
-inline std::string const& getRuntimeLibraryName(RuntimeMode const mode)
-{
-    switch (mode)
-    {
-    case RuntimeMode::kFULL: return kNVINFER_LIBNAME;
-    case RuntimeMode::kDISPATCH: return kNVINFER_DISPATCH_LIBNAME;
-    case RuntimeMode::kLEAN: return kNVINFER_LEAN_LIBNAME;
-    }
-    throw std::runtime_error("Unknown runtime mode");
-}
-
-template <typename FetchPtrs>
-bool initLibrary(LibraryPtr& libPtr, std::string const& libName, FetchPtrs fetchFunc)
-{
-    if (libPtr != nullptr)
-    {
-        return true;
-    }
-    try
-    {
-        libPtr.reset(new DynamicLibrary{libName});
-        fetchFunc(libPtr.get());
-    }
-    catch (std::exception const& e)
-    {
-        libPtr.reset();
-        sample::gLogError << "Could not load library " << libName << ": " << e.what() << std::endl;
-        return false;
-    }
-    catch (...)
-    {
-        libPtr.reset();
-        sample::gLogError << "Could not load library " << libName << std::endl;
-        return false;
-    }
-
-    return true;
-}
-#endif // !TRT_STATIC
 
 bool initNvinfer()
 {
@@ -208,6 +146,45 @@ nvonnxparser::IParser* createONNXParser(INetworkDefinition& network)
     return static_cast<nvonnxparser::IParser*>(
         pCreateNvOnnxParserInternal(&network, &gLogger.getTRTLogger(), NV_ONNX_PARSER_VERSION));
 }
+
+#if ENABLE_UNIFIED_BUILDER
+
+bool processSafetyPluginLibrary(nvinfer2::safe::ISafePluginRegistry* safetyPluginRegistry, DynamicLibrary* libPtr,
+    samplesSafeCommon::SafetyPluginLibraryArgument const& pluginArgs)
+{
+    if (libPtr == nullptr)
+    {
+        sample::gLogError << "Cannot open safety plugin library " << pluginArgs.libraryName << std::endl;
+        return false;
+    }
+    std::string const pluginGetterSymbolName{"getSafetyPluginCreator"};
+    auto pGetSafetyPluginCreator
+        = libPtr->symbolAddress<void*(char const*, char const*)>(pluginGetterSymbolName.c_str());
+    if (pGetSafetyPluginCreator == nullptr)
+    {
+        sample::gLogError << "Cannot find plugin creator getter symbol from plugin library: " << pluginArgs.libraryName
+                          << std::endl;
+        sample::gLogError << "Please ensure interface function is correctly implemented and exported." << std::endl;
+        return false;
+    }
+
+    for (auto const& pluginAttr : pluginArgs.pluginAttrs)
+    {
+        auto pluginCreator = static_cast<IPluginCreatorInterface*>(
+            pGetSafetyPluginCreator(pluginAttr.pluginNamespace.c_str(), pluginAttr.pluginName.c_str()));
+        if (pluginCreator == nullptr)
+        {
+            sample::gLogInfo << "Cannot find plugin " << pluginAttr.pluginNamespace << "::" << pluginAttr.pluginName
+                             << " in the safety plugin library: " << pluginArgs.libraryName << std::endl;
+            continue;
+        }
+        sample::gLogInfo << "Registering " << pluginAttr.pluginNamespace << "::" << pluginAttr.pluginName
+                         << " for TensorRT safety." << std::endl;
+        safetyPluginRegistry->registerCreator(*pluginCreator, pluginAttr.pluginNamespace.c_str(), *gSafeRecorder);
+    }
+    return true;
+}
+#endif
 
 using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
@@ -310,12 +287,35 @@ int main(int argc, char** argv)
         {
             throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
         }
+#if ENABLE_UNIFIED_BUILDER
+        auto safetyPluginRegistry = sample::safe::getSafePluginRegistry(*gSafeRecorder);
+        ASSERT(safetyPluginRegistry != nullptr);
+
+        if (!options.system.safetyPlugins.empty())
+        {
+            for (auto const& safetyPluginArg : options.system.safetyPlugins)
+            {
+                sample::gLogInfo << "Loading supplied safety plugin library with manual registration: "
+                                 << safetyPluginArg.libraryName << std::endl;
+                auto pluginLib = loadLibrary(safetyPluginArg.libraryName);
+                processSafetyPluginLibrary(safetyPluginRegistry, pluginLib.get(), safetyPluginArg);
+                pluginLibs.emplace_back(std::move(pluginLib));
+            }
+        }
+#endif // ENABLE_UNIFIED_BUILDER
         if (options.build.safe && !sample::hasSafeRuntime())
         {
             sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
             return sample::gLogger.reportFail(sampleTest);
         }
-        // Start engine building phase.
+
+        if (!options.build.safe && options.build.consistency)
+        {
+            sample::gLogInfo << "Skipping consistency checker on non-safety mode." << std::endl;
+            options.build.consistency = false;
+        }
+
+       // Start engine building phase.
         std::unique_ptr<BuildEnvironment> bEnv(new BuildEnvironment(options.build.safe, options.build.versionCompatible,
             options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath,
             sampleTest.getCmdline()));
@@ -327,6 +327,10 @@ int main(int argc, char** argv)
             sample::gLogError << "Engine set up failed" << std::endl;
             return sample::gLogger.reportFail(sampleTest);
         }
+
+#if ENABLE_UNIFIED_BUILDER
+        safetyPluginRegistry->setSafeRecorder(*gSafeRecorder);
+#endif // ENABLE_UNIFIED_BUILDER
 
         // Exit as version is already printed during getEngineBuildEnv
         if (options.build.getPlanVersionOnly)
@@ -378,8 +382,22 @@ int main(int argc, char** argv)
             return sample::gLogger.reportPass(sampleTest);
         }
 
-        // Start inference phase.
-        std::unique_ptr<InferenceEnvironment> iEnv(new InferenceEnvironment(*bEnv));
+        std::unique_ptr<InferenceEnvironmentBase> iEnv;
+
+        if (!options.build.safe)
+        {
+            iEnv = std::make_unique<InferenceEnvironmentStd>(*bEnv);
+        }
+        else
+        {
+#if ENABLE_UNIFIED_BUILDER
+            iEnv = std::make_unique<InferenceEnvironmentSafe>(*bEnv);
+#else
+            sample::gLogInfo << "--safe flag is enabled but application is not compatible with safety." << std::endl;
+            return sample::gLogger.reportFail(sampleTest);
+#endif
+        }
+
         // We avoid re-loading some dynamic plugins while deserializing
         // if they were already serialized with `setPluginsToSerialize`.
         std::vector<std::string> dynamicPluginsNotSerialized;
@@ -445,7 +463,8 @@ int main(int argc, char** argv)
 
         if (!options.build.safe)
         {
-            printLayerInfo(options.reporting, iEnv->engine.get(), iEnv->contexts.front().get());
+            printLayerInfo(options.reporting, iEnv->engine.get(),
+                static_cast<InferenceEnvironmentStd*>(iEnv.get())->contexts.front().get());
             printOptimizationProfileInfo(options.reporting, iEnv->engine.get());
         }
         std::vector<InferenceTrace> trace;
@@ -477,8 +496,8 @@ int main(int argc, char** argv)
         {
             auto* profiler = new Profiler;
             iEnv->profiler.reset(profiler);
-            iEnv->contexts.front()->setProfiler(profiler);
-            iEnv->contexts.front()->setEnqueueEmitsProfile(false);
+            static_cast<InferenceEnvironmentStd*>(iEnv.get())->contexts.front()->setProfiler(profiler);
+            static_cast<InferenceEnvironmentStd*>(iEnv.get())->contexts.front()->setEnqueueEmitsProfile(false);
             if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
             {
                 options.inference.graph = false;

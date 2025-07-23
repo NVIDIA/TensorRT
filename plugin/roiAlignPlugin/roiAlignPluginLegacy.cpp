@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,9 +30,6 @@ char const* gRoialignPluginVersion{"1"};
 char const* gRoialignPluginName{"ROIAlign_TRT"};
 size_t constexpr kSERIALIZATION_SIZE{sizeof(int32_t) * 5 + sizeof(float) + sizeof(int32_t) * 4};
 } // namespace
-
-PluginFieldCollection ROIAlignPluginCreator::mFC{};
-std::vector<PluginField> ROIAlignPluginCreator::mPluginAttributes;
 
 ROIAlignPluginCreator::ROIAlignPluginCreator()
 {

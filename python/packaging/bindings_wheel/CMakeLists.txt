@@ -13,6 +13,7 @@
 # limitations under the License.
 
 add_custom_target(tensorrt_bindings_wheels ALL)
+add_custom_target(trt_bindings_wheel_files)
 
 # \brief Creates a target named tensorrt_bindings_wheel_${moduleName}_${pyVersion} which will build the Bindings Wheel for that combination.
 # 
@@ -52,9 +53,9 @@ function(buildBindingsWheel moduleName pyVersion)
     # File paths starting with "tensorrt/" are expanded into "${moduleName}/".
     processWheelTemplates(binding ${moduleName} ${pyVersion} ${wheelTemplateFiles})
 
-    # Creates a new custom target, and makes trt_python_wheel_files depend on the new target.
+    # Creates a new custom target, and makes trt_bindings_wheel_files depend on the new target.
     add_custom_target(${filesTarget} DEPENDS ${generatedWheelFiles})
-    add_dependencies(trt_python_wheel_files ${filesTarget})
+    add_dependencies(trt_bindings_wheel_files ${filesTarget})
 
     # Copies the binding library (tensorrt.so) into the same directory as the generated files.
     add_custom_command(
@@ -97,7 +98,7 @@ function(buildBindingsWheel moduleName pyVersion)
         DEPENDS ${wheelOutputFile}
     )
 
-    add_dependencies(${wheelTarget} trt_python_wheel_files)
+    add_dependencies(${wheelTarget} trt_bindings_wheel_files)
     add_dependencies(tensorrt_bindings_wheels ${wheelTarget})
 
     install(FILES

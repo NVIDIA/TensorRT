@@ -20,7 +20,7 @@ add_executable(sample_progress_monitor sampleProgressMonitor.cpp)
 target_link_libraries(sample_progress_monitor PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_progress_monitor)
 
-install(
+installLibraries(
     TARGETS sample_progress_monitor
     OPTIONAL
     COMPONENT full

@@ -52,11 +52,6 @@ static char const* PLUGIN_VERSION{"2"};
 static char const* PLUGIN_NAME{"ModulatedDeformConv2d"};
 } // namespace
 
-PluginFieldCollection ModulatedDeformableConvPluginDynamic::mFCToSerialize{};
-std::vector<PluginField> ModulatedDeformableConvPluginDynamic::mDataToSerialize{};
-PluginFieldCollection ModulatedDeformableConvPluginDynamicCreator::mFC{};
-std::vector<PluginField> ModulatedDeformableConvPluginDynamicCreator::mPluginAttributes{};
-
 ModulatedDeformableConvPluginDynamic::ModulatedDeformableConvPluginDynamic(std::string const& name,
     nvinfer1::Dims const stride, nvinfer1::Dims const padding, nvinfer1::Dims const dilation,
     int32_t const deformableGroup, int32_t const group)

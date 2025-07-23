@@ -45,18 +45,10 @@ char const* const kQKV_TO_CONTEXT_VAR_SEQLEN_LEGACY_PLUGIN_VERSION{"2"};
 char const* const kQKV_TO_CONTEXT_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
 } // namespace
 
-// Static class fields initialization
-PluginFieldCollection QKVToContextPluginDynamicLegacyCreator::mFC{};
-std::vector<PluginField> QKVToContextPluginDynamicLegacyCreator::mPluginAttributes;
-
 REGISTER_TENSORRT_PLUGIN(QKVToContextPluginDynamicLegacyCreator);
 
 constexpr uint32_t kIIDX = 0; // index of the input tensor
 constexpr uint32_t kMIDX = 1; // index of the mask
-
-// Static class fields initialization
-PluginFieldCollection QKVToContextVarSeqlenPluginLegacyCreator::mFC{};
-std::vector<PluginField> QKVToContextVarSeqlenPluginLegacyCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(QKVToContextVarSeqlenPluginLegacyCreator);
 

@@ -8,7 +8,7 @@ Install the tool dependencies via `python3 -m pip install -r requirements.txt`.
 
 Invoke [downloader.py](downloader.py) to download the data with
 a command like the one below if `download.yml` is present in the
-sample directory ([example](yolov3_onnx/download.yml)).
+sample directory ([example](onnx_packnet/download.yml)).
 
 ```sh
 downloader.py -d /path/to/data/dir -f /path/to/download.yml
@@ -40,7 +40,7 @@ TRT_DATA_DIR = None
 def getFilePath(path):
     global TRT_DATA_DIR
     if not TRT_DATA_DIR:
-        parser = argparse.ArgumentParser(description="Convert YOLOv3 to ONNX model")
+        parser = argparse.ArgumentParser(description="Convert PackNet to ONNX")
         parser.add_argument('-d', '--data', help="Specify the data directory where it is saved in. $TRT_DATA_DIR will be overwritten by this argument.")
         args, _ = parser.parse_known_args()
         TRT_DATA_DIR = os.environ.get('TRT_DATA_DIR', None) if args.data is None else args.data
@@ -52,14 +52,6 @@ def getFilePath(path):
         raise ValueError("Data file %s doesn't exist!" % fullpath)
 
     return fullpath
-```
-
-The helper function `getFilePath` in `downloader.py` can also be used to obtain the full path to the downloaded data files. It only works when the sample doesn't have any other command line argument.
-
-```py
-from downloader import getFilePath
-
-cfg_file_path = getFilePath('samples/python/yolov3_onnx/yolov3.cfg')
 ```
 
 **Python Version Support**

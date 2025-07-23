@@ -32,7 +32,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 **TensorRT GA build**
 
-- TensorRT v10.12.0.36
+- TensorRT v10.13.0.35
   - Available from direct download links listed below
 
 **System Packages**
@@ -86,24 +86,24 @@ To build the TensorRT-OSS components, you will first need the following software
 
    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
 
-   - [TensorRT 10.12.0.36 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.12.0/tars/TensorRT-10.12.0.36.Linux.x86_64-gnu.cuda-11.8.tar.gz)
-   - [TensorRT 10.12.0.36 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.12.0/tars/TensorRT-10.12.0.36.Linux.x86_64-gnu.cuda-12.9.tar.gz)
-   - [TensorRT 10.12.0.36 for CUDA 11.8, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.12.0/zip/TensorRT-10.12.0.36.Windows.win10.cuda-11.8.zip)
-   - [TensorRT 10.12.0.36 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.12.0/zip/TensorRT-10.12.0.36.Windows.win10.cuda-12.9.zip)
+   - [TensorRT 10.13.0.35 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/tars/TensorRT-10.13.0.35.Linux.x86_64-gnu.cuda-11.8.tar.gz)
+   - [TensorRT 10.13.0.35 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/tars/TensorRT-10.13.0.35.Linux.x86_64-gnu.cuda-12.9.tar.gz)
+   - [TensorRT 10.13.0.35 for CUDA 11.8, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/zip/TensorRT-10.13.0.35.Windows.win10.cuda-11.8.zip)
+   - [TensorRT 10.13.0.35 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/zip/TensorRT-10.13.0.35.Windows.win10.cuda-12.9.zip)
 
    **Example: Ubuntu 20.04 on x86-64 with cuda-12.9**
 
    ```bash
    cd ~/Downloads
-   tar -xvzf TensorRT-10.12.0.36.Linux.x86_64-gnu.cuda-12.9.tar.gz
-   export TRT_LIBPATH=`pwd`/TensorRT-10.12.0.36
+   tar -xvzf TensorRT-10.13.0.35.Linux.x86_64-gnu.cuda-12.9.tar.gz
+   export TRT_LIBPATH=`pwd`/TensorRT-10.13.0.35
    ```
 
    **Example: Windows on x86-64 with cuda-12.9**
 
    ```powershell
-   Expand-Archive -Path TensorRT-10.12.0.36.Windows.win10.cuda-12.9.zip
-   $env:TRT_LIBPATH="$pwd\TensorRT-10.12.0.36\lib"
+   Expand-Archive -Path TensorRT-10.13.0.35.Windows.win10.cuda-12.9.zip
+   $env:TRT_LIBPATH="$pwd\TensorRT-10.13.0.35\lib"
    ```
 
 ## Setting Up The Build Environment

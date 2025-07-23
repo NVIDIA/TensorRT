@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,7 @@
 #include "common/bertCommon.h"
 #include "common/common.cuh"
 #include "common/serialize.hpp"
+#include "common/cubCcclCompat.h"
 #include "embLayerNormPlugin.h"
 
 using namespace nvinfer1;
@@ -101,7 +102,7 @@ __global__ void maskIdxKernelSmall(int ld, int32_t const* mask, int* maskIdx)
     using BlockReduce = cub::BlockReduce<int32_t, TPB>;
     __shared__ typename BlockReduce::TempStorage tmpStorage;
 
-    cub::Min min;
+    auto min = compat::getCudaMinOp();
     int threadData(ld); // if the mask admits all values
 
     if (threadIdx.x < ld)
@@ -118,6 +119,7 @@ __global__ void maskIdxKernelSmall(int ld, int32_t const* mask, int* maskIdx)
 
     const auto minIdx = BlockReduce(tmpStorage).Reduce(threadData, min);
 
+
     if (threadIdx.x == 0)
     {
         maskIdx[blockIdx.x] = minIdx;
@@ -131,7 +133,7 @@ __global__ void maskIdxKernel(int ld, int32_t const* mask, int* maskIdx)
     using BlockReduce = cub::BlockReduce<int32_t, TPB>;
     __shared__ typename BlockReduce::TempStorage tmpStorage;
 
-    cub::Min min;
+    auto min = compat::getCudaMinOp();
     int threadData(ld); // if the mask admits all values
 
     for (int i = threadIdx.x; i < ld; i += TPB)

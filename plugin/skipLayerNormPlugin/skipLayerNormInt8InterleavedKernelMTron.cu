@@ -1,6 +1,5 @@
-
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION &
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +17,7 @@
 #include "NvInfer.h"
 #include "common/bertCommon.h"
 #include "common/common.cuh"
+#include "common/cubCcclCompat.h"
 #include <cassert>
 #include <cstring>
 #include <cuda.h>
@@ -326,7 +326,7 @@ __global__ void skiplnDQQ_vec4(int32_t const ld, int8_t const* input, int8_t con
     __shared__ half mu;     // mean
     __shared__ half rsigma; // 1 / std.dev.
 
-    half2 const sum2 = BlockReduce(tempStorage).Reduce(statsLocal, cub::Sum());
+    half2 const sum2 = BlockReduce(tempStorage).Reduce(statsLocal, compat::getCudaSumOp());
 
     // Copy skip connection output before Layer Norm
 #pragma unroll

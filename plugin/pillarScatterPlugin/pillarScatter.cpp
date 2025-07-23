@@ -25,10 +25,6 @@ namespace nvinfer1::plugin
 static char const* const kPLUGIN_VERSION{"1"};
 static char const* const kPLUGIN_NAME{"PillarScatterPlugin"};
 
-// Static class fields initialization
-PluginFieldCollection PillarScatterPluginCreator::mFC{};
-std::vector<PluginField> PillarScatterPluginCreator::mPluginAttributes;
-
 PillarScatterPlugin::PillarScatterPlugin(size_t h, size_t w)
     : feature_y_size_(h)
     , feature_x_size_(w)

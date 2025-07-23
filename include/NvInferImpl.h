@@ -31,33 +31,33 @@ class ILogger;
 namespace v_1_0
 {
 class IProgressMonitor;
-}
+} // namespace v_1_0
 using IProgressMonitor = v_1_0::IProgressMonitor;
 
 #if !STRIP_TRT_RTX_INTERNAL_API
 namespace v_1_0
 {
 class IAlgorithmSelector;
-}
+} // namespace v_1_0
 using IAlgorithmSelector = v_1_0::IAlgorithmSelector;
 #endif // !STRIP_TRT_RTX_INTERNAL_API
 
 namespace v_1_0
 {
 class IProfiler;
-}
+} // namespace v_1_0
 using IProfiler = v_1_0::IProfiler;
 
 namespace v_1_0
 {
 class IOutputAllocator;
-}
+} // namespace v_1_0
 using IOutputAllocator = v_1_0::IOutputAllocator;
 
 namespace v_1_0
 {
 class IDebugListener;
-}
+} // namespace v_1_0
 using IDebugListener = v_1_0::IDebugListener;
 
 class IActivationLayer;
@@ -127,8 +127,10 @@ using IPluginV3 = v_1_0::IPluginV3;
 namespace v_1_0
 {
 class IStreamReader;
+class IStreamWriter;
 } // namespace v_1_0
 using IStreamReader = v_1_0::IStreamReader;
+using IStreamWriter = v_1_0::IStreamWriter;
 namespace v_1_0
 {
 class IStreamReaderV2;
@@ -1146,7 +1148,7 @@ public:
     virtual IFillLayer* addFillV2(Dims const& dimensions, FillOperation op, DataType outputType) noexcept = 0;
     virtual bool markDebug(ITensor& tensor) noexcept = 0;
     virtual bool unmarkDebug(ITensor& tensor) noexcept = 0;
-    virtual bool isDebugTensor(nvinfer1::ITensor const& tensor) const noexcept = 0;
+    virtual bool isDebugTensor(ITensor const& tensor) const noexcept = 0;
     virtual bool markWeightsRefittable(char const* name) noexcept = 0;
     virtual bool unmarkWeightsRefittable(char const* name) noexcept = 0;
     virtual bool areWeightsMarkedRefittable(char const* name) const noexcept = 0;
@@ -1275,6 +1277,8 @@ public:
     virtual TilingOptimizationLevel getTilingOptimizationLevel() const noexcept = 0;
     virtual bool setL2LimitForTiling(int64_t size) noexcept = 0;
     virtual int64_t getL2LimitForTiling() const noexcept = 0;
+    virtual bool setRemoteAutoTuningConfig(char const* config) noexcept = 0;
+    virtual char const* getRemoteAutoTuningConfig() const noexcept = 0;
 };
 
 class VSerializationConfig : public VRoot
@@ -1310,6 +1314,10 @@ public:
     virtual int32_t getMaxThreads() const noexcept = 0;
     virtual IPluginRegistry& getPluginRegistry() noexcept = 0;
     virtual ICudaEngine* buildEngineWithConfig(INetworkDefinition& network, IBuilderConfig& config) noexcept = 0;
+    virtual bool buildSerializedNetworkToStream(
+        INetworkDefinition& network, IBuilderConfig& config, IStreamWriter& writer) noexcept = 0;
+    virtual nvinfer1::IHostMemory* buildSerializedNetworkWithKernelText(
+        INetworkDefinition& network, IBuilderConfig& config, IHostMemory*& kernelText) noexcept = 0;
 };
 
 class VRuntimeConfig : public VRoot
