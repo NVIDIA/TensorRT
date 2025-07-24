@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,9 +29,6 @@ namespace
 char const* const kPYRAMIDROIALGIN_PLUGIN_VERSION{"1"};
 char const* const kPYRAMIDROIALGIN_PLUGIN_NAME{"PyramidROIAlign_TRT"};
 } // namespace
-
-PluginFieldCollection PyramidROIAlignPluginCreator::mFC{};
-std::vector<PluginField> PyramidROIAlignPluginCreator::mPluginAttributes;
 
 PyramidROIAlignPluginCreator::PyramidROIAlignPluginCreator()
 {

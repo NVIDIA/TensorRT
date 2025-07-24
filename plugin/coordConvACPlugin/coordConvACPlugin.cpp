@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,9 +29,6 @@ char const* const kCOORDCONV_AC_PLUGIN_VERSION{"1"};
 char const* const kCOORDCONV_AC_PLUGIN_NAME{"CoordConvAC"};
 int32_t const kNUM_COORDCONV_CHANNELS = 2;
 } // namespace
-
-PluginFieldCollection CoordConvACPluginCreator::mFC{};
-std::vector<PluginField> CoordConvACPluginCreator::mPluginAttributes;
 
 CoordConvACPlugin::CoordConvACPlugin() {}
 

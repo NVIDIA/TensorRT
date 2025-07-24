@@ -1,5 +1,19 @@
 # TensorRT OSS Release Changelog
 
+## 10.13.0 GA - 2025-7-24
+- Plugin changes
+  - Fixed a division-by-zero error in geluPlugin that occured when the bias is omitted.
+  - Completed transition away from using static plugin field/attribute member variables in standard plugins. There's no such need since presently, TRT does not access field information after plugin creators are destructed (deregistered from the plugin registry), nor does access such information without a creator instance.
+- Sample changes
+  - Deprecated the `yolov3_onnx` sample due to unstable url of yolo weights.
+  - Updated the `1_run_onnx_with_tensorrt` and `2_construct_network_with_layer_apis` samples to use `cuda-python` instead of `PyCUDA` for latest GPU/CUDA support.
+- Parser changes
+  - Decreased memory usage when importing models with external weights
+  - Added `loadModelProto`, `loadInitializer` and `parseModelProto` APIs for IParser. These APIs are meant to be used to load user initializers when parsing ONNX models.
+  - Added `loadModelProto`, `loadInitializer` and `refitModelProto` APIs for IParserRefitter. These APIs are meant to be used to load user initializers when refitting ONNX models.
+  - Deprecated `IParser::parseWithWeightDescriptors`.
+
+
 ## 10.12.0 GA - 2025-6-10
 - Plugin changes
   - Migrated `IPluginV2`-descendent version 1 of `cropAndResizeDynamic`, to version 2, which implements `IPluginV3`.
@@ -30,7 +44,7 @@
   - Added [Image-to-Image](demo/Diffusion#generate-an-image-with-stable-diffusion-v35-large-with-controlnet-guided-by-an-image-and-a-text-prompt) support for Stable Diffusion v3.5-large ControlNet models.
   - Enabled download of [pre-exported ONNX models](https://huggingface.co/stabilityai/stable-diffusion-3.5-large-tensorrt) for the Stable Diffusion v3.5-large pipeline.
 - Sample changes
-  - Added two refactored python samples [1_run_onnx_with_tensorrt](samples/python/refactored/1_run_onnx_with_tensorrt) and [2_construct_network_with_layer_apis](samples/python/refactored/2_construct_network_with_layer_apis) 
+  - Added two refactored python samples [1_run_onnx_with_tensorrt](samples/python/refactored/1_run_onnx_with_tensorrt) and [2_construct_network_with_layer_apis](samples/python/refactored/2_construct_network_with_layer_apis)
 - Parser changes
   - Added support for integer-typed base tensors for `Pow` operations
   - Added support for custom `MXFP8` quantization operations

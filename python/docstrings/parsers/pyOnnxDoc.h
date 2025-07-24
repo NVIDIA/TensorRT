@@ -43,6 +43,8 @@ constexpr const char* parse = R"trtdoc(
 )trtdoc";
 
 constexpr const char* parse_with_weight_descriptors = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.13. See load_initializers.
+
     Parse a serialized ONNX model into the TensorRT network with consideration of user provided weights.
 
     :arg model: The serialized ONNX model.
@@ -167,6 +169,54 @@ constexpr const char* get_used_vc_plugin_libraries = R"trtdoc(
 
     :raises: :class:`RuntimeError` if an internal error occurred when trying to fetch the list of plugin libraries.
 )trtdoc";
+
+constexpr const char* load_model_proto = R"trtdoc(
+    Load a serialized ONNX model into the parser. Unlike the parse(), parse_from_file(), or parse_with_weight_descriptors()
+    functions, this function does not immediately convert the model into a TensorRT INetworkDefinition. Using this function
+    allows users to provide their own initializers for the ONNX model through the load_initializer() function.
+
+    Only one model can be loaded at a time. Subsequent calls to load_model_proto() will result in an error.
+
+    To begin the conversion of the model into a TensorRT INetworkDefinition, use parse_model_proto().
+
+    :arg model: The serialized ONNX model.
+    :arg path: The path to the model file. Only required if the model has externally stored weights.
+
+    :returns: true if the model was loaded successfully
+
+)trtdoc";
+
+constexpr const char* load_initializer = R"trtdoc(
+    Prompt the ONNX parser to load an initializer with user-provided binary data.
+    The lifetime of the data must exceed the lifetime of the parser.
+
+    All user-provided initializers must be provided prior to calling parse_model_proto().
+
+    This function can be called multiple times to specify the names of multiple initializers.
+
+    Calling this function with an initializer previously specified will overwrite the previous instance.
+
+    This function will return false if initializer validation fails. Possible validation errors are:
+     * This function was called prior to load_model_proto().
+     * The requested initializer was not found in the model.
+     * The size of the data provided is different from the corresponding initializer in the model.
+
+    :arg name: name of the initializer.
+    :arg data: binary data of the initializer.
+    :arg size: the size of the binary data.
+
+    :returns: true if the initializer was successfully loaded
+
+)trtdoc";
+
+constexpr const char* parse_model_proto = R"trtdoc(
+
+    Begin the parsing and conversion process of the loaded ONNX model into a TensorRT INetworkDefinition.
+
+    :returns: true if the model was parsed successfully.
+
+)trtdoc";
+
 } // namespace OnnxParserDoc
 
 namespace OnnxParserRefitterDoc
@@ -206,6 +256,54 @@ constexpr const char* get_error = R"trtdoc(
 constexpr const char* clear_errors = R"trtdoc(
     Clear errors from prior calls to :func:`refitFromBytes` or :func:`refitFromFile`.
 )trtdoc";
+
+constexpr const char* load_model_proto = R"trtdoc(
+    Load a serialized ONNX model into the refitter. Unlike the refit() or refit_from_file()
+    functions, this function does not immediately begin the refit process. Using this function
+    allows users to provide their own initializers for the ONNX model through the load_initializer() function.
+
+    Only one model can be loaded at a time. Subsequent calls to load_model_proto() will result in an error.
+
+    To begin the refit process, use refit_model_proto().
+
+    :arg model: The serialized ONNX model.
+    :arg path: The path to the model file. Only required if the model has externally stored weights.
+
+    :returns: true if the model was loaded successfully.
+
+)trtdoc";
+
+constexpr const char* load_initializer = R"trtdoc(
+    Prompt the ONNX refitter to load an initializer with user-provided binary data.
+    The lifetime of the data must exceed the lifetime of the refitter.
+
+    All user-provided initializers must be provided prior to calling refit_model_proto().
+
+    This function can be called multiple times to specify the names of multiple initializers.
+
+    Calling this function with an initializer previously specified will overwrite the previous instance.
+
+    This function will return false if initializer validation fails. Possible validation errors are:
+     * This function was called prior to load_model_proto().
+     * The requested initializer was not found in the model.
+     * The size of the data provided is different from the corresponding initializer in the model.
+
+    :arg name: name of the initializer.
+    :arg data: binary data of the initializer.
+    :arg size: the size of the binary data.
+
+    :returns: true if the initializer was successfully loaded.
+
+)trtdoc";
+
+constexpr const char* refit_model_proto = R"trtdoc(
+
+    Begin the refit process from the loaded ONNX model.
+
+    :returns: true if the model was refit successfully.
+
+)trtdoc";
+
 } // namespace OnnxParserRefitterDoc
 
 namespace ErrorCodeDoc

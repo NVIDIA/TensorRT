@@ -16,6 +16,6 @@
 add_shared_source(
     fileLock.cpp
     fileLock.h
-    timingCache.cpp
-    timingCache.h
+    cacheUtils.cpp
+    cacheUtils.h
 )

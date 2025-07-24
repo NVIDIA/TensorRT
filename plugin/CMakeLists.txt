@@ -147,7 +147,6 @@ endif()
 
 set(trt_plugin_dependencies
     tensorrt
-    TRT::cudart
     trt_global_definitions
 )
 
@@ -205,7 +204,6 @@ set_target_properties(
 ### Static Plugin Setup
 set(trt_plugin_static_dependencies
     tensorrt_static
-    TRT::cudart
     trt_global_definitions
 )
 
@@ -275,13 +273,13 @@ if(NOT ${TRT_BUILD_ENABLE_STATIC_LIBS})
     )
 endif()
 
-install(
+installLibraries(
     TARGETS tensorrt_plugins tensorrt_plugins_static tensorrt_vc_plugins tensorrt_vc_plugins_static
     OPTIONAL
     COMPONENT release
 )
 
-install(
+installLibraries(
     TARGETS tensorrt_plugins_internal
     OPTIONAL
     COMPONENT full

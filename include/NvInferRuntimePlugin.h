@@ -43,7 +43,7 @@ enum class TensorFormat : int32_t;
 namespace v_1_0
 {
 class IGpuAllocator;
-}
+} // namespace v_1_0
 using IGpuAllocator = v_1_0::IGpuAllocator;
 
 //!

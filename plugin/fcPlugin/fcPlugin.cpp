@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,10 +41,6 @@ char const* const kFC_VERSION{"1"};
 char const* const kFC_NAME{"CustomFCPluginDynamic"};
 constexpr size_t kMAX_WORKSPACE_BYTES = 4 * 1024 * 1024; // 4MiB
 } // namespace
-
-// Static class fields initialization
-PluginFieldCollection FCPluginDynamicCreator::mFC{};
-std::vector<PluginField> FCPluginDynamicCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(FCPluginDynamicCreator);
 

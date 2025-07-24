@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION &
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -82,10 +82,6 @@ void checkDescs(PluginTensorDesc const& iDesc, PluginTensorDesc const& sDesc, Pl
     PLUGIN_VALIDATE(iDesc.type == oDesc.type);
 }
 } // namespace
-
-// Static class fields initialization
-PluginFieldCollection SkipLayerNormInterleavedPluginBaseLegacyCreator::mFC{};
-std::vector<PluginField> SkipLayerNormInterleavedPluginBaseLegacyCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormInterleavedPluginHFaceLegacyCreator);
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormInterleavedPluginMTronLegacyCreator);

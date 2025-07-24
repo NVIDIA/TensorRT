@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,10 +35,6 @@ namespace
 char const* const kGELU_PLUGIN_VERSION{"1"};
 char const* const kGELU_PLUGIN_NAME{"CustomGeluPluginDynamic"};
 } // namespace
-
-// Static class fields initialization
-PluginFieldCollection GeluPluginDynamicCreator::mFC{};
-std::vector<PluginField> GeluPluginDynamicCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(GeluPluginDynamicCreator);
 
@@ -165,11 +161,11 @@ int32_t GeluPluginDynamic::enqueueTyped(
 {
     TDataType const* input = static_cast<TDataType const*>(input_);
     TDataType* output = static_cast<TDataType*>(output_);
-    int32_t const cols = inputVolume / mLd;
-    int32_t const rows = mLd;
 
     if (mHasBias)
     {
+        int32_t const cols = inputVolume / mLd;
+        int32_t const rows = mLd;
         TDataType const* bias = static_cast<TDataType*>(mBiasDev.get());
         return computeGeluBias(output, input, bias, rows, cols, stream);
     }

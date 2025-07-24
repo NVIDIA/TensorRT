@@ -33,9 +33,6 @@ std::string const kGRID_ANCHOR_PLUGIN_NAMES[] = {"GridAnchor_TRT", "GridAnchorRe
 char const* const kGRID_ANCHOR_PLUGIN_VERSION = "1";
 } // namespace
 
-PluginFieldCollection GridAnchorBasePluginCreator::mFC{};
-std::vector<PluginField> GridAnchorBasePluginCreator::mPluginAttributes;
-
 GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, int32_t numLayers, char const* name)
     : mPluginName(name)
     , mNumLayers(numLayers)

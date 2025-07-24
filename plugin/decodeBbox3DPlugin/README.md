@@ -1,6 +1,6 @@
 # decodeBbox3D Plugin [DEPRECATED]
 
-**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. No alternatives are planned to be provided.**
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. No alternatives are planned to be provided    .**
 
 **Table Of Contents**
 - [Description](#description)

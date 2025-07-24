@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,7 @@
 namespace sample
 {
 
-class Bindings;
+class BindingsStd;
 
 //!
 //! \struct InferenceTime
@@ -165,20 +165,20 @@ void exportJSONTrace(
 //!
 //! \brief Print input tensors to stream
 //!
-void dumpInputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
+void dumpInputs(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings, std::ostream& os);
 
 //!
 //! \brief Print output tensors to stream
 //!
-void dumpOutputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
+void dumpOutputs(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings, std::ostream& os);
 
-void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os);
+void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings, std::ostream& os);
 
 //!
 //! \brief Export output tensors to JSON file
 //!
-void exportJSONOutput(
-    nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
+void exportJSONOutput(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings,
+    std::string const& fileName, int32_t batch);
 
 //!
 //! \struct LayerProfile
@@ -281,17 +281,17 @@ void printLayerInfo(
 void printOptimizationProfileInfo(ReportingOptions const& reporting, nvinfer1::ICudaEngine const* engine);
 
 //! Forward declaration.
-struct InferenceEnvironment;
+struct InferenceEnvironmentBase;
 
 //!
 //! \brief Print per-layer perf profile data to logger or export it to output JSON file.
 //!
-void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironment& iEnv);
+void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironmentBase& iEnv);
 
 //!
 //! \brief Print binding output values to logger or export them to output JSON file.
 //!
-void printOutput(ReportingOptions const& reporting, InferenceEnvironment const& iEnv, int32_t batch);
+void printOutput(ReportingOptions const& reporting, InferenceEnvironmentBase const& iEnv, int32_t batch);
 
 } // namespace sample
 

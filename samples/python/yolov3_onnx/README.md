@@ -1,4 +1,6 @@
-# Object Detection With The ONNX TensorRT Backend In Python
+# [DEPRECATED] Object Detection With The ONNX TensorRT Backend In Python
+
+> This sample has been deprecated starting from TensorRT 10.13 due to unstable yolov3 weights. See also https://github.com/pjreddie/darknet/issues/2655
 
 **Table Of Contents**
 - [Description](#description)

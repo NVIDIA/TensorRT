@@ -70,9 +70,6 @@ struct SoftmaxTreeDeleter
 
 } // namespace
 
-PluginFieldCollection RegionPluginCreator::mFC{};
-std::vector<PluginField> RegionPluginCreator::mPluginAttributes;
-
 Region::Region(RegionParameters params)
     : num(params.num)
     , coords(params.coords)

@@ -279,7 +279,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 "fp16": self.fp16,
                 "tf32": self.tf32,
                 "text_maxlen": self.models["t5"].text_maxlen + self.models["clip_g"].text_maxlen,
-                "build_strongly_typed": False,
+                "build_strongly_typed": not self.controlnets,
                 "weight_streaming": self.weight_streaming,
                 "do_classifier_free_guidance": self.do_classifier_free_guidance,
             }

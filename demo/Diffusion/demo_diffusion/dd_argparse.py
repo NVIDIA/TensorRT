@@ -310,27 +310,36 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     # int8 support
     if args.int8 and not any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1")):
         raise ValueError("int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
+    
+    # fp8 support validation
+    if args.fp8:
+        # Check version compatibility
+        supported_versions = ("xl", "1.4", "1.5", "2.1", "3.5-large")
+        if not (any(args.version.startswith(prefix) for prefix in supported_versions) or is_flux):
+            raise ValueError(
+                "fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1, SD3.5-large and FLUX pipelines."
+            )
 
-    # fp8 support
-    if args.fp8 and not (
-        any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1", "3.5-large")) or is_flux
-    ):
-        raise ValueError(
-            "fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1, SD3.5-large and FLUX pipelines."
-        )
-
-    if args.fp8 and hasattr(args, "controlnet_type"):
-        if args.version != "xl-1.0":
+        # Check controlnet compatibility
+        if hasattr(args, "controlnet_type") and args.version != "xl-1.0":
             raise ValueError("fp8 controlnet quantization is only supported for SDXL.")
 
-    if args.fp8 and args.int8:
-        raise ValueError("Cannot apply both int8 and fp8 quantization, please choose only one.")
+        # Check for conflicting quantization
+        if args.int8:
+            raise ValueError("Cannot apply both int8 and fp8 quantization, please choose only one.")
 
-    if args.fp8 and sm_version < 89:
-        raise ValueError(
-            f"Cannot apply FP8 quantization for GPU with compute capability {sm_version / 10.0}.  Only Ada and Hopper are supported."
-        )
+        # Check GPU compute capability
+        if sm_version < 89:
+            raise ValueError(
+                f"Cannot apply FP8 quantization for GPU with compute capability {sm_version / 10.0}. A minimum compute capability of 8.9 is required."
+            )
 
+        # Check SD3.5-large specific requirement
+        if args.version == "3.5-large" and not args.download_onnx_models:
+            raise ValueError(
+                "Native FP8 quantization is not supported for SD3.5-large. Please pass --download-onnx-models."
+            )
+        
     # TensorRT ModelOpt quantization level
     if args.quantization_level == 0.0:
         def override_quant_level(level: float, dtype_str: str):
@@ -352,8 +361,8 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
             "Transformer ONNX model for Quantization level 3 is not available for download. Please export the quantized Transformer model natively with the removal of --download-onnx-models."
         )
     if args.fp4:
-        # FP4 precision is only supported for Flux Pipelines
-        assert is_flux, "FP4 precision is only supported for Flux pipelines"
+        # FP4 precision is only supported for the Flux pipeline
+        assert is_flux, "FP4 precision is only supported for the Flux pipeline"
 
     # Handle LoRA
     # FLUX canny and depth official LoRAs are not supported because they modify the transformer architecture, conflicting with refit

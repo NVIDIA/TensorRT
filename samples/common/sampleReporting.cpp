@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,14 @@
 #include "sampleInference.h"
 #include "sampleOptions.h"
 #include "sampleReporting.h"
+
+#if ENABLE_UNIFIED_BUILDER
+#include "NvInferSafeRuntime.h"
+#include "bfloat16.h"
+#if CUDA_VERSION >= 11060
+#include <cuda_fp8.h>
+#endif
+#endif
 
 using namespace nvinfer1;
 
@@ -455,25 +463,24 @@ void Profiler::exportJSONProfile(std::string const& fileName) const noexcept
     os << "]" << std::endl;
 }
 
-void dumpInputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os)
+void dumpInputs(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings, std::ostream& os)
 {
     os << "Input Tensors:" << std::endl;
     bindings.dumpInputs(context, os);
 }
 
-void dumpOutputs(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os)
+void dumpOutputs(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings, std::ostream& os)
 {
-    auto isOutput = [](Binding const& b) { return !b.isInput; };
-    bindings.dumpBindings(context, isOutput, os);
+    bindings.dumpOutputs(context, os);
 }
 
-void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::ostream& os)
+void dumpRawBindingsToFiles(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings, std::ostream& os)
 {
     bindings.dumpRawBindingToFiles(context, os);
 }
 
 void exportJSONOutput(
-    nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch)
+    nvinfer1::IExecutionContext const& context, BindingsStd const& bindings, std::string const& fileName, int32_t batch)
 {
     std::ofstream os(fileName, std::ofstream::trunc);
     std::string sep = "  ";
@@ -495,8 +502,46 @@ void exportJSONOutput(
     os << "]" << std::endl;
 }
 
-void exportJSONOutput(
-    nvinfer1::IExecutionContext const& context, Bindings const& bindings, std::string const& fileName, int32_t batch);
+void exportJSONOutput(nvinfer1::IExecutionContext const& context, BindingsStd const& bindings,
+    std::string const& fileName, int32_t batch);
+
+#if ENABLE_UNIFIED_BUILDER
+void dumpSafeOutputs(nvinfer2::safe::ITRTGraph const& graph, BindingsSafe const& bindings, std::ostream& os)
+{
+    bindings.dumpOutputs(graph, os);
+}
+
+void dumpSafeRawBindingsToFiles(nvinfer2::safe::ITRTGraph const& graph, BindingsSafe const& bindings, std::ostream& os)
+{
+    bindings.dumpRawBindingToFiles(const_cast<nvinfer2::safe::ITRTGraph&>(graph), os);
+}
+
+void exportSafeJSONOutput(
+    nvinfer2::safe::ITRTGraph const& graph, BindingsSafe const& bindings, std::string const& fileName, int32_t batch)
+{
+    std::ofstream os(fileName, std::ofstream::trunc);
+    std::string sep = "  ";
+    auto const output = bindings.getOutputBindings();
+    os << "[" << std::endl;
+    for (auto const& binding : output)
+    {
+        // clang-format off
+        os << sep << R"({ "name" : ")" << binding.first << "\"" << std::endl;
+        sep = ", ";
+        os << "  " << sep << R"("dimensions" : ")";
+        bindings.dumpBindingDimensions(binding.first, graph, os);
+        os << "\"" << std::endl;
+        os << "  " << sep << "\"values\" : [ ";
+        bindings.dumpBindingValues(graph, binding.second, os, sep, batch);
+        os << " ]" << std::endl << "  }" << std::endl;
+        // clang-format on
+    }
+    os << "]" << std::endl;
+}
+
+void exportSafeJSONOutput(
+    nvinfer2::safe::ITRTGraph const& graph, BindingsSafe const& bindings, std::string const& fileName, int32_t batch);
+#endif
 
 void printLayerInfo(
     ReportingOptions const& reporting, nvinfer1::ICudaEngine* engine, nvinfer1::IExecutionContext* context)
@@ -541,7 +586,7 @@ void printOptimizationProfileInfo(ReportingOptions const& reporting, nvinfer1::I
     }
 }
 
-void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironment& iEnv)
+void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnvironmentBase& iEnv)
 {
     if (reporting.profile)
     {
@@ -566,7 +611,7 @@ void printPerformanceProfile(ReportingOptions const& reporting, InferenceEnviron
 
 namespace details
 {
-void dump(std::unique_ptr<nvinfer1::IExecutionContext> const& context, std::unique_ptr<Bindings> const& binding,
+void dump(std::unique_ptr<nvinfer1::IExecutionContext> const& context, std::unique_ptr<BindingsStd> const& binding,
     ReportingOptions const& reporting, int32_t batch)
 {
     if (!context)
@@ -587,22 +632,58 @@ void dump(std::unique_ptr<nvinfer1::IExecutionContext> const& context, std::uniq
         exportJSONOutput(*context, *binding, reporting.exportOutput, batch);
     }
 }
+
+#if ENABLE_UNIFIED_BUILDER
+void safeDump(std::unique_ptr<nvinfer2::safe::ITRTGraph> const& graph, std::unique_ptr<BindingsSafe> const& binding,
+    ReportingOptions const& reporting, int32_t batch)
+{
+    if (!graph)
+    {
+        sample::gLogError << "Empty safe graph! Skip printing outputs." << std::endl;
+        return;
+    }
+    if (reporting.output)
+    {
+        dumpSafeOutputs(*graph, *binding, sample::gLogInfo);
+    }
+    if (reporting.dumpRawBindings)
+    {
+        dumpSafeRawBindingsToFiles(*graph, *binding, sample::gLogInfo);
+    }
+    if (!reporting.exportOutput.empty())
+    {
+        exportSafeJSONOutput(*graph, *binding, reporting.exportOutput, batch);
+    }
+}
+#endif
+
 } // namespace details
 
-void printOutput(ReportingOptions const& reporting, InferenceEnvironment const& iEnv, int32_t batch)
+void printOutput(ReportingOptions const& reporting, InferenceEnvironmentBase const& iEnv, int32_t batch)
 {
-    auto const& binding = iEnv.bindings.at(0);
+    if (iEnv.safe)
+    {
+#if ENABLE_UNIFIED_BUILDER
+        auto const& binding = static_cast<const InferenceEnvironmentSafe&>(iEnv).bindings.at(0);
+        if (!binding)
+        {
+            sample::gLogError << "Empty bindings! Skip printing outputs." << std::endl;
+            return;
+        }
+        auto const& graph = static_cast<const InferenceEnvironmentSafe&>(iEnv).mClonedGraphs.at(0);
+        details::safeDump(graph, binding, reporting, batch);
+#else
+        sample::gLogWarning << "Safe mode is not supported! Skip printing outputs." << std::endl;
+#endif
+        return;
+    }
+    auto const& binding = static_cast<const InferenceEnvironmentStd&>(iEnv).bindings.at(0);
     if (!binding)
     {
         sample::gLogError << "Empty bindings! Skip printing outputs." << std::endl;
         return;
     }
-    if (iEnv.safe)
-    {
-        sample::gLogError << "Safe inferernce is not supported!" << std::endl;
-        return;
-    }
-    auto const& context = iEnv.contexts.at(0);
+    auto const& context = static_cast<const InferenceEnvironmentStd&>(iEnv).contexts.at(0);
     details::dump(context, binding, reporting, batch);
 }
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,9 +32,6 @@ using nvinfer1::plugin::FlattenConcatPluginCreator;
 
 static char const* const kFLATTENCONCAT_PLUGIN_VERSION{"1"};
 static char const* const kFLATTENCONCAT_PLUGIN_NAME{"FlattenConcat_TRT"};
-
-PluginFieldCollection FlattenConcatPluginCreator::mFC{};
-std::vector<PluginField> FlattenConcatPluginCreator::mPluginAttributes;
 
 FlattenConcat::FlattenConcat(int32_t concatAxis, bool ignoreBatch)
     : mIgnoreBatch(ignoreBatch)

@@ -22,8 +22,6 @@ namespace nvinfer1::plugin
 {
 static char const* const kLRELU_PLUGIN_VERSION{"1"};
 static char const* const kLRELU_PLUGIN_NAME{"LReLU_TRT"};
-PluginFieldCollection LReluPluginCreator::mFC{};
-std::vector<PluginField> LReluPluginCreator::mPluginAttributes;
 
 // LeakyReLU {{{
 LReLU::LReLU(float negSlope)

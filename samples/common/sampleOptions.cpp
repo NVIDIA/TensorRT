@@ -272,6 +272,21 @@ WeightStreamingBudget stringToValue<WeightStreamingBudget>(std::string const& op
     return budget;
 }
 
+#if ENABLE_UNIFIED_BUILDER
+template <>
+samplesSafeCommon::SafetyPluginLibraryArgument stringToValue<samplesSafeCommon::SafetyPluginLibraryArgument>(
+    std::string const& option)
+{
+    samplesSafeCommon::SafetyPluginLibraryArgument argument;
+    auto status = parseSafetyPluginArgument(option, argument);
+    if (!status)
+    {
+        throw std::invalid_argument(std::string("Invalid Safety plugin library option: " + option));
+    }
+    return argument;
+}
+#endif
+
 
 template <typename T>
 std::pair<std::string, T> splitNameAndValue(const std::string& s)
@@ -1193,7 +1208,7 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--best", best);
     if (best)
     {
-        int8 = true;
+        int8 = (samplesCommon::getSMVersion() != 0x0a03);
         fp16 = true;
 
         // BF16 only supported on Ampere+
@@ -1284,8 +1299,14 @@ void BuildOptions::parse(Arguments& arguments)
         throw std::invalid_argument("Invalid usage, fp8 and int8 aren't allowed to be enabled together.");
     }
     getAndDelOption(arguments, "--safe", safe);
+    getAndDelOption(arguments, "--dumpKernelText", dumpKernelText);
+    if (dumpKernelText && !safe)
+    {
+        throw std::invalid_argument("--dumpKernelText requires --safe to be enabled.");
+    }
     getAndDelOption(arguments, "--buildDLAStandalone", buildDLAStandalone);
     getAndDelOption(arguments, "--allowGPUFallback", allowGPUFallback);
+    getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--restricted", restricted);
     getAndDelOption(arguments, "--skipInference", skipInference);
     if (getAndDelOption(arguments, "--directIO", directIO))
@@ -1606,6 +1627,12 @@ void BuildOptions::parse(Arguments& arguments)
 
     getAndDelOption(arguments, "--tilingOptimizationLevel", tilingOptimizationLevel);
     getAndDelOption(arguments, "--l2LimitForTiling", l2LimitForTiling);
+    getAndDelOption(arguments, "--remoteAutoTuningConfig", remoteAutoTuningConfig);
+    if (!remoteAutoTuningConfig.empty() && !safe)
+    {
+        throw std::invalid_argument(
+            "Remote auto tuning is not supported in standard build. Use --safe flag to enable it.");
+    }
 }
 
 void SystemOptions::parse(Arguments& arguments)
@@ -1630,6 +1657,13 @@ void SystemOptions::parse(Arguments& arguments)
     {
         dynamicPlugins.emplace_back(pluginName);
     }
+#if ENABLE_UNIFIED_BUILDER
+    samplesSafeCommon::SafetyPluginLibraryArgument safetyPluginOption;
+    while (getAndDelOption(arguments, "--safetyPlugins", safetyPluginOption))
+    {
+        safetyPlugins.emplace_back(std::move(safetyPluginOption));
+    }
+#endif // ENABLE_UNIFIED_BUILDER
     getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
 }
 
@@ -1904,6 +1938,7 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     getFormats(outputFormats, "--outputIOFormats");
     getAndDelOption(arguments, "--int8", int8);
     getAndDelOption(arguments, "--calib", calibFile);
+    getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--std", standard);
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
@@ -2525,7 +2560,7 @@ void BuildOptions::help(std::ostream& os)
           "                                     Note: Also accepts decimal sizes, e.g. 0.25M. Will be rounded down to the nearest integer bytes."   "\n"
           "                                     In particular, for dlaSRAM the bytes will be rounded down to the nearest power of 2."               "\n"
         R"(                                     Pool constraint: poolspec ::= poolfmt[","poolspec])"                                                "\n"
-          "                                                      poolfmt ::= pool:size\n"                                                             
+          "                                                      poolfmt ::= pool:size\n"
         R"(                                                      pool ::= "workspace"|"dlaSRAM"|"dlaLocalDRAM"|"dlaGlobalDRAM"|"tacticSharedMem")"  "\n"
           "  --profilingVerbosity=mode          Specify profiling verbosity. mode ::= layer_names_only|detailed|none (default = layer_names_only)." "\n"
           "                                     Please only assign once."                                                                           "\n"
@@ -2605,11 +2640,13 @@ void BuildOptions::help(std::ostream& os)
           "  --calib=<file>                     Read INT8 calibration cache file"                                                                   "\n"
           "  --safe                             Enable build safety certified engine, if DLA is enable, --buildDLAStandalone will be specified"     "\n"
           "                                     automatically (default = disabled)"                                                                 "\n"
+          "  --dumpKernelText                   Dump the kernel text to a file, only available when --safe is enabled"                              "\n"
           "  --buildDLAStandalone               Enable build DLA standalone loadable which can be loaded by cuDLA, when this option is enabled, "   "\n"
           "                                     --allowGPUFallback is disallowed and --skipInference is enabled by default. Additionally, "         "\n"
           "                                     specifying --inputIOFormats and --outputIOFormats restricts I/O data type and memory layout"        "\n"
           "                                     (default = disabled)"                                                                               "\n"
           "  --allowGPUFallback                 When DLA is enabled, allow GPU fallback for unsupported layers (default = disabled)"                "\n"
+          "  --consistency                      Perform consistency checking on safety certified engine"                                            "\n"
           "  --restricted                       Enable safety scope checking with kSAFETY_SCOPE build flag"                                         "\n"
           "  --saveEngine=<file>                Save the serialized engine"                                                                         "\n"
           "  --loadEngine=<file>                Load a serialized engine"                                                                           "\n"
@@ -2675,11 +2712,14 @@ void BuildOptions::help(std::ostream& os)
           "  --markUnfusedTensorsAsDebugTensors Mark unfused tensors as debug tensors"                                                              "\n"
           "  --tilingOptimizationLevel          Set the tiling optimization level. (default is " << defaultTilingOptimizationLevel << ")"           "\n"
           "                                     A Higher level allows TensorRT to spend more time searching for better optimization strategy."      "\n"
-          "                                     Valid values include integers from " 
-                                                << static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kNONE) 
-                                                << " to the maximum tiling optimization level(" 
+          "                                     Valid values include integers from "
+                                                << static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kNONE)
+                                                << " to the maximum tiling optimization level("
                                                 << static_cast<int32_t>(nvinfer1::TilingOptimizationLevel::kFULL) << ")."                           "\n"
           "  --l2LimitForTiling                 Set the L2 cache usage limit for tiling optimization(default is -1)"                                "\n"
+          "  --remoteAutoTuningConfig           Set the remote auto tuning config. Must be specified with --safe."                                  "\n"
+          "                                     Format: protocol://username[:password]@hostname[:port]?param1=value1&param2=value2"                 "\n"
+          "                                     Example: ssh://root:root@192.168.1.100:2213?remote_exec_path=/workspace/LWEServer&remote_lib_path=/workspace" "\n"
           ;
     // clang-format on
     os << std::flush;
@@ -2696,7 +2736,10 @@ void SystemOptions::help(std::ostream& os)
           "  --setPluginsToSerialize     Plugin library (.so) to be serialized with the engine (can be specified multiple times)" << std::endl <<
           "  --ignoreParsedPluginLibs    By default, when building a version-compatible engine, plugin libraries specified by the ONNX parser " << std::endl <<
           "                              are implicitly serialized with the engine (unless --excludeLeanRuntime is specified) and loaded dynamically. " << std::endl <<
-          "                              Enable this flag to ignore these plugin libraries instead." << std::endl;
+          "                              Enable this flag to ignore these plugin libraries instead." << std::endl <<
+          "  --safetyPlugins             Plugin library (.so) for TensorRT auto safety to manually load safety plugins specified by the command line arguments." << std::endl <<
+          "                              Example: --safetyPlugins=/path/to/plugin_lib.so[pluginNamespace1::plugin1,pluginNamespace2::plugin2]." << std::endl <<
+          "                              The option can be specified multiple times with different plugin libraries." << std::endl;
     // clang-format on
 }
 
@@ -2868,6 +2911,7 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
         R"(                                          fmt   ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        << std::endl <<
         R"(                                                   "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"fmt])"               << std::endl <<
           "  --int8                      Enable int8 precision, in addition to fp16 (default = disabled)"                                    << std::endl <<
+          "  --consistency               Perform consistency checking on safety certified engine"                                            << std::endl <<
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
           "  --serialized=<file>         Save the serialized network"                                                                        << std::endl <<

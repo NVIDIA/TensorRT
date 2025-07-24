@@ -20,7 +20,7 @@ add_executable(sample_named_dimensions sampleNamedDimensions.cpp)
 target_link_libraries(sample_named_dimensions PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_named_dimensions)
 
-install(
+installLibraries(
     TARGETS sample_named_dimensions
     OPTIONAL
     COMPONENT full

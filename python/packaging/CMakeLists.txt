@@ -34,6 +34,12 @@ function(processWheelTemplates wheelType moduleName pyVersion)
             set(__srcFilePath ${adjustedFilePath})
             set(__outDir ${outputDir}/${moduleName})
             set(__outputFile ${outputDir}/${moduleName}/${adjustedFilePath})
+        elseif(filePath MATCHES "^tensorrt_libs/") # Standalone lib wheels use <module>_libs/ instead of <module>/
+            string(REGEX REPLACE "^tensorrt_libs/" "" adjustedFilePath ${filePath})
+            set(__srcDir ${CMAKE_CURRENT_LIST_DIR}/tensorrt_libs)
+            set(__srcFilePath ${adjustedFilePath})
+            set(__outDir ${outputDir}/${moduleName}_libs)
+            set(__outputFile ${outputDir}/${moduleName}_libs/${adjustedFilePath})
         else()
             set(__srcDir ${CMAKE_CURRENT_LIST_DIR})
             set(__srcFilePath ${filePath})
@@ -42,6 +48,9 @@ function(processWheelTemplates wheelType moduleName pyVersion)
         endif()
 
         flagToInt(TRT_BUILD_WINML)
+
+        get_target_property(TRT_OUTPUT_NAME tensorrt OUTPUT_NAME)
+        get_target_property(PARSER_OUTPUT_NAME nvonnxparser OUTPUT_NAME)
 
         add_custom_command(
             OUTPUT ${__outputFile}
@@ -55,8 +64,8 @@ function(processWheelTemplates wheelType moduleName pyVersion)
                 --cuda-version ${TRT_CUDA_VERSION}
                 --trt-version ${TensorRT_VERSION}
                 --plugin-disabled ${TRT_BUILD_WINML_INT}
-                --trt-nvinfer-name ${TRT_NVINFER_NAME}
-                --trt-onnxparser-name ${TRT_ONNXPARSER_NAME}
+                --trt-nvinfer-name ${TRT_OUTPUT_NAME}
+                --trt-onnxparser-name ${PARSER_OUTPUT_NAME}
             DEPENDS
                 ${TensorRT_SOURCE_DIR}/python/scripts/process_wheel_template.py
                 ${CMAKE_CURRENT_LIST_DIR}/${filePath}
@@ -88,3 +97,4 @@ add_custom_command(
 add_custom_target(trt_packaging_requirements_installed DEPENDS package_install_cache.txt)
 
 add_subdirectory(bindings_wheel)
+add_subdirectory(libs_wheel)

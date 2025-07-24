@@ -30,7 +30,7 @@ else()
     )
 endif()
 
-install(
+installLibraries(
     TARGETS sample_onnx_mnist_coord_conv_ac
     OPTIONAL
     COMPONENT full

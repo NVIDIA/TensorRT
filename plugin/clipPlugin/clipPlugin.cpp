@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,8 +32,6 @@ using nvinfer1::plugin::ClipPlugin;
 
 static char const* const kCLIP_PLUGIN_VERSION{"1"};
 static char const* const kCLIP_PLUGIN_NAME{"Clip_TRT"};
-PluginFieldCollection ClipPluginCreator::mFC{};
-std::vector<PluginField> ClipPluginCreator::mPluginAttributes;
 
 ClipPlugin::ClipPlugin(std::string name, float clipMin, float clipMax)
     : mLayerName(std::move(name))

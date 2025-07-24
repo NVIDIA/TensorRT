@@ -21,10 +21,6 @@ namespace nvinfer1::plugin
 static char const* const kREORG_PLUGIN_STATIC_VERSION{"1"};
 static char const* const kREORG_PLUGIN_DYNAMIC_VERSION{"2"};
 static char const* const kREORG_PLUGIN_NAME{"Reorg_TRT"};
-template <class TBaseClass>
-PluginFieldCollection ReorgPluginCreator<TBaseClass>::mFC{};
-template <class TBaseClass>
-std::vector<PluginField> ReorgPluginCreator<TBaseClass>::mPluginAttributes;
 
 template <class TBaseClass>
 Reorg<TBaseClass>::Reorg(int32_t strideValue)

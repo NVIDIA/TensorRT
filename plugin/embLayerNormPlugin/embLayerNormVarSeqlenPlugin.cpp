@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -124,10 +124,6 @@ bool initializeFields(char const* name, PluginFieldCollection const* fc, Weights
 }
 
 } // namespace
-
-// Static class fields initialization
-PluginFieldCollection EmbLayerNormVarSeqlenPluginBaseCreator::mFC{};
-std::vector<PluginField> EmbLayerNormVarSeqlenPluginBaseCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginHFaceCreator);
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginMTronCreator);

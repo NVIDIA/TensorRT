@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION &
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,13 +36,6 @@ constexpr char const* kSKIP_LAYER_NORM_VERSION{"1"};
 constexpr char const* kSKIP_LAYER_NORM_NAME{"CustomSkipLayerNormPluginDynamic"};
 constexpr char const* kSKIP_LAYER_NORM_VAR_SEQLEN_VERSION{"2"};
 } // namespace
-
-// Static class fields initialization
-PluginFieldCollection SkipLayerNormPluginDynamicCreator::mFC{};
-std::vector<PluginField> SkipLayerNormPluginDynamicCreator::mPluginAttributes;
-
-PluginFieldCollection SkipLayerNormVarSeqlenPluginCreator::mFC{};
-std::vector<PluginField> SkipLayerNormVarSeqlenPluginCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormPluginDynamicCreator);
 REGISTER_TENSORRT_PLUGIN(SkipLayerNormVarSeqlenPluginCreator);

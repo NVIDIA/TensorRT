@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.11 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.13 --single-branch
 cd TensorRT
 ```
 
@@ -49,7 +49,7 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.12.0.36
+tensorrt            10.13.0.35
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2
@@ -460,7 +460,3 @@ Custom override paths to pre-built engine files can be provided using `--custom-
 - To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
-
-### Known Issues
-
-The Stable Diffusion XL pipeline is currently not supported on RTX 5090 due to memory constraints. This issue will be resolved in an upcoming release.

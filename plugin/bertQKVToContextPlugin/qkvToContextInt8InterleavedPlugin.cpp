@@ -40,10 +40,6 @@ char const* const kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION{"6"};
 char const* const kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
 } // namespace
 
-// Static class fields initialization
-PluginFieldCollection QKVToContextInterleavedPluginCreator::mFC{};
-std::vector<PluginField> QKVToContextInterleavedPluginCreator::mPluginAttributes;
-
 REGISTER_TENSORRT_PLUGIN(QKVToContextInterleavedPluginCreator);
 
 constexpr uint32_t kIIDX = 0; // index of the input tensor

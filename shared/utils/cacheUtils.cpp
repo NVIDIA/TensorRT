@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "timingCache.h"
+#include "cacheUtils.h"
 #include "NvInfer.h"
 #include "fileLock.h"
 #include <fstream>
@@ -27,7 +27,7 @@
 
 namespace nvinfer1::utils
 {
-std::vector<char> loadTimingCacheFile(ILogger& logger, std::string const& inFileName)
+std::vector<char> loadCacheFile(ILogger& logger, std::string const& inFileName)
 {
     try
     {
@@ -36,8 +36,7 @@ std::vector<char> loadTimingCacheFile(ILogger& logger, std::string const& inFile
         if (!iFile)
         {
             std::stringstream ss;
-            ss << "Could not read timing cache from: " << inFileName
-               << ". A new timing cache will be generated and written.";
+            ss << "Could not read cache from: " << inFileName << ". A new cache will be generated and written.";
             logger.log(ILogger::Severity::kWARNING, ss.str().c_str());
             return std::vector<char>();
         }
@@ -48,13 +47,13 @@ std::vector<char> loadTimingCacheFile(ILogger& logger, std::string const& inFile
         iFile.read(content.data(), fsize);
         iFile.close();
         std::stringstream ss;
-        ss << "Loaded " << fsize << " bytes of timing cache from " << inFileName;
+        ss << "Loaded " << fsize << " bytes of cache from file: " << inFileName;
         logger.log(ILogger::Severity::kINFO, ss.str().c_str());
         return content;
     }
     catch (std::exception const& e)
     {
-        std::cerr << "Exception while loading timing cache file " << inFileName << ": " << e.what() << std::endl;
+        std::cerr << "Exception while loading cache file " << inFileName << ": " << e.what() << std::endl;
     }
     return {};
 }
@@ -63,7 +62,7 @@ std::unique_ptr<ITimingCache> buildTimingCacheFromFile(
     ILogger& logger, IBuilderConfig& config, std::string const& timingCacheFile)
 {
     std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
-    std::vector<char> timingCacheContents = loadTimingCacheFile(logger, timingCacheFile);
+    std::vector<char> timingCacheContents = loadCacheFile(logger, timingCacheFile);
 
     timingCache.reset(config.createTimingCache(timingCacheContents.data(), timingCacheContents.size()));
     if (timingCache == nullptr)
@@ -82,7 +81,7 @@ std::unique_ptr<ITimingCache> buildTimingCacheFromFile(
     return timingCache;
 }
 
-void saveTimingCacheFile(ILogger& logger, std::string const& outFileName, IHostMemory const* blob)
+void saveCacheFile(ILogger& logger, std::string const& outFileName, IHostMemory const* blob)
 {
     try
     {
@@ -91,19 +90,19 @@ void saveTimingCacheFile(ILogger& logger, std::string const& outFileName, IHostM
         if (!oFile)
         {
             std::stringstream ss;
-            ss << "Could not write timing cache to: " << outFileName;
+            ss << "Could not write cache to file: " << outFileName;
             logger.log(ILogger::Severity::kWARNING, ss.str().c_str());
             return;
         }
         oFile.write(reinterpret_cast<char const*>(blob->data()), blob->size());
         oFile.close();
         std::stringstream ss;
-        ss << "Saved " << blob->size() << " bytes of timing cache to " << outFileName;
+        ss << "Saved " << blob->size() << " bytes of cache to file: " << outFileName;
         logger.log(ILogger::Severity::kINFO, ss.str().c_str());
     }
     catch (std::exception const& e)
     {
-        std::cerr << "Exception while saving timing cache file " << outFileName << ": " << e.what() << std::endl;
+        std::cerr << "Exception while saving cache file " << outFileName << ": " << e.what() << std::endl;
     }
 }
 
@@ -113,7 +112,7 @@ void updateTimingCacheFile(nvinfer1::ILogger& logger, std::string const& fileNam
     try
     {
         std::unique_ptr<IBuilderConfig> config{builder.createBuilderConfig()};
-        std::vector<char> timingCacheContents = loadTimingCacheFile(logger, fileName);
+        std::vector<char> timingCacheContents = loadCacheFile(logger, fileName);
         std::unique_ptr<ITimingCache> fileTimingCache{
             config->createTimingCache(timingCacheContents.data(), timingCacheContents.size())};
 

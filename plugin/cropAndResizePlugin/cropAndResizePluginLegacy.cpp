@@ -33,10 +33,6 @@ char const* const kCROP_AND_RESIZE_PLUGIN_NAME{"CropAndResize"};
 char const* const kCROP_AND_RESIZE_DYNAMIC_PLUGIN_NAME{"CropAndResizeDynamic"};
 } // namespace
 
-// Static class fields initialization for Legacy creators
-PluginFieldCollection CropAndResizeBasePluginCreator::mFC{};
-std::vector<PluginField> CropAndResizeBasePluginCreator::mPluginAttributes;
-
 // Legacy Plugin Implementation
 CropAndResizePlugin::CropAndResizePlugin(int32_t cropWidth, int32_t cropHeight)
     : mCropWidth(cropWidth)

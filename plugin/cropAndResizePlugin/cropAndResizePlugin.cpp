@@ -31,12 +31,6 @@ char const* const kCROP_AND_RESIZE_DYNAMIC_PLUGIN_VERSION{"2"};
 char const* const kCROP_AND_RESIZE_DYNAMIC_PLUGIN_NAME{"CropAndResizeDynamic"};
 } // namespace
 
-// Static class fields initialization
-PluginFieldCollection CropAndResizeDynamicPlugin::mFCToSerialize{};
-std::vector<PluginField> CropAndResizeDynamicPlugin::mDataToSerialize{};
-PluginFieldCollection CropAndResizeDynamicPluginCreator::mFC{};
-std::vector<PluginField> CropAndResizeDynamicPluginCreator::mPluginAttributes;
-
 CropAndResizeDynamicPlugin::CropAndResizeDynamicPlugin(int32_t cropWidth, int32_t cropHeight)
     : mCropWidth(cropWidth)
     , mCropHeight(cropHeight)

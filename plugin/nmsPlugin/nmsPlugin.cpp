@@ -28,9 +28,6 @@ char const* const kNMS_PLUGIN_VERSION{"1"};
 char const* const kNMS_PLUGIN_NAMES[] = {"NMS_TRT", "NMSDynamic_TRT"};
 } // namespace
 
-PluginFieldCollection NMSBasePluginCreator::mFC{};
-std::vector<PluginField> NMSBasePluginCreator::mPluginAttributes;
-
 // Constrcutor
 DetectionOutput::DetectionOutput(DetectionOutputParameters params)
     : param(params)

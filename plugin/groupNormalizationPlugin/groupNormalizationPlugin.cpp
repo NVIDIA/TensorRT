@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,9 +33,7 @@ constexpr char const* kGROUP_NORM_VERSION{"1"};
 constexpr char const* kGROUP_NORM_NAME{"GroupNormalizationPlugin"};
 } // namespace
 
-// // Static class fields initialization
-PluginFieldCollection GroupNormalizationPluginCreator::mFC{};
-std::vector<nvinfer1::PluginField> GroupNormalizationPluginCreator::mPluginAttributes;
+// std::vector<nvinfer1::PluginField> GroupNormalizationPluginCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(GroupNormalizationPluginCreator);
 

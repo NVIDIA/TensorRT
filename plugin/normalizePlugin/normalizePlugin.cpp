@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,9 +30,6 @@ namespace
 char const* const kNORMALIZE_PLUGIN_VERSION{"1"};
 char const* const kNORMALIZE_PLUGIN_NAME{"Normalize_TRT"};
 } // namespace
-
-PluginFieldCollection NormalizePluginCreator::mFC{};
-std::vector<PluginField> NormalizePluginCreator::mPluginAttributes;
 
 Normalize::Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpatial, bool channelShared, float eps)
     : acrossSpatial(acrossSpatial)

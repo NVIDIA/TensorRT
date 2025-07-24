@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import gc
 import inspect
 import json
 import os
@@ -48,10 +49,10 @@ from demo_diffusion.model import (
     CLIPModel,
     CLIPWithProjModel,
     SDLoraLoader,
+    UNet2DConditionControlNetModel,
     UNetModel,
     UNetXLModel,
     UNetXLModelControlNet,
-    UNet2DConditionControlNetModel,
     VAEEncoderModel,
     VAEModel,
     get_clip_embedding_dim,
@@ -640,6 +641,10 @@ class StableDiffusionPipeline:
         for model_name, obj in self.models.items():
             if torch_fallback[model_name]:
                 self.torch_models[model_name] = obj.get_model(torch_inference=self.torch_inference)
+
+        # Release temp GPU memory during onnx export to avoid OOM.
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def calculateMaxDeviceMemory(self):
         max_device_memory = 0

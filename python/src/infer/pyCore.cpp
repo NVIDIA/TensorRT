@@ -33,7 +33,7 @@ using namespace nvinfer1;
 namespace lambdas
 {
 // For IOptimizationProfile
-static const auto opt_profile_set_shape
+static auto const opt_profile_set_shape
     = [](IOptimizationProfile& self, std::string const& inputName, Dims const& min, Dims const& opt, Dims const& max) {
           PY_ASSERT_RUNTIME_ERROR(self.setDimensions(inputName.c_str(), OptProfileSelector::kMIN, min),
               "Shape provided for min is inconsistent with other shapes.");
@@ -43,7 +43,7 @@ static const auto opt_profile_set_shape
               "Shape provided for max is inconsistent with other shapes.");
       };
 
-static const auto opt_profile_get_shape
+static auto const opt_profile_get_shape
     = [](IOptimizationProfile& self, std::string const& inputName) -> std::vector<Dims> {
     std::vector<Dims> shapes{};
     Dims minShape = self.getDimensions(inputName.c_str(), OptProfileSelector::kMIN);
@@ -56,7 +56,7 @@ static const auto opt_profile_get_shape
     return shapes;
 };
 
-static const auto opt_profile_set_shape_input = [](IOptimizationProfile& self, std::string const& inputName,
+static auto const opt_profile_set_shape_input = [](IOptimizationProfile& self, std::string const& inputName,
                                                     std::vector<int64_t> const& min, std::vector<int64_t> const& opt,
                                                     std::vector<int64_t> const& max) {
     PY_ASSERT_RUNTIME_ERROR(self.setShapeValuesV2(inputName.c_str(), OptProfileSelector::kMIN, min.data(), min.size()),
@@ -67,7 +67,7 @@ static const auto opt_profile_set_shape_input = [](IOptimizationProfile& self, s
         "max input provided for shape tensor is inconsistent with other inputs.");
 };
 
-static const auto opt_profile_get_shape_input
+static auto const opt_profile_get_shape_input
     = [](IOptimizationProfile& self, std::string const& inputName) -> std::vector<std::vector<int64_t>> {
     std::vector<std::vector<int64_t>> shapes{};
     int32_t const shapeSize = self.getNbShapeValues(inputName.c_str());
@@ -88,7 +88,7 @@ static const auto opt_profile_get_shape_input
 
 // For IExecutionContext
 
-static const auto execute_v2 = [](IExecutionContext& self, std::vector<size_t>& bindings) {
+static auto const execute_v2 = [](IExecutionContext& self, std::vector<size_t>& bindings) {
     return self.executeV2(reinterpret_cast<void**>(bindings.data()));
 };
 
@@ -102,6 +102,7 @@ std::vector<char const*> infer_shapes(IExecutionContext& self)
     {
         std::stringstream msg;
         msg << "infer_shapes error code: " << nbNames;
+        py::gil_scoped_acquire gil{};
         utils::throwPyError(PyExc_RuntimeError, msg.str().c_str());
     }
 
@@ -161,20 +162,22 @@ bool setInputShape(IExecutionContext& self, char const* tensorName, PyIterable& 
 }
 
 // For IRuntime
-static const auto runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffer& serializedEngine) {
+static auto const runtime_deserialize_cuda_engine = [](IRuntime& self, py::buffer& serializedEngine) {
     py::buffer_info info = serializedEngine.request();
+
+    py::gil_scoped_release releaseGil{};
+
     return self.deserializeCudaEngine(info.ptr, info.size * info.itemsize);
 };
 
-static const auto reader_v2_read = [](IStreamReaderV2& self, void* destination, int64_t nbBytes, size_t stream) {
+static auto const reader_v2_read = [](IStreamReaderV2& self, void* destination, int64_t nbBytes, size_t stream) {
     return self.read(destination, nbBytes, reinterpret_cast<cudaStream_t>(stream));
 };
 
 
-
 // For ICudaEngine
 // TODO: Add slicing support?
-static const auto engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
+static auto const engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
     // Support python's negative indexing
     int32_t const index = (pyIndex < 0) ? static_cast<int32_t>(self.getNbIOTensors()) + pyIndex : pyIndex;
     PY_ASSERT_INDEX_ERROR(index < self.getNbIOTensors());
@@ -235,20 +238,23 @@ void* reallocate_output_async(IOutputAllocator& self, char const* tensorName, vo
         tensorName, currentMemory, size, alignment, reinterpret_cast<cudaStream_t>(streamHandle));
 }
 
+#if EXPORT_ALL_BINDINGS
 // For IBuilderConfig
-static const auto netconfig_get_profile_stream
+static auto const netconfig_get_profile_stream
     = [](IBuilderConfig& self) -> size_t { return reinterpret_cast<size_t>(self.getProfileStream()); };
 
-static const auto netconfig_set_profile_stream = [](IBuilderConfig& self, size_t streamHandle) {
+static auto const netconfig_set_profile_stream = [](IBuilderConfig& self, size_t streamHandle) {
     self.setProfileStream(reinterpret_cast<cudaStream_t>(streamHandle));
 };
 
-static const auto netconfig_create_timing_cache = [](IBuilderConfig& self, py::buffer& serializedTimingCache) {
+static auto const netconfig_create_timing_cache = [](IBuilderConfig& self, py::buffer& serializedTimingCache) {
     py::buffer_info info = serializedTimingCache.request();
+
+    py::gil_scoped_release releaseGil{};
     return self.createTimingCache(info.ptr, info.size * info.itemsize);
 };
 
-static const auto get_plugins_to_serialize = [](IBuilderConfig& self) {
+static auto const get_plugins_to_serialize = [](IBuilderConfig& self) {
     std::vector<std::string> paths;
     int64_t const nbPlugins = self.getNbPluginsToSerialize();
     if (nbPlugins < 0)
@@ -264,7 +270,7 @@ static const auto get_plugins_to_serialize = [](IBuilderConfig& self) {
     return paths;
 };
 
-static const auto set_plugins_to_serialize = [](IBuilderConfig& self, std::vector<std::string> const& paths) {
+static auto const set_plugins_to_serialize = [](IBuilderConfig& self, std::vector<std::string> const& paths) {
     std::vector<char const*> cStrings;
     cStrings.reserve(paths.size());
     for (auto const& path : paths)
@@ -274,8 +280,15 @@ static const auto set_plugins_to_serialize = [](IBuilderConfig& self, std::vecto
     self.setPluginsToSerialize(reinterpret_cast<char const* const*>(cStrings.data()), cStrings.size());
 };
 
+static auto const get_remote_auto_tuning_config
+    = [](IBuilderConfig& self) { return std::string{self.getRemoteAutoTuningConfig()}; };
+
+static auto const set_remote_auto_tuning_config
+    = [](IBuilderConfig& self, std::string const& config) { self.setRemoteAutoTuningConfig(config.c_str()); };
+#endif // EXPORT_ALL_BINDINGS
+
 // For IRefitter
-static const auto refitter_get_missing = [](IRefitter& self) {
+static auto const refitter_get_missing = [](IRefitter& self) {
     // First get the number of missing weights.
     int32_t const size{self.getMissing(0, nullptr, nullptr)};
     // Now that we know how many weights are missing, we can create the buffers appropriately.
@@ -285,7 +298,7 @@ static const auto refitter_get_missing = [](IRefitter& self) {
     return std::pair<std::vector<const char*>, std::vector<WeightsRole>>{layerNames, roles};
 };
 
-static const auto refitter_get_missing_weights = [](IRefitter& self) {
+static auto const refitter_get_missing_weights = [](IRefitter& self) {
     // First get the number of missing weights.
     int32_t const size{self.getMissingWeights(0, nullptr)};
     // Now that we know how many weights are missing, we can create the buffers appropriately.
@@ -294,7 +307,7 @@ static const auto refitter_get_missing_weights = [](IRefitter& self) {
     return names;
 };
 
-static const auto refitter_get_all = [](IRefitter& self) {
+static auto const refitter_get_all = [](IRefitter& self) {
     int32_t const size{self.getAll(0, nullptr, nullptr)};
     std::vector<char const*> layerNames(size);
     std::vector<WeightsRole> roles(size);
@@ -302,35 +315,35 @@ static const auto refitter_get_all = [](IRefitter& self) {
     return std::pair<std::vector<const char*>, std::vector<WeightsRole>>{layerNames, roles};
 };
 
-static const auto refitter_get_all_weights = [](IRefitter& self) {
+static auto const refitter_get_all_weights = [](IRefitter& self) {
     int32_t const size{self.getAllWeights(0, nullptr)};
     std::vector<char const*> names(size);
     self.getAllWeights(size, names.data());
     return names;
 };
 
-static const auto refitter_get_dynamic_range = [](IRefitter& self, std::string const& tensorName) {
+static auto const refitter_get_dynamic_range = [](IRefitter& self, std::string const& tensorName) {
     return py::make_tuple(self.getDynamicRangeMin(tensorName.c_str()), self.getDynamicRangeMax(tensorName.c_str()));
 };
 
-static const auto refitter_set_dynamic_range
+static auto const refitter_set_dynamic_range
     = [](IRefitter& self, std::string const& tensorName, std::vector<float> const& range) -> bool {
     PY_ASSERT_VALUE_ERROR(range.size() == 2, "Dynamic range must contain exactly 2 elements");
     return self.setDynamicRange(tensorName.c_str(), range[0], range[1]);
 };
 
-static const auto refitter_get_tensors_with_dynamic_range = [](IRefitter& self) {
+static auto const refitter_get_tensors_with_dynamic_range = [](IRefitter& self) {
     int32_t const size = self.getTensorsWithDynamicRange(0, nullptr);
     std::vector<char const*> tensorNames(size);
     self.getTensorsWithDynamicRange(size, tensorNames.data());
     return tensorNames;
 };
 
-static const auto refitter_refit_cuda_engine_async = [](IRefitter& self, size_t streamHandle) {
+static auto const refitter_refit_cuda_engine_async = [](IRefitter& self, size_t streamHandle) {
     return self.refitCudaEngineAsync(reinterpret_cast<cudaStream_t>(streamHandle));
 };
 
-static const auto context_set_optimization_profile_async
+static auto const context_set_optimization_profile_async
     = [](IExecutionContext& self, int32_t const profileIndex, size_t streamHandle) {
           PY_ASSERT_RUNTIME_ERROR(
               self.setOptimizationProfileAsync(profileIndex, reinterpret_cast<cudaStream_t>(streamHandle)),
@@ -453,7 +466,7 @@ std::vector<TimingCacheKey> queryTimingCacheKeys(ITimingCache const& cache)
 namespace PyGpuAllocatorHelper
 {
 template <typename TAllocator, typename... Args>
-void* allocHelper(TAllocator* allocator, const char* pyFuncName, bool showWarning, Args&&... args) noexcept
+void* allocHelper(TAllocator* allocator, char const* pyFuncName, bool showWarning, Args&&... args) noexcept
 {
     try
     {
@@ -470,7 +483,7 @@ void* allocHelper(TAllocator* allocator, const char* pyFuncName, bool showWarnin
         {
             return reinterpret_cast<void*>(ptr.cast<size_t>());
         }
-        catch (const py::cast_error& e)
+        catch (py::cast_error const& e)
         {
             std::cerr << "[ERROR] Return value of allocate() could not be interpreted as an int" << std::endl;
         }
@@ -606,7 +619,7 @@ public:
             {
                 return reinterpret_cast<void*>(ptr.cast<size_t>());
             }
-            catch (const py::cast_error& e)
+            catch (py::cast_error const& e)
             {
                 std::cerr << "[ERROR] Return value of reallocateOutput() could not be interpreted as an int"
                           << std::endl;
@@ -648,7 +661,7 @@ public:
             {
                 return reinterpret_cast<void*>(ptr.cast<size_t>());
             }
-            catch (const py::cast_error& e)
+            catch (py::cast_error const& e)
             {
                 std::cerr << "[ERROR] Return value of reallocateOutputAsync() could not be interpreted as an int"
                           << std::endl;
@@ -722,7 +735,7 @@ public:
 class PyStreamReaderV2 : public IStreamReaderV2
 {
     using TFnPointerGetAttribute = CUresult (*)(void*, CUpointer_attribute, CUdeviceptr);
-    using TFnMemcpyHtoD = CUresult (*)(CUdeviceptr, const void*, size_t);
+    using TFnMemcpyHtoD = CUresult (*)(CUdeviceptr, void const*, size_t);
 
 public:
     PyStreamReaderV2()
@@ -858,6 +871,45 @@ private:
     TFnMemcpyHtoD mFnMemcpyHtoD{};
 };
 
+class PyStreamWriter : public IStreamWriter
+{
+public:
+    int64_t write(void const* data, int64_t size) noexcept override
+    {
+        try
+        {
+            py::gil_scoped_acquire gil{};
+            py::function pyFunc = utils::getOverride(static_cast<IStreamWriter*>(this), "write");
+
+            if (!pyFunc)
+            {
+                return 0;
+            }
+
+            auto const pyBytes = py::bytes(static_cast<char const*>(data), size);
+            py::object bytesWritten = pyFunc(pyBytes);
+
+            if (!py::isinstance<py::int_>(bytesWritten))
+            {
+                std::cerr << "[ERROR] StreamWriter shall returns the written bytes count in integer." << std::endl;
+                return 0;
+            }
+
+            return bytesWritten.cast<int64_t>();
+        }
+        catch (std::exception const& e)
+        {
+            std::cerr << "[ERROR] Exception caught in write(): " << e.what() << std::endl;
+        }
+        catch (...)
+        {
+            std::cerr << "[ERROR] Exception caught in write()" << std::endl;
+        }
+
+        return 0;
+    }
+};
+
 class PyDebugListener : public IDebugListener
 {
 public:
@@ -893,7 +945,7 @@ void bindCore(py::module& m)
     class PyLogger : public ILogger
     {
     public:
-        virtual void log(Severity severity, const char* msg) noexcept override
+        virtual void log(Severity severity, char const* msg) noexcept override
         {
             try
             {
@@ -933,7 +985,7 @@ void bindCore(py::module& m)
         {
         }
 
-        virtual void log(Severity severity, const char* msg) noexcept override
+        virtual void log(Severity severity, char const* msg) noexcept override
         {
             //  INFO is the largest value, so this comparison is inverted.
             if (severity > mMinSeverity)
@@ -992,7 +1044,7 @@ void bindCore(py::module& m)
     class PyProfiler : public IProfiler
     {
     public:
-        void reportLayerTime(const char* layerName, float ms) noexcept override
+        void reportLayerTime(char const* layerName, float ms) noexcept override
         {
             try
             {
@@ -1016,7 +1068,7 @@ void bindCore(py::module& m)
     class DefaultProfiler : public IProfiler
     {
     public:
-        void reportLayerTime(const char* layerName, float ms) noexcept override
+        void reportLayerTime(char const* layerName, float ms) noexcept override
         {
             std::cout << layerName << ": " << ms << "ms" << std::endl;
         }
@@ -1307,8 +1359,7 @@ void bindCore(py::module& m)
         .def_property_readonly("all_binding_shapes_specified", &IExecutionContext::allInputDimensionsSpecified)
         .def_property_readonly("all_shape_inputs_specified", &IExecutionContext::allInputShapesSpecified)
         .def("set_optimization_profile_async", lambdas::context_set_optimization_profile_async, "profile_index"_a,
-            "stream_handle"_a, IExecutionContextDoc::set_optimization_profile_async,
-            py::call_guard<py::gil_scoped_release>{})
+            "stream_handle"_a, IExecutionContextDoc::set_optimization_profile_async)
         .def_property("error_recorder", &IExecutionContext::getErrorRecorder,
             py::cpp_function(&IExecutionContext::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property("enqueue_emits_profile", &IExecutionContext::getEnqueueEmitsProfile,
@@ -1384,6 +1435,7 @@ void bindCore(py::module& m)
         .value("NONE", TensorIOMode::kNONE, TensorIOModeDoc::NONE)
         .value("INPUT", TensorIOMode::kINPUT, TensorIOModeDoc::INPUT)
         .value("OUTPUT", TensorIOMode::kOUTPUT, TensorIOModeDoc::OUTPUT);
+
     py::class_<IRuntimeConfig>(m, "IRuntimeConfig", IRuntimeConfigDoc::descr, py::module_local())
         .def("set_execution_context_allocation_strategy", &IRuntimeConfig::setExecutionContextAllocationStrategy,
             IRuntimeConfigDoc::set_execution_context_allocation_strategy,
@@ -1392,13 +1444,7 @@ void bindCore(py::module& m)
         .def("get_execution_context_allocation_strategy", &IRuntimeConfig::getExecutionContextAllocationStrategy,
             IRuntimeConfigDoc::get_execution_context_allocation_strategy, py::keep_alive<0, 1>{},
             py::call_guard<py::gil_scoped_release>{})
-        .def("set_execution_context_allocation_strategy", &IRuntimeConfig::setExecutionContextAllocationStrategy,
-            IRuntimeConfigDoc::set_execution_context_allocation_strategy,
-            py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC, py::keep_alive<0, 1>{},
-            py::call_guard<py::gil_scoped_release>{})
-        .def("get_execution_context_allocation_strategy", &IRuntimeConfig::getExecutionContextAllocationStrategy,
-            IRuntimeConfigDoc::get_execution_context_allocation_strategy, py::keep_alive<0, 1>{},
-            py::call_guard<py::gil_scoped_release>{});
+        ;
 
 
     py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr, py::module_local())
@@ -1445,68 +1491,60 @@ void bindCore(py::module& m)
 
         .def(
             "get_tensor_bytes_per_component",
-            [](ICudaEngine& self, std::string const& name) -> int32_t {
-                return self.getTensorBytesPerComponent(name.c_str());
-            },
+            [](ICudaEngine& self, std::string const& name) -> int32_t
+            { return self.getTensorBytesPerComponent(name.c_str()); },
             "name"_a, ICudaEngineDoc::get_tensor_bytes_per_component)
         .def(
             "get_tensor_bytes_per_component",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
-                return self.getTensorBytesPerComponent(name.c_str(), profileIndex);
-            },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t
+            { return self.getTensorBytesPerComponent(name.c_str(), profileIndex); },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_bytes_per_component)
 
         .def(
             "get_tensor_components_per_element",
-            [](ICudaEngine& self, std::string const& name) -> int32_t {
-                return self.getTensorComponentsPerElement(name.c_str());
-            },
+            [](ICudaEngine& self, std::string const& name) -> int32_t
+            { return self.getTensorComponentsPerElement(name.c_str()); },
             "name"_a, ICudaEngineDoc::get_tensor_components_per_element)
         .def(
             "get_tensor_components_per_element",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
-                return self.getTensorComponentsPerElement(name.c_str(), profileIndex);
-            },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t
+            { return self.getTensorComponentsPerElement(name.c_str(), profileIndex); },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_components_per_element)
 
         .def(
             "get_tensor_format",
-            [](ICudaEngine& self, std::string const& name) -> TensorFormat {
-                return self.getTensorFormat(name.c_str());
-            },
+            [](ICudaEngine& self, std::string const& name) -> TensorFormat
+            { return self.getTensorFormat(name.c_str()); },
             "name"_a, ICudaEngineDoc::get_tensor_format)
 
         .def(
             "get_tensor_format",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> TensorFormat {
-                return self.getTensorFormat(name.c_str(), profileIndex);
-            },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> TensorFormat
+            { return self.getTensorFormat(name.c_str(), profileIndex); },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_format)
 
         .def(
             "get_tensor_format_desc",
-            [](ICudaEngine& self, std::string const& name) -> const char* {
+            [](ICudaEngine& self, std::string const& name) -> char const* {
                 return self.getTensorFormatDesc(name.c_str());
             },
             "name"_a, ICudaEngineDoc::get_tensor_format_desc)
         .def(
             "get_tensor_format_desc",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> const char* {
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> char const* {
                 return self.getTensorFormatDesc(name.c_str(), profileIndex);
             },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_format_desc)
 
         .def(
             "get_tensor_vectorized_dim",
-            [](ICudaEngine& self, std::string const& name) -> int32_t {
-                return self.getTensorVectorizedDim(name.c_str());
-            },
+            [](ICudaEngine& self, std::string const& name) -> int32_t
+            { return self.getTensorVectorizedDim(name.c_str()); },
             "name"_a, ICudaEngineDoc::get_tensor_vectorized_dim)
         .def(
             "get_tensor_vectorized_dim",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
-                return self.getTensorVectorizedDim(name.c_str(), profileIndex);
-            },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t
+            { return self.getTensorVectorizedDim(name.c_str(), profileIndex); },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_vectorized_dim)
 
         .def("get_tensor_profile_shape", lambdas::get_tensor_profile_shape, "name"_a, "profile_index"_a,
@@ -1600,6 +1638,10 @@ void bindCore(py::module& m)
         .def(py::init<>())
         .def("read", lambdas::reader_v2_read, "destination"_a, "num_bytes"_a, "stream"_a, StreamReaderV2Doc::seek)
         .def("seek", &IStreamReaderV2::seek, "offset"_a, "where"_a, StreamReaderV2Doc::read);
+
+    py::class_<IStreamWriter, PyStreamWriter>(m, "IStreamWriter", StreamWriterDoc::descr, py::module_local())
+        .def(py::init<>())
+        .def("write", &IStreamWriter::write, "data"_a, "size"_a, StreamWriterDoc::write);
 
     py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr, py::module_local())
         .value("FP16", BuilderFlag::kFP16, BuilderFlagDoc::FP16)
@@ -1743,7 +1785,7 @@ void bindCore(py::module& m)
             py::cpp_function(utils::deprecateMember(&IBuilderConfig::setInt8Calibrator,
                                  "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
                 py::keep_alive<1, 2>{}))
-         .def_property(
+        .def_property(
             "quantization_flags", &IBuilderConfig::getQuantizationFlags, &IBuilderConfig::setQuantizationFlags)
         .def("clear_quantization_flag", &IBuilderConfig::clearQuantizationFlag, "flag"_a,
             IBuilderConfigDoc::clear_quantization_flag)
@@ -1778,7 +1820,7 @@ void bindCore(py::module& m)
             IBuilderConfigDoc::set_tactic_sources)
         .def("get_tactic_sources", &IBuilderConfig::getTacticSources, IBuilderConfigDoc::get_tactic_sources)
         .def("create_timing_cache", lambdas::netconfig_create_timing_cache, "serialized_timing_cache"_a,
-            IBuilderConfigDoc::create_timing_cache, py::call_guard<py::gil_scoped_release>{})
+            IBuilderConfigDoc::create_timing_cache)
         .def("set_timing_cache", &IBuilderConfig::setTimingCache, "cache"_a, "ignore_mismatch"_a,
             IBuilderConfigDoc::set_timing_cache, py::keep_alive<1, 2>{})
         .def("get_timing_cache", &IBuilderConfig::getTimingCache, IBuilderConfigDoc::get_timing_cache)
@@ -1799,6 +1841,9 @@ void bindCore(py::module& m)
         .def_property("tiling_optimization_level", &IBuilderConfig::getTilingOptimizationLevel,
             &IBuilderConfig::setTilingOptimizationLevel)
         .def_property("l2_limit_for_tiling", &IBuilderConfig::getL2LimitForTiling, &IBuilderConfig::setL2LimitForTiling)
+
+        .def_property(
+            "remote_auto_tuning_config", lambdas::get_remote_auto_tuning_config, lambdas::set_remote_auto_tuning_config)
 
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
@@ -1834,8 +1879,28 @@ void bindCore(py::module& m)
             py::cpp_function(&IBuilder::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def("create_builder_config", &IBuilder::createBuilderConfig, BuilderDoc::create_builder_config,
             py::keep_alive<0, 1>{})
-        .def("build_serialized_network", &IBuilder::buildSerializedNetwork, "network"_a, "config"_a,
-            BuilderDoc::build_serialized_network, py::call_guard<py::gil_scoped_release>{})
+        .def("build_serialized_network",
+            static_cast<nvinfer1::IHostMemory* (IBuilder::*) (INetworkDefinition&, IBuilderConfig&) noexcept>(
+                &IBuilder::buildSerializedNetwork),
+            "network"_a, "config"_a, BuilderDoc::build_serialized_network, py::call_guard<py::gil_scoped_release>{})
+        .def(
+            "build_serialized_network",
+            [](IBuilder& self, INetworkDefinition& network, IBuilderConfig& config, py::object& kernel_text_obj) {
+                IHostMemory* kernel_text = nullptr;
+                auto result = self.buildSerializedNetwork(network, config, kernel_text);
+                {
+                    py::gil_scoped_acquire gil{};
+                    if (kernel_text)
+                    {
+                        kernel_text_obj = py::cast(kernel_text);
+                    }
+                }
+                return result;
+            },
+            "network"_a, "config"_a, "kernel_text"_a, BuilderDoc::build_serialized_network,
+            py::call_guard<py::gil_scoped_release>{})
+        .def("build_serialized_network_to_stream", &IBuilder::buildSerializedNetworkToStream, "network"_a, "config"_a,
+            "writer"_a, BuilderDoc::build_serialized_network_to_stream, py::call_guard<py::gil_scoped_release>{})
         .def("build_engine_with_config", &IBuilder::buildEngineWithConfig, "network"_a, "config"_a,
             BuilderDoc::build_engine_with_config, py::call_guard<py::gil_scoped_release>{})
         .def("is_network_supported", &IBuilder::isNetworkSupported, "network"_a, "config"_a,
@@ -1855,7 +1920,7 @@ void bindCore(py::module& m)
         .def(py::init([](ILogger& logger) { return nvinfer1::createInferRuntime(logger); }), "logger"_a,
             RuntimeDoc::init, py::keep_alive<1, 2>{})
         .def("deserialize_cuda_engine", lambdas::runtime_deserialize_cuda_engine, "serialized_engine"_a,
-            RuntimeDoc::deserialize_cuda_engine, py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
+            RuntimeDoc::deserialize_cuda_engine, py::keep_alive<0, 1>{})
         .def("deserialize_cuda_engine", py::overload_cast<IStreamReader&>(&IRuntime::deserializeCudaEngine),
             "stream_reader"_a, RuntimeDoc::deserialize_cuda_engine_reader, py::call_guard<py::gil_scoped_release>{},
             py::keep_alive<0, 1>{})

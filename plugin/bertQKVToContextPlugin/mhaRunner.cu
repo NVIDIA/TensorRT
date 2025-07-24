@@ -28,6 +28,7 @@
 
 #include "bertQKVToContextPlugin/fused_multihead_attention_v2/fused_multihead_attention_v2.h"
 #include "mhaRunner.h"
+#include "common/cubCcclCompat.h"
 using namespace nvinfer1;
 using namespace nvinfer1::pluginInternal;
 
@@ -85,7 +86,7 @@ __global__ void maskedSoftmax(const float rsqrtHeadSize, const T* input, T* outp
 #pragma unroll
     for (int it = 0; it < VPT; it++)
     {
-        float maxElem = BlockReduce(tmp.reduce).Reduce(local[it], cub::Max());
+        float maxElem = BlockReduce(tmp.reduce).Reduce(local[it], compat::getCudaMaxOp());
         if (threadIdx.x == 0)
         {
             fMax[it] = maxElem;
@@ -103,7 +104,7 @@ __global__ void maskedSoftmax(const float rsqrtHeadSize, const T* input, T* outp
 #pragma unroll
     for (int it = 0; it < VPT; it++)
     {
-        const auto Z = BlockReduce(tmp.reduce).Reduce(local[it], cub::Sum());
+        const auto Z = BlockReduce(tmp.reduce).Reduce(local[it], compat::getCudaSumOp());
 
         if (threadIdx.x == 0)
         {
@@ -156,7 +157,7 @@ __global__ void softmax(const float rsqrtHeadSize, const T* input, T* output)
 #pragma unroll
     for (int it = 0; it < VPT; it++)
     {
-        float maxElem = BlockReduce(tmp.reduce).Reduce(local[it], cub::Max());
+        float maxElem = BlockReduce(tmp.reduce).Reduce(local[it], compat::getCudaMaxOp());
         if (threadIdx.x == 0)
         {
             fMax[it] = maxElem;
@@ -174,8 +175,7 @@ __global__ void softmax(const float rsqrtHeadSize, const T* input, T* output)
 #pragma unroll
     for (int it = 0; it < VPT; it++)
     {
-
-        const auto Z = BlockReduce(tmp.reduce).Reduce(local[it], cub::Sum());
+        const auto Z = BlockReduce(tmp.reduce).Reduce(local[it], compat::getCudaSumOp());
 
         if (threadIdx.x == 0)
         {

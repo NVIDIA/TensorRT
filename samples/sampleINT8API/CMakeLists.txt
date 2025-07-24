@@ -21,7 +21,7 @@ add_executable(sample_int8_api sampleINT8API.cpp)
 target_link_libraries(sample_int8_api PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_int8_api)
 
-install(
+installLibraries(
     TARGETS sample_int8_api
     OPTIONAL
     COMPONENT full

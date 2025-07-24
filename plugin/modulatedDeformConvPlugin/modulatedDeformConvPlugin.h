@@ -111,8 +111,8 @@ private:
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
 
-    static nvinfer1::PluginFieldCollection mFCToSerialize;
-    static std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
 };
 
 class ModulatedDeformableConvPluginDynamicCreator final : public nvinfer1::IPluginCreatorV3One
@@ -132,8 +132,8 @@ public:
     char const* getPluginNamespace() const noexcept override;
 
 private:
-    static nvinfer1::PluginFieldCollection mFC;
-    static std::vector<nvinfer1::PluginField> mPluginAttributes;
+    nvinfer1::PluginFieldCollection mFC;
+    std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
 

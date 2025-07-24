@@ -21,7 +21,7 @@
 #include "NvInferPlugin.h"
 #include "logger.h"
 #include "sampleEntrypoints.h"
-#include "utils/timingCache.h"
+#include "utils/cacheUtils.h"
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -206,9 +206,9 @@ private:
 
 namespace samplesCommon
 {
-using nvinfer1::utils::loadTimingCacheFile;
+using nvinfer1::utils::loadCacheFile;
 using nvinfer1::utils::buildTimingCacheFromFile;
-using nvinfer1::utils::saveTimingCacheFile;
+using nvinfer1::utils::saveCacheFile;
 using nvinfer1::utils::updateTimingCacheFile;
 
 template <typename T>
@@ -1081,14 +1081,29 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
 
 [[nodiscard]] inline std::string genFilenameSafeString(std::string_view s)
 {
-    static constexpr std::string_view kALLOWED{"._-,"};
-    std::string res;
-    res.reserve(s.size()); // avoid repeated reallocations
+    constexpr std::string_view kALLOWED{"._-,"};
+    constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
+    constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
 
-    for (char c : s)
+    auto processChar = [&kALLOWED](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_';
+    };
+
+    std::string res;
+    if (s.length() <= kMAX_FILENAME_LENGTH)
     {
-        res += (std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos) ? c : '_';
+        res.reserve(s.size());
+        std::transform(s.begin(), s.end(), std::back_inserter(res), processChar);
+        return res;
     }
+
+    res.reserve(kMAX_FILENAME_LENGTH);
+    size_t const halfLength = (kMAX_FILENAME_LENGTH - kELLIPSIS_LENGTH) / 2;
+
+    std::transform(s.begin(), s.begin() + halfLength, std::back_inserter(res), processChar);
+    res += "...";
+    std::transform(s.end() - halfLength, s.end(), std::back_inserter(res), processChar);
+
     return res;
 }
 

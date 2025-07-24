@@ -213,8 +213,8 @@ public:
     PluginFieldCollection const* getFieldNames() noexcept override;
 
 protected:
-    static PluginFieldCollection mFC;
-    static std::vector<PluginField> mPluginAttributes;
+    PluginFieldCollection mFC;
+    std::vector<PluginField> mPluginAttributes;
     std::string mPluginName;
     std::string mPluginVersion;
 };

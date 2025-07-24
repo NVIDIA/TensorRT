@@ -134,8 +134,8 @@ public:
     char const* getPluginNamespace() const noexcept override;
 
 private:
-    static nvinfer1::PluginFieldCollection mFC;
-    static std::vector<nvinfer1::PluginField> mPluginAttributes;
+    nvinfer1::PluginFieldCollection mFC;
+    std::vector<nvinfer1::PluginField> mPluginAttributes;
     std::string mNamespace;
 };
 } // namespace plugin

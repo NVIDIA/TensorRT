@@ -1543,7 +1543,7 @@ protected:
     }
 
 public:
-    APILanguage getAPILanguage() const noexcept
+    APILanguage getAPILanguage() const noexcept final
     {
         return APILanguage::kPYTHON;
     }
@@ -2427,8 +2427,6 @@ private:
     std::string mPluginVersion;
     PluginFieldCollection mFC;
 
-    bool mIsNbOutputsInitialized{false};
-    bool mIsNamespaceInitialized{false};
     bool mIsPluginTypeInitialized{false};
     bool mIsPluginVersionInitialized{false};
 };
@@ -3173,13 +3171,13 @@ static const auto IPluginV3_get_timing_cache_id = [](IPluginV3OneBuild& self, st
 static const auto dimsexprs_vector_constructor = [](std::vector<IDimensionExpr const*> const& in) {
     // This is required, because otherwise MAX_DIMS will not be resolved at compile time.
     int32_t const maxDims{static_cast<int32_t>(Dims::MAX_DIMS)};
-    PY_ASSERT_VALUE_ERROR(in.size() <= maxDims,
+    PY_ASSERT_VALUE_ERROR(in.size() <= static_cast<size_t>(maxDims),
         "Input length " + std::to_string(in.size()) + ". Max expected length is " + std::to_string(maxDims));
 
     // Create the Dims object.
     DimsExprs* self = new DimsExprs{};
     self->nbDims = in.size();
-    for (int32_t i = 0; i < in.size(); ++i)
+    for (int32_t i = 0; static_cast<size_t>(i) < in.size(); ++i)
         self->d[i] = in[i];
     return self;
 };

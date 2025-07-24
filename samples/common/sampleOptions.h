@@ -29,6 +29,10 @@
 
 #include "NvInfer.h"
 
+#if ENABLE_UNIFIED_BUILDER
+#include "safeCommon.h"
+#endif
+
 namespace sample
 {
 
@@ -107,6 +111,9 @@ enum class RuntimeMode
 
     //! Maps to libnvinfer_lean.so or nvinfer_lean.dll
     kLEAN,
+
+    //! Maps to libnvinfer_safe.so or nvinfer_safe.dll
+    kSAFE,
 };
 
 inline std::ostream& operator<<(std::ostream& os, RuntimeMode const mode)
@@ -126,6 +133,11 @@ inline std::ostream& operator<<(std::ostream& os, RuntimeMode const mode)
     case RuntimeMode::kLEAN:
     {
         os << "lean";
+        break;
+    }
+    case RuntimeMode::kSAFE:
+    {
+        os << "safe";
         break;
     }
     }
@@ -227,6 +239,8 @@ public:
     bool markUnfusedTensorsAsDebugTensors{false};
     StringSet debugTensorStates;
     bool safe{false};
+    bool consistency{false};
+    bool dumpKernelText{false};
     bool buildDLAStandalone{false};
     bool allowGPUFallback{false};
     bool restricted{false};
@@ -275,6 +289,7 @@ public:
     int32_t tilingOptimizationLevel{defaultTilingOptimizationLevel};
     int64_t l2LimitForTiling{-1};
     bool distributiveIndependence{false};
+    std::string remoteAutoTuningConfig{};
 
     void parse(Arguments& arguments) override;
 
@@ -290,6 +305,9 @@ public:
     std::vector<std::string> plugins;
     std::vector<std::string> setPluginsToSerialize;
     std::vector<std::string> dynamicPlugins;
+#if ENABLE_UNIFIED_BUILDER
+    std::vector<samplesSafeCommon::SafetyPluginLibraryArgument> safetyPlugins;
+#endif
 
     void parse(Arguments& arguments) override;
 
@@ -368,6 +386,7 @@ public:
     bool int4{false};
     std::string calibFile{};
     std::vector<std::string> plugins;
+    bool consistency{false};
     bool standard{false};
     TimingCacheMode timingCacheMode{TimingCacheMode::kLOCAL};
     std::string timingCacheFile{};

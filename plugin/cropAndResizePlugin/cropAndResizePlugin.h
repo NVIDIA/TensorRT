@@ -105,9 +105,8 @@ private:
     int32_t mNumBoxes;
     std::string mNamespace;
 
-    // Static members for serialization
-    static PluginFieldCollection mFCToSerialize;
-    static std::vector<PluginField> mDataToSerialize;
+    PluginFieldCollection mFCToSerialize;
+    std::vector<PluginField> mDataToSerialize;
 };
 
 //!
@@ -128,8 +127,8 @@ public:
     IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override;
 
 private:
-    static PluginFieldCollection mFC;
-    static std::vector<PluginField> mPluginAttributes;
+    PluginFieldCollection mFC;
+    std::vector<PluginField> mPluginAttributes;
     std::string mNamespace;
 };
 

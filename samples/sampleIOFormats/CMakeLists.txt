@@ -20,7 +20,7 @@ add_executable(sample_io_formats sampleIOFormats.cpp)
 target_link_libraries(sample_io_formats PRIVATE trt_samples_common)
 add_dependencies(tensorrt_samples sample_io_formats)
 
-install(
+installLibraries(
     TARGETS sample_io_formats
     OPTIONAL
     COMPONENT full

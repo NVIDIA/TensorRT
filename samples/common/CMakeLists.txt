@@ -10,6 +10,9 @@
 
 add_library(trt_samples_common STATIC)
 
+
+set(SAFE_EXECUTOR_INCLUDE_PATH "${TRT_BUILD_CONAN_DEP_PATH}/myelin_include/lwe")
+
 target_sources(trt_samples_common PRIVATE
     argsParser.h
     BatchStream.h
@@ -67,10 +70,10 @@ endif()
 
 target_link_libraries(trt_samples_common PUBLIC
     trt_global_definitions
-    TRT::cudart
     trt_shared
     dl
 )
+
 
 if(NOT MSVC)
     target_link_libraries(trt_samples_common PUBLIC
@@ -80,6 +83,7 @@ endif()
 
 target_include_directories(trt_samples_common PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
+    ${SAFE_EXECUTOR_INCLUDE_PATH}
 )
 
 if(${TRT_BUILD_ENABLE_DLA})

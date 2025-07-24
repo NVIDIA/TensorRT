@@ -479,7 +479,7 @@ public:
     //! this respect. For example, the inputs to IElementWiseLayer must be shape tensors
     //! if the output is a shape tensor.
     //!
-    //! The TensorRT Developer Guide give the formal rules for what tensors are shape tensors.
+    //! The TensorRT Developer Guide gives the formal rules for what tensors are shape tensors.
     //!
     //! The result of isShapeTensor() is reliable only when network construction is complete.
     //! For example, if a partially built network sums two tensors T1 and T2 to create
@@ -503,7 +503,7 @@ public:
     //! \brief Whether the tensor is an execution tensor.
     //!
     //! Tensors are usually execution tensors.  The exceptions are tensors used
-    //! solely for shape calculations or whose contents not needed to compute the outputs.
+    //! solely for shape calculations or whose contents are not needed to compute the outputs.
     //!
     //! The result of isExecutionTensor() is reliable only when network construction is complete.
     //! For example, if a partially built network has no path from a tensor to a network output,
@@ -2316,7 +2316,7 @@ public:
     //!
     //! \brief Set the multi-dimension kernel size of the deconvolution.
     //!
-    //! If executing this layer on DLA, there are ttwo restrictions:
+    //! If executing this layer on DLA, there are two restrictions:
     //! 1) Only 2D Kernel is supported.
     //! 2) Kernel height and width must be in the range [1,32] or the combinations of [64, 96, 128] in one
     //! dimension and 1 in the other dimensions, i.e. [1x64] or [64x1] are valid, but not [64x64].
@@ -2587,7 +2587,7 @@ constexpr inline int32_t EnumMax<GatherMode>() noexcept
 //!     GatherMode::kND:
 //!         If indices.d[q-1] = r - nbElementwiseDims
 //!             output.d = [indices.d[0], ... , indices.d[q-2]]
-//!         Else if indices.d[q-1] < r - nbElementWiseDims
+//!         Else if indices.d[q-1] < r - nbElementwiseDims
 //!             output.d = [indices.d[0], ... , indices.d[q-1], data.d[nbElementwiseDims + indices.d[q-1] + q],
 //!             data.d[r-1]]
 //!         Else
@@ -5398,23 +5398,23 @@ protected:
 //! output data type. \p zeroPt must only contain zero-valued coefficients, because only symmetric quantization is
 //! supported.
 //! The \p scale value must be a scalar for per-tensor quantization, a 1D tensor for per-channel quantization, or the
-//! same rank as the input tensor for block quantization (supported for DataType::kINT4 only). All \p scale
-//! coefficients must have positive values. The size of the 1D \p scale tensor must match the size of the quantization
-//! axis. For block quantization, the shape of \p scale tensor must match the shape of the input, except for one
-//! dimension (the last or second to last dimension) in which blocking occurs.
-//! The size of \p zeroPt must match the size of \p scale.
+//! same rank as the input tensor for block quantization. All \p scale coefficients must have strictly positive values.
+//! The size of the 1D \p scale tensor must match the size of the quantization axis. For block quantization, the shape
+//! of \p scale tensor must match the shape of the input, except for the blocking dimension (the last or second to last
+//! dimension). The size of \p zeroPt must match the size of \p scale.
 //!
-//! The subgraph which terminates with the \p scale tensor must be a build-time constant. The same restrictions apply
-//! to the \p zeroPt.
-//! The output type, if constrained, must be constrained to DataType::kINT8, DataType::kFP8 or DataType::kINT4. The
-//! input type, if constrained, must be constrained to DataType::kFLOAT, DataType::kHALF, or DataType::kBF16. The
-//! output size is the same as the input size. The quantization axis is in reference to the input tensor's dimensions.
+//! The subgraph which terminates with the \p zeroPt tensor must be a build-time constant containing only zeros.
+//! The output type, if constrained, must be constrained to DataType::kINT8, DataType::kFP8, DataType::kINT4 or
+//! DataType::kFP4. The input type, if constrained, must be constrained to DataType::kFLOAT, DataType::kHALF, or
+//! DataType::kBF16. The output size is the same as the input size. The quantization axis is in reference to the input
+//! tensor's dimensions.
 //!
 //! IQuantizeLayer supports DataType::kFLOAT, DataType::kHALF, or DataType::kBF16 precision and will default to
-//! DataType::kFLOAT precision during instantiation. For strongly typed networks, \p input data type must match the
-//! \p scale data type, with the exception of MXFP8 quantization, where the scale data type must be DataType::kE8M0.
+//! DataType::kFLOAT precision during instantiation. For strongly typed networks, if the scale data type is
+//! DataType::kHALF or DataType::kBF16, it must match the input data type. For MXFP8 quantization, the \p scale
+//! data type must be DataType::kE8M0.
 //!
-//! IQuantizeLayer supports DataType::kINT8, DataType::kFP8, or DataType::kINT4 output.
+//! IQuantizeLayer supports DataType::kINT8, DataType::kFP8, DataType::kINT4 or DataType::kFP4 output.
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
@@ -5433,15 +5433,15 @@ protected:
 //!                 For each s in S:
 //!                     output[k,c,r,s] = clamp(round(\p input[k,c,r,s] / \p scale[k]) + \p zeroPt[k])
 //!
-//! Block quantization is supported only for weight inputs of DataType::kINT4. As an example of blocked
-//! operation, imagine a 2D RS weights input, R (dimension 0) as the blocking axis and B as the block size.
-//! The scale is a 2D array of coefficients, with dimensions (R//B, S).
+//! Block quantization is supported for input types DataType::kFP4, DataType::kFP8 and DataType::kINT4.
+//! As an example of blocked operation, imagine a 2D RS input with R (dimension 0) as the blocking axis and B as the
+//! block size. The scale is a 2D array of coefficients, with dimensions (R//B, S).
 //!     For each r in R:
 //!         For each s in S:
 //!             output[r,s] = clamp(round(\p input[r,s] / \p scale[r//B, s]) + \p zeroPt[r//B, s])
 //!
 //! \note Only symmetric quantization is supported.
-//! \note Currently the only allowed build-time constant \p scale and \p zeroPt subgraphs are:
+//! \note Currently the only allowed build-time constant \p zeroPt subgraphs are:
 //! 1. Constant -> Quantize
 //! 2. Constant -> Cast -> Quantize
 //!
@@ -5481,9 +5481,9 @@ public:
     //!
     //! \param toType The DataType of the output tensor.
     //!
-    //! Set the output type of the quantize layer. Valid values are DataType::kINT8 and DataType::kFP8.
-    //! If the network is strongly typed, setToType must be used to set the output type, and use of setOutputType
-    //! is an error. Otherwise, types passed to setOutputType and setToType must be the same.
+    //! Set the output type of the quantize layer. Valid values are DataType::kINT8, DataType::kFP8, DataType::kINT4 and
+    //! DataType::kFP4. If the network is strongly typed, setToType must be used to set the output type, and use of
+    //! setOutputType is an error. Otherwise, types passed to setOutputType and setToType must be the same.
     //!
     //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
     //!
@@ -5526,21 +5526,19 @@ protected:
 //! the input's data type. \p zeroPt must only contain zero-valued coefficients, because only symmetric quantization is
 //! supported.
 //! The \p scale value must be a scalar for per-tensor quantization, a 1D tensor for per-channel quantization, or the
-//! same rank as the input tensor for block quantization (supported for DataType::kINT4 only). All \p scale
-//! coefficients must have positive values. The size of the 1D \p scale tensor must match the size of the quantization
-//! axis. For block quantization, the shape of \p scale tensor must match the shape of the input, except for one
-//! dimension (the last or second to last dimension) in which blocking occurs.
-//! The size of \p zeroPt must match the size of \p scale.
+//! same rank as the input tensor for block quantization. All \p scale coefficients must have strictly positive values.
+//! The size of the 1D \p scale tensor must match the size of the quantization axis. For block quantization, the shape
+//! of \p scale tensor must match the shape of the input, except for one dimension (the last or second to last
+//! dimension) in which blocking occurs. The size of \p zeroPt must match the size of \p scale.
 //!
-//! The subgraph which terminates with the \p scale tensor must be a build-time constant.  The same restrictions apply
-//! to the \p zeroPt.
+//! The subgraph which terminates with the \p zeroPt tensor must be a build-time constant containing only zeros.
 //! The output type, if constrained, must be constrained to DataType::kFLOAT, DataType::kHALF, or DataType::kBF16. The
-//! input type, if constrained, must be constrained to DataType::kINT8, DataType::kFP8 or DataType::kINT4. The output
-//! size is the same as the input size. The quantization axis is in reference to the input tensor's dimensions.
+//! input type, if constrained, must be constrained to DataType::kINT8, DataType::kFP8, DataType::kINT4 or
+//! DataType::kFP4. The output size is the same as the input size. The quantization axis is in reference to the input
+//! tensor's dimensions.
 //!
-//! IDequantizeLayer supports DataType::kINT8, DataType::kFP8 or DataType::kINT4 precision and will default to
-//! DataType::kINT8 precision during instantiation. For strongly typed networks, \p input data type must be same as
-//! \p zeroPt data type.
+//! IDequantizeLayer supports DataType::kINT8 (default), DataType::kFP8, DataType::kINT4 or DataType::kFP4. For strongly
+//! typed networks, \p input data type must be the same as \p zeroPt data type.
 //!
 //! IDequantizeLayer supports DataType::kFLOAT, DataType::kHALF, or DataType::kBF16 output. The output data type must
 //! be configured explicitly using \p setToType.
@@ -5563,16 +5561,15 @@ protected:
 //!                 For each s in S:
 //!                     output[k,c,r,s] = (\p input[k,c,r,s] - \p zeroPt[k]) * \p scale[k]
 //!
-//! Block dequantization is supported only for input tensors with DataType::kINT4 that are rooted at an
-//! IConstantLayer (i.e. weights). As an example of blocked operation, imagine a 2D RS weights input with R
-//! (dimension 0) as the blocking axis and B as the block size. The scale is a 2D array of coefficients, with
-//! dimensions (R//B, S).
+//! Block dequantization is supported for input types DataType::kFP4, DataType::kFP8 and DataType::kINT4.
+//! As an example of blocked operation, imagine a 2D RS input with R (dimension 0) as the blocking axis and B as the
+//! block size. The scale is a 2D array of coefficients, with dimensions (R//B, S).
 //! For each r in R:
 //!     For each s in S:
 //!         output[r,s] = (\p input[r,s] - \p zeroPt[r//B, s]) * \p scale[r//B, s]
 //!
 //! \note Only symmetric quantization is supported.
-//! \note Currently the only allowed build-time constant \p scale and \p zeroPt subgraphs are:
+//! \note Currently the only allowed build-time constant \p zeroPt subgraphs are:
 //! 1. Constant -> Quantize
 //! 2. Constant -> Cast -> Quantize
 //!
@@ -6779,7 +6776,7 @@ public:
     //!
     //! \return true if tensor is marked as debug tensor, false otherwise.
     //!
-    bool isDebugTensor(nvinfer1::ITensor const& tensor) const noexcept
+    bool isDebugTensor(ITensor const& tensor) const noexcept
     {
         return mImpl->isDebugTensor(tensor);
     }
@@ -7859,11 +7856,12 @@ public:
     //!
     //! \see IDequantizeLayer
     //!
-    //! \p input tensor data type must be DataType::kINT8, DataType::kFP8 or DataType::kINT4.
-    //! \p scale tensor data type defaults to DataType::kFLOAT. For strongly typed networks, it must be the same as the
-    //! output data type. The subgraph which terminates with the \p scale tensor must be a build-time constant.
-    //! \p outputType output tensor data type, default value is DataType::kFLOAT. Future calls to set output type using
-    //! setToType or setOutputType must be consistent. For strongly typed networks, it must be the same as the scale data type.
+    //! \p input tensor data type must be DataType::kINT8, DataType::kFP8,  DataType::kINT4 or DataType::kFP4.
+    //! \p scale tensor data type must be one of the following: DataType::kFLOAT (default), DataType::kHALF,
+    //! DataType::kBF16 or DataType::kE8M0 (for MXFP8 quantization).
+    //! \p outputType output tensor data type must be DataType::kFLOAT (default), DataType::kHALF or DataType::kBF16.
+    //! Future calls to set output type using setToType or setOutputType must be consistent. For strongly typed
+    //! networks, if the scale type is DataType::kHALF or DataType::kBF16 the output type must match.
     //!
     //! \return The new quantization layer, or nullptr if it could not be created.
     //!
@@ -7923,10 +7921,12 @@ public:
     //! \see IQuantizeLayer
     //!
     //! \p input tensor data type must be DataType::kFLOAT, DataType::kHALF or DataType::kBF16.
-    //! \p scale tensor data type defaults to DataType::kFLOAT. For strongly typed networks, it must have the same data
-    //! type as the input. The subgraph which terminates with the \p scale tensor must be a build-time constant.
-    //! \p outputType output tensor data type, must be DataType::kINT8 (default), DataType::kFP8 or DataType::kINT4.
-    //! Future calls to set output type using setToType or setOutputType must be consistent.
+    //! \p scale tensor data type must be one of the following: DataType::kFLOAT (default), DataType::kHALF,
+    //! DataType::kBF16 or DataType::kE8M0 (for MXFP8 quantization).
+    //! \p outputType output tensor data type must be DataType::kINT8 (default), DataType::kFP8, DataType::kINT4 or
+    //! DataType::kFP4.
+    //! Future calls to set output type using setToType or setOutputType must be consistent. For strongly typed
+    //! networks, if the scale type is DataType::kHALF or DataType::kBF16 the output type must match.
     //!
     //! \return The new quantization layer, or nullptr if it could not be created.
     //!
@@ -10422,6 +10422,29 @@ public:
         return mImpl->getL2LimitForTiling();
     }
 
+    //!
+    //! \brief Set a config string for remote auto tuning.
+    //!
+    //! Remote auto-tuning is supported only for engines built with EngineCapability::kSAFETY.
+    //!
+    //! \param config The config string to be used during remote auto tuning.
+    //!
+    //! \return True if successful, false otherwise
+    //!
+    bool setRemoteAutoTuningConfig(char const* config) noexcept
+    {
+        return mImpl->setRemoteAutoTuningConfig(config);
+    }
+
+    //!
+    //! \brief Get a config string for remote auto tuning.
+    //!
+    //! \return The current string for remote auto tuning, or nullptr if not set.
+    //!
+    char const* getRemoteAutoTuningConfig() const noexcept
+    {
+        return mImpl->getRemoteAutoTuningConfig();
+    }
 
 protected:
     apiv::VBuilderConfig* mImpl;
@@ -10675,6 +10698,52 @@ public:
     }
 
     //!
+    //! \brief Builds and serializes a network into stream for the given INetworkDefinition and IBuilderConfig.
+    //!
+    //! This function allows building and serialization of a network without creating an engine. The engine is
+    //! finally serialized into the writer stream.
+    //!
+    //! \param network Network definition.
+    //! \param config Builder configuration.
+    //! \param writer Output writer stream.
+    //!
+    //! \return true if build succeed, otherwise false.
+    //!
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
+    //!
+    //! \see INetworkDefinition, IBuilderConfig, IStreamWriter
+    //!
+    bool buildSerializedNetworkToStream(
+        INetworkDefinition& network, IBuilderConfig& config, IStreamWriter& writer) noexcept
+    {
+        return mImpl->buildSerializedNetworkToStream(network, config, writer);
+    }
+
+    //!
+    //! \brief Extended form of buildSerializedNetwork that optionally permits getting the kernelText.
+    //!
+    //! Similar to two-argument form, except that if an engine with safe capability is successfully built
+    //! and there are kernels, sets kernelText to ..... Otherwise sets kernelText=nullptr.
+    //!
+    //! This function allows building and serialization of a network without creating an engine.
+    //!
+    //! \param network Network definition.
+    //! \param config Builder configuration.
+    //! \param kernelText A reference to a pointer to a IHostMemory object that will be set to the kernel CPP code text
+    //!
+    //! \return A pointer to a IHostMemory object that contains a serialized network.
+    //!
+    //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
+    //!
+    //! \see INetworkDefinition, IBuilderConfig, IHostMemory
+    //!
+    nvinfer1::IHostMemory* buildSerializedNetwork(
+        INetworkDefinition& network, IBuilderConfig& config, IHostMemory*& kernelText) noexcept
+    {
+        return mImpl->buildSerializedNetworkWithKernelText(network, config, kernelText);
+    }
+
+    //!
     //! \brief Builds a network for the given INetworkDefinition and IBuilderConfig.
     //!
     //! \param network Network definition.
@@ -10802,7 +10871,6 @@ inline IBuilder* createInferBuilder(ILogger& logger) noexcept
 //!
 //! Also return nullptr if the input argument is not EngineCapability::kSTANDARD.
 //! Engine capabilities EngineCapability::kSTANDARD and EngineCapability::kSAFETY have distinct plugin registries.
-//! When building a Safety engine, use nvinfer1::getBuilderSafePluginRegistry().
 //! Use IPluginRegistry::registerCreator from the registry to register plugins.
 //! Plugins registered in a registry associated with a specific engine capability are only available when
 //! building engines with that engine capability.
@@ -10825,7 +10893,7 @@ class IPluginRegistry;
 //! When building a Standard engine, use nvinfer1::getBuilderPluginRegistry().
 //! Use safe::IPluginRegistry::registerCreator from the registry to register plugins.
 //!
-extern "C" TENSORRTAPI nvinfer1::safe::IPluginRegistry* getBuilderSafePluginRegistry(
+extern "C" TRT_DEPRECATED_API nvinfer1::safe::IPluginRegistry* getBuilderSafePluginRegistry(
     nvinfer1::EngineCapability capability) noexcept;
 
 } // namespace nvinfer1

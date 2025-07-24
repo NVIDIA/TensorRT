@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,10 +34,6 @@ constexpr char const* kEMB_LAYER_NORM_VAR_SEQLEN_VERSION_HFACE{"2"};
 constexpr char const* kEMB_LAYER_NORM_VAR_SEQLEN_VERSION_MTRON{"3"};
 constexpr char const* kEMB_LAYER_NORM_VAR_SEQLEN_NAME{"CustomEmbLayerNormPluginDynamic"};
 } // namespace
-
-// Static class fields initialization
-PluginFieldCollection EmbLayerNormVarSeqlenPluginLegacyBaseCreator::mFC{};
-std::vector<PluginField> EmbLayerNormVarSeqlenPluginLegacyBaseCreator::mPluginAttributes;
 
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginLegacyHFaceCreator);
 REGISTER_TENSORRT_PLUGIN(EmbLayerNormVarSeqlenPluginLegacyMTronCreator);
