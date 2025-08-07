@@ -323,6 +323,66 @@ class FluxTransformerModel(base_model.BaseModel):
             return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
         return super().optimize(onnx_graph)
 
+class KontextTransformerModel(FluxTransformerModel):
+    def __init__(self, *args, **kwargs):
+        super(KontextTransformerModel, self).__init__(*args, **kwargs)
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        shape_dict = {
+            "hidden_states": (batch_size, (latent_height // 2) * (latent_width // 2) * 2, self.config["in_channels"]),
+            "encoder_hidden_states": (batch_size, self.text_maxlen, self.config["joint_attention_dim"]),
+            "pooled_projections": (batch_size, self.config["pooled_projection_dim"]),
+            "timestep": (batch_size,),
+            "img_ids": ((latent_height // 2) * (latent_width // 2) * 2, 3),
+            "txt_ids": (self.text_maxlen, 3),
+            "latent": (batch_size, (latent_height // 2) * (latent_width // 2) * 2, self.out_channels),
+        }
+        if self.config["guidance_embeds"]:
+            shape_dict["guidance"] = (batch_size,)
+        return shape_dict
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        (
+            min_batch,
+            max_batch,
+            min_image_height,
+            max_image_height,
+            min_image_width,
+            max_image_width,
+            min_latent_height,
+            max_latent_height,
+            min_latent_width,
+            max_latent_width,
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        input_profile = {
+            "hidden_states": [
+                (min_batch, (min_latent_height // 2) * (min_latent_width // 2) * 2, self.config["in_channels"]),
+                (batch_size, (latent_height // 2) * (latent_width // 2) * 2, self.config["in_channels"]),
+                (max_batch, (max_latent_height // 2) * (max_latent_width // 2) * 2, self.config["in_channels"]),
+            ],
+            "encoder_hidden_states": [
+                (min_batch, self.text_maxlen, self.config["joint_attention_dim"]),
+                (batch_size, self.text_maxlen, self.config["joint_attention_dim"]),
+                (max_batch, self.text_maxlen, self.config["joint_attention_dim"]),
+            ],
+            "pooled_projections": [
+                (min_batch, self.config["pooled_projection_dim"]),
+                (batch_size, self.config["pooled_projection_dim"]),
+                (max_batch, self.config["pooled_projection_dim"]),
+            ],
+            "timestep": [(min_batch,), (batch_size,), (max_batch,)],
+            "img_ids": [
+                ((min_latent_height // 2) * (min_latent_width // 2) * 2, 3),
+                ((latent_height // 2) * (latent_width // 2) * 2, 3),
+                ((max_latent_height // 2) * (max_latent_width // 2) * 2, 3),
+            ],
+            "txt_ids": [(self.text_maxlen, 3), (self.text_maxlen, 3), (self.text_maxlen, 3)],
+        }
+        if self.config["guidance_embeds"]:
+            input_profile["guidance"] = [(min_batch,), (batch_size,), (max_batch,)]
+        return input_profile
 
 class Transformer3DControlNetModel(torch.nn.Module):
     def __init__(self, transformer, controlnets) -> None:

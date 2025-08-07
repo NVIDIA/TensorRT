@@ -275,7 +275,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     device_info = torch.cuda.get_device_properties(0)
     sm_version = device_info.major * 10 + device_info.minor
 
-    is_flux = args.version.startswith("flux")
+    is_flux = args.version.startswith("flux") or args.version.startswith("kontext")
     is_sd35 = args.version.startswith("3.5")
 
     if args.height % 8 != 0 or args.width % 8 != 0:

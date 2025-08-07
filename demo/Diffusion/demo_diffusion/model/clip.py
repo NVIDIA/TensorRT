@@ -57,6 +57,7 @@ def get_clip_embedding_dim(version, pipeline):
         "flux.1-schnell",
         "flux.1-dev-canny",
         "flux.1-dev-depth",
+        "kontext.1-dev",
     ):
         return 768
     elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):

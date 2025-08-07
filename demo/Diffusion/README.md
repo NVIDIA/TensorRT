@@ -68,6 +68,7 @@ python3 demo_inpaint.py --help
 python3 demo_controlnet.py --help
 python3 demo_txt2img_xl.py --help
 python3 demo_txt2img_flux.py --help
+python3 demo_kontext.py --help
 ```
 
 ### HuggingFace user access token
@@ -415,8 +416,29 @@ python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latt
 python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latte art design, with the 'Coffee Creations' logo skillfully formed within the latte foam. In a watercolor style, AQUACOLTOK. White background." --hf-token=$HF_TOKEN --lora-path "SebastianBodza/flux_lora_aquarel_watercolor" --lora-weight 1.0 --onnx-dir=onnx-flux-lora --engine-dir=engine-flux-lora --fp8
 ```
 ---
+#### 5. Generate an Image Using Flux Kontext
 
-#### 5. Export ONNX Models Only (Skip Inference)
+NOTE: Pass `--download-onnx-models` to avoid native ONNX export and download the ONNX models from [Black Forest Labs Kontext](https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev-onnx). It is only supported for BF16, FP8, and FP4 pipelines.
+
+Download an example input image:
+```bash
+wget "https://comfyui-wiki.com/_next/static/media/squirrel.bdc023b9.png" -O  input_kontext.jpg
+```
+
+Run KontextPipeline:
+```bash
+# BF16
+python3 demo_kontext.py "Change the style of this image to anime style" --hf-token=$HF_TOKEN --bf16 --download-onnx-models --input-image input_kontext.jpg
+
+# FP8
+python3 demo_kontext.py "Change the style of this image to anime style" --hf-token=$HF_TOKEN --fp8 --quantization-level 4 --download-onnx-models --input-image input_kontext.jpg
+
+# FP8 (With Dynamic Shape)
+python3 demo_kontext.py "Change the style of this image to anime style" --hf-token=$HF_TOKEN --fp8 --download-onnx-models --input-image input_kontext.jpg --build-static-batch --batch-size 1 --build-dynamic-shape --quantization-level 4
+
+```
+
+#### 6. Export ONNX Models Only (Skip Inference)
 
 Use the `--onnx-export-only` flag to export ONNX models on a higher-VRAM device. The exported ONNX models can be used on a device with lower VRAM for the engine build and inference steps.
 
@@ -426,7 +448,7 @@ python3 demo_txt2img_flux.py "a beautiful photograph of Mt. Fuji during cherry b
 
 ---
 
-#### 6. Running Flux on GPUs with Limited Memory
+#### 7. Running Flux on GPUs with Limited Memory
 
 ##### Optimization Flags
 

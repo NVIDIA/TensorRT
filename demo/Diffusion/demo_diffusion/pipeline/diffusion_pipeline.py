@@ -99,6 +99,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-canny",
         "flux.1-dev-depth",
         "flux.1-schnell",
+        "kontext.1-dev",
     )
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
@@ -118,6 +119,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-canny": "FlowMatchEuler",
         "flux.1-dev-depth": "FlowMatchEuler",
         "flux.1-schnell": "FlowMatchEuler",
+        "kontext.1-dev": "FlowMatchEuler",
     }
 
     def __init__(
@@ -375,11 +377,12 @@ class DiffusionPipeline(ABC):
                     or self.version in ["1.5", "2.1", "2.1-base"]
                     or self.version.startswith("flux.1")
                     or self.version.startswith("3.5-large")
+                    or self.version.startswith("kontext.1-dev")
                 ), "fp8 quantization only supported for SDXL, SD1.5, SD2.1, SD3.5-large and FLUX pipelines"
                 if (
                     (self.pipeline_type.is_sd_xl() and model_name == "unetxl")
                     or (
-                        (self.version.startswith("flux.1") or self.version.startswith("3.5-large"))
+                        (self.version.startswith("flux.1") or self.version.startswith("3.5-large") or self.version.startswith("kontext.1-dev"))
                         and model_name == "transformer"
                     )
                     or (model_name == "unet")
