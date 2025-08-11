@@ -163,7 +163,7 @@ class FluxPipeline(DiffusionPipeline):
         )
 
     @classmethod
-    def get_model_names(cls, pipeline_type: PIPELINE_TYPE) -> List[str]:
+    def get_model_names(cls, pipeline_type: PIPELINE_TYPE, controlnet_type: str = None) -> List[str]:
         """Return a list of model names used by this pipeline.
 
         Overrides:

@@ -42,6 +42,7 @@ class BaseModel:
         bf16=False,
         int8=False,
         fp8=False,
+        fp4=False,
         max_batch_size=16,
         text_maxlen=77,
         embedding_dim=768,
@@ -63,6 +64,7 @@ class BaseModel:
         self.bf16 = bf16
         self.int8 = int8
         self.fp8 = fp8
+        self.fp4 = fp4
 
         self.compression_factor = compression_factor
         self.min_batch = 1
