@@ -310,7 +310,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     # int8 support
     if args.int8 and not any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1")):
         raise ValueError("int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
-    
+
     # fp8 support validation
     if args.fp8:
         # Check version compatibility
@@ -339,7 +339,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
             raise ValueError(
                 "Native FP8 quantization is not supported for SD3.5-large. Please pass --download-onnx-models."
             )
-        
+
     # TensorRT ModelOpt quantization level
     if args.quantization_level == 0.0:
         def override_quant_level(level: float, dtype_str: str):

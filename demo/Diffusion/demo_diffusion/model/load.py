@@ -25,8 +25,9 @@ import os
 import sys
 from typing import List, Optional
 
-import onnx
 import torch
+
+import onnx
 
 
 def onnx_graph_needs_external_data(onnx_graph: onnx.ModelProto) -> bool:
@@ -45,7 +46,7 @@ def get_path(version: str, pipeline: "pipeline.DiffusionPipeline", controlnets: 
         if version == "xl-1.0":
             return ["diffusers/controlnet-canny-sdxl-1.0"]
         if version == "3.5-large":
-            return [f"stabilityai/stable-diffusion-3.5-large-controlnet-{modality}" for modality in controlnets]
+            return f"stabilityai/stable-diffusion-3.5-large-controlnet-{controlnets}"
         return ["lllyasviel/sd-controlnet-" + modality for modality in controlnets]
 
     if version in ("1.4", "1.5") and pipeline.is_inpaint():
