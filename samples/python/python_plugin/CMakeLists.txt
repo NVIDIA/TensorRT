@@ -88,6 +88,13 @@ if(NOT MSVC)
         cuda_ge(12 ${minor} ${result_var})
     endforeach()
 
+    # Define THOR_SM based on CUDA version
+    if(CUDA_GE_13_0)
+        set(THOR_SM 110)
+    else()
+        set(THOR_SM 101)
+    endif()
+
     set(SAMPLE_SMS "75")
 
     if(CUDA_GE_11_0)
@@ -108,10 +115,10 @@ if(NOT MSVC)
 
     # Blackwell support
     if(CUDA_GE_12_8)
-        list(APPEND SAMPLE_SMS "100" "101" "120")
+        list(APPEND SAMPLE_SMS "100" ${THOR_SM} "120")
     endif()
 
-    set(NON_HFC_SMS "89" "90" "100" "101" "120")
+    set(NON_HFC_SMS "89" "90" "100" ${THOR_SM} "120")
 
     if(NOT DEFINED GENCODES)
         set(GENCODES "")

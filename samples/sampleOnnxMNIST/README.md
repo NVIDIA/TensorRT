@@ -17,7 +17,7 @@
 
 ## Description
 
-This sample, sampleOnnxMNIST, converts a model trained on the [MNIST dataset](https://github.com/onnx/models/tree/master/vision/classification/mnist) in Open Neural Network Exchange (ONNX) format to a TensorRT network and runs inference on the network.
+This sample, sampleOnnxMNIST, converts a model trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md) in Open Neural Network Exchange (ONNX) format to a TensorRT network and runs inference on the network.
 
 ONNX is a standard for representing deep learning models that enables models to be transferred between frameworks.
 

@@ -16,7 +16,7 @@
 # limitations under the License.
 #
 
-arg_tag=tensorrt-ubuntu20.04
+arg_tag=tensorrt-ubuntu22.04
 arg_gpus=all
 arg_jupyter=0
 arg_help=0

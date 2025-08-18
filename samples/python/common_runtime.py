@@ -20,7 +20,7 @@ from typing import Optional, List, Union
 
 import numpy as np
 import tensorrt as trt
-from cuda import cuda, cudart
+from cuda.bindings import driver as cuda, runtime as cudart
 
 def check_cuda_err(err):
     if isinstance(err, cuda.CUresult):

@@ -2719,7 +2719,7 @@ void BuildOptions::help(std::ostream& os)
           "  --l2LimitForTiling                 Set the L2 cache usage limit for tiling optimization(default is -1)"                                "\n"
           "  --remoteAutoTuningConfig           Set the remote auto tuning config. Must be specified with --safe."                                  "\n"
           "                                     Format: protocol://username[:password]@hostname[:port]?param1=value1&param2=value2"                 "\n"
-          "                                     Example: ssh://root:root@192.168.1.100:2213?remote_exec_path=/workspace/LWEServer&remote_lib_path=/workspace" "\n"
+          "                                     Example: ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib" "\n"
           ;
     // clang-format on
     os << std::flush;

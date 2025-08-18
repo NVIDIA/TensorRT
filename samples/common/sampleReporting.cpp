@@ -298,7 +298,7 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
     }
 
     // Report warnings if the GPU Compute Time is unstable.
-    constexpr float kUNSTABLE_PERF_REPORTING_THRESHOLD{1.0F};
+    constexpr float kUNSTABLE_PERF_REPORTING_THRESHOLD{2.5F};
     if (gpuComputeResult.coeffVar > kUNSTABLE_PERF_REPORTING_THRESHOLD)
     {
         osWarning << "* GPU compute time is unstable, with coefficient of variance = " << gpuComputeResult.coeffVar

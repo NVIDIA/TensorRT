@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.9.0
+ARG CUDA_VERSION=13.0.0
 ARG OS_VERSION=22.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.13.0.35
+ENV TRT_VERSION 10.13.2.6
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG uid=1000
@@ -99,12 +99,12 @@ RUN  dpkg -x /pdk_files/cudnn-local*.deb /pdk_files/cudnn_extract \
     && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_version_v[7-9].h /usr/include/cudnn_version.h
 
 # Unpack libnvinfer
-RUN dpkg -x /pdk_files/libnvinfer10_*-1+cuda12.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-dev_*-1+cuda12.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-plugin10_*-1+cuda12.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-plugin-dev_*-1+cuda12.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvonnxparsers10_*-1+cuda12.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvonnxparsers-dev_*-1+cuda12.[0-9]_arm64.deb /pdk_files/tensorrt
+RUN dpkg -x /pdk_files/libnvinfer10_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
+    && dpkg -x /pdk_files/libnvinfer-dev_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
+    && dpkg -x /pdk_files/libnvinfer-plugin10_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
+    && dpkg -x /pdk_files/libnvinfer-plugin-dev_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
+    && dpkg -x /pdk_files/libnvonnxparsers10_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
+    && dpkg -x /pdk_files/libnvonnxparsers-dev_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt
 
 # Clean up debs
 RUN rm -rf /pdk_files/*.deb

@@ -21,7 +21,7 @@ import time
 import argparse
 import numpy as np
 import tensorrt as trt
-from cuda import cuda, cudart
+from cuda.bindings import driver as cuda, runtime as cudart
 from PIL import Image
 from pathlib import Path
 import threading

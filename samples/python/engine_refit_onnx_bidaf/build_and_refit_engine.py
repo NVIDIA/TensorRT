@@ -24,7 +24,7 @@ import argparse
 import tensorrt as trt
 
 sys.path.insert(1, os.path.join(sys.path[0], ".."))
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 
 TRT_LOGGER = trt.Logger()
 

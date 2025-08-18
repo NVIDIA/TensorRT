@@ -22,8 +22,11 @@ set(TRT_PLATFORM_ID "aarch64")
 
 set(CUDA_PLATFORM_ID "sbsa-linux")
 
-set(CMAKE_C_COMPILER /usr/bin/aarch64-linux-gnu-gcc-8)
-set(CMAKE_CXX_COMPILER /usr/bin/aarch64-linux-gnu-g++-8)
+set(CMAKE_C_COMPILER /usr/bin/aarch64-linux-gnu-gcc)
+set(CMAKE_CXX_COMPILER /usr/bin/aarch64-linux-gnu-g++)
+set(CMAKE_C_COMPILER_ID "GNU")
+set(CMAKE_CXX_COMPILER_ID "GNU")
+set(CMAKE_CXX_COMPILE_FEATURES cxx_std_17)
 
 set(CMAKE_C_FLAGS "" CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS "" CACHE STRING "" FORCE)

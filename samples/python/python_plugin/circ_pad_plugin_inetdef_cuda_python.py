@@ -32,7 +32,7 @@ from polygraphy.json import to_json, from_json
 
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 from plugin_utils import checkCudaErrors, KernelHelper, parseArgs, CudaCtxManager
-from cuda import cuda
+from cuda.bindings import driver as cuda
 
 circ_pad_half_kernel = r"""
 #include <cuda_fp16.h>

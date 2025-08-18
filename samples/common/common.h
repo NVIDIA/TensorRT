@@ -1081,7 +1081,7 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
 
 [[nodiscard]] inline std::string genFilenameSafeString(std::string_view s)
 {
-    constexpr std::string_view kALLOWED{"._-,"};
+    std::string_view const kALLOWED{"._-,"};
     constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
     constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
 

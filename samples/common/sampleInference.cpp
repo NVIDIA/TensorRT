@@ -192,6 +192,7 @@ nvinfer2::safe::TypedArray createTypedArray(void* const ptr, DataType const type
     case DataType::kHALF: return nvinfer2::safe::TypedArray(static_cast<nvinfer2::safe::half_t*>(ptr), bufferSize);
     case DataType::kINT32: return nvinfer2::safe::TypedArray(static_cast<int32_t*>(ptr), bufferSize);
     case DataType::kINT8: return nvinfer2::safe::TypedArray(static_cast<int8_t*>(ptr), bufferSize);
+    case DataType::kINT64: return nvinfer2::safe::TypedArray(static_cast<int64_t*>(ptr), bufferSize);
     default:
     {
         sample::gLogError << "Invalid tensor DataType encountered." << std::endl;

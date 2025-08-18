@@ -24,7 +24,7 @@ from typing import Any, List, Union
 
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers.image_processor import VaeImageProcessor
 from huggingface_hub import snapshot_download
 from transformers import PreTrainedTokenizerBase

@@ -19,7 +19,7 @@ import argparse
 
 import controlnet_aux
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from PIL import Image
 
 from demo_diffusion import dd_argparse

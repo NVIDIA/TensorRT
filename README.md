@@ -32,20 +32,20 @@ To build the TensorRT-OSS components, you will first need the following software
 
 **TensorRT GA build**
 
-- TensorRT v10.13.0.35
+- TensorRT v10.13.2.6
   - Available from direct download links listed below
 
 **System Packages**
 
 - [CUDA](https://developer.nvidia.com/cuda-toolkit)
   - Recommended versions:
+  - cuda-13.0.0
   - cuda-12.9.0
-  - cuda-11.8.0
 - [CUDNN (optional)](https://developer.nvidia.com/cudnn)
   - cuDNN 8.9
 - [GNU make](https://ftp.gnu.org/gnu/make/) >= v4.1
-- [cmake](https://github.com/Kitware/CMake/releases) >= v3.13
-- [python](https://www.python.org/downloads/) >= v3.8, <= v3.10.x
+- [cmake](https://github.com/Kitware/CMake/releases) >= v3.31
+- [python](https://www.python.org/downloads/) >= v3.10, <= v3.13.x
 - [pip](https://pypi.org/project/pip/#history) >= v19.0
 - Essential utilities
   - [git](https://git-scm.com/downloads), [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/), [wget](https://www.gnu.org/software/wget/faq.html#download)
@@ -86,24 +86,24 @@ To build the TensorRT-OSS components, you will first need the following software
 
    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
 
-   - [TensorRT 10.13.0.35 for CUDA 11.8, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/tars/TensorRT-10.13.0.35.Linux.x86_64-gnu.cuda-11.8.tar.gz)
-   - [TensorRT 10.13.0.35 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/tars/TensorRT-10.13.0.35.Linux.x86_64-gnu.cuda-12.9.tar.gz)
-   - [TensorRT 10.13.0.35 for CUDA 11.8, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/zip/TensorRT-10.13.0.35.Windows.win10.cuda-11.8.zip)
-   - [TensorRT 10.13.0.35 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.0/zip/TensorRT-10.13.0.35.Windows.win10.cuda-12.9.zip)
+   - [TensorRT 10.13.2.6 for CUDA 13.0, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.2/tars/TensorRT-10.13.2.6.Linux.x86_64-gnu.cuda-13.0.tar.gz)
+   - [TensorRT 10.13.2.6 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.2/tars/TensorRT-10.13.2.6.Linux.x86_64-gnu.cuda-12.9.tar.gz)
+   - [TensorRT 10.13.2.6 for CUDA 13.0, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.2/zip/TensorRT-10.13.2.6.Windows.win10.cuda-13.0.zip)
+   - [TensorRT 10.13.2.6 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.2/zip/TensorRT-10.13.2.6.Windows.win10.cuda-12.9.zip)
 
-   **Example: Ubuntu 20.04 on x86-64 with cuda-12.9**
+   **Example: Ubuntu 22.04 on x86-64 with cuda-13.0**
 
    ```bash
    cd ~/Downloads
-   tar -xvzf TensorRT-10.13.0.35.Linux.x86_64-gnu.cuda-12.9.tar.gz
-   export TRT_LIBPATH=`pwd`/TensorRT-10.13.0.35
+   tar -xvzf TensorRT-10.13.2.6.Linux.x86_64-gnu.cuda-13.0.tar.gz
+   export TRT_LIBPATH=`pwd`/TensorRT-10.13.2.6
    ```
 
    **Example: Windows on x86-64 with cuda-12.9**
 
    ```powershell
-   Expand-Archive -Path TensorRT-10.13.0.35.Windows.win10.cuda-12.9.zip
-   $env:TRT_LIBPATH="$pwd\TensorRT-10.13.0.35\lib"
+   Expand-Archive -Path TensorRT-10.13.2.6.Windows.win10.cuda-12.9.zip
+   $env:TRT_LIBPATH="$pwd\TensorRT-10.13.2.6\lib"
    ```
 
 ## Setting Up The Build Environment
@@ -112,10 +112,10 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 1. #### Generate the TensorRT-OSS build container.
 
-   **Example: Ubuntu 20.04 on x86-64 with cuda-12.9 (default)**
+   **Example: Ubuntu 22.04 on x86-64 with cuda-13.0 (default)**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-20.04.Dockerfile --tag tensorrt-ubuntu20.04-cuda12.9
+   ./docker/build.sh --file docker/ubuntu-22.04.Dockerfile --tag tensorrt-ubuntu22.04-cuda13.0
    ```
 
    **Example: Rockylinux8 on x86-64 with cuda-12.9**
@@ -137,9 +137,9 @@ For Linux platforms, we recommend that you generate a docker container for build
    ```
 
 2. #### Launch the TensorRT-OSS build container.
-   **Example: Ubuntu 20.04 build container**
+   **Example: Ubuntu 22.04 build container**
    ```bash
-   ./docker/launch.sh --tag tensorrt-ubuntu20.04-cuda12.9 --gpus all
+   ./docker/launch.sh --tag tensorrt-ubuntu22.04-cuda13.0 --gpus all
    ```
    > NOTE:
    > <br> 1. Use the `--tag` corresponding to build container generated in Step 1.
@@ -199,21 +199,21 @@ For Linux platforms, we recommend that you generate a docker container for build
   msbuild TensorRT.sln /property:Configuration=Release -m:$env:NUMBER_OF_PROCESSORS
   ```
 
-  > NOTE: The default CUDA version used by CMake is 12.9.0. To override this, for example to 11.8, append `-DCUDA_VERSION=11.8` to the cmake command.
+  > NOTE: The default CUDA version used by CMake is 13.0. To override this, for example to 12.9, append `-DCUDA_VERSION=12.9` to the cmake command.
 
 - Required CMake build arguments are:
   - `TRT_LIB_DIR`: Path to the TensorRT installation directory containing libraries.
   - `TRT_OUT_DIR`: Output directory where generated build artifacts will be copied.
 - Optional CMake build arguments:
   - `CMAKE_BUILD_TYPE`: Specify if binaries generated are for release or debug (contain debug symbols). Values consists of [`Release`] | `Debug`
-  - `CUDA_VERSION`: The version of CUDA to target, for example [`11.7.1`].
-  - `CUDNN_VERSION`: The version of cuDNN to target, for example [`8.6`].
-  - `PROTOBUF_VERSION`: The version of Protobuf to use, for example [`3.0.0`]. Note: Changing this will not configure CMake to use a system version of Protobuf, it will configure CMake to download and try building that version.
+  - `CUDA_VERSION`: The version of CUDA to target, for example [`12.9.9`].
+  - `CUDNN_VERSION`: The version of cuDNN to target, for example [`8.9`].
+  - `PROTOBUF_VERSION`: The version of Protobuf to use, for example [`3.20.1`]. Note: Changing this will not configure CMake to use a system version of Protobuf, it will configure CMake to download and try building that version.
   - `CMAKE_TOOLCHAIN_FILE`: The path to a toolchain file for cross compilation.
   - `BUILD_PARSERS`: Specify if the parsers should be built, for example [`ON`] | `OFF`. If turned OFF, CMake will try to find precompiled versions of the parser libraries to use in compiling samples. First in `${TRT_LIB_DIR}`, then on the system. If the build type is Debug, then it will prefer debug builds of the libraries before release versions if available.
   - `BUILD_PLUGINS`: Specify if the plugins should be built, for example [`ON`] | `OFF`. If turned OFF, CMake will try to find a precompiled version of the plugin library to use in compiling samples. First in `${TRT_LIB_DIR}`, then on the system. If the build type is Debug, then it will prefer debug builds of the libraries before release versions if available.
   - `BUILD_SAMPLES`: Specify if the samples should be built, for example [`ON`] | `OFF`.
-  - `GPU_ARCHS`: GPU (SM) architectures to target. By default we generate CUDA code for all major SMs. Specific SM versions can be specified here as a quoted space-separated list to reduce compilation time and binary size. Table of compute capabilities of NVIDIA GPUs can be found [here](https://developer.nvidia.com/cuda-gpus). Examples: - NVidia A100: `-DGPU_ARCHS="80"` - Tesla T4, GeForce RTX 2080: `-DGPU_ARCHS="75"` - Titan V, Tesla V100: `-DGPU_ARCHS="70"` - Multiple SMs: `-DGPU_ARCHS="80 75"`
+  - `GPU_ARCHS`: GPU (SM) architectures to target. By default we generate CUDA code for all major SMs. Specific SM versions can be specified here as a quoted space-separated list to reduce compilation time and binary size. Table of compute capabilities of NVIDIA GPUs can be found [here](https://developer.nvidia.com/cuda-gpus). Examples: - NVidia A100: `-DGPU_ARCHS="80"` - RTX 50 series: `-DGPU_ARCHS="120"` - Multiple SMs: `-DGPU_ARCHS="80 120"`
   - `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation). Currently supported options: `x86_64` (default).
 
 # References

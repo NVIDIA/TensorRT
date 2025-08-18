@@ -8,11 +8,11 @@ on:
 
 jobs:
 
-  build-ubuntu2004:
+  build-ubuntu2204:
 
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
-    - name: Build TensorRT-OSS ubuntu20.04 container
-      run: docker build . --file docker/ubuntu-20.04.Dockerfile --build-arg uid=1000 --build-arg gid=1000 --tag tensorrt-ubuntu20.04:$(date +%s)
+    - name: Build TensorRT-OSS ubuntu22.04 container
+      run: docker build . --file docker/ubuntu-22.04.Dockerfile --build-arg uid=1000 --build-arg gid=1000 --tag tensorrt-ubuntu22.04:$(date +%s)

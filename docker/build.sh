@@ -16,7 +16,7 @@
 # limitations under the License.
 #
 
-arg_dockerfile=docker/ubuntu-20.04.Dockerfile
+arg_dockerfile=docker/ubuntu-22.04.Dockerfile
 arg_imagename=tensorrt-ubuntu
 arg_help=0
 

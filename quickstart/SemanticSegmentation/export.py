@@ -19,7 +19,7 @@ from PIL import Image
 from io import BytesIO
 import requests
 
-output_image="input.ppm"
+output_image = "input.ppm"
 
 # Read sample image input and save it in ppm format
 print("Exporting ppm image {}".format(output_image))
@@ -32,19 +32,22 @@ with Image.open(BytesIO(response.content)) as img:
 
 import torch
 import torch.nn as nn
+import torchvision.models.segmentation as segmentation
 
-output_onnx="fcn-resnet101.onnx"
+output_onnx = "fcn-resnet101.onnx"
+
 
 # FC-ResNet101 pretrained model from torch-hub extended with argmax layer
 class FCN_ResNet101(nn.Module):
     def __init__(self):
         super(FCN_ResNet101, self).__init__()
-        self.model = torch.hub.load('pytorch/vision:v0.6.0', 'fcn_resnet101', pretrained=True)
+        self.model = segmentation.fcn_resnet101(pretrained=True)
 
     def forward(self, inputs):
-        x = self.model(inputs)['out']
+        x = self.model(inputs)["out"]
         x = x.argmax(1, keepdims=True)
         return x
+
 
 model = FCN_ResNet101()
 model.eval()
@@ -54,12 +57,14 @@ input_tensor = torch.rand(4, 3, 224, 224)
 
 # Export torch model to ONNX
 print("Exporting ONNX model {}".format(output_onnx))
-torch.onnx.export(model, input_tensor, output_onnx,
+torch.onnx.export(
+    model,
+    input_tensor,
+    output_onnx,
     opset_version=12,
     do_constant_folding=True,
     input_names=["input"],
     output_names=["output"],
-    dynamic_axes={"input": {0: "batch", 2: "height", 3: "width"},
-                  "output": {0: "batch", 2: "height", 3: "width"}},
-    verbose=False)
-
+    dynamic_axes={"input": {0: "batch", 2: "height", 3: "width"}, "output": {0: "batch", 2: "height", 3: "width"}},
+    verbose=False,
+)
