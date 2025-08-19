@@ -22,7 +22,7 @@ import time
 import nvtx
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 
 import demo_diffusion.engine as engine_module
 import demo_diffusion.image as image_module

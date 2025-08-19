@@ -26,7 +26,7 @@ import modelopt.torch.opt as mto
 import modelopt.torch.quantization as mtq
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.utils.torch_utils import randn_tensor
 from tqdm.auto import tqdm

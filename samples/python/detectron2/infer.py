@@ -20,7 +20,7 @@ import sys
 import argparse
 import numpy as np
 import tensorrt as trt
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from image_batcher import ImageBatcher
 from visualize import visualize_detections
 

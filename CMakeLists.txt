@@ -66,6 +66,24 @@ endif()
 
 set(CMAKE_SKIP_BUILD_RPATH True)
 
+# Set CUDA architectures before enabling CUDA language to avoid detection issues in containers
+if (DEFINED GPU_ARCHS AND NOT GPU_ARCHS STREQUAL "")
+  message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Setting CUDA architectures for SM ${GPU_ARCHS}")
+  separate_arguments(GPU_ARCHS)
+  foreach(SM IN LISTS GPU_ARCHS)
+    list(APPEND CMAKE_CUDA_ARCHITECTURES "${SM}")
+  endforeach()
+else()
+  # Set default architectures for container builds where auto-detection fails
+  set(CMAKE_CUDA_ARCHITECTURES 75 80 86 87 89 90)
+
+  if(CUDA_VERSION VERSION_GREATER_EQUAL 12.8)
+      list(APPEND CMAKE_CUDA_ARCHITECTURES 100 120)
+  endif()
+
+  message(STATUS "Setting default CUDA architectures for container build: ${CMAKE_CUDA_ARCHITECTURES}")
+endif()
+
 project(TensorRT
         LANGUAGES CXX CUDA
         VERSION ${TRT_VERSION}
@@ -177,23 +195,6 @@ endif()
 set(CUDA_LIBRARIES ${CUDART_LIB})
 
 ############################################################################################
-# CUDA targets
-
-if (DEFINED GPU_ARCHS)
-  message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
-  separate_arguments(GPU_ARCHS)
-  foreach(SM IN LISTS GPU_ARCHS)
-    list(APPEND CMAKE_CUDA_ARCHITECTURES "${SM}")
-  endforeach()
-else()
-  list(APPEND CMAKE_CUDA_ARCHITECTURES 72 75 80 86 87 89 90)
-  
-  if(CUDA_VERSION VERSION_GREATER_EQUAL 12.8)
-      list(APPEND CMAKE_CUDA_ARCHITECTURES 100 120)
-  endif()
-
-  message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${CMAKE_CUDA_ARCHITECTURES}")
-endif()
 set(BERT_GENCODES)
 # Generate SASS for each architecture
 foreach(arch ${CMAKE_CUDA_ARCHITECTURES})

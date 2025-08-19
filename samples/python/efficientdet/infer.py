@@ -21,7 +21,7 @@ import time
 import argparse
 import numpy as np
 import tensorrt as trt
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 import common

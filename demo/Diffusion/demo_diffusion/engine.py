@@ -24,7 +24,7 @@ from collections import OrderedDict, defaultdict
 import numpy as np
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from polygraphy.backend.common import bytes_from_path
 from polygraphy.backend.trt import (
     engine_from_bytes,

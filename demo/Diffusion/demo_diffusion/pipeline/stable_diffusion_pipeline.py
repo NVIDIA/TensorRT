@@ -30,7 +30,7 @@ import numpy as np
 import nvtx
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers import (
     DDIMScheduler,
     DDPMScheduler,

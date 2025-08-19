@@ -1,5 +1,10 @@
 # TensorRT OSS Release Changelog
 
+## 10.13.2 GA - 2025-8-18
+- Added support for CUDA 13.0, dropped support for CUDA 11.X
+- Dropped support for Ubuntu 20.04
+- Dropped support for Python versions < 3.10 for samples and demos
+
 ## 10.13.0 GA - 2025-7-24
 - Plugin changes
   - Fixed a division-by-zero error in geluPlugin that occured when the bias is omitted.

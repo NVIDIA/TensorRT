@@ -1220,7 +1220,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         return false;
     }
 
-    config.setRemoteAutoTuningConfig(build.remoteAutoTuningConfig.c_str());
+    if (!build.remoteAutoTuningConfig.empty())
+    {
+        SMP_RETVAL_IF_FALSE(config.setRemoteAutoTuningConfig(build.remoteAutoTuningConfig.c_str()),
+            "Failed to set remote auto tuning configuration", false, err);
+    }
 
     return true;
 }
@@ -1228,7 +1232,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
 } // namespace
 
 //!
-//! \brief Create a serialized engine for a network defintion
+//! \brief Create a serialized engine for a network definition
 //!
 //! \return Whether the engine creation succeeds or fails.
 //!

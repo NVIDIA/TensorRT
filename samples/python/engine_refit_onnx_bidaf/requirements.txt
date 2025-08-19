@@ -1,8 +1,7 @@
 onnx==1.16.0
 nltk==3.9.1
 wget==3.2
-cuda-python==12.2.0; python_version <= "3.10"
-cuda-python==12.6.0; python_version >= "3.11"
+cuda-python==12.9.0
 pywin32; platform_system == "Windows"
 pyyaml==6.0.1
 requests==2.32.2

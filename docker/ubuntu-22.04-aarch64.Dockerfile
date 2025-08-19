@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=12.9.0
+ARG CUDA_VERSION=13.0.0
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
-ENV TRT_VERSION 10.13.0.35
+ENV TRT_VERSION 10.13.2.6
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -31,7 +31,7 @@ RUN usermod -aG sudo trtuser
 RUN echo 'trtuser:nvidia' | chpasswd
 RUN mkdir -p /workspace && chown trtuser /workspace
 
-# Required to build Ubuntu 20.04 without user prompts with DLFW container
+# Required to build Ubuntu 22.04 without user prompts with DLFW container
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Update CUDA signing key
@@ -68,19 +68,21 @@ RUN apt-get install -y --no-install-recommends \
     ln -s /usr/bin/python3 python &&\
     ln -s /usr/bin/pip3 pip;
 
-# Install TensorRT. This will also pull in CUDNN
-RUN ver="${CUDA_VERSION%.*}" &&\
-    if [ "${ver%.*}" = "12" ] ; then \
-    ver="12.8"; \
-    fi &&\
-    v="${TRT_VERSION}-1+cuda${ver}" &&\
-    apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/3bf863cc.pub &&\
-    apt-get update &&\
-    sudo apt-get -y install libnvinfer10=${v} libnvonnxparsers10=${v}  libnvinfer-plugin10=${v} \
-    libnvinfer-dev=${v} libnvonnxparsers-dev=${v} libnvinfer-plugin-dev=${v} \
-    python3-libnvinfer=${v} libnvinfer-dispatch10=${v} libnvinfer-dispatch-dev=${v} libnvinfer-lean10=${v} \
-    libnvinfer-lean-dev=${v} libnvinfer-vc-plugin10=${v} libnvinfer-vc-plugin-dev=${v} \
-    libnvinfer-headers-dev=${v} libnvinfer-headers-plugin-dev=${v};
+# Install TensorRT
+RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.2/tars/TensorRT-10.13.2.6.Linux.aarch64-gnu.cuda-13.0.tar.gz \
+    && tar -xf TensorRT-10.13.2.6.Linux.aarch64-gnu.cuda-13.0.tar.gz \
+    && cp -a TensorRT-10.13.2.6/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-10.13.2.6/python/tensorrt-10.13.2.6-cp310-none-linux_aarch64.whl ;\
+    elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.2/tars/TensorRT-10.13.2.6.Linux.aarch64-gnu.cuda-12.9.tar.gz \
+    && tar -xf TensorRT-10.13.2.6.Linux.aarch64-gnu.cuda-12.9.tar.gz \
+    && cp -a TensorRT-10.13.2.6/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-10.13.2.6/python/tensorrt-10.13.2.6-cp310-none-linux_aarch64.whl ;\
+    else \
+    echo "Invalid CUDA_VERSION"; \
+    exit 1; \
+    fi
 
 # Install Cmake
 RUN cd /tmp && \

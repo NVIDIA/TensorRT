@@ -16,7 +16,7 @@
 #
 
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 
 
 class ModelMemoryManager:

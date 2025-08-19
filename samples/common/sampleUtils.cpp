@@ -571,7 +571,7 @@ void transpose2DWeights(void* dst, void const* src, int32_t const m, int32_t con
 template void transpose2DWeights<float>(void* dst, void const* src, int32_t const m, int32_t const n);
 template void transpose2DWeights<half_float::half>(void* dst, void const* src, int32_t const m, int32_t const n);
 
-template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool>>
+template <typename T, typename std::enable_if<std::is_integral<T>::value, bool>::type>
 void fillBuffer(void* buffer, int64_t volume, int32_t min, int32_t max)
 {
     T* typedBuffer = static_cast<T*>(buffer);
@@ -581,7 +581,7 @@ void fillBuffer(void* buffer, int64_t volume, int32_t min, int32_t max)
     std::generate(typedBuffer, typedBuffer + volume, generator);
 }
 
-template <typename T, typename std::enable_if_t<!std::is_integral_v<T>, bool>>
+template <typename T, typename std::enable_if<!std::is_integral<T>::value, bool>::type>
 void fillBuffer(void* buffer, int64_t volume, float min, float max)
 {
     T* typedBuffer = static_cast<T*>(buffer);
@@ -617,6 +617,162 @@ bool matchStringWithOneWildcard(std::string const& pattern, std::string const& t
     // Otherwise, target must follow prefix+anything+postfix pattern.
     return target.size() >= (splitPattern[0].size() + splitPattern[1].size()) && target.find(splitPattern[0]) == 0
         && target.rfind(splitPattern[1]) == (target.size() - splitPattern[1].size());
+}
+
+//! @brief Sanitizes the remote auto tuning config string by removing sensitive credentials
+//!
+//! This function removes usernames and passwords from URL-style configuration strings
+//! to prevent sensitive authentication information from appearing in logs or debug output.
+//! The credentials section (username:password) is replaced with "***" for security.
+//!
+//! Config format: protocol://username[:password]@hostname[:port]?param1=value1&param2=value2
+//! Supported protocols: ssh, http, https, etc.
+//!
+//! Examples:
+//!   Input:  "ssh://admin:secretpass@server.com:22?timeout=30"
+//!   Output: "ssh://***@server.com:22?timeout=30"
+//!
+//! @param config The configuration string to sanitize
+//! @return Sanitized configuration string with passwords and usernames replaced by ***
+std::string sanitizeRemoteAutoTuningConfig(const std::string& config)
+{
+    if (config.empty())
+    {
+        return config;
+    }
+
+    try
+    {
+        // Find the protocol part (before ://)
+        size_t protocolEnd = config.find("://");
+        if (protocolEnd == std::string::npos)
+        {
+            return config; // Invalid format, return as is
+        }
+
+        // Find the credentials part (between :// and @)
+        size_t credentialsStart = protocolEnd + 3;
+        if (credentialsStart >= config.length())
+        {
+            return config; // Truncated after protocol
+        }
+
+        size_t credentialsEnd = config.find('@', credentialsStart);
+        if (credentialsEnd == std::string::npos)
+        {
+            return config; // No credentials, return as is
+        }
+
+        // Extract parts and sanitize
+        std::string protocol = config.substr(0, protocolEnd);
+        std::string hostAndParams = config.substr(credentialsEnd);
+
+        // Return sanitized version
+        return protocol + "://***" + hostAndParams;
+    }
+    catch (std::exception const& e)
+    {
+        sample::gLogError << "Exception in sanitizeRemoteAutoTuningConfig: " << e.what() << std::endl;
+        return config; // Return original on error
+    }
+    catch (...)
+    {
+        sample::gLogError << "Unknown exception in sanitizeRemoteAutoTuningConfig" << std::endl;
+        return config; // Return original on error
+    }
+}
+
+std::pair<std::string, std::string> parseFlag(const std::string& arg)
+{
+    // Handle long flags: --flag=value
+    if (startsWith(arg, "--"))
+    {
+        auto eqIdx = arg.find('=');
+        if (eqIdx != std::string::npos)
+        {
+            return std::make_pair(arg.substr(2, eqIdx - 2), arg.substr(eqIdx + 1));
+        }
+        return std::make_pair("", "");
+    }
+
+    // Handle short flags: -flag=value
+    if (startsWith(arg, "-") && arg.length() > 2)
+    {
+        auto eqIdx = arg.find('=');
+        if (eqIdx != std::string::npos)
+        {
+            return std::make_pair(arg.substr(1, eqIdx - 1), arg.substr(eqIdx + 1));
+        }
+    }
+
+    return std::make_pair("", "");
+}
+
+std::string parseBooleanFlag(const std::string& arg)
+{
+    // Handle long flags: --flag
+    if (startsWith(arg, "--") && arg.length() > 2)
+    {
+        return arg.substr(2);
+    }
+
+    // Handle short flags: only allow explicitly whitelisted single-character flags
+    // to avoid conflicts with valid inputs like negative numbers
+    if (startsWith(arg, "-") && arg.length() == 2)
+    {
+        char flag = arg[1];
+        // Whitelist of allowed short flags (removed 'd' as it requires a value)
+        if (flag == 'h' || flag == 'v')
+        {
+            return arg.substr(1);
+        }
+    }
+
+    return "";
+}
+
+bool validateNonEmpty(const std::string& value, const std::string& flagName)
+{
+    if (value.empty())
+    {
+        sample::gLogError << flagName << " cannot be empty" << std::endl;
+        return false;
+    }
+    return true;
+}
+
+bool validateRemoteAutoTuningConfig(const std::string& config)
+{
+    if (config.find("://") == std::string::npos)
+    {
+        sample::gLogError << "Invalid remote auto tuning config format. Expected format: "
+                             "protocol://username[:password]@hostname[:port]?param1=value1&param2=value2"
+                          << std::endl;
+        return false;
+    }
+    return true;
+}
+
+std::vector<std::string> sanitizeArgv(int32_t argc, char** argv)
+{
+    std::vector<std::string> sanitizedArgs;
+    sanitizedArgs.reserve(argc);
+
+    for (int32_t i = 0; i < argc; ++i)
+    {
+        std::string arg = argv[i];
+
+        // Sanitize remoteAutoTuningConfig argument
+        if (auto const flag = std::string("--remoteAutoTuningConfig=");
+            arg.size() > flag.size() && arg.substr(0, flag.size()) == flag)
+        {
+            arg = std::string(flag) + sanitizeRemoteAutoTuningConfig(arg.substr(flag.size()));
+        }
+
+        sanitizedArgs.push_back(arg);
+    }
+
+    return sanitizedArgs;
 }
 
 } // namespace sample

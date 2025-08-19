@@ -105,7 +105,7 @@ target_link_libraries(trt_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
 target_link_libraries(trt_vc_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
 
 # Use true link dependencies on the global definitions and cudart.
-target_link_libraries(trt_plugins PUBLIC trt_global_definitions TRT::cudart)
+target_link_libraries(trt_plugins PUBLIC trt_global_definitions TRT::cudart trt_cccl_headers)
 target_link_libraries(trt_vc_plugins PUBLIC trt_global_definitions TRT::cudart)
 
 foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)

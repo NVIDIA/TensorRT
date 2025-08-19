@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from cuda import cuda, cudart, nvrtc
+from cuda.bindings import driver as cuda, runtime as cudart, nvrtc
 import numpy as np
 import os
 import argparse

@@ -31,7 +31,7 @@ import modelopt.torch.opt as mto
 import modelopt.torch.quantization as mtq
 import nvtx
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers import (
     DDIMScheduler,
     DDPMScheduler,

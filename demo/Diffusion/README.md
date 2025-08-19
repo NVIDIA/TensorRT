@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.13 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.13.2 --single-branch
 cd TensorRT
 ```
 
@@ -19,7 +19,7 @@ Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacent
 docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.01-py3 /bin/bash
 ```
 
-NOTE: The demo supports CUDA>=11.8
+NOTE: The demo supports CUDA>=12
 
 ### Install latest TensorRT release
 
@@ -49,7 +49,7 @@ onnx                1.15.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.16.3
 polygraphy          0.49.9
-tensorrt            10.13.0.35
+tensorrt            10.13.2.6
 tokenizers          0.13.3
 torch               2.2.0
 transformers        4.42.2

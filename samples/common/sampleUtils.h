@@ -60,10 +60,10 @@ using samplesCommon::volume;
 
 nvinfer1::Dims toDims(std::vector<int64_t> const& vec);
 
-template <typename T, typename std::enable_if_t<std::is_integral_v<T>, bool> = true>
+template <typename T, typename std::enable_if<std::is_integral<T>::value, bool>::type = true>
 void fillBuffer(void* buffer, int64_t volume, int32_t min, int32_t max);
 
-template <typename T, typename std::enable_if_t<!std::is_integral_v<T>, bool> = true>
+template <typename T, typename std::enable_if<!std::is_integral<T>::value, bool>::type = true>
 void fillBuffer(void* buffer, int64_t volume, float min, float max);
 
 template <typename T>
@@ -122,6 +122,58 @@ typename std::unordered_map<std::string, T>::const_iterator findPlausible(
     }
     return res;
 }
+
+// ==== Common argument parsing utilities ====
+
+//! Simple implementation of startsWith for strings
+inline bool startsWith(const std::string& str, const std::string& prefix)
+{
+    return str.size() >= prefix.size() && str.substr(0, prefix.size()) == prefix;
+}
+
+//! Holds a flag and value, so `--foo=bar` becomes `FlagValue{"foo", "bar"}`.
+struct FlagValue
+{
+    std::string flag;
+    std::string value;
+};
+
+//! Parse a command line argument into flag and value components
+//! Returns pair with flag and value, empty flag if parsing failed
+std::pair<std::string, std::string> parseFlag(const std::string& arg);
+
+//! Check if argument is a boolean flag (--flag format or whitelisted short flags: -h, -v, -d)
+//! Returns flag name if valid, empty string otherwise
+std::string parseBooleanFlag(const std::string& arg);
+
+//! Validate that a value is not empty, log error if it is
+bool validateNonEmpty(const std::string& value, const std::string& flagName);
+
+//! Validate remote auto tuning config format
+bool validateRemoteAutoTuningConfig(const std::string& config);
+
+//! Ensure directory path ends with '/'
+inline std::string normalizeDirectoryPath(const std::string& dirPath)
+{
+    std::string result = dirPath;
+    if (!result.empty() && result.back() != '/')
+    {
+        result.push_back('/');
+    }
+    return result;
+}
+
+//! Sanitizes the remote auto tuning config string by removing sensitive credentials
+//! Removes usernames and passwords from URL-style config strings for security.
+//! Example: "ssh://user:pass@host:22" becomes "ssh://***:***@host:22"
+std::string sanitizeRemoteAutoTuningConfig(const std::string& config);
+
+//! Sanitizes command line arguments for logging, removing sensitive credentials
+//! Processes argv array and sanitizes sensitive arguments like remoteAutoTuningConfig
+//! @param argc Number of arguments
+//! @param argv Array of argument strings
+//! @return Vector of sanitized argument strings
+std::vector<std::string> sanitizeArgv(int32_t argc, char** argv);
 
 } // namespace sample
 
