@@ -1,4 +1,5 @@
 # Required for building wheel files
 wheel==0.37.1
-setuptools~=69.5.1; python_version<"3.12"
-setuptools~=80.4.0; python_version>="3.12"
+setuptools~=75.3.2; python_version<"3.10"
+setuptools~=80.9.0; python_version>="3.10"
+

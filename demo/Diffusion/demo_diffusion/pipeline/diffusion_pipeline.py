@@ -99,6 +99,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-canny",
         "flux.1-dev-depth",
         "flux.1-schnell",
+        "flux.1-kontext-dev",
     )
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
@@ -118,6 +119,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-canny": "FlowMatchEuler",
         "flux.1-dev-depth": "FlowMatchEuler",
         "flux.1-schnell": "FlowMatchEuler",
+        "flux.1-kontext-dev": "FlowMatchEuler",
     }
 
     def __init__(
@@ -143,6 +145,7 @@ class DiffusionPipeline(ABC):
         weight_streaming=False,
         text_encoder_weight_streaming_budget_percentage=None,
         denoiser_weight_streaming_budget_percentage=None,
+        controlnet=None,
     ):
         """
         Initializes the Diffusion pipeline.
@@ -190,6 +193,8 @@ class DiffusionPipeline(ABC):
                 Weight streaming budget as a percentage of the size of total streamable weights for the text encoder model.
             denoiser_weight_streaming_budget_percentage (`int`, defaults to None):
                 Weight streaming budget as a percentage of the size of total streamable weights for the denoiser model.
+            controlnet (str, defaults to None):
+                Type of ControlNet to use for the pipeline.
         """
         self.bf16 = bf16
         self.dd_path = dd_path
@@ -218,7 +223,7 @@ class DiffusionPipeline(ABC):
         self.text_encoder_weight_streaming_budget_percentage = text_encoder_weight_streaming_budget_percentage
         self.denoiser_weight_streaming_budget_percentage = denoiser_weight_streaming_budget_percentage
 
-        self.stages = self.get_model_names(self.pipeline_type)
+        self.stages = self.get_model_names(self.pipeline_type, controlnet)
         # config to store additional info
         self.config = {}
         if torch_fallback:
@@ -248,7 +253,9 @@ class DiffusionPipeline(ABC):
         try:
             scheduler_class = scheduler_class_map[scheduler]
         except KeyError:
-            raise ValueError(f"Unsupported scheduler {scheduler}.  Should be one of {list(scheduler_class.keys())}.")
+            raise ValueError(
+                f"Unsupported scheduler {scheduler}.  Should be one of {list(scheduler_class_map.keys())}."
+            )
         self.scheduler = make_scheduler(scheduler_class, version, pipeline_type, hf_token, framework_model_dir)
 
         self.torch_inference = torch_inference
@@ -286,7 +293,7 @@ class DiffusionPipeline(ABC):
 
     @classmethod
     @abc.abstractmethod
-    def get_model_names(cls, pipeline_type: PIPELINE_TYPE) -> List[str]:
+    def get_model_names(cls, pipeline_type: PIPELINE_TYPE, controlnet_type: str = None) -> List[str]:
         """Return a list of model names used by this pipeline."""
         raise NotImplementedError("get_model_names cannot be called from the abstract base class.")
 
@@ -618,14 +625,14 @@ class DiffusionPipeline(ABC):
         if do_export_onnx or do_export_weights_map:
             if not model_config['use_int8'] and not model_config['use_fp8']:
                 obj.export_onnx(
-                    model_config['onnx_path'],
-                    model_config['onnx_opt_path'],
+                    model_config["onnx_path"],
+                    model_config["onnx_opt_path"],
                     onnx_opset,
                     opt_image_height,
                     opt_image_width,
-                    enable_lora_merge=model_config['do_lora_merge'],
+                    enable_lora_merge=model_config["do_lora_merge"],
                     static_shape=static_shape,
-                    lora_loader=self.lora_loader
+                    lora_loader=self.lora_loader,
                 )
             else:
                 print(f"[I] Generating quantized ONNX model: {model_config['onnx_path']}")
@@ -639,16 +646,16 @@ class DiffusionPipeline(ABC):
                     calib_batch_size,
                     height=opt_image_width,
                     width=opt_image_width,
-                    enable_lora_merge=model_config['do_lora_merge']
+                    enable_lora_merge=model_config["do_lora_merge"],
                 )
                 obj.export_onnx(
-                    model_config['onnx_path'],
-                    model_config['onnx_opt_path'],
+                    model_config["onnx_path"],
+                    model_config["onnx_opt_path"],
                     onnx_opset,
                     opt_image_height,
                     opt_image_width,
                     custom_model=quantized_model,
-                    static_shape=static_shape
+                    static_shape=static_shape,
                 )
 
         # FIXME do_export_weights_map needs ONNX graph
@@ -898,16 +905,23 @@ class DiffusionPipeline(ABC):
             cudart.cudaEventDestroy(e[1])
 
         for engine in self.engine.values():
+            engine.deallocate_buffers()
+            engine.deactivate()
+            engine.unload(verbose=False)
             del engine
 
         if self.shared_device_memory:
             cudart.cudaFree(self.shared_device_memory)
 
         for torch_model in self.torch_models.values():
+            torch_model.to("cpu")
             del torch_model
 
         cudart.cudaStreamDestroy(self.stream)
         del self.stream
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def initialize_latents(self, batch_size, unet_channels, latent_height, latent_width, latents_dtype=torch.float32):
         latents_shape = (batch_size, unet_channels, latent_height, latent_width)

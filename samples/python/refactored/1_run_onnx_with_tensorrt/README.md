@@ -31,7 +31,7 @@ This sample demonstrates:
 - Provides performance comparison between `ONNX Runtime` and `TensorRT`
 - Performs inference on a real-world image
 
-## CLI Tools 
+## CLI Tools
 Users can run their onnx model and generate the engine with similar functionality using `trtexec`:
 
 ```bash
@@ -59,3 +59,8 @@ Key options explained:
 - [TensorRT Documentation](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html)
 - [ONNX Documentation](https://onnx.ai/)
 - [EfficientNet Paper](https://arxiv.org/abs/1905.11946)
+
+# Changelog
+
+August 2025
+Removed support for Python versions < 3.10.

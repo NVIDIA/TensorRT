@@ -4,7 +4,7 @@
 
 This sample, `non_zero_plugin`, implements a Python-based plugin for the NonZero operation, configurable to use a `CUDA Python` or `PyTorch` backend.
 
-NonZero is an operation where the non-zero indices of the input tensor is found. 
+NonZero is an operation where the non-zero indices of the input tensor is found.
 
 ## How does this sample work?
 
@@ -45,14 +45,14 @@ num_non_zero_size_tensor = exprBuilder.declare_size_tensor(1, opt_value, upper_b
 
 Now we are ready to specify the extent of the first dimension of the non-zero indices output:
 ```
-# output_dims[0] = trt.DimsExprs(0) 
+# output_dims[0] = trt.DimsExprs(0)
 output_dims[0][0] = num_non_zero_size_tensor
 ```
 Note that the size tensor is declared to be a scalar (0-D):
 
 ### Creating network and building the engine
 
-To add the plugin to the network, the `INetworkDefinition::add_plugin_v3()` method must be used. 
+To add the plugin to the network, the `INetworkDefinition::add_plugin_v3()` method must be used.
 
 Similar to `IPluginCreator` used for V2 plugins, V3 plugins must be accompanied by the registration of a plugin creator implementing the `IPluginCreatorV3One` interface.
 
@@ -95,6 +95,9 @@ The following resources provide a deeper understanding about the V3 TensorRT plu
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+August 2025
+Removed support for Python versions < 3.10.
 
 April 2024
 This is the first version of this `README.md` file.

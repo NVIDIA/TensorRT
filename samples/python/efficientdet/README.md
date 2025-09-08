@@ -18,6 +18,8 @@ These scripts help with conversion and execution of [Google EfficientDet](https:
 
 ## Changelog
 
+- August 2025:
+  - Removed support for Python versions < 3.10.
 - August 2023:
   - Removed support for Python versions < 3.8.
   - Added support for TensorFlow 2.12.0

@@ -1,5 +1,11 @@
 # TensorRT OSS Release Changelog
 
+## 10.13.3 GA - 2025-9-8
+- Added support for TensorRT API Capture and Replay feature, see the [developer guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/advanced.html) for more information.
+- Demo changes
+  - Added support for Flux Kontext pipeline.
+
+
 ## 10.13.2 GA - 2025-8-18
 - Added support for CUDA 13.0, dropped support for CUDA 11.X
 - Dropped support for Ubuntu 20.04

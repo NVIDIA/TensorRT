@@ -56,4 +56,9 @@ def getFilePath(path):
 
 **Python Version Support**
 
-All Python samples are expected to be run with Python>=3.8. It is not recommended to use any lower version as there may be compatibility issues.
+All Python samples are expected to be run with Python>=3.10. It is not recommended to use any lower version as there may be compatibility issues.
+
+# Changelog
+
+August 2025
+Removed support for Python versions < 3.10.

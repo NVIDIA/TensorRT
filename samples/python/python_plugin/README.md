@@ -39,13 +39,13 @@ Implementing a TRT plugin in Python is similar to C++ in that implementation of 
 
 ## Differences in C++ and Python APIs for `IPluginV2DynamicExt`
 The interface methods in Python have mostly similar APIs to their C++ counterparts, except for `serialize()` and `enqueue()`.
- - While the C++ API for `serialize()` is `void serialize (void *buffer)` where the plugin writes to the passed-in `buffer`, the Python API is `serialize(self) -> bytes`, where the implementation of the method is expected to return a bytes object containing a serialized representation of the plugin object. 
+ - While the C++ API for `serialize()` is `void serialize (void *buffer)` where the plugin writes to the passed-in `buffer`, the Python API is `serialize(self) -> bytes`, where the implementation of the method is expected to return a bytes object containing a serialized representation of the plugin object.
  - In `enqueue()`, the device pointers for input and output tensors are passed as their `intptr_t` casts. Since these buffers are created and owned by TRT, care must be taken when writing to them from the Python side.
   - No bindings yet for `attachToContext()` and `detachFromContext()` which are not pure virtual.
 
 # Running the sample: Circular padding plugin
 
-This sample contains a circular padding plugin, where the `enqueue` has been implemented with various frameworks for writing kernels or executing GPU ops (torch). 
+This sample contains a circular padding plugin, where the `enqueue` has been implemented with various frameworks for writing kernels or executing GPU ops (torch).
 
 Each script accepts a command-line argument to choose precision from either FP32 or FP16. e.g.
 ```bash
@@ -116,16 +116,16 @@ V3 plugins allow users to specify any number of custom tactics to time also (in 
 
 In this example, we specify two custom tactics: PyTorch's [torch.nn.functional.pad](https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.html) and a custom kernel written using OpenAI Triton.
 
-It is possible to advertise tactics specific to a format combination. e.g. In this sample, we can support both tactics for FP32 I/O, and only support the OpenAI Triton tactic for FP16 I/O. To achieve this, return in `get_valid_tactics()` the set of tactics `T(f)` supported by the plugin for the format combination `f` indicated by the immediately preceding call to `configure_plugin()`. To enable this behavior in this sample, pass the flag `--per-format-tactics`. 
+It is possible to advertise tactics specific to a format combination. e.g. In this sample, we can support both tactics for FP32 I/O, and only support the OpenAI Triton tactic for FP16 I/O. To achieve this, return in `get_valid_tactics()` the set of tactics `T(f)` supported by the plugin for the format combination `f` indicated by the immediately preceding call to `configure_plugin()`. To enable this behavior in this sample, pass the flag `--per-format-tactics`.
 
 ### Multiple plugins instances
 
 Imagine that you expect to have multiple instances of the same plugin in your network, which would operate on separate inputs, but where the input and output shapes/formats, as well
-as other determining plugin attributes would be the same. With V2 plugins, TensorRT would time all such plugin instances during the engine build -- however, this would be inefficient because the only salient difference between those instances are the values of the input tensors. 
+as other determining plugin attributes would be the same. With V2 plugins, TensorRT would time all such plugin instances during the engine build -- however, this would be inefficient because the only salient difference between those instances are the values of the input tensors.
 
 To communicate to TensorRT that you would like the timing for similar plugin instances to be cached, V3 plugins allow for the specification of a timing cache ID. The timing cache ID
 should only capture timing determinants extraneous to plugin I/O, like their shapes and formats. Typically, this would be the values of any plugin attributes that might be different
-between the plugin instances. 
+between the plugin instances.
 
 In this example,
  - The shape of the `pads` parameter affects timing, but only as far as it affects the output shape. Therefore, the timing cache ID could be an empty string.
@@ -159,6 +159,8 @@ In this example,
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+August 2025: Removed support for Python versions < 3.10.
 
 July 2023: Initial release of this sample
 

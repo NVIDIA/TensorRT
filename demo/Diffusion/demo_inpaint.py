@@ -53,13 +53,13 @@ if __name__ == "__main__":
     image_width, image_height = input_image.size
     if image_height != args.height or image_width != args.width:
         print(f"[I] Resizing input_image to {args.height}x{args.width}")
-        input_image = input_image.resize((args.height, args.width))
+        input_image = input_image.resize((args.width, args.height))
         image_height, image_width = args.height, args.width
 
     mask_width, mask_height = mask_image.size
     if mask_height != args.height or mask_width != args.width:
         print(f"[I] Resizing mask_image to {args.height}x{args.width}")
-        mask_image = mask_image.resize((args.height, args.width))
+        mask_image = mask_image.resize((args.width, args.height))
         mask_height, mask_width = args.height, args.width
 
     kwargs_init_pipeline, kwargs_load_engine, args_run_demo = dd_argparse.process_pipeline_args(args)

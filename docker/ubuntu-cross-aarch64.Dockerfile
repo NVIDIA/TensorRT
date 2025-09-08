@@ -16,14 +16,19 @@
 #
 
 ARG CUDA_VERSION=13.0.0
-ARG OS_VERSION=22.04
+ARG OS_VERSION=24.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.13.2.6
+ENV TRT_VERSION 10.13.3.9
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Setup user account and edit default account
+RUN if id "ubuntu" &>/dev/null; then \
+      usermod -u 1234 ubuntu && \
+      groupmod -g 1234 ubuntu; \
+    fi
 ARG uid=1000
 ARG gid=1000
 RUN groupadd -r -f -g ${gid} trtuser && useradd -o -r -l -u ${uid} -g ${gid} -ms /bin/bash trtuser
@@ -31,7 +36,7 @@ RUN usermod -aG sudo trtuser
 RUN echo 'trtuser:nvidia' | chpasswd
 RUN mkdir -p /workspace && chown trtuser /workspace
 
-# Install requried libraries
+# Install requried libraries + aarch64 toolchains
 RUN apt-get update && apt-get install -y software-properties-common
 RUN add-apt-repository ppa:ubuntu-toolchain-r/test
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,23 +44,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     git \
     pkg-config \
-    python3 \
-    python3-pip \
-    python3-dev \
-    python3-wheel \
     sudo \
     ssh \
     pbzip2 \
     pv \
     bzip2 \
     unzip \
-    build-essential
+    build-essential \
+    g++-aarch64-linux-gnu
 
-RUN cd /usr/local/bin &&\
+# Install python3
+RUN apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-wheel \
+    python3-venv &&\
+    cd /usr/local/bin &&\
     ln -s /usr/bin/python3 python &&\
-    ln -s /usr/bin/pip3 pip
-RUN pip3 install --upgrade pip
-RUN pip3 install setuptools>=41.0.0
+    ln -s /usr/bin/pip3 pip;
+
+# Create python3 virtualenv
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Cmake
 RUN cd /tmp && \
@@ -64,70 +75,25 @@ RUN cd /tmp && \
     ./cmake-3.27.9-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
     rm ./cmake-3.27.9-Linux-x86_64.sh
 
-# Skip installing PyPI packages and NGC client on cross-build container
-
-COPY docker/jetpack_files /pdk_files
-COPY scripts/stubify.sh /pdk_files
-
-# Update CUDA signing keys
-RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub
-
 # Install CUDA cross compile toolchain
-RUN dpkg -i /pdk_files/cuda-repo-cross-aarch64*.deb /pdk_files/cuda-repo-ubuntu*_amd64.deb \
-    && sudo cp /var/cuda-repo-cross-aarch64*/cuda-*keyring.gpg /usr/share/keyrings/ \
-    && sudo cp /var/cuda-repo-ubuntu2204*/cuda-*keyring.gpg /usr/share/keyrings/ \
-    && apt-get update \
-    && apt-get install -y cuda-cross-aarch64 \
-    && rm -rf /var/lib/apt/lists/*
+RUN wget https://developer.download.nvidia.com/compute/cuda/13.0.0/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-0-local_13.0.0-1_all.deb && \
+    dpkg -i cuda-repo-cross-sbsa-ubuntu2404-13-0-local_13.0.0-1_all.deb && \
+    cp /var/cuda-repo-cross-sbsa-ubuntu2404-13-0-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
+    apt-get update && \
+    apt-get -y install cuda-cross-sbsa-13-0
 
-# Unpack cudnn
-RUN  dpkg -x /pdk_files/cudnn-local*.deb /pdk_files/cudnn_extract \
-    && dpkg -x /pdk_files/cudnn_extract/var/cudnn-local*/libcudnn8_*.deb /pdk_files/cudnn \
-    && dpkg -x /pdk_files/cudnn_extract/var/cudnn-local*/libcudnn8-dev*.deb /pdk_files/cudnn \
-    && cd /pdk_files/cudnn/usr/lib/aarch64-linux-gnu \
-    && cd /pdk_files/cudnn \
-    && ln -s usr/include/aarch64-linux-gnu include \
-    && ln -s usr/lib/aarch64-linux-gnu lib \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_adv_infer_v[7-9].h /usr/include/cudnn_adv_infer.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_adv_train_v[7-9].h /usr/include/cudnn_adv_train.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_backend_v[7-9].h /usr/include/cudnn_backend.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_cnn_infer_v[7-9].h /usr/include/cudnn_cnn_infer.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_cnn_train_v[7-9].h /usr/include/cudnn_cnn_train.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_ops_infer_v[7-9].h /usr/include/cudnn_ops_infer.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_ops_train_v[7-9].h /usr/include/cudnn_ops_train.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_v[7-9].h /usr/include/cudnn.h \
-    && ln -s /pdk_files/cudnn/usr/include/aarch64-linux-gnu/cudnn_version_v[7-9].h /usr/include/cudnn_version.h
+# Unpack libnvinfer.
 
-# Unpack libnvinfer
-RUN dpkg -x /pdk_files/libnvinfer10_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-dev_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-plugin10_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvinfer-plugin-dev_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvonnxparsers10_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt \
-    && dpkg -x /pdk_files/libnvonnxparsers-dev_*-1+cuda13.[0-9]_arm64.deb /pdk_files/tensorrt
+RUN wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.3/tars/TensorRT-10.13.3.9.Linux.aarch64-gnu.cuda-13.0.tar.gz && \
+    tar -xf TensorRT-10.13.3.9.Linux.aarch64-gnu.cuda-13.0.tar.gz && \
+    cp -a TensorRT-10.13.3.9/lib/*.so* /usr/lib/aarch64-linux-gnu
 
-# Clean up debs
-RUN rm -rf /pdk_files/*.deb
-
-# set up librt.so symlink
-RUN ln -sf /usr/aarch64-linux-gnu/lib/librt.so.1 /usr/aarch64-linux-gnu/lib/librt.so
-RUN ln -sf /usr/lib/aarch64-linux-gnu/librt.so.1 /usr/lib/aarch64-linux-gnu/librt.so
-
-# create stub libraries
-RUN cd /pdk_files/tensorrt \
-    && ln -s usr/include/aarch64-linux-gnu include \
-    && ln -s usr/lib/aarch64-linux-gnu lib \
-    && cd lib \
-    && mkdir stubs \
-    && for x in nvinfer nvparsers nvinfer_plugin nvonnxparser; \
-    do                                                     \
-    CC=aarch64-linux-gnu-gcc /pdk_files/stubify.sh lib${x}.so stubs/lib${x}.so \
-    ; done
+# Link required library
+RUN cd /usr/aarch64-linux-gnu/lib && ln -sf librt.so.1 librt.so
 
 # Set environment and working directory
-ENV TRT_LIBPATH /pdk_files/tensorrt/lib
+ENV TRT_LIBPATH /usr/lib/aarch64-linux-gnu
 ENV TRT_OSSPATH /workspace/TensorRT
-ENV IS_L4T_CROSS True
 WORKDIR /workspace
 
 USER trtuser

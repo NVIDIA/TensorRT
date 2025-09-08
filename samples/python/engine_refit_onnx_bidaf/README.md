@@ -143,14 +143,17 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
-October 2020: This sample was recreated, updated and reviewed.
-
-August 2023: 
-  - Add support for refitting engines from GPU weights.
-  - Removed support for Python versions < 3.8.
+August 2025:
+  - Removed support for Python versions < 3.10.
 
 January 2024:
   - Add support for refitting version compatible engines.
+
+August 2023:
+  - Add support for refitting engines from GPU weights.
+  - Removed support for Python versions < 3.8.
+
+October 2020: This sample was recreated, updated and reviewed.
 
 # Known issues
 

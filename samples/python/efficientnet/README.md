@@ -1,5 +1,7 @@
 # EfficientNet V1 and V2 in TensorRT
 
+> NOTE: This sample will be deprecated after TensorRT 10.13.3.
+
 These scripts help with conversion and execution of Google [EfficientNet V1](https://arxiv.org/abs/1905.11946) and [EfficientNet V2](https://arxiv.org/abs/2104.00298) models with [NVIDIA TensorRT](https://developer.nvidia.com/tensorrt).
 
 ## Contents
@@ -18,7 +20,11 @@ These scripts help with conversion and execution of Google [EfficientNet V1](htt
 
 # Changelog
 
-August 2023: 
+August 2025:
+  - Removed support for Python versions < 3.10.
+    - Added deprecation notice
+
+August 2023:
   - Update ONNX version support to 1.14.0
   - Removed support for Python versions < 3.8.
 

@@ -15,8 +15,13 @@ This directory contains refactored and improved versions of TensorRT samples, de
 
 1.  Navigate to the desired sample directory and start the Jupyter server:
     ```bash
-    pip install notebook 
+    pip install notebook
     cd 1_run_onnx_with_tensorrt # or any other sample
-    jupyter notebook 
+    jupyter notebook
     ```
 2.  Then, open the `main.ipynb` file in the Jupyter Notebook interface that opens in your web browser.
+
+# Changelog
+
+August 2025
+Removed support for Python versions < 3.10.

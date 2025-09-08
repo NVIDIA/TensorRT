@@ -22,7 +22,7 @@ import argparse
 
 import numpy as np
 import tensorrt as trt
-from cuda.bindings import runtime as cudart
+from cuda.bindings import driver as cuda, runtime as cudart
 
 from image_batcher import ImageBatcher
 

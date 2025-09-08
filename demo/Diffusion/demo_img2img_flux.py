@@ -33,7 +33,7 @@ def parse_args():
         "--version",
         type=str,
         default="flux.1-dev",
-        choices=("flux.1-dev", "flux.1-schnell", "flux.1-dev-canny", "flux.1-dev-depth"),
+        choices=("flux.1-dev", "flux.1-schnell", "flux.1-dev-canny", "flux.1-dev-depth", "flux.1-kontext-dev"),
         help="Version of Flux",
     )
     parser.add_argument(
@@ -79,8 +79,24 @@ def parse_args():
         default=None,
         help="Set runtime weight streaming budget as the percentage of the size of streamable weights for the transformer model. This argument only takes effect when --ws is set. 0 streams the most weights and 100 or None streams no weights.",
     )
-    parser.add_argument("--control-image", type=str, default=None, help="Path to the control image")
-    parser.add_argument("--input-image", type=str, default=None, help="Path to the input conditioning image")
+    parser.add_argument(
+        "--control-image",
+        type=str,
+        default=None,
+        help="Path to the control image for the flux.1-dev-canny and flux.1-dev-depth pipelines",
+    )
+    parser.add_argument(
+        "--input-image",
+        type=str,
+        default=None,
+        help="Path to the input conditioning image for the flux.1-dev and flux.1-schnell img2img pipelines",
+    )
+    parser.add_argument(
+        "--kontext-image",
+        type=str,
+        default=None,
+        help="Path to the input image for Kontext pipeline (flux.1-kontext-dev only, required)",
+    )
     parser.add_argument(
         "--image-strength",
         type=float,
@@ -118,6 +134,7 @@ def process_demo_args(args):
         "flux.1-dev": 512,
         "flux.1-dev-canny": 512,
         "flux.1-dev-depth": 512,
+        "flux.1-kontext-dev": 512,
     }[args.version]
     if args.max_sequence_length is not None:
         if args.max_sequence_length > max_seq_supported_by_model:
@@ -155,15 +172,30 @@ def process_demo_args(args):
             raise ValueError(
                 f"--control-image is a valid input for versions [flux.1-dev-canny, flux.1-dev-depth]. Provided {args.version}"
             )
-        if not args.input_image:
-            raise ValueError(
-                "--input-image is required for the img2img pipeline. Please provide it using the --input-image flag."
-            )
-        args.input_image = Image.open(args.input_image).convert("RGB").resize((args.height, args.width))
+
+        # Handle input image for img2img pipelines
+        if args.version == "flux.1-kontext-dev":
+            # For Kontext pipeline, only use kontext-image
+            if not args.kontext_image:
+                raise ValueError(
+                    "--kontext-image is required for the Kontext pipeline. Please provide it using the --kontext-image flag."
+                )
+            if args.input_image:
+                raise ValueError(
+                    "--input-image is not supported for the Kontext pipeline. Please use --kontext-image instead."
+                )
+            # Kontext pipeline doesn't resize the input image
+            args.kontext_image = Image.open(args.kontext_image).convert("RGB")
+        else:
+            if not args.input_image:
+                raise ValueError(
+                    "--input-image is required for the img2img pipeline. Please provide it using the --input-image flag."
+                )
+            args.input_image = Image.open(args.input_image).convert("RGB").resize((args.width, args.height))
 
     if args.fp8:
-        if not controlnet_type:
-            raise ValueError("--fp8 is currently not supported for Flux img2img pipelines.")
+        if args.version == "flux.1-dev" or args.version == "flux.1-schnell":
+            raise ValueError("--fp8 is currently not supported for Flux.1-dev and Flux.1-schnell img2img pipelines.")
 
         if not args.calibration_dataset:
             args.calibration_dataset = os.path.join(f"{controlnet_type}-eval", "benchmark")
@@ -174,8 +206,16 @@ def process_demo_args(args):
                 f"[W] Could not find the calibration dataset at {args.calibration_dataset}, and will fallback to using pre-exported ONNX models. Please follow the instructions in README to download calibration dataset and provide the path if pre-exported ONNX models are not provided either."
             )
 
-    if args.fp4 and not controlnet_type:
-        raise ValueError("--fp4 is currently not supported for Flux img2img pipelines.")
+        if args.version == "flux.1-kontext-dev" and not args.download_onnx_models:
+            raise ValueError(
+                "--download-onnx-models is required when using --fp8 for Flux.1-kontext-dev img2img pipeline."
+            )
+
+    if args.fp4:
+        if args.version == "flux.1-dev" or args.version == "flux.1-schnell":
+            raise ValueError("--fp4 is currently not supported for Flux.1-dev and Flux.1-schnell img2img pipelines.")
+        if not args.download_onnx_models:
+            raise ValueError("--download-onnx-models is required when using --fp4.")
 
     kwargs_run_demo = {
         "prompt": prompt,
@@ -185,10 +225,13 @@ def process_demo_args(args):
         "batch_count": args.batch_count,
         "num_warmup_runs": args.num_warmup_runs,
         "use_cuda_graph": args.use_cuda_graph,
-        "control_image": args.control_image,
-        "input_image": args.input_image,
         "image_strength": args.image_strength,
     }
+
+    # Add the appropriate image parameter based on pipeline type
+    if not args.version == "flux.1-kontext-dev":
+        kwargs_run_demo["input_image"] = args.input_image
+        kwargs_run_demo["control_image"] = args.control_image
 
     return kwargs_run_demo
 
@@ -201,7 +244,11 @@ if __name__ == "__main__":
     kwargs_run_demo = process_demo_args(args)
 
     # Initialize demo
-    demo = pipeline_module.FluxPipeline.FromArgs(args, pipeline_type=pipeline_module.PIPELINE_TYPE.IMG2IMG)
+    pipeline_type = pipeline_module.PIPELINE_TYPE.IMG2IMG
+    if args.version == "flux.1-kontext-dev":
+        demo = pipeline_module.FluxKontextPipeline.FromArgs(args, pipeline_type=pipeline_type)
+    else:
+        demo = pipeline_module.FluxPipeline.FromArgs(args, pipeline_type=pipeline_type)
 
     # Load TensorRT engines and pytorch modules
     demo.load_engines(
@@ -225,6 +272,9 @@ if __name__ == "__main__":
     demo.load_resources(args.height, args.width, args.batch_size, args.seed)
 
     # Run inference
-    demo.run(**kwargs_run_demo)
+    images = demo.run(**kwargs_run_demo)
 
     demo.teardown()
+
+    # save images
+    demo.save_images(kwargs_run_demo["prompt"], images, check_integrity=(args.version == "flux.1-kontext-dev"))

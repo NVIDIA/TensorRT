@@ -30,8 +30,8 @@ from demo_diffusion.model.diffusion_transformer import (
     FluxTransformerModel,
     SD3_MMDiTModel,
     SD3TransformerModel,
-    SD3TransformerModelControlNet,
 )
+from demo_diffusion.model.controlnet import SD3ControlNet
 from demo_diffusion.model.gan import VQGANModel
 from demo_diffusion.model.load import unload_torch_model
 from demo_diffusion.model.lora import FLUXLoraLoader, SDLoraLoader, merge_loras
@@ -71,7 +71,7 @@ __all__ = [
     "SD3_MMDiTModel",
     "FluxTransformerModel",
     "SD3TransformerModel",
-    "SD3TransformerModelControlNet",
+    "SD3ControlNet",
     # gan
     "VQGANModel",
     # lora

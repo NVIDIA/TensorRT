@@ -27,10 +27,15 @@ from demo_diffusion.utils_sd3.other_impls import load_into
 from demo_diffusion.utils_sd3.sd3_impls import BaseModel as BaseModelSD3
 
 # List of models to import from diffusers.models
-models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel", "SD3ControlNetModel"]
+models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel"]
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, "diffusers.models")
 
+# Import FluxKontextUtil from pipeline module
+# Using a deferred import to avoid circular dependencies
+def _get_flux_kontext_util():
+    from demo_diffusion.pipeline.flux_pipeline import FluxKontextUtil
+    return FluxKontextUtil
 
 class SD3_MMDiTModel(base_model.BaseModel):
     def __init__(
@@ -137,6 +142,7 @@ class SD3_MMDiTModel(base_model.BaseModel):
 
 
 class FluxTransformerModel(base_model.BaseModel):
+
     def __init__(
         self,
         version,
@@ -155,6 +161,7 @@ class FluxTransformerModel(base_model.BaseModel):
         build_strongly_typed=False,
         weight_streaming=False,
         weight_streaming_budget_percentage=None,
+        kontext_resolution=None,
     ):
         super(FluxTransformerModel, self).__init__(
             version,
@@ -184,6 +191,7 @@ class FluxTransformerModel(base_model.BaseModel):
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
         self.out_channels = self.config.get("out_channels") or self.config["in_channels"]
+        self.kontext_resolution = kontext_resolution
 
     def get_model(self, torch_inference=""):
         model_opts = (
@@ -230,7 +238,17 @@ class FluxTransformerModel(base_model.BaseModel):
         }
         if self.config["guidance_embeds"]:
             dynamic_axes["guidance"] = {0: "B"}
+
         return dynamic_axes
+
+    def get_context_latent_dim(self, static_shape=False):
+        FluxKontextUtil = _get_flux_kontext_util()
+        return FluxKontextUtil.get_context_latent_dim(
+            version=self.version,
+            kontext_resolution=self.kontext_resolution,
+            compression_factor=self.compression_factor,
+            static_shape=static_shape,
+        )
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
@@ -246,11 +264,26 @@ class FluxTransformerModel(base_model.BaseModel):
             min_latent_width,
             max_latent_width,
         ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+
+        min_context_latent_dim, context_latent_dim, max_context_latent_dim = self.get_context_latent_dim(static_shape)
+
         input_profile = {
             "hidden_states": [
-                (min_batch, (min_latent_height // 2) * (min_latent_width // 2), self.config["in_channels"]),
-                (batch_size, (latent_height // 2) * (latent_width // 2), self.config["in_channels"]),
-                (max_batch, (max_latent_height // 2) * (max_latent_width // 2), self.config["in_channels"]),
+                (
+                    min_batch,
+                    (min_latent_height // 2) * (min_latent_width // 2) + min_context_latent_dim,
+                    self.config["in_channels"],
+                ),
+                (
+                    batch_size,
+                    (latent_height // 2) * (latent_width // 2) + context_latent_dim,
+                    self.config["in_channels"],
+                ),
+                (
+                    max_batch,
+                    (max_latent_height // 2) * (max_latent_width // 2) + max_context_latent_dim,
+                    self.config["in_channels"],
+                ),
             ],
             "encoder_hidden_states": [
                 (min_batch, self.text_maxlen, self.config["joint_attention_dim"]),
@@ -264,9 +297,9 @@ class FluxTransformerModel(base_model.BaseModel):
             ],
             "timestep": [(min_batch,), (batch_size,), (max_batch,)],
             "img_ids": [
-                ((min_latent_height // 2) * (min_latent_width // 2), 3),
-                ((latent_height // 2) * (latent_width // 2), 3),
-                ((max_latent_height // 2) * (max_latent_width // 2), 3),
+                ((min_latent_height // 2) * (min_latent_width // 2) + min_context_latent_dim, 3),
+                ((latent_height // 2) * (latent_width // 2) + context_latent_dim, 3),
+                ((max_latent_height // 2) * (max_latent_width // 2) + max_context_latent_dim, 3),
             ],
             "txt_ids": [(self.text_maxlen, 3), (self.text_maxlen, 3), (self.text_maxlen, 3)],
         }
@@ -276,14 +309,19 @@ class FluxTransformerModel(base_model.BaseModel):
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        _, context_latent_dim, _ = self.get_context_latent_dim()
         shape_dict = {
-            "hidden_states": (batch_size, (latent_height // 2) * (latent_width // 2), self.config["in_channels"]),
+            "hidden_states": (
+                batch_size,
+                (latent_height // 2) * (latent_width // 2) + context_latent_dim,
+                self.config["in_channels"],
+            ),
             "encoder_hidden_states": (batch_size, self.text_maxlen, self.config["joint_attention_dim"]),
             "pooled_projections": (batch_size, self.config["pooled_projection_dim"]),
             "timestep": (batch_size,),
-            "img_ids": ((latent_height // 2) * (latent_width // 2), 3),
+            "img_ids": ((latent_height // 2) * (latent_width // 2) + context_latent_dim, 3),
             "txt_ids": (self.text_maxlen, 3),
-            "latent": (batch_size, (latent_height // 2) * (latent_width // 2), self.out_channels),
+            "latent": (batch_size, (latent_height // 2) * (latent_width // 2) + context_latent_dim, self.out_channels),
         }
         if self.config["guidance_embeds"]:
             shape_dict["guidance"] = (batch_size,)
@@ -322,51 +360,6 @@ class FluxTransformerModel(base_model.BaseModel):
         if self.int8:
             return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
         return super().optimize(onnx_graph)
-
-
-class Transformer3DControlNetModel(torch.nn.Module):
-    def __init__(self, transformer, controlnets) -> None:
-        super().__init__()
-        self.transformer = transformer
-        self.controlnets = controlnets
-
-    def forward(
-        self,
-        hidden_states,
-        encoder_hidden_states,
-        pooled_projections,
-        timestep,
-        controlnet_image,
-        controlnet_scales,
-    ):
-        for i, (scale, controlnet) in enumerate(zip(controlnet_scales, self.controlnets)):
-            block_samples = controlnet(
-                hidden_states=hidden_states,
-                timestep=timestep,
-                pooled_projections=pooled_projections,
-                controlnet_cond=controlnet_image,
-                conditioning_scale=scale,
-                return_dict=False,
-            )[0]
-
-            # merge samples
-            if i == 0:
-                control_block_samples = block_samples
-            else:
-                control_block_samples = [
-                    control_block_sample + block_sample
-                    for control_block_sample, block_sample in zip(control_block_samples[0], block_samples[0])
-                ]
-                control_block_samples = (tuple(control_block_samples),)
-
-        noise_pred = self.transformer(
-            hidden_states=hidden_states,
-            timestep=timestep,
-            encoder_hidden_states=encoder_hidden_states,
-            pooled_projections=pooled_projections,
-            block_controlnet_hidden_states=control_block_samples,
-        )
-        return noise_pred
 
 
 class UpcastLayer(torch.nn.Module):
@@ -409,6 +402,9 @@ class SD3TransformerModel(base_model.BaseModel):
         fp16=False,
         tf32=False,
         bf16=False,
+        fp8=False,
+        int8=False,
+        fp4=False,
         max_batch_size=16,
         text_maxlen=256,
         build_strongly_typed=False,
@@ -426,6 +422,9 @@ class SD3TransformerModel(base_model.BaseModel):
             fp16=fp16,
             tf32=tf32,
             bf16=bf16,
+            fp8=fp8,
+            int8=int8,
+            fp4=fp4,
             max_batch_size=max_batch_size,
             text_maxlen=text_maxlen,
         )
@@ -443,6 +442,7 @@ class SD3TransformerModel(base_model.BaseModel):
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
         self.out_channels = self.config.get("out_channels")
         self.xB = 2 if do_classifier_free_guidance else 1  # batch multiplier
+        self.num_controlnet_layers = 19  # Can be queried from the ControlNet model config
 
     def get_model(self, torch_inference=""):
         model_opts = (
@@ -470,12 +470,15 @@ class SD3TransformerModel(base_model.BaseModel):
         return model
 
     def get_input_names(self):
-        return [
+        input_names = [
             "hidden_states",
             "encoder_hidden_states",
             "pooled_projections",
             "timestep",
         ]
+        if not self.fp8:
+            input_names.append("block_controlnet_hidden_states")
+        return input_names
 
     def get_output_names(self):
         return ["latent"]
@@ -489,6 +492,8 @@ class SD3TransformerModel(base_model.BaseModel):
             "timestep": {0: xB},
             "latent": {0: xB, 2: "H", 3: "W"},
         }
+        if not self.fp8:
+            dynamic_axes["block_controlnet_hidden_states"] = {1: xB, 2: "latent_dim"}
         return dynamic_axes
 
     def get_input_profile(
@@ -531,6 +536,28 @@ class SD3TransformerModel(base_model.BaseModel):
             ],
             "timestep": [(self.xB * min_batch,), (self.xB * batch_size,), (self.xB * max_batch,)],
         }
+        if not self.fp8:
+            input_profile["block_controlnet_hidden_states"] = [
+                (
+                    self.num_controlnet_layers,
+                    self.xB * min_batch,
+                    min_latent_height // self.config["patch_size"] * min_latent_width // self.config["patch_size"],
+                    self.config["num_attention_heads"] * self.config["attention_head_dim"],
+                ),
+                (
+                    self.num_controlnet_layers,
+                    self.xB * batch_size,
+                    latent_height // self.config["patch_size"] * latent_width // self.config["patch_size"],
+                    self.config["num_attention_heads"] * self.config["attention_head_dim"],
+                ),
+                (
+                    self.num_controlnet_layers,
+                    self.xB * max_batch,
+                    max_latent_height // self.config["patch_size"] * max_latent_width // self.config["patch_size"],
+                    self.config["num_attention_heads"] * self.config["attention_head_dim"],
+                ),
+            ]
+
         return input_profile
 
     def get_shape_dict(self, batch_size, image_height, image_width):
@@ -542,6 +569,13 @@ class SD3TransformerModel(base_model.BaseModel):
             "timestep": (self.xB * batch_size,),
             "latent": (self.xB * batch_size, self.out_channels, latent_height, latent_width),
         }
+        if not self.fp8:
+            shape_dict["block_controlnet_hidden_states"] = (
+                self.num_controlnet_layers,
+                self.xB * batch_size,
+                latent_height // self.config["patch_size"] * latent_width // self.config["patch_size"],
+                self.config["num_attention_heads"] * self.config["attention_head_dim"],
+            )
         return shape_dict
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
@@ -567,130 +601,18 @@ class SD3TransformerModel(base_model.BaseModel):
             torch.randn(self.xB * batch_size, self.config["pooled_projection_dim"], dtype=dtype, device=self.device),
             torch.randn(self.xB * batch_size, dtype=torch.float32, device=self.device),
         )
-        return sample_input
-
-
-class SD3TransformerModelControlNet(SD3TransformerModel):
-    def __init__(
-        self,
-        version,
-        pipeline,
-        device,
-        hf_token,
-        verbose,
-        framework_model_dir,
-        fp16=False,
-        tf32=False,
-        bf16=False,
-        max_batch_size=16,
-        text_maxlen=256,
-        build_strongly_typed=False,
-        weight_streaming=False,
-        weight_streaming_budget_percentage=None,
-        do_classifier_free_guidance=False,
-        controlnets=None,
-    ):
-        super(SD3TransformerModelControlNet, self).__init__(
-            version,
-            pipeline,
-            device=device,
-            hf_token=hf_token,
-            verbose=verbose,
-            framework_model_dir=framework_model_dir,
-            fp16=fp16,
-            tf32=tf32,
-            bf16=bf16,
-            max_batch_size=max_batch_size,
-            text_maxlen=text_maxlen,
-            build_strongly_typed=build_strongly_typed,
-            weight_streaming=weight_streaming,
-            weight_streaming_budget_percentage=weight_streaming_budget_percentage,
-            do_classifier_free_guidance=do_classifier_free_guidance,
-        )
-        self.controlnets = load.get_path(version, pipeline, controlnets) if controlnets else None
-
-    def get_model(self, torch_inference=""):
-        model = super().get_model(torch_inference)
-        cnet_model_opts = {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
-        controlnets = torch.nn.ModuleList(
-            [SD3ControlNetModel.from_pretrained(path, **cnet_model_opts, use_safetensors=self.hf_safetensor).to(self.device) for path in self.controlnets]
-        )
-        for controlnet in controlnets:
-            if hasattr(controlnet.config, "use_pos_embed") and controlnet.config.use_pos_embed is False:
-                pos_embed = controlnet._get_pos_embed_from_transformer(model)
-                controlnet.pos_embed = pos_embed.to(controlnet.dtype).to(controlnet.device)
-        model = Transformer3DControlNetModel(model, controlnets)
-        model = optimizer.optimize_checkpoint(model, torch_inference)
-        return model
-
-    def get_input_names(self):
-        return super().get_input_names() + ["controlnet_image", "controlnet_scales"]
-
-    def get_dynamic_axes(self):
-        xB = "2B" if self.xB == 2 else "B"
-        dynamic_axes = super().get_dynamic_axes()
-        dynamic_axes.update({
-            "controlnet_image": {0: xB, 2: "H", 3: "W"},
-            "controlnet_scales": {0: "S"}
-        })
-        return dynamic_axes
-
-    def get_input_profile(
-        self,
-        batch_size: int,
-        image_height: int,
-        image_width: int,
-        static_batch: bool,
-        static_shape: bool,
-    ):
-        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
-        (
-            min_batch,
-            max_batch,
-            _,
-            _,
-            _,
-            _,
-            min_latent_height,
-            max_latent_height,
-            min_latent_width,
-            max_latent_width,
-        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
-
-        input_profile = super().get_input_profile(batch_size, image_height, image_width, static_batch, static_shape)
-        input_profile.update({
-            "controlnet_image": [
-                (self.xB * min_batch, self.config["in_channels"], min_latent_height, min_latent_width),
-                (self.xB * batch_size, self.config["in_channels"], latent_height, latent_width),
-                (self.xB * max_batch, self.config["in_channels"], max_latent_height, max_latent_width),
-            ],
-            "controlnet_scales": [(len(self.controlnets) * min_batch,), (len(self.controlnets) * batch_size,), (len(self.controlnets) * max_batch,)],
-        })
-        return input_profile
-
-    def get_shape_dict(self, batch_size, image_height, image_width):
-        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
-        shape_dict = super().get_shape_dict(batch_size, image_height, image_width)
-        shape_dict.update({
-            "controlnet_image": (self.xB * batch_size, self.config["in_channels"], latent_height, latent_width),
-            "controlnet_scales": (len(self.controlnets),),
-        })
-        return shape_dict
-
-    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
-        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
-        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
-        sample_input = super().get_sample_input(batch_size, image_height, image_width, static_shape)
-        sample_input += (
-            torch.randn(
-                self.xB * batch_size,
-                self.config["in_channels"],
-                latent_height,
-                latent_width,
-                dtype=dtype,
-                device=self.device,
-            ),
-            torch.randn(len(self.controlnets), dtype=dtype, device=self.device),
-        )
+        if not self.fp8:
+            sample_input += (
+                {
+                    "block_controlnet_hidden_states": torch.randn(
+                        self.num_controlnet_layers,
+                        self.xB * batch_size,
+                        latent_height // self.config["patch_size"] * latent_width // self.config["patch_size"],
+                        self.config["num_attention_heads"] * self.config["attention_head_dim"],
+                        dtype=dtype,
+                        device=self.device,
+                    ),
+                }
+            )
 
         return sample_input

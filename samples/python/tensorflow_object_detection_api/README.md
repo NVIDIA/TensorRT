@@ -321,6 +321,9 @@ If you run this on COCO val2017 images, you may also add the parameter `--annota
 
 # Changelog
 
+August 2025:
+  - Removed support for Python versions < 3.10.
+
 May 2024:
   - Update TensorFlow version support to 2.13.1.
 

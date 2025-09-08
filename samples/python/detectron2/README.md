@@ -4,6 +4,8 @@ Support for Detectron 2 Mask R-CNN R50-FPN 3x model in TensorRT. This script hel
 
 ## Changelog
 
+- Aug 2025
+  - Removed support for Python versions < 3.10.
 - Aug 2023
   - Update ONNX version support to 1.14.0
   - Update ONNX Runtime version support to 1.15.1 for Python>=3.8

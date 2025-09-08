@@ -14,3 +14,8 @@ This sample constructs a simple, single-layer Long Short-Term Memory (LSTM) netw
 
 ## Additional Resources
 *   [tensorrtx repo](https://github.com/wang-xinyu/tensorrtx): Offers real-world examples of constructing complex networks using the TensorRT Layer APIs.
+
+# Changelog
+
+August 2025
+Removed support for Python versions < 3.10.
