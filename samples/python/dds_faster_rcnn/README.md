@@ -93,6 +93,10 @@ python3 infer.py \
 ```
 This will perform object detection on the test image and save the output to the specified directory (`output_dir` in this case).
 
-## Changlog
-- Feb 2025
-    - Initial release
+# Changelog
+
+August 2025
+Removed support for Python versions < 3.10.
+
+February 2025
+Initial release

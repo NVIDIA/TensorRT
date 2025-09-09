@@ -66,22 +66,37 @@ endif()
 
 set(CMAKE_SKIP_BUILD_RPATH True)
 
-# Set CUDA architectures before enabling CUDA language to avoid detection issues in containers
-if (DEFINED GPU_ARCHS AND NOT GPU_ARCHS STREQUAL "")
-  message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Setting CUDA architectures for SM ${GPU_ARCHS}")
+# CUDA targets
+
+if (DEFINED GPU_ARCHS)
+  message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
   separate_arguments(GPU_ARCHS)
   foreach(SM IN LISTS GPU_ARCHS)
     list(APPEND CMAKE_CUDA_ARCHITECTURES "${SM}")
   endforeach()
 else()
-  # Set default architectures for container builds where auto-detection fails
-  set(CMAKE_CUDA_ARCHITECTURES 75 80 86 87 89 90)
+  list(APPEND CMAKE_CUDA_ARCHITECTURES 75 80 86 87 89 90)
 
   if(CUDA_VERSION VERSION_GREATER_EQUAL 12.8)
       list(APPEND CMAKE_CUDA_ARCHITECTURES 100 120)
   endif()
 
-  message(STATUS "Setting default CUDA architectures for container build: ${CMAKE_CUDA_ARCHITECTURES}")
+  message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${CMAKE_CUDA_ARCHITECTURES}")
+endif()
+set(BERT_GENCODES)
+# Generate SASS for each architecture
+foreach(arch ${CMAKE_CUDA_ARCHITECTURES})
+    if (${arch} GREATER_EQUAL 75)
+        set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
+    endif()
+    set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
+endforeach()
+
+# Generate PTX for the last architecture in the list.
+list(GET CMAKE_CUDA_ARCHITECTURES -1 LATEST_SM)
+set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
+if (${LATEST_SM} GREATER_EQUAL 75)
+    set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
 endif()
 
 project(TensorRT
@@ -195,21 +210,6 @@ endif()
 set(CUDA_LIBRARIES ${CUDART_LIB})
 
 ############################################################################################
-set(BERT_GENCODES)
-# Generate SASS for each architecture
-foreach(arch ${CMAKE_CUDA_ARCHITECTURES})
-    if (${arch} GREATER_EQUAL 75)
-        set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
-    endif()
-    set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
-endforeach()
-
-# Generate PTX for the last architecture in the list.
-list(GET CMAKE_CUDA_ARCHITECTURES -1 LATEST_SM)
-set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-if (${LATEST_SM} GREATER_EQUAL 75)
-    set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-endif()
 
 if(NOT MSVC)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr -Xcompiler -Wno-deprecated-declarations")

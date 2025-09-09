@@ -15,7 +15,7 @@
 
 ## Description
 
-This sample, simple_progress_reporter, is a Python sample which uses TensorRT and its included ONNX parser, to perform inference with ResNet-50 models saved in ONNX format. It displays animated progress bars while TensorRT builds the engine. 
+This sample, simple_progress_monitor, is a Python sample which uses TensorRT and its included ONNX parser, to perform inference with ResNet-50 models saved in ONNX format. It displays animated progress bars while TensorRT builds the engine.
 
 ## How does this sample work?
 
@@ -83,6 +83,9 @@ The following resources provide a deeper understanding about importing a model i
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+August 2025
+Removed support for Python versions < 3.10.
 
 August 2023
 Removed support for Python versions < 3.8.

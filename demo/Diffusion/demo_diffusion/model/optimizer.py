@@ -19,12 +19,12 @@ import os
 import re
 import tempfile
 
+import onnx
 import onnx_graphsurgeon as gs
 import torch
-from onnxconverter_common.float16 import convert_float_to_float16
+from onnx import shape_inference
 from polygraphy.backend.onnx.loader import fold_constants
 
-import onnx
 from demo_diffusion.model import load
 from demo_diffusion.utils_modelopt import (
     cast_fp8_mha_io,
@@ -32,7 +32,6 @@ from demo_diffusion.utils_modelopt import (
     convert_fp16_io,
     convert_zp_fp8,
 )
-from onnx import shape_inference
 
 # FIXME update callsites after serialization support for torch.compile is added
 TORCH_INFERENCE_MODELS = ["default", "reduce-overhead", "max-autotune"]
@@ -186,8 +185,7 @@ class Optimizer:
         onnx_graph = gs.export_onnx(self.graph)
         # Convert INT8 Zero to FP8.
         onnx_graph = convert_zp_fp8(onnx_graph)
-        # Convert weights and activations to FP16 and insert Cast nodes in FP8 MHA.
-        onnx_graph = convert_float_to_float16(onnx_graph, keep_io_types=True, disable_shape_infer=True)
+
         self.graph = gs.import_onnx(onnx_graph)
         # Add cast nodes to Resize I/O.
         cast_resize_io(self.graph)

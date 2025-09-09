@@ -1,22 +1,23 @@
 apex==0.9.10dev
-accelerate
+accelerate==1.2.1
 colored
 controlnet_aux==0.0.6
 cuda-python
-# TODO: Pin Diffusers version after the next release
-git+https://github.com/huggingface/diffusers.git@3335e2262d47e7d7e311a44dea7f454b5f01b643 # Install from source for the latest changes in main
+git+https://github.com/huggingface/diffusers.git@7298bdd8177c16eadb74f6166327f5984fd8c69d
+git+https://github.com/black-forest-labs/flux.git
 ftfy
 matplotlib
 nvtx
-onnx==1.17.0
-onnxconverter-common==1.14.0
+onnx==1.18.0
 onnxruntime==1.19.2
+onnxscript==0.3.2
 opencv-python-headless==4.8.0.74
 scipy
-transformers==4.42.2
+transformers==4.52.4
 --extra-index-url https://pypi.nvidia.com
-nvidia-modelopt[torch,onnx]==0.21.0
+nvidia-modelopt[torch,onnx]==0.31.0
 onnx-graphsurgeon==0.5.2
-peft==0.13.0
-polygraphy==0.49.9
+peft==0.17.0
+polygraphy==0.49.22
 sentencepiece
+numpy==1.26.4

@@ -18,6 +18,7 @@
 import argparse
 
 from cuda.bindings import runtime as cudart
+
 from demo_diffusion import dd_argparse
 from demo_diffusion import pipeline as pipeline_module
 
@@ -133,7 +134,8 @@ if __name__ == "__main__":
     kwargs_run_demo = process_demo_args(args)
 
     # Initialize demo
-    demo = pipeline_module.FluxPipeline.FromArgs(args, pipeline_type=pipeline_module.PIPELINE_TYPE.TXT2IMG)
+    pipeline_type = pipeline_module.PIPELINE_TYPE.TXT2IMG
+    demo = pipeline_module.FluxPipeline.FromArgs(args, pipeline_type=pipeline_type)
 
     # Load TensorRT engines and pytorch modules
     demo.load_engines(
@@ -157,6 +159,9 @@ if __name__ == "__main__":
     demo.load_resources(args.height, args.width, args.batch_size, args.seed)
 
     # Run inference
-    demo.run(**kwargs_run_demo)
+    images = demo.run(**kwargs_run_demo)
 
     demo.teardown()
+
+    # save images
+    demo.save_images(kwargs_run_demo["prompt"], images)

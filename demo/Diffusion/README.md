@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.13.2 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.13.3 --single-branch
 cd TensorRT
 ```
 
@@ -16,16 +16,15 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.01-py3 /bin/bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.08-py3 /bin/bash
 ```
 
-NOTE: The demo supports CUDA>=12
+NOTE: The demo supports CUDA>=12.0
 
-### Install latest TensorRT release
+### Install the required packages
 
 ```bash
-python3 -m pip install --upgrade pip
-pip install --pre tensorrt-cu12
+source setup.sh
 ```
 
 Check your installed version using:
@@ -33,28 +32,21 @@ Check your installed version using:
 
 > NOTE: Alternatively, you can download and install TensorRT packages from [NVIDIA TensorRT Developer Zone](https://developer.nvidia.com/tensorrt).
 
-### Install required packages
-
-```bash
-export TRT_OSSPATH=/workspace
-cd $TRT_OSSPATH/demo/Diffusion
-pip3 install -r requirements.txt
-```
 
 > NOTE: demoDiffusion has been tested on systems with NVIDIA H100, A100, L40, T4, and RTX4090 GPUs, and the following software configuration.
 
 ```
-diffusers           0.31.0
-onnx                1.15.0
+diffusers           0.35.0
+onnx                1.18.0
 onnx-graphsurgeon   0.5.2
-onnxruntime         1.16.3
-polygraphy          0.49.9
-tensorrt            10.13.2.6
+onnxruntime         1.19.2
+polygraphy          0.49.22
+tensorrt            10.13.3.9
 tokenizers          0.13.3
-torch               2.2.0
-transformers        4.42.2
+torch               2.8.0a0+5228986c39.nv25.6
+transformers        4.52.4
 controlnet-aux      0.0.6
-nvidia-modelopt     0.15.1
+nvidia-modelopt     0.31.0
 ```
 
 # Running demoDiffusion
@@ -210,7 +202,7 @@ Run the command below to generate an image using Stable Diffusion 3 and Stable D
 python3 demo_txt2img_sd3.py "A vibrant street wall covered in colorful graffiti, the centerpiece spells \"SD3 MEDIUM\", in a storm of colors" --version sd3 --hf-token=$HF_TOKEN
 
 # Stable Diffusion 3.5-medium
-python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-medium --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN --bf16
+python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-medium --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN --bf16 --download-onnx-models
 
 # Stable Diffusion 3.5-large
 python3 demo_txt2img_sd35.py "a beautiful photograph of Mt. Fuji during cherry blossom" --version=3.5-large --denoising-steps=30 --guidance-scale 3.5 --hf-token=$HF_TOKEN --bf16 --download-onnx-models
@@ -234,13 +226,13 @@ Note that a denosing-percentage is applied to the number of denoising-steps when
 
 ```bash
 # Depth
-python3 demo_controlnet_sd35.py "a photo of a man" --controlnet-type depth --hf-token=$HF_TOKEN --denoising-steps 40 --guidance-scale 4.5 --bf16
+python3 demo_controlnet_sd35.py "a photo of a man" --controlnet-type depth --hf-token=$HF_TOKEN --denoising-steps 40 --guidance-scale 4.5 --bf16 --download-onnx-models
 
 # Canny
-python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16
+python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
 
 # Blur
-python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in an action shot close-up, surfing the humongous waves, inside the tube, in the style of Kelly Slater" --controlnet-type blur --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16
+python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in an action shot close-up, surfing the humongous waves, inside the tube, in the style of Kelly Slater" --controlnet-type blur --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
 ```
 
 ### Generate a video guided by an initial image using Stable Video Diffusion
@@ -413,6 +405,21 @@ python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latt
 
 # FP8
 python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latte art design, with the 'Coffee Creations' logo skillfully formed within the latte foam. In a watercolor style, AQUACOLTOK. White background." --hf-token=$HF_TOKEN --lora-path "SebastianBodza/flux_lora_aquarel_watercolor" --lora-weight 1.0 --onnx-dir=onnx-flux-lora --engine-dir=engine-flux-lora --fp8
+```
+
+#### 5. Edit an Image using Flux Kontext
+
+```bash
+wget https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/cat.png
+
+# BF16
+python3 demo_img2img_flux.py "Add a hat to the cat" --version="flux.1-kontext-dev" --hf-token=$HF_TOKEN --guidance-scale 2.5 --kontext-image cat.png --denoising-steps 28 --bf16 --onnx-dir onnx-kontext --engine-dir engine-kontext --download-onnx-models
+
+# FP8
+python3 demo_img2img_flux.py "Add a hat to the cat" --version="flux.1-kontext-dev" --hf-token=$HF_TOKEN --guidance-scale 2.5 --kontext-image cat.png --denoising-steps 28 --fp8 --onnx-dir onnx-kontext-fp8 --engine-dir engine-kontext-fp8 --download-onnx-models --quantization-level 4
+
+# FP4
+python3 demo_img2img_flux.py "Add a hat to the cat" --version="flux.1-kontext-dev" --hf-token=$HF_TOKEN --guidance-scale 2.5 --kontext-image cat.png --denoising-steps 28 --fp4 --onnx-dir onnx-kontext-fp4 --engine-dir engine-kontext-fp4 --download-onnx-models
 ```
 ---
 

@@ -1,7 +1,6 @@
 onnx==1.16.0
-onnxruntime==1.15.1; python_version <= "3.10"
-onnxruntime==1.18.1; python_version >= "3.11"
-Pillow>=10.0.0
+onnxruntime==1.18.1
+Pillow==11.3.0
 git+https://github.com/facebookresearch/detectron2.git
 git+https://github.com/NVIDIA/TensorRT#subdirectory=tools/onnx-graphsurgeon
 cuda-python==12.9.0
@@ -9,5 +8,4 @@ pywin32; platform_system == "Windows"
 pyyaml==6.0.1
 requests==2.32.2
 tqdm==4.66.4
-numpy==1.24.4; python_version <= "3.10"
-numpy==1.26.4; python_version >= "3.11"
+numpy==1.26.4

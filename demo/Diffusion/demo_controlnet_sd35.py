@@ -43,7 +43,7 @@ def parseArgs():
     parser.add_argument(
         "--max-sequence-length",
         type=int,
-        default=77,
+        default=256,
         help="Maximum sequence length to use with the prompt.",
     )
     parser.add_argument(
@@ -55,17 +55,15 @@ def parseArgs():
     )
     parser.add_argument(
         "--controlnet-type",
-        nargs="+",
         type=str,
-        default=["canny"],
-        help="Controlnet type, can be `None`, `str` or `str` list from ['canny', 'depth', 'blur']",
+        default="canny",
+        help="Controlnet type (single type only), can be 'canny', 'depth', 'blur', etc.",
     )
     parser.add_argument(
         "--controlnet-scale",
-        nargs="+",
         type=float,
-        default=[1.0],
-        help="The outputs of the controlnet are multiplied by `controlnet_scale` before they are added to the residual in the original unet, can be `None`, `float` or `float` list",
+        default=1.0,
+        help="The outputs of the controlnet are multiplied by `controlnet_scale` before they are added to the residual in the original Transformer",
     )
     return parser.parse_args()
 
@@ -99,25 +97,15 @@ def process_demo_args(args):
         )
 
     # Controlnet configuration
-    if not isinstance(args.controlnet_type, list):
-        raise ValueError(
-            f"`--controlnet-type` must be of type `str` or `str` list, but is {type(args.controlnet_type)}"
-        )
+    if not isinstance(args.controlnet_type, str):
+        raise ValueError(f"`--controlnet-type` must be of type `str`, but is {type(args.controlnet_type)}")
 
     # Controlnet configuration
-    if not isinstance(args.controlnet_scale, list):
-        raise ValueError(
-            f"`--controlnet-scale`` must be of type `float` or `float` list, but is {type(args.controlnet_scale)}"
-        )
-
-    # Check number of ControlNets to ControlNet scales
-    if len(args.controlnet_type) != len(args.controlnet_scale):
-        raise ValueError(
-            f"Numbers of ControlNets {len(args.controlnet_type)} should be equal to number of ControlNet scales {len(args.controlnet_scale)}."
-        )
+    if not isinstance(args.controlnet_scale, float):
+        raise ValueError(f"`--controlnet-scale` must be of type `float`, but is {type(args.controlnet_scale)}")
 
     # Convert controlnet scales to tensor
-    controlnet_scale = torch.FloatTensor(args.controlnet_scale)
+    controlnet_scale = torch.FloatTensor([args.controlnet_scale])
 
     # Check images
     input_images = []
@@ -125,22 +113,23 @@ def process_demo_args(args):
         for image in args.control_image:
             input_images.append(Image.open(image))
     else:
-        for controlnet in args.controlnet_type:
-            if controlnet == "canny":
-                canny_image = image_module.download_image("https://huggingface.co/datasets/diffusers/diffusers-images-docs/resolve/main/canny.png")
-                input_images.append(canny_image.resize((args.height, args.width)))
-            elif controlnet == "depth":
-                depth_image = image_module.download_image(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/marigold/marigold_einstein_lcm_depth.png"
-                )
-                input_images.append(depth_image.resize((args.height, args.width)))
-            elif controlnet == "blur":
-                blur_image = image_module.download_image(
-                    "https://huggingface.co/datasets/diffusers/diffusers-images-docs/resolve/main/blur.png"
-                )
-                input_images.append(blur_image.resize((args.height, args.width)))
-            else:
-                raise ValueError(f"You should implement the conditonal image of this controlnet: {controlnet}")
+        if args.controlnet_type == "canny":
+            canny_image = image_module.download_image(
+                "https://huggingface.co/datasets/diffusers/diffusers-images-docs/resolve/main/canny.png"
+            )
+            input_images.append(canny_image.resize((args.width, args.height)))
+        elif args.controlnet_type == "depth":
+            depth_image = image_module.download_image(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/marigold/marigold_einstein_lcm_depth.png"
+            )
+            input_images.append(depth_image.resize((args.width, args.height)))
+        elif args.controlnet_type == "blur":
+            blur_image = image_module.download_image(
+                "https://huggingface.co/datasets/diffusers/diffusers-images-docs/resolve/main/blur.png"
+            )
+            input_images.append(blur_image.resize((args.width, args.height)))
+        else:
+            raise ValueError(f"You should implement the conditonal image of this controlnet: {args.controlnet_type}")
     assert len(input_images) > 0
 
     kwargs_run_demo = {
@@ -149,7 +138,7 @@ def process_demo_args(args):
         "height": args.height,
         "width": args.width,
         "control_image": input_images,
-        "controlnet_scales": controlnet_scale,
+        "controlnet_scale": controlnet_scale,
         "batch_count": args.batch_count,
         "num_warmup_runs": args.num_warmup_runs,
         "use_cuda_graph": args.use_cuda_graph,

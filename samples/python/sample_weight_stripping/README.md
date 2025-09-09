@@ -74,8 +74,10 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
-February 2024
+August 2025
+Removed support for Python versions < 3.10.
 
+February 2024
 Initial release of this sample.
 
 # Known issues

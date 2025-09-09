@@ -20,6 +20,7 @@ import argparse
 import inspect
 import os
 import time
+import warnings
 from typing import Any, List, Union
 
 import tensorrt as trt
@@ -32,8 +33,8 @@ from transformers import PreTrainedTokenizerBase
 from demo_diffusion import path as path_module
 from demo_diffusion.model import (
     CLIPWithProjModel,
+    SD3ControlNet,
     SD3TransformerModel,
-    SD3TransformerModelControlNet,
     T5Model,
     VAEEncoderModel,
     VAEModel,
@@ -68,7 +69,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
         guidance_scale: float = 7.0,
         max_sequence_length: int = 256,
-        controlnets=None,
+        controlnet=None,
         **kwargs,
     ):
         """
@@ -84,20 +85,18 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 Higher guidance scale encourages to generate images that are closely linked to the text prompt, usually at the expense of lower image quality.
             max_sequence_length (`int`, defaults to 256):
                 Maximum sequence length to use with the `prompt`.
-            controlnets (str):
-                Which ControlNet/ControlNets to use.
+            controlnet (str):
+                Which ControlNet to use.
         """
-        super().__init__(
-            version=version,
-            pipeline_type=pipeline_type,
-            **kwargs
-        )
+        super().__init__(version=version, pipeline_type=pipeline_type, controlnet=controlnet, **kwargs)
 
         self.fp16 = True if not self.bf16 else False
 
         self.force_weakly_typed_t5 = False
+        self.config["clip_g_torch_fallback"] = True
+        self.config["clip_l_torch_fallback"] = True
         self.config["clip_hidden_states"] = True
-        self.controlnets = controlnets
+        self.controlnet = controlnet
 
         self.guidance_scale = guidance_scale
         self.do_classifier_free_guidance = self.guidance_scale > 1
@@ -115,8 +114,12 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         DO_RETURN_LATENTS = False
 
         # Resolve all paths.
+        controlnet_type = args.controlnet_type if "controlnet_type" in args else None
         dd_path = path_module.resolve_path(
-            cls.get_model_names(pipeline_type), args, pipeline_type, cls._get_pipeline_uid(args.version)
+            cls.get_model_names(pipeline_type, controlnet_type),
+            args,
+            pipeline_type,
+            cls._get_pipeline_uid(args.version),
         )
 
         return cls(
@@ -125,7 +128,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
             pipeline_type=pipeline_type,
             guidance_scale=args.guidance_scale,
             max_sequence_length=args.max_sequence_length,
-            controlnets=args.controlnet_type if "controlnet_type" in args else None,
+            controlnet=controlnet_type,
             bf16=args.bf16,
             low_vram=args.low_vram,
             torch_fallback=args.torch_fallback,
@@ -145,14 +148,15 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         )
 
     @classmethod
-    def get_model_names(cls, pipeline_type: PIPELINE_TYPE) -> List[str]:
+    def get_model_names(cls, pipeline_type: PIPELINE_TYPE, controlnet_type: str = None) -> List[str]:
         """Return a list of model names used by this pipeline.
 
         Overrides:
             DiffusionPipeline.get_model_names
         """
         if pipeline_type.is_controlnet():
-            return ["clip_l", "clip_g", "t5", "transformer", "vae", "vae_encoder"]
+            assert controlnet_type, "ControlNet type must be specified for ControlNet pipelines"
+            return ["clip_l", "clip_g", "t5", "transformer", "vae", "vae_encoder", f"controlnet_{controlnet_type}"]
         return ["clip_l", "clip_g", "t5", "transformer", "vae"]
 
     def download_onnx_models(self, model_name: str, model_config: dict[str, Any]) -> None:
@@ -160,12 +164,6 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
             raise ValueError(
                 "ONNX models can be downloaded only for the following precisions: BF16, FP8. This pipeline is running in FP16."
             )
-        if self.version == "3.5-medium":
-            raise ValueError(
-                "ONNX models can be downloaded only for the large variant of Stable Diffusion 3.5. This pipeline is running the medium variant."
-            )
-        if self.controlnets:
-            raise ValueError("ONNX model download is not supported for ControlNet models.")
 
         hf_download_path = "-".join([load.get_path(self.version, self.pipeline_type.name), "tensorrt"])
         model_path = model_config["onnx_opt_path"]
@@ -177,6 +175,9 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                     dirname = os.path.join(model_name, "fp8")
                 elif self.bf16:
                     dirname = os.path.join(model_name, "bf16")
+            elif "controlnet" in model_name:
+                hf_download_path_cnet = hf_download_path.replace("large", "controlnets")
+                dirname = f"controlnet_{self.controlnet}"
             elif model_name in self.stages:
                 dirname = model_name
             else:
@@ -184,7 +185,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
 
             dirname = os.path.join("ONNX", dirname)
             snapshot_download(
-                repo_id=hf_download_path,
+                repo_id=hf_download_path if "controlnet" not in model_name else hf_download_path_cnet,
                 allow_patterns=os.path.join(dirname, "*"),
                 local_dir=base_dir,
                 token=self.hf_token,
@@ -241,6 +242,9 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         self.bf16 = True if int8 or fp8 or fp4 else self.bf16
         self.fp16 = True if not self.bf16 else False
         self.tf32=True
+        self.fp8 = fp8
+        self.int8 = int8
+        self.fp4 = fp4
         if "clip_l" in self.stages:
             self.models["clip_l"] = CLIPWithProjModel(
                 **models_args,
@@ -274,26 +278,29 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
             )
 
         if "transformer" in self.stages:
-            transformer_args = {
-                "bf16": self.bf16,
-                "fp16": self.fp16,
-                "tf32": self.tf32,
-                "text_maxlen": self.models["t5"].text_maxlen + self.models["clip_g"].text_maxlen,
-                "build_strongly_typed": not self.controlnets,
-                "weight_streaming": self.weight_streaming,
-                "do_classifier_free_guidance": self.do_classifier_free_guidance,
-            }
-            if self.controlnets:
-                self.models["transformer"] = SD3TransformerModelControlNet(
-                    **models_args,
-                    **transformer_args,
-                    controlnets=self.controlnets,
-                )
-            else:
-                self.models["transformer"] = SD3TransformerModel(
-                    **models_args,
-                    **transformer_args,
-                )
+            self.models["transformer"] = SD3TransformerModel(
+                **models_args,
+                fp16=self.fp16,
+                tf32=self.tf32,
+                bf16=self.bf16,
+                fp8=self.fp8,
+                int8=self.int8,
+                fp4=self.fp4,
+                text_maxlen=self.models["t5"].text_maxlen + self.models["clip_g"].text_maxlen,
+                build_strongly_typed=False,
+                weight_streaming=self.weight_streaming,
+                do_classifier_free_guidance=self.do_classifier_free_guidance,
+            )
+
+        if f"controlnet_{self.controlnet}" in self.stages:
+            self.models[f"controlnet_{self.controlnet}"] = SD3ControlNet(
+                **models_args,
+                fp16=self.fp16,
+                tf32=self.tf32,
+                bf16=self.bf16,
+                do_classifier_free_guidance=self.do_classifier_free_guidance,
+                controlnet=self.controlnet,
+            )
 
         if "vae" in self.stages:
             self.models["vae"] = VAEModel(**models_args, fp16=self.fp16, tf32=self.tf32, bf16=self.bf16)
@@ -314,7 +321,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 if "vae" in self.stages and self.models["vae"] is not None
                 else 16
             )
-            if "canny"  in self.controlnets:
+            if self.controlnet and "canny" in self.controlnet:
                 self.image_processor = SD3CannyImageProcessor()
             else:
                 self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
@@ -387,7 +394,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
 
         if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(text_input_ids, untruncated_ids):
             removed_text = tokenizer.batch_decode(untruncated_ids[:, max_sequence_length - 1 : -1])
-            TRT_LOGGER.warning(
+            warnings.warn(
                 "The following part of your input was truncated because `max_sequence_length` is set to "
                 f" {max_sequence_length} tokens: {removed_text}"
             )
@@ -638,6 +645,15 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
             timesteps = scheduler.timesteps
         return timesteps, num_inference_steps
 
+    def get_control_block_samples(self, params_controlnet, controlnet_name="controlnet"):
+        # Predict the controlnet block samples
+        if self.torch_inference or self.torch_fallback[controlnet_name]:
+            block_samples = self.torch_models[controlnet_name](**params_controlnet)
+        else:
+            block_samples = self.run_engine(controlnet_name, params_controlnet)["controlnet_block_samples"].clone()
+
+        return block_samples
+
     def denoise_latents(
         self,
         latents: torch.Tensor,
@@ -647,7 +663,8 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         guidance_scale: float,
         denoiser="transformer",
         control_image=None,
-        cond_scale=None,
+        controlnet_scale=None,
+        controlnet_keep=None,
     ) -> torch.Tensor:
         do_autocast = self.torch_inference != "" and self.models[denoiser].fp16
         with torch.autocast("cuda", enabled=do_autocast):
@@ -659,14 +676,45 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
                 timestep_inp = timestep.expand(latents_model_input.shape[0])
 
+                controlnet_name = f"controlnet_{self.controlnet}"
+                if control_image is not None:
+                    cond_scale = controlnet_scale * controlnet_keep[step_index]
+
+                    cast_to = (
+                        torch.float16
+                        if self.models[controlnet_name].fp16
+                        else torch.bfloat16 if self.models[controlnet_name].bf16 else torch.float32
+                    )
+                    params_controlnet = {
+                        "hidden_states": latents_model_input,
+                        "timestep": timestep_inp,
+                        "pooled_projections": pooled_prompt_embeds,
+                        "controlnet_cond": control_image,
+                        "conditioning_scale": cond_scale.to(self.device).to(cast_to),
+                    }
+
+                    control_block_samples = self.get_control_block_samples(params_controlnet, controlnet_name)
+                else:
+                    latent_shape = latents_model_input.shape
+                    # Initialize control block samples with zeros. Hard-coding some dimensions that can only be queried if a controlnet is used.
+                    control_block_samples = torch.zeros(
+                        self.models["transformer"].num_controlnet_layers,
+                        latent_shape[0],  # batch size
+                        latent_shape[2] // 2 * latent_shape[3] // 2,
+                        self.models["transformer"].config["num_attention_heads"]
+                        * self.models["transformer"].config["attention_head_dim"],
+                        dtype=latents.dtype,
+                        device=latents.device,
+                    )
                 params = {
                     "hidden_states": latents_model_input,
                     "timestep": timestep_inp,
                     "encoder_hidden_states": prompt_embeds,
                     "pooled_projections": pooled_prompt_embeds,
                 }
-                if control_image is not None:
-                    params.update({"controlnet_image": control_image, "controlnet_scales": cond_scale})
+                if not self.fp8:
+                    params["block_controlnet_hidden_states"] = control_block_samples
+
                 # Predict the noise residual
                 if self.torch_inference or self.torch_fallback[denoiser]:
                     noise_pred = self.torch_models[denoiser](**params)["sample"]
@@ -743,7 +791,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         image_height: int,
         image_width: int,
         control_image=None,
-        controlnet_scales=None,
+        controlnet_scale=None,
         control_guidance_start: Union[float, List[float]] = 0.0,
         control_guidance_end: Union[float, List[float]] = 1.0,
         warmup=False,
@@ -763,9 +811,8 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 Width (in pixels) of the image to be generated. Must be a multiple of 8.
             control_image (PIL.Image.Image):
                 The control image to guide the image generation.
-            controlnet_scales (torch.Tensor):
-                A tensor which containes ControlNet scales, essential for multi ControlNet.
-                Must be equal to number of Controlnets.
+            controlnet_scale (torch.Tensor):
+                A tensor which contains ControlNet scale, essential for multi ControlNet.
             control_guidance_start (`float` or `List[float]`, *optional*, defaults to 0.0):
                 The percentage of total steps at which the ControlNet starts applying.
             control_guidance_end (`float` or `List[float]`, *optional*, defaults to 1.0):
@@ -777,14 +824,6 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         """
         assert len(prompt) == len(negative_prompt)
         self.batch_size = len(prompt)
-
-        # controlnet guidance start and end
-        if self.controlnets:
-            mult = len(self.controlnets)
-            control_guidance_start, control_guidance_end = (
-                mult * [control_guidance_start],
-                mult * [control_guidance_end],
-            )
 
         # Spatial dimensions of latent tensor
         assert image_height % (self.vae_scale_factor * self.patch_size) == 0, (
@@ -836,23 +875,15 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
             )
 
             # 4. Prepare control image
-            cond_scale = None
+            controlnet_keep = []
             if control_image is not None:
                 # Process controlnet_scales
-                controlnet_keep = []
                 for i in range(len(timesteps)):
                     keeps = [
                         1.0 - float(i / len(timesteps) < s or (i + 1) / len(timesteps) > e)
-                        for s, e in zip(control_guidance_start, control_guidance_end)
+                        for s, e in zip([control_guidance_start], [control_guidance_end])
                     ]
-                    controlnet_keep.append(keeps[0] if len(self.controlnets) == 1 else keeps)
-                if isinstance(controlnet_keep[i], list):
-                    cond_scale = [c * s for c, s in zip(controlnet_scales, controlnet_keep[i])]
-                else:
-                    controlnet_cond_scale = controlnet_scales
-                    if isinstance(controlnet_cond_scale, list):
-                        controlnet_cond_scale = controlnet_cond_scale[0]
-                    cond_scale = controlnet_cond_scale * controlnet_keep[i]
+                    controlnet_keep.append(keeps[0])
 
                 control_image = self.prepare_image(
                     image=control_image,
@@ -865,8 +896,9 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 with self.model_memory_manager(["vae_encoder"], low_vram=self.low_vram):
                     control_image = self.encode_image(control_image)
 
-            # 5 Denoise
-            with self.model_memory_manager(["transformer"], low_vram=self.low_vram):
+            # 5. Denoise
+            denoiser_list = ["transformer", f"controlnet_{self.controlnet}"] if self.controlnet else ["transformer"]
+            with self.model_memory_manager(denoiser_list, low_vram=self.low_vram):
                 latents = self.denoise_latents(
                     latents=latents,
                     prompt_embeds=prompt_embeds,
@@ -874,7 +906,9 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                     timesteps=timesteps,
                     guidance_scale=self.guidance_scale,
                     control_image=control_image,
-                    cond_scale=cond_scale,
+                    # TODO: support multiple controlnets
+                    controlnet_scale=controlnet_scale,
+                    controlnet_keep=controlnet_keep,
                 )
 
             # 6. Decode Latents

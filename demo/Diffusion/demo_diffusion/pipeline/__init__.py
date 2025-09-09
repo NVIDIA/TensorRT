@@ -16,7 +16,7 @@
 #
 
 from demo_diffusion.pipeline.diffusion_pipeline import DiffusionPipeline
-from demo_diffusion.pipeline.flux_pipeline import FluxPipeline
+from demo_diffusion.pipeline.flux_pipeline import FluxKontextPipeline, FluxPipeline
 from demo_diffusion.pipeline.stable_cascade_pipeline import StableCascadePipeline
 from demo_diffusion.pipeline.stable_diffusion_3_pipeline import StableDiffusion3Pipeline
 from demo_diffusion.pipeline.stable_diffusion_35_pipeline import (
@@ -31,6 +31,7 @@ from demo_diffusion.pipeline.type import PIPELINE_TYPE
 __all__ = [
     "DiffusionPipeline",
     "FluxPipeline",
+    "FluxKontextPipeline",
     "StableCascadePipeline",
     "StableDiffusion3Pipeline",
     "StableDiffusion35Pipeline",
