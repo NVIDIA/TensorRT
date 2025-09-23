@@ -17,7 +17,7 @@
 
 import argparse
 
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from PIL import Image
 
 from demo_diffusion import dd_argparse
@@ -60,7 +60,7 @@ def process_pipeline_args(args):
         image_width, image_height = input_image.size
         if image_height != args.height or image_width != args.width:
             print(f"[I] Resizing input_image to {args.height}x{args.width}")
-            input_image = input_image.resize((args.height, args.width), Image.LANCZOS)
+            input_image = input_image.resize((args.width, args.height), Image.LANCZOS)
             image_height, image_width = args.height, args.width
 
         input_image = preprocess_image_sd3(input_image)

@@ -134,6 +134,7 @@ class BaseModel:
                     if enable_lora_merge:
                         assert lora_loader is not None
                         model = merge_loras(model, lora_loader)
+
                     inputs = self.get_sample_input(1, opt_image_height, opt_image_width, static_shape)
                     torch.onnx.export(
                         model,

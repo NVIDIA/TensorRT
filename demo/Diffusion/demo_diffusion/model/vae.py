@@ -34,6 +34,12 @@ models_to_import = [
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, "diffusers.models")
 
+# Import FluxKontextUtil from pipeline module
+# Using a deferred import to avoid circular dependencies
+def _get_flux_kontext_util():
+    from demo_diffusion.pipeline.flux_pipeline import FluxKontextUtil
+    return FluxKontextUtil
+
 
 class VAEModel(base_model.BaseModel):
     def __init__(
@@ -331,7 +337,8 @@ class VAEEncoderModel(base_model.BaseModel):
         tf32=False,
         bf16=False,
         max_batch_size=16,
-        do_classifier_free_guidance=False
+        do_classifier_free_guidance=False,
+        kontext_resolution=None,
     ):
         super(VAEEncoderModel, self).__init__(
             version,
@@ -345,6 +352,7 @@ class VAEEncoderModel(base_model.BaseModel):
             bf16=bf16,
             max_batch_size=max_batch_size,
         )
+        self.kontext_resolution = kontext_resolution
         self.subfolder = "vae"
         self.vae_encoder_model_dir = load.get_checkpoint_dir(
             framework_model_dir, version, self.pipeline, self.subfolder
@@ -390,6 +398,16 @@ class VAEEncoderModel(base_model.BaseModel):
             self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
         )
 
+        if self.version == "flux.1-kontext-dev":
+            FluxKontextUtil = _get_flux_kontext_util()
+            min_latent_dim, max_latent_dim = FluxKontextUtil.get_min_max_kontext_dimensions()
+            return {
+                "images": [
+                    (self.xB * min_batch, 3, min_latent_dim[1], min_latent_dim[0]),
+                    (self.xB * batch_size, 3, self.kontext_resolution[1], self.kontext_resolution[0]),
+                    (self.xB * max_batch, 3, max_latent_dim[1], max_latent_dim[0]),
+                ],
+            }
         return {
             "images": [
                 (self.xB * min_batch, 3, min_image_height, min_image_width),
@@ -399,9 +417,15 @@ class VAEEncoderModel(base_model.BaseModel):
         }
 
     def get_shape_dict(self, batch_size, image_height, image_width):
-        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        # Determine dimensions based on version
+        if self.version == "flux.1-kontext-dev":
+            img_h, img_w = self.kontext_resolution[1], self.kontext_resolution[0]
+        else:
+            img_h, img_w = image_height, image_width
+        latent_height, latent_width = self.check_dims(batch_size, img_h, img_w)
+
         return {
-            "images": (self.xB * batch_size, 3, image_height, image_width),
+            "images": (self.xB * batch_size, 3, img_h, img_w),
             "latent": (self.xB * batch_size, self.config["latent_channels"], latent_height, latent_width),
         }
 

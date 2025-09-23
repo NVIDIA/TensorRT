@@ -78,6 +78,7 @@ def add_arguments(parser):
             "flux.1-schnell",
             "flux.1-dev-canny",
             "flux.1-dev-depth",
+            "flux.1-kontext-dev",
         ),
         help="Version of Stable Diffusion",
     )
@@ -321,9 +322,11 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
             )
 
         # Check controlnet compatibility
-        if hasattr(args, "controlnet_type") and args.version != "xl-1.0":
-            raise ValueError("fp8 controlnet quantization is only supported for SDXL.")
-
+        if getattr(args, "controlnet_type", None) is not None:
+            if args.version not in ("xl-1.0", "3.5-large"):
+                raise ValueError("fp8 controlnet quantization is only supported for SDXL and SD3.5-large.")
+            if args.version == "3.5-large" and args.controlnet_type == "blur":
+                raise ValueError("Blur controlnet type is not supported for SD3.5.")
         # Check for conflicting quantization
         if args.int8:
             raise ValueError("Cannot apply both int8 and fp8 quantization, please choose only one.")

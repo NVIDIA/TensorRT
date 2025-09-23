@@ -57,6 +57,7 @@ def get_clip_embedding_dim(version, pipeline):
         "flux.1-schnell",
         "flux.1-dev-canny",
         "flux.1-dev-depth",
+        "flux.1-kontext-dev",
     ):
         return 768
     elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):
@@ -119,6 +120,7 @@ class CLIPModel(base_model.BaseModel):
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 token=self.hf_token,
+                attn_implementation="eager",
                 **model_opts,
             ).to(self.device)
             model.save_pretrained(clip_model_dir, **model_opts)
@@ -231,6 +233,7 @@ class CLIPWithProjModel(CLIPModel):
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
                 token=self.hf_token,
+                attn_implementation="eager",
                 **model_opts,
             ).to(self.device)
             model.save_pretrained(clip_model_dir, **model_opts)
@@ -552,5 +555,4 @@ class CLIPImageProcessorModel(base_model.BaseModel):
         else:
             print(f"[I] Load CLIPImageProcessor model from: {clip_model_dir}")
             model = CLIPImageProcessor.from_pretrained(clip_model_dir)
-        model = optimizer.optimize_checkpoint(model, torch_inference)
         return model

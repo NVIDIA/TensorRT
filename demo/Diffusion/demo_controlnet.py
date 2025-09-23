@@ -19,7 +19,7 @@ import argparse
 
 import controlnet_aux
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from PIL import Image
 
 from demo_diffusion import dd_argparse
@@ -78,49 +78,49 @@ if __name__ == "__main__":
                     raise ValueError(
                         f"This demo supports ControlNets for v1.5 and SDXL base pipelines only. Version provided: {args.version}"
                     )
-                input_images.append(canny_image.resize((args.height, args.width)))
+                input_images.append(canny_image.resize((args.width, args.height)))
             elif controlnet == "normal":
                 normal_image = image_module.download_image(
                     "https://huggingface.co/lllyasviel/sd-controlnet-normal/resolve/main/images/toy.png"
                 )
                 normal_image = controlnet_aux.NormalBaeDetector.from_pretrained("lllyasviel/Annotators")(normal_image)
-                input_images.append(normal_image.resize((args.height, args.width)))
+                input_images.append(normal_image.resize((args.width, args.height)))
             elif controlnet == "depth":
                 depth_image = image_module.download_image(
                     "https://huggingface.co/lllyasviel/sd-controlnet-depth/resolve/main/images/stormtrooper.png"
                 )
                 depth_image = controlnet_aux.LeresDetector.from_pretrained("lllyasviel/Annotators")(depth_image)
-                input_images.append(depth_image.resize((args.height, args.width)))
+                input_images.append(depth_image.resize((args.width, args.height)))
             elif controlnet == "hed":
                 hed_image = image_module.download_image(
                     "https://huggingface.co/lllyasviel/sd-controlnet-hed/resolve/main/images/man.png"
                 )
                 hed_image = controlnet_aux.HEDdetector.from_pretrained("lllyasviel/Annotators")(hed_image)
-                input_images.append(hed_image.resize((args.height, args.width)))
+                input_images.append(hed_image.resize((args.width, args.height)))
             elif controlnet == "mlsd":
                 mlsd_image = image_module.download_image(
                     "https://huggingface.co/lllyasviel/sd-controlnet-mlsd/resolve/main/images/room.png"
                 )
                 mlsd_image = controlnet_aux.MLSDdetector.from_pretrained("lllyasviel/Annotators")(mlsd_image)
-                input_images.append(mlsd_image.resize((args.height, args.width)))
+                input_images.append(mlsd_image.resize((args.width, args.height)))
             elif controlnet == "openpose":
                 openpose_image = image_module.download_image(
                     "https://huggingface.co/lllyasviel/sd-controlnet-openpose/resolve/main/images/pose.png"
                 )
                 openpose_image = controlnet_aux.OpenposeDetector.from_pretrained("lllyasviel/Annotators")(openpose_image)
-                input_images.append(openpose_image.resize((args.height, args.width)))
+                input_images.append(openpose_image.resize((args.width, args.height)))
             elif controlnet == "scribble":
                 scribble_image = image_module.download_image(
                     "https://huggingface.co/lllyasviel/sd-controlnet-scribble/resolve/main/images/bag.png"
                 )
                 scribble_image = controlnet_aux.HEDdetector.from_pretrained("lllyasviel/Annotators")(scribble_image, scribble=True)
-                input_images.append(scribble_image.resize((args.height, args.width)))
+                input_images.append(scribble_image.resize((args.width, args.height)))
             elif controlnet == "seg":
                 seg_image = image_module.download_image(
                     "https://huggingface.co/lllyasviel/sd-controlnet-seg/resolve/main/images/house.png"
                 )
                 seg_image = controlnet_aux.SamDetector.from_pretrained("ybelkada/segment-anything", subfolder="checkpoints")(seg_image)
-                input_images.append(seg_image.resize((args.height, args.width)))
+                input_images.append(seg_image.resize((args.width, args.height)))
             else:
                 raise ValueError(f"You should implement the conditonal image of this controlnet: {controlnet}")
     assert len(input_images) > 0

@@ -25,7 +25,7 @@ from typing import Any, List, Union
 
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers.image_processor import VaeImageProcessor
 from huggingface_hub import snapshot_download
 from transformers import PreTrainedTokenizerBase
@@ -178,6 +178,10 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
             elif "controlnet" in model_name:
                 hf_download_path_cnet = hf_download_path.replace("large", "controlnets")
                 dirname = f"controlnet_{self.controlnet}"
+                if model_config["use_fp8"]:
+                    dirname = os.path.join(dirname, "fp8")
+                elif self.bf16:
+                    dirname = os.path.join(dirname, "bf16")
             elif model_name in self.stages:
                 dirname = model_name
             else:
@@ -241,7 +245,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
 
         self.bf16 = True if int8 or fp8 or fp4 else self.bf16
         self.fp16 = True if not self.bf16 else False
-        self.tf32=True
+        self.tf32 = True
         self.fp8 = fp8
         self.int8 = int8
         self.fp4 = fp4
@@ -321,7 +325,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 if "vae" in self.stages and self.models["vae"] is not None
                 else 16
             )
-            if "canny" in self.controlnet:
+            if self.controlnet and "canny" in self.controlnet:
                 self.image_processor = SD3CannyImageProcessor()
             else:
                 self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
@@ -367,7 +371,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         print("|-----------------|--------------|")
         print("| {:^15} | {:>9.2f} ms |".format("Pipeline", walltime_ms))
         print("|-----------------|--------------|")
-        print("Throughput: {:.2f} image/s".format(self.batch_size * 1000.0 / walltime_ms))
+        print("Throughput: {:.5f} image/s".format(self.batch_size * 1000.0 / walltime_ms))
 
     @staticmethod
     def _tokenize(
@@ -711,9 +715,8 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                     "timestep": timestep_inp,
                     "encoder_hidden_states": prompt_embeds,
                     "pooled_projections": pooled_prompt_embeds,
+                    "block_controlnet_hidden_states": control_block_samples,
                 }
-                if not self.fp8:
-                    params["block_controlnet_hidden_states"] = control_block_samples
 
                 # Predict the noise residual
                 if self.torch_inference or self.torch_fallback[denoiser]:

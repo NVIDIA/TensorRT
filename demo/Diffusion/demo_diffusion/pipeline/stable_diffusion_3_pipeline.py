@@ -22,7 +22,7 @@ import time
 import nvtx
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 
 import demo_diffusion.engine as engine_module
 import demo_diffusion.image as image_module
@@ -371,7 +371,7 @@ class StableDiffusion3Pipeline:
         print('|-----------------|--------------|')
         print('| {:^15} | {:>9.2f} ms |'.format('Pipeline', walltime_ms))
         print('|-----------------|--------------|')
-        print('Throughput: {:.2f} image/s'.format(batch_size*1000./walltime_ms))
+        print('Throughput: {:.5f} image/s'.format(batch_size*1000./walltime_ms))
 
     def save_image(self, images, pipeline, prompt, seed):
         # Save image

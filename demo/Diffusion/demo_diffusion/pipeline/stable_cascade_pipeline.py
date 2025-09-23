@@ -20,7 +20,7 @@ import time
 
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers import DDPMWuerstchenScheduler
 
 from demo_diffusion.model import (
@@ -221,7 +221,7 @@ class StableCascadePipeline(StableDiffusionPipeline):
         print('|-----------------|--------------|')
         print('| {:^15} | {:>9.2f} ms |'.format('Pipeline', walltime_ms))
         print('|-----------------|--------------|')
-        print('Throughput: {:.2f} image/s'.format(batch_size*1000./walltime_ms))
+        print('Throughput: {:.5f} image/s'.format(batch_size*1000./walltime_ms))
 
     def infer(
         self,

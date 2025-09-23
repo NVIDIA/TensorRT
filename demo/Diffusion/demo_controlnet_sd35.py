@@ -18,7 +18,7 @@
 import argparse
 
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from PIL import Image
 
 from demo_diffusion import dd_argparse
@@ -117,17 +117,17 @@ def process_demo_args(args):
             canny_image = image_module.download_image(
                 "https://huggingface.co/datasets/diffusers/diffusers-images-docs/resolve/main/canny.png"
             )
-            input_images.append(canny_image.resize((args.height, args.width)))
+            input_images.append(canny_image.resize((args.width, args.height)))
         elif args.controlnet_type == "depth":
             depth_image = image_module.download_image(
                 "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/marigold/marigold_einstein_lcm_depth.png"
             )
-            input_images.append(depth_image.resize((args.height, args.width)))
+            input_images.append(depth_image.resize((args.width, args.height)))
         elif args.controlnet_type == "blur":
             blur_image = image_module.download_image(
                 "https://huggingface.co/datasets/diffusers/diffusers-images-docs/resolve/main/blur.png"
             )
-            input_images.append(blur_image.resize((args.height, args.width)))
+            input_images.append(blur_image.resize((args.width, args.height)))
         else:
             raise ValueError(f"You should implement the conditonal image of this controlnet: {args.controlnet_type}")
     assert len(input_images) > 0

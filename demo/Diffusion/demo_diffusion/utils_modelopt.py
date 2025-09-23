@@ -351,7 +351,14 @@ def generate_fp8_scales(unet):
             module.input_quantizer._amax = module.input_quantizer._amax * (127 / 448.0)
             module.weight_quantizer._amax = module.weight_quantizer._amax * (127 / 448.0)
         elif isinstance(module, Attention) and (
-            hasattr(module.q_bmm_quantizer, "_amax") and module.q_bmm_quantizer is not None
+            hasattr(module.q_bmm_quantizer, "_amax")
+            and module.q_bmm_quantizer is not None
+            and hasattr(module.k_bmm_quantizer, "_amax")
+            and module.k_bmm_quantizer is not None
+            and hasattr(module.v_bmm_quantizer, "_amax")
+            and module.v_bmm_quantizer is not None
+            and hasattr(module.softmax_quantizer, "_amax")
+            and module.softmax_quantizer is not None
         ):
             module.q_bmm_quantizer._num_bits = 8
             module.q_bmm_quantizer._amax = module.q_bmm_quantizer._amax * (127 / 448.0)

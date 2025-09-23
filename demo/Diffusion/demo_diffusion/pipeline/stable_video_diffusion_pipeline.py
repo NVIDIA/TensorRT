@@ -26,7 +26,7 @@ import modelopt.torch.opt as mto
 import modelopt.torch.quantization as mtq
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.utils.torch_utils import randn_tensor
 from tqdm.auto import tqdm
@@ -397,7 +397,7 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
         print('|-----------------|--------------|')
         print('| {:^15} | {:>9.2f} ms |'.format('Pipeline', walltime_ms))
         print('|-----------------|--------------|')
-        print('Throughput: {:.2f} videos/min ({} frames)'.format(batch_size*60000./walltime_ms, num_frames))
+        print('Throughput: {:.5f} videos/min ({} frames)'.format(batch_size*60000./walltime_ms, num_frames))
 
     def save_video(self, frames, pipeline, seed):
         video_name_prefix = '-'.join([pipeline, 'fp16', str(seed), str(random.randint(1000,9999))])

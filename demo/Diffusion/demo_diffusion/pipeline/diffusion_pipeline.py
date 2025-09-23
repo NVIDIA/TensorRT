@@ -31,7 +31,7 @@ import modelopt.torch.opt as mto
 import modelopt.torch.quantization as mtq
 import nvtx
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 from diffusers import (
     DDIMScheduler,
     DDPMScheduler,
@@ -99,6 +99,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-canny",
         "flux.1-dev-depth",
         "flux.1-schnell",
+        "flux.1-kontext-dev",
     )
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
@@ -118,6 +119,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-canny": "FlowMatchEuler",
         "flux.1-dev-depth": "FlowMatchEuler",
         "flux.1-schnell": "FlowMatchEuler",
+        "flux.1-kontext-dev": "FlowMatchEuler",
     }
 
     def __init__(
@@ -383,9 +385,10 @@ class DiffusionPipeline(ABC):
                 ), "fp8 quantization only supported for SDXL, SD1.5, SD2.1, SD3.5-large and FLUX pipelines"
                 if (
                     (self.pipeline_type.is_sd_xl() and model_name == "unetxl")
+                    or (self.version.startswith("flux.1") and model_name == "transformer")
                     or (
-                        (self.version.startswith("flux.1") or self.version.startswith("3.5-large"))
-                        and model_name == "transformer"
+                        self.version.startswith("3.5-large")
+                        and ("transformer" in model_name or "controlnet" in model_name)
                     )
                     or (model_name == "unet")
                 ):
@@ -623,14 +626,14 @@ class DiffusionPipeline(ABC):
         if do_export_onnx or do_export_weights_map:
             if not model_config['use_int8'] and not model_config['use_fp8']:
                 obj.export_onnx(
-                    model_config['onnx_path'],
-                    model_config['onnx_opt_path'],
+                    model_config["onnx_path"],
+                    model_config["onnx_opt_path"],
                     onnx_opset,
                     opt_image_height,
                     opt_image_width,
-                    enable_lora_merge=model_config['do_lora_merge'],
+                    enable_lora_merge=model_config["do_lora_merge"],
                     static_shape=static_shape,
-                    lora_loader=self.lora_loader
+                    lora_loader=self.lora_loader,
                 )
             else:
                 print(f"[I] Generating quantized ONNX model: {model_config['onnx_path']}")
@@ -644,16 +647,16 @@ class DiffusionPipeline(ABC):
                     calib_batch_size,
                     height=opt_image_width,
                     width=opt_image_width,
-                    enable_lora_merge=model_config['do_lora_merge']
+                    enable_lora_merge=model_config["do_lora_merge"],
                 )
                 obj.export_onnx(
-                    model_config['onnx_path'],
-                    model_config['onnx_opt_path'],
+                    model_config["onnx_path"],
+                    model_config["onnx_opt_path"],
                     onnx_opset,
                     opt_image_height,
                     opt_image_width,
                     custom_model=quantized_model,
-                    static_shape=static_shape
+                    static_shape=static_shape,
                 )
 
         # FIXME do_export_weights_map needs ONNX graph
@@ -903,16 +906,23 @@ class DiffusionPipeline(ABC):
             cudart.cudaEventDestroy(e[1])
 
         for engine in self.engine.values():
+            engine.deallocate_buffers()
+            engine.deactivate()
+            engine.unload(verbose=False)
             del engine
 
         if self.shared_device_memory:
             cudart.cudaFree(self.shared_device_memory)
 
         for torch_model in self.torch_models.values():
+            torch_model.to("cpu")
             del torch_model
 
         cudart.cudaStreamDestroy(self.stream)
         del self.stream
+
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def initialize_latents(self, batch_size, unet_channels, latent_height, latent_width, latents_dtype=torch.float32):
         latents_shape = (batch_size, unet_channels, latent_height, latent_width)
