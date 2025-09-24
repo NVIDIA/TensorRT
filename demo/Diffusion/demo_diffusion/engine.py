@@ -22,16 +22,15 @@ import warnings
 from collections import OrderedDict, defaultdict
 
 import numpy as np
+import onnx
 import tensorrt as trt
 import torch
-from cuda import cudart
+from cuda.bindings import runtime as cudart
+from onnx import numpy_helper
 from polygraphy.backend.common import bytes_from_path
 from polygraphy.backend.trt import (
     engine_from_bytes,
 )
-
-import onnx
-from onnx import numpy_helper
 
 TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
@@ -262,14 +261,16 @@ class Engine:
                     weight_streaming_budget_percentage / 100 * self.engine.streamable_weights_size
                 )
 
-    def unload(self):
+    def unload(self, verbose=True):
         if self.engine is not None:
-            print(f"Unloading TensorRT engine: {self.engine_path}")
+            if verbose:
+                print(f"Unloading TensorRT engine: {self.engine_path}")
             del self.engine
             self.engine = None
             gc.collect()
         else:
-            print(f"[W]: Unload an unloaded engine {self.engine_path}, skip unloading")
+            if verbose:
+                print(f"[W]: Unload an unloaded engine {self.engine_path}, skip unloading")
 
     def activate(self, device_memory=None):
         if device_memory:
@@ -303,6 +304,8 @@ class Engine:
             self.tensors[name] = tensor
 
     def deallocate_buffers(self):
+        if not self.engine:
+            return
         for idx in range(self.engine.num_io_tensors):
             binding = self.engine[idx]
             del self.tensors[binding]

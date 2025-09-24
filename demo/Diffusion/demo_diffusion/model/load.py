@@ -95,6 +95,8 @@ def get_path(version: str, pipeline: "pipeline.DiffusionPipeline", controlnets: 
         return "black-forest-labs/FLUX.1-Canny-dev"
     elif version == "flux.1-dev-depth":
         return "black-forest-labs/FLUX.1-Depth-dev"
+    elif version == "flux.1-kontext-dev":
+        return "black-forest-labs/FLUX.1-Kontext-dev"
     else:
         raise ValueError(f"Unsupported version {version} + pipeline {pipeline.name}")
 

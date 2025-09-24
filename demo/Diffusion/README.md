@@ -16,16 +16,15 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.01-py3 /bin/bash
+docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.08-py3 /bin/bash
 ```
 
-NOTE: The demo supports CUDA>=11.8
+NOTE: The demo supports CUDA>=12.0
 
-### Install latest TensorRT release
+### Install the required packages
 
 ```bash
-python3 -m pip install --upgrade pip
-pip install --pre tensorrt-cu12
+source setup.sh
 ```
 
 Check your installed version using:
@@ -33,28 +32,21 @@ Check your installed version using:
 
 > NOTE: Alternatively, you can download and install TensorRT packages from [NVIDIA TensorRT Developer Zone](https://developer.nvidia.com/tensorrt).
 
-### Install required packages
-
-```bash
-export TRT_OSSPATH=/workspace
-cd $TRT_OSSPATH/demo/Diffusion
-pip3 install -r requirements.txt
-```
 
 > NOTE: demoDiffusion has been tested on systems with NVIDIA H100, A100, L40, T4, and RTX4090 GPUs, and the following software configuration.
 
 ```
-diffusers           0.31.0
-onnx                1.15.0
+diffusers           0.35.0
+onnx                1.18.0
 onnx-graphsurgeon   0.5.2
-onnxruntime         1.16.3
-polygraphy          0.49.9
-tensorrt            10.13.0.35
+onnxruntime         1.19.2
+polygraphy          0.49.22
+tensorrt            10.13.3.9
 tokenizers          0.13.3
-torch               2.2.0
-transformers        4.42.2
+torch               2.8.0a0+5228986c39.nv25.6
+transformers        4.52.4
 controlnet-aux      0.0.6
-nvidia-modelopt     0.15.1
+nvidia-modelopt     0.31.0
 ```
 
 # Running demoDiffusion
@@ -233,11 +225,17 @@ Note that a denosing-percentage is applied to the number of denoising-steps when
 ### Generate an image with Stable Diffusion v3.5-large with ControlNet guided by an image and a text prompt
 
 ```bash
-# Depth
+# Depth BF16
 python3 demo_controlnet_sd35.py "a photo of a man" --controlnet-type depth --hf-token=$HF_TOKEN --denoising-steps 40 --guidance-scale 4.5 --bf16 --download-onnx-models
 
-# Canny
+# Depth FP8
+python3 demo_controlnet_sd35.py "a photo of a man" --version=3.5-large --fp8 --controlnet-type depth --download-onnx-models --denoising-steps=40 --guidance-scale 4.5 --hf-token=$HF_TOKEN
+
+# Canny BF16
 python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
+
+# Canny FP8
+python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --version=3.5-large --fp8 --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --download-onnx-models
 
 # Blur
 python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in an action shot close-up, surfing the humongous waves, inside the tube, in the style of Kelly Slater" --controlnet-type blur --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
@@ -414,6 +412,21 @@ python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latt
 # FP8
 python3 demo_txt2img_flux.py "A painting of a barista creating an intricate latte art design, with the 'Coffee Creations' logo skillfully formed within the latte foam. In a watercolor style, AQUACOLTOK. White background." --hf-token=$HF_TOKEN --lora-path "SebastianBodza/flux_lora_aquarel_watercolor" --lora-weight 1.0 --onnx-dir=onnx-flux-lora --engine-dir=engine-flux-lora --fp8
 ```
+
+#### 5. Edit an Image using Flux Kontext
+
+```bash
+wget https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/cat.png
+
+# BF16
+python3 demo_img2img_flux.py "Add a hat to the cat" --version="flux.1-kontext-dev" --hf-token=$HF_TOKEN --guidance-scale 2.5 --kontext-image cat.png --denoising-steps 28 --bf16 --onnx-dir onnx-kontext --engine-dir engine-kontext --download-onnx-models
+
+# FP8
+python3 demo_img2img_flux.py "Add a hat to the cat" --version="flux.1-kontext-dev" --hf-token=$HF_TOKEN --guidance-scale 2.5 --kontext-image cat.png --denoising-steps 28 --fp8 --onnx-dir onnx-kontext-fp8 --engine-dir engine-kontext-fp8 --download-onnx-models --quantization-level 4
+
+# FP4
+python3 demo_img2img_flux.py "Add a hat to the cat" --version="flux.1-kontext-dev" --hf-token=$HF_TOKEN --guidance-scale 2.5 --kontext-image cat.png --denoising-steps 28 --fp4 --onnx-dir onnx-kontext-fp4 --engine-dir engine-kontext-fp4 --download-onnx-models
+```
 ---
 
 #### 5. Export ONNX Models Only (Skip Inference)
@@ -460,3 +473,4 @@ Custom override paths to pre-built engine files can be provided using `--custom-
 - To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
+
