@@ -146,23 +146,26 @@ public:
     //! A pointer to the raw data that is owned by the library.
     void* data() const noexcept
     {
-        return mImpl->data();
+        // Guard against null implementation pointer to avoid segfaults
+        return mImpl ? mImpl->data() : nullptr;
     }
 
     //! The size in bytes of the data that was allocated.
     std::size_t size() const noexcept
     {
-        return mImpl->size();
+        // Guard against null implementation pointer to avoid segfaults
+        return mImpl ? mImpl->size() : 0;
     }
 
     //! The type of the memory that was allocated.
     DataType type() const noexcept
     {
-        return mImpl->type();
+        // Guard against null implementation pointer to avoid segfaults
+        return mImpl ? mImpl->type() : DataType::kFLOAT;
     }
 
 protected:
-    apiv::VHostMemory* mImpl;
+    apiv::VHostMemory* mImpl = nullptr; // initialize to nullptr for safety
 };
 
 //!
@@ -236,7 +239,7 @@ public:
     //!
     bool isConstant() const noexcept
     {
-        return mImpl->isConstant();
+        return mImpl ? mImpl->isConstant() : false;
     }
 
     //!
@@ -247,7 +250,7 @@ public:
     //!
     int64_t getConstantValue() const noexcept
     {
-        return mImpl->getConstantValue();
+        return mImpl ? mImpl->getConstantValue() : std::numeric_limits<int64_t>::min();
     }
 
 protected:
@@ -262,7 +265,7 @@ public:
     //!
     bool isSizeTensor() const noexcept
     {
-        return mImpl->isSizeTensor();
+        return mImpl ? mImpl->isSizeTensor() : false;
     }
 };
 
@@ -291,7 +294,7 @@ public:
     //!
     IDimensionExpr const* constant(int64_t value) noexcept
     {
-        return mImpl->constant(value);
+        return mImpl ? mImpl->constant(value) : nullptr;
     }
 
     //!
@@ -303,7 +306,7 @@ public:
     IDimensionExpr const* operation(
         DimensionOperation op, IDimensionExpr const& first, IDimensionExpr const& second) noexcept
     {
-        return mImpl->operation(op, first, second);
+        return mImpl ? mImpl->operation(op, first, second) : nullptr;
     }
 
 protected:
@@ -314,30 +317,9 @@ public:
     //!
     //! \brief Declare a size tensor at the given output index, with the specified auto-tuning formula and upper bound.
     //!
-    //! A size tensor allows a plugin to have output dimensions that cannot be computed solely from input dimensions.
-    //! For example, suppose a plugin implements the equivalent of INonZeroLayer for 2D input. The plugin can
-    //! have one output for the indices of non-zero elements, and a second output containing the number of non-zero
-    //! elements. Suppose the input has size [M,N] and has K non-zero elements. The plugin can write K to the second
-    //! output. When telling TensorRT that the first output has shape [2,K], plugin uses IExprBuilder::constant() and
-    //! IExprBuilder::declareSizeTensor(1,...) to create the IDimensionExpr that respectively denote 2 and K.
-    //!
-    //! TensorRT also needs to know the value of K to use for auto-tuning and an upper bound on K so that it can
-    //! allocate memory for the output tensor. In the example, supposed typically half of the plugin's input elements
-    //! are non-zero, and all the elements might be nonzero. then using M*N/2 might be a good expression for the opt
-    //! parameter, and M*N for the upper bound. IDimensionsExpr for these expressions can be constructed from
-    //! IDimensionsExpr for the input dimensions.
-    //!
-    //! \param outputIndex index of a plugin output that is a size tensor.
-    //! \param opt formula for computing auto-tuning value. Must not depend on a size tensor.
-    //! \param upper Upper bound on the size tensor.
-    //!
-    //! \return IDimensionExpr denoting the value of the size tensor.
-    //!
-    //! \see IPluginV3OneBuild::getOutputShapes()
-    //!
     IDimensionExpr const* declareSizeTensor(int32_t outputIndex, IDimensionExpr const& opt, IDimensionExpr const& upper)
     {
-        return mImpl->declareSizeTensor(outputIndex, opt, upper);
+        return mImpl ? mImpl->declareSizeTensor(outputIndex, opt, upper) : nullptr;
     }
 };
 
@@ -999,124 +981,103 @@ public:
         int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept = 0;
 
     //!
-    //! \brief Get the number of outputs from the plugin.
+    //! \brief Configure the plugin.
     //!
-    //! \return The number of outputs, which must be a positive integer.
+    //! configurePlugin() can be called multiple times in the build phase during creation of an engine by IBuilder.
     //!
-    virtual int32_t getNbOutputs() const noexcept = 0;
+    //! configurePlugin() is called when a plugin is being prepared for profiling but not for any
+    //! specific input size. This provides an opportunity for the plugin to make algorithmic choices on the basis of
+    //! input and output formats, along with the bound of possible dimensions. The min, opt and max value of the
+    //! DynamicPluginTensorDesc correspond to the kMIN, kOPT and kMAX value of the current profile that the plugin is
+    //! being profiled for, with the desc.dims field corresponding to the dimensions of plugin specified at network
+    //! creation. Wildcard dimensions may exist during this phase in the desc.dims field.
+    //!
+    //! \param in The input tensors attributes that are used for configuration.
+    //! \param nbInputs Number of input tensors.
+    //! \param out The output tensors attributes that are used for configuration.
+    //! \param nbOutputs Number of output tensors.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination, if invoked by TensorRT).
+    //!
+    virtual int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
 
     //!
-    //! \brief Find the workspace size required by the layer.
+    //! \brief Provide the data types of the plugin outputs if the input tensors have the data types provided.
     //!
-    //! This function is called after the plugin is configured, and possibly during execution.
-    //! The result should be a sufficient workspace size to deal with inputs and outputs of the given size
-    //! or any smaller problem.
-    //!
-    //! \return The workspace size.
-    //!
-    virtual size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
-    {
-        return 0;
-    }
-
-    //!
-    //! \brief Query for any custom tactics that the plugin intends to use
-    //!
-    //! This method queries for the set of tactics T(f) supported by the plugin for the format combination f indicated
-    //! by the immediately preceding call to configurePlugin(). It is guaranteed to be called after configurePlugin().
-    //!
-    //! For each format combination provided through configurePlugin(), up to a maximum of getFormatCombinationLimit(),
-    //! the plugin will be timed for each tactic advertised through this method for that format combination. i.e. The
-    //! plugin will be timed \f$N = \sum_{i=0}^{i<getFormatCombinationLimit()} (T(f[i]))\f$ times. If \f$N = 1\f$, the
-    //! plugin may not be timed. In pseudocode, the timing protocol appears as the following:
-    //!
-    //! counter = 0
-    //! for each supported format combination
-    //!     ++counter
-    //!     if counter > getFormatCombinationLimit()
-    //!         goto done
-    //!     configurePlugin(...)
-    //!     for each tactic in getValidTactics(...)
-    //!         time tactic
-    //! done:
-    //!
-    //!
-    //! \param tactics Pre-allocated buffer to which the tactic values should be written
-    //! \param nbTactics The number of tactics advertised through getNbTactics()
-    //!
-    //! \note The provided tactic values must be unique and non-zero. The tactic value 0 is reserved for the default
-    //! tactic attached to each format combination.
+    //! \param outputTypes Pre-allocated array to which the output data types should be written.
+    //! \param nbOutputs The number of output tensors. This matches the value returned from getNbOutputs().
+    //! \param inputTypes The input data types.
+    //! \param nbInputs The number of input tensors.
     //!
     //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
     //! through the error recorder.
     //!
-    virtual int32_t getValidTactics(int32_t* tactics, int32_t nbTactics) noexcept
-    {
-        return 0;
-    }
+    //! \note Provide `DataType::kFLOAT`s if the layer has no inputs. The data type for any size tensor outputs must be
+    //! `DataType::kINT32`. The returned data types must each have a format that is supported by the plugin.
+    //!
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
+    //!
+    virtual int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept = 0;
 
     //!
-    //! \brief Query for the number of custom tactics the plugin intends to use
+    //! \brief Provide expressions for computing dimensions of the output tensors from dimensions of the input tensors.
     //!
-    virtual int32_t getNbTactics() noexcept
-    {
-        return 0;
-    }
-
+    //! \param inputs Expressions for dimensions of the input tensors
+    //! \param nbInputs The number of input tensors
+    //! \param shapeInputs Expressions for values of the shape tensor inputs
+    //! \param nbShapeInputs The number of shape tensor inputs
+    //! \param outputs Pre-allocated array to which the output dimensions must be written
+    //! \param nbOutputs Number of outputs.
+    //! \param exprBuilder Object for generating new dimension expressions
     //!
-    //! \brief Called to query the suffix to use for the timing cache ID. May be called anytime after plugin creation.
+    //! \note Any size tensor outputs must be declared to be 0D.
     //!
-    //! \return Suffix to use for timing cache ID, considering only the creation state of the plugin.
-    //!         Returning nullptr will disable timing caching for the plugin altogether.
+    //! \note The declaration of shapeInputs as DimsExprs is slightly abusive, because the "dimensions"
+    //!       are actually the values of the shape tensor. For example, if the input shape tensor
+    //!       is a 2x3 matrix, the DimsExprs will have six "dimensions": the three values from the first
+    //!       row of the matrix followed by the three values from the second row of the matrix.
     //!
-    //! \note If timing caching is enabled for the plugin (by returning non-null), the I/O shape and format information
-    //! will be automatically considered to form the prefix of the timing cache ID. Therefore, only other factors
-    //! determining the creation state of the plugin, such as its attribute values, should be considered to compose the
-    //! return value.
-    //!
-    virtual char const* getTimingCacheID() noexcept
-    {
-        return nullptr;
-    }
-
-    //!
-    //! \brief Return the maximum number of format combinations that will be timed by TensorRT during the build phase
-    //!
-    virtual int32_t getFormatCombinationLimit() noexcept
-    {
-        return kDEFAULT_FORMAT_COMBINATION_LIMIT;
-    }
-
-    //!
-    //! \brief Query for a string representing the configuration of the plugin. May be called anytime after
-    //! plugin creation.
-    //!
-    //! \return A string representing the plugin's creation state, especially with regard to its attribute values.
-    //!
-    virtual char const* getMetadataString() noexcept
-    {
-        return nullptr;
-    }
-};
-
-class IPluginV3OneRuntime : public IPluginCapability
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"PLUGIN_V3ONE_RUNTIME", 1, 0};
-    }
-
-    //!
-    //! \brief Set the tactic to be used in the subsequent call to enqueue(). If no custom tactics were advertised, this
-    //! will have a value of 0, which is designated as the default tactic.
-    //!
-    //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
+    //! \return 0 for success, else non-zero (which will cause engine termination). Returned code will be reported
     //! through the error recorder.
+    //!
+    virtual int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept = 0;
+
+    //!
+    //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
+    //!
+    //! For this method inputs are numbered 0.. (nbInputs - 1) and outputs are numbered nbInputs.. (nbInputs + nbOutputs
+    //! - 1). Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs + nbOutputs - 1.
+    //!
+    //! TensorRT invokes this method to ask if the input/output indexed by pos supports the format/datatype specified
+    //! by inOut[pos].format and inOut[pos].type.  The override should return true if that format/datatype at inOut[pos]
+    //! are supported by the plugin.  If support is conditional on other input/output formats/datatypes, the plugin can
+    //! make its result conditional on the formats/datatypes in inOut[0.. pos - 1], which will be set to values
+    //! that the plugin supports.  The override should not inspect inOut[pos1.. nbInputs + nbOutputs - 1],
+    //! which will have invalid values.  In other words, the decision for pos must be based on inOut[0..pos] only.
+    //!
+    //! Some examples:
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && inOut.type[pos] == DataType::kHALF;
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW for its two inputs,
+    //!   and FP32 NCHW for its single output:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == pos < 2 ?  DataType::kHALF :
+    //!         DataType::kFLOAT);
+    //!
+    //! * A definition for a "polymorphic" plugin with two inputs and one output that supports
+    //!   any format or type, but the inputs and output must have the same format and type:
+    //!
+    //!         return pos == 0 || (inOut.format[pos] == inOut.format[0] && inOut.type[pos] == inOut.type[0]);
+    //!
+    //! \warning TensorRT will stop asking for formats once it finds getFormatCombinationLimit() of combinations.
+    //!
+    //! \see getFormatCombinationLimit
     //!
     virtual int32_t setTactic(int32_t tactic) noexcept
     {
@@ -1124,356 +1085,397 @@ public:
     }
 
     //!
-    //! \brief Called when a plugin is being prepared for execution for specific dimensions. This could
-    //! happen multiple times in the execution phase, both during creation of an engine by IBuilder and execution of an
-    //! engine by IExecutionContext.
-    //!  * IBuilder will call this function once per profile, with `in` resolved to the values specified by the
-    //!  kOPT field of the current profile.
-    //!  * IExecutionContext will call this during the next subsequent instance of enqueueV3() or executeV2() if:
-    //!    - The optimization profile is changed via setOptimizationProfile() or setOptimizationProfileAsync().
-    //!    - An input binding is changed via setInputTensorAddress() or setTensorAddress() or setInputShape().
-    //! \warning The execution phase is timing critical during IExecutionContext but is not part of the timing loop when
-    //! called from IBuilder. Performance bottlenecks of onShapeChange() will not show up during engine building but
-    //! will be visible during execution if any triggering functions are called.
+    //! \brief Configure the plugin.
+    //!
+    //! configurePlugin() can be called multiple times in the build phase during creation of an engine by IBuilder.
+    //!
+    //! configurePlugin() is called when a plugin is being prepared for profiling but not for any
+    //! specific input size. This provides an opportunity for the plugin to make algorithmic choices on the basis of
+    //! input and output formats, along with the bound of possible dimensions. The min, opt and max value of the
+    //! DynamicPluginTensorDesc correspond to the kMIN, kOPT and kMAX value of the current profile that the plugin is
+    //! being profiled for, with the desc.dims field corresponding to the dimensions of plugin specified at network
+    //! creation. Wildcard dimensions may exist during this phase in the desc.dims field.
     //!
     //! \param in The input tensors attributes that are used for configuration.
     //! \param nbInputs Number of input tensors.
     //! \param out The output tensors attributes that are used for configuration.
     //! \param nbOutputs Number of output tensors.
     //!
-    virtual int32_t onShapeChange(
-        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
+    //! \return 0 for success, else non-zero (which will cause engine termination, if invoked by TensorRT).
+    //!
+    virtual int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
 
     //!
-    //! \brief Execute the layer.
+    //! \brief Provide the data types of the plugin outputs if the input tensors have the data types provided.
     //!
-    //! \param inputDesc how to interpret the memory for the input tensors.
-    //! \param outputDesc how to interpret the memory for the output tensors.
-    //! \param inputs The memory for the input tensors.
-    //! \param outputs The memory for the output tensors.
-    //! \param workspace Workspace for execution.
-    //! \param stream The stream in which to execute the kernels.
+    //! \param outputTypes Pre-allocated array to which the output data types should be written.
+    //! \param nbOutputs The number of output tensors. This matches the value returned from getNbOutputs().
+    //! \param inputTypes The input data types.
+    //! \param nbInputs The number of input tensors.
     //!
     //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
     //! through the error recorder.
     //!
-    virtual int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept = 0;
+    //! \note Provide `DataType::kFLOAT`s if the layer has no inputs. The data type for any size tensor outputs must be
+    //! `DataType::kINT32`. The returned data types must each have a format that is supported by the plugin.
+    //!
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
+    //!
+    virtual int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept = 0;
 
     //!
-    //! \brief Clone the plugin, attach the cloned plugin object to a execution context and grant the cloned plugin
-    //! access to some context resources.
+    //! \brief Provide expressions for computing dimensions of the output tensors from dimensions of the input tensors.
     //!
-    //! This function is called automatically for each plugin when a new execution context is created. The plugin may
-    //! use resources provided by the IPluginResourceContext until the plugin is deleted by TensorRT.
+    //! \param inputs Expressions for dimensions of the input tensors
+    //! \param nbInputs The number of input tensors
+    //! \param shapeInputs Expressions for values of the shape tensor inputs
+    //! \param nbShapeInputs The number of shape tensor inputs
+    //! \param outputs Pre-allocated array to which the output dimensions must be written
+    //! \param nbOutputs Number of outputs.
+    //! \param exprBuilder Object for generating new dimension expressions
     //!
-    //! If the plugin needs per-context resources, it can be allocated here.
+    //! \note Any size tensor outputs must be declared to be 0D.
     //!
-    //! \param context A resource context that exposes methods to get access to execution context specific resources.
-    //!                A different resource context is guaranteed for each different execution context to which the
-    //!                plugin is attached.
-    //! \see IPluginResourceContext
+    //! \note The declaration of shapeInputs as DimsExprs is slightly abusive, because the "dimensions"
+    //!       are actually the values of the shape tensor. For example, if the input shape tensor
+    //!       is a 2x3 matrix, the DimsExprs will have six "dimensions": the three values from the first
+    //!       row of the matrix followed by the three values from the second row of the matrix.
     //!
-    //! \note This method should clone the entire IPluginV3 object, not just the runtime interface
+    //! \return 0 for success, else non-zero (which will cause engine termination). Returned code will be reported
+    //! through the error recorder.
     //!
-    //! \return A clone of the IPluginV3 object whose runtime interface on which this method is invoked, which has
-    //! attached to the provided resource context.
-    //!
-    virtual IPluginV3* attachToContext(IPluginResourceContext* context) noexcept = 0;
+    virtual int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept = 0;
 
     //!
-    //! \brief Get the plugin fields which should be serialized.
+    //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
     //!
-    //! \note The set of plugin fields returned does not necessarily need to match that advertised through
-    //! getFieldNames() of the corresponding plugin creator.
-
-    //! \note To serialize arbitrary plugin data, use a PluginField of
-    //! PluginFieldType::kUNKNOWN, with the length of the PluginField set to the correct number of bytes.
+    //! For this method inputs are numbered 0.. (nbInputs - 1) and outputs are numbered nbInputs.. (nbInputs + nbOutputs
+    //! - 1). Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs + nbOutputs - 1.
     //!
-    virtual PluginFieldCollection const* getFieldsToSerialize() noexcept = 0;
-};
-} // namespace v_1_0
-
-namespace v_2_0
-{
-
-class IPluginV3OneBuild : public v_1_0::IPluginV3OneBuild
-{
-public:
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"PLUGIN_V3ONE_BUILD", 2, 0};
-    }
+    //! TensorRT invokes this method to ask if the input/output indexed by pos supports the format/datatype specified
+    //! by inOut[pos].format and inOut[pos].type.  The override should return true if that format/datatype at inOut[pos]
+    //! are supported by the plugin.  If support is conditional on other input/output formats/datatypes, the plugin can
+    //! make its result conditional on the formats/datatypes in inOut[0.. pos - 1], which will be set to values
+    //! that the plugin supports.  The override should not inspect inOut[pos1.. nbInputs + nbOutputs - 1],
+    //! which will have invalid values.  In other words, the decision for pos must be based on inOut[0..pos] only.
+    //!
+    //! Some examples:
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && inOut.type[pos] == DataType::kHALF;
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW for its two inputs,
+    //!   and FP32 NCHW for its single output:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == pos < 2 ?  DataType::kHALF :
+    //!         DataType::kFLOAT);
+    //!
+    //! * A definition for a "polymorphic" plugin with two inputs and one output that supports
+    //!   any format or type, but the inputs and output must have the same format and type:
+    //!
+    //!         return pos == 0 || (inOut.format[pos] == inOut.format[0] && inOut.type[pos] == inOut.type[0]);
+    //!
+    //! \warning TensorRT will stop asking for formats once it finds getFormatCombinationLimit() of combinations.
+    //!
+    //! \see getFormatCombinationLimit
+    //!
+    virtual bool supportsFormatCombination(
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept = 0;
 
     //!
-    //! \brief Communicates to TensorRT that the output at the specified output index is aliased to the input at the
-    //! returned index
+    //! \brief Configure the plugin.
     //!
-    //! Enables read-modify-write behavior in plugins. TensorRT may insert copies to facilitate this capability.
+    //! configurePlugin() can be called multiple times in the build phase during creation of an engine by IBuilder.
     //!
-    //! \return An integer denoting the index of the input which is aliased to the output at outputIndex.
-    //!         Returning -1 indicates that the output is not aliased to any input. Otherwise, the valid range for
-    //!         return value is [0, nbInputs - 1].
+    //! configurePlugin() is called when a plugin is being prepared for profiling but not for any
+    //! specific input size. This provides an opportunity for the plugin to make algorithmic choices on the basis of
+    //! input and output formats, along with the bound of possible dimensions. The min, opt and max value of the
+    //! DynamicPluginTensorDesc correspond to the kMIN, kOPT and kMAX value of the current profile that the plugin is
+    //! being profiled for, with the desc.dims field corresponding to the dimensions of plugin specified at network
+    //! creation. Wildcard dimensions may exist during this phase in the desc.dims field.
     //!
-    //! \note A given plugin input can only be aliased to a single plugin output.
+    //! \param in The input tensors attributes that are used for configuration.
+    //! \param nbInputs Number of input tensors.
+    //! \param out The output tensors attributes that are used for configuration.
+    //! \param nbOutputs Number of output tensors.
     //!
-    //! \note This API will only be called and have an effect when PreviewFeature::kALIASED_PLUGIN_IO_10_03 is turned
-    //! on.
+    //! \return 0 for success, else non-zero (which will cause engine termination, if invoked by TensorRT).
     //!
-    //! \warning If an input is not shallow copyable, a copy inserted by TensorRT may not work as intended. Therefore,
-    //!          using this feature with tensors requiring deep copies is not supported.
+    virtual int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
+
     //!
-    //! \warning If a given tensor is requested to be aliased by two different plugins, this may result in divergent
-    //! copies of the tensor after writes from each plugin. e.g. In the below example, t1 and t2 could be divergent.
+    //! \brief Provide the data types of the plugin outputs if the input tensors have the data types provided.
     //!
-    //!        +-----+            +--------+
-    //!     +->|Copy +--> t* ---->|Plugin0 +--> t1
-    //!     |  +-----+            +--------+
-    //!     t
-    //!     |  +-----+            +--------+
-    //!     +->|Copy +--> t** --->|Plugin1 +--> t2
-    //!        +-----+            +--------+
+    //! \param outputTypes Pre-allocated array to which the output data types should be written.
+    //! \param nbOutputs The number of output tensors. This matches the value returned from getNbOutputs().
+    //! \param inputTypes The input data types.
+    //! \param nbInputs The number of input tensors.
     //!
-    virtual int32_t getAliasedInput(int32_t outputIndex) noexcept
-    {
-        return -1;
-    }
-};
-
-} // namespace v_2_0
-
-//!
-//! \class IPluginV3OneCore
-//!
-//! \brief A plugin capability interface that enables the core capability (PluginCapabilityType::kCORE).
-//!
-//! \see IPluginCapability
-//! \see PluginCapabilityType
-//! \see IPluginV3::getCapabilityInterface()
-//!
-using IPluginV3OneCore = v_1_0::IPluginV3OneCore;
-
-//!
-//! \class IPluginV3OneBuild
-//!
-//! \brief A plugin capability interface that enables the build capability (PluginCapabilityType::kBUILD). Exposes
-//! methods that allow the expression of the build time properties and behavior of a plugin.
-//!
-//! \see IPluginCapability
-//! \see PluginCapabilityType
-//! \see IPluginV3::getCapabilityInterface()
-//!
-using IPluginV3OneBuild = v_1_0::IPluginV3OneBuild;
-
-//!
-//! \class IPluginV3OneRuntime
-//!
-//! \brief A plugin capability interface that enables the runtime capability (PluginCapabilityType::kRUNTIME). Exposes
-//! methods that allow the expression of the runtime properties and behavior of a plugin.
-//!
-//! \see IPluginCapability
-//! \see PluginCapabilityType
-//! \see IPluginV3::getCapabilityInterface()
-//!
-using IPluginV3OneRuntime = v_1_0::IPluginV3OneRuntime;
-
-//!
-//! \class IPluginV3OneBuildV2
-//!
-//! \brief A plugin capability interface that extends IPluginV3OneBuild by providing I/O aliasing functionality.
-//!
-//! \see IPluginV3OneBuild
-//!
-using IPluginV3OneBuildV2 = v_2_0::IPluginV3OneBuild;
-
-namespace v_1_0
-{
-class IProfiler
-{
-public:
+    //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
+    //! through the error recorder.
     //!
-    //! \brief Layer time reporting callback.
+    //! \note Provide `DataType::kFLOAT`s if the layer has no inputs. The data type for any size tensor outputs must be
+    //! `DataType::kINT32`. The returned data types must each have a format that is supported by the plugin.
     //!
-    //! \param layerName The name of the layer, set when constructing the network definition. If the engine is built
-    //!                  with profiling verbosity set to kNONE, the layerName is the decimal index of the layer.
-    //! \param ms The time in milliseconds to execute the layer.
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
     //!
-    virtual void reportLayerTime(char const* layerName, float ms) noexcept = 0;
+    virtual int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept = 0;
 
-    virtual ~IProfiler() noexcept {}
-};
-} // namespace v_1_0
-
-//!
-//! \class IProfiler
-//!
-//! \brief Application-implemented interface for profiling.
-//!
-//! When this class is added to an execution context, the profiler will be called once per layer for each invocation of
-//! executeV2()/enqueueV3().
-//!
-//! It is not recommended to run inference with profiler enabled when the inference execution time is critical since the
-//! profiler may affect execution time negatively.
-//!
-using IProfiler = v_1_0::IProfiler;
-
-//!
-//! \enum WeightsRole
-//!
-//! \brief How a layer uses particular Weights.
-//!
-//! The power weights of an IScaleLayer are omitted.  Refitting those is not supported.
-//!
-enum class WeightsRole : int32_t
-{
-    kKERNEL = 0,   //!< kernel for IConvolutionLayer or IDeconvolutionLayer
-    kBIAS = 1,     //!< bias for IConvolutionLayer or IDeconvolutionLayer
-    kSHIFT = 2,    //!< shift part of IScaleLayer
-    kSCALE = 3,    //!< scale part of IScaleLayer
-    kCONSTANT = 4, //!< weights for IConstantLayer
-    kANY = 5,      //!< Any other weights role
-};
-
-//! Maximum number of elements in WeightsRole enum. \see WeightsRole
-template <>
-constexpr inline int32_t EnumMax<WeightsRole>() noexcept
-{
-    return 6;
-}
-
-//!
-//! \enum DeviceType
-//! \brief The device that this layer/network will execute on.
-//!
-//!
-enum class DeviceType : int32_t
-{
-    kGPU = 0, //!< GPU Device
-    kDLA = 1, //!< DLA Core
-};
-
-//! Maximum number of elements in DeviceType enum. \see DeviceType
-template <>
-constexpr inline int32_t EnumMax<DeviceType>() noexcept
-{
-    return 2;
-}
-
-//!
-//! \enum TempfileControlFlag
-//!
-//! \brief Flags used to control TensorRT's behavior when creating executable temporary files.
-//!
-//! On some platforms the TensorRT runtime may need to create files in a temporary directory or use platform-specific
-//! APIs to create files in-memory to load temporary DLLs that implement runtime code. These flags allow the
-//! application to explicitly control TensorRT's use of these files. This will preclude the use of certain TensorRT
-//! APIs for deserializing and loading lean runtimes.
-//!
-enum class TempfileControlFlag : int32_t
-{
-    //! Allow creating and loading files in-memory (or unnamed files).
-    kALLOW_IN_MEMORY_FILES = 0,
-
-    //! Allow creating and loading named files in a temporary directory on the filesystem.
     //!
-    //! \see IRuntime::setTemporaryDirectory()
-    kALLOW_TEMPORARY_FILES = 1,
-};
-
-//! Maximum number of elements in TempfileControlFlag enum. \see TempfileControlFlag
-template <>
-constexpr inline int32_t EnumMax<TempfileControlFlag>() noexcept
-{
-    return 2;
-}
-
-//!
-//! \brief Represents a collection of one or more TempfileControlFlag values combined using bitwise-OR operations.
-//!
-//! \see TempfileControlFlag,
-//!      IRuntime::setTempfileControlFlags(),
-//!      IRuntime::getTempfileControlFlags()
-using TempfileControlFlags = uint32_t;
-
-//!
-//! \enum TensorFormat
-//!
-//! \brief Format of the input/output tensors.
-//!
-//! This enum is used by both plugins and network I/O tensors.
-//!
-//! \see IPluginV2::supportsFormat(), safe::ICudaEngine::getBindingFormat()
-//!
-//! Many of the formats are **vector-major** or **vector-minor**. These formats specify
-//! a <em>vector dimension</em> and <em>scalars per vector</em>.
-//! For example, suppose that the tensor has has dimensions [M,N,C,H,W],
-//! the vector dimension is C and there are V scalars per vector.
-//!
-//! * A **vector-major** format splits the vectorized dimension into two axes in the
-//!   memory layout. The vectorized dimension is replaced by an axis of length ceil(C/V)
-//!   and a new dimension of length V is appended. For the example tensor, the memory layout
-//!   is equivalent to an array with dimensions [M][N][ceil(C/V)][H][W][V].
-//!   Tensor coordinate (m,n,c,h,w) maps to array location [m][n][c/V][h][w][c\%V].
-//!
-//! * A **vector-minor** format moves the vectorized dimension to become the last axis
-//!   in the memory layout. For the example tensor, the memory layout is equivalent to an
-//!   array with dimensions [M][N][H][W][ceil(C/V)*V]. Tensor coordinate (m,n,c,h,w) maps
-//!   array location subscript [m][n][h][w][c].
-//!
-//! In interfaces that refer to "components per element", that's the value of V above.
-//!
-//! For more information about data formats, see the topic "Data Format Description" located in the
-//! TensorRT Developer Guide.
-//! https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/advanced.html#i-o-formats
-//!
-enum class TensorFormat : int32_t
-{
-    //! Memory layout is similar to an array in C or C++.
-    //! The stride of each dimension is the product of the dimensions after it.
-    //! The last dimension has unit stride.
+    //! \brief Provide expressions for computing dimensions of the output tensors from dimensions of the input tensors.
     //!
-    //! This format supports all TensorRT types.
-    //! For DLA usage, the tensor sizes are limited to C,H,W in the range [1,8192].
-    kLINEAR = 0,
+    //! \param inputs Expressions for dimensions of the input tensors
+    //! \param nbInputs The number of input tensors
+    //! \param shapeInputs Expressions for values of the shape tensor inputs
+    //! \param nbShapeInputs The number of shape tensor inputs
+    //! \param outputs Pre-allocated array to which the output dimensions must be written
+    //! \param nbOutputs Number of outputs.
+    //! \param exprBuilder Object for generating new dimension expressions
+    //!
+    //! \note Any size tensor outputs must be declared to be 0D.
+    //!
+    //! \note The declaration of shapeInputs as DimsExprs is slightly abusive, because the "dimensions"
+    //!       are actually the values of the shape tensor. For example, if the input shape tensor
+    //!       is a 2x3 matrix, the DimsExprs will have six "dimensions": the three values from the first
+    //!       row of the matrix followed by the three values from the second row of the matrix.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination). Returned code will be reported
+    //! through the error recorder.
+    //!
+    virtual int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept = 0;
 
-    //! Vector-major format with two scalars per vector.
-    //! Vector dimension is third to last.
     //!
-    //! This format requires FP16 or BF16 and at least three dimensions.
-    kCHW2 = 1,
+    //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
+    //!
+    //! For this method inputs are numbered 0.. (nbInputs - 1) and outputs are numbered nbInputs.. (nbInputs + nbOutputs
+    //! - 1). Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs + nbOutputs - 1.
+    //!
+    //! TensorRT invokes this method to ask if the input/output indexed by pos supports the format/datatype specified
+    //! by inOut[pos].format and inOut[pos].type.  The override should return true if that format/datatype at inOut[pos]
+    //! are supported by the plugin.  If support is conditional on other input/output formats/datatypes, the plugin can
+    //! make its result conditional on the formats/datatypes in inOut[0.. pos - 1], which will be set to values
+    //! that the plugin supports.  The override should not inspect inOut[pos1.. nbInputs + nbOutputs - 1],
+    //! which will have invalid values.  In other words, the decision for pos must be based on inOut[0..pos] only.
+    //!
+    //! Some examples:
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && inOut.type[pos] == DataType::kHALF;
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW for its two inputs,
+    //!   and FP32 NCHW for its single output:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == pos < 2 ?  DataType::kHALF :
+    //!         DataType::kFLOAT);
+    //!
+    //! * A definition for a "polymorphic" plugin with two inputs and one output that supports
+    //!   any format or type, but the inputs and output must have the same format and type:
+    //!
+    //!         return pos == 0 || (inOut.format[pos] == inOut.format[0] && inOut.type[pos] == inOut.type[0]);
+    //!
+    //! \warning TensorRT will stop asking for formats once it finds getFormatCombinationLimit() of combinations.
+    //!
+    //! \see getFormatCombinationLimit
+    //!
+    virtual bool supportsFormatCombination(
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept = 0;
 
-    //! Vector-minor format with eight scalars per vector.
-    //! Vector dimension is third to last.
-    //! This format requires FP16 or BF16 and at least three dimensions.
-    kHWC8 = 2,
+    //!
+    //! \brief Configure the plugin.
+    //!
+    //! configurePlugin() can be called multiple times in the build phase during creation of an engine by IBuilder.
+    //!
+    //! configurePlugin() is called when a plugin is being prepared for profiling but not for any
+    //! specific input size. This provides an opportunity for the plugin to make algorithmic choices on the basis of
+    //! input and output formats, along with the bound of possible dimensions. The min, opt and max value of the
+    //! DynamicPluginTensorDesc correspond to the kMIN, kOPT and kMAX value of the current profile that the plugin is
+    //! being profiled for, with the desc.dims field corresponding to the dimensions of plugin specified at network
+    //! creation. Wildcard dimensions may exist during this phase in the desc.dims field.
+    //!
+    //! \param in The input tensors attributes that are used for configuration.
+    //! \param nbInputs Number of input tensors.
+    //! \param out The output tensors attributes that are used for configuration.
+    //! \param nbOutputs Number of output tensors.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination, if invoked by TensorRT).
+    //!
+    virtual int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
 
-    //! Vector-major format with four scalars per vector.
-    //! Vector dimension is third to last.
     //!
-    //! This format requires INT8 and at least three dimensions.
-    //! For INT8, the length of the vector dimension must be a build-time constant.
+    //! \brief Provide the data types of the plugin outputs if the input tensors have the data types provided.
     //!
-    //! Deprecated usage:
+    //! \param outputTypes Pre-allocated array to which the output data types should be written.
+    //! \param nbOutputs The number of output tensors. This matches the value returned from getNbOutputs().
+    //! \param inputTypes The input data types.
+    //! \param nbInputs The number of input tensors.
     //!
-    //! If running on the DLA, this format can be used for acceleration
-    //! with the caveat that C must be less than or equal to 4.
-    //! If used as DLA input and the build option kGPU_FALLBACK is not specified,
-    //! it needs to meet line stride requirement of DLA format. Column stride in
-    //! bytes must be a multiple of 64 on Orin.
-    kCHW4 = 3,
+    //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
+    //! through the error recorder.
+    //!
+    //! \note Provide `DataType::kFLOAT`s if the layer has no inputs. The data type for any size tensor outputs must be
+    //! `DataType::kINT32`. The returned data types must each have a format that is supported by the plugin.
+    //!
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
+    //!
+    virtual int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept = 0;
 
-    //! Vector-major format with 16 scalars per vector.
-    //! Vector dimension is third to last.
     //!
-    //! This format is only supported by DLA and requires FP16 and at least three dimensions.
-    //! This format maps to the native feature format for FP16,
-    //! and the tensor sizes are limited to C,H,W in the range [1,8192].
-    kCHW16 = 4,
+    //! \brief Provide expressions for computing dimensions of the output tensors from dimensions of the input tensors.
+    //!
+    //! \param inputs Expressions for dimensions of the input tensors
+    //! \param nbInputs The number of input tensors
+    //! \param shapeInputs Expressions for values of the shape tensor inputs
+    //! \param nbShapeInputs The number of shape tensor inputs
+    //! \param outputs Pre-allocated array to which the output dimensions must be written
+    //! \param nbOutputs Number of outputs.
+    //! \param exprBuilder Object for generating new dimension expressions
+    //!
+    //! \note Any size tensor outputs must be declared to be 0D.
+    //!
+    //! \note The declaration of shapeInputs as DimsExprs is slightly abusive, because the "dimensions"
+    //!       are actually the values of the shape tensor. For example, if the input shape tensor
+    //!       is a 2x3 matrix, the DimsExprs will have six "dimensions": the three values from the first
+    //!       row of the matrix followed by the three values from the second row of the matrix.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination). Returned code will be reported
+    //! through the error recorder.
+    //!
+    virtual int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept = 0;
 
-    //! Vector-major format with 32 scalars per vector.
-    //! Vector dimension is third to last.
     //!
-    //! This format requires INT8, FP32, or FP16 and at least three dimensions.
+    //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
+    //!
+    //! For this method inputs are numbered 0.. (nbInputs - 1) and outputs are numbered nbInputs.. (nbInputs + nbOutputs
+    //! - 1). Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs + nbOutputs - 1.
+    //!
+    //! TensorRT invokes this method to ask if the input/output indexed by pos supports the format/datatype specified
+    //! by inOut[pos].format and inOut[pos].type.  The override should return true if that format/datatype at inOut[pos]
+    //! are supported by the plugin.  If support is conditional on other input/output formats/datatypes, the plugin can
+    //! make its result conditional on the formats/datatypes in inOut[0.. pos - 1], which will be set to values
+    //! that the plugin supports.  The override should not inspect inOut[pos1.. nbInputs + nbOutputs - 1],
+    //! which will have invalid values.  In other words, the decision for pos must be based on inOut[0..pos] only.
+    //!
+    //! Some examples:
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && inOut.type[pos] == DataType::kHALF;
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW for its two inputs,
+    //!   and FP32 NCHW for its single output:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && (inOut.type[pos] == pos < 2 ?  DataType::kHALF :
+    //!         DataType::kFLOAT);
+    //!
+    //! * A definition for a "polymorphic" plugin with two inputs and one output that supports
+    //!   any format or type, but the inputs and output must have the same format and type:
+    //!
+    //!         return pos == 0 || (inOut.format[pos] == inOut.format[0] && inOut.type[pos] == inOut.type[0]);
+    //!
+    //! \warning TensorRT will stop asking for formats once it finds getFormatCombinationLimit() of combinations.
+    //!
+    //! \see getFormatCombinationLimit
+    //!
+    virtual bool supportsFormatCombination(
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept = 0;
+
+    //!
+    //! \brief Configure the plugin.
+    //!
+    //! configurePlugin() can be called multiple times in the build phase during creation of an engine by IBuilder.
+    //!
+    //! configurePlugin() is called when a plugin is being prepared for profiling but not for any
+    //! specific input size. This provides an opportunity for the plugin to make algorithmic choices on the basis of
+    //! input and output formats, along with the bound of possible dimensions. The min, opt and max value of the
+    //! DynamicPluginTensorDesc correspond to the kMIN, kOPT and kMAX value of the current profile that the plugin is
+    //! being profiled for, with the desc.dims field corresponding to the dimensions of plugin specified at network
+    //! creation. Wildcard dimensions may exist during this phase in the desc.dims field.
+    //!
+    //! \param in The input tensors attributes that are used for configuration.
+    //! \param nbInputs Number of input tensors.
+    //! \param out The output tensors attributes that are used for configuration.
+    //! \param nbOutputs Number of output tensors.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination, if invoked by TensorRT).
+    //!
+    virtual int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
+
+    //!
+    //! \brief Provide the data types of the plugin outputs if the input tensors have the data types provided.
+    //!
+    //! \param outputTypes Pre-allocated array to which the output data types should be written.
+    //! \param nbOutputs The number of output tensors. This matches the value returned from getNbOutputs().
+    //! \param inputTypes The input data types.
+    //! \param nbInputs The number of input tensors.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
+    //! through the error recorder.
+    //!
+    //! \note Provide `DataType::kFLOAT`s if the layer has no inputs. The data type for any size tensor outputs must be
+    //! `DataType::kINT32`. The returned data types must each have a format that is supported by the plugin.
+    //!
+    //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
+    //!
+    virtual int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept = 0;
+
+    //!
+    //! \brief Provide expressions for computing dimensions of the output tensors from dimensions of the input tensors.
+    //!
+    //! \param inputs Expressions for dimensions of the input tensors
+    //! \param nbInputs The number of input tensors
+    //! \param shapeInputs Expressions for values of the shape tensor inputs
+    //! \param nbShapeInputs The number of shape tensor inputs
+    //! \param outputs Pre-allocated array to which the output dimensions must be written
+    //! \param nbOutputs Number of outputs.
+    //! \param exprBuilder Object for generating new dimension expressions
+    //!
+    //! \note Any size tensor outputs must be declared to be 0D.
+    //!
+    //! \note The declaration of shapeInputs as DimsExprs is slightly abusive, because the "dimensions"
+    //!       are actually the values of the shape tensor. For example, if the input shape tensor
+    //!       is a 2x3 matrix, the DimsExprs will have six "dimensions": the three values from the first
+    //!       row of the matrix followed by the three values from the second row of the matrix.
+    //!
+    //! \return 0 for success, else non-zero (which will cause engine termination). Returned code will be reported
+    //! through the error recorder.
+    //!
+    virtual int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept = 0;
+
+    //!
+    //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
+    //!
+    //! For this method inputs are numbered 0.. (nbInputs - 1) and outputs are numbered nbInputs.. (nbInputs + nbOutputs
+    //! - 1). Using this numbering, pos is an index into InOut, where 0 <= pos < nbInputs + nbOutputs - 1.
+    //!
+    //! TensorRT invokes this method to ask if the input/output indexed by pos supports the format/datatype specified
+    //! by inOut[pos].format and inOut[pos].type.  The override should return true if that format/datatype at inOut[pos]
+    //! are supported by the plugin.  If support is conditional on other input/output formats/datatypes, the plugin can
+    //! make its result conditional on the formats/datatypes in inOut[0.. pos - 1], which will be set to values
+    //! that the plugin supports.  The override should not inspect inOut[pos1.. nbInputs + nbOutputs - 1],
+    //! which will have invalid values.  In other words, the decision for pos must be based on inOut[0..pos] only.
+    //!
+    //! Some examples:
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW:
+    //!
+    //!         return inOut.format[pos] == TensorFormat::kLINEAR && inOut.type[pos] == DataType::kHALF;
+    //!
+    //! * A definition for a plugin that supports only FP16 NCHW for its two inputs,
+    //!   and FP32 NCHW for its single output:
     //!
     //! For DLA usage, this format maps to the native feature format for INT8,
     //! and the tensor sizes are limited to C,H,W in the range [1,8192].
