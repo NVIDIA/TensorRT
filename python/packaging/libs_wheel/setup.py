@@ -23,7 +23,10 @@ import_package_name = "##TENSORRT_MODULE##_libs"
 
 
 def get_requirements():
-    reqs = ["nvidia-cuda-runtime-cu##CUDA_MAJOR##"]
+    if "##CUDA_MAJOR##" == "13":
+        reqs = ["nvidia-cuda-runtime"]
+    else:
+        reqs = ["nvidia-cuda-runtime-cu##CUDA_MAJOR##"]
     return reqs
 
 
