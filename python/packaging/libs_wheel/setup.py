@@ -23,7 +23,10 @@ import_package_name = "##TENSORRT_MODULE##_libs"
 
 
 def get_requirements():
-    reqs = ["nvidia-cuda-runtime-cu##CUDA_MAJOR##"]
+    # Use the unified nvidia-cuda-runtime package instead of the deprecated
+    # CUDA-version-specific packages (nvidia-cuda-runtime-cu12, nvidia-cuda-runtime-cu13, etc.)
+    # See: https://pypi.org/project/nvidia-cuda-runtime/
+    reqs = ["nvidia-cuda-runtime"]
     return reqs
 
 
