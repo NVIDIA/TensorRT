@@ -262,6 +262,36 @@ class Reduce(Tool):
         #   as variable inputs. Further, fallback shape inference does not apply to Constant nodes.
         GRAPH = onnx_util.lower_constant_nodes(onnx_backend.gs_from_onnx(model))
 
+        # Check for multiple input iterations when using custom data loaders with input reduction
+        if args.reduce_inputs and not self.arg_groups[DataLoaderArgs].is_using_random_data():
+            # Try to determine the number of iterations from the data loader
+            try:
+                data_loader = self.arg_groups[DataLoaderArgs].get_data_loader()
+                # Check if the data loader has a length (e.g., loaded from file)
+                if hasattr(data_loader, '__len__'):
+                    num_iterations = len(data_loader)
+                    if num_iterations > 1:
+                        G_LOGGER.critical(
+                            f"The provided data loader contains {num_iterations} input iterations, but `debug reduce` "
+                            "only supports a single input iteration when input reduction is enabled.\n"
+                            "This limitation exists because:\n"
+                            "  1. Fallback shape inference (used for constant folding) only operates on the first iteration\n"
+                            "  2. Using multiple iterations can lead to inconsistent comparison results\n\n"
+                            "Possible workarounds:\n"
+                            "  - Use `--no-reduce-inputs` to disable input reduction (only output reduction will be performed)\n"
+                            "  - Modify your data loader to provide only a single input iteration\n"
+                            "  - Use the first iteration only by extracting it from your input file"
+                        )
+            except Exception as e:
+                # If we can't determine the number of iterations, log a warning
+                G_LOGGER.warning(
+                    "Could not determine the number of iterations in the provided data loader. "
+                    "If you are using multiple input iterations with a custom data loader, "
+                    "please note that `debug reduce` only supports a single iteration when input reduction is enabled. "
+                    "Consider using `--no-reduce-inputs` if you encounter issues.",
+                    mode=LogMode.ONCE,
+                )
+
         fallback_outputs = IterationResult()
         fallback_metadata = TensorMetadata()
 

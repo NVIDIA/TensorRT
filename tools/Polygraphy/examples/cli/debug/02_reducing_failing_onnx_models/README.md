@@ -95,6 +95,14 @@ Hence, the final reduced model should contain just the `Mul` node (since the oth
         Though we're using a file here, input data can be provided via any other Polygraphy data loader argument covered in
         [the CLI user guide](../../../../how-to/use_custom_input_data.md).
 
+        **IMPORTANT:** When using custom data loaders with input reduction enabled (the default behavior), `debug reduce`
+        only supports a single input iteration. If your data loader provides multiple iterations, you must either:
+        - Use `--no-reduce-inputs` to disable input reduction (only output reduction will be performed), or
+        - Modify your data loader to provide only the first iteration
+
+        This limitation exists because fallback shape inference (used for constant folding during input reduction)
+        only operates on the first input iteration.
+
         In case you're not sure whether you need to provide a data loader,
         `debug reduce` will emit a warning like this when it tries to replace a branch:
         ```
