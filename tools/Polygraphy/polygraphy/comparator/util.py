@@ -289,7 +289,9 @@ def build_heatmaps(
                 fig.colorbar(images[0], ax=axs, shrink=0.7)
 
                 if save_dir is not None:
-                    path = os.path.join(save_dir, f"{fig_title}.svg")
+                    path = os.path.join(
+                        save_dir, f"{util.sanitize_filename(fig_title)}.svg"
+                    )
                     util.makedirs(path)
                     G_LOGGER.info(f"Saving '{prefix}' heatmap to: '{path}'")
                     fig.savefig(path)
@@ -334,7 +336,7 @@ def scatter_plot_error_magnitude(
     )
     with G_LOGGER.indent():
         title = f"Error metrics between output0 and output1\noutput0: {runner0_name:35} | {out0_name}\noutput1: {runner1_name:35} | {out1_name}"
-        fname = f"error_metrics_{out0_name}.png"
+        fname = util.sanitize_filename(f"error_metrics_{out0_name}.png")
         TICK_FONT_SIZE = 6
         TITLE_FONT_SIZE = 7
         NUM_X_TICKS = 20
@@ -358,7 +360,9 @@ def scatter_plot_error_magnitude(
             ax.set_yscale("log")
             xticks = ax.get_xticks()
 
-            yrange = np.log10(np.array([min_diff, max_diff]))
+            # Add a very small epsilon to prevent division by 0:
+            eps = 1e-15
+            yrange = np.log10(np.array([min_diff + eps, max_diff + eps]))
             yrange[0] = math.floor(yrange[0])
             yrange[1] = math.ceil(yrange[1])
 

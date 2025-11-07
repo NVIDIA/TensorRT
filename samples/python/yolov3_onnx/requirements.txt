@@ -1,9 +1,9 @@
 cuda-python==12.9.0
 pywin32; platform_system == "Windows"
 numpy==1.26.4
-onnx==1.16.0
+onnx==1.18.0
 Pillow==11.3.0
 protobuf==3.20.3
 pyyaml==6.0.1
-requests==2.32.2
+requests==2.32.4
 tqdm==4.66.4

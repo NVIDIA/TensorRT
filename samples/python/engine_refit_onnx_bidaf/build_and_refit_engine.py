@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,7 @@ import numpy as np
 import argparse
 import tensorrt as trt
 
-sys.path.insert(1, os.path.join(sys.path[0], ".."))
+sys.path.insert(1, os.path.join(sys.path[0], os.path.pardir))
 from cuda.bindings import runtime as cudart
 
 TRT_LOGGER = trt.Logger()
@@ -201,7 +201,7 @@ def main():
     if args.weights_location == "GPU":
         for name, weights in refit_weights_dict.items():
             nbytes = weights.size * weights.itemsize
-            device_mem_dict[name] = common.cuda_call(cudart.cudaMalloc(nbytes))
+            device_mem_dict[name] = common.DeviceMem(nbytes)
 
     execution_context = engine.create_execution_context()
     refitter = trt.Refitter(engine, TRT_LOGGER)
@@ -213,7 +213,7 @@ def main():
     if args.weights_location == "GPU":
         for name, device_mem in device_mem_dict.items():
             device_weights = trt.Weights(
-                trt.DataType.FLOAT, device_mem, refit_weights_dict[name].size
+                trt.DataType.FLOAT, device_mem.device_ptr, refit_weights_dict[name].size
             )
             weights_prototype = refitter.get_weights_prototype(name)
             assert device_weights.dtype == weights_prototype.dtype
@@ -236,7 +236,7 @@ def main():
                 location = trt.TensorLocation.HOST
                 refitter.set_named_weights(name, weights, location)
             else:
-                common.memcpy_host_to_device(device_mem_dict[name], host_weights)
+                common.memcpy_host_to_device(device_mem_dict[name].device_ptr, host_weights)
 
         # Get missing weights names. This should return empty lists in this case.
         missing_weights = refitter.get_missing_weights()
@@ -254,40 +254,42 @@ def main():
         for profile_idx in range(engine.num_optimization_profiles):
             print("Doing inference...")
             # Do inference
-            inputs, outputs, bindings, stream = common.allocate_buffers(
+            inputs, outputs, bindings = common.allocate_buffers(
                 engine, profile_idx
             )
             padding_bindings = [0] * (len(bindings) * profile_idx)
             new_bindings = padding_bindings + bindings
 
-            # Set host input. The common.do_inference function will copy the input to the GPU before executing.
-            inputs[0].host = cw
-            inputs[1].host = cc
-            inputs[2].host = qw
-            inputs[3].host = qc
-            execution_context.set_optimization_profile_async(profile_idx, stream)
-            execution_context.set_input_shape("CategoryMapper_4", (10, 1))
-            execution_context.set_input_shape("CategoryMapper_5", (10, 1, 1, 16))
-            execution_context.set_input_shape("CategoryMapper_6", (6, 1))
-            execution_context.set_input_shape("CategoryMapper_7", (6, 1, 1, 16))
+            # Use context manager for proper stream lifecycle management
+            with common.CudaStreamContext() as stream:
+                # Set host input. The common.do_inference function will copy the input to the GPU before executing.
+                inputs[0].host = cw
+                inputs[1].host = cc
+                inputs[2].host = qw
+                inputs[3].host = qc
+                execution_context.set_optimization_profile_async(profile_idx, stream.stream)
+                execution_context.set_input_shape("CategoryMapper_4", (10, 1))
+                execution_context.set_input_shape("CategoryMapper_5", (10, 1, 1, 16))
+                execution_context.set_input_shape("CategoryMapper_6", (6, 1))
+                execution_context.set_input_shape("CategoryMapper_7", (6, 1, 1, 16))
 
-            trt_outputs = common.do_inference(
-                execution_context,
-                engine=engine,
-                bindings=bindings,
-                inputs=inputs,
-                outputs=outputs,
-                stream=stream,
-            )
+                trt_outputs = common.do_inference(
+                    execution_context,
+                    engine=engine,
+                    bindings=bindings,
+                    inputs=inputs,
+                    outputs=outputs,
+                    stream=stream,
+                )
 
             start = trt_outputs[0].item()
             end = trt_outputs[1].item()
             answer = [w.encode() for w in cw_str[start : end + 1].reshape(-1)]
             assert answer_correct == (answer == [b"brown"]), answer
-            common.free_buffers(inputs, outputs, stream)
+            common.free_buffers(inputs, outputs)
 
     for _, device_mem in device_mem_dict.items():
-        common.cuda_call(cudart.cudaFree(device_mem))
+        device_mem.free()
 
     print("Passed")
 

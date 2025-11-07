@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from polygraphy.tools.base import Tool
-from polygraphy.tools.template.subtool import TrtNetwork, TrtConfig, OnnxGs
+from polygraphy.tools.template.subtool import TrtNetwork, TrtConfig, OnnxGs, ShardHint
 
 
 class Template(Tool):
@@ -31,4 +31,5 @@ class Template(Tool):
             TrtNetwork(),
             TrtConfig(),
             OnnxGs(),
+            ShardHint()
         ]

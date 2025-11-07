@@ -66,7 +66,7 @@ QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, con
 
 {
     mHasImask = static_cast<int32_t>(hasImask);
-    mSM = getSMVersion();
+    mSM = getSmVersion();
 }
 
 QKVToContextPluginDynamic::QKVToContextPluginDynamic(const std::string name, const DataType type, const int32_t S,
@@ -772,7 +772,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     , mDqProbs(dqProbs)
     , mHdim(HDIM)
 {
-    mSM = getSMVersion();
+    mSM = getSmVersion();
     mUseVarSeqlen = static_cast<int32_t>(varSeqlen);
     mUseInt8ScaleMax = static_cast<int32_t>(useInt8ScaleMax);
     mHasImask = static_cast<int32_t>(hasImask);
@@ -802,7 +802,7 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     , mDqProbs(dqProbs)
     , mHdim(HDIM)
 {
-    mSM = getSMVersion();
+    mSM = getSmVersion();
     mUseVarSeqlen = static_cast<int32_t>(varSeqlen);
     mUseInt8ScaleMax = static_cast<int32_t>(useInt8ScaleMax);
     mHasImask = static_cast<int32_t>(hasImask);
@@ -824,7 +824,6 @@ QKVToContextVarSeqlenPlugin::QKVToContextVarSeqlenPlugin(std::string const name,
     auto length = mDispatcher->getSerializationSize();
     mDispatcher->deserialize(runnerStateBuffer, length);
 }
-
 
 IPluginCapability* QKVToContextVarSeqlenPlugin::getCapabilityInterface(PluginCapabilityType type) noexcept
 {

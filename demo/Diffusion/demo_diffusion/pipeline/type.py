@@ -29,6 +29,7 @@ class PIPELINE_TYPE(enum.Enum):
     XL_REFINER = enum.auto()
     CASCADE_PRIOR = enum.auto()
     CASCADE_DECODER = enum.auto()
+    VIDEO2WORLD = enum.auto()
 
     def is_txt2img(self):
         return self in (self.TXT2IMG, self.CONTROLNET)
@@ -62,3 +63,6 @@ class PIPELINE_TYPE(enum.Enum):
 
     def is_cascade(self):
         return self.is_cascade_prior() or self.is_cascade_decoder()
+
+    def is_video2world(self):
+        return self == self.VIDEO2WORLD

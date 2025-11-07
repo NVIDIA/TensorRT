@@ -67,6 +67,9 @@ endif()
 set(CMAKE_SKIP_BUILD_RPATH True)
 
 # CUDA targets
+set(DEFAULT_CUDA_VERSION 13.0.0)
+set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
+message(STATUS "CUDA version set to ${CUDA_VERSION}")
 
 if (DEFINED GPU_ARCHS)
   message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
@@ -81,6 +84,9 @@ else()
       list(APPEND CMAKE_CUDA_ARCHITECTURES 100 120)
   endif()
 
+  if(CUDA_VERSION VERSION_GREATER_EQUAL 13.0)
+        list(APPEND CMAKE_CUDA_ARCHITECTURES 110)
+  endif()
   message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${CMAKE_CUDA_ARCHITECTURES}")
 endif()
 set(BERT_GENCODES)
@@ -105,6 +111,10 @@ project(TensorRT
         DESCRIPTION "TensorRT is a C++ library that facilitates high-performance inference on NVIDIA GPUs and deep learning accelerators."
         HOMEPAGE_URL "https://github.com/NVIDIA/TensorRT")
 
+if (WIN32)
+    enable_language(C)
+endif()
+
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX ${TRT_LIB_DIR}/../ CACHE PATH "TensorRT installation" FORCE)
 endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -113,7 +123,7 @@ option(BUILD_PLUGINS "Build TensorRT plugin" ON)
 option(BUILD_PARSERS "Build TensorRT parsers" ON)
 option(BUILD_SAMPLES "Build TensorRT samples" ON)
 
-# C++14
+# C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -141,14 +151,10 @@ endif()
 
 ############################################################################################
 # Dependencies
-
-set(DEFAULT_CUDA_VERSION 12.2.0)
 set(DEFAULT_CUDNN_VERSION 8.9)
-set(DEFAULT_PROTOBUF_VERSION 3.20.1)
+set(DEFAULT_PROTOBUF_VERSION 3.20.3)
 
 # Dependency Version Resolution
-set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
-message(STATUS "CUDA version set to ${CUDA_VERSION}")
 set_ifndef(CUDNN_VERSION ${DEFAULT_CUDNN_VERSION})
 message(STATUS "cuDNN version set to ${CUDNN_VERSION}")
 set_ifndef(PROTOBUF_VERSION ${DEFAULT_PROTOBUF_VERSION})
@@ -221,16 +227,18 @@ endif()
 ############################################################################################
 # TensorRT
 
+set(HINT_PATHS "${TRT_OUT_DIR}" "${TRT_LIB_DIR}")
+
 if(BUILD_PLUGINS)
     add_subdirectory(plugin)
 else()
-    find_library_create_target(nvinfer_plugin ${nvinfer_plugin_lib_name} SHARED "${TRT_OUT_DIR}" "${TRT_LIB_DIR}")
+    find_library_create_target(${nvinfer_plugin_lib_name} ${nvinfer_plugin_lib_name} SHARED "${HINT_PATHS}")
 endif()
 
 if(BUILD_PARSERS)
     add_subdirectory(parsers)
 else()
-    find_library_create_target(nvonnxparser ${nvonnxparser_lib_name} SHARED "${TRT_OUT_DIR}" "${TRT_LIB_DIR}")
+    find_library_create_target(${nvonnxparser_lib_name} ${nvonnxparser_lib_name} SHARED "${HINT_PATHS}")
 endif()
 
 if(BUILD_SAMPLES)

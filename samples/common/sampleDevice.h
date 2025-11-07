@@ -124,7 +124,7 @@ public:
         CHECK(cudaEventRecord(mEvent, stream.get()));
     }
 
-    void synchronize()
+    void synchronize() const
     {
         CHECK(cudaEventSynchronize(mEvent));
     }
@@ -132,6 +132,10 @@ public:
     // Returns time elapsed time in milliseconds
     float operator-(const TrtCudaEvent& e) const
     {
+        // Synchronize both events to ensure they have completed before calculating elapsed time
+        synchronize();
+        e.synchronize();
+
         float time{0};
         CHECK(cudaEventElapsedTime(&time, e.get(), get()));
         return time;

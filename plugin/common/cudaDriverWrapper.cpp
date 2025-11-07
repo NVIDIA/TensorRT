@@ -50,18 +50,45 @@ CUDADriverWrapper::CUDADriverWrapper()
         return ret;
     };
 
-    *(void**) (&_cuGetErrorName) = load_sym(handle, "cuGetErrorName");
-    *(void**) (&_cuFuncSetAttribute) = load_sym(handle, "cuFuncSetAttribute");
-    *(void**) (&_cuLinkComplete) = load_sym(handle, "cuLinkComplete");
-    *(void**) (&_cuModuleUnload) = load_sym(handle, "cuModuleUnload");
-    *(void**) (&_cuLinkDestroy) = load_sym(handle, "cuLinkDestroy");
-    *(void**) (&_cuModuleLoadData) = load_sym(handle, "cuModuleLoadData");
-    *(void**) (&_cuLinkCreate) = load_sym(handle, "cuLinkCreate_v2");
-    *(void**) (&_cuModuleGetFunction) = load_sym(handle, "cuModuleGetFunction");
-    *(void**) (&_cuLinkAddFile) = load_sym(handle, "cuLinkAddFile_v2");
-    *(void**) (&_cuLinkAddData) = load_sym(handle, "cuLinkAddData_v2");
-    *(void**) (&_cuLaunchCooperativeKernel) = load_sym(handle, "cuLaunchCooperativeKernel");
-    *(void**) (&_cuLaunchKernel) = load_sym(handle, "cuLaunchKernel");
+    _cuGetErrorName = reinterpret_cast<CUresult (*)(CUresult, char const**)>(load_sym(handle, "cuGetErrorName"));
+    _cuGetErrorString = reinterpret_cast<CUresult (*)(CUresult, char const**)>(load_sym(handle, "cuGetErrorString"));
+    _cuFuncSetAttribute = reinterpret_cast<CUresult (*)(CUfunction, CUfunction_attribute, int32_t)>(
+        load_sym(handle, "cuFuncSetAttribute"));
+    _cuLinkComplete = reinterpret_cast<CUresult (*)(CUlinkState, void**, size_t*)>(load_sym(handle, "cuLinkComplete"));
+    _cuModuleUnload = reinterpret_cast<CUresult (*)(CUmodule)>(load_sym(handle, "cuModuleUnload"));
+    _cuLinkDestroy = reinterpret_cast<CUresult (*)(CUlinkState)>(load_sym(handle, "cuLinkDestroy"));
+    _cuModuleLoadData = reinterpret_cast<CUresult (*)(CUmodule*, void const*)>(load_sym(handle, "cuModuleLoadData"));
+    _cuLinkCreate = reinterpret_cast<CUresult (*)(uint32_t, CUjit_option*, void**, CUlinkState*)>(
+        load_sym(handle, "cuLinkCreate_v2"));
+    _cuModuleGetFunction
+        = reinterpret_cast<CUresult (*)(CUfunction*, CUmodule, char const*)>(load_sym(handle, "cuModuleGetFunction"));
+    _cuLinkAddFile
+        = reinterpret_cast<CUresult (*)(CUlinkState, CUjitInputType, char const*, uint32_t, CUjit_option*, void**)>(
+            load_sym(handle, "cuLinkAddFile_v2"));
+    _cuLinkAddData = reinterpret_cast<CUresult (*)(CUlinkState, CUjitInputType, void*, size_t, char const*, uint32_t,
+        CUjit_option*, void**)>(load_sym(handle, "cuLinkAddData_v2"));
+    _cuLaunchCooperativeKernel = reinterpret_cast<CUresult (*)(CUfunction, uint32_t, uint32_t, uint32_t, uint32_t,
+        uint32_t, uint32_t, uint32_t, CUstream, void**)>(load_sym(handle, "cuLaunchCooperativeKernel"));
+    _cuLaunchKernel = reinterpret_cast<CUresult (*)(CUfunction, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t,
+        uint32_t, uint32_t, CUstream, void**, void**)>(load_sym(handle, "cuLaunchKernel"));
+#if CUDA_VERSION >= 11060
+    _cuLaunchKernelEx
+        = reinterpret_cast<CUresult (*)(CUlaunchConfig const* config, CUfunction f, void** kernelParams, void** extra)>(
+            dllGetSym(handle, "cuLaunchKernelEx"));
+#endif
+#if CUDA_VERSION >= 12000
+    _cuTensorMapEncodeTiled
+        = reinterpret_cast<CUresult (*)(CUtensorMap*, CUtensorMapDataType, cuuint32_t, void const*, cuuint64_t const*,
+            cuuint64_t const*, cuuint32_t const*, cuuint32_t const*, CUtensorMapInterleave, CUtensorMapSwizzle,
+            CUtensorMapL2promotion, CUtensorMapFloatOOBfill)>(load_sym(handle, "cuTensorMapEncodeTiled"));
+#endif
+    _cuMemcpyDtoH = reinterpret_cast<CUresult (*)(void*, CUdeviceptr, size_t)>(load_sym(handle, "cuMemcpyDtoH_v2"));
+    _cuDeviceGetAttribute = reinterpret_cast<CUresult (*)(int32_t*, CUdevice_attribute, CUdevice)>(
+        load_sym(handle, "cuDeviceGetAttribute"));
+#if CUDA_VERSION >= 12000
+    _cuOccupancyMaxActiveClusters = reinterpret_cast<CUresult (*)(int32_t*, CUfunction, CUlaunchConfig const*)>(
+        load_sym(handle, "cuOccupancyMaxActiveClusters"));
+#endif
 }
 
 CUDADriverWrapper::~CUDADriverWrapper()
@@ -72,6 +99,11 @@ CUDADriverWrapper::~CUDADriverWrapper()
 CUresult CUDADriverWrapper::cuGetErrorName(CUresult error, char const** pStr) const
 {
     return (*_cuGetErrorName)(error, pStr);
+}
+
+CUresult CUDADriverWrapper::cuGetErrorString(CUresult error, char const** pStr) const
+{
+    return (*_cuGetErrorString)(error, pStr);
 }
 
 CUresult CUDADriverWrapper::cuFuncSetAttribute(CUfunction hfunc, CUfunction_attribute attrib, int32_t value) const
@@ -137,3 +169,43 @@ CUresult CUDADriverWrapper::cuLaunchKernel(CUfunction f, uint32_t gridDimX, uint
     return (*_cuLaunchKernel)(
         f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, sharedMemBytes, hStream, kernelParams, extra);
 }
+
+#if CUDA_VERSION >= 11060
+CUresult CUDADriverWrapper::cuLaunchKernelEx(
+    CUlaunchConfig const* config, CUfunction f, void** kernelParams, void** extra) const
+{
+    PLUGIN_ASSERT(_cuLaunchKernelEx != nullptr);
+    return (*_cuLaunchKernelEx)(config, f, kernelParams, extra);
+}
+#endif
+
+#if CUDA_VERSION >= 12000
+CUresult CUDADriverWrapper::cuTensorMapEncodeTiled(CUtensorMap* tensorMap, CUtensorMapDataType tensorDataType,
+    cuuint32_t tensorRank, void const* globalAddress, cuuint64_t const* globalDim, cuuint64_t const* globalStrides,
+    cuuint32_t const* boxDim, cuuint32_t const* elementStrides, CUtensorMapInterleave interleave,
+    CUtensorMapSwizzle swizzle, CUtensorMapL2promotion l2Promotion, CUtensorMapFloatOOBfill oobFill) const
+{
+    PLUGIN_ASSERT(_cuTensorMapEncodeTiled != nullptr);
+    return (*_cuTensorMapEncodeTiled)(tensorMap, tensorDataType, tensorRank, globalAddress, globalDim, globalStrides,
+        boxDim, elementStrides, interleave, swizzle, l2Promotion, oobFill);
+}
+#endif
+
+CUresult CUDADriverWrapper::cuMemcpyDtoH(void* dstHost, CUdeviceptr srcDevice, size_t ByteCount) const
+{
+    return (*_cuMemcpyDtoH)(dstHost, srcDevice, ByteCount);
+}
+
+CUresult CUDADriverWrapper::cuDeviceGetAttribute(int32_t* pi, CUdevice_attribute attrib, CUdevice dev) const
+{
+    return (*_cuDeviceGetAttribute)(pi, attrib, dev);
+}
+
+#if CUDA_VERSION >= 12000
+CUresult CUDADriverWrapper::cuOccupancyMaxActiveClusters(
+    int32_t* maxActiveClusters, CUfunction f, CUlaunchConfig const* config) const
+{
+    PLUGIN_ASSERT(_cuOccupancyMaxActiveClusters != nullptr);
+    return (*_cuOccupancyMaxActiveClusters)(maxActiveClusters, f, config);
+}
+#endif

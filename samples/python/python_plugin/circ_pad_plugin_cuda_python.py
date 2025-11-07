@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,8 @@ from polygraphy.backend.trt import (
 from polygraphy.json import to_json, from_json
 
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
-from plugin_utils import checkCudaErrors, KernelHelper, parseArgs, CudaCtxManager
+from plugin_utils import cuda_call, KernelHelper, parseArgs, CudaCtxManager, cuda_init, cuda_get_device, cuda_memcpy_htod
+import common_runtime as common
 from cuda.bindings import driver as cuda
 
 circ_pad_half_kernel = r"""
@@ -121,17 +122,13 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
                     self.N = int(f.data)
 
     def initialize(self):
-        err, self.cuDevice = cuda.cuDeviceGet(0)
+        self.cuDevice = cuda_get_device(0)
         trt.get_plugin_registry().acquire_plugin_resource(
             "cuda_ctx", CudaCtxManager(self.cuDevice)
         )
-        self.all_pads_d = checkCudaErrors(
-            cuda.cuMemAlloc(np.int32().itemsize * self.N * 2)
-        )
-        self.orig_dims_d = checkCudaErrors(
-            cuda.cuMemAlloc(np.int32().itemsize * self.N)
-        )
-        self.Y_shape_d = checkCudaErrors(cuda.cuMemAlloc(np.int32().itemsize * self.N))
+        self.all_pads_d = common.DeviceMem(np.int32().itemsize * self.N * 2)
+        self.orig_dims_d = common.DeviceMem(np.int32().itemsize * self.N)
+        self.Y_shape_d = common.DeviceMem(np.int32().itemsize * self.N)
 
     def get_output_datatype(self, index, input_types):
         return input_types[0]
@@ -169,17 +166,11 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
         # Copy vectors from host memory to device memory
         if self.all_pads_d:
-            checkCudaErrors(
-                cuda.cuMemcpyHtoD(self.all_pads_d, all_pads, all_pads.nbytes)
-            )
+            cuda_memcpy_htod(self.all_pads_d.device_ptr, all_pads)
         if self.orig_dims_d:
-            checkCudaErrors(
-                cuda.cuMemcpyHtoD(self.orig_dims_d, orig_dims, orig_dims.nbytes)
-            )
+            cuda_memcpy_htod(self.orig_dims_d.device_ptr, orig_dims)
         if self.Y_shape_d:
-            checkCudaErrors(
-                cuda.cuMemcpyHtoD(self.Y_shape_d, out_dims, out_dims.nbytes)
-            )
+            cuda_memcpy_htod(self.Y_shape_d.device_ptr, out_dims)
 
         self.Y_len_d = np.prod(out_dims)
 
@@ -211,9 +202,9 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         da = np.array([inputs[0]], dtype=np.uint64)
         dc = np.array([outputs[0]], dtype=np.uint64)
 
-        d_all_pads = np.array([int(self.all_pads_d)], dtype=np.uint64)
-        d_orig_dims = np.array([int(self.orig_dims_d)], dtype=np.uint64)
-        d_Y_shape = np.array([int(self.Y_shape_d)], dtype=np.uint64)
+        d_all_pads = np.array([int(self.all_pads_d.device_ptr)], dtype=np.uint64)
+        d_orig_dims = np.array([int(self.orig_dims_d.device_ptr)], dtype=np.uint64)
+        d_Y_shape = np.array([int(self.Y_shape_d.device_ptr)], dtype=np.uint64)
         Y_len = np.array(self.Y_len_d, dtype=np.uint32)
 
         args = [da, d_all_pads, d_orig_dims, dc, d_Y_shape, Y_len]
@@ -224,7 +215,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         if inp_dtype == np.float32:
             kernelHelper = KernelHelper(circ_pad_float_kernel, int(self.cuDevice))
             _circ_pad_float_kernel = kernelHelper.getFunction(b"circ_pad_float")
-            checkCudaErrors(
+            cuda_call(
                 cuda.cuLaunchKernel(
                     _circ_pad_float_kernel,
                     numBlocks,
@@ -242,7 +233,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         elif inp_dtype == np.float16:
             kernelHelper = KernelHelper(circ_pad_half_kernel, int(self.cuDevice))
             _circ_pad_half_kernel = kernelHelper.getFunction(b"circ_pad_half")
-            checkCudaErrors(
+            cuda_call(
                 cuda.cuLaunchKernel(
                     _circ_pad_half_kernel,
                     numBlocks,
@@ -266,12 +257,10 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         return cloned_plugin
 
     def terminate(self):
-        if self.all_pads_d:
-            checkCudaErrors(cuda.cuMemFree(self.all_pads_d))
-        if self.orig_dims_d:
-            checkCudaErrors(cuda.cuMemFree(self.orig_dims_d))
-        if self.Y_shape_d:
-            checkCudaErrors(cuda.cuMemFree(self.Y_shape_d))
+        # Release DeviceMem objects - automatic cleanup via __del__ when reference count reaches 0
+        self.all_pads_d = None
+        self.orig_dims_d = None
+        self.Y_shape_d = None
 
         trt.get_plugin_registry().release_plugin_resource("cuda_ctx")
 
@@ -317,10 +306,10 @@ if __name__ == "__main__":
     args = parseArgs()
 
     # Initialize CUDA Driver API
-    (err,) = cuda.cuInit(0)
+    cuda_init()
 
     # Retrieve handle for device 0
-    err, cuDevice = cuda.cuDeviceGet(0)
+    cuDevice = cuda_get_device(0)
 
     plg_registry = trt.get_plugin_registry()
 

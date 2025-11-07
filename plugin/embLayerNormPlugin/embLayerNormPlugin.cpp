@@ -55,7 +55,7 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(std::string const& name, Da
     mWordVocabSize = wordEmb.count / mLd;
     mPosVocabSize = posEmb.count / mLd;
     mTokVocabSize = tokEmb.count / mLd;
-    mSM = getSMVersion();
+    mSM = getSmVersion();
     mOutputFp16 = mType == DataType::kHALF ? 1 : 0;
     mUseFullMask = static_cast<int32_t>(useFullMask);
     // NOTE: mS is set during configure

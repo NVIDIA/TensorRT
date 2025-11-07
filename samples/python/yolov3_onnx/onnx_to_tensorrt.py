@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ import tensorrt as trt
 from data_processing import ALL_CATEGORIES, PostprocessYOLO, PreprocessYOLO
 from PIL import ImageDraw
 
-sys.path.insert(1, os.path.join(sys.path[0], ".."))
+sys.path.insert(1, os.path.join(sys.path[0], os.path.pardir))
 from downloader import getFilePath
 
 import common
@@ -148,19 +148,25 @@ def main():
     with get_engine(
         onnx_file_path, engine_file_path
     ) as engine, engine.create_execution_context() as context:
-        inputs, outputs, bindings, stream = common.allocate_buffers(engine)
-        # Do inference
-        print("Running inference on image {}...".format(input_image_path))
-        # Set host input to the image. The common.do_inference function will copy the input to the GPU before executing.
-        inputs[0].host = image
-        trt_outputs = common.do_inference(
-            context,
-            engine=engine,
-            bindings=bindings,
-            inputs=inputs,
-            outputs=outputs,
-            stream=stream,
-        )
+        inputs, outputs, bindings = common.allocate_buffers(engine)
+        
+        # Use context manager for proper stream lifecycle management
+        with common.CudaStreamContext() as stream:
+            # Do inference
+            print("Running inference on image {}...".format(input_image_path))
+            # Set host input to the image. The common.do_inference function will copy the input to the GPU before executing.
+            inputs[0].host = image
+            trt_outputs = common.do_inference(
+                context,
+                engine=engine,
+                bindings=bindings,
+                inputs=inputs,
+                outputs=outputs,
+                stream=stream,
+            )
+            
+            # Free host and device memory used for inputs and outputs
+            common.free_buffers(inputs, outputs)
 
     # Before doing post-processing, we need to reshape the outputs as the common.do_inference will give us flat arrays.
     trt_outputs = [
@@ -203,8 +209,7 @@ def main():
         )
     )
 
-    # Free host and device memory used for inputs and outputs
-    common.free_buffers(inputs, outputs, stream)
+
 
 
 if __name__ == "__main__":

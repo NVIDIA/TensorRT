@@ -16,6 +16,7 @@
 #
 
 from typing import Dict, List, Union
+import copy
 
 from onnx_graphsurgeon.ir.graph import Constant, Graph, Node
 from onnx_graphsurgeon.logger import G_LOGGER
@@ -330,6 +331,76 @@ class GraphPattern:
             from_inbound,
         )
         if match:
+            # If we entered this subpattern via an inbound boundary tensor, ensure
+            # that all internal consumers of the boundary input tensor are covered.
+            # This supports cases where a single subpattern input fans out to multiple
+            # internal nodes.
+            if from_inbound:
+                # Determine the boundary ONNX tensor corresponding to this inbound edge
+                tensor_index_for_node = self._get_tensor_index_for_node(
+                    initial_node, from_tensor, is_node_input=True
+                )
+                if tensor_index_for_node >= len(onnx_node.inputs):
+                    return None
+                boundary_onnx_tensor = onnx_node.inputs[tensor_index_for_node]
+
+                # All internal consumer nodes of the boundary input tensor
+                internal_consumers = list(self.tensor_outputs.get(from_tensor, []))
+
+                # Build candidate ONNX consumer nodes for the boundary tensor
+                candidate_onnx_consumers = list(getattr(boundary_onnx_tensor, "outputs", []))
+                used_consumer_ids = set()
+
+                # Mark already mapped consumers as used if applicable
+                for consumer_node in internal_consumers:
+                    if consumer_node in mapping:
+                        inbound_tensor_index = self._get_tensor_index_for_node(
+                            consumer_node, from_tensor, is_node_input=True
+                        )
+                        inbound_mapped = self.nodes[consumer_node].get_inbound_or_outbound_onnx_node(
+                            mapping[consumer_node], is_inbound=True, tensor_index=inbound_tensor_index
+                        )
+                        if inbound_mapped is None:
+                            return None
+                        # Ensure the mapped node is indeed one of the boundary tensor's consumers
+                        if all(c.id != inbound_mapped.id for c in candidate_onnx_consumers):
+                            return None
+                        used_consumer_ids.add(inbound_mapped.id)
+
+                # For remaining internal consumers not yet mapped, try to match them to unused ONNX consumers
+                for consumer_node in internal_consumers:
+                    if consumer_node in mapping:
+                        continue
+                    matched_this_consumer = False
+                    for c in candidate_onnx_consumers:
+                        if c.id in used_consumer_ids or c.id in mapped_onnx_nodes:
+                            continue
+                        # Try to extend mapping with this branch. Use copies to allow backtracking on failure.
+                        mapping_copy = copy.deepcopy(mapping)
+                        mapped_onnx_nodes_copy = set(mapped_onnx_nodes)
+                        ok = self._match_node(
+                            consumer_node,
+                            c,
+                            from_tensor,
+                            mapping_copy,
+                            mapped_onnx_nodes_copy,
+                            onnx_graph_output_tensors,
+                            from_inbound=True,
+                        )
+                        if ok:
+                            mapping.clear()
+                            for _k, _v in mapping_copy.items():
+                                mapping[_k] = _v
+                            mapping.inputs = mapping_copy.inputs
+                            mapping.outputs = mapping_copy.outputs
+                            mapping.constants = mapping_copy.constants
+                            mapped_onnx_nodes = mapped_onnx_nodes_copy
+                            used_consumer_ids.add(c.id)
+                            matched_this_consumer = True
+                            break
+                    if not matched_this_consumer:
+                        return None
+
             return mapping
         else:
             return None
@@ -443,13 +514,14 @@ class GraphPattern:
             if onnx_tensor.name in onnx_graph_output_tensors:
                 return False  # The pattern tensor is not an output but the onnx tensor is an output tensor of the onnx graph.
 
-            # For sub-patterns, each input tensor can only have 1 output node. Otherwise the following test will fail.
-            if len(self.tensor_outputs[node_output_tensor]) != len(onnx_tensor.outputs):
-                return False
-            for output_node, output_onnx_node in zip(
-                self.tensor_outputs[node_output_tensor], onnx_tensor.outputs
-            ):
-                # dfs ends when revisiting a node. We need to check if the edges are matched.
+            # Flexible consumer matching: each pattern consumer must map to some ONNX consumer,
+            # but the ONNX tensor may have additional consumers we can ignore.
+            pattern_consumers = list(self.tensor_outputs[node_output_tensor])
+            candidate_consumers = list(getattr(onnx_tensor, "outputs", []))
+            used_candidate_ids = set()
+
+            # First validate already mapped consumers
+            for output_node in pattern_consumers:
                 if output_node in mapping:
                     inbound_tensor_index = self._get_tensor_index_for_node(
                         output_node, node_output_tensor, is_node_input=True
@@ -463,22 +535,50 @@ class GraphPattern:
                     )
                     if (
                         inbound_onnx_node_of_output_node is None
-                        or inbound_onnx_node_of_output_node.name
-                        != output_onnx_node.name
+                        or all(c.id != inbound_onnx_node_of_output_node.id for c in candidate_consumers)
                     ):
                         return False
+                    used_candidate_ids.add(inbound_onnx_node_of_output_node.id)
+
+            # Then match remaining consumers greedily with backtracking via copies
+            for output_node in pattern_consumers:
+                if output_node in mapping:
                     continue
-                match = self._match_node(
-                    output_node,
-                    output_onnx_node,
-                    node_output_tensor,
-                    mapping,
-                    mapped_onnx_nodes,
-                    onnx_graph_output_tensors,
-                    from_inbound=True,
-                )
-                if not match:
+                matched_output_consumer = False
+                for oc in candidate_consumers:
+                    if oc.id in used_candidate_ids or oc.id in mapped_onnx_nodes:
+                        continue
+                    mapping_copy = copy.deepcopy(mapping)
+                    mapped_onnx_nodes_copy = set(mapped_onnx_nodes)
+                    ok = self._match_node(
+                        output_node,
+                        oc,
+                        node_output_tensor,
+                        mapping_copy,
+                        mapped_onnx_nodes_copy,
+                        onnx_graph_output_tensors,
+                        from_inbound=True,
+                    )
+                    if ok:
+                        # Adopt mapping changes in-place so caller's reference sees updates
+                        mapping.clear()
+                        for _k, _v in mapping_copy.items():
+                            mapping[_k] = _v
+                        mapping.inputs = mapping_copy.inputs
+                        mapping.outputs = mapping_copy.outputs
+                        mapping.constants = mapping_copy.constants
+                        mapped_onnx_nodes = mapped_onnx_nodes_copy
+                        used_candidate_ids.add(oc.id)
+                        matched_output_consumer = True
+                        break
+                if not matched_output_consumer:
                     return False
+            # For non-pattern-output tensors, disallow extra external consumers.
+            # All consumers of this ONNX tensor must be accounted for by the pattern.
+            if node_output_tensor not in self.output_tensors:
+                for oc in candidate_consumers:
+                    if oc.id not in used_candidate_ids:
+                        return False
         return True
 
     def match_all(self, graph: Graph) -> List[PatternMapping]:

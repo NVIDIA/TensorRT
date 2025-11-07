@@ -616,6 +616,8 @@ constexpr char const* get_runtime_config = R"trtdoc(
 
     :returns: The runtime configuration.
 )trtdoc";
+
+
 } // namespace IExecutionContextDoc
 
 namespace IDebugListenerDoc
@@ -723,6 +725,14 @@ constexpr char const* get_execution_context_allocation_strategy = R"trtdoc(
 
 } // namespace IRuntimeConfigDoc
 
+
+namespace EngineStatDoc
+{
+constexpr char const* descr = R"trtdoc(The kind of engine statistics that queried from the ICudaEngine.)trtdoc";
+constexpr char const* TOTAL_WEIGHTS_SIZE = R"trtdoc(The total weights size in bytes in the engine.)trtdoc";
+constexpr char const* STRIPPED_WEIGHTS_SIZE
+    = R"trtdoc(The stripped weight size in bytes for engines built with BuilderFlag::kSTRIP_PLAN.)trtdoc";
+} // namespace EngineStatDoc
 
 namespace ICudaEngineDoc
 {
@@ -923,6 +933,14 @@ constexpr char const* is_debug_tensor = R"trtdoc(
     Determine whether the given name corresponds to a debug tensor.
 
     :arg name: The tensor name.
+)trtdoc";
+
+constexpr char const* get_engine_stat = R"trtdoc(
+    Return the engine statistics specified by the given enum value.
+    If STRIPPED_WEIGHTS_SIZE is passed to query a normal engine, this function will
+    return -1 to indicate invalid enum value.
+
+    :arg stat: The engine statistic kind to get.
 )trtdoc";
 } // namespace ICudaEngineDoc
 
@@ -1816,6 +1834,7 @@ namespace SerializationFlagDoc
 constexpr char const* descr = R"trtdoc(Valid flags that can be use to creating binary file from engine.)trtdoc";
 constexpr char const* EXCLUDE_WEIGHTS = R"trtdoc(Exclude weights that can be refitted.)trtdoc";
 constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
+constexpr char const* INCLUDE_REFIT = R"trtdoc(Remain refittable if originally so.)trtdoc";
 } // namespace SerializationFlagDoc
 
 namespace ExecutionContextAllocationStrategyDoc

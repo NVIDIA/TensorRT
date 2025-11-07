@@ -19,13 +19,13 @@ import json
 import os
 
 import numpy as np
+import onnx
 import torch
 from diffusers import DiffusionPipeline
+from onnx import numpy_helper
 
-import onnx
 from demo_diffusion.model import load, optimizer
 from demo_diffusion.model.lora import merge_loras
-from onnx import numpy_helper
 
 
 class BaseModel:
@@ -50,6 +50,7 @@ class BaseModel:
     ):
 
         self.name = self.__class__.__name__
+        self.pipeline_type = pipeline
         self.pipeline = pipeline.name
         self.version = version
         self.path = load.get_path(version, pipeline)
@@ -70,7 +71,7 @@ class BaseModel:
         self.min_batch = 1
         self.max_batch = max_batch_size
         self.min_image_shape = 256  # min image resolution: 256x256
-        self.max_image_shape = 1344  # max image resolution: 1344x1344
+        self.max_image_shape = 1360  # max image resolution: 1360x1360
         self.min_latent_shape = self.min_image_shape // self.compression_factor
         self.max_latent_shape = self.max_image_shape // self.compression_factor
 
@@ -123,6 +124,7 @@ class BaseModel:
         enable_lora_merge=False,
         static_shape=False,
         lora_loader=None,
+        dynamo=False,
     ):
         onnx_opt_graph = None
         # Export optimized ONNX model (if missing)
@@ -135,6 +137,11 @@ class BaseModel:
                         assert lora_loader is not None
                         model = merge_loras(model, lora_loader)
 
+                    export_kwargs = {}
+                    if dynamo:
+                        export_kwargs["dynamic_shapes"] = self.get_dynamic_axes()
+                    else:
+                        export_kwargs["dynamic_axes"] = self.get_dynamic_axes()
                     inputs = self.get_sample_input(1, opt_image_height, opt_image_width, static_shape)
                     torch.onnx.export(
                         model,
@@ -145,8 +152,9 @@ class BaseModel:
                         do_constant_folding=self.do_constant_folding,
                         input_names=self.get_input_names(),
                         output_names=self.get_output_names(),
-                        dynamic_axes=self.get_dynamic_axes(),
                         verbose=False,
+                        dynamo=dynamo,
+                        **export_kwargs,
                     )
 
                 if custom_model:
@@ -223,7 +231,7 @@ class BaseModel:
             print(f"[I] Found cached weights map: {weights_map_path} ")
 
     def optimize(self, onnx_graph, return_onnx=True, **kwargs):
-        opt = optimizer.Optimizer(onnx_graph, verbose=self.verbose)
+        opt = optimizer.Optimizer(onnx_graph, verbose=self.verbose, version=self.version)
         opt.info(self.name + ": original")
         opt.cleanup()
         opt.info(self.name + ": cleanup")

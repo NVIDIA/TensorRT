@@ -26,7 +26,6 @@
 
 // Define TRT entrypoints used in common code
 #define DEFINE_TRT_ENTRYPOINTS 1
-#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
 
 #include "argsParser.h"
 #include "buffers.h"

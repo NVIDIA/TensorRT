@@ -20,7 +20,7 @@ ARG CUDA_VERSION=13.0.0
 FROM nvidia/cuda:${CUDA_VERSION}-devel-rockylinux9
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.13.3.9
+ENV TRT_VERSION 10.14.1.48
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account
@@ -56,15 +56,15 @@ RUN dnf -y install \
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.3/tars/TensorRT-10.13.3.9.Linux.x86_64-gnu.cuda-13.0.tar.gz \
-    && tar -xf TensorRT-10.13.3.9.Linux.x86_64-gnu.cuda-13.0.tar.gz \
-    && cp -a TensorRT-10.13.3.9/lib/*.so* /usr/lib64 \
-    && pip install TensorRT-10.13.3.9/python/tensorrt-10.13.3.9-cp39-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-13.0.tar.gz \
+    && tar -xf TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-13.0.tar.gz \
+    && cp -a TensorRT-10.14.1.48/lib/*.so* /usr/lib64 \
+    && pip install TensorRT-10.14.1.48/python/tensorrt-10.14.1.48-cp39-none-linux_x86_64.whl ;\
     elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.3/tars/TensorRT-10.13.3.9.Linux.x86_64-gnu.cuda-12.9.tar.gz \
-    && tar -xf TensorRT-10.13.3.9.Linux.x86_64-gnu.cuda-12.9.tar.gz \
-    && cp -a TensorRT-10.13.3.9/lib/*.so* /usr/lib64 \
-    && pip install TensorRT-10.13.3.9/python/tensorrt-10.13.3.9-cp39-none-linux_x86_64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-12.9.tar.gz \
+    && tar -xf TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-12.9.tar.gz \
+    && cp -a TensorRT-10.14.1.48/lib/*.so* /usr/lib64 \
+    && pip install TensorRT-10.14.1.48/python/tensorrt-10.14.1.48-cp39-none-linux_x86_64.whl ;\
     else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \

@@ -447,4 +447,19 @@ ONNX_MODELS = {
         LoaderType=BytesFromPath,
         check_runner=no_check_implemented,
     ),
+    "attention": Model(
+        path=model_path("attention.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
+    "multi_attention": Model(
+        path=model_path("multi_attention.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
+    "attention_same_qkv": Model(
+        path=model_path("attention_same_qkv.onnx"),
+        LoaderType=BytesFromPath,
+        check_runner=no_check_implemented,
+    ),
 }

@@ -26,8 +26,7 @@ import re
 import sys
 import time
 import onnx
-import pycuda.autoinit
-
+from helpers.cuda_utils import getComputeCapacity
 # TensorRT
 import tensorrt as trt
 from helpers.calibrator import BertCalibrator as BertCalibrator
@@ -669,7 +668,7 @@ def main():
     args.batch_size = args.batch_size or [1]
     args.sequence_length = args.sequence_length or [128]
 
-    cc = pycuda.autoinit.device.compute_capability()
+    cc = getComputeCapacity()
     if cc[0] * 10 + cc[1] < 75 and args.force_int8_multihead:
         raise RuntimeError("--force-int8-multihead option is only supported on Turing+ GPU.")
     if cc[0] * 10 + cc[1] < 72 and args.force_int8_skipln:

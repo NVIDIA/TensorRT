@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ import numpy as np
 import tensorrt as trt
 from PIL import Image
 
-sys.path.insert(1, os.path.join(sys.path[0], ".."))
+sys.path.insert(1, os.path.join(sys.path[0], os.path.pardir))
 import common
 
 
@@ -100,9 +100,9 @@ def main(args):
     engine = load_normal_engine(args.normal_engine)
     refitted_engine = load_stripped_engine_and_refit(args.stripped_engine, onnx_model_file)
 
-    # Allocate buffers and create a CUDA stream.
-    inputs, outputs, bindings, stream = common.allocate_buffers(engine)
-    inputs_1, outputs_1, bindings_1, stream_1 = common.allocate_buffers(refitted_engine)
+    # Allocate buffers
+    inputs, outputs, bindings = common.allocate_buffers(engine)
+    inputs_1, outputs_1, bindings_1 = common.allocate_buffers(refitted_engine)
 
     # Contexts are used to perform inference.
     context = engine.create_execution_context()
@@ -115,17 +115,22 @@ def main(args):
 
     # Run the engine. The output will be a 1D tensor of length 1000, where each value represents the
     # probability that the image corresponds to that label
-    start_time = time.time()
-    for i in range(100): # count time for 100 times of inference
-        trt_outputs = common.do_inference(context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
-    total_time = time.time() - start_time
-    print("Normal engine inference time on 100 cases: {:.4f} seconds".format(total_time))
+    
+    # Use context manager for proper stream lifecycle management - Normal engine
+    with common.CudaStreamContext() as stream:
+        start_time = time.time()
+        for i in range(100): # count time for 100 times of inference
+            trt_outputs = common.do_inference(context, engine=engine, bindings=bindings, inputs=inputs, outputs=outputs, stream=stream)
+        total_time = time.time() - start_time
+        print("Normal engine inference time on 100 cases: {:.4f} seconds".format(total_time))
 
-    start_time = time.time()
-    for i in range(100):
-        trt_outputs_refitted = common.do_inference(context_1, engine=refitted_engine, bindings=bindings_1, inputs=inputs_1, outputs=outputs_1, stream=stream_1)
-    total_time = time.time() - start_time
-    print("Refitted stripped engine inference time on 100 cases: {:.4f} seconds".format(total_time))
+    # Use context manager for proper stream lifecycle management - Refitted engine
+    with common.CudaStreamContext() as stream_1:
+        start_time = time.time()
+        for i in range(100):
+            trt_outputs_refitted = common.do_inference(context_1, engine=refitted_engine, bindings=bindings_1, inputs=inputs_1, outputs=outputs_1, stream=stream_1)
+        total_time = time.time() - start_time
+        print("Refitted stripped engine inference time on 100 cases: {:.4f} seconds".format(total_time))
 
     # We use the highest probability as our prediction. Its index corresponds to the predicted label.
     pred = labels[np.argmax(trt_outputs[0])]

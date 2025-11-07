@@ -91,6 +91,18 @@ class Model(Tool):
             dest="show_unbounded_dds",
         )
 
+        parser.add_argument(
+            "--combine-tensor-info",
+            help="""
+            Set the path to the tensor JSON file to combine information from the file into layers' input and output information.
+            This is only supported when --model-type is "engine" and --show includes "layers".
+            To get the tensor JSON file, use '--mark-unfused-tensors-as-debug-tensors' and '--save-outputs' when running model with TensorRT.
+            """,
+            type=str,
+            default=None,
+            dest="combine_tensor_info",
+        )
+
     def run_impl(self, args):
         def show(aspect):
             return aspect in args.show
@@ -104,6 +116,7 @@ class Model(Tool):
                         context,
                         show_layers=show("layers"),
                         show_attrs=show("attrs"),
+                        combine_tensor_info=args.combine_tensor_info
                     )
                     G_LOGGER.info(f"==== TensorRT Engine ====\n{engine_str}")
             else:

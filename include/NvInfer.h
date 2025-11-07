@@ -19,7 +19,7 @@
 #define NV_INFER_H
 
 #include "NvInferLegacyDims.h"
-#include "NvInferRuntime.h"
+#include "NvInferRuntime.h" // IWYU pragma: export
 
 //!
 //! \mainpage
@@ -106,7 +106,9 @@ enum class LayerType : int32_t
     kSQUEEZE = 47,            //!< Squeeze Layer.
     kUNSQUEEZE = 48,          //!< Unsqueeze Layer.
     kCUMULATIVE = 49,         //!< Cumulative layer.
-    kDYNAMIC_QUANTIZE = 50,    //!< Dynamic Quantize layer.
+    kDYNAMIC_QUANTIZE = 50,   //!< Dynamic Quantize layer.
+    kATTENTION_INPUT = 51,    //!< Attention Input.
+    kATTENTION_OUTPUT = 52,   //!< Attention Output.
 };
 
 //!
@@ -117,7 +119,7 @@ enum class LayerType : int32_t
 template <>
 constexpr inline int32_t EnumMax<LayerType>() noexcept
 {
-    return 51;
+    return 53;
 }
 
 //!
@@ -150,6 +152,7 @@ enum class ActivationType : int32_t
     kGELU_ERF = 12,         //!< GELU erf activation: 0.5 * x * (1 + erf(sqrt(0.5) * x))
     kGELU_TANH = 13         //!< GELU tanh activation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (0.044715F * pow(x, 3) + x)))
 };
+
 
 namespace impl
 {
@@ -3645,6 +3648,33 @@ public:
     //!
     using ILayer::setInput;
 
+    //!
+    //! \brief Set the indices type for the layer.
+    //!
+    //! \param type The DataType of the indices tensor.
+    //!
+    //! \return true if set successfully, false otherwise.
+    //!
+    //! Set the indices (the second output) type of the TopK layer. Valid values are DataType::kINT32 and
+    //! DataType::kINT64, otherwise an error occurs and the type is not updated.
+    //!
+    bool setIndicesType(DataType type) noexcept
+    {
+        return mImpl->setIndicesType(type);
+    }
+
+    //!
+    //! \brief Return the TopK layer indices type.
+    //!
+    //! \return indices type set during layer creation or by setIndicesType().
+    //! The return value is the indices type of the TopK layer.
+    //! The default value is DataType::kINT32.
+    //!
+    DataType getIndicesType() const noexcept
+    {
+        return mImpl->getIndicesType();
+    }
+
 protected:
     apiv::VTopKLayer* mImpl;
     virtual ~ITopKLayer() noexcept = default;
@@ -3757,7 +3787,7 @@ protected:
 //!
 //! The input may have type kFLOAT, kHALF, kINT32, or kBOOL.
 //!
-//! The output is a matrix of type kINT32.
+//! The output is a matrix of type kINT32 or kINT64.
 //! For an input with dimensions [L1, L2, ..., Lm], the output has dimensions [m,n],
 //! where n is the number of non-zero elements. I.e., each column denotes a m-D position.
 //!
@@ -3771,6 +3801,34 @@ protected:
 //!
 class INonZeroLayer : public ILayer
 {
+public:
+    //!
+    //! \brief Set the indices type for the layer.
+    //!
+    //! \param type The DataType of the indices tensor.
+    //!
+    //! \return true if set successfully, false otherwise.
+    //!
+    //! Set the indices (the first output) type of the NonZero layer. Valid values are DataType::kINT32 and
+    //! DataType::kINT64, otherwise an error occurs and the type is not updated.
+    //!
+    bool setIndicesType(DataType type) noexcept
+    {
+        return mImpl->setIndicesType(type);
+    }
+
+    //!
+    //! \brief Return the NonZero layer indices type.
+    //!
+    //! \return indices type set during layer creation or by setIndicesType().
+    //! The return value is the indices type of the NonZero layer.
+    //! The default value is DataType::kINT32.
+    //!
+    DataType getIndicesType() const noexcept
+    {
+        return mImpl->getIndicesType();
+    }
+
 protected:
     virtual ~INonZeroLayer() noexcept = default;
     apiv::VNonZeroLayer* mImpl;
@@ -6145,10 +6203,12 @@ constexpr inline int32_t EnumMax<BoundingBoxFormat>() noexcept
 //! intersection-over-union (IoU) with previously selected boxes is less than or equal to a given threshold.
 //! This layer implements NMS per batch item and per class.
 //!
-//! Per batch item, boxes are initially sorted by their scores without regard to class. Only boxes up to a maximum of the TopK limit are considered for selection (per batch).
-//! During selection, only overlapping boxes of the same class are compared, so that overlapping boxes of different classes do not suppress each other.
+//! Per batch item, boxes are initially sorted by their scores without regard to class. Only boxes up to a maximum of
+//! the TopK limit are considered for selection (per batch). During selection, only overlapping boxes of the same class
+//! are compared, so that overlapping boxes of different classes do not suppress each other.
 //!
-//! For each batch item, the ordering of candidate bounding boxes with the same score is unspecified, but the ordering will be consistent across different runs for the same inputs.
+//! For each batch item, the ordering of candidate bounding boxes with the same score is unspecified, but the ordering
+//! will be consistent across different runs for the same inputs.
 //!
 //! The layer has the following inputs, in order of input index:
 //!
@@ -6161,19 +6221,21 @@ constexpr inline int32_t EnumMax<BoundingBoxFormat>() noexcept
 //!   It is a scalar (0D tensor) of type kINT32.
 //! * IoUThreshold is the maximum IoU for selected boxes. It is a scalar (0D tensor) of type kFLOAT in the range
 //!   [0.0f, 1.0f]. It is an optional input with default 0.0f.
-//! * ScoreThreshold is the value that a box score must exceed in order to be selected. It is a scalar (0D tensor) of type kFLOAT. It is an optional
+//! * ScoreThreshold is the value that a box score must exceed in order to be selected. It is a scalar (0D tensor) of
+//! type kFLOAT. It is an optional
 //!   input with default 0.0f.
 //!
 //! The layer has the following outputs, in order of output index:
 //!
-//! * SelectedIndices contains the indices of the selected boxes. It is a linear tensor of type kINT32. It has shape
+//! * SelectedIndices contains the indices of the selected boxes. It is a linear tensor of type kINT32 or kINT64. It has
+//! shape
 //!   [NumOutputBoxes, 3]. Each row contains a (batchIndex, classIndex, boxIndex) tuple.
-//!   The output boxes are sorted in order of increasing batchIndex and then in order of decreasing score within each batchIndex.
-//!   For each batchIndex, the ordering of output boxes with the same score is unspecified.
-//!   If MaxOutputBoxesPerClass is a constant input, the maximum number of output boxes is
-//!   batchSize * numClasses * min(numInputBoundingBoxes, MaxOutputBoxesPerClass).
-//!   Otherwise, the maximum number of output boxes is batchSize * numClasses * numInputBoundingBoxes.
-//!   The maximum number of output boxes is used to determine the upper-bound on allocated memory for this output tensor.
+//!   The output boxes are sorted in order of increasing batchIndex and then in order of decreasing score within each
+//!   batchIndex. For each batchIndex, the ordering of output boxes with the same score is unspecified. If
+//!   MaxOutputBoxesPerClass is a constant input, the maximum number of output boxes is batchSize * numClasses *
+//!   min(numInputBoundingBoxes, MaxOutputBoxesPerClass). Otherwise, the maximum number of output boxes is batchSize *
+//!   numClasses * numInputBoundingBoxes. The maximum number of output boxes is used to determine the upper-bound on
+//!   allocated memory for this output tensor.
 //! * NumOutputBoxes is the number of output boxes in SelectedIndices. It is a scalar (0D tensor) of type kINT32.
 //!
 //! \warning There is a hardware-dependent limit K such that only the K highest scoring boxes in each batch item
@@ -6253,6 +6315,33 @@ public:
     //! inputs are set to null. Note that only optional inputs can be missing.
     //!
     using ILayer::setInput;
+
+    //!
+    //! \brief Set the indices type for the layer.
+    //!
+    //! \param type The DataType of the indices tensor.
+    //!
+    //! \return true if set successfully, false otherwise.
+    //!
+    //! Set the indices (the first output) type of the NMS layer. Valid values are DataType::kINT32 and
+    //! DataType::kINT64, otherwise an error occurs and the type is not updated.
+    //!
+    bool setIndicesType(DataType type) noexcept
+    {
+        return mImpl->setIndicesType(type);
+    }
+
+    //!
+    //! \brief Return the NMS layer indices type.
+    //!
+    //! \return indices type set during layer creation or by setIndicesType().
+    //! The return value is the indices type of the NMS layer.
+    //! The default value is DataType::kINT32.
+    //!
+    DataType getIndicesType() const noexcept
+    {
+        return mImpl->getIndicesType();
+    }
 
 protected:
     apiv::VNMSLayer* mImpl;
@@ -6659,6 +6748,409 @@ public:
 protected:
     apiv::VCumulativeLayer* mImpl;
     virtual ~ICumulativeLayer() noexcept = default;
+};
+
+//!
+//! \enum AttentionNormalizationOp
+//!
+//! \brief Enumerates the operations that may be performed by the normalization in the attention subgraph.
+//!
+enum class AttentionNormalizationOp : int32_t
+{
+    kNONE
+    = 0, //!< Apply no normalization on the attention scores. Must be used with decomposable=True on pre-Blackwell GPUs
+    kSOFTMAX = 1, //!< Apply softmax normalization on the attention scores on the `s_kv` dimension.
+};
+
+namespace impl
+{
+//!
+//! Maximum number of elements in AttentionNormalizationOp enum.
+//!
+//! \see AttentionNormalizationOp
+//!
+template <>
+struct EnumMaxImpl<AttentionNormalizationOp>
+{
+    static constexpr int32_t kVALUE = 2;
+};
+
+} // namespace impl
+
+//!
+//! \class IAttentionBoundaryLayer
+//!
+//! \brief This is a base class for Attention boundary layers.
+//!
+//! Boundary layers are used to demarcate the boundaries of IAttention.
+//! Typically client code does not deal directly with the boundary layers.
+//! However, they are indirectly visible via method `INetworkDefinition::getLayer(int32_t index)`.
+//!
+class IAttentionBoundaryLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Get a pointer to the IAttention associated with this boundary layer.
+    //!
+    IAttention* getAttention() const noexcept
+    {
+        return mBoundary->getAttention();
+    }
+
+protected:
+    virtual ~IAttentionBoundaryLayer() noexcept = default;
+    apiv::VAttentionBoundaryLayer* mBoundary;
+};
+
+//!
+//! \class IAttentionInputLayer
+//!
+//! \brief This layer represents an input to an attention subgraph.
+//!
+//! This layer is automatically created when an `IAttention` is created. Clients typically do not
+//! deal with the layer directly, but instead specify its input via `addAttention` or `IAttention::setInput`.
+//!
+//! An IAttentionInputLayer has three to four inputs and one output.
+//!
+class IAttentionInputLayer : public IAttentionBoundaryLayer
+{
+public:
+    //!
+    //! \brief Append or replace an input of this layer with a specific tensor
+    //!
+    //! \param index the index of the input to modify.
+    //! \param tensor the new input tensor
+    //!
+    //! The indices are as follows:
+    //!
+    //! Input 0 is the input query tensor.
+    //! Input 1 is the input key tensor.
+    //! Input 2 is the input value tensor.
+    //! Input 3 is the optional mask tensor. setMask should be used instead of setInput
+    //! Input 4 is the optional normalizationQuantizeScale tensor. setNormalizationQuantizeScale should be used instead
+    //! of setInput
+    //!
+    using ILayer::setInput;
+
+protected:
+    virtual ~IAttentionInputLayer() noexcept = default;
+    apiv::VAttentionInputLayer* mImpl;
+};
+
+//!
+//! \class IAttentionOutputLayer
+//!
+//! \brief This layer represents an output of an IAttention.
+//!
+//! This layer is automatically created when an `IAttention` is created. Clients typically do not
+//! deal with the layer directly, but instead getting its output via `IAttention::getOutput`.
+//!
+//! An IAttentionOutputLayer has one input and one output.
+//!
+class IAttentionOutputLayer : public IAttentionBoundaryLayer
+{
+public:
+protected:
+    virtual ~IAttentionOutputLayer() noexcept = default;
+    apiv::VAttentionOutputLayer* mImpl;
+};
+
+//!
+//! \class IAttention
+//!
+//! \brief Helper for constructing an attention that consumes query, key and value tensors.
+//!
+//! An attention subgraph implicitly includes three main components, two MatrixMultiply layers
+//! known as BMM1 and BMM2, and one normalization operation which defaults to be a Softmax.
+//! By default, IAttention is not decomposable and TensorRT will try to use a single fused kernel, which may be more
+//! efficient than if the subgraph is expressed without IAttention. Setting the IAttention to decomposable=True can
+//! allow IAttention to be decomposed to use multiple kernels if no fused kernel support found.
+//!
+//!  Query       Key       Value      Mask (optional)      NormalizationQuantizeScale (optional)
+//!    |          |          |          |                    |
+//!    |       Transpose     |          |                    |
+//!    |          |          |          |                    |
+//!    ----BMM1----          |          |                    |
+//!          |               |          |                    |
+//!          *---------------------------                    |
+//!          |               |                               |
+//!    Normalization         |                               |
+//!          |               |                               |
+//!          *------------------------------------------------
+//!          |               |
+//!          -------BMM2------
+//!                  |
+//!                Output
+//!
+//! The attention has the following inputs, in order of input index:
+//!
+//! * Query contains the input query. It is a tensor of type kFLOAT, kHALF or kBF16 with
+//!   shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead]
+//! * Key contains the input key. It is a tensor of type kFLOAT, kHALF or kBF16 with
+//!   shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead]
+//! * Value contains the input value. It is a tensor of type kFLOAT, kHALF or kBF16 with
+//!   shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead]
+//! * Mask (optional) contains the mask value. It is a tensor of type kBOOL or the same data type of
+//!   BMM1 output with shape [batchSize, numHeadsQuery, sequenceLengthQuery, sequenceLengthKeyValue]
+//!   with batchSize and numHeadsQuery broadcastable. For a kBOOL mask, a True value indicates that the corresponding
+//!   position is allowed to attend. For other data types, the mask values will be added to the BMM1 output, known
+//!   as an add mask.
+//! * NormalizationQuantizeScale (optional) contains the quantization scale for the attention normalization output.
+//!   It is a tensor of type kFLOAT, kHALF or kBF16 with dimension 0 or 1.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IAttention : public INoCopy
+{
+public:
+    //!
+    //! \brief Set the normalization operation for the attention.
+    //!
+    //! \see getNormalizationOperation(), AttentionNormalizationOp
+    //!
+    //! \return True if the normalization operation is set successfully, false otherwise.
+    //!
+    bool setNormalizationOperation(AttentionNormalizationOp op) noexcept
+    {
+        return mImpl->setNormalizationOperation(op);
+    }
+
+    //!
+    //! \brief Get the normalization operation for the attention.
+    //!
+    //! \see setNormalizationOperation(), AttentionNormalizationOp
+    //!
+    //! \return The normalization operation for the attention. Default is kSOFTMAX.
+    //!
+    AttentionNormalizationOp getNormalizationOperation() const noexcept
+    {
+        return mImpl->getNormalizationOperation();
+    }
+
+    //!
+    //! \brief Set whether a mask will be used for the normalization operation.
+    //!
+    //! \param mask the mask tensor of type kBOOL or the same data type of
+    //! BMM1 output with shape [batchSize, sequenceLengthQuery, sequenceLengthKeyValue]. For a kBOOL mask, a True value
+    //! indicates that the corresponding position is allowed to attend. For other data types, the mask values will
+    //! be added to the BMM1 output, known as an add mask.
+    //!
+    //! \see getMask
+    //!
+    //! \return True if the mask is set successfully, false otherwise.
+    //!
+    bool setMask(ITensor& mask) noexcept
+    {
+        return mImpl->setMask(mask);
+    }
+
+    //!
+    //! \brief Get the optional mask in attention.
+    //!
+    //! \see setMask
+    //!
+    //! \return The optional mask in attention, nullptr if no mask is set.
+    //!
+    ITensor* getMask() noexcept
+    {
+        return mImpl->getMask();
+    }
+
+    //!
+    //! \brief Set whether the attention will run a causal inference.
+    //! Cannot be used together with setMask().
+    //!
+    //! \see getCausal
+    //!
+    //! \return True if the causal inference is set successfully, false otherwise.
+    //!
+    bool setCausal(bool isCausal) noexcept
+    {
+        return mImpl->setCausal(isCausal);
+    }
+
+    //!
+    //! \brief Get whether the attention will run a causal inference.
+    //!
+    //! \see setCausal
+    //!
+    //! \return True if the attention will run a causal inference, false otherwise. Default is false.
+    //!
+    bool getCausal() const noexcept
+    {
+        return mImpl->getCausal();
+    }
+
+    //!
+    //! \brief Set whether the attention can be decomposed to use multiple kernels if no fused kernel support found.
+    //!
+    //! \see getDecomposable
+    //!
+    //! \return True if the decomposable attention is set successfully, false otherwise.
+    //!
+    bool setDecomposable(bool decomposable) noexcept
+    {
+        return mImpl->setDecomposable(decomposable);
+    }
+
+    //!
+    //! \brief Get whether the attention can be decomposed to use multiple kernels if no fused kernel support found.
+    //!
+    //! \return True if the attention can be decomposed to use multiple kernels by the compiler,
+    //!         false otherwise. Default is false.
+    //!
+    //! \see setDecomposable
+    //!
+    bool getDecomposable() const noexcept
+    {
+        return mImpl->getDecomposable();
+    }
+
+    //!
+    //! \brief Append or replace an input of this layer with a specific tensor.
+    //!
+    //! \param index the index of the input to modify.
+    //! \param input the new input tensor.
+    //!
+    //! The indices are as follows:
+    //!
+    //! Input 0 is the input query tensor.
+    //! Input 1 is the input key tensor.
+    //! Input 2 is the input value tensor.
+    //!
+    //! \return True if the input tensor is set successfully, false otherwise.
+    //!
+    bool setInput(int32_t index, ITensor& input) noexcept
+    {
+        return mImpl->setInput(index, input);
+    }
+
+    //!
+    //! \brief Get the number of inputs of IAttention. IAttention has three inputs.
+    //!
+    //! \return The number of inputs of IAttention.
+    int32_t getNbInputs() const noexcept
+    {
+        return mImpl->getNbInputs();
+    }
+
+    //!
+    //! \brief Get the IAttention input corresponding to the given index.
+    //!
+    //! \param index The index of the input tensor.
+    //!
+    //! \return The input tensor, or nullptr if the index is out of range.
+    //!
+    ITensor* getInput(int32_t index) const noexcept
+    {
+        return mImpl->getInput(index);
+    }
+
+    //!
+    //! \brief Get the number of outputs of a layer. IAttention has one output.
+    //!
+    int32_t getNbOutputs() const noexcept
+    {
+        return mImpl->getNbOutputs();
+    }
+
+    //!
+    //! \brief Get the IAttention output corresponding to the given index. IAttention has only one output.
+    //!
+    //! \param index The index of the output tensor.
+    //!
+    //! \return The indexed output tensor, or nullptr if the index is out of range.
+    //!
+    ITensor* getOutput(int32_t index) const noexcept
+    {
+        return mImpl->getOutput(index);
+    }
+
+    //!
+    //! \brief Set the name of the attention.
+    //!
+    //! The name is used in error diagnostics.
+    //! This method copies the name string.
+    //!
+    //! \warning The string name must be null-terminated, and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getName()
+    //!
+    //! \return True if the name is set successfully, false otherwise.
+    //!
+    bool setName(char const* name) noexcept
+    {
+        return mImpl->setName(name);
+    }
+
+    //!
+    //! \brief Return the name of the attention.
+    //!
+    //! \see setName()
+    //!
+    //! \return The name of the attention.
+    //!
+    char const* getName() const noexcept
+    {
+        return mImpl->getName();
+    }
+
+    //!
+    //! \brief Set the quantization scale for the attention normalization output.
+    //!
+    //! \param tensor for quantization scale. Data type must be DataType::kFLOAT, DataType::kHALF or DataType::kBF16.
+    //! Must be a 0-d or 1-d.
+    //!
+    //! \return True if the quantization scale is set successfully, false otherwise.
+    //!
+    //! \warning Must be used together with setNormalizationQuantizeToType to set normalization output datatype to
+    //! DataType::kFP8 or DataType::kINT8.
+    //!
+    bool setNormalizationQuantizeScale(ITensor& tensor) noexcept
+    {
+        return mImpl->setNormalizationQuantizeScale(tensor);
+    }
+
+    //!
+    //! \brief Get the quantization scale for the attention normalization output.
+    //!
+    //! \return The quantization scale for the attention normalization output or nullptr if no quantization scale is
+    //! set.
+    //!
+    ITensor* getNormalizationQuantizeScale() const noexcept
+    {
+        return mImpl->getNormalizationQuantizeScale();
+    }
+
+    //!
+    //! \brief Set the datatype the attention normalization is quantized to.
+    //!
+    //! \param type the datatype the attention normalization is quantized to. Must be one of DataType::kFP8,
+    //! DataType::kINT8.
+    //!
+    //! \return True if the quantization to type is set successfully, false otherwise.
+    //!
+    bool setNormalizationQuantizeToType(DataType type) noexcept
+    {
+        return mImpl->setNormalizationQuantizeToType(type);
+    }
+
+    //!
+    //! \brief Get the datatype the attention normalization is quantized to.
+    //!
+    //! \return The datatype the attention normalization is quantized to.
+    //! The default value is DataType::kFLOAT.
+    //!
+    //! \warning Must be used after normalization quantization to type is set by setNormalizationQuantizeToType.
+    DataType getNormalizationQuantizeToType() const noexcept
+    {
+        return mImpl->getNormalizationQuantizeToType();
+    }
+
+
+protected:
+    apiv::VAttention* mImpl;
+    virtual ~IAttention() noexcept = default;
 };
 
 //!
@@ -7112,6 +7604,8 @@ public:
     //!
     //! Currently only values of K up to 3840 are supported.
     //!
+    //! The default indices tensor (the second output) data type is DataType::kINT32.
+    //!
     //! \param input The input tensor to the layer.
     //!
     //! \param op Operation to perform.
@@ -7122,17 +7616,51 @@ public:
     //! \param reduceAxes The reduction dimensions.
     //!        The bit in position i of bitmask reduceAxes corresponds to explicit dimension i of the result.
     //!        E.g., the least significant bit corresponds to the first explicit dimension and the next to least
-    //!        significant bit corresponds to the second explicit dimension.
-    //!
-    //!        Currently reduceAxes must specify exactly one dimension, and it must be one of the last four dimensions.
+    //!        significant bit corresponds to the second explicit dimension. Currently reduceAxes must specify
+    //!        exactly one dimension, and it must be one of the last four dimensions.
     //!
     //! \see ITopKLayer
     //!
     //! \return The new TopK layer, or nullptr if it could not be created.
     //!
-    ITopKLayer* addTopK(ITensor& input, TopKOperation op, int32_t k, uint32_t reduceAxes) noexcept
+    //! \deprecated Deprecated in TensorRT 10.14. Superseded by five-argument addTopK.
+    //!
+    TRT_DEPRECATED ITopKLayer* addTopK(ITensor& input, TopKOperation op, int32_t k, uint32_t reduceAxes) noexcept
     {
         return mImpl->addTopK(input, op, k, reduceAxes);
+    }
+
+    //!
+    //! \brief Add a TopK layer to the network.
+    //!
+    //! The TopK layer has two outputs of the same dimensions. The first contains data values,
+    //! the second contains index positions for the values. Output values are sorted, largest first
+    //! for operation kMAX and smallest first for operation kMIN.
+    //!
+    //! Currently only values of K up to 3840 are supported.
+    //!
+    //! \param input The input tensor to the layer.
+    //!
+    //! \param op Operation to perform.
+    //!
+    //! \param k The number of elements to keep. For dynamic k, use the setInput() method to pass in k as a tensor
+    //!        instead, which will override the static k value passed here in calculations.
+    //!
+    //! \param reduceAxes The reduction dimensions.
+    //!        The bit in position i of bitmask reduceAxes corresponds to explicit dimension i of the result.
+    //!        E.g., the least significant bit corresponds to the first explicit dimension and the next to least
+    //!        significant bit corresponds to the second explicit dimension. Currently reduceAxes must specify
+    //!        exactly one dimension, and it must be one of the last four dimensions.
+    //!
+    //! \param indicesType Indices tensor (the second output) data type, must be DataType::kINT32 or DataType::kINT64.
+    //!
+    //! \see ITopKLayer
+    //!
+    //! \return The new TopK layer, or nullptr if it could not be created.
+    //!
+    ITopKLayer* addTopK(ITensor& input, TopKOperation op, int32_t k, uint32_t reduceAxes, DataType indicesType) noexcept
+    {
+        return mImpl->addTopKV2(input, op, k, reduceAxes, indicesType);
     }
 
     //!
@@ -7211,15 +7739,35 @@ public:
     //!
     //! \brief Add a nonzero layer to the network.
     //!
+    //! The default indices tensor (the first output) data type is DataType::kINT32.
+    //!
     //! \param input The input tensor to the layer.
     //!
     //! \see INonZeroLayer
     //!
-    //! \return The new nonzero layer, or nullptr if it could be created.
+    //! \return The new nonzero layer, or nullptr if it could not be created.
     //!
-    INonZeroLayer* addNonZero(ITensor& input) noexcept
+    //! \deprecated Deprecated in TensorRT 10.14. Superseded by two-argument addNonZero.
+    //!
+    TRT_DEPRECATED INonZeroLayer* addNonZero(ITensor& input) noexcept
     {
         return mImpl->addNonZero(input);
+    }
+
+    //!
+    //! \brief Add a nonzero layer to the network.
+    //!
+    //! \param input The input tensor to the layer.
+    //!
+    //! \param indicesType Indices tensor (the first output) data type, must be DataType::kINT32 or DataType::kINT64.
+    //!
+    //! \see INonZeroLayer
+    //!
+    //! \return The new nonzero layer, or nullptr if it could not be created.
+    //!
+    INonZeroLayer* addNonZero(ITensor& input, DataType indicesType) noexcept
+    {
+        return mImpl->addNonZeroV2(input, indicesType);
     }
 
     //!
@@ -7940,7 +8488,7 @@ public:
     //!
     //! This layer performs dynamic block quantization of its input tensor and outputs the
     //! quantized data and the computed block scale-factors.
-    //! The block size is currently limited to 16 and the size of the blocked axis must be divisible by 16.
+    //! The blocked axis dimension size must be divisible by the block size.
     //!
     //! \param input The input tensor to be quantized. Its data type must be one of DataType::kFLOAT,
     //! DataType::kHALF, or DataType::kBF16. Currently only 2D and 3D inputs are supported.
@@ -7999,6 +8547,8 @@ public:
     //!
     //! \brief Add a non-maximum suppression layer to the network.
     //!
+    //! The default indices tensor (the first output) data type is DataType::kINT32.
+    //!
     //! \param boxes The input boxes tensor to the layer.
     //!
     //! \param scores The input scores tensor to the layer.
@@ -8009,9 +8559,31 @@ public:
     //!
     //! \return The new NMS layer, or nullptr if it could not be created.
     //!
-    INMSLayer* addNMS(ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass) noexcept
+    //! \deprecated Deprecated in TensorRT 10.14. Superseded by four-argument addNMS.
+    //!
+    TRT_DEPRECATED INMSLayer* addNMS(ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass) noexcept
     {
         return mImpl->addNMS(boxes, scores, maxOutputBoxesPerClass);
+    }
+
+    //!
+    //! \brief Add a non-maximum suppression layer to the network.
+    //!
+    //! \param boxes The input boxes tensor to the layer.
+    //!
+    //! \param scores The input scores tensor to the layer.
+    //!
+    //! \param maxOutputBoxesPerClass The input maxOutputBoxesPerClass tensor to the layer.
+    //!
+    //! \param indicesType Indices tensor (the first output) data type, must be DataType::kINT32 or DataType::kINT64.
+    //!
+    //! \see INMSLayer
+    //!
+    //! \return The new NMS layer, or nullptr if it could not be created.
+    //!
+    INMSLayer* addNMS(ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass, DataType indicesType) noexcept
+    {
+        return mImpl->addNMSV2(boxes, scores, maxOutputBoxesPerClass, indicesType);
     }
 
     //!
@@ -8077,6 +8649,34 @@ public:
     ICumulativeLayer* addCumulative(ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept
     {
         return mImpl->addCumulative(input, axis, operation, exclusive, reverse);
+    }
+
+    //!
+    //! \brief Add an attention to the network.
+    //!
+    //! \param query A 4d input query tensor to the layer.
+    //! \param key A 4d input key tensor to the layer.
+    //! \param value A 4d input value tensor to the layer.
+    //! \param normOp The normalization operation to perform.
+    //! \param causal Use causual inference or not.
+    //!
+    //! query must have shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead].
+    //! key and value must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
+    //! pastKey and pastValue must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
+    //! normOp defaults to kSOFTMAX isCausal defaults to false.
+    //!
+    //! By default, IAttention is not decomposable and TensorRT will try to use a single fused kernel, which may be more
+    //! efficient than if the subgraph is expressed without IAttention. Setting the IAttention to decomposable=True can
+    //! allow IAttention to be to use multiple kernels if no fused kernel support found.
+    //!
+    //! \see IAttention
+    //!
+    //! \return The new attention, or nullptr if it could not be created.
+    //!
+    IAttention* addAttention(
+        ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp, bool causal) noexcept
+    {
+        return mImpl->addAttention(query, key, value, normOp, causal);
     }
 
     //!
@@ -8812,6 +9412,8 @@ enum class RuntimePlatform : int32_t
     //! Designates the target platform for engine execution as Windows AMD64 system. Currently this flag can only be
     //! enabled when building engines on Linux AMD64 platforms.
     kWINDOWS_AMD64 = 1,
+
+
 };
 
 namespace impl
@@ -9018,6 +9620,8 @@ enum class BuilderFlag : int32_t
     //! For layers that perform einsum:
     //! Let n be the leftmost reduction axis. The axes to the left of n are distributive axes.
     kDISTRIBUTIVE_INDEPENDENCE = 28,
+
+
 };
 
 //!

@@ -61,6 +61,19 @@ def FileReader(
         def read(self, size: int) -> bytes:
             return self.file.read(size)
 
+        def seek(self, offset: int, whence: int = 0) -> int:
+            """
+            Seek to a position in the stream. Required for IStreamReaderV2.
+
+            Args:
+                offset: The offset to seek to
+                whence: How to interpret the offset (0=absolute, 1=relative to current, 2=relative to end)
+
+            Returns:
+                The new absolute position
+            """
+            return self.file.seek(offset, whence)
+
         def free(self):
             if self.file:
                 self.file.close()

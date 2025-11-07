@@ -16,7 +16,7 @@ conditions:
   onnx-graphsurgeon:
    - onnx-graphsurgeon
   onnx:
-   - onnx==1.16.0; platform_system == "Windows"
+   - onnx==1.18.0; platform_system == "Windows"
   triton:
    - 'triton==3.2.0; (platform_system != "Windows")'
   numpy:

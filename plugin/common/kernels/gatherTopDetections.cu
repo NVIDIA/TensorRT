@@ -173,7 +173,7 @@ struct gtdLaunchConfig
         , function(function)
     {
     }
-    bool operator==(const gtdLaunchConfig& other)
+    bool operator==(gtdLaunchConfig const& other) const
     {
         return t_bbox == other.t_bbox && t_score == other.t_score;
     }

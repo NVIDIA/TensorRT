@@ -52,7 +52,7 @@ versions:
     attributes_required:
       - crop_height
       - crop_width
-    golden_io_path: "plugin/cropAndResizePlugin/CropAndResizeDynamic_PluginGoldenIO.json"
+    golden_io_path: "plugin/CropAndResizeDynamic_PluginGoldenIO.json"
     abs_tol: 1e-6
     rel_tol: 1e-6
     fp16_atol: 1e-3
@@ -111,7 +111,7 @@ versions:
     attributes_required:
       - crop_height
       - crop_width
-    golden_io_path: "plugin/cropAndResizePlugin/CropAndResizeDynamic_PluginGoldenIO.json"
+    golden_io_path: "plugin/CropAndResizeDynamic_PluginGoldenIO.json"
     abs_tol: 1e-6
     rel_tol: 1e-6
     fp16_atol: 1e-3

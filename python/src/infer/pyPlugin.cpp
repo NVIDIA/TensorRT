@@ -2000,7 +2000,8 @@ public:
             {
                 auto result = pyResult.cast<std::tuple<std::string, py::bytes>>();
 
-                *kernelName = std::get<0>(result).c_str();
+                mKernelName = std::get<0>(result);
+                *kernelName = mKernelName.c_str();
                 mCompiledKernel = std::get<1>(result);
                 py::buffer_info buffer(py::buffer(mCompiledKernel).request());
                 *compiledKernel = static_cast<char*>(buffer.ptr);
@@ -2081,6 +2082,7 @@ public:
 
 private:
     py::bytes mCompiledKernel;
+    std::string mKernelName;
 };
 
 class PyIPluginV3QuickRuntimeImpl : public IPluginV3QuickRuntime

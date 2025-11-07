@@ -285,7 +285,7 @@ struct roiFwdLaunchConfig
     {
     }
 
-    bool operator==(const roiFwdLaunchConfig& other)
+    bool operator==(roiFwdLaunchConfig const& other) const
     {
         return (t_rois == other.t_rois)
             && (t_featureMap == other.t_featureMap)

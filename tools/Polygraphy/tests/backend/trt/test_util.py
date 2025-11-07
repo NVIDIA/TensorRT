@@ -19,11 +19,18 @@ import contextlib
 from textwrap import dedent
 
 import pytest
-import tensorrt as trt
 
-from polygraphy import mod
-from polygraphy.backend.trt import CreateConfig, Profile, create_network
+from polygraphy import config, mod
+from polygraphy.backend.trt import Profile, create_network
 from polygraphy.backend.trt import util as trt_util
+
+# Import CreateConfigRTX conditionally for TensorRT-RTX builds
+if config.USE_TENSORRT_RTX:
+    import tensorrt_rtx as trt
+    from polygraphy.backend.tensorrt_rtx import CreateConfigRTX as CreateConfig
+else:
+    import tensorrt as trt
+    from polygraphy.backend.trt import CreateConfig
 
 
 @pytest.fixture(scope="session")
@@ -54,14 +61,27 @@ def test_all_layer_types_mapped(layer_class_mapping, layer_type):
 
 def adjust_memory_pool_limits_after_8_6(limits):
     # Adjust tactic DRAM so we can match the output text reliably in update_expected_output.
-    if mod.version(trt.__version__) >= mod.version("8.6"):
+    if mod.version(trt.__version__) >= mod.version("8.6") or config.USE_TENSORRT_RTX:
         limits[trt.MemoryPoolType.TACTIC_DRAM] = 1 << 30
     return limits
 
 
 def update_expected_output(expected):
-    if mod.version(trt.__version__) >= mod.version("8.6"):
-        if mod.version(trt.__version__) >= mod.version("10.0"):
+    is_trt_10_plus = (
+        mod.version(trt.__version__) >= mod.version("10.0") or 
+        config.USE_TENSORRT_RTX
+    )
+    is_trt_8_6_plus = (
+        mod.version(trt.__version__) >= mod.version("8.6") or 
+        config.USE_TENSORRT_RTX
+    )
+    is_trt_8_7_plus = (
+        mod.version(trt.__version__) >= mod.version("8.7") or 
+        config.USE_TENSORRT_RTX
+    )
+    
+    if is_trt_8_6_plus:
+        if is_trt_10_plus:
             expected = expected.replace(
                 "MiB]",
                 "MiB, TACTIC_DRAM: 1024.00 MiB, TACTIC_SHARED_MEMORY: 1024.00 MiB]",
@@ -70,22 +90,26 @@ def update_expected_output(expected):
             expected = expected.replace("MiB]", "MiB, TACTIC_DRAM: 1024.00 MiB]")
 
         if "Preview Features" not in expected:
-            if mod.version(trt.__version__) < mod.version("10.0"):
+            if not is_trt_10_plus:
                 expected = (
                     dedent(expected).strip()
                     + "\nPreview Features       | [FASTER_DYNAMIC_SHAPES_0805, DISABLE_EXTERNAL_TACTIC_SOURCES_FOR_CORE_0805]"
                 )
             else:
+                preview_features = "[PROFILE_SHARING_0806"
+                if config.USE_TENSORRT_RTX:
+                    preview_features += ", RUNTIME_ACTIVATION_RESIZE_10_10"
+                preview_features += "]"
                 expected = (
                     dedent(expected).strip()
-                    + "\nPreview Features       | [PROFILE_SHARING_0806]"
+                    + f"\nPreview Features       | {preview_features}"
                 )
 
-    if mod.version(trt.__version__) >= mod.version("8.7"):
+    if is_trt_8_7_plus:
         # CUBLAS_LT is not longer enabled by default
         expected = expected.replace("CUBLAS_LT, ", "")
 
-    if mod.version(trt.__version__) >= mod.version("10.0"):
+    if is_trt_10_plus:
         expected = expected.replace(
             "EngineCapability.DEFAULT", "EngineCapability.STANDARD"
         )
@@ -107,12 +131,12 @@ def update_expected_output(expected):
             ),
             update_expected_output(
                 """
-                Flags                  | []
+                Flags                  | [{}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """
+                """.format("TF32" if config.USE_TENSORRT_RTX else "")
             ),
         ),
         (
@@ -124,12 +148,12 @@ def update_expected_output(expected):
             ),
             update_expected_output(
                 """
-                Flags                  | []
+                Flags                  | [{}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | []
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """
+                """.format("TF32" if config.USE_TENSORRT_RTX else "")
             ),
         ),
         (
@@ -140,12 +164,12 @@ def update_expected_output(expected):
             ),
             update_expected_output(
                 """
-                Flags                  | []
+                Flags                  | [{}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 4.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """
+                """.format("TF32" if config.USE_TENSORRT_RTX else "")
             ),
         ),
         (
@@ -153,20 +177,24 @@ def update_expected_output(expected):
                 memory_pool_limits=adjust_memory_pool_limits_after_8_6(
                     {trt.MemoryPoolType.WORKSPACE: 16 << 20}
                 ),
-                fp16=True,
-                int8=True,
-                tf32=True,
+                **({} if config.USE_TENSORRT_RTX else {
+                    "fp16": True,
+                    "int8": True,
+                    "tf32": True,
+                }),
                 refittable=True,
                 precision_constraints="obey",
             ),
             update_expected_output(
                 """
-                Flags                  | [FP16, INT8, REFIT, TF32, OBEY_PRECISION_CONSTRAINTS]
+                Flags                  | [{}REFIT, TF32, OBEY_PRECISION_CONSTRAINTS]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                """
+                """.format(
+                    "" if config.USE_TENSORRT_RTX else "FP16, INT8, ",
+                )
             ),
         ),
         (
@@ -181,15 +209,16 @@ def update_expected_output(expected):
             ),
             update_expected_output(
                 """
-                Flags                  | []
+                Flags                  | [{}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
                 Optimization Profiles  | 2 profile(s)
-                """
+                """.format("TF32" if config.USE_TENSORRT_RTX else "")
             ),
         ),
+    ] + ([] if config.USE_TENSORRT_RTX else [
         (
             CreateConfig(
                 memory_pool_limits=adjust_memory_pool_limits_after_8_6(
@@ -208,6 +237,7 @@ def update_expected_output(expected):
                 """
             ),
         ),
+    ]) + [
         (
             (
                 CreateConfig(
@@ -218,32 +248,39 @@ def update_expected_output(expected):
                 ),
                 update_expected_output(
                     """
-                Flags                  | []
+                Flags                  | [{}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
                 Preview Features       | [PROFILE_SHARING_0806]
-                """
+                """.format("TF32" if config.USE_TENSORRT_RTX else "")
                 ),
             )
-            if mod.version(trt.__version__) >= mod.version("10.0")
+            if mod.version(trt.__version__) >= mod.version("10.0") or config.USE_TENSORRT_RTX
             else (
                 CreateConfig(
                     memory_pool_limits=adjust_memory_pool_limits_after_8_6(
                         {trt.MemoryPoolType.WORKSPACE: 16 << 20}
                     ),
-                    preview_features=[trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
+                    preview_features=(
+                        [trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03] 
+                        if config.USE_TENSORRT_RTX 
+                        else [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
+                    ),
                 ),
                 update_expected_output(
                     """
-                Flags                  | []
+                Flags                  | [{}]
                 Engine Capability      | EngineCapability.DEFAULT
                 Memory Pools           | [WORKSPACE: 16.00 MiB]
                 Tactic Sources         | [CUBLAS, CUBLAS_LT, CUDNN, EDGE_MASK_CONVOLUTIONS, JIT_CONVOLUTIONS]
                 Profiling Verbosity    | ProfilingVerbosity.DETAILED
-                Preview Features       | [FASTER_DYNAMIC_SHAPES_0805]
-                """
+                Preview Features       | [{}]
+                """.format(
+                    "TF32" if config.USE_TENSORRT_RTX else "",
+                    "ALIASED_PLUGIN_IO_10_03" if config.USE_TENSORRT_RTX else "FASTER_DYNAMIC_SHAPES_0805"
+                )
                 ),
             )
         ),
@@ -252,9 +289,9 @@ def update_expected_output(expected):
         "default",
         "tactic-sources",
         "memory-pool-limits",
-        "builder-flags",
+        "builder-flags" + ("-rtx" if config.USE_TENSORRT_RTX else ""),
         "profiles",
-        "dla",
+    ] + ([] if config.USE_TENSORRT_RTX else ["dla"]) + [
         "preview-features",
     ],
 )

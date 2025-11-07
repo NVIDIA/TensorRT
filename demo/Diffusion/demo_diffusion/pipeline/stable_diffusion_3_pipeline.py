@@ -126,9 +126,9 @@ class StableDiffusion3Pipeline:
 
         # Pipeline type
         self.pipeline_type = pipeline_type
-        self.stages = ['clip_g', 'clip_l', 't5xxl', 'mmdit', 'vae_decoder']
+        self.stages = ['clip_g', 'clip_l', 't5xxl', 'transformer', 'vae_decoder']
         if input_image is not None:
-            self.stages += ['vae_encoder']
+            self.stages = ['vae_encoder'] + self.stages
 
         self.config = {}
         self.config['clip_hidden_states'] = True
@@ -161,7 +161,7 @@ class StableDiffusion3Pipeline:
             self.generator = torch.Generator(device="cuda").manual_seed(seed)
 
         # Create CUDA events and stream
-        for stage in ['clip_g', 'clip_l', 't5xxl', 'denoise', 'vae_encode', 'vae_decode']:
+        for stage in self.stages:
             self.events[stage] = [cudart.cudaEventCreate()[1], cudart.cudaEventCreate()[1]]
         self.stream = cudart.cudaStreamCreate()[1]
 
@@ -261,9 +261,9 @@ class StableDiffusion3Pipeline:
         if 't5xxl' in self.stages:
             self.models['t5xxl'] = SD3_T5XXLModel(**models_args, fp16=True, embedding_dim=get_clip_embedding_dim(self.version, self.pipeline_type))
 
-        # Load MMDiT model
-        if 'mmdit' in self.stages:
-            self.models['mmdit'] = SD3_MMDiTModel(**models_args, fp16=True, shift=self.shift)
+        # Load Transformer model
+        if 'transformer' in self.stages:
+            self.models['transformer'] = SD3_MMDiTModel(**models_args, fp16=True, shift=self.shift)
 
         # Load VAE Encoder model
         if 'vae_encoder' in self.stages:
@@ -320,7 +320,7 @@ class StableDiffusion3Pipeline:
 
         # Load torch models
         for model_name, obj in self.models.items():
-            if self.torch_fallback[model_name] or model_name == 'mmdit':
+            if self.torch_fallback[model_name] or model_name == 'transformer':
                 self.torch_models[model_name] = obj.get_model(torch_inference=self.torch_inference)
 
     def calculateMaxDeviceMemory(self):
@@ -361,17 +361,19 @@ class StableDiffusion3Pipeline:
         print('|-----------------|--------------|')
         print('| {:^15} | {:^12} |'.format('Module', 'Latency'))
         print('|-----------------|--------------|')
-        if 'vae_encoder' in self.stages:
-            print('| {:^15} | {:>9.2f} ms |'.format('VAE Encoder', cudart.cudaEventElapsedTime(self.events['vae_encode'][0], self.events['vae_encode'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('CLIP-G', cudart.cudaEventElapsedTime(self.events['clip_g'][0], self.events['clip_g'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('CLIP-L', cudart.cudaEventElapsedTime(self.events['clip_l'][0], self.events['clip_l'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('T5XXL', cudart.cudaEventElapsedTime(self.events['t5xxl'][0], self.events['t5xxl'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('MMDiT'+' x '+str(denoising_steps), cudart.cudaEventElapsedTime(self.events['denoise'][0], self.events['denoise'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('VAE Decoder', cudart.cudaEventElapsedTime(self.events['vae_decode'][0], self.events['vae_decode'][1])[1]))
+        for stage in self.stages:
+            stage_name = stage
+            if "transformer" in stage:
+                stage_name += ' x ' + str(denoising_steps)
+            print(
+                "| {:^15} | {:>9.2f} ms |".format(
+                    stage_name, cudart.cudaEventElapsedTime(self.events[stage][0], self.events[stage][1])[1],
+                )
+            )
         print('|-----------------|--------------|')
         print('| {:^15} | {:>9.2f} ms |'.format('Pipeline', walltime_ms))
         print('|-----------------|--------------|')
-        print('Throughput: {:.2f} image/s'.format(batch_size*1000./walltime_ms))
+        print('Throughput: {:.5f} image/s'.format(batch_size*1000./walltime_ms))
 
     def save_image(self, images, pipeline, prompt, seed):
         # Save image
@@ -414,7 +416,7 @@ class StableDiffusion3Pipeline:
         neg_conditioning = tokenize(negative_prompt[0])
         return conditioning, neg_conditioning
 
-    def denoise_latent(self, latent, conditioning, neg_conditioning, model_name='mmdit'):
+    def denoise_latent(self, latent, conditioning, neg_conditioning, model_name='transformer'):
         def get_noise(latent):
             return torch.randn(latent.size(), dtype=torch.float32, layout=latent.layout, generator=self.generator, device="cuda").to(latent.dtype)
 
@@ -456,7 +458,7 @@ class StableDiffusion3Pipeline:
             scaled = neg_out + (pos_out - neg_out) * cond_scale
             return scaled
 
-        self.profile_start('denoise', color='blue')
+        self.profile_start(model_name, color='blue')
 
         latent = latent.half().cuda()
         noise = get_noise(latent).cuda()
@@ -470,32 +472,32 @@ class StableDiffusion3Pipeline:
         latent = sample_euler(cfg_denoiser, noise_scaled, sigmas, extra_args=extra_args)
         latent = SD3LatentFormat().process_out(latent)
 
-        self.profile_stop('denoise')
+        self.profile_stop(model_name)
 
         return latent
 
-    def encode_image(self):
+    def encode_image(self, model_name='vae_encoder'):
         self.input_image = self.input_image.to(self.device)
-        self.profile_start('vae_encode', color='orange')
+        self.profile_start(model_name, color='orange')
         if self.torch_inference:
             with torch.autocast("cuda", dtype=torch.float16):
-                latent = self.torch_models['vae_encoder'](self.input_image)
+                latent = self.torch_models[model_name](self.input_image)
         else:
-            latent = self.runEngine('vae_encoder', {'images': self.input_image})['latent']
+            latent = self.runEngine(model_name, {'images': self.input_image})['latent']
 
         latent = SD3LatentFormat().process_in(latent)
-        self.profile_stop('vae_encode')
+        self.profile_stop(model_name)
         return latent
 
-    def decode_latent(self, latent):
-        self.profile_start('vae_decode', color='red')
+    def decode_latent(self, latent, model_name='vae_decoder'):
+        self.profile_start(model_name, color='red')
         if self.torch_inference:
             with torch.autocast("cuda", dtype=torch.float16):
-                image = self.torch_models['vae_decoder'](latent)
+                image = self.torch_models[model_name](latent)
         else:
-            image = self.runEngine('vae_decoder', {'latent': latent})['images']
+            image = self.runEngine(model_name, {'latent': latent})['images']
         image = image.float()
-        self.profile_stop('vae_decode')
+        self.profile_stop(model_name)
         return image
 
     def infer(

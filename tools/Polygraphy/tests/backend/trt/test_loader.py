@@ -17,14 +17,11 @@
 from __future__ import annotations
 
 import sys
-
 import pytest
-import tensorrt as trt
 
-from polygraphy import constants, mod, util
+from polygraphy import config, constants, mod, util
 from polygraphy.backend.trt import (
     Calibrator,
-    CreateConfig,
     EngineBytesFromNetwork,
     EngineFromBytes,
     EngineFromNetwork,
@@ -56,6 +53,15 @@ from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
+
+# Import CreateConfigRTX conditionally for TensorRT-RTX builds
+if config.USE_TENSORRT_RTX:
+    import tensorrt_rtx as trt
+    from polygraphy.backend.tensorrt_rtx import CreateConfigRTX as CreateConfig
+else:
+    import tensorrt as trt
+    from polygraphy.backend.trt import CreateConfig
+
 
 ##
 ## Fixtures
@@ -124,6 +130,10 @@ def modifiable_reshape_network():
 
 
 class TestLoadPlugins:
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="Plugin tests are not compatible with TensorRT-RTX"
+    )
     def test_can_load_libnvinfer_plugins(self):
         def get_plugin_names():
             return [pc.name for pc in trt.get_plugin_registry().plugin_creator_list]
@@ -165,7 +175,7 @@ class TestSerializedEngineLoader:
 
 
 @pytest.mark.skipif(
-    mod.version(trt.__version__) < mod.version("10.0"), reason="API was added in TRT 10.0"
+    mod.version(trt.__version__) < mod.version("10.0") and not config.USE_TENSORRT_RTX, reason="API was added in TRT 10.0"
 )
 class TestSerializedEngineLoaderFromDisk:
     def test_serialized_engine_loader_from_lambda(self, identity_engine):
@@ -190,6 +200,10 @@ class TestSerializedEngineLoaderFromDisk:
 @pytest.mark.skipif(
     mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6"
 )
+@pytest.mark.skipif(
+    config.USE_TENSORRT_RTX,
+    reason="TensorRT-RTX does not have lean runtime shared objects"
+)
 class TestLoadRuntime:
     def test_load_lean_runtime(self, nvinfer_lean_path):
         loader = LoadRuntime(nvinfer_lean_path)
@@ -198,7 +212,11 @@ class TestLoadRuntime:
 
 
 @pytest.mark.skipif(
-    mod.version(trt.__version__) < mod.version("8.6"), reason="API was added in TRT 8.6"
+    mod.version(trt.__version__) < mod.version("8.6") and not config.USE_TENSORRT_RTX, reason="API was added in TRT 8.6"
+)
+@pytest.mark.skipif(
+    config.USE_TENSORRT_RTX,
+    reason="TensorRT-RTX does not have libnvinfer_lean.so.1"
 )
 class TestSerializedVCEngineLoader:
     def test_serialized_vc_engine_loader_from_lambda(self, identity_vc_engine_bytes):
@@ -221,7 +239,8 @@ class TestNetworkFromOnnxBytes:
         builder, network, parser = network_from_onnx_bytes(
             ONNX_MODELS["identity"].loader
         )
-        assert not network.has_implicit_batch_dimension
+        if not config.USE_TENSORRT_RTX:
+            assert not network.has_implicit_batch_dimension
 
     @pytest.mark.parametrize(
         "kwargs, flag",
@@ -232,7 +251,7 @@ class TestNetworkFromOnnxBytes:
                     trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED,
                 )
             ]
-            if mod.version(trt.__version__) >= mod.version("8.7")
+            if mod.version(trt.__version__) >= mod.version("8.7") and not config.USE_TENSORRT_RTX
             else []
         ),
     )
@@ -246,7 +265,8 @@ class TestNetworkFromOnnxBytes:
 class TestNetworkFromOnnxPath:
     def test_loader(self):
         builder, network, parser = network_from_onnx_path(ONNX_MODELS["identity"].path)
-        assert not network.has_implicit_batch_dimension
+        if not config.USE_TENSORRT_RTX:
+            assert not network.has_implicit_batch_dimension
 
     @pytest.mark.parametrize(
         "kwargs, flag",
@@ -257,7 +277,7 @@ class TestNetworkFromOnnxPath:
                     trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED,
                 )
             ]
-            if mod.version(trt.__version__) >= mod.version("8.7")
+            if mod.version(trt.__version__) >= mod.version("8.7") and not config.USE_TENSORRT_RTX
             else []
         ),
     )
@@ -360,6 +380,10 @@ class TestPostprocessNetwork:
         builder, network, parser = postprocess_network(modifiable_network, func)
         assert func_called
 
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX uses strongly typed networks where layer precision cannot be set"
+    )
     def test_modify_network(self, modifiable_network):
         """Tests that the network passed in is properly modified by the callback."""
 
@@ -385,6 +409,10 @@ class TestPostprocessNetwork:
 
 
 class TestSetLayerPrecisions:
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX uses strongly typed networks where layer precision cannot be set"
+    )
     def test_basic(self, modifiable_network):
         builder, network, parser = set_layer_precisions(
             modifiable_network,
@@ -399,6 +427,10 @@ class TestSetLayerPrecisions:
 
 
 class TestSetTensorDatatypes:
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX uses strongly typed networks where tensor datatypes cannot be set"
+    )
     def test_basic(self, modifiable_network):
         builder, network, parser = set_tensor_datatypes(
             modifiable_network,
@@ -459,6 +491,10 @@ class TestEngineFromNetwork:
         with loader() as engine:
             assert isinstance(engine, trt.ICudaEngine)
 
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX does not support calibrators"
+    )
     @pytest.mark.parametrize(
         "use_config_loader, set_calib_profile",
         [(True, None), (False, False), (False, True)],
@@ -617,6 +653,10 @@ class TestOnnxLikeFromNetwork:
 
 
 class TestDefaultPlugins:
+    @pytest.mark.skipif(
+        config.USE_TENSORRT_RTX,
+        reason="Plugin tests are not compatible with TensorRT-RTX"
+    )
     def test_default_plugins(self):
         network_loader = NetworkFromOnnxBytes(ONNX_MODELS["roialign"].loader)
         engine_loader = EngineFromNetwork(network_loader)

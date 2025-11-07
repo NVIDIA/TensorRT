@@ -119,13 +119,17 @@ class MyOutputAllocator(trt.IOutputAllocator):
                 print(f"Updated shape for tensor '{tensor_name}': {dims}")
 
     def __del__(self):
-        with self.lock:
-            for tensor_name, item in self.states.items():
-                if item.ptr is not None:
-                    cuda_call(cudart.cudaFree(item.ptr))
-                    if self.verbose:
-                        print(f"Freed memory for tensor '{tensor_name}'")
-            self.states.clear()
+        try:
+            with self.lock:
+                for tensor_name, item in self.states.items():
+                    if item.ptr is not None:
+                        cuda_call(cudart.cudaFree(item.ptr))
+                        if self.verbose:
+                            print(f"Freed memory for tensor '{tensor_name}'")
+                self.states.clear()
+        except Exception:
+            # Silently handle cleanup failures to prevent exceptions during object deletion
+            pass
 
 
 class PoolAllocator(trt.IGpuAsyncAllocator):
@@ -183,8 +187,12 @@ class PoolAllocator(trt.IGpuAsyncAllocator):
         return True
 
     def __del__(self):
-        if self.pool:
-            cuda_call(cudart.cudaMemPoolDestroy(self.pool))
+        try:
+            if self.pool:
+                cuda_call(cudart.cudaMemPoolDestroy(self.pool))
+        except Exception:
+            # Silently handle cleanup failures to prevent exceptions during object deletion
+            pass
 
 
 class TensorRTInfer:

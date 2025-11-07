@@ -30,13 +30,15 @@ This sample demonstrates how to build an engine from an ONNX model file using th
 ```bash
 pip3 install -r requirements.txt
 ```
+2. Preparing sample data
+See [Preparing sample data](../../README.md#preparing-sample-data) in the main samples README.
 
 ## Running the sample
 
 1.  Run the sample from a terminal to create a TensorRT inference engine and run inference:
 	`python3 simple_progress_monitor.py`
 
-	**Note:** If the TensorRT sample data is not installed in the default location, for example `/usr/src/tensorrt/data/`, the `data` directory must be specified. For example: `python3 simple_progress_monitor.py -d /path/to/my/data/`
+	**Note:** If the TensorRT sample data is not installed in the default location, the `data` directory must be specified. For example: `python3 simple_progress_monitor.py -d $TRT_DATADIR`
 
 	**Note:** Do not redirect the output of this script to a file or pipe.
 
@@ -83,6 +85,9 @@ The following resources provide a deeper understanding about importing a model i
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+October 2025
+Migrate to strongly typed APIs.
 
 August 2025
 Removed support for Python versions < 3.10.

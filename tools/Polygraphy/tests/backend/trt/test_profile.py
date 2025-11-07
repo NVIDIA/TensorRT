@@ -17,7 +17,12 @@
 
 import numpy as np
 import pytest
-import tensorrt as trt
+
+from polygraphy import config
+if config.USE_TENSORRT_RTX:
+    import tensorrt_rtx as trt
+else:
+    import tensorrt as trt
 from polygraphy.backend.trt import Profile, create_network, network_from_onnx_bytes
 from tests.models.meta import ONNX_MODELS
 
@@ -55,7 +60,10 @@ class TestProfile:
         fill_shape = network.add_input("fill_shape", shape=tuple(), dtype=trt.int32)
 
         # Need to add some other operations so TensorRT treats `fill_shape` as a shape tensor.
-        fill = network.add_fill(tuple(), trt.FillOperation.LINSPACE)
+        if config.USE_TENSORRT_RTX:
+            fill = network.add_fill(tuple(), trt.FillOperation.LINSPACE, trt.int32)
+        else:
+            fill = network.add_fill(tuple(), trt.FillOperation.LINSPACE)
         fill.set_input(0, fill_shape)
         fill.set_input(
             1,
@@ -109,4 +117,3 @@ class TestProfile:
         trt_prof = profile.to_trt(builder, network)
         res = [trt_prof.get_shape(case) == [(2, 2, 3), (2, 2, 3), (2, 2, 3)] for case in match_case]
         assert res == should_match 
-

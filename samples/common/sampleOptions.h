@@ -154,6 +154,7 @@ using ShapeRange = std::array<std::vector<int64_t>, nvinfer1::EnumMax<nvinfer1::
 using LayerPrecisions = std::unordered_map<std::string, nvinfer1::DataType>;
 using LayerOutputTypes = std::unordered_map<std::string, std::vector<nvinfer1::DataType>>;
 using LayerDeviceTypes = std::unordered_map<std::string, nvinfer1::DeviceType>;
+using DecomposableAttentions = std::unordered_map<std::string, bool>;
 
 using StringSet = std::unordered_set<std::string>;
 
@@ -235,6 +236,7 @@ public:
     LayerPrecisions layerPrecisions;
     LayerOutputTypes layerOutputTypes;
     LayerDeviceTypes layerDeviceTypes;
+    DecomposableAttentions decomposableAttentions;
     StringSet debugTensors;
     bool markUnfusedTensorsAsDebugTensors{false};
     StringSet debugTensorStates;
@@ -344,6 +346,7 @@ public:
     std::unordered_map<std::string, std::string> debugTensorFileNames;
     std::vector<std::string> dumpAlldebugTensorFormats;
     WeightStreamingBudget weightStreamingBudget;
+    std::string refitOnnxModel;
 
     void parse(Arguments& arguments) override;
 

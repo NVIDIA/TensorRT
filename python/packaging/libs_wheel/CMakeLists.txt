@@ -28,7 +28,7 @@ add_custom_target(tensorrt_libs_wheels ${ENABLE_ALL})
 # Then, the relevant TRT libraries (e.g. libnvinfer.so) are copied into the same directory as the generated files.
 # Finally, the wheel is built by running setup.py with the appropriate arguments in the binary directory.
 #
-# \param moduleName The module name to create the bindings for. One of "tensorrt", "tensorrt_dispatch", or "tensorrt_lean".
+# \param moduleName The module name to create the libs wheel for. One of "tensorrt", "tensorrt_dispatch", or "tensorrt_lean".
 function(buildLibsWheel moduleName)
     set(filesTarget trt_wheel_files_libs_${moduleName})
 
@@ -53,8 +53,15 @@ function(buildLibsWheel moduleName)
         endif()
     elseif(${moduleName} STREQUAL "tensorrt" OR ${moduleName} STREQUAL "tensorrt_rtx")
         set(moduleLibraryTargets tensorrt)
+        get_all_fatbin_archs(KLIB_ARCHS KLIB_ARCHS_CROSS)
         if(NOT ${TRT_BUILD_WINML})
-            list(APPEND moduleLibraryTargets tensorrt_builder_resource)
+            if(NOT ${TRT_BUILD_SPLIT_KLIB})
+                list(APPEND moduleLibraryTargets tensorrt_builder_resource)
+            else()
+                foreach(ARCH IN LISTS KLIB_ARCHS)
+                    list(APPEND moduleLibraryTargets tensorrt_builder_resource_${ARCH})
+                endforeach()
+            endif()
         endif()
         if(${TRT_BUILD_PLUGINS})
             list(APPEND moduleLibraryTargets tensorrt_plugins)
@@ -63,7 +70,9 @@ function(buildLibsWheel moduleName)
             list(APPEND moduleLibraryTargets nvonnxparser)
         endif()
         if(NOT ${TRT_BUILD_SKIP_WIN_BUILDER_RESOURCE})
-            list(APPEND moduleLibraryTargets tensorrt_builder_resource_win)
+            foreach(ARCH IN LISTS KLIB_ARCHS_CROSS)
+                list(APPEND moduleLibraryTargets tensorrt_builder_resource_win_${ARCH})
+            endforeach()
         endif()
     else()
         message(FATAL_ERROR "Unknown module name: ${moduleName}. Expected 'tensorrt', 'tensorrt_dispatch', or 'tensorrt_lean'.")
@@ -115,8 +124,9 @@ function(buildLibsWheel moduleName)
             ${pageSizeArgs}
             --build-dir=${CMAKE_LIBRARY_OUTPUT_DIRECTORY} # Since we give absolute paths, this is mostly unused, but we'll keep it for consistency.
             --output=${generatedFileOutDir}/${moduleName}_libs/
+            --trim-version
             ${moduleLibraryPaths}
-        COMMENT "Copying TRT library files to wheel directory"
+        COMMENT "Copying TRT libraries for ${moduleName} to ${generatedFileOutDir}/${moduleName}_libs/"
         DEPENDS ${moduleLibraryTargets}
         VERBATIM
     )
@@ -167,10 +177,11 @@ function(buildLibsWheel moduleName)
 
     add_dependencies(tensorrt_libs_wheels ${wheelTarget})
 
+    # Standalone wheels are only published to the internal tarfile as they are released separately.
     install(FILES
         ${wheelOutputFile}
-        DESTINATION wheels
-        COMPONENT release
+        DESTINATION python_standalone
+        COMPONENT internal
         OPTIONAL
     )
 endfunction()

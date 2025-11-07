@@ -70,54 +70,34 @@ template <typename Input_Data_Type_ = uint16_t, typename Output_Data_Type_ = uin
     int32_t SM_ = 700>
 struct Instance_norm_kernel_params
 {
-    enum
-    {
-        USE_ONLINE_APPROACH = 1
-    };
-    enum
-    {
-        THREADS_PER_CTA = THREADS_PER_CTA_
-    };
-    enum
-    {
-        THREADS_PER_PIXEL = THREADS_PER_PIXEL_
-    }; // 8 or 16
-    enum
-    {
-        SM = SM_
-    };
+    static constexpr int32_t USE_ONLINE_APPROACH = 1;
+
+    static constexpr int32_t THREADS_PER_CTA = THREADS_PER_CTA_;
+
+    //! 8 or 16
+    static constexpr int32_t THREADS_PER_PIXEL = THREADS_PER_PIXEL_;
+
+    static constexpr int32_t SM = SM_;
 
     typedef Input_Data_Type_ Input_Data_Type;
     typedef Output_Data_Type_ Output_Data_Type;
 
     typedef StorageType_ StorageType;
-    enum
-    {
-        PIXELS_PER_THREAD_IN_REGISTERS = getPixelsPerThreadInRegisters<StorageType, SM>()
-    };
-    enum
-    {
-        PIXELS_PER_THREAD_IN_SMEM = getPixelsPerThreadInSmem<StorageType, SM>()
-    };
 
-    enum
-    {
-        C_ELEMENTS_PER_CTA = C_ELEMENTS_PER_CTA_
-    }; // 64;
-    enum
-    {
-        ELEMENTS_PER_LDG = C_ELEMENTS_PER_CTA / THREADS_PER_PIXEL
-    }; // 4 default
+    static constexpr int32_t PIXELS_PER_THREAD_IN_REGISTERS = getPixelsPerThreadInRegisters<StorageType, SM>();
+
+    static constexpr int32_t PIXELS_PER_THREAD_IN_SMEM = getPixelsPerThreadInSmem<StorageType, SM>();
+
+    //! 64
+    static constexpr int32_t C_ELEMENTS_PER_CTA = C_ELEMENTS_PER_CTA_;
+
+    //! 4 default
+    static constexpr int32_t ELEMENTS_PER_LDG = C_ELEMENTS_PER_CTA / THREADS_PER_PIXEL;
 
     // Derived params.
-    enum
-    {
-        PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL
-    };
-    enum
-    {
-        MIN_PIXELS_PER_CTA = PIXELS_PER_LDG * PIXELS_PER_THREAD_IN_REGISTERS
-    };
+    static constexpr int32_t PIXELS_PER_LDG = THREADS_PER_CTA / THREADS_PER_PIXEL;
+
+    static constexpr int32_t MIN_PIXELS_PER_CTA = PIXELS_PER_LDG * PIXELS_PER_THREAD_IN_REGISTERS;
 };
 
 struct InstanceNormFwdContext

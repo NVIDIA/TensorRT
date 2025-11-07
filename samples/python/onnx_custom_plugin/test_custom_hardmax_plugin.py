@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,19 +68,22 @@ def make_trt_network_and_engine(input_shape, axis):
 
 
 def custom_plugin_impl(input_arr, engine):
-    inputs, outputs, bindings, stream = common.allocate_buffers(engine)
+    inputs, outputs, bindings = common.allocate_buffers(engine)
     context = engine.create_execution_context()
     inputs[0].host = input_arr.astype(trt.nptype(trt.float32))
-    trt_outputs = common.do_inference(
-        context,
-        engine=engine,
-        bindings=bindings,
-        inputs=inputs,
-        outputs=outputs,
-        stream=stream,
-    )
-    output = trt_outputs[0].copy()
-    common.free_buffers(inputs, outputs, stream)
+    
+    # Use context manager for proper stream lifecycle management
+    with common.CudaStreamContext() as stream:
+        trt_outputs = common.do_inference(
+            context,
+            engine=engine,
+            bindings=bindings,
+            inputs=inputs,
+            outputs=outputs,
+            stream=stream,
+        )
+        output = trt_outputs[0].copy()
+    common.free_buffers(inputs, outputs)
     return output
 
 

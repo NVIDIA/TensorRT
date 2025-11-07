@@ -27,10 +27,7 @@ from demo_diffusion.utils_sd3.other_impls import load_into
 from demo_diffusion.utils_sd3.sd3_impls import SDVAE
 
 # List of models to import from diffusers.models
-models_to_import = [
-    "AutoencoderKL",
-    "AutoencoderKLTemporalDecoder",
-]
+models_to_import = ["AutoencoderKL", "AutoencoderKLTemporalDecoder", "AutoencoderKLWan"]
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, "diffusers.models")
 
@@ -507,3 +504,163 @@ class SD3_VAEEncoderModel(base_model.BaseModel):
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         dtype = torch.float16 if self.fp16 else torch.float32
         return torch.randn(batch_size, 3, image_height, image_width, dtype=dtype, device=self.device)
+
+
+class AutoencoderKLWanModel(base_model.BaseModel):
+
+    def __init__(
+        self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        fp16=False,
+        tf32=False,
+        bf16=False,
+        max_batch_size=16,
+    ):
+        super(AutoencoderKLWanModel, self).__init__(
+            version,
+            pipeline,
+            device=device,
+            hf_token=hf_token,
+            verbose=verbose,
+            framework_model_dir=framework_model_dir,
+            fp16=fp16,
+            tf32=tf32,
+            bf16=bf16,
+            max_batch_size=max_batch_size,
+        )
+        self.subfolder = "vae"
+        self.vae_decoder_model_dir = load.get_checkpoint_dir(
+            self.framework_model_dir, self.version, self.pipeline, self.subfolder
+        )
+        if not os.path.exists(self.vae_decoder_model_dir):
+            self.config = AutoencoderKLWan.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load AutoencoderKLWan (decoder) config from: {self.vae_decoder_model_dir}")
+            self.config = AutoencoderKLWan.load_config(self.vae_decoder_model_dir)
+
+    def get_model(self, torch_inference=""):
+        model_opts = (
+            {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
+        )
+        if not load.is_model_cached(self.vae_decoder_model_dir, model_opts, self.hf_safetensor):
+            model = AutoencoderKLWan.from_pretrained(
+                self.path,
+                subfolder=self.subfolder,
+                use_safetensors=self.hf_safetensor,
+                token=self.hf_token,
+                **model_opts,
+            ).to(self.device)
+            model.save_pretrained(self.vae_decoder_model_dir, **model_opts)
+        else:
+            print(f"[I] Load AutoencoderKLWan (decoder) model from: {self.vae_decoder_model_dir}")
+            model = AutoencoderKLWan.from_pretrained(self.vae_decoder_model_dir, **model_opts).to(self.device)
+        model.forward = model.decode
+        model = optimizer.optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_names(self):
+        return ["latent"]
+
+    def get_output_names(self):
+        return ["images"]
+
+    def get_dynamic_axes(self):
+        return {"latent": {0: "B", 3: "H", 4: "W"}, "images": {0: "B", 3: "8H", 4: "8W"}}
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        min_batch, max_batch, _, _, _, _, min_latent_height, max_latent_height, min_latent_width, max_latent_width = (
+            self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        )
+        return {
+            "latent": [
+                (min_batch, self.config["z_dim"], 1, min_latent_height, min_latent_width),
+                (batch_size, self.config["z_dim"], 1, latent_height, latent_width),
+                (max_batch, self.config["z_dim"], 1, max_latent_height, max_latent_width),
+            ]
+        }
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        return {
+            "latent": (batch_size, self.config["z_dim"], 1, latent_height, latent_width),
+            "images": (batch_size, 3, 1, image_height, image_width),
+        }
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
+        return torch.randn(
+            batch_size, self.config["z_dim"], 1, latent_height, latent_width, dtype=dtype, device=self.device
+        )
+
+
+class AutoencoderKLWanEncoderModelWrapper(torch.nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        return self.model.encode(x).latent_dist.sample()
+
+
+class AutoencoderKLWanEncoderModel(base_model.BaseModel):
+    def __init__(
+        self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        fp16=False,
+        tf32=False,
+        bf16=False,
+        max_batch_size=16,
+    ):
+        super(AutoencoderKLWanEncoderModel, self).__init__(
+            version,
+            pipeline,
+            device=device,
+            hf_token=hf_token,
+            verbose=verbose,
+            framework_model_dir=framework_model_dir,
+            fp16=fp16,
+            tf32=tf32,
+            bf16=bf16,
+            max_batch_size=max_batch_size,
+        )
+        self.subfolder = "vae"
+        self.vae_encoder_model_dir = load.get_checkpoint_dir(
+            self.framework_model_dir, self.version, self.pipeline, self.subfolder
+        )
+        if not os.path.exists(self.vae_encoder_model_dir):
+            self.config = AutoencoderKLWan.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load AutoencoderKLWan (encoder) config from: {self.vae_encoder_model_dir}")
+            self.config = AutoencoderKLWan.load_config(self.vae_encoder_model_dir)
+
+    def get_model(self, torch_inference=""):
+        model_opts = (
+            {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
+        )
+        if not load.is_model_cached(self.vae_encoder_model_dir, model_opts, self.hf_safetensor):
+            model = AutoencoderKLWan.from_pretrained(
+                self.path,
+                subfolder=self.subfolder,
+                use_safetensors=self.hf_safetensor,
+                token=self.hf_token,
+                **model_opts,
+            ).to(self.device)
+            model.save_pretrained(self.vae_encoder_model_dir, **model_opts)
+        else:
+            print(f"[I] Load AutoencoderKLWan (encoder) model from: {self.vae_encoder_model_dir}")
+            model = AutoencoderKLWan.from_pretrained(self.vae_encoder_model_dir, **model_opts).to(self.device)
+        model = AutoencoderKLWanEncoderModelWrapper(model)
+        model = optimizer.optimize_checkpoint(model, torch_inference)
+        return model

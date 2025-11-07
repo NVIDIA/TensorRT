@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-# We need cmake >= 3.8, since 3.8 introduced CUDA as a first class language
-cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
+# We need cmake >= 3.19 for REAL_PATH support
+cmake_minimum_required(VERSION 3.19 FATAL_ERROR)
 project(CustomHardMax LANGUAGES CXX CUDA)
 
 if(NOT MSVC)
@@ -76,16 +76,19 @@ set_ifndef(CUDA_LIB ${_CUDA_LIB})
 add_definitions(-DTENSORRT_BUILD_LIB)
 
 # Add include directories
-get_filename_component(SAMPLES_COMMON_DIR ${CMAKE_SOURCE_DIR}/../../common/ ABSOLUTE)
-get_filename_component(SAMPLES_DIR ${CMAKE_SOURCE_DIR}/../../ ABSOLUTE)
-include_directories(${CUDA_INC_DIR} ${TRT_INCLUDE} ${CMAKE_SOURCE_DIR}/plugin/
-                    ${SAMPLES_COMMON_DIR} ${SAMPLES_DIR})
+file(REAL_PATH ${CMAKE_SOURCE_DIR} CMAKE_SOURCE_DIR_REALPATH)
+
+get_filename_component(SAMPLES_COMMON_DIR ${CMAKE_SOURCE_DIR_REALPATH}/../../common/ ABSOLUTE)
+get_filename_component(SHARED_DIR ${CMAKE_SOURCE_DIR_REALPATH}/../../../shared ABSOLUTE)
+get_filename_component(SAMPLES_DIR ${CMAKE_SOURCE_DIR_REALPATH}/../../ ABSOLUTE)
+include_directories(${CUDA_INC_DIR} ${TRT_INCLUDE} ${CMAKE_SOURCE_DIR_REALPATH}/plugin/
+                    ${SAMPLES_COMMON_DIR} ${SAMPLES_DIR} ${SHARED_DIR})
 
 # Define Hardmax plugin library target
 add_library(
     customHardmaxPlugin MODULE
-    ${SAMPLES_COMMON_DIR}/logger.cpp ${SAMPLES_DIR}/utils/fileLock.cpp
-    ${CMAKE_SOURCE_DIR}/plugin/customHardmaxPlugin.cpp ${CMAKE_SOURCE_DIR}/plugin/customHardmaxPlugin.h)
+    ${SAMPLES_COMMON_DIR}/logger.cpp ${SHARED_DIR}/utils/fileLock.cpp
+    ${CMAKE_SOURCE_DIR_REALPATH}/plugin/customHardmaxPlugin.cpp ${CMAKE_SOURCE_DIR_REALPATH}/plugin/customHardmaxPlugin.h)
 
 # Use C++11
 target_compile_features(customHardmaxPlugin PUBLIC cxx_std_17)

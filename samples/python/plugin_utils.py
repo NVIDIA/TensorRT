@@ -16,8 +16,10 @@
 #
 
 from cuda.bindings import driver as cuda, runtime as cudart, nvrtc
+
 import numpy as np
 import os
+from common_runtime import cuda_call, create_cuda_context, cuda_init, cuda_get_device, cuda_memcpy_htod
 import argparse
 import threading
 
@@ -44,42 +46,18 @@ def volume(d):
     return np.prod(d)
 
 
-# Taken from https://github.com/NVIDIA/cuda-python/blob/main/examples/common/helper_cuda.py
-def checkCudaErrors(result):
-    def _cudaGetErrorEnum(error):
-        if isinstance(error, cuda.CUresult):
-            err, name = cuda.cuGetErrorName(error)
-            return name if err == cuda.CUresult.CUDA_SUCCESS else "<unknown>"
-        elif isinstance(error, cudart.cudaError_t):
-            return cudart.cudaGetErrorName(error)[1]
-        elif isinstance(error, nvrtc.nvrtcResult):
-            return nvrtc.nvrtcGetErrorString(error)[1]
-        else:
-            raise RuntimeError("Unknown error type: {}".format(error))
 
-    if result[0].value:
-        raise RuntimeError(
-            "CUDA error code={}({})".format(
-                result[0].value, _cudaGetErrorEnum(result[0])
-            )
-        )
-    if len(result) == 1:
-        return None
-    elif len(result) == 2:
-        return result[1]
-    else:
-        return result[1:]
 
 def getComputeCapacity(devID):
-    major = checkCudaErrors(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMajor, devID))
-    minor = checkCudaErrors(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMinor, devID))
+    major = cuda_call(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMajor, devID))
+    minor = cuda_call(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMinor, devID))
     return (major, minor)
 
 
 # Taken from https://github.com/NVIDIA/cuda-python/blob/main/examples/common/common.py
 class KernelHelper:
     def __init__(self, code, devID):
-        prog = checkCudaErrors(
+        prog = cuda_call(
             nvrtc.nvrtcCreateProgram(str.encode(code), b"sourceCode.cu", 0, [], [])
         )
         CUDA_HOME = os.getenv("CUDA_HOME")
@@ -90,10 +68,10 @@ class KernelHelper:
         include_dirs = os.path.join(CUDA_HOME, "include")
 
         # Initialize CUDA
-        checkCudaErrors(cudart.cudaFree(0))
+        cuda_call(cudart.cudaFree(0))
 
         major, minor = getComputeCapacity(devID)
-        _, nvrtc_minor = checkCudaErrors(nvrtc.nvrtcVersion())
+        _, nvrtc_minor = cuda_call(nvrtc.nvrtcVersion())
         use_cubin = nvrtc_minor >= 1
         prefix = "sm" if use_cubin else "compute"
         arch_arg = bytes(f"--gpu-architecture={prefix}_{major}{minor}", "ascii")
@@ -106,28 +84,28 @@ class KernelHelper:
                 b"--std=c++11",
                 b"-default-device",
             ]
-            checkCudaErrors(nvrtc.nvrtcCompileProgram(prog, len(opts), opts))
+            cuda_call(nvrtc.nvrtcCompileProgram(prog, len(opts), opts))
         except RuntimeError as err:
-            logSize = checkCudaErrors(nvrtc.nvrtcGetProgramLogSize(prog))
+            logSize = cuda_call(nvrtc.nvrtcGetProgramLogSize(prog))
             log = b" " * logSize
-            checkCudaErrors(nvrtc.nvrtcGetProgramLog(prog, log))
+            cuda_call(nvrtc.nvrtcGetProgramLog(prog, log))
             print(log.decode())
             print(err)
             exit(-1)
 
         if use_cubin:
-            dataSize = checkCudaErrors(nvrtc.nvrtcGetCUBINSize(prog))
+            dataSize = cuda_call(nvrtc.nvrtcGetCUBINSize(prog))
             data = b" " * dataSize
-            checkCudaErrors(nvrtc.nvrtcGetCUBIN(prog, data))
+            cuda_call(nvrtc.nvrtcGetCUBIN(prog, data))
         else:
-            dataSize = checkCudaErrors(nvrtc.nvrtcGetPTXSize(prog))
+            dataSize = cuda_call(nvrtc.nvrtcGetPTXSize(prog))
             data = b" " * dataSize
-            checkCudaErrors(nvrtc.nvrtcGetPTX(prog, data))
+            cuda_call(nvrtc.nvrtcGetPTX(prog, data))
 
-        self.module = checkCudaErrors(cuda.cuModuleLoadData(np.char.array(data)))
+        self.module = cuda_call(cuda.cuModuleLoadData(np.char.array(data)))
 
     def getFunction(self, name):
-        return checkCudaErrors(cuda.cuModuleGetFunction(self.module, name))
+        return cuda_call(cuda.cuModuleGetFunction(self.module, name))
 
 
 class CudaCtxManager(trt.IPluginResource):
@@ -141,11 +119,11 @@ class CudaCtxManager(trt.IPluginResource):
         cloned.__dict__.update(self.__dict__)
         # Delay the CUDA ctx creation until clone()
         # since only a cloned resource is registered by TRT
-        _, cloned.cuda_ctx = cuda.cuCtxCreate(0, self.device)
+        cloned.cuda_ctx = create_cuda_context(self.device)
         return cloned
 
     def release(self):
-        checkCudaErrors(cuda.cuCtxDestroy(self.cuda_ctx))
+        cuda_call(cuda.cuCtxDestroy(self.cuda_ctx))
 
 class UnownedMemory:
     def __init__(self, ptr, shape, dtype):

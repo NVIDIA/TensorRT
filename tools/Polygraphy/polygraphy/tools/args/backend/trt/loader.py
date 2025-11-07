@@ -260,6 +260,13 @@ class TrtLoadNetworkArgs(BaseArgs):
             default=None,
         )
 
+        self.group.add_argument(
+            "--mark-unfused-tensors-as-debug-tensors",
+            help="Mark unfused tensors as debug tensors.",
+            action="store_true",
+            default=None,
+        )
+
     def parse_impl(self, args):
         """
         Parses command-line arguments and populates the following attributes:
@@ -275,6 +282,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     A list of tuples specifying a path to a network postprocessing script and the name of the postprocessing function.
             strongly_typed (bool): Whether to mark the network as being strongly typed.
             mark_debug (List[str]): Names of tensors which should be marked as debug tensors.
+            mark_unfused_tensors_as_debug_tensors (bool): Whether to mark unfused tensors as debug tensors.
         """
         self.outputs = args_util.get_outputs(args, "trt_outputs")
 
@@ -335,6 +343,9 @@ class TrtLoadNetworkArgs(BaseArgs):
         self.strongly_typed = args_util.get(args, "strongly_typed")
 
         self.mark_debug = args_util.get(args, "mark_debug")
+        self.mark_unfused_tensors_as_debug_tensors = args_util.get(
+            args, "mark_unfused_tensors_as_debug_tensors"
+        )
 
     def add_to_script_impl(self, script):
         network_func_name = self.arg_groups[ModelArgs].extra_model_info
@@ -394,6 +405,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     flags=parser_flags,
                     plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
+                    mark_unfused_tensors_as_debug_tensors=self.mark_unfused_tensors_as_debug_tensors,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
             else:
@@ -408,6 +420,7 @@ class TrtLoadNetworkArgs(BaseArgs):
                     flags=parser_flags,
                     plugin_instancenorm=plugin_instancenorm,
                     strongly_typed=self.strongly_typed,
+                    mark_unfused_tensors_as_debug_tensors=self.mark_unfused_tensors_as_debug_tensors,
                 )
                 loader_name = script.add_loader(loader_str, "parse_network_from_onnx")
         else:

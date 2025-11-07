@@ -93,7 +93,7 @@ class StableCascadePipeline(StableDiffusionPipeline):
             self.models['vqgan'] = VQGANModel(**models_args, fp16=self.fp16, bf16=self.bf16, latent_dim_scale = self.latent_dim_scale)
 
     def encode_prompt(self, prompt, negative_prompt, encoder='clip', pooled_outputs=False, output_hidden_states=False):
-        self.profile_start('clip', color='green')
+        self.profile_start(encoder, color='green')
 
         tokenizer = self.tokenizer
 
@@ -140,7 +140,7 @@ class StableCascadePipeline(StableDiffusionPipeline):
         if output_hidden_states:
             text_embeddings = torch.cat([text_hidden_states, uncond_hidden_states]) if self.do_classifier_free_guidance else text_hidden_states
 
-        self.profile_stop('clip')
+        self.profile_stop(encoder)
         if pooled_outputs:
             return text_embeddings, pooled_output
         return text_embeddings
@@ -157,7 +157,7 @@ class StableCascadePipeline(StableDiffusionPipeline):
 
         do_autocast = False
         with torch.autocast('cuda', enabled=do_autocast):
-            self.profile_start('denoise', color='blue')
+            self.profile_start(denoiser, color='blue')
             for step_index, timestep in enumerate(timesteps):
                 # ratio input required for stable cascade prior
                 timestep_ratio = timestep.expand(latents.size(0)).to(latents.dtype)
@@ -197,31 +197,34 @@ class StableCascadePipeline(StableDiffusionPipeline):
 
             latents = latents.to(dtype=torch.bfloat16 if self.bf16 else torch.float32)
 
-        self.profile_stop('denoise')
+        self.profile_stop(denoiser)
         return latents
 
-    def decode_latent(self, latents):
-        self.profile_start('vqgan', color='red')
-        latents = self.models['vqgan'].scale_factor * latents
+    def decode_latent(self, latents, model_name='vqgan'):
+        self.profile_start(model_name, color='red')
+        latents = self.models[model_name].scale_factor * latents
         if self.torch_inference:
-            images = self.torch_models['vqgan'](latents)['sample']
+            images = self.torch_models[model_name](latents)['sample']
         else:
-            images = self.runEngine('vqgan', {'latent': latents})['images']
-        self.profile_stop('vqgan')
+            images = self.runEngine(model_name, {'latent': latents})['images']
+        self.profile_stop(model_name)
         return images
 
     def print_summary(self, denoising_steps, walltime_ms, batch_size):
         print('|-----------------|--------------|')
         print('| {:^15} | {:^12} |'.format('Module', 'Latency'))
         print('|-----------------|--------------|')
-        print('| {:^15} | {:>9.2f} ms |'.format('CLIP', cudart.cudaEventElapsedTime(self.events['clip'][0], self.events['clip'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('UNet'+' x '+str(denoising_steps), cudart.cudaEventElapsedTime(self.events['denoise'][0], self.events['denoise'][1])[1]))
-        if 'vqgan' in self.stages:
-            print('| {:^15} | {:>9.2f} ms |'.format('VQGAN', cudart.cudaEventElapsedTime(self.events['vqgan'][0], self.events['vqgan'][1])[1]))
+        for stage in self.stages:
+            stage_name = stage + ' x ' + str(denoising_steps) if stage == 'unet' else stage
+            print(
+                "| {:^15} | {:>9.2f} ms |".format(
+                    stage_name, cudart.cudaEventElapsedTime(self.events[stage][0], self.events[stage][1])[1],
+                )
+            )
         print('|-----------------|--------------|')
         print('| {:^15} | {:>9.2f} ms |'.format('Pipeline', walltime_ms))
         print('|-----------------|--------------|')
-        print('Throughput: {:.2f} image/s'.format(batch_size*1000./walltime_ms))
+        print('Throughput: {:.5f} image/s'.format(batch_size*1000./walltime_ms))
 
     def infer(
         self,

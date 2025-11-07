@@ -20,3 +20,4 @@ add_plugin_source(
     groupNormalizationPlugin.cpp
     groupNormalizationPlugin.h
 )
+

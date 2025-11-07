@@ -26,3 +26,4 @@ add_plugin_source(
     modulatedDeformConvPluginLegacy.cpp
     modulatedDeformConvPluginLegacy.h
 )
+

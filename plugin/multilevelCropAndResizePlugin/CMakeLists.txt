@@ -19,3 +19,4 @@ add_plugin_source(
     multilevelCropAndResizePlugin.cpp
     multilevelCropAndResizePlugin.h
 )
+

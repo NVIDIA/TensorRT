@@ -1,5 +1,5 @@
 Pillow==11.3.0
 cuda-python==12.9.0
-onnx
+onnx==1.18.0
 onnx-graphsurgeon --index-url https://pypi.ngc.nvidia.com
 numpy==1.26.4

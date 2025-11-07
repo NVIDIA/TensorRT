@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -138,7 +138,7 @@ versions:
       - bert_embeddings_word_embeddings
       - bert_embeddings_token_type_embeddings
       - bert_embeddings_position_embeddings
-    golden_reference_script: "plugin/embLayerNormPlugin/CustomEmbLayerNormPluginDynamic_PluginReference.py"
+    golden_reference_script: "plugin/CustomEmbLayerNormPluginDynamic_PluginReference.py"
     abs_tol: 1e-5
     rel_tol: 1e-5
     configs:

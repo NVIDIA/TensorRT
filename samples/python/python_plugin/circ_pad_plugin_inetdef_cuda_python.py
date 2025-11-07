@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,7 @@ from polygraphy.backend.trt import (
 from polygraphy.json import to_json, from_json
 
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
-from plugin_utils import checkCudaErrors, KernelHelper, parseArgs, CudaCtxManager
+from plugin_utils import cuda_call, KernelHelper, parseArgs, CudaCtxManager
 from cuda.bindings import driver as cuda
 
 circ_pad_half_kernel = r"""
@@ -121,17 +121,17 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
                     self.N = int(f.data)
 
     def initialize(self):
-        err, self.cuDevice = cuda.cuDeviceGet(0)
+        self.cuDevice = cuda_call(cuda.cuDeviceGet(0))
         trt.get_plugin_registry().acquire_plugin_resource(
             "cuda_ctx", CudaCtxManager(self.cuDevice)
         )
-        self.all_pads_d = checkCudaErrors(
+        self.all_pads_d = cuda_call(
             cuda.cuMemAlloc(np.int32().itemsize * self.N * 2)
         )
-        self.orig_dims_d = checkCudaErrors(
+        self.orig_dims_d = cuda_call(
             cuda.cuMemAlloc(np.int32().itemsize * self.N)
         )
-        self.Y_shape_d = checkCudaErrors(cuda.cuMemAlloc(np.int32().itemsize * self.N))
+        self.Y_shape_d = cuda_call(cuda.cuMemAlloc(np.int32().itemsize * self.N))
 
     def get_output_datatype(self, index, input_types):
         return input_types[0]
@@ -169,15 +169,15 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
         # Copy vectors from host memory to device memory
         if self.all_pads_d:
-            checkCudaErrors(
+            cuda_call(
                 cuda.cuMemcpyHtoD(self.all_pads_d, all_pads, all_pads.nbytes)
             )
         if self.orig_dims_d:
-            checkCudaErrors(
+            cuda_call(
                 cuda.cuMemcpyHtoD(self.orig_dims_d, orig_dims, orig_dims.nbytes)
             )
         if self.Y_shape_d:
-            checkCudaErrors(
+            cuda_call(
                 cuda.cuMemcpyHtoD(self.Y_shape_d, out_dims, out_dims.nbytes)
             )
 
@@ -224,7 +224,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         if inp_dtype == np.float32:
             kernelHelper = KernelHelper(circ_pad_float_kernel, int(self.cuDevice))
             _circ_pad_float_kernel = kernelHelper.getFunction(b"circ_pad_float")
-            checkCudaErrors(
+            cuda_call(
                 cuda.cuLaunchKernel(
                     _circ_pad_float_kernel,
                     numBlocks,
@@ -242,7 +242,7 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
         elif inp_dtype == np.float16:
             kernelHelper = KernelHelper(circ_pad_half_kernel, int(self.cuDevice))
             _circ_pad_half_kernel = kernelHelper.getFunction(b"circ_pad_half")
-            checkCudaErrors(
+            cuda_call(
                 cuda.cuLaunchKernel(
                     _circ_pad_half_kernel,
                     numBlocks,
@@ -267,11 +267,11 @@ class CircPadPlugin(trt.IPluginV2DynamicExt):
 
     def terminate(self):
         if self.all_pads_d:
-            checkCudaErrors(cuda.cuMemFree(self.all_pads_d))
+            cuda_call(cuda.cuMemFree(self.all_pads_d))
         if self.orig_dims_d:
-            checkCudaErrors(cuda.cuMemFree(self.orig_dims_d))
+            cuda_call(cuda.cuMemFree(self.orig_dims_d))
         if self.Y_shape_d:
-            checkCudaErrors(cuda.cuMemFree(self.Y_shape_d))
+            cuda_call(cuda.cuMemFree(self.Y_shape_d))
 
         plg_registry.release_plugin_resource("cuda_ctx")
 
@@ -318,10 +318,10 @@ if __name__ == "__main__":
     precision = np.float32 if args.precision == "fp32" else np.float16
 
     # Initialize CUDA Driver API
-    (err,) = cuda.cuInit(0)
+    cuda_call(cuda.cuInit(0))
 
     # Retrieve handle for device 0
-    err, cuDevice = cuda.cuDeviceGet(0)
+    cuDevice = cuda_call(cuda.cuDeviceGet(0))
 
     plg_registry = trt.get_plugin_registry()
 

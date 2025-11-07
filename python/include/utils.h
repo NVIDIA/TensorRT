@@ -170,6 +170,18 @@ constexpr auto deprecateMember(RetVal (Cls::*func)(Args...), const char* useInst
 }
 
 template <typename T>
+constexpr auto deprecateInTrtRtxOnly(T&& func, const char* /*unused*/) -> T&&
+{
+    return std::forward<T>(func);
+}
+
+template <typename T>
+constexpr auto deprecateMemberInTrtRtxOnly(T&& func, const char* /*unused*/) -> T&&
+{
+    return std::forward<T>(func);
+}
+
+template <typename T>
 void doNothingDel(const T& self)
 {
     issueDeprecationWarning("del obj");

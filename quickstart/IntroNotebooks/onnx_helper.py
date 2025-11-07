@@ -19,7 +19,7 @@ import numpy as np
 import tensorrt as trt
 import weakref
 
-from cuda import cudart
+from cuda.bindings import runtime as cudart
 
 
 def _cleanup_cuda_resources(d_input, d_output, stream):

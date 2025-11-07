@@ -88,8 +88,14 @@ if(NOT MSVC)
         cuda_ge(12 ${minor} ${result_var})
     endforeach()
 
+    # Add checks for CUDA 13.x versions
+    foreach(minor RANGE 0 9)
+        set(result_var "CUDA_GE_13_${minor}")
+        cuda_ge(13 ${minor} ${result_var})
+    endforeach()
+
     # Define THOR_SM based on CUDA version
-    if(CUDA_GE_13_0)
+    if(${CUDA_GE_13_0})
         set(THOR_SM 110)
     else()
         set(THOR_SM 101)
@@ -97,24 +103,24 @@ if(NOT MSVC)
 
     set(SAMPLE_SMS "75")
 
-    if(CUDA_GE_11_0)
+    if(${CUDA_GE_11_0})
         list(APPEND SAMPLE_SMS "80")
     endif()
 
-    if(CUDA_GE_11_1)
+    if(${CUDA_GE_11_1})
         list(APPEND SAMPLE_SMS "86")
     endif()
 
-    if(CUDA_GE_11_4)
+    if(${CUDA_GE_11_4})
         list(APPEND SAMPLE_SMS "87")
     endif()
 
-    if(CUDA_GE_11_8)
+    if(${CUDA_GE_11_8})
         list(APPEND SAMPLE_SMS "89" "90")
     endif()
 
     # Blackwell support
-    if(CUDA_GE_12_8)
+    if(${CUDA_GE_12_8})
         list(APPEND SAMPLE_SMS "100" ${THOR_SM} "120")
     endif()
 

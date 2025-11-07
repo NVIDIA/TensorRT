@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -162,8 +162,7 @@ void bindAlgorithm(py::module& m)
         .def_property_readonly("name", &IAlgorithmContext::getName)
         .def("get_shape", lambdas::get_shape, "index"_a, IAlgorithmContextDoc::get_shape)
         .def_property_readonly("num_inputs", &IAlgorithmContext::getNbInputs)
-        .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs)
-        ;
+        .def_property_readonly("num_outputs", &IAlgorithmContext::getNbOutputs);
 
     // IAlgorithm
     py::class_<IAlgorithm, std::unique_ptr<IAlgorithm, py::nodelete>>(

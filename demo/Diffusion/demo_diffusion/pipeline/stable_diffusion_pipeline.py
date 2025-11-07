@@ -49,10 +49,10 @@ from demo_diffusion.model import (
     CLIPModel,
     CLIPWithProjModel,
     SDLoraLoader,
+    UNet2DConditionControlNetModel,
     UNetModel,
     UNetXLModel,
     UNetXLModelControlNet,
-    UNet2DConditionControlNetModel,
     VAEEncoderModel,
     VAEModel,
     get_clip_embedding_dim,
@@ -265,7 +265,7 @@ class StableDiffusionPipeline:
             self.generator = torch.Generator(device="cuda").manual_seed(seed)
 
         # Create CUDA events and stream
-        for stage in ['clip', 'denoise', 'vae', 'vae_encoder', 'vqgan']:
+        for stage in self.stages:
             self.events[stage] = [cudart.cudaEventCreate()[1], cudart.cudaEventCreate()[1]]
         self.stream = cudart.cudaStreamCreate()[1]
 
@@ -713,7 +713,7 @@ class StableDiffusionPipeline:
         return images
 
     def encode_prompt(self, prompt, negative_prompt, encoder='clip', pooled_outputs=False, output_hidden_states=False):
-        self.profile_start('clip', color='green')
+        self.profile_start(encoder, color='green')
 
         tokenizer = self.tokenizer2 if encoder == 'clip2' else self.tokenizer
 
@@ -756,7 +756,7 @@ class StableDiffusionPipeline:
         if output_hidden_states:
             text_embeddings = torch.cat([uncond_hidden_states, text_hidden_states]).to(dtype=torch.float16) if self.do_classifier_free_guidance else text_hidden_states
 
-        self.profile_stop('clip')
+        self.profile_stop(encoder)
         if pooled_outputs:
             return text_embeddings, pooled_output
         return text_embeddings
@@ -818,7 +818,7 @@ class StableDiffusionPipeline:
 
         do_autocast = self.torch_inference != '' and self.models[denoiser].fp16
         with torch.autocast('cuda', enabled=do_autocast):
-            self.profile_start('denoise', color='blue')
+            self.profile_start(denoiser, color='blue')
             for step_index, timestep in enumerate(timesteps):
                 # Expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
@@ -870,7 +870,7 @@ class StableDiffusionPipeline:
             latents = 1. / self.vae_scaling_factor * latents
             latents = latents.to(dtype=torch.float32)
 
-        self.profile_stop('denoise')
+        self.profile_stop(denoiser)
         return latents
 
     def encode_image(self, input_image):
@@ -901,15 +901,21 @@ class StableDiffusionPipeline:
         print('|-----------------|--------------|')
         print('| {:^15} | {:^12} |'.format('Module', 'Latency'))
         print('|-----------------|--------------|')
-        if 'vae_encoder' in self.stages:
-            print('| {:^15} | {:>9.2f} ms |'.format('VAE-Enc', cudart.cudaEventElapsedTime(self.events['vae_encoder'][0], self.events['vae_encoder'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('CLIP', cudart.cudaEventElapsedTime(self.events['clip'][0], self.events['clip'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('UNet'+('+CNet' if self.pipeline_type.is_controlnet() else '')+' x '+str(denoising_steps), cudart.cudaEventElapsedTime(self.events['denoise'][0], self.events['denoise'][1])[1]))
-        print('| {:^15} | {:>9.2f} ms |'.format('VAE-Dec', cudart.cudaEventElapsedTime(self.events['vae'][0], self.events['vae'][1])[1]))
+        for stage in self.stages:
+            stage_name = stage
+            if "unet" in stage:
+                if self.pipeline_type.is_controlnet():
+                    stage_name += '+cnet'
+                stage_name += ' x ' + str(denoising_steps)
+            print(
+                "| {:^15} | {:>9.2f} ms |".format(
+                    stage_name, cudart.cudaEventElapsedTime(self.events[stage][0], self.events[stage][1])[1],
+                )
+            )
         print('|-----------------|--------------|')
         print('| {:^15} | {:>9.2f} ms |'.format('Pipeline', walltime_ms))
         print('|-----------------|--------------|')
-        print('Throughput: {:.2f} image/s'.format(batch_size*1000./walltime_ms))
+        print('Throughput: {:.5f} image/s'.format(batch_size*1000./walltime_ms))
 
     def save_image(self, images, pipeline, prompt, seed):
         # Save image

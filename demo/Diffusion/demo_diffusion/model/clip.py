@@ -174,7 +174,7 @@ class CLIPModel(base_model.BaseModel):
         return torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device)
 
     def optimize(self, onnx_graph):
-        opt = optimizer.Optimizer(onnx_graph, verbose=self.verbose)
+        opt = optimizer.Optimizer(onnx_graph, verbose=self.verbose, version=self.version)
         opt.info(self.name + ": original")
         keep_outputs = [0, 1] if self.keep_pooled_output else [0]
         opt.select_outputs(keep_outputs)
@@ -356,7 +356,7 @@ class SD3_CLIPGModel(CLIPModel):
         return output
 
     def optimize(self, onnx_graph):
-        opt = optimizer.Optimizer(onnx_graph, verbose=self.verbose)
+        opt = optimizer.Optimizer(onnx_graph, verbose=self.verbose, version=self.version)
         opt.info(self.name + ": original")
         opt.select_outputs([0, 1])
         opt.cleanup()

@@ -28,6 +28,9 @@ This sample demonstrates how to build a weight-stripped engine from an ONNX mode
 	pip3 install -r requirements.txt
 	```
 
+2. Preparing sample data
+See [Preparing sample data](../../README.md#preparing-sample-data) in the main samples README.
+
 ## Running the sample
 
 1.  Build and save both normal engine and weight-stripped engine:

@@ -107,7 +107,7 @@ OutType read(BufferType const*& buffer)
     return val;
 }
 
-inline int32_t getTrtSMVersionDec(int32_t majorVersion, int32_t minorVersion)
+inline int32_t getTrtSmVersionDec(int32_t majorVersion, int32_t minorVersion)
 {
     return majorVersion * 10 + minorVersion;
 }
@@ -132,12 +132,12 @@ struct DeviceComputeCapability
     }
 };
 
-inline int32_t getSMVersion()
+inline int32_t getSmVersion()
 {
     int32_t device{-1};
     PLUGIN_CHECK_CUDA(cudaGetDevice(&device));
     auto const cc = DeviceComputeCapability::forDevice(device);
-    return getTrtSMVersionDec(cc.major, cc.minor);
+    return getTrtSmVersionDec(cc.major, cc.minor);
 }
 
 // Check that all required field names are present in the PluginFieldCollection.

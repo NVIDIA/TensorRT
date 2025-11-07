@@ -17,13 +17,13 @@
 if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
 add_executable(sample_onnx_mnist sampleOnnxMNIST.cpp)
-target_link_libraries(sample_onnx_mnist PRIVATE trt_samples_common)
+target_link_libraries(sample_onnx_mnist PRIVATE trt_samples_common TRT_SAMPLES::tensorrt)
 add_dependencies(tensorrt_samples sample_onnx_mnist)
 
 installLibraries(
     TARGETS sample_onnx_mnist
     OPTIONAL
-    COMPONENT full
+    COMPONENT internal
 )
 
 else()

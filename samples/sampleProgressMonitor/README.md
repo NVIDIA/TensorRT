@@ -42,15 +42,9 @@ This sample implements an `IProgressMonitor` to display progress while building 
 
 The progress bars are drawn using virtual terminal escape sequences to manipulate the terminal's cursor and clear lines.
 
-## Preparing sample data
-
-1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
-    ```bash
-    export TRT_DATADIR=/usr/src/tensorrt/data
-    pushd $TRT_DATADIR/mnist
-    pip3 install Pillow
-    popd
-    ```
+## Prerequisites
+1. Preparing sample data
+See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
 
 ## Running the sample
 

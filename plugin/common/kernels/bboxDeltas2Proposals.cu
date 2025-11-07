@@ -236,7 +236,7 @@ struct bd2pLaunchConfig
     {
     }
 
-    bool operator==(const bd2pLaunchConfig& other)
+    bool operator==(bd2pLaunchConfig const& other) const
     {
         return t_deltas == other.t_deltas && l_deltas == other.l_deltas && t_proposals == other.t_proposals && l_proposals == other.l_proposals && t_scores == other.t_scores && l_scores == other.l_scores;
     }

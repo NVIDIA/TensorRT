@@ -76,6 +76,8 @@ constexpr const char* SQUEEZE = R"trtdoc(Squeeze layer)trtdoc";
 constexpr const char* UNSQUEEZE = R"trtdoc(Unsqueeze layer)trtdoc";
 constexpr const char* CUMULATIVE = R"trtdoc(Cumulative layer)trtdoc";
 constexpr const char* DYNAMIC_QUANTIZE = R"trtdoc(DynamicQuantize layer)trtdoc";
+constexpr const char* ATTENTION_INPUT = R"trtdoc(Attention input layer)trtdoc";
+constexpr const char* ATTENTION_OUTPUT = R"trtdoc(Attention output layer)trtdoc";
 constexpr const char* SPLIT_TO_RAGGED = R"trtdoc(SplitToRagged layer)trtdoc";
 constexpr const char* CONCAT_FROM_RAGGED = R"trtdoc(ConcatFromRagged layer)trtdoc";
 } // namespace LayerTypeDoc
@@ -905,6 +907,8 @@ constexpr const char* descr = R"trtdoc(
     :ivar k: :class:`TopKOperation` the k value for the layer. Currently only values up to 3840 are supported.
         Use the set_input() method with index 1 to pass in dynamic k as a tensor.
     :ivar axes: :class:`TopKOperation` The axes along which to reduce.
+    :ivar indices_type: :class:`DataType` The specified data type of the output indices tensor. Must be tensorrt.int32 or tensorrt.int64.
+
 )trtdoc";
 
 constexpr const char* set_input = R"trtdoc(
@@ -958,6 +962,25 @@ constexpr const char* descr = R"trtdoc(
     :ivar op1: :class:`MatrixOperation` How to treat the second input.
 )trtdoc";
 } // namespace IMatrixMultiplyLayerDoc
+
+namespace CollectiveOperationDoc
+{
+constexpr const char* descr
+    = R"trtdoc(The collective operations that may be performed by a DistCollective layer)trtdoc";
+
+constexpr const char* ALL_REDUCE = R"trtdoc(All reduce collective operation)trtdoc";
+constexpr const char* ALL_GATHER = R"trtdoc(All gather collective operation)trtdoc";
+constexpr const char* BROADCAST = R"trtdoc(Broadcast collective operation)trtdoc";
+constexpr const char* REDUCE = R"trtdoc(Reduce collective operation)trtdoc";
+constexpr const char* REDUCE_SCATTER = R"trtdoc(Reduce scatter collective operation)trtdoc";
+} // namespace CollectiveOperationDoc
+
+namespace IDistCollectiveLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A dist collective layer in an :class:`INetworkDefinition` .
+)trtdoc";
+} // namespace IDistCollectiveLayerDoc
 
 namespace IRaggedSoftMaxLayerDoc
 {
@@ -1410,7 +1433,7 @@ constexpr const char* descr = R"trtdoc(
     Use :func:`set_input` to add this optional tensor.
 
     The SelectedIndices output tensor contains the indices of the selected boxes.
-    It is a linear tensor of type ``int32``. It has shape [NumOutputBoxes, 3].]
+    It is a linear tensor of type ``int32`` or ``int64``. It has shape [NumOutputBoxes, 3].]
     Each row contains a (batchIndex, classIndex, boxIndex) tuple.
     The output boxes are sorted in order of increasing batchIndex and then in order of decreasing score within each batchIndex.
     For each batchIndex, the ordering of output boxes with the same score is unspecified.
@@ -1432,6 +1455,7 @@ constexpr const char* descr = R"trtdoc(
 
     :ivar bounding_box_format: :class:`BoundingBoxFormat` The bounding box format used by the layer. Default is CORNER_PAIRS.
     :ivar topk_box_limit: :class:`int` The maximum number of filtered boxes considered for selection. Default is 2000 for SM 5.3 and 6.2 devices, and 5000 otherwise. The TopK box limit must be less than or equal to {2000 for SM 5.3 and 6.2 devices, 5000 otherwise}.
+    :ivar indices_type: :class:`DataType` The specified data type of the output indices tensor. Must be tensorrt.int32 or tensorrt.int64.
 )trtdoc";
 
 constexpr const char* set_input = R"trtdoc(
@@ -1832,6 +1856,8 @@ constexpr char const* descr = R"trtdoc(
     Computes the indices of the input tensor where the value is non-zero. The returned indices are in row-major order.
 
     The output shape is always `{D, C}`, where `D` is the number of dimensions of the input and `C` is the number of non-zero values.
+
+    :ivar indices_type: :class:`DataType` The specified data type of the output indices tensor. Must be tensorrt.int32 or tensorrt.int64.
 )trtdoc";
 } // namespace INonZeroLayerDoc
 
@@ -1977,6 +2003,94 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 } // namespace ICumulativeLayerDoc
 
+
+namespace AttentionNormalizationOpDoc
+{
+constexpr const char* descr = R"trtdoc(The normalization operations that may be performed by an Attention layer)trtdoc";
+constexpr const char* NONE = R"trtdoc()trtdoc";
+constexpr const char* SOFTMAX = R"trtdoc()trtdoc";
+} // namespace AttentionNormalizationOpDoc
+
+namespace IAttentionBoundaryLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    :ivar attention: :class:`IAttention` associated with this boundary layer.
+)trtdoc";
+} // namespace IAttentionBoundaryLayerDoc
+
+namespace IAttentionInputLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Marks input boundary to an :class:`IAttention` scope
+)trtdoc";
+} // namespace IAttentionInputLayerDoc
+
+namespace IAttentionOutputLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    Marks output boundary to an :class:`IAttention` scope
+)trtdoc";
+} // namespace IAttentionOutputLayerDoc
+
+namespace IAttentionDoc
+{
+constexpr const char* descr = R"trtdoc(
+    An attention in a :class:`INetworkDefinition` .
+
+    :ivar mask: :class:`ITensor` The mask tensor for attention. Cannot be set together with causal attention.
+    :ivar norm_op: :class:`AttentionNormalizationOp` The normalization operation for the attention layer. Default to AttentionNormalizationOp::kSOFTMAX.
+    :ivar decomposable: :class:`bool` Specifies whether decomposition into primitive ops is allowed when no attention fusion is supported. Default to False.
+    :ivar causal: :class:`bool` Specifies whether the attention will run a causal inference. Cannot be used together with mask.
+    :ivar name: :class:`str` The name of the attention.
+    :ivar normalization_quantize_scale: :class:`ITensor` The quantization scale for the attention normalization output.
+    :ivar normalization_quantize_to_type: :class:`DataType` The datatype the attention normalization is quantized to.
+    :ivar num_inputs: :class:`int` The number of inputs of the attention.
+    :ivar num_outputs: :class:`int` The number of outputs of the attention.
+)trtdoc";
+
+constexpr char const* init = R"trtdoc(
+    :arg query: The input query tensor.
+    :arg key: The input key tensor.
+    :arg value: The input value tensor.
+    :arg norm_op: The normalization operation for the attention.
+    :arg casual: The boolean specifies whether the attention will run a causal inference.
+)trtdoc";
+
+constexpr const char* set_input = R"trtdoc(
+    Set the input tensor specified by the given index.
+
+    The indices are as follows:
+
+    =====   ==================================================================================
+    Index   Description
+    =====   ==================================================================================
+        0     query.
+        1     key.
+        2     value.
+    =====   ==================================================================================
+
+    :arg index: The index of the input tensor. query:0, key:1, value:2
+    :arg tensor: The input tensor.
+)trtdoc";
+
+constexpr const char* get_input = R"trtdoc(
+    Get the input tensor specified by the given index.
+
+    :arg index: The index of the input tensor.
+
+    :returns: The tensor, or :class:`None` if it is out of range.
+)trtdoc";
+
+constexpr const char* get_output = R"trtdoc(
+    Get the output tensor specified by the given index.
+
+    :arg index: The index of the output tensor.
+
+    :returns: The tensor, or :class:`None` if it is out of range.
+)trtdoc";
+
+} // namespace IAttentionDoc
+
 namespace INetworkDefinitionDoc
 {
 constexpr const char* descr = R"trtdoc(
@@ -1985,6 +2099,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar num_layers: :class:`int` The number of layers in the network.
     :ivar num_inputs: :class:`int` The number of inputs of the network.
     :ivar num_outputs: :class:`int` The number of outputs of the network.
+    :ivar num_ranks: :class:`int` The number of ranks to use for multi-device execution.
     :ivar name: :class:`str` The name of the network. This is used so that it can be associated with a built engine. The name must be at most 128 characters in length. TensorRT makes no use of this string except storing it as part of the engine so that it may be retrieved at runtime. A name unique to the builder will be generated by default.
     :ivar has_implicit_batch_dimension: :class:`bool` [DEPRECATED] Deprecated in TensorRT 10.0. Always flase since the implicit batch dimensions support has been removed.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
@@ -2063,7 +2178,7 @@ constexpr const char* mark_unfused_tensors_as_debug_tensors = R"trtdoc(
     Tensors marked this way will not prevent fusion like mark_debug() does, thus preserving performance.
 
     Tensors marked this way cannot be detected by is_debug_tensor().
-    DebugListener can only get internal tensor names instead of the original tensor names in the NetworkDefinition for tensors marked this way. 
+    DebugListener can only get internal tensor names instead of the original tensor names in the NetworkDefinition for tensors marked this way.
     But the names correspond to the names obtained by IEngineInspector.
     There is no guarantee that all unfused tensors are marked.
 
@@ -2288,6 +2403,8 @@ constexpr const char* add_topk = R"trtdoc(
         significant bit corresponds to the second explicit dimension.
         Currently axes must specify exactly one dimension, and it must be one of the last four dimensions.
 
+    :arg indices_type: The datatype of the output indices tensor. Specifying indices_type is optional (default value tensorrt.int32).
+
     :returns: The new TopK layer, or :class:`None` if it could not be created.
 )trtdoc";
 
@@ -2466,6 +2583,7 @@ constexpr const char* add_nms = R"trtdoc(
     :arg max_output_boxes_per_class: The maxOutputBoxesPerClass tensor to the layer.
     :ivar bounding_box_format: :class:`BoundingBoxFormat` The bounding box format used by the layer. Default is CORNER_PAIRS.
     :ivar topk_box_limit: :class:`int` The maximum number of filtered boxes considered for selection per batch item. Default is 2000 for SM 5.3 and 6.2 devices, and 5000 otherwise. The TopK box limit must be less than or equal to {2000 for SM 5.3 and 6.2 devices, 5000 otherwise}.
+    :arg indices_type: The datatype of the output indices tensor. Specifying indices_type is optional (default value tensorrt.int32).
 
     :returns: The new NMS layer, or :class:`None` if it could not be created.
 )trtdoc";
@@ -2688,6 +2806,8 @@ constexpr char const* add_non_zero = R"trtdoc(
 
     :arg input: The input tensor to the layer.
 
+    :arg indices_type: The datatype of the output indices tensor. Specifying indices_type is optional (default value tensorrt.int32).
+
     :returns: the new NonZero layer, or :class:`None` if it could not be created.
 )trtdoc";
 
@@ -2748,6 +2868,19 @@ constexpr const char* add_cumulative = R"trtdoc(
     :arg reverse: The boolean that specifies whether the cumulative should be applied backward.
 
     :returns: The new cumulative layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_attention = R"trtdoc(
+    Add an attention to the network.
+    See :class:`IAttention` for more information.
+
+    :arg query: The 4d query input tensor to the attention.
+    :arg key: The 4d key input tensor to the attention.
+    :arg value: The 4d value input tensor to the attention.
+    :arg normOp: The normalization operation to perform.
+    :arg causal: The boolean that specifies whether an attention will run casual inference.
+
+    :returns: The new Attention, or :class:`None` if it could not be created.
 )trtdoc";
 
 } // namespace INetworkDefinitionDoc

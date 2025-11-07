@@ -331,6 +331,18 @@ nvinfer1::IHostMemory* modelToSerialized(
 bool serializeAndSave(
     const ModelOptions& model, const BuildOptions& build, const SystemOptions& sys, std::ostream& err);
 
+//!
+//! \brief Refit an engine using the weights from the specified ONNX model.
+//!
+//! \return boolean Return true if the engine was successfully refit from the model.
+//!
+bool refitFromOnnx(nvinfer1::ICudaEngine& engine, std::string onnxModelFile, bool multiThreading);
+
+//!
+//! \brief Refit an engine using the weights from the INetworkDefintiion and report the amount of time it took.
+//!
+//! \return boolean Return true if the engine was successfully refit from the INetworkDefinition.
+//!
 bool timeRefit(const nvinfer1::INetworkDefinition& network, nvinfer1::ICudaEngine& engine, bool multiThreading);
 
 //!
@@ -347,12 +359,13 @@ bool hasSafeRuntime();
 //!
 //! \brief Run consistency check on serialized engine.
 //!
-bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize);
+bool checkSafeEngine(
+    void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibPath);
 
 bool loadStreamingEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);
 
-bool loadEngineToBuildEnv(
-    std::string const& engine, BuildEnvironment& env, std::ostream& err, bool const enableConsistency);
+bool loadEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err, SystemOptions const& sys,
+    bool const enableConsistency);
 } // namespace sample
 
 #endif // TRT_SAMPLE_ENGINES_H

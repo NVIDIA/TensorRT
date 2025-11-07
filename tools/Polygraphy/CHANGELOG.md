@@ -2,6 +2,37 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.49.27
+### Added
+- Added `polygraphy template shard-hints` to generate hints file for `polygraphy multi-device shard`.
+- Added support for inserting transposes to `polygraphy multi-device shard` when the sequence length dimension of sharded tensors is not 0.
+
+### Changed
+- Changed hints file format for `polygraphy multi-device shard` to support new additions.
+- Changed `polygraphy multi-device shard` example and README to reflect new additions.
+
+### Fixed
+- Fixed issue when `polygraphy multi-device shard` would exceed python recursive depth limit on large models.
+
+
+## v0.49.26 (2025-07-16)
+### Added
+- Added support for dumping unfused tensors when running TensorRT using `--mark-unfused-tensors-as-debug-tensors`.
+    int4, fp4, fp8, and bfloat16 tensors are not supported and will be skipped.
+- Added support for combining tensor statistics from the tensor JSON file with the output of the engine inspector.
+
+### Changed
+- Relaxed `onnxconverter_common` version requirements to allow newer versions to be installed.
+
+### Fixed
+- Fixed a bug where `--save-heatmaps` and `--save-error-metrics-plot` would not handle slashes in output names well.
+- Fixed a bug where `--save-error-metrics-plot` would not work if the minimum error was 0.
+
+
+## v0.49.25 (2025-06-11)
+### Added
+- Added `multi-device shard` tool for converting SD models to MD.
+
 
 ## v0.49.24 (2025-05-27)
 ### Fixed

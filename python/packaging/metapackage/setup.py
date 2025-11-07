@@ -19,7 +19,6 @@
 from setuptools import setup
 
 distribution_package_name = "##TENSORRT_MODULE##"
-plugin_import_package_name = f"{distribution_package_name}.plugin"
 
 DISABLE_INTERNAL_PIP_FLAG = "NVIDIA_TENSORRT_DISABLE_INTERNAL_PIP"
 
@@ -46,7 +45,6 @@ pip install tensorrt
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[plugin_import_package_name],
     install_requires=["##TENSORRT_MODULE##_cu##CUDA_MAJOR##==##TENSORRT_PYTHON_VERSION##"],
     include_package_data=True,
     zip_safe=True,

@@ -40,9 +40,17 @@ import torch
 import tensorrt as trt
 import os, sys, argparse
 import numpy as np
-import pycuda.driver as cuda
-import pycuda.autoinit # without this, "LogicError: explicit_context_dependent failed: invalid device context - no currently active context?"
 from time import time
+from cuda.bindings import driver as cuda, runtime as cudart
+from cuda_utils import (
+    cuda_call,
+    CudaStreamContext,
+    memcpy_host_to_device_async,
+    memcpy_device_to_host_async,
+    memcpy_host_to_device,
+    memcpy_device_to_device_async,
+    memcpy_device_to_device,
+)
 
 TRT_VERSION = int(trt.__version__[:3].replace('.','')) # e.g., version 8.4.1.5 becomes 84
 
@@ -167,7 +175,7 @@ class TRTModel:
         inputs = []
         outputs = []
         bindings = []
-        stream = cuda.Stream()
+        stream = CudaStreamContext()
 
         for i in range(engine.num_io_tensors):
             tensor_name = engine.get_tensor_name(i)
@@ -175,10 +183,10 @@ class TRTModel:
             dtype = trt.nptype(engine.get_tensor_dtype(tensor_name))
 
             # Allocate host and device buffers
-            host_mem = cuda.pagelocked_empty(size, dtype) # page-locked memory buffer (won't swapped to disk)
-            device_mem = cuda.mem_alloc(host_mem.nbytes)
+            host_mem = np.empty(size, dtype)
+            device_mem = cuda_call(cudart.cudaMalloc(host_mem.nbytes))
 
-            # Append the device buffer address to device bindings. When cast to int, it's a linear index into the context's memory (like memory address). See https://documen.tician.de/pycuda/driver.html#pycuda.driver.DeviceAllocation
+            # Append the device buffer address to device bindings. When cast to int, it's a linear index into the context's memory (like memory address).
             bindings.append(int(device_mem))
 
             # Append to the appropriate input/output list.
@@ -226,18 +234,19 @@ class TRTModel:
                 # fill host memory with flattened input data
                 np.copyto(self.inputs[i].host, model_input.ravel())
             elif TORCH:
+                nbytes = model_input.element_size() * model_input.nelement()
                 if timing:
-                    cuda.memcpy_dtod(self.inputs[i].device, model_input.data_ptr(), model_input.element_size() * model_input.nelement())
+                    memcpy_device_to_device(self.inputs[i].device, model_input.data_ptr(), nbytes)
                 else:
                     # for Torch GPU tensor it's easier, can just do Device to Device copy
-                    cuda.memcpy_dtod_async(self.inputs[i].device, model_input.data_ptr(), model_input.element_size() * model_input.nelement(), self.stream) # dtod need size in bytes
+                    memcpy_device_to_device_async(self.inputs[i].device, model_input.data_ptr(), nbytes, self.stream.stream)
 
         if NUMPY:
             if timing:
-                [cuda.memcpy_htod(inp.device, inp.host) for inp in self.inputs]
+                [memcpy_host_to_device(inp.device, inp.host) for inp in self.inputs]
             else:
                 # input, Host to Device
-                [cuda.memcpy_htod_async(inp.device, inp.host, self.stream) for inp in self.inputs]
+                [memcpy_host_to_device_async(inp.device, inp.host, self.stream.stream) for inp in self.inputs]
 
         for i in range(self.engine.num_io_tensors):
             self.context.set_tensor_address(self.engine.get_tensor_name(i), self.bindings[i])
@@ -250,13 +259,13 @@ class TRTModel:
             duration = end_time - start_time
         else:
             # run inference
-            self.context.execute_async_v3(stream_handle=self.stream.handle)
+            self.context.execute_async_v3(stream_handle=self.stream.stream)
 
         if timing:
-            [cuda.memcpy_dtoh(out.host, out.device) for out in self.outputs]
+            [cuda_call(cudart.cudaMemcpy(out.host.ctypes.data, out.device, out.host.nbytes, cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost)) for out in self.outputs]
         else:
             # output, Device to Host
-            [cuda.memcpy_dtoh_async(out.host, out.device, self.stream) for out in self.outputs]
+            [memcpy_device_to_host_async(out.host, out.device, self.stream.stream) for out in self.outputs]
 
         if not timing:
             # synchronize to ensure completion of async calls

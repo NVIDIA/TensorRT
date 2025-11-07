@@ -54,7 +54,7 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& 
     , mQkvScale(qkvScale)
     , mCtxScale(ctxScale)
 {
-    mSM = getSMVersion();
+    mSM = getSmVersion();
     mUseInt8ScaleMax = static_cast<int32_t>(useInt8ScaleMax);
     mUseExplicitInt8 = static_cast<int32_t>(useExplicitInt8);
     // variable sequence length is only supported with the fused MHA kernels

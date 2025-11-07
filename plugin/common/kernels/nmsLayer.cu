@@ -390,7 +390,7 @@ struct nmsLaunchConfig
     {
     }
 
-    bool operator==(const nmsLaunchConfig& other)
+    bool operator==(nmsLaunchConfig const& other) const
     {
         return (t_fgScores == other.t_fgScores) && (l_fgScores == other.l_fgScores) && (t_proposals == other.t_proposals) && (l_proposals == other.l_proposals) && (t_rois == other.t_rois);
     }

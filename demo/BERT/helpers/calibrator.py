@@ -19,8 +19,8 @@
 import tensorrt as trt
 import os
 
-import pycuda.driver as cuda
-import pycuda.autoinit
+from helpers.cuda_utils import cuda_call, memcpy_host_to_device
+from cuda.bindings import driver as cuda, runtime as cudart
 import numpy as np
 import helpers.tokenization as tokenization
 import helpers.data_processing as dp
@@ -44,11 +44,12 @@ class BertCalibrator(trt.IInt8LegacyCalibrator):
         self.max_query_length = 64
 
         # Allocate enough memory for a whole batch.
-        self.device_inputs = [cuda.mem_alloc(self.max_seq_length * trt.int32.itemsize * self.batch_size) for binding in range(3)]
+        self.device_inputs = [cuda_call(cudart.cudaMalloc(self.max_seq_length * trt.int32.itemsize * self.batch_size)) for binding in range(3)]
 
     def free(self):
         for dinput in self.device_inputs:
-            dinput.free()
+            # dinput is a device pointer (int) returned by cudaMalloc
+            cuda_call(cudart.cudaFree(dinput))
 
     def get_batch_size(self):
         return self.batch_size
@@ -80,9 +81,9 @@ class BertCalibrator(trt.IInt8LegacyCalibrator):
                 segment_ids = features[0].segment_ids
                 input_mask = features[0].input_mask
 
-        cuda.memcpy_htod(self.device_inputs[0], input_ids.ravel())
-        cuda.memcpy_htod(self.device_inputs[1], segment_ids.ravel())
-        cuda.memcpy_htod(self.device_inputs[2], input_mask.ravel())
+        memcpy_host_to_device(self.device_inputs[0], input_ids.ravel())
+        memcpy_host_to_device(self.device_inputs[1], segment_ids.ravel())
+        memcpy_host_to_device(self.device_inputs[2], input_mask.ravel())
 
         self.current_index += self.batch_size
         return self.device_inputs

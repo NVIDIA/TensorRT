@@ -10,9 +10,6 @@
 
 add_library(trt_samples_common STATIC)
 
-
-set(SAFE_EXECUTOR_INCLUDE_PATH "${TRT_BUILD_CONAN_DEP_PATH}/myelin_include/lwe")
-
 target_sources(trt_samples_common PRIVATE
     argsParser.h
     BatchStream.h
@@ -56,35 +53,28 @@ if (MSVC)
     )
 endif()
 
-if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
-    target_link_libraries(trt_samples_common PUBLIC
-        tensorrt_static
-        nvonnxparser_static
-    )
-else()
-    target_link_libraries(trt_samples_common PUBLIC
-        tensorrt
-        nvonnxparser
-    )
-endif()
+target_include_directories(trt_samples_common PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+
 
 target_link_libraries(trt_samples_common PUBLIC
     trt_global_definitions
     trt_shared
+    Threads::Threads
     dl
+    TRT::cudart
+    $<COMPILE_ONLY:TRT_SAMPLES::tensorrt> # Each sample individually must determine its linkage to TRT.
+    TRT_SAMPLES::onnxparser
 )
 
-
-if(NOT MSVC)
+# For statically-linked samples, we need to upgrade the link to always link TRT rather than letting the samples decide.
+if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
     target_link_libraries(trt_samples_common PUBLIC
-        Threads::Threads
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,TRT_SAMPLES::tensorrt> # Has to be whole archive so we keep the builder resources correctly.
     )
 endif()
 
-target_include_directories(trt_samples_common PUBLIC
-    ${CMAKE_CURRENT_LIST_DIR}
-    ${SAFE_EXECUTOR_INCLUDE_PATH}
-)
 
 if(${TRT_BUILD_ENABLE_DLA})
     target_link_libraries(trt_samples_common PUBLIC NVDLA::compiler)

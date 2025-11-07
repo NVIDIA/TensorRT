@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 include_guard()
 include(GNUInstallDirs)
 
@@ -26,7 +27,7 @@ include(GNUInstallDirs)
 function(installLibraries)
     cmake_parse_arguments(
         ARG                       # Prefix for parsed args
-        "OPTIONAL"                # Options (flags)
+        "OPTIONAL;RUNTIME_ONLY"   # Options (flags)
         "COMPONENT"               # Single value args
         "TARGETS;CONFIGURATIONS"  # Multi-value args
         ${ARGN}
@@ -50,12 +51,22 @@ function(installLibraries)
         set(optional_arg OPTIONAL)
     endif()
 
+    # When RUNTIME_ONLY is passed, we only want to install .dll files.
+    # Instead of also installing the import library (.lib) files.
+    # This is only relevant on Windows since Linux doesn't have this distinction.
+    if(ARG_RUNTIME_ONLY AND WIN32)
+        set(runtime_only_arg
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+    endif()
+
     # Install the libraries
     install(
         TARGETS ${ARG_TARGETS}
         ${optional_arg}
         ${component_arg}
         ${config_arg}
+        ${runtime_only_arg}
     )
 
     # Install PDB files for MSVC builds

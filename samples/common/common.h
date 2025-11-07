@@ -450,7 +450,7 @@ inline float getMaxValue(const float* buffer, int64_t size)
 // All tensors in a network must have a dynamic range specified if a calibrator is not used.
 // This function is just a utility to globally fill in missing scales and zero-points for the entire network.
 //
-// If a tensor does not have a dyanamic range set, it is assigned inRange or outRange as follows:
+// If a tensor does not have a dynamic range set, it is assigned inRange or outRange as follows:
 //
 // * If the tensor is the input to a layer or output of a pooling node, its dynamic range is derived from inRange.
 // * Otherwise its dynamic range is derived from outRange.
@@ -478,7 +478,7 @@ inline void setAllDynamicRanges(nvinfer1::INetworkDefinition* network, float inR
     }
 
     // Ensure that all layer outputs have a scale.
-    // Tensors that are also inputs to layers are ingored here
+    // Tensors that are also inputs to layers are ignored here
     // since the previous loop nest assigned scales to them.
     for (int i = 0; i < network->getNbLayers(); i++)
     {
@@ -918,11 +918,11 @@ inline int getW(const nvinfer1::Dims& d)
 class DynamicLibrary
 {
 public:
-    explicit DynamicLibrary(std::string const& name)
-        : mLibName{name}
+    explicit DynamicLibrary(std::string name)
+        : mLibName{std::move(name)}
     {
 #if defined(_WIN32)
-        mHandle = LoadLibraryA(name.c_str());
+        mHandle = LoadLibraryA(mLibName.c_str());
 #else // defined(_WIN32)
         int32_t flags{RTLD_LAZY};
 #if ENABLE_ASAN
@@ -933,7 +933,7 @@ public:
         flags |= RTLD_NODELETE;
 #endif // ENABLE_ASAN
 
-        mHandle = dlopen(name.c_str(), flags);
+        mHandle = dlopen(mLibName.c_str(), flags);
 #endif // defined(_WIN32)
 
         if (mHandle == nullptr)
@@ -942,7 +942,7 @@ public:
 #if !defined(_WIN32)
             errorStr = std::string{" due to "} + std::string{dlerror()};
 #endif
-            throw std::runtime_error("Unable to open library: " + name + errorStr);
+            throw std::runtime_error("Unable to open library: " + mLibName + errorStr);
         }
     }
 
@@ -997,10 +997,9 @@ private:
     void* mHandle{};        //!< Handle to the DynamicLibrary
 };
 
-inline std::unique_ptr<DynamicLibrary> loadLibrary(std::string const& path)
+[[nodiscard]] inline std::unique_ptr<DynamicLibrary> loadLibrary(std::string name)
 {
-    // make_unique not available until C++14 - we still need to support C++11 builds.
-    return std::unique_ptr<DynamicLibrary>(new DynamicLibrary{path});
+    return std::make_unique<DynamicLibrary>(std::move(name));
 }
 
 //! Represents the compute capability of a device.
@@ -1029,7 +1028,7 @@ struct ComputeCapability
     }
 };
 
-inline int32_t getSMVersion()
+inline int32_t getSmVersion()
 {
     int32_t deviceIndex = 0;
     CHECK(cudaGetDevice(&deviceIndex));
@@ -1038,9 +1037,9 @@ inline int32_t getSMVersion()
     return ((cc.major << 8) | cc.minor);
 }
 
-inline bool isSMSafe()
+inline bool isSmSafe()
 {
-    const int32_t smVersion = getSMVersion();
+    const int32_t smVersion = getSmVersion();
     return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807;
 }
 

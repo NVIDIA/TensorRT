@@ -178,6 +178,12 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
             elif "controlnet" in model_name:
                 hf_download_path_cnet = hf_download_path.replace("large", "controlnets")
                 dirname = f"controlnet_{self.controlnet}"
+                if "blur" in model_name:
+                    pass
+                elif model_config["use_fp8"]:
+                    dirname = os.path.join(dirname, "fp8")
+                elif self.bf16:
+                    dirname = os.path.join(dirname, "bf16")
             elif model_name in self.stages:
                 dirname = model_name
             else:
@@ -241,7 +247,7 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
 
         self.bf16 = True if int8 or fp8 or fp4 else self.bf16
         self.fp16 = True if not self.bf16 else False
-        self.tf32=True
+        self.tf32 = True
         self.fp8 = fp8
         self.int8 = int8
         self.fp4 = fp4
@@ -330,44 +336,24 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
         print("|-----------------|--------------|")
         print("| {:^15} | {:^12} |".format("Module", "Latency"))
         print("|-----------------|--------------|")
-        if "vae_encoder" in self.stages:
+        for stage in self.stages:
+            # controlnet is profiled in the denoising step
+            if "controlnet" in stage:
+                continue
+            stage_name = stage
+            if "transformer" in stage:
+                if f"controlnet_{self.controlnet}" in self.stages:
+                    stage_name += '+cnet'
+                stage_name += ' x ' + str(denoising_steps)
             print(
                 "| {:^15} | {:>9.2f} ms |".format(
-                    "VAE Encoder",
-                    cudart.cudaEventElapsedTime(self.events["vae_encoder"][0], self.events["vae_encoder"][1])[1],
+                    stage_name, cudart.cudaEventElapsedTime(self.events[stage][0], self.events[stage][1])[1],
                 )
             )
-        print(
-            "| {:^15} | {:>9.2f} ms |".format(
-                "CLIP-G", cudart.cudaEventElapsedTime(self.events["clip_g"][0], self.events["clip_g"][1])[1]
-            )
-        )
-        print(
-            "| {:^15} | {:>9.2f} ms |".format(
-                "CLIP-L", cudart.cudaEventElapsedTime(self.events["clip_l"][0], self.events["clip_l"][1])[1]
-            )
-        )
-        print(
-            "| {:^15} | {:>9.2f} ms |".format(
-                "T5", cudart.cudaEventElapsedTime(self.events["t5"][0], self.events["t5"][1])[1]
-            )
-        )
-        print(
-            "| {:^15} | {:>9.2f} ms |".format(
-                "MMDiT" + " x " + str(denoising_steps),
-                cudart.cudaEventElapsedTime(self.events["transformer"][0], self.events["transformer"][1])[1],
-            )
-        )
-        print(
-            "| {:^15} | {:>9.2f} ms |".format(
-                "VAE Decoder",
-                cudart.cudaEventElapsedTime(self.events["vae"][0], self.events["vae"][1])[1],
-            )
-        )
         print("|-----------------|--------------|")
         print("| {:^15} | {:>9.2f} ms |".format("Pipeline", walltime_ms))
         print("|-----------------|--------------|")
-        print("Throughput: {:.2f} image/s".format(self.batch_size * 1000.0 / walltime_ms))
+        print("Throughput: {:.5f} image/s".format(self.batch_size * 1000.0 / walltime_ms))
 
     @staticmethod
     def _tokenize(
@@ -711,9 +697,8 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                     "timestep": timestep_inp,
                     "encoder_hidden_states": prompt_embeds,
                     "pooled_projections": pooled_prompt_embeds,
+                    "block_controlnet_hidden_states": control_block_samples,
                 }
-                if not self.fp8:
-                    params["block_controlnet_hidden_states"] = control_block_samples
 
                 # Predict the noise residual
                 if self.torch_inference or self.torch_fallback[denoiser]:

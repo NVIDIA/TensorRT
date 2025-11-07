@@ -145,13 +145,15 @@ Set the computational precision of this layer. Setting the precision forces Tens
 [ILayer::SetOutputType](https://docs.nvidia.com/deeplearning/sdk/tensorrt-api/c_api/classnvinfer1_1_1_i_layer.html#a85aded4e3ff0867e392602551d5b5dc7)
 Set the output type of this layer. Setting the output type forces TensorRT to choose the implementations which generate output data with the given type. If the output type is not set, TensorRT will select the implementation based on performance considerations and the flags specified to the builder.
 
-## Preparing sample data
+## Prerequisites
+1. Preparing sample data
+See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
 
-`ResNet50.onnx` is located in the `data/resnet50` directory.
+`ResNet50.onnx` is located in the `$TRT_DATADIR/resnet50` directory.
 
 In addition to the model file and input image, you will need per-tensor dynamic range stored in a text file along with the ImageNet label reference file.
 
-The following required files are included in the package and are located in the `data/int8_api` directory.
+The following required files are included in the package and are located in the `$TRT_DATADIR/int8_api` directory.
 
 `reference_labels.txt`
 The ImageNet reference label file.

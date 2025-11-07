@@ -174,7 +174,7 @@ struct nmsOutLaunchConfig
         , function(function)
     {
     }
-    bool operator==(const nmsOutLaunchConfig& other)
+    bool operator==(nmsOutLaunchConfig const& other) const
     {
         return t_bbox == other.t_bbox && t_score == other.t_score;
     }

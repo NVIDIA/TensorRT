@@ -118,6 +118,10 @@ The Shuffle layer implements a reshape and transpose operator for tensors.
 
 
 
+## Preparing sample data
+
+See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
+
 ## Running the sample
 
 1. The sample gets compiled when building the TensorRT OSS following the [instructions](https://github.com/NVIDIA/TensorRT). The binary named sample_onnx_mnist_coord_conv_ac will be created in the output directory.

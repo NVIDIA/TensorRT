@@ -1,4 +1,6 @@
-# EfficientDet Object Detection in TensorRT
+# [DEPRECATED] EfficientDet Object Detection in TensorRT
+
+> **Notice:** This sample has been deprecated as of TensorRT 10.14 due to compatibility issues with outdated dependencies in the [tf2onnx](https://github.com/onnx/tensorflow-onnx) conversion pipeline. Users are advised to use earlier TensorRT versions if this sample is required for legacy workflows. 
 
 ![efficientdet](https://drive.google.com/uc?export=view&id=1Le98wETvmKKj0fUKoCFLsld7o8QPJq9C)
 

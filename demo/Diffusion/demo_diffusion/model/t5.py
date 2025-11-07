@@ -27,6 +27,7 @@ from demo_diffusion.model import base_model, load, optimizer
 
 
 class T5Model(base_model.BaseModel):
+
     def __init__(
         self,
         version,
@@ -44,6 +45,7 @@ class T5Model(base_model.BaseModel):
         build_strongly_typed=False,
         weight_streaming=False,
         weight_streaming_budget_percentage=None,
+        use_attention_mask=False,
     ):
         super(T5Model, self).__init__(
             version,
@@ -70,6 +72,7 @@ class T5Model(base_model.BaseModel):
         self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
+        self.use_attention_mask = use_attention_mask
 
     def get_model(self, torch_inference=""):
         model_opts = (
@@ -91,12 +94,16 @@ class T5Model(base_model.BaseModel):
         return model
 
     def get_input_names(self):
+        if self.use_attention_mask:
+            return ["input_ids", "attention_mask"]
         return ["input_ids"]
 
     def get_output_names(self):
         return ["text_embeddings"]
 
     def get_dynamic_axes(self):
+        if self.use_attention_mask:
+            return {"input_ids": {0: "B"}, "attention_mask": {0: "B"}, "text_embeddings": {0: "B"}}
         return {"input_ids": {0: "B"}, "text_embeddings": {0: "B"}}
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
@@ -104,9 +111,16 @@ class T5Model(base_model.BaseModel):
         min_batch, max_batch, _, _, _, _, _, _, _, _ = self.get_minmax_dims(
             batch_size, image_height, image_width, static_batch, static_shape
         )
-        return {
+        profile = {
             "input_ids": [(min_batch, self.text_maxlen), (batch_size, self.text_maxlen), (max_batch, self.text_maxlen)]
         }
+        if self.use_attention_mask:
+            profile["attention_mask"] = [
+                (min_batch, self.text_maxlen),
+                (batch_size, self.text_maxlen),
+                (max_batch, self.text_maxlen),
+            ]
+        return profile
 
     def get_shape_dict(self, batch_size, image_height, image_width):
         self.check_dims(batch_size, image_height, image_width)
@@ -114,8 +128,13 @@ class T5Model(base_model.BaseModel):
             "input_ids": (batch_size, self.text_maxlen),
             "text_embeddings": (batch_size, self.text_maxlen, self.config.d_model),
         }
+        if self.use_attention_mask:
+            output["attention_mask"] = (batch_size, self.text_maxlen)
         return output
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
         self.check_dims(batch_size, image_height, image_width)
-        return torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device)
+        inputs = {"input_ids": torch.zeros(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device)}
+        if self.use_attention_mask:
+            inputs["attention_mask"] = torch.ones(batch_size, self.text_maxlen, dtype=torch.int32, device=self.device)
+        return inputs

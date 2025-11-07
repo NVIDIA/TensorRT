@@ -1,9 +1,9 @@
-onnx==1.16.0
+onnx==1.18.0
 nltk==3.9.1
 wget==3.2
 cuda-python==12.9.0
 pywin32; platform_system == "Windows"
 pyyaml==6.0.1
-requests==2.32.2
+requests==2.32.4
 tqdm==4.66.4
 numpy==1.26.4

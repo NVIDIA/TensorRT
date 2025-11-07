@@ -3,12 +3,10 @@ import os
 import tempfile
 
 import pytest
-import tensorrt as trt
 
 from polygraphy import mod, util
 from polygraphy.backend.trt import (
     Calibrator,
-    CreateConfig,
     Profile,
     network_from_onnx_bytes,
     postprocess_config,
@@ -16,9 +14,17 @@ from polygraphy.backend.trt import (
 from polygraphy.common.struct import BoundedShape
 from polygraphy.comparator import DataLoader
 from polygraphy.datatype import DataType
+from polygraphy import config as polygraphy_config
 from tests.helper import has_dla
 from tests.models.meta import ONNX_MODELS
 
+# Import CreateConfigRTX conditionally for TensorRT-RTX builds
+if polygraphy_config.USE_TENSORRT_RTX:
+    import tensorrt_rtx as trt
+    from polygraphy.backend.tensorrt_rtx import CreateConfigRTX as CreateConfig
+else:
+    import tensorrt as trt
+    from polygraphy.backend.trt import CreateConfig
 
 @pytest.fixture(scope="session")
 def identity_builder_network():
@@ -36,7 +42,10 @@ class TestCreateConfig:
         with loader(builder, network) as config:
             assert not config.get_flag(trt.BuilderFlag.DISABLE_TIMING_CACHE)
             with contextlib.suppress(AttributeError):
-                assert not config.get_flag(trt.BuilderFlag.TF32)
+                if polygraphy_config.USE_TENSORRT_RTX:
+                    assert config.get_flag(trt.BuilderFlag.TF32)
+                else:
+                    assert not config.get_flag(trt.BuilderFlag.TF32)
             with contextlib.suppress(AttributeError):
                 assert not config.get_flag(trt.BuilderFlag.SPARSE_WEIGHTS)
             assert not config.get_flag(trt.BuilderFlag.FP16)
@@ -47,19 +56,21 @@ class TestCreateConfig:
                 assert not config.get_flag(trt.BuilderFlag.FP8)
                 assert not config.get_flag(trt.BuilderFlag.VERSION_COMPATIBLE)
                 assert not config.get_flag(trt.BuilderFlag.EXCLUDE_LEAN_RUNTIME)
-                assert (
-                    config.hardware_compatibility_level
-                    == trt.HardwareCompatibilityLevel.NONE
-                )
-            if mod.version(trt.__version__) >= mod.version("10.2"):
+                if not polygraphy_config.USE_TENSORRT_RTX:
+                    assert (
+                        config.hardware_compatibility_level
+                        == trt.HardwareCompatibilityLevel.NONE
+                    )
+            if mod.version(trt.__version__) >= mod.version("10.2") and not polygraphy_config.USE_TENSORRT_RTX:
                 assert (
                     config.runtime_platform
                     == trt.RuntimePlatform.SAME_AS_BUILD
                 )
             assert config.num_optimization_profiles == 1
-            assert config.int8_calibrator is None
+            if not polygraphy_config.USE_TENSORRT_RTX:
+                assert config.int8_calibrator is None
             with contextlib.suppress(AttributeError):
-                if mod.version(trt.__version__) >= mod.version("10.0"):
+                if mod.version(trt.__version__) >= mod.version("10.0") or polygraphy_config.USE_TENSORRT_RTX:
                     assert config.get_tactic_sources() == 24
                 elif mod.version(trt.__version__) >= mod.version("8.7"):
                     assert config.get_tactic_sources() == 29
@@ -72,7 +83,10 @@ class TestCreateConfig:
             with contextlib.suppress(AttributeError):
                 assert not config.get_flag(trt.BuilderFlag.OBEY_PRECISION_CONSTRAINTS)
             with contextlib.suppress(AttributeError):
-                assert config.engine_capability == trt.EngineCapability.STANDARD
+                if polygraphy_config.USE_TENSORRT_RTX:
+                    assert config.engine_capability == trt.EngineCapability.STANDARD
+                else:
+                    assert config.engine_capability == trt.EngineCapability.DEFAULT
             with contextlib.suppress(AttributeError):
                 assert not config.get_flag(trt.BuilderFlag.DIRECT_IO)
 
@@ -105,7 +119,7 @@ class TestCreateConfig:
                 assert not obey_set and not prefer_set
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.6"),
+        mod.version(trt.__version__) < mod.version("8.6") and not polygraphy_config.USE_TENSORRT_RTX,
         reason="Unsupported before TRT 8.6",
     )
     @pytest.mark.parametrize(
@@ -142,26 +156,8 @@ class TestCreateConfig:
     @pytest.mark.parametrize(
         "arg_name, flag_type",
         [
-            ("fp16", trt.BuilderFlag.FP16),
-            ("int8", trt.BuilderFlag.INT8),
-            ("allow_gpu_fallback", trt.BuilderFlag.GPU_FALLBACK),
             ("refittable", trt.BuilderFlag.REFIT),
-            ("tf32", trt.BuilderFlag.TF32),
         ]
-        + (
-            [
-                ("bf16", trt.BuilderFlag.BF16),
-            ]
-            if mod.version(trt.__version__) >= mod.version("8.7")
-            else []
-        )
-        + (
-            [
-                ("fp8", trt.BuilderFlag.FP8),
-            ]
-            if mod.version(trt.__version__) >= mod.version("8.6")
-            else []
-        )
         + (
             [
                 (
@@ -177,6 +173,30 @@ class TestCreateConfig:
                 ("strip_plan", trt.BuilderFlag.STRIP_PLAN),
             ]
             if mod.version(trt.__version__) >= mod.version("10.0")
+            else []
+        )
+        + (
+            [
+                ("fp16", trt.BuilderFlag.FP16),
+                ("int8", trt.BuilderFlag.INT8),
+                ("allow_gpu_fallback", trt.BuilderFlag.GPU_FALLBACK),
+                ("tf32", trt.BuilderFlag.TF32),
+            ]
+            + (
+                [
+                    ("bf16", trt.BuilderFlag.BF16),
+                ]
+                if mod.version(trt.__version__) >= mod.version("8.7")
+                else []
+            )
+            + (
+                [
+                    ("fp8", trt.BuilderFlag.FP8),
+                ]
+                if mod.version(trt.__version__) >= mod.version("8.6")
+                else []
+            )
+            if not polygraphy_config.USE_TENSORRT_RTX
             else []
         ),
     )
@@ -194,6 +214,10 @@ class TestCreateConfig:
         with loader(builder, network) as config:
             assert config.get_flag(trt.BuilderFlag.SPARSE_WEIGHTS) == flag
 
+    @pytest.mark.skipif(
+        polygraphy_config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX does not support DLA"
+    )
     def test_use_dla(self, identity_builder_network):
         builder, network = identity_builder_network
         loader = CreateConfig(use_dla=True)
@@ -241,7 +265,7 @@ class TestCreateConfig:
             ),
         ]
 
-        if mod.version(trt.__version__) >= mod.version("10.0"):
+        if mod.version(trt.__version__) >= mod.version("10.0") or polygraphy_config.USE_TENSORRT_RTX:
             TACTIC_SOURCES_CASES[0] = (None, 24)
         elif mod.version(trt.__version__) >= mod.version("8.7"):
             TACTIC_SOURCES_CASES[0] = (None, 29)
@@ -254,7 +278,7 @@ class TestCreateConfig:
             assert config.get_tactic_sources() == expected
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.7"),
+        mod.version(trt.__version__) < mod.version("8.7") and not polygraphy_config.USE_TENSORRT_RTX,
         reason="API was added in TRT 8.7",
     )
     @pytest.mark.parametrize("flag", [True, False])
@@ -264,6 +288,10 @@ class TestCreateConfig:
         with loader(builder, network) as config:
             assert config.get_flag(trt.BuilderFlag.ERROR_ON_TIMING_CACHE_MISS) == flag
 
+    @pytest.mark.skipif(
+        polygraphy_config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX does not support calibrators"
+    )
     def test_calibrator_metadata_set(self, identity_builder_network):
         builder, network = identity_builder_network
         calibrator = Calibrator(DataLoader())
@@ -336,6 +364,10 @@ class TestCreateConfig:
             },
         ]
 
+        # @pytest.mark.skipif(
+        #     config.USE_TENSORRT_RTX,
+        #     reason="TensorRT-RTX does not support DLA memory pools"
+        # )
         @pytest.mark.parametrize("pool_limits", POOL_LIMITS)
         def test_memory_pool_limits(self, pool_limits, identity_builder_network):
             if any("dla" in key.name.lower() for key in pool_limits) and not has_dla():
@@ -352,7 +384,11 @@ class TestCreateConfig:
         [
             [trt.PreviewFeature.PROFILE_SHARING_0806]
             if mod.version(trt.__version__) >= mod.version("10.0")
-            else [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805],
+            else (
+                [trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03]
+                if polygraphy_config.USE_TENSORRT_RTX
+                else [trt.PreviewFeature.FASTER_DYNAMIC_SHAPES_0805]
+            ),
         ],
     )
     def test_preview_features(self, identity_builder_network, preview_features):
@@ -361,8 +397,16 @@ class TestCreateConfig:
         with loader(builder, network) as config:
             # Check that only the enabled preview features are on.
             for pf in trt.PreviewFeature.__members__.values():
-                assert config.get_preview_feature(pf) == (pf in preview_features)
+                expected = pf in preview_features
+                # TensorRT-RTX enables PROFILE_SHARING_0806 by default and can't be disabled
+                if polygraphy_config.USE_TENSORRT_RTX and pf == trt.PreviewFeature.PROFILE_SHARING_0806:
+                    expected = True
+                assert config.get_preview_feature(pf) == expected
 
+    @pytest.mark.skipif(
+        polygraphy_config.USE_TENSORRT_RTX,
+        reason="TensorRT-RTX does not support quantization_flag API"
+    )
     @pytest.mark.parametrize(
         "quantization_flags",
         [
@@ -379,7 +423,7 @@ class TestCreateConfig:
                 assert config.get_quantization_flag(qf) == (qf in quantization_flags)
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.6"),
+        mod.version(trt.__version__) < mod.version("8.6") and not polygraphy_config.USE_TENSORRT_RTX,
         reason="Unsupported for TRT versions prior to 8.6",
     )
     @pytest.mark.parametrize("level", range(6))
@@ -420,7 +464,7 @@ class TestCreateConfig:
                 assert config.runtime_platform == platform
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("8.6"),
+        mod.version(trt.__version__) < mod.version("8.6") and not polygraphy_config.USE_TENSORRT_RTX,
         reason="Unsupported for TRT versions prior to 8.6",
     )
     @pytest.mark.parametrize("num_streams", range(3))
@@ -431,7 +475,7 @@ class TestCreateConfig:
             assert config.max_aux_streams == num_streams
 
     @pytest.mark.skipif(
-        mod.version(trt.__version__) < mod.version("9.0"),
+        mod.version(trt.__version__) < mod.version("9.0") and not polygraphy_config.USE_TENSORRT_RTX,
         reason="API was added in TRT 9.0",
     )
     def test_progress_monitor(self, identity_builder_network):
@@ -454,7 +498,7 @@ class TestCreateConfig:
         with loader(builder, network) as config:
             assert config.progress_monitor == progress_monitor
 
-    if mod.version(trt.__version__) >= mod.version("10.8"):
+    if mod.version(trt.__version__) >= mod.version("10.8") and not polygraphy_config.USE_TENSORRT_RTX:
         @pytest.mark.parametrize(
             "level",
             [

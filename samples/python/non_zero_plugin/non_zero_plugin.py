@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,11 +36,12 @@ import argparse
 from polygraphy import mod
 
 sys.path.insert(1, os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
-from plugin_utils import checkCudaErrors, KernelHelper, UnownedMemory, volume
+from plugin_utils import cuda_call, KernelHelper, UnownedMemory, volume
 
-cuda = mod.lazy_import("cuda.cuda")
-cudart = mod.lazy_import("cuda.cudart")
-nvrtc = mod.lazy_import("cuda.nvrtc")
+
+cuda = mod.lazy_import("cuda.bindings.driver")
+cudart = mod.lazy_import("cuda.bindings.runtime")
+nvrtc = mod.lazy_import("cuda.bindings.nvrtc")
 
 torch = mod.lazy_import("torch")
 cp = mod.lazy_import("cupy")
@@ -145,11 +146,11 @@ class NonZeroPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
 
     def configure_plugin(self, inp, out):
         if self.backend == "cuda_python":
-            err, self.cuDevice = cuda.cuDeviceGet(0)
+            self.cuDevice = cuda_call(cuda.cuDeviceGet(0))
 
     def on_shape_change(self, inp, out):
         if self.backend == "cuda_python":
-            err, self.cuDevice = cuda.cuDeviceGet(0)
+            self.cuDevice = cuda_call(cuda.cuDeviceGet(0))
 
     def supports_format_combination(self, pos, in_out, num_inputs):
         assert num_inputs == 1
@@ -190,7 +191,7 @@ class NonZeroPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
             if inp_dtype == np.float32:
                 kernelHelper = KernelHelper(non_zero_float_kernel, int(self.cuDevice))
                 _non_zero_float_kernel = kernelHelper.getFunction(b'find_non_zero_indices_float')
-                checkCudaErrors(cuda.cuLaunchKernel(_non_zero_float_kernel,
+                cuda_call(cuda.cuLaunchKernel(_non_zero_float_kernel,
                                             numBlocks, 1, 1,
                                             blockSize, 1, 1,
                                             0,
@@ -199,7 +200,7 @@ class NonZeroPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
             elif inp_dtype == np.float16:
                 kernelHelper = KernelHelper(non_zero_half_kernel, int(self.cuDevice))
                 _non_zero_half_kernel = kernelHelper.getFunction(b'find_non_zero_indices_half')
-                checkCudaErrors(cuda.cuLaunchKernel(_non_zero_half_kernel,
+                cuda_call(cuda.cuLaunchKernel(_non_zero_half_kernel,
                                             numBlocks, 1, 1,
                                             blockSize, 1, 1,
                                             0,
@@ -277,12 +278,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.backend == "cuda_python":
-        # Initialize CUDA Driver API
-        err, = cuda.cuInit(0)
-        # Retrieve handle for device 0
-        err, cuDevice = cuda.cuDeviceGet(0)
-        # Create context
-        _, cudaCtx = cuda.cuCtxCreate(0, cuDevice)
+        # Initialize CUDA and create default context
+        cuda_call(cudart.cudaFree(0))
+
+    elif args.backend == "torch":
+        # Initialize CUDA and create default context
+        torch.cuda.init()
 
     precision = np.float32 if args.precision == "fp32" else np.float16
 
@@ -348,5 +349,4 @@ if __name__ == "__main__":
         else:
             print("Inference result incorrect!")
 
-    if args.backend == "cuda_python":
-        checkCudaErrors(cuda.cuCtxDestroy(cudaCtx))
+

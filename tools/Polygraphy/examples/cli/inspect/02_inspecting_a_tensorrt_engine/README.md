@@ -18,6 +18,9 @@ about TensorRT engines, i.e. plan files:
         --save-engine dynamic_identity.engine
     ```
 
+    You can also dump unfused intermediate tensors by adding `--mark-unfused-tensors-as-debug-tensors` and 
+        `--save-outputs output.json` options. Later, this tensor information can be combined with the inspector output.
+
 2. Inspect the engine:
 
     ```bash
@@ -65,3 +68,15 @@ about TensorRT engines, i.e. plan files:
     ```
 
     It is also possible to show more detailed layer information using `--show layers attrs`.
+
+    You can also combine tensor value statistics using `--combine-tensor-info output.json` where the JSON file is got from
+        `--mark-unfused-tensors-as-debug-tensors` and `--save-outputs output.json`.
+    
+    The statistics will be added to the input and output tensors of each layer:
+
+    <!-- Polygraphy Test: Ignore Start -->
+    ```
+        {X [dtype=float32, shape=(1, 2, -1, -1), Format: Float, min=0.42, max=0.72, avg=0.57]}
+         -> {Y [dtype=float32, shape=(1, 2, -1, -1), Format: Float, min=0.42, max=0.72, avg=0.57]}
+    ```
+    <!-- Polygraphy Test: Ignore End -->

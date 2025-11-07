@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +23,7 @@ import_package_name = "##TENSORRT_MODULE##_libs"
 
 
 def get_requirements():
-    reqs = ["nvidia-cuda-runtime-cu##CUDA_MAJOR##"]
+    reqs = [f"cuda-toolkit[cudart] >=##CUDA_MAJOR##,<{##CUDA_MAJOR## + 1}"]
     return reqs
 
 

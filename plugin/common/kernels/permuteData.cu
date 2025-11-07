@@ -80,7 +80,7 @@ struct pdLaunchConfig
         , function(function)
     {
     }
-    bool operator==(const pdLaunchConfig& other)
+    bool operator==(pdLaunchConfig const& other) const
     {
         return t_data == other.t_data;
     }

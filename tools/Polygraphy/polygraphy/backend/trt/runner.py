@@ -16,6 +16,7 @@
 #
 import math
 import time
+import ctypes
 from collections import OrderedDict
 
 from polygraphy import config, cuda, mod, util
@@ -38,19 +39,26 @@ def _make_debug_listener():
             self.debug_tensor_outputs = {}
 
         def process_debug_tensor(self, addr, location, type, shape, name, stream):
+            if type in [util.try_getattr(trt, "fp8"), util.try_getattr(trt, "int4"), util.try_getattr(trt, "fp4"), util.try_getattr(trt, "bfloat16")]:
+                G_LOGGER.warning(f"Not supported datatype for debug tensor in polygraphy: {type}")
+                return
+
             cuda.wrapper().stream_synchronize(stream)
             datatype = DataType.from_dtype(type)
             size = util.volume(shape)
             buffer = np.zeros(shape, dtype=DataType.to_dtype(datatype, "numpy"))
             buffer = util.array.resize_or_reallocate(buffer, size)
-            cuda.wrapper().memcpy(
-                dst=util.array.data_ptr(buffer),
-                src=addr,
-                nbytes=size * datatype.itemsize,
-                kind=cuda.MemcpyKind.DeviceToHost,
-                stream_ptr=stream,
-            )
-            cuda.wrapper().stream_synchronize(stream)
+            if location == trt.TensorLocation.HOST:
+                ctypes.memmove(util.array.data_ptr(buffer), addr, size * datatype.itemsize)
+            else:
+                cuda.wrapper().memcpy(
+                    dst=util.array.data_ptr(buffer),
+                    src=addr,
+                    nbytes=size * datatype.itemsize,
+                    kind=cuda.MemcpyKind.DeviceToHost,
+                    stream_ptr=stream,
+                )
+                cuda.wrapper().stream_synchronize(stream)
             self.debug_tensor_outputs[name] = util.array.resize_or_reallocate(buffer, shape)
 
     return DebugTensorWriter()

@@ -30,8 +30,8 @@ import argparse
 import collections
 import numpy as np
 import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
+from helpers.cuda_utils import cuda_call, CudaStreamContext, memcpy_host_to_device_async, memcpy_device_to_host_async
+from cuda.bindings import driver as cuda, runtime as cudart
 
 import helpers.tokenization as tokenization
 import helpers.data_processing as dp
@@ -143,126 +143,133 @@ if __name__ == '__main__':
             raise RuntimeError("Could not find any profile that can run batch size {}.".format(args.batch_size))
 
         # Create a stream in which to copy inputs/outputs and run inference.
-        stream = cuda.Stream()
+        with CudaStreamContext() as stream:
+            context.set_optimization_profile_async(selected_profile, stream.stream)
+            binding_idx_offset = selected_profile * engine.num_io_tensors
 
-        context.set_optimization_profile_async(selected_profile, stream.handle)
-        binding_idx_offset = selected_profile * engine.num_io_tensors
+            # Specify input shapes. These must be within the min/max bounds of the active profile
+            # Note that input shapes can be specified on a per-inference basis, but in this case, we only have a single shape.
+            input_shape = (args.batch_size, max_seq_length)
+            input_nbytes = trt.volume(input_shape) * trt.int32.itemsize
+            for name in ["input_ids", "segment_ids", "input_mask"]:
+                context.set_input_shape(name, input_shape)
+            assert len(context.infer_shapes()) == 0
 
-        # Specify input shapes. These must be within the min/max bounds of the active profile
-        # Note that input shapes can be specified on a per-inference basis, but in this case, we only have a single shape.
-        input_shape = (args.batch_size, max_seq_length)
-        input_nbytes = trt.volume(input_shape) * trt.int32.itemsize
-        for name in ["input_ids", "segment_ids", "input_mask"]:
-            context.set_input_shape(name, input_shape)
-        assert len(context.infer_shapes()) == 0
+            # Allocate device memory for inputs.
+            d_inputs = [cuda_call(cudart.cudaMalloc(input_nbytes)) for binding in range(3)]
 
-        # Allocate device memory for inputs.
-        d_inputs = [cuda.mem_alloc(input_nbytes) for binding in range(3)]
+            # Allocate output buffer by querying the size from the context. This may be different for different input shapes.
+            h_output = np.empty(tuple(context.get_tensor_shape("logits_out")), dtype=np.float32)
+            cuda_call(cudart.cudaHostRegister(h_output, h_output.nbytes, 0))
+            # Pin the memory for faster transfers
+            d_output = cuda_call(cudart.cudaMalloc(h_output.nbytes))
 
-        # Allocate output buffer by querying the size from the context. This may be different for different input shapes.
-        h_output = cuda.pagelocked_empty(tuple(context.get_tensor_shape("logits_out")), dtype=np.float32)
-        d_output = cuda.mem_alloc(h_output.nbytes)
+            def inference(features, tokens):
+                global h_output
 
-        def inference(features, tokens):
-            global h_output
+                _NetworkOutput = collections.namedtuple(  # pylint: disable=invalid-name
+                        "NetworkOutput",
+                        ["start_logits", "end_logits", "feature_index"])
+                networkOutputs = []
 
-            _NetworkOutput = collections.namedtuple(  # pylint: disable=invalid-name
-                    "NetworkOutput",
-                    ["start_logits", "end_logits", "feature_index"])
-            networkOutputs = []
+                eval_time_elapsed = 0
+                for feature_index, feature in enumerate(features):
+                    # Copy inputs
+                    input_ids_batch = np.repeat(np.expand_dims(feature.input_ids, 0), args.batch_size, axis=0)
+                    segment_ids_batch = np.repeat(np.expand_dims(feature.segment_ids, 0), args.batch_size, axis=0)
+                    input_mask_batch = np.repeat(np.expand_dims(feature.input_mask, 0), args.batch_size, axis=0)
 
-            eval_time_elapsed = 0
-            for feature_index, feature in enumerate(features):
-                # Copy inputs
-                input_ids_batch = np.repeat(np.expand_dims(feature.input_ids, 0), args.batch_size, axis=0)
-                segment_ids_batch = np.repeat(np.expand_dims(feature.segment_ids, 0), args.batch_size, axis=0)
-                input_mask_batch = np.repeat(np.expand_dims(feature.input_mask, 0), args.batch_size, axis=0)
+                    input_ids = np.ascontiguousarray(input_ids_batch.ravel())
+                    segment_ids = np.ascontiguousarray(segment_ids_batch.ravel())
+                    input_mask = np.ascontiguousarray(input_mask_batch.ravel())
 
-                input_ids = cuda.register_host_memory(np.ascontiguousarray(input_ids_batch.ravel()))
-                segment_ids = cuda.register_host_memory(np.ascontiguousarray(segment_ids_batch.ravel()))
-                input_mask = cuda.register_host_memory(np.ascontiguousarray(input_mask_batch.ravel()))
+                    eval_start_time = time.time()
+                    memcpy_host_to_device_async(d_inputs[0], input_ids, stream.stream)
+                    memcpy_host_to_device_async(d_inputs[1], segment_ids, stream.stream)
+                    memcpy_host_to_device_async(d_inputs[2], input_mask, stream.stream)
 
-                eval_start_time = time.time()
-                cuda.memcpy_htod_async(d_inputs[0], input_ids, stream)
-                cuda.memcpy_htod_async(d_inputs[1], segment_ids, stream)
-                cuda.memcpy_htod_async(d_inputs[2], input_mask, stream)
+                    bindings = [0 for _ in range(binding_idx_offset)] + [int(d_inp) for d_inp in d_inputs] + [int(d_output)]
 
-                bindings = [0 for _ in range(binding_idx_offset)] + [int(d_inp) for d_inp in d_inputs] + [int(d_output)]
-                
-                # allocate address for IO tensor
-                for i in range(engine.num_io_tensors): 
-                    context.set_tensor_address(engine.get_tensor_name(i), bindings[i + binding_idx_offset])
+                    # allocate address for IO tensor
+                    for i in range(engine.num_io_tensors):
+                        context.set_tensor_address(engine.get_tensor_name(i), bindings[i + binding_idx_offset])
 
-                # Run inference
-                context.execute_async_v3(stream_handle=stream.handle)
-                # Synchronize the stream
-                stream.synchronize()
-                eval_time_elapsed += (time.time() - eval_start_time)
+                    # Run inference
+                    context.execute_async_v3(stream_handle=stream.stream)
+                    # Synchronize the stream
+                    stream.synchronize()
+                    eval_time_elapsed += (time.time() - eval_start_time)
 
-                # Transfer predictions back from GPU
-                cuda.memcpy_dtoh_async(h_output, d_output, stream)
-                stream.synchronize()
+                    # Transfer predictions back from GPU
+                    memcpy_device_to_host_async(h_output, d_output, stream.stream)
+                    stream.synchronize()
 
-                # Only retrieve and post-process the first batch
-                batch = h_output[0]
-                networkOutputs.append(_NetworkOutput(
-                    start_logits = np.array(batch.squeeze()[:, 0]),
-                    end_logits = np.array(batch.squeeze()[:, 1]),
-                    feature_index = feature_index
-                    ))
+                    # Only retrieve and post-process the first batch
+                    batch = h_output[0]
+                    networkOutputs.append(_NetworkOutput(
+                        start_logits = np.array(batch.squeeze()[:, 0]),
+                        end_logits = np.array(batch.squeeze()[:, 1]),
+                        feature_index = feature_index
+                        ))
 
-            eval_time_elapsed /= len(features)
+                eval_time_elapsed /= len(features)
 
-            # Total number of n-best predictions to generate in the nbest_predictions.json output file
-            n_best_size = 20
+                # Total number of n-best predictions to generate in the nbest_predictions.json output file
+                n_best_size = 20
 
-            # The maximum length of an answer that can be generated. This is needed
-            # because the start and end predictions are not conditioned on one another
-            max_answer_length = 30
+                # The maximum length of an answer that can be generated. This is needed
+                # because the start and end predictions are not conditioned on one another
+                max_answer_length = 30
 
-            prediction, nbest_json, scores_diff_json = dp.get_predictions(tokens, features,
-                    networkOutputs, args.n_best_size, args.max_answer_length)
+                prediction, nbest_json, scores_diff_json = dp.get_predictions(tokens, features,
+                        networkOutputs, args.n_best_size, args.max_answer_length)
 
-            return eval_time_elapsed, prediction, nbest_json
+                return eval_time_elapsed, prediction, nbest_json
 
-        def print_single_query(eval_time_elapsed, prediction, nbest_json):
-            print("------------------------")
-            print("Running inference in {:.3f} Sentences/Sec".format(args.batch_size/eval_time_elapsed))
-            print("------------------------")
+            def print_single_query(eval_time_elapsed, prediction, nbest_json):
+                print("------------------------")
+                print("Running inference in {:.3f} Sentences/Sec".format(args.batch_size/eval_time_elapsed))
+                print("------------------------")
 
-            print("Answer: '{}'".format(prediction))
-            print("With probability: {:.3f}".format(nbest_json[0]['probability'] * 100.0))
+                print("Answer: '{}'".format(prediction))
+                print("With probability: {:.3f}".format(nbest_json[0]['probability'] * 100.0))
 
-        if squad_examples:
-            all_predictions = collections.OrderedDict()
+            if squad_examples:
+                all_predictions = collections.OrderedDict()
 
-            for example in squad_examples:
-                features = question_features(example.doc_tokens, example.question_text)
-                eval_time_elapsed, prediction, nbest_json = inference(features, example.doc_tokens)
-                all_predictions[example.id] = prediction
+                for example in squad_examples:
+                    features = question_features(example.doc_tokens, example.question_text)
+                    eval_time_elapsed, prediction, nbest_json = inference(features, example.doc_tokens)
+                    all_predictions[example.id] = prediction
 
-            with open(output_prediction_file, "w") as f:
-                f.write(json.dumps(all_predictions, indent=4))
-                print("\nOutput dump to {}".format(output_prediction_file))
-        else:
-            # Extract tokecs from the paragraph
-            doc_tokens = dp.convert_doc_tokens(paragraph_text)
-
-            if question_text:
-                print("\nPassage: {}".format(paragraph_text))
-                print("\nQuestion: {}".format(question_text))
-
-                features = question_features(doc_tokens, question_text)
-                eval_time_elapsed, prediction, nbest_json = inference(features, doc_tokens)
-                print_single_query(eval_time_elapsed, prediction, nbest_json)
-
+                with open(output_prediction_file, "w") as f:
+                    f.write(json.dumps(all_predictions, indent=4))
+                    print("\nOutput dump to {}".format(output_prediction_file))
             else:
-                # If no question text is provided, loop until the question is 'exit'
-                EXIT_CMDS = ["exit", "quit"]
-                question_text = input("Question (to exit, type one of {:}): ".format(EXIT_CMDS))
+                # Extract tokecs from the paragraph
+                doc_tokens = dp.convert_doc_tokens(paragraph_text)
 
-                while question_text.strip() not in EXIT_CMDS:
+                if question_text:
+                    print("\nPassage: {}".format(paragraph_text))
+                    print("\nQuestion: {}".format(question_text))
+
                     features = question_features(doc_tokens, question_text)
                     eval_time_elapsed, prediction, nbest_json = inference(features, doc_tokens)
                     print_single_query(eval_time_elapsed, prediction, nbest_json)
+
+                else:
+                    # If no question text is provided, loop until the question is 'exit'
+                    EXIT_CMDS = ["exit", "quit"]
                     question_text = input("Question (to exit, type one of {:}): ".format(EXIT_CMDS))
+
+                    while question_text.strip() not in EXIT_CMDS:
+                        features = question_features(doc_tokens, question_text)
+                        eval_time_elapsed, prediction, nbest_json = inference(features, doc_tokens)
+                        print_single_query(eval_time_elapsed, prediction, nbest_json)
+                        question_text = input("Question (to exit, type one of {:}): ".format(EXIT_CMDS))
+
+        # free allocated memory
+        for d_input in d_inputs:
+            cuda_call(cudart.cudaFree(d_input))
+        cuda_call(cudart.cudaFree(d_output))
+        cuda_call(cudart.cudaHostUnregister(h_output))

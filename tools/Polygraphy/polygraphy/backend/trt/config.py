@@ -16,38 +16,33 @@
 #
 import contextlib
 import copy
+import re
 
-from polygraphy import mod, util
+from polygraphy import config as polygraphy_config, mod, util
 from polygraphy.backend.base import BaseLoader
 from polygraphy.backend.trt import util as trt_util
 from polygraphy.backend.trt.profile import Profile
+from polygraphy.backend.trt.util import inherit_and_extend_docstring
 from polygraphy.mod.trt_importer import lazy_import_trt
 from polygraphy.logger import G_LOGGER
 
 trt = lazy_import_trt()
 
 
-@mod.export(funcify=True)
-class CreateConfig(BaseLoader):
+class _CreateConfigCommon(BaseLoader):
     """
-    Functor that creates a TensorRT IBuilderConfig.
+    Generic TensorRT IBuilderConfig.
     """
 
     def __init__(
         self,
-        tf32=None,
-        fp16=None,
-        int8=None,
         profiles=None,
-        calibrator=None,
         precision_constraints=None,
         load_timing_cache=None,
         algorithm_selector=None,
         sparse_weights=None,
         tactic_sources=None,
         restricted=None,
-        use_dla=None,
-        allow_gpu_fallback=None,
         profiling_verbosity=None,
         memory_pool_limits=None,
         refittable=None,
@@ -56,14 +51,12 @@ class CreateConfig(BaseLoader):
         engine_capability=None,
         direct_io=None,
         builder_optimization_level=None,
-        fp8=None,
         hardware_compatibility_level=None,
         max_aux_streams=None,
         version_compatible=None,
         exclude_lean_runtime=None,
         quantization_flags=None,
         error_on_timing_cache_miss=None,
-        bf16=None,
         disable_compilation_cache=None,
         progress_monitor=None,
         weight_streaming=None,
@@ -71,18 +64,9 @@ class CreateConfig(BaseLoader):
         tiling_optimization_level=None,
     ):
         """
-        Creates a TensorRT IBuilderConfig that can be used by EngineFromNetwork.
+        Creates an IBuilderConfig that can be used by EngineFromNetwork.
 
         Args:
-            tf32 (bool):
-                    Whether to build the engine with TF32 precision enabled.
-                    Defaults to False.
-            fp16 (bool):
-                    Whether to build the engine with FP16 precision enabled.
-                    Defaults to False.
-            int8 (bool):
-                    Whether to build the engine with INT8 precision enabled.
-                    Defaults to False.
             profiles (List[Profile]):
                     A list of optimization profiles to add to the configuration. Only needed for
                     networks with dynamic input shapes. If this is omitted for a network with
@@ -90,11 +74,6 @@ class CreateConfig(BaseLoader):
                     replaced with Polygraphy's DEFAULT_SHAPE_VALUE (defined in constants.py).
                     A partially populated profile will be automatically filled using values from ``Profile.fill_defaults()``
                     See ``Profile`` for details.
-            calibrator (trt.IInt8Calibrator):
-                    An int8 calibrator. Only required in int8 mode when
-                    the network does not have explicit precision. For networks with
-                    dynamic shapes, the last profile provided (or default profile if
-                    no profiles are provided) is used during calibration.
             precision_constraints (Optional[str]):
                     If set to "obey", require that layers execute in specified precisions.
                     If set to "prefer", prefer that layers execute in specified precisions but allow TRT to fall back to
@@ -123,13 +102,6 @@ class CreateConfig(BaseLoader):
             restricted (bool):
                     Whether to enable safety scope checking in the builder. This will check if the network
                     and builder configuration are compatible with safety scope.
-                    Defaults to False.
-            use_dla (bool):
-                    [EXPERIMENTAL] Whether to enable DLA as the default device type.
-                    Defaults to False.
-            allow_gpu_fallback (bool):
-                    [EXPERIMENTAL] When DLA is enabled, whether to allow layers to fall back to GPU if they cannot be run on DLA.
-                    Has no effect if DLA is not enabled.
                     Defaults to False.
             profiling_verbosity (trt.ProfilingVerbosity):
                     The verbosity of NVTX annotations in the generated engine.
@@ -161,9 +133,6 @@ class CreateConfig(BaseLoader):
                     to an engine built with a lower optimization level.
                     Refer to the TensorRT API documentation for details.
                     Defaults to TensorRT's default optimization level.
-            fp8  (bool):
-                    Whether to build the engine with FP8 precision enabled.
-                    Defaults to False.
             hardware_compatibility_level (trt.HardwareCompatibilityLevel):
                     The hardware compatibility level. This allows engines built on one GPU architecture to work on GPUs
                     of other architectures.
@@ -187,9 +156,6 @@ class CreateConfig(BaseLoader):
                     Emit error when a tactic being timed is not present in the timing cache.
                     This flag has an effect only when IBuilderConfig has an associated ITimingCache.
                     Defaults to False.
-            bf16 (bool):
-                    Whether to build the engine with BF16 precision enabled.
-                    Defaults to False.
             disable_compilation_cache (bool):
                     Whether to disable caching JIT-compiled code.
                     Defaults to False.
@@ -205,13 +171,7 @@ class CreateConfig(BaseLoader):
                     The tiling optimization level. Setting a higher optimization level allows TensorRT to spend more building time for more tiling strategies.
                     Defaults to TensorRT's default tiling optimization level. Refer to the TensorRT API documentation for details.
         """
-        self.tf32 = util.default(tf32, False)
-        self.fp16 = util.default(fp16, False)
-        self.bf16 = util.default(bf16, False)
-        self.int8 = util.default(int8, False)
-        self.fp8 = util.default(fp8, False)
         self.profiles = util.default(profiles, [Profile()])
-        self.calibrator = calibrator
         self.precision_constraints = precision_constraints
         self.restricted = util.default(restricted, False)
         self.refittable = util.default(refittable, False)
@@ -220,8 +180,6 @@ class CreateConfig(BaseLoader):
         self.algorithm_selector = algorithm_selector
         self.sparse_weights = util.default(sparse_weights, False)
         self.tactic_sources = tactic_sources
-        self.use_dla = util.default(use_dla, False)
-        self.allow_gpu_fallback = util.default(allow_gpu_fallback, False)
         self.profiling_verbosity = profiling_verbosity
         self.memory_pool_limits = memory_pool_limits
         self.preview_features = preview_features
@@ -242,18 +200,6 @@ class CreateConfig(BaseLoader):
         self.runtime_platform = runtime_platform
         self.tiling_optimization_level = tiling_optimization_level
 
-        if self.calibrator is not None and not self.int8:
-            G_LOGGER.warning(
-                "A calibrator was provided to `CreateConfig`, but int8 mode was not enabled. "
-                "Did you mean to set `int8=True` to enable building with int8 precision?"
-            )
-
-        # Print a message to tell users that TF32 can be enabled to improve perf with minor accuracy differences.
-        if not self.tf32:
-            G_LOGGER.info(
-                "TF32 is disabled by default. Turn on TF32 for better performance with minor accuracy differences."
-            )
-
     @util.check_called_by("__call__")
     def call_impl(self, builder, network):
         """
@@ -273,7 +219,7 @@ class CreateConfig(BaseLoader):
             try:
                 return func()
             except AttributeError:
-                trt_util.fail_unavailable(f"{name} in CreateConfig")
+                trt_util.fail_unavailable(f"{name} in {self.__class__.__name__}")
 
         def try_set_flag(flag_name):
             return try_run(
@@ -330,60 +276,8 @@ class CreateConfig(BaseLoader):
         if self.direct_io:
             try_set_flag("DIRECT_IO")
 
-        if self.tf32:
-            try_set_flag("TF32")
-        else:  # TF32 is on by default
-            with contextlib.suppress(AttributeError):
-                config.clear_flag(trt.BuilderFlag.TF32)
-
-        if self.fp16:
-            try_set_flag("FP16")
-
-        if self.bf16:
-            try_set_flag("BF16")
-
-        if self.fp8:
-            try_set_flag("FP8")
-
-        if self.int8:
-            try_set_flag("INT8")
-            # No Q/DQ layers means that we will need to calibrate.
-            if not any(
-                layer.type in [trt.LayerType.QUANTIZE, trt.LayerType.DEQUANTIZE]
-                for layer in network
-            ):
-                if self.calibrator is not None:
-                    config.int8_calibrator = self.calibrator
-                    try:
-                        config.set_calibration_profile(
-                            calib_profile.to_trt(builder, network)
-                        )
-                        G_LOGGER.info(f"Using calibration profile: {calib_profile}")
-                    except AttributeError:
-                        G_LOGGER.extra_verbose(
-                            "Cannot set calibration profile on TensorRT 7.0 and older."
-                        )
-
-                    trt_util.try_setup_polygraphy_calibrator(
-                        config,
-                        network,
-                        calib_profile=calib_profile.to_trt(builder, network),
-                    )
-                else:
-                    G_LOGGER.warning(
-                        "Network does not have explicit precision and no calibrator was provided. Please ensure "
-                        "that tensors in the network have dynamic ranges set, or provide a calibrator in order to use int8 mode."
-                    )
-
         if self.sparse_weights:
             try_set_flag("SPARSE_WEIGHTS")
-
-        if self.use_dla:
-            config.default_device_type = trt.DeviceType.DLA
-            config.DLA_core = 0
-
-        if self.allow_gpu_fallback:
-            try_set_flag("GPU_FALLBACK")
 
         if self.profiling_verbosity is not None:
 
@@ -434,7 +328,7 @@ class CreateConfig(BaseLoader):
                 cache = config.create_timing_cache(b"")
         except AttributeError:
             if self.timing_cache_path:
-                trt_util.fail_unavailable("load_timing_cache in CreateConfig")
+                trt_util.fail_unavailable(f"load_timing_cache in {self.__class__.__name__}")
         else:
             config.set_timing_cache(cache, ignore_mismatch=False)
 
@@ -537,6 +431,180 @@ class CreateConfig(BaseLoader):
                 config.tiling_optimization_level = self.tiling_optimization_level
 
             try_run(set_tiling_optimization_level, "tiling_optimization_level")
+
+        return config
+
+
+@mod.export(funcify=True)
+class CreateConfig(_CreateConfigCommon):
+    """
+    Functor that creates an IBuilderConfig with TensorRT features.
+    """
+
+    @inherit_and_extend_docstring(_CreateConfigCommon.__init__)
+    def __init__(
+        self,
+        tf32=None,
+        fp16=None,
+        int8=None,
+        fp8=None,
+        bf16=None,
+        calibrator=None,
+        use_dla=None,
+        allow_gpu_fallback=None,
+        **kwargs
+    ):
+        """
+        Creates an IBuilderConfig with TensorRT-specific features.
+
+        Args:
+            tf32 (bool):
+                    Whether to enable TF32 precision. Defaults to False.
+            fp16 (bool):
+                    Whether to enable FP16 precision. Defaults to False.
+            int8 (bool):
+                    Whether to enable INT8 precision. Defaults to False.
+            fp8 (bool):
+                    Whether to enable FP8 precision. Defaults to False.
+            bf16 (bool):
+                    Whether to enable BF16 precision. Defaults to False.
+            calibrator (trt.IInt8Calibrator):
+                    An int8 calibrator. Only required in int8 mode when
+                    the network does not have explicit precision. For networks with
+                    dynamic shapes, the last profile provided (or default profile if
+                    no profiles are provided) is used during calibration.
+            use_dla (bool):
+                    [EXPERIMENTAL] Whether to enable DLA as the default device type.
+                    Defaults to False.
+            allow_gpu_fallback (bool):
+                    [EXPERIMENTAL] When DLA is enabled, whether to allow layers to fall back to GPU if they cannot be run on DLA.
+                    Has no effect if DLA is not enabled.
+                    Defaults to False.
+            **kwargs: All other arguments from _CreateConfigCommon.
+        """
+        super().__init__(**kwargs)
+        self.tf32 = util.default(tf32, False)
+        self.fp16 = util.default(fp16, False)
+        self.bf16 = util.default(bf16, False)
+        self.int8 = util.default(int8, False)
+        self.fp8 = util.default(fp8, False)
+        self.calibrator = calibrator
+        self.use_dla = util.default(use_dla, False)
+        self.allow_gpu_fallback = util.default(allow_gpu_fallback, False)
+
+        if self.calibrator is not None and not self.int8:
+            G_LOGGER.warning(
+                "A calibrator was provided to `CreateConfig`, but int8 mode was not enabled. "
+                "Did you mean to set `int8=True` to enable building with int8 precision?"
+            )
+
+        # Print a message to tell users that TF32 can be enabled to improve perf with minor accuracy differences.
+        if not self.tf32:
+            G_LOGGER.info(
+                "TF32 is disabled by default. Turn on TF32 for better performance with minor accuracy differences."
+            )
+
+        self._validator()
+
+    def _validator(self):
+        """
+        Validates initialization parameters for TensorRT-specific features.
+        """
+        # Validate that TensorRT-RTX specific flags are not used in regular TensorRT mode
+        if polygraphy_config.USE_TENSORRT_RTX:
+            if self.fp16 or self.int8 or self.bf16 or self.fp8:
+                G_LOGGER.critical("Precision flags (fp16, int8, bf16, fp8) are not supported with USE_TENSORRT_RTX=1.")
+            if self.use_dla:
+                G_LOGGER.critical("DLA is not supported with USE_TENSORRT_RTX=1.")
+            if self.calibrator is not None:
+                G_LOGGER.critical("Custom calibrator is not supported with USE_TENSORRT_RTX=1.")
+
+    def _configure_flags(self, builder, network, config):
+        """
+        Validates and configures TensorRT-specific features.
+
+        Args:
+            builder (trt.Builder): The TensorRT builder
+            network (trt.INetworkDefinition): The TensorRT network
+            config (trt.IBuilderConfig): The TensorRT builder config to modify
+        """
+        def try_run(func, name):
+            try:
+                return func()
+            except AttributeError:
+                trt_util.fail_unavailable(f"{name} in CreateConfig")
+
+        def try_set_flag(flag_name):
+            return try_run(
+                lambda: config.set_flag(getattr(trt.BuilderFlag, flag_name)),
+                flag_name.lower(),
+            )
+
+        # Add precision-related logic
+        if self.tf32:
+            try_set_flag("TF32")
+        else:  # TF32 is on by default
+            with contextlib.suppress(AttributeError):
+                config.clear_flag(trt.BuilderFlag.TF32)
+
+        if self.fp16:
+            try_set_flag("FP16")
+
+        if self.bf16:
+            try_set_flag("BF16")
+
+        if self.fp8:
+            try_set_flag("FP8")
+
+        if self.int8:
+            try_set_flag("INT8")
+
+        if self.int8:
+            # No Q/DQ layers means that we will need to calibrate.
+            if not any(
+                layer.type in [trt.LayerType.QUANTIZE, trt.LayerType.DEQUANTIZE]
+                for layer in network
+            ):
+                if self.calibrator is not None:
+                    config.int8_calibrator = self.calibrator
+                    try:
+                        profiles = copy.deepcopy(self.profiles)
+                        calib_profile = profiles[-1].fill_defaults(network)
+                        config.set_calibration_profile(
+                            calib_profile.to_trt(builder, network)
+                        )
+                        G_LOGGER.info(f"Using calibration profile: {calib_profile}")
+                    except AttributeError:
+                        G_LOGGER.extra_verbose(
+                            "Cannot set calibration profile on TensorRT 7.0 and older."
+                        )
+
+                    trt_util.try_setup_polygraphy_calibrator(
+                        config,
+                        network,
+                        calib_profile=calib_profile.to_trt(builder, network),
+                    )
+                else:
+                    G_LOGGER.warning(
+                        "Network does not have explicit precision and no calibrator was provided. Please ensure "
+                        "that tensors in the network have dynamic ranges set, or provide a calibrator in order to use int8 mode."
+                    )
+
+        if self.use_dla:
+            config.default_device_type = trt.DeviceType.DLA
+            config.DLA_core = 0
+
+        if self.allow_gpu_fallback:
+            try_set_flag("GPU_FALLBACK")
+
+    @util.check_called_by("__call__")
+    def call_impl(self, builder, network):
+        """
+        Callable implementation that creates and configures the IBuilderConfig with TensorRT features.
+        """
+        config = super().call_impl(builder, network)
+
+        self._configure_flags(builder, network, config)
 
         return config
 

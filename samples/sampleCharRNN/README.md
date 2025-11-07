@@ -25,7 +25,7 @@ There are also many GitHub repositories that contain CharRNN implementations tha
 
 The CharRNN network is a fairly simple RNN network. The input into the network is a single character that is embedded into a vector of size 512. This embedded input is then supplied to a RNN layer containing two stacked LSTM cells. The output from the RNN layer is then supplied to a fully connected layer, which can be represented in TensorRT by a Matrix Multiply layer followed by an ElementWise sum layer. Constant layers are used to supply the weights and biases to the Matrix Multiply and ElementWise Layers, respectively. A TopK operation is then performed on the output of the ElementWise sum layer where `K = 1` to find the next predicted character in the sequence. For more information about these layers, see the [TensorRT API](http://docs.nvidia.com/deeplearning/sdk/tensorrt-api/index.html) documentation.
 
-This sample provides a pre-trained model called `model-20080.data-00000-of-00001` located in the `/usr/src/tensorrt/data/samples/char-rnn/model` directory, therefore, training is not required for this sample. The model used by this sample was trained using [tensorflow-char-rnn](https://github.com/crazydonkey200/tensorflow-char-rnn). This GitHub repository includes instructions on how to train and produce checkpoint that can be used by TensorRT.
+This sample provides a pre-trained model called `model-20080.data-00000-of-00001` located in the `$TRT_DATADIR/char-rnn/model` directory, therefore, training is not required for this sample. The model used by this sample was trained using [tensorflow-char-rnn](https://github.com/crazydonkey200/tensorflow-char-rnn). This GitHub repository includes instructions on how to train and produce checkpoint that can be used by TensorRT.
 
 **Note:** If you wanted to train your own model and then perform inference with TensorRT, you will simply need to do a char to char comparison between TensorFlow and TensorRT.
 
@@ -43,12 +43,11 @@ The MatrixMultiply layer implements matrix multiplication for a collection of ma
 [TopK](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#topk-layer)
 The TopK layer is used to identify the character that has the maximum probability of appearing next. The TopK layer finds the top K maximum (or minimum) elements along a dimension, returning a reduced tensor and a tensor of index positions.
 
-## Preparing sample data
+## Prerequisites
 
-1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
-    ```bash
-    export TRT_DATADIR=/usr/src/tensorrt/data
-    ```
+1. Preparing sample data
+
+See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
 
 ## Converting TensorFlow weights
 
@@ -121,6 +120,9 @@ documentation.
 
 
 # Changelog
+
+September 2025
+* Use new addTopK API with indices type.
 
 January 2024
 * Removed RNNv2Layer based addLSTMLayer implementation. addLSTMLayer is now implemented with ILoop only.

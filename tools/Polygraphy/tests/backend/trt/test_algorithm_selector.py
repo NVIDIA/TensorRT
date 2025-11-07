@@ -19,7 +19,7 @@ from collections import namedtuple
 
 import pytest
 import tensorrt as trt
-from polygraphy import mod, util
+from polygraphy import config, util
 from polygraphy.backend.trt import (
     Algorithm,
     TacticRecorder,
@@ -28,6 +28,10 @@ from polygraphy.backend.trt import (
     TensorInfo,
 )
 from polygraphy.exception import PolygraphyException
+
+# Skip all tests in this file if TensorRT-RTX is enabled
+if config.USE_TENSORRT_RTX:
+    pytest.skip("Algorithm selector tests are not compatible with TensorRT-RTX", allow_module_level=True)
 
 
 FakeAlgorithmContext = namedtuple(

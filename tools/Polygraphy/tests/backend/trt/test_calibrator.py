@@ -19,7 +19,7 @@ import pytest
 import tensorrt as trt
 import torch
 
-from polygraphy import cuda, util
+from polygraphy import config, cuda, util
 from polygraphy.backend.trt import (
     Calibrator,
     CreateConfig,
@@ -34,6 +34,10 @@ from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from tests.helper import get_file_size, is_file_non_empty
 from tests.models.meta import ONNX_MODELS
+
+# Skip all tests in this file if TensorRT-RTX is enabled
+if config.USE_TENSORRT_RTX:
+    pytest.skip("Calibrator tests are not compatible with TensorRT-RTX", allow_module_level=True)
 
 
 @pytest.fixture(scope="session")

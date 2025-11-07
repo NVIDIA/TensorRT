@@ -23,7 +23,6 @@ from typing import Set
 
 import modelopt.torch.quantization as mtq
 import numpy as np
-import onnx
 import onnx_graphsurgeon as gs
 import torch
 import torch.nn.functional as F
@@ -37,6 +36,8 @@ from modelopt.torch.quantization import utils as quant_utils
 from modelopt.torch.quantization.calib.max import MaxCalibrator
 from PIL import Image
 from torch.utils.data import Dataset, Sampler
+
+import onnx
 
 USE_PEFT = True
 try:

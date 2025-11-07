@@ -7,4 +7,4 @@ from onnx_graphsurgeon.ir.node import Node
 from onnx_graphsurgeon.ir.tensor import Constant, Tensor, Variable
 from onnx_graphsurgeon.util.exception import OnnxGraphSurgeonException
 
-__version__ = "0.5.8"
+__version__ = "0.5.9"

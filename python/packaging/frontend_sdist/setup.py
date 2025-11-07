@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import contextlib
 import os
 import platform
 import subprocess
@@ -26,6 +27,7 @@ from setuptools.command.install import install
 
 distribution_package_name = "##TENSORRT_MODULE##_cu##CUDA_MAJOR##"
 import_package_name = "##TENSORRT_MODULE##"
+plugin_import_package_name = f"{import_package_name}.plugin"
 tensorrt_version = "##TENSORRT_PYTHON_VERSION##"
 tensorrt_submodules = [
     "{}_libs=={}".format(distribution_package_name, tensorrt_version),
@@ -89,10 +91,9 @@ class InstallCommand(install):
 
 def pip_config_list():
     """Get the current pip config (env vars, config file, etc)."""
-    try:
+    with contextlib.suppress(subprocess.CalledProcessError, OSError, UnicodeDecodeError):
         return run_pip_command(["config", "list"], subprocess.check_output).decode()
-    except:
-        return ""
+    return ""
 
 
 def parent_command_line():
@@ -100,17 +101,13 @@ def parent_command_line():
     pid = os.getppid()
 
     # try retrieval using psutil
-    try:
+    with contextlib.suppress(ImportError, ModuleNotFoundError, Exception):
         import psutil
-
         return " ".join(psutil.Process(pid).cmdline())
-    except:
-        pass
     # fall back to shell
-    try:
+    with contextlib.suppress(subprocess.CalledProcessError, OSError, UnicodeDecodeError):
         return subprocess.check_output(["ps", "-p", str(pid), "-o", "command", "--no-headers"]).decode()
-    except:
-        return ""
+    return ""
 
 
 # use pip-inside-pip hack only if the nvidia index is not set in the environment
@@ -145,7 +142,7 @@ pip install tensorrt
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
     ],
-    packages=[import_package_name],
+    packages=[import_package_name, plugin_import_package_name],
     install_requires=install_requires,
     setup_requires=["wheel", "pip"],
     python_requires=">=3.6",  # ref https://pypi.nvidia.com/tensorrt-bindings/

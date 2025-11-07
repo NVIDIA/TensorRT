@@ -17,6 +17,7 @@
 import contextlib
 import json
 import os
+import re
 import signal
 
 from polygraphy import config, mod, util, cuda
@@ -25,6 +26,8 @@ from polygraphy.common import TensorMetadata
 from polygraphy.datatype import DataType
 from polygraphy.exception import PolygraphyException
 from polygraphy.logger import G_LOGGER, LogMode
+from polygraphy.json import load_json
+from polygraphy.comparator import RunResults
 
 trt = lazy_import_trt()
 np = mod.lazy_import("numpy")
@@ -159,6 +162,8 @@ def get_layer_class_mapping():
     try_add("UNSQUEEZE", "IUnsqueezeLayer")
     try_add("CUMULATIVE", "ICumulativeLayer")
     try_add("DYNAMIC_QUANTIZE", "IDynamicQuantizeLayer")
+    try_add("ATTENTION_INPUT", "IAttentionInputLayer")
+    try_add("ATTENTION_OUTPUT", "IAttentionOutputLayer")
 
     return layer_class_mapping
 
@@ -672,7 +677,50 @@ def get_metadata_from_engine(engine, context, mode):
     return meta
 
 
-def str_from_engine(engine, context, show_layers=None, show_attrs=None):
+class TensorInfo:
+    def __init__(self, json_path: str = None):
+        self.tensors = {}
+        if json_path:
+            self.load_json(json_path)
+
+    def load_json(self, json_path: str) -> None:
+        data = load_json(json_path)
+        if isinstance(data, RunResults):
+            # Handle RunResults format
+            for runner_name, iterations in data.items():
+                if not iterations:
+                    G_LOGGER.warning(f"No iterations found for runner: {runner_name}")
+                    continue
+
+                if len(iterations) > 1:
+                    G_LOGGER.warning(
+                        f"Found {len(iterations)} iterations in tensor info file, only using the first one"
+                    )
+
+                iter_data = iterations[0]
+                for name, tensor in iter_data.items():
+                    if not isinstance(tensor, np.ndarray):
+                        tensor = np.array(tensor)
+
+                    self.tensors[name] = {
+                        "min": float(np.min(tensor)),
+                        "max": float(np.max(tensor)),
+                        "avg": float(np.mean(tensor)),
+                    }
+                break  # Only use first runner
+        else:
+            G_LOGGER.warning(f"Unsupported tensor info format: {json_path}")
+
+    def get_tensor_statistics(self, tensor_name: str) -> str:
+        tensor = self.tensors.get(tensor_name)
+        if not tensor:
+            return ""
+        return f", min={tensor['min']:.2f}, max={tensor['max']:.2f}, avg={tensor['avg']:.2f}"
+
+
+def str_from_engine(
+    engine, context, show_layers=None, show_attrs=None, combine_tensor_info=None
+):
     show_layers = util.default(show_layers, False)
     show_attrs = util.default(show_attrs, False)
 
@@ -759,6 +807,7 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                 if num_profiles_to_print > 1:
                     indent_level = 1
                     engine_str += f"- Profile: {profile_idx}\n"
+                tensor_info = TensorInfo(combine_tensor_info)
 
                 offset = profile_idx * layers_per_profile
                 for index in range(layers_per_profile):
@@ -807,6 +856,9 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                                 return meta
                             for elem in info:
                                 names.append(elem["Name"])
+                                tensor_statistics = tensor_info.get_tensor_statistics(
+                                    elem["Name"]
+                                )
                                 meta.add(
                                     name=elem["Name"],
                                     dtype=dtype_from_fmt_dtype(elem["Format/Datatype"]),
@@ -814,8 +866,9 @@ def str_from_engine(engine, context, show_layers=None, show_attrs=None):
                                     docstring=(
                                         f"Format: {elem['Format/Datatype']}"
                                         if "N/A" not in elem["Format/Datatype"]
-                                        else None
-                                    ),
+                                        else ""
+                                    )
+                                    + tensor_statistics,
                                 )
                             return names, meta
 
@@ -901,3 +954,59 @@ def _get_array_on_gpu(arr, name, device_buffers, stream=None):
     device_buffers[name].resize(shape)
     device_buffers[name].copy_from(util.array.view(arr, DataType.UINT8, shape), stream)
     return device_buffers[name].ptr
+
+
+def inherit_and_extend_docstring(parent_method):
+    """
+    Decorator to inherit and extend docstrings from parent class methods.
+
+    Combines the parent method's description and Args with the child method's
+    description and Args, preserving proper formatting for Sphinx documentation.
+
+    Args:
+        parent_method: The parent method to inherit docstring from
+
+    Returns:
+        Decorator function that combines parent and child docstrings
+    """
+
+    def decorator(child_method):
+        parent_doc = parent_method.__doc__ or ""
+        child_doc = child_method.__doc__ or ""
+
+        if not parent_doc:
+            return child_method
+        if not child_doc:
+            child_method.__doc__ = parent_doc
+            return child_method
+
+        def extract_description_and_args(docstring):
+            """Extract description and Args section from a docstring."""
+            desc = re.split(r"\n\s*Args:", docstring, 1)[0].strip()
+            args_match = re.search(
+                r"\n\s*Args:\s*\n(.*?)(?=\n\s*[A-Z][a-z]*:|\Z)", docstring, re.DOTALL
+            )
+            args = args_match.group(1).rstrip() if args_match else ""
+            return desc, args
+
+        # Extract components from both docstrings
+        parent_desc, parent_args = extract_description_and_args(parent_doc)
+        child_desc, child_args = extract_description_and_args(child_doc)
+
+        # Combine descriptions
+        combined_desc = f"{parent_desc}\n\n{child_desc}" if child_desc else parent_desc
+
+        # Combine Args sections
+        args_parts = [
+            args for args in [parent_args, child_args] if args
+        ]  # Filter for non-empty argument strings
+        combined_doc = (
+            f"{combined_desc}\n\nArgs:\n" + "\n".join(args_parts)
+            if args_parts
+            else combined_desc
+        )
+
+        child_method.__doc__ = combined_doc
+        return child_method
+
+    return decorator
