@@ -28,6 +28,7 @@
 | [simpleProgressMonitor](python/simple_progress_monitor) | Python | ONNX | Progress Monitor API usage |
 | [python_plugin](python/python_plugin) | Python | INetwork/ONNX | Python-based TRT plugins |
 | [non_zero_plugin](python/non_zero_plugin) | Python | INetwork/ONNX | Python-based TRT plugin for NonZero op |
+| [pytorch_tensorrt_compatibility](python/pytorch_tensorrt_compatibility) | Python | All | Using PyTorch and TensorRT together without CUDA context conflicts |
 
 ### 3. Application Samples
 | Sample | Language | Format | Description |
