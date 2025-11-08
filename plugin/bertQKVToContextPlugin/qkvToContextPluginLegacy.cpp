@@ -65,7 +65,7 @@ QKVToContextPluginDynamicLegacy::QKVToContextPluginDynamicLegacy(std::string con
     , mDqProbs(dqProbs)
 
 {
-    mSM = getSMVersion();
+    mSM = getSmVersion();
 }
 
 QKVToContextPluginDynamicLegacy::QKVToContextPluginDynamicLegacy(
@@ -603,7 +603,7 @@ QKVToContextVarSeqlenPluginLegacy::QKVToContextVarSeqlenPluginLegacy(std::string
     , mUseVarSeqlen(varSeqlen)
     , mUseInt8ScaleMax(useInt8ScaleMax)
 {
-    mSM = getSMVersion();
+    mSM = getSmVersion();
 
     if (varSeqlen)
     {

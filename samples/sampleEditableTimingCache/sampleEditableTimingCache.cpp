@@ -42,7 +42,6 @@
 #include <cstdlib> // for strtoull
 
 #define DEFINE_TRT_ENTRYPOINTS 1
-#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 0
 #include "NvInfer.h"
 #include "common.h"
 #include "logger.h"

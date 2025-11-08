@@ -17,13 +17,13 @@
 if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
 add_executable(sample_progress_monitor sampleProgressMonitor.cpp)
-target_link_libraries(sample_progress_monitor PRIVATE trt_samples_common)
+target_link_libraries(sample_progress_monitor PRIVATE trt_samples_common TRT_SAMPLES::tensorrt)
 add_dependencies(tensorrt_samples sample_progress_monitor)
 
 installLibraries(
     TARGETS sample_progress_monitor
     OPTIONAL
-    COMPONENT full
+    COMPONENT internal
 )
 
 else()

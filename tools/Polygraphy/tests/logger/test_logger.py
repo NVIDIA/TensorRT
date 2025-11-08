@@ -75,8 +75,12 @@ class TestLogger:
             assert num_times_called == 3
         assert num_times_called == 4
 
-    @pytest.mark.serial    
+    @pytest.mark.serial
     def test_use_python_logging_system(self, tmp_python_log_file):
+        # Clear log file
+        with tmp_python_log_file.open("w") as fp:
+            fp.write("")
+
         logger = Logger(severity=Logger.ULTRA_VERBOSE)
         logger.use_python_logging_system = True
         # add custom Polygraphy levels
@@ -103,7 +107,16 @@ class TestLogger:
         with tmp_python_log_file.open() as fp:
             log_messages = fp.read()
 
-        assert log_messages == """\
+        # Remove lines containing "pytest_shutil.workspace"
+        log_messages = "\n".join(
+            line
+            for line in log_messages.splitlines()
+            if "pytest_shutil.workspace" not in line
+        ) + ("\n" if log_messages.endswith("\n") else "")
+
+        assert (
+            log_messages
+            == """\
 ULTRA_VERBOSE:Polygraphy:[U] ultra verbose
 SUPER_VERBOSE:Polygraphy:[S] super verbose
 EXTRA_VERBOSE:Polygraphy:[X] extra verbose
@@ -115,6 +128,8 @@ WARNING:Polygraphy:[W] warning
 ERROR:Polygraphy:[E] error
 CRITICAL:Polygraphy:[!] critical
 """
+        )
+
 
 class TestSeverityTrie:
     @pytest.mark.parametrize(

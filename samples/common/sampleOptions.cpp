@@ -552,6 +552,23 @@ void getLayerDeviceTypes(Arguments& arguments, char const* argument, LayerDevice
     }
 }
 
+void getDecomposableAttentions(
+    Arguments& arguments, char const* argument, DecomposableAttentions& decomposableAttentions)
+{
+    std::string list;
+    if (!getAndDelOption(arguments, argument, list))
+    {
+        return;
+    }
+
+    std::vector<std::string> attentionList{splitToStringVec(list, ',')};
+    for (auto& s : attentionList)
+    {
+        auto const attentionName = removeSingleQuotationMarks(s);
+        decomposableAttentions[attentionName] = true;
+    }
+}
+
 void getAndDelStringsSet(Arguments& arguments, char const* argument, StringSet& stringSet)
 {
     std::string list;
@@ -1208,11 +1225,11 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--best", best);
     if (best)
     {
-        int8 = (samplesCommon::getSMVersion() != 0x0a03);
+        int8 = (samplesCommon::getSmVersion() != 0x0a03);
         fp16 = true;
 
         // BF16 only supported on Ampere+
-        if (samplesCommon::getSMVersion() >= 0x0800)
+        if (samplesCommon::getSmVersion() >= 0x0800)
         {
             bf16 = true;
         }
@@ -1283,9 +1300,17 @@ void BuildOptions::parse(Arguments& arguments)
         disableAndLog(fp8, "fp8", "kFP8");
         disableAndLog(int4, "int4", "kINT4");
     }
-
+    // Print a message to tell users that weakly-typed networks have been deprecated in TensorRT.
+    if (fp16 || bf16 || int8 || fp8 || int4 || best)
+    {
+        sample::gLogWarning << "Weakly-typed networks have been deprecated in TensorRT. "
+                               "You can use the AutoCast tool "
+                               "(https://nvidia.github.io/TensorRT-Model-Optimizer/guides/8_autocast.html) to convert "
+                               "the network to be strongly typed."
+                            << std::endl;
+    }
     // Print a message to tell users that --noTF32 can be added to improve accuracy with performance cost.
-    if (samplesCommon::getSMVersion() >= 0x0800)
+    if (samplesCommon::getSmVersion() >= 0x0800)
     {
         if (!(stronglyTyped || fp16 || bf16 || int8 || fp8 || int4))
         {
@@ -1336,6 +1361,7 @@ void BuildOptions::parse(Arguments& arguments)
     getLayerPrecisions(arguments, "--layerPrecisions", layerPrecisions);
     getLayerOutputTypes(arguments, "--layerOutputTypes", layerOutputTypes);
     getLayerDeviceTypes(arguments, "--layerDeviceTypes", layerDeviceTypes);
+    getDecomposableAttentions(arguments, "--decomposableAttentions", decomposableAttentions);
 
     if (layerPrecisions.empty() && layerOutputTypes.empty() && precisionConstraints != PrecisionConstraints::kNONE)
     {
@@ -1451,22 +1477,22 @@ void BuildOptions::parse(Arguments& arguments)
                 source = nvinfer1::TacticSource::kCUBLAS_LT;
             }
             else
-            if (t == "CUDNN")
-            {
-                source = nvinfer1::TacticSource::kCUDNN;
-            }
-            else if (t == "EDGE_MASK_CONVOLUTIONS")
-            {
-                source = nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS;
-            }
-            else if (t == "JIT_CONVOLUTIONS")
-            {
-                source = nvinfer1::TacticSource::kJIT_CONVOLUTIONS;
-            }
-            else
-            {
-                throw std::invalid_argument(std::string("Unknown tactic source: ") + t);
-            }
+                if (t == "CUDNN")
+                {
+                    source = nvinfer1::TacticSource::kCUDNN;
+                }
+                else if (t == "EDGE_MASK_CONVOLUTIONS")
+                {
+                    source = nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS;
+                }
+                else if (t == "JIT_CONVOLUTIONS")
+                {
+                    source = nvinfer1::TacticSource::kJIT_CONVOLUTIONS;
+                }
+                else
+                {
+                    throw std::invalid_argument(std::string("Unknown tactic source: ") + t);
+                }
 
             uint32_t sourceBit = 1U << static_cast<uint32_t>(source);
 
@@ -1517,8 +1543,9 @@ void BuildOptions::parse(Arguments& arguments)
     }
     else
     {
-        throw std::invalid_argument(std::string("Unknown runtime platform: ") + runtimePlatformArgs
-            + ". Valid options: SameAsBuild, WindowsAMD64.");
+        std::string validOptions = "SameAsBuild, WindowsAMD64";
+        throw std::invalid_argument(
+            std::string("Unknown runtime platform: ") + runtimePlatformArgs + ". Valid options: " + validOptions);
     }
 
     std::string hardwareCompatibleArgs;
@@ -1748,6 +1775,7 @@ void InferenceOptions::parse(Arguments& arguments)
     std::string debugFormats;
     getAndDelOption(arguments, "--saveAllDebugTensors", debugFormats);
     dumpAlldebugTensorFormats = splitToStringVec(debugFormats, ',');
+    getAndDelOption(arguments, "--refitFromOnnx", refitOnnxModel);
 }
 
 void ReportingOptions::parse(Arguments& arguments)
@@ -1938,7 +1966,6 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     getFormats(outputFormats, "--outputIOFormats");
     getAndDelOption(arguments, "--int8", int8);
     getAndDelOption(arguments, "--calib", calibFile);
-    getAndDelOption(arguments, "--consistency", consistency);
     getAndDelOption(arguments, "--std", standard);
     std::string pluginName;
     while (getAndDelOption(arguments, "--plugins", pluginName))
@@ -2233,6 +2260,17 @@ std::ostream& operator<<(std::ostream& os, LayerDeviceTypes const& layerDeviceTy
     return os;
 }
 
+std::ostream& operator<<(std::ostream& os, DecomposableAttentions const& decomposableAttentions)
+{
+    char const* sep = "";
+    for (auto const& attentionDecomposablePair : decomposableAttentions)
+    {
+        os << sep << attentionDecomposablePair.first << ":" << attentionDecomposablePair.second;
+        sep = ", ";
+    }
+    return os;
+}
+
 std::ostream& operator<<(std::ostream& os, StringSet const& stringSet)
 {
     int64_t i = 0;
@@ -2259,6 +2297,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Precision: ";        printPrecision(os, options)                                                             << std::endl <<
           "LayerPrecisions: " << options.layerPrecisions                                                                << std::endl <<
           "Layer Device Types: " << options.layerDeviceTypes                                                            << std::endl <<
+          "Decomposable Attentions: " << options.decomposableAttentions                                                            << std::endl <<
           "Calibration: "    << (options.int8 && options.calibration.empty() ? "Dynamic" : options.calibration.c_str()) << std::endl <<
           "Refit: "          << boolToEnabled(options.refittable)                                                       << std::endl <<
           "Strip weights: "     << boolToEnabled(options.stripWeights)                                                  << std::endl <<
@@ -2586,7 +2625,7 @@ void BuildOptions::help(std::ostream& os)
         R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"        "\n"
           "                                     not support building an engine."                                                                    "\n"
         R"(                                         runtime::= "full"|"lean"|"dispatch")"                                                           "\n"
-          "  --leanDLLPath=<file>               External lean runtime DLL to use in version compatiable mode."                                      "\n"
+          "  --leanDLLPath=<file>               External lean runtime DLL to use in version compatible mode."                                      "\n"
           "  --excludeLeanRuntime               When --versionCompatible is enabled, this flag indicates that the generated engine should"          "\n"
           "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
           "                                     valid lean runtime to use when loading the engine."     "\n"
@@ -2608,6 +2647,9 @@ void BuildOptions::help(std::ostream& os)
           "  --fp8                              Enable fp8 precision, in addition to fp32 (default = disabled)"                                     "\n"
           "  --int4                             Enable int4 precision, in addition to fp32 (default = disabled)"                                    "\n"
           "  --best                             Enable all precisions to achieve the best performance (default = disabled)"                         "\n"
+          "                                     Note: --fp16, --bf16, --int8, --fp8, --int4, --best are deprecated and superseded by strong typing.""\n"
+          "                                         The AutoCast tool (https://nvidia.github.io/TensorRT-Model-Optimizer/guides/8_autocast.html)"   "\n"
+          "                                         can be used to convert the network to be strongly typed."                                       "\n"
           "  --stronglyTyped                    Create a strongly typed network. (default = disabled)"                                              "\n"
           "  --directIO                         [Deprecated] Avoid reformatting at network boundaries. (default = disabled)"                        "\n"
           "  --precisionConstraints=spec        Control precision constraint setting. (default = none)"                                             "\n"
@@ -2637,9 +2679,12 @@ void BuildOptions::help(std::ostream& os)
         R"(                                     Per-layer device type spec ::= layerDeviceTypePair[","spec])"                                       "\n"
         R"(                                                           layerDeviceTypePair ::= layerName":"deviceType)"                              "\n"
         R"(                                                           deviceType ::= "GPU"|"DLA")"                                                  "\n"
+          "  --decomposableAttentions=spec      Specify decomposable attentions by comma-separated names."                                          "\n"
+        R"(                                     The specs are read left-to-right, and later ones override earlier ones. Each layer name can)"       "\n"
+          "                                     contain at most one wildcard ('*') character."                                                      "\n"
           "  --calib=<file>                     Read INT8 calibration cache file"                                                                   "\n"
-          "  --safe                             Enable build safety certified engine, if DLA is enable, --buildDLAStandalone will be specified"     "\n"
-          "                                     automatically (default = disabled)"                                                                 "\n"
+          "  --safe                             Enable build safety certified engine, --stronglyTyped will be enabled by default with this option." "\n"
+          "                                     If DLA is enabled, --buildDLAStandalone will be specified"                                          "\n"
           "  --dumpKernelText                   Dump the kernel text to a file, only available when --safe is enabled"                              "\n"
           "  --buildDLAStandalone               Enable build DLA standalone loadable which can be loaded by cuDLA, when this option is enabled, "   "\n"
           "                                     --allowGPUFallback is disallowed and --skipInference is enabled by default. Additionally, "         "\n"
@@ -2720,6 +2765,8 @@ void BuildOptions::help(std::ostream& os)
           "  --remoteAutoTuningConfig           Set the remote auto tuning config. Must be specified with --safe."                                  "\n"
           "                                     Format: protocol://username[:password]@hostname[:port]?param1=value1&param2=value2"                 "\n"
           "                                     Example: ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib" "\n"
+          "  --refitFromOnnx                    Refit the loaded engine with the weights from the provided ONNX model."                              "\n"
+          "                                     The model should be identical to the one used to generate the engine."                              "\n"
           ;
     // clang-format on
     os << std::flush;
@@ -2911,7 +2958,6 @@ void SafeBuilderOptions::printHelp(std::ostream& os)
         R"(                                          fmt   ::= ("chw"|"chw2"|"hwc8"|"chw4"|"chw16"|"chw32"|"dhwc8"|)"                        << std::endl <<
         R"(                                                   "cdhw32"|"hwc"|"dla_linear"|"dla_hwc4"|"hwc16"|"dhwc")["+"fmt])"               << std::endl <<
           "  --int8                      Enable int8 precision, in addition to fp16 (default = disabled)"                                    << std::endl <<
-          "  --consistency               Perform consistency checking on safety certified engine"                                            << std::endl <<
           "  --std                       Build standard serialized engine, (default = disabled)"                                             << std::endl <<
           "  --calib=<file>              Read INT8 calibration cache file"                                                                   << std::endl <<
           "  --serialized=<file>         Save the serialized network"                                                                        << std::endl <<

@@ -35,8 +35,8 @@
 extern nvinfer1::IBuilder* createBuilder();
 extern nvinfer1::IRuntime* createRuntime();
 extern nvinfer1::IRefitter* createRefitter(nvinfer1::ICudaEngine& engine);
-
 extern nvonnxparser::IParser* createONNXParser(nvinfer1::INetworkDefinition& network);
+extern nvonnxparser::IParserRefitter* createONNXRefitter(nvinfer1::IRefitter& refitter);
 
 #if !defined(DEFINE_TRT_ENTRYPOINTS)
 #define DEFINE_TRT_ENTRYPOINTS 0
@@ -54,9 +54,6 @@ extern nvonnxparser::IParser* createONNXParser(nvinfer1::INetworkDefinition& net
 #endif
 #if !defined(DEFINE_TRT_ONNX_PARSER_ENTRYPOINT)
 #define DEFINE_TRT_ONNX_PARSER_ENTRYPOINT 1
-#endif
-#if !defined(DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT)
-#define DEFINE_TRT_LEGACY_PARSER_ENTRYPOINT 1
 #endif
 
 #if DEFINE_TRT_ENTRYPOINTS
@@ -91,6 +88,15 @@ nvonnxparser::IParser* createONNXParser(nvinfer1::INetworkDefinition& network)
 {
 #if DEFINE_TRT_ONNX_PARSER_ENTRYPOINT
     return nvonnxparser::createParser(network, sample::gLogger.getTRTLogger());
+#else
+    return {};
+#endif
+}
+
+nvonnxparser::IParserRefitter* createONNXRefitter(nvinfer1::IRefitter& refitter)
+{
+#if DEFINE_TRT_ONNX_PARSER_ENTRYPOINT
+    return nvonnxparser::createParserRefitter(refitter, sample::gLogger.getTRTLogger());
 #else
     return {};
 #endif

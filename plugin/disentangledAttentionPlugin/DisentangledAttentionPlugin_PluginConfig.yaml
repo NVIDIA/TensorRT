@@ -45,7 +45,7 @@ versions:
     attributes_required:
       - span
       - factor
-    golden_io_path: "plugin/disentangledAttentionPlugin/DisentangledAttention_PluginGoldenIO.json"
+    golden_io_path: "plugin/DisentangledAttention_PluginGoldenIO.json"
     abs_tol: 1e-5
     rel_tol: 1e-5
     fp16_atol: 1e-2
@@ -120,7 +120,7 @@ versions:
     attributes_required:
       - span
       - factor
-    golden_io_path: "plugin/disentangledAttentionPlugin/DisentangledAttention_PluginGoldenIO.json"
+    golden_io_path: "plugin/DisentangledAttention_PluginGoldenIO.json"
     abs_tol: 1e-5
     rel_tol: 1e-5
     fp16_atol: 1e-2

@@ -97,6 +97,14 @@ def get_path(version: str, pipeline: "pipeline.DiffusionPipeline", controlnets: 
         return "black-forest-labs/FLUX.1-Depth-dev"
     elif version == "flux.1-kontext-dev":
         return "black-forest-labs/FLUX.1-Kontext-dev"
+    elif version == "cosmos-predict2-2b-text2image":
+        return "nvidia/Cosmos-Predict2-2B-Text2Image"
+    elif version == "cosmos-predict2-14b-text2image":
+        return "nvidia/Cosmos-Predict2-14B-Text2Image"
+    elif version == "cosmos-predict2-2b-video2world":
+        return "nvidia/Cosmos-Predict2-2B-Video2World"
+    elif version == "cosmos-predict2-14b-video2world":
+        return "nvidia/Cosmos-Predict2-14B-Video2World"
     else:
         raise ValueError(f"Unsupported version {version} + pipeline {pipeline.name}")
 

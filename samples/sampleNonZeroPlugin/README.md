@@ -85,9 +85,10 @@ interface.
 As sample inputs, random images from MNIST dataset are selected and scaled to between `[0,1]`. The network will output both the non-zero indices,
 as well as the non-zero count.
 
-## Preparing sample data
+## Prerequisites
+1. Preparing sample data
 
-Download the sample data from the [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#).
+See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
 
 ## Running the sample
 

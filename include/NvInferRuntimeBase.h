@@ -138,6 +138,8 @@ constexpr int32_t EnumMax() noexcept
 //!
 //! \enum DataType
 //! \brief The type of weights and tensors.
+//!  The datatypes other than kBOOL, kINT32, and kINT64 are "activation datatypes,"
+//!  as they often represent values corresponding to inference results.
 //!
 enum class DataType : int32_t
 {

@@ -1,10 +1,26 @@
 # TensorRT OSS Release Changelog
 
+## 10.14 GA - 2025-11-7
+- Sample changes
+  - Replace all pycuda usages with cuda-python APIs
+  - Removed the efficientnet samples
+  - Deprecated tensorflow_object_detection and efficientdet samples
+  - Samples will no longer be released with the packages. The TensorRT GitHub repository will be the single source.
+
+
+- Parsers:
+  - Added support for the `Attention` operator
+  - Improved refit for `ConstantOfShape` nodes
+
+- Demos
+  - demoDiffusion:
+    - Added support for the Cosmos-Predict2 text2image and video2world pipelines
+
+
 ## 10.13.3 GA - 2025-9-8
 - Added support for TensorRT API Capture and Replay feature, see the [developer guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/advanced.html) for more information.
 - Demo changes
   - Added support for Flux Kontext pipeline.
-
 
 ## 10.13.2 GA - 2025-8-18
 - Added support for CUDA 13.0, dropped support for CUDA 11.X
@@ -23,7 +39,6 @@
   - Added `loadModelProto`, `loadInitializer` and `parseModelProto` APIs for IParser. These APIs are meant to be used to load user initializers when parsing ONNX models.
   - Added `loadModelProto`, `loadInitializer` and `refitModelProto` APIs for IParserRefitter. These APIs are meant to be used to load user initializers when refitting ONNX models.
   - Deprecated `IParser::parseWithWeightDescriptors`.
-
 
 ## 10.12.0 GA - 2025-6-10
 - Plugin changes

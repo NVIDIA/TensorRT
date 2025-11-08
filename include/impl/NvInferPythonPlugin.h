@@ -115,7 +115,6 @@ protected:
     virtual ~ISymExprs() noexcept = default;
 };
 
-
 //! \enum QuickPluginCreationRequest
 //! \brief Communicates preference when a quickly deployable plugin is to be added to the network
 enum class QuickPluginCreationRequest : int32_t

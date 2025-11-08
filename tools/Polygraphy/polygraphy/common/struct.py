@@ -62,7 +62,7 @@ class MetadataTuple:
             meta_items.append(f"dtype={self.dtype}")
         if self.shape is not None:
             meta_items.append(f"shape={tuple(self.shape)}")
-        if self.docstring is not None:
+        if self.docstring:
             meta_items.append(self.docstring)
         if meta_items:
             ret += "[" + ", ".join(meta_items) + "]"

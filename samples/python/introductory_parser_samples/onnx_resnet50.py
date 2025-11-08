@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ import numpy as np
 import tensorrt as trt
 from PIL import Image
 
-sys.path.insert(1, os.path.join(sys.path[0], ".."))
+sys.path.insert(1, os.path.join(sys.path[0], os.path.pardir))
 import common
 
 
@@ -102,27 +102,29 @@ def main():
     # Build a TensorRT engine.
     engine = build_engine_onnx(onnx_model_file)
     # Inference is the same regardless of which parser is used to build the engine, since the model architecture is the same.
-    # Allocate buffers and create a CUDA stream.
-    inputs, outputs, bindings, stream = common.allocate_buffers(engine)
+    # Allocate buffers
+    inputs, outputs, bindings = common.allocate_buffers(engine)
     # Contexts are used to perform inference.
     context = engine.create_execution_context()
 
-    # Load a normalized test case into the host input page-locked buffer.
-    test_image = random.choice(test_images)
-    test_case = load_normalized_test_case(test_image, inputs[0].host)
-    # Run the engine. The output will be a 1D tensor of length 1000, where each value represents the
-    # probability that the image corresponds to that label
-    trt_outputs = common.do_inference(
-        context,
-        engine=engine,
-        bindings=bindings,
-        inputs=inputs,
-        outputs=outputs,
-        stream=stream,
-    )
-    # We use the highest probability as our prediction. Its index corresponds to the predicted label.
-    pred = labels[np.argmax(trt_outputs[0])]
-    common.free_buffers(inputs, outputs, stream)
+    # Use context manager for proper stream lifecycle management
+    with common.CudaStreamContext() as stream:
+        # Load a normalized test case into the host input page-locked buffer.
+        test_image = random.choice(test_images)
+        test_case = load_normalized_test_case(test_image, inputs[0].host)
+        # Run the engine. The output will be a 1D tensor of length 1000, where each value represents the
+        # probability that the image corresponds to that label
+        trt_outputs = common.do_inference(
+            context,
+            engine=engine,
+            bindings=bindings,
+            inputs=inputs,
+            outputs=outputs,
+            stream=stream,
+        )
+        # We use the highest probability as our prediction. Its index corresponds to the predicted label.
+        pred = labels[np.argmax(trt_outputs[0])]
+        common.free_buffers(inputs, outputs)
     if "_".join(pred.split()) in os.path.splitext(os.path.basename(test_case))[0]:
         print("Correctly recognized " + test_case + " as " + pred)
     else:

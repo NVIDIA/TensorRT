@@ -20,8 +20,8 @@ import ctypes
 import time
 import numpy as np
 import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit
+from helpers.cuda_utils import cuda_call, CudaStreamContext, memcpy_host_to_device, memcpy_device_to_host
+from cuda.bindings import driver as cuda, runtime as cudart
 
 import numpy as np
 
@@ -29,13 +29,13 @@ TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 
 class DeviceBuffer(object):
     def __init__(self, shape, dtype=trt.int32):
-        self.buf = cuda.mem_alloc(trt.volume(shape) * dtype.itemsize)
+        self.buf = cuda_call(cudart.cudaMalloc(trt.volume(shape) * dtype.itemsize))
 
     def binding(self):
         return int(self.buf)
 
     def free(self):
-        self.buf.free()
+        cuda_call(cudart.cudaFree(self.buf))
 
 
 def main():
@@ -74,57 +74,58 @@ def main():
         test_cu_seq_lens = np.arange(0, args.sequence_length * max(args.batch_size) + 1, args.sequence_length, dtype=np.int32)
 
         # Copy input h2d
-        cuda.memcpy_htod(buffers[0].buf, test_word_ids.ravel())
-        cuda.memcpy_htod(buffers[1].buf, test_segment_ids.ravel())
-        cuda.memcpy_htod(buffers[2].buf, test_cu_seq_lens.ravel())
+        memcpy_host_to_device(buffers[0].buf, test_word_ids.ravel())
+        memcpy_host_to_device(buffers[1].buf, test_segment_ids.ravel())
+        memcpy_host_to_device(buffers[2].buf, test_cu_seq_lens.ravel())
 
         bench_times = {}
 
         for idx, batch_size in enumerate(sorted(args.batch_size)):
-            stream = cuda.Stream()
-            context.set_optimization_profile_async(0, stream.handle)
+            with CudaStreamContext() as stream:
+                context.set_optimization_profile_async(0, stream.stream)
 
-            # Each profile has unique bindings
-            bindings = [buf.binding() for buf in buffers]
+                # Each profile has unique bindings
+                bindings = [buf.binding() for buf in buffers]
 
-            shapes = {
-                "input_ids": (args.sequence_length * batch_size, ),
-                "segment_ids": (args.sequence_length * batch_size, ),
-                "cu_seqlens": (batch_size + 1, ),
-                "max_seqlen": (args.sequence_length, ),
-            }
+                shapes = {
+                    "input_ids": (args.sequence_length * batch_size, ),
+                    "segment_ids": (args.sequence_length * batch_size, ),
+                    "cu_seqlens": (batch_size + 1, ),
+                    "max_seqlen": (args.sequence_length, ),
+                }
 
-            for binding, shape in shapes.items():
-                context.set_input_shape(binding, shape)
-            assert len(context.infer_shapes()) == 0
+                for binding, shape in shapes.items():
+                    context.set_input_shape(binding, shape)
+                assert len(context.infer_shapes()) == 0
 
-            for i in range(engine.num_io_tensors):
-                context.set_tensor_address(engine.get_tensor_name(i), bindings[i])
+                for i in range(engine.num_io_tensors):
+                    context.set_tensor_address(engine.get_tensor_name(i), bindings[i])
 
-            # Inference
-            total_time = 0
-            start = cuda.Event()
-            end = cuda.Event()
+                # Inference
+                total_time = 0
+                start = cuda_call(cudart.cudaEventCreate())
+                end = cuda_call(cudart.cudaEventCreate())
 
-            # Warmup
-            for _ in range(args.warm_up_runs):
-                context.execute_async_v3(stream_handle=stream.handle)
-                stream.synchronize()
+                # Warmup
+                for _ in range(args.warm_up_runs):
+                    context.execute_async_v3(stream_handle=stream.stream)
+                    stream.synchronize()
 
-            # Timing loop
-            times = []
-            actual_iterations = 0
-            start_time = time.time()
-            while actual_iterations < args.iterations or (time.time() - start_time) < args.duration:
-                start.record(stream)
-                context.execute_async_v3(stream_handle=stream.handle)
-                end.record(stream)
-                stream.synchronize()
-                times.append(end.time_since(start))
-                actual_iterations += 1
+                # Timing loop
+                times = []
+                actual_iterations = 0
+                start_time = time.time()
+                while actual_iterations < args.iterations or (time.time() - start_time) < args.duration:
+                    cuda_call(cudart.cudaEventRecord(start, stream.stream))
+                    context.execute_async_v3(stream_handle=stream.stream)
+                    cuda_call(cudart.cudaEventRecord(end, stream.stream))
+                    stream.synchronize()
+                    elapsed_time = cuda_call(cudart.cudaEventElapsedTime(start, end))
+                    times.append(elapsed_time)
+                    actual_iterations += 1
 
-            # Compute average time, 95th percentile time and 99th percentile time.
-            bench_times[batch_size] = times
+                # Compute average time, 95th percentile time and 99th percentile time.
+                bench_times[batch_size] = times
 
         [b.free() for b in buffers]
 

@@ -26,12 +26,13 @@ from demo_diffusion.model.clip import (
     SD3_T5XXLModel,
     get_clip_embedding_dim,
 )
+from demo_diffusion.model.controlnet import SD3ControlNet
 from demo_diffusion.model.diffusion_transformer import (
+    CosmosTransformerModel,
     FluxTransformerModel,
     SD3_MMDiTModel,
     SD3TransformerModel,
 )
-from demo_diffusion.model.controlnet import SD3ControlNet
 from demo_diffusion.model.gan import VQGANModel
 from demo_diffusion.model.load import unload_torch_model
 from demo_diffusion.model.lora import FLUXLoraLoader, SDLoraLoader, merge_loras
@@ -47,6 +48,8 @@ from demo_diffusion.model.unet import (
     UNetXLModelControlNet,
 )
 from demo_diffusion.model.vae import (
+    AutoencoderKLWanEncoderModel,
+    AutoencoderKLWanModel,
     SD3_VAEDecoderModel,
     SD3_VAEEncoderModel,
     TorchVAEEncoder,
@@ -67,6 +70,7 @@ __all__ = [
     "SD3_T5XXLModel",
     "CLIPVisionWithProjModel",
     "CLIPImageProcessorModel",
+    "CosmosTransformerModel",
     # diffusion_transformer
     "SD3_MMDiTModel",
     "FluxTransformerModel",
@@ -98,6 +102,8 @@ __all__ = [
     "TorchVAEEncoder",
     "VAEEncoderModel",
     "SD3_VAEEncoderModel",
+    "AutoencoderKLWanModel",
+    "AutoencoderKLWanEncoderModel",
     # load
     "unload_torch_model",
 ]

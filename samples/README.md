@@ -33,7 +33,29 @@
 | Sample | Language | Format | Description |
 |---|---|---|---|
 | [detectron2](python/detectron2) | Python | ONNX | Support for Detectron 2 Mask R-CNN R50-FPN 3x model in TensorRT |
-| [efficientdet](python/efficientdet) | Python | ONNX | EfficientDet Object Detection with TensorRT |
-| [efficientnet](python/efficientnet) | Python | ONNX | EfficientNet V1 and V2 Classification with TensorRT |
-| [tensorflow_object_detection_api](python/tensorflow_object_detection_api) | Python | ONNX | TensorFlow Object Detection API Models in TensorRT |
+| [[DEPRECATED] efficientdet](python/efficientdet) | Python | ONNX | EfficientDet Object Detection with TensorRT |
+| [[DEPRECATED] tensorflow_object_detection_api](python/tensorflow_object_detection_api) | Python | ONNX | TensorFlow Object Detection API Models in TensorRT |
 | [[DEPRECATED] yolov3_onnx](python/yolov3_onnx) | Python | ONNX | Object Detection Using YOLOv3 With TensorRT ONNX Backend |
+
+## Preparing sample data
+
+Many samples require the TensorRT sample data package. If not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers), download and extract it:
+
+1. Download the sample data from [TensorRT GitHub Releases](https://github.com/NVIDIA/TensorRT/releases).
+
+2. Extract and set up the data:
+    ```bash
+    unzip tensorrt_sample_data_xxx.zip
+    mkdir -p /usr/src/tensorrt/data
+    cp -r tensorrt_sample_data_*/* /usr/src/tensorrt/data/
+    export TRT_DATADIR=/usr/src/tensorrt/data
+    ```
+
+After extraction, the data directory structure should be:
+```
+$TRT_DATADIR/
+├── char-rnn/
+├── int8_api/
+├── mnist/
+└── resnet50/
+```

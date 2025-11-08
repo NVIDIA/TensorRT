@@ -20,8 +20,10 @@ from textwrap import dedent
 import onnx
 import pytest
 import tensorrt as trt
-from polygraphy import mod, util
+
+from polygraphy import util
 from polygraphy.backend.common import BytesFromPath
+from polygraphy.backend.onnx import gs_from_onnx
 from polygraphy.backend.trt import EngineFromBytes
 from tests.models.meta import ONNX_MODELS, TF_MODELS
 
@@ -49,12 +51,15 @@ class TestConvertToOnnx:
             )
             # I/O types should be unchanged
             model = onnx.load(outmodel.name)
-            assert model.graph.input[0].type.tensor_type.elem_type == 1
-            assert model.graph.node[2].op_type == "Cast"
-            assert model.graph.node[0].op_type == "Identity"
-            assert model.graph.node[1].op_type == "Identity"
-            assert model.graph.node[3].op_type == "Cast"
-            assert model.graph.output[0].type.tensor_type.elem_type == 1
+            graph = gs_from_onnx(model)
+            graph.toposort()
+
+            assert graph.inputs[0].dtype == "float32"
+            assert graph.nodes[0].op == "Cast"
+            assert graph.nodes[1].op == "Identity"
+            assert graph.nodes[2].op == "Identity"
+            assert graph.nodes[3].op == "Cast"
+            assert graph.outputs[0].dtype == "float32"
 
 
 class TestConvertToTrt:

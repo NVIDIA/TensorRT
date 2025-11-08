@@ -84,7 +84,7 @@ class CreateNetwork(BaseLoader):
     Functor that creates an empty TensorRT network.
     """
 
-    def __init__(self, explicit_batch=None, strongly_typed=None):
+    def __init__(self, explicit_batch=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None):
         """
         Creates an empty TensorRT network.
 
@@ -95,12 +95,16 @@ class CreateNetwork(BaseLoader):
             strongly_typed (bool):
                     Whether to mark the network as being strongly typed.
                     Defaults to False.
+            mark_unfused_tensors_as_debug_tensors (bool):
+                    Whether to mark unfused tensors as debug tensors.
+                    Defaults to False.
         """
         self.explicit_batch = util.default(
             explicit_batch,
             True if mod.version(trt.__version__) < mod.version("10.0") else None,
         )
         self.strongly_typed = util.default(strongly_typed, False)
+        self.mark_unfused_tensors_as_debug_tensors = util.default(mark_unfused_tensors_as_debug_tensors, False)
 
     @util.check_called_by("__call__")
     def call_impl(self):
@@ -130,11 +134,15 @@ class CreateNetwork(BaseLoader):
         network = builder.create_network(flags=network_flags)
         if network is None:
             G_LOGGER.critical("Invalid network. See logging output above for details.")
+
+        if self.mark_unfused_tensors_as_debug_tensors:
+            network.mark_unfused_tensors_as_debug_tensors()
+
         return builder, network
 
 
 class BaseNetworkFromOnnx(BaseLoader):
-    def __init__(self, flags=None, plugin_instancenorm=None, strongly_typed=None):
+    def __init__(self, flags=None, plugin_instancenorm=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None):
         """
         Args:
             flags (List[trt.OnnxParserFlag]):
@@ -152,10 +160,11 @@ class BaseNetworkFromOnnx(BaseLoader):
         self.flags = flags
         self.plugin_instancenorm = util.default(plugin_instancenorm, False)
         self.strongly_typed = util.default(strongly_typed, False)
+        self.mark_unfused_tensors_as_debug_tensors = util.default(mark_unfused_tensors_as_debug_tensors, False)
 
     @util.check_called_by("__call__")
     def call_impl(self):
-        builder, network = create_network(strongly_typed=self.strongly_typed)
+        builder, network = create_network(strongly_typed=self.strongly_typed, mark_unfused_tensors_as_debug_tensors=self.mark_unfused_tensors_as_debug_tensors)
         # Initialize plugin library for the parser.
         trt.init_libnvinfer_plugins(trt_util.get_trt_logger(), "")
         parser = trt.OnnxParser(network, trt_util.get_trt_logger())
@@ -178,7 +187,7 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
     """
 
     def __init__(
-        self, model_bytes, flags=None, plugin_instancenorm=None, strongly_typed=None
+        self, model_bytes, flags=None, plugin_instancenorm=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None
     ):
         """
         Parses an ONNX model.
@@ -203,6 +212,7 @@ class NetworkFromOnnxBytes(BaseNetworkFromOnnx):
             flags=flags,
             plugin_instancenorm=plugin_instancenorm,
             strongly_typed=strongly_typed,
+            mark_unfused_tensors_as_debug_tensors=mark_unfused_tensors_as_debug_tensors
         )
         self._model_bytes = model_bytes
 
@@ -227,7 +237,7 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
     This loader supports models with weights stored in an external location.
     """
 
-    def __init__(self, path, flags=None, plugin_instancenorm=None, strongly_typed=None):
+    def __init__(self, path, flags=None, plugin_instancenorm=None, strongly_typed=None, mark_unfused_tensors_as_debug_tensors=None):
         """
         Parses an ONNX model from a file.
 
@@ -250,6 +260,7 @@ class NetworkFromOnnxPath(BaseNetworkFromOnnx):
             flags=flags,
             plugin_instancenorm=plugin_instancenorm,
             strongly_typed=strongly_typed,
+            mark_unfused_tensors_as_debug_tensors=mark_unfused_tensors_as_debug_tensors
         )
         self.path = path
 
@@ -753,8 +764,14 @@ class EngineFromPath(BaseLoader):
         except AttributeError:
             pass
 
-        file_reader = FileReader(path)
-        engine = runtime.deserialize_cuda_engine(file_reader)
+        if config.USE_TENSORRT_RTX:
+            # Read the entire file into memory for buffer-based deserialization
+            with open(path, 'rb') as f:
+                buffer_data = f.read()
+            engine = runtime.deserialize_cuda_engine(buffer_data)
+        else:
+            file_reader = FileReader(path)
+            engine = runtime.deserialize_cuda_engine(file_reader)
         if not engine:
             G_LOGGER.critical("Could not deserialize engine. See log for details.")
         return engine
@@ -1003,3 +1020,4 @@ class MarkDebug(PostprocessNetwork):
         """
         func = lambda network: MarkDebug._apply(network, mark_debug)
         super().__init__(network, func, "MarkDebug")
+

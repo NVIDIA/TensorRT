@@ -63,7 +63,9 @@ set(PYBIND11_NOPYTHON ON CACHE INTERNAL "")
 add_subdirectory(${TRT_BUILD_PYTHON_EXTERNALS_PATH}/pybind11 ${CMAKE_CURRENT_BINARY_DIR}/externals/pybind11)
 
 # Pybind11 would normally enable this by default, but does not do so under NOPYTHON mode, so we do it manually.
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+if(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_X86})
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+endif()
 
 add_custom_target(tensorrt_python_bindings)
 
@@ -171,9 +173,6 @@ function(createBindingLibrary moduleName pyVersion)
     else()
         message(FATAL_ERROR "Unknown TensorRT module " ${moduleName})
     endif()
-    message(STATUS "TRT LIBS: ${TRT_LIBS}")
-
-    find_package(CUDAToolkit REQUIRED)
 
     target_link_libraries(${libName} PRIVATE
         ${TRT_LIBS}
@@ -224,44 +223,6 @@ function(createBindingLibrary moduleName pyVersion)
     endif()
 endfunction()
 
-# Processes one or more wheel templates file, replacing any markers with concrete information and
-# copying the result into the per-python per-module build dir.
-#
-# \param moduleName The module name to create the bindings for. One of "tensorrt", "tensorrt_dispatch", or "tensorrt_lean".
-# \param pyVersion  The python version to create bindings for, i.e. "3.12".
-# \param ARGN       A list of file paths, relative to './packaging/bindings_wheel/tensorrt', of the file(s) to copy.
-# \returns generatedWheelFiles A list containing paths to all generated files, which can be used to create a custom target.
-function(processWheelTemplates moduleName pyVersion)
-    foreach(filePath IN LISTS ARGN)
-        set(outputDir ${CMAKE_CURRENT_BINARY_DIR}/${moduleName}_bindings-py${pyVersion}/$<CONFIG>)
-        set(outputFile ${outputDir}/${filePath})
-
-        get_target_property(TRT_OUTPUT_NAME tensorrt OUTPUT_NAME)
-        get_target_property(PARSER_OUTPUT_NAME nvonnxparser OUTPUT_NAME)
-
-        add_custom_command(
-            OUTPUT ${outputFile}
-            COMMAND
-                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/scripts/process_wheel_template.py
-                --src-dir ${CMAKE_CURRENT_LIST_DIR}/packaging/bindings_wheel/tensorrt
-                --dst-dir ${outputDir}
-                --filepath ${filePath}
-                --trt-module ${moduleName}
-                --trt-py-version ${TensorRT_PACKAGE_VERSION}
-                --cuda-version ${TRT_CUDA_VERSION}
-                --trt-version ${TensorRT_VERSION}
-                --trt-nvinfer-name ${TRT_OUTPUT_NAME}
-                --trt-onnxparser-name ${PARSER_OUTPUT_NAME}
-            DEPENDS
-                scripts/process_wheel_template.py
-                ${CMAKE_CURRENT_LIST_DIR}/packaging/bindings_wheel/tensorrt/${filePath}
-            VERBATIM)
-
-        list(APPEND generatedFiles ${outputFile})
-    endforeach()
-    set(generatedWheelFiles ${generatedFiles} PARENT_SCOPE)
-endfunction()
-
 # Enumerate all the combinations and create the per-python per-module targets.
 foreach(moduleName IN LISTS TRT_PYTHON_MODULE_NAMES)
     foreach(pyVersion IN LISTS TRT_BUILD_PYTHON_PY_VERSIONS)
@@ -271,14 +232,6 @@ endforeach()
 
 # Enter the packaging subdir to actually build the wheels.
 add_subdirectory(packaging)
-
-if(${TRT_BUILD_PLUGINS})
-    install(
-        FILES include/impl/NvInferPythonPlugin.h
-        TYPE INCLUDE
-        COMPONENT release
-    )
-endif()
 
 else() # TRT_BUILD_ENABLE_NEW_PYTHON_FLOW - old flow is below this line
 

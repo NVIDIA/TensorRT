@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-add_plugin_source(
+# Base source files
+set(PLUGIN_COMMON_SOURCES
     bboxUtils.h
     bertCommon.h
     checkMacrosPlugin.cpp
@@ -37,9 +38,13 @@ add_plugin_source(
     plugin.cpp
     plugin.h
     reducedMathPlugin.cpp
+    scopedCudaStream.h
     serialize.hpp
     templates.h
 )
+
+
+add_plugin_source(${PLUGIN_COMMON_SOURCES})
 
 add_subdirectory(kernels)
 

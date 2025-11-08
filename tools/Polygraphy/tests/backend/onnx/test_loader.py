@@ -22,7 +22,7 @@ import onnx
 import onnx_graphsurgeon as gs
 import pytest
 
-from polygraphy import constants, mod, util
+from polygraphy import constants
 from polygraphy.backend.onnx import (
     ConvertToFp16,
     FoldConstants,
@@ -178,17 +178,24 @@ class TestInferShapes:
 class TestConvertToFp16:
     @pytest.mark.parametrize("copy", [True, False])
     def test_basic(self, copy):
+        # Precondition.
         original_model = onnx_from_path(ONNX_MODELS["identity_identity"].path)
+        assert original_model.graph.input[0].type.tensor_type.elem_type == onnx.TensorProto.FLOAT or not copy
+
+        # Under test.
         loader = ConvertToFp16(original_model, copy=copy)
         model = loader()
 
-        assert original_model.graph.input[0].type.tensor_type.elem_type == 1 or not copy
-        assert model.graph.input[0].type.tensor_type.elem_type == 1
-        assert model.graph.node[2].op_type == "Cast"
-        assert model.graph.node[0].op_type == "Identity"
-        assert model.graph.node[1].op_type == "Identity"
-        assert model.graph.node[3].op_type == "Cast"
-        assert model.graph.output[0].type.tensor_type.elem_type == 1
+        # Postcondition.
+        graph = gs_from_onnx(model)
+        graph.toposort()
+
+        assert graph.inputs[0].dtype == "float32"
+        assert graph.nodes[0].op == "Cast"
+        assert graph.nodes[1].op == "Identity"
+        assert graph.nodes[2].op == "Identity"
+        assert graph.nodes[3].op == "Cast"
+        assert graph.outputs[0].dtype == "float32"
 
 
 class TestFoldConstants:

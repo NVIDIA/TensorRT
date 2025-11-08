@@ -79,7 +79,7 @@ struct sspiLaunchConfig
         , function(function)
     {
     }
-    bool operator==(const sspiLaunchConfig& other)
+    bool operator==(sspiLaunchConfig const& other) const
     {
         return t_score == other.t_score;
     }

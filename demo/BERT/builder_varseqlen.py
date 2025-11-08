@@ -26,8 +26,7 @@ import re
 import sys
 import time
 import onnx
-import pycuda.autoinit
-
+from helpers.cuda_utils import getComputeCapacity
 # TensorRT
 import tensorrt as trt
 from builder_utils import load_tf_weights, load_pytorch_weights_and_quant, load_onnx_weights_and_quant, load_megatron_pickle_weights
@@ -352,7 +351,6 @@ def bert_model(config, init_dict, network, input_tensor, residual, mask_idx, cu_
     squad_logits_out.name = "logits_out"
     network.mark_output(squad_logits_out)
 
-
 def squad_output(prefix, config, init_dict, network, input_tensor):
     """
     Create the squad output
@@ -645,7 +643,7 @@ def main():
     if args.verbose:
         TRT_LOGGER.min_severity = TRT_LOGGER.VERBOSE
 
-    cc = pycuda.autoinit.device.compute_capability()
+    cc = getComputeCapacity()
     if cc[0] * 10 + cc[1] < 72:
         raise RuntimeError("This variable-length BERT demo only support Xavier+ GPU.")
 

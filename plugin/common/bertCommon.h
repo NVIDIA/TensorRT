@@ -139,7 +139,7 @@ inline int32_t getMHAMaskPackedSize(int32_t smVersion, nvinfer1::DataType dataTy
     return packedSize;
 }
 
-inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
+inline uint32_t getElementSize(nvinfer1::DataType t)
 {
     switch (t)
     {

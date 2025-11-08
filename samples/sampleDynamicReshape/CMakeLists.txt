@@ -17,13 +17,13 @@
 if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
 add_executable(sample_dynamic_reshape sampleDynamicReshape.cpp)
-target_link_libraries(sample_dynamic_reshape PRIVATE trt_samples_common)
+target_link_libraries(sample_dynamic_reshape PRIVATE trt_samples_common TRT_SAMPLES::tensorrt)
 add_dependencies(tensorrt_samples sample_dynamic_reshape)
 
 installLibraries(
     TARGETS sample_dynamic_reshape
     OPTIONAL
-    COMPONENT full
+    COMPONENT internal
 )
 
 else()

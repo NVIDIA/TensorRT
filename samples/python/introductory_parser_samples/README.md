@@ -31,12 +31,16 @@ This sample demonstrates how to build an engine from an ONNX model file using th
 pip3 install -r requirements.txt
 ```
 
+2. Preparing sample data
+
+See [Preparing sample data](../../README.md#preparing-sample-data) in the main samples README.
+
 ## Running the sample
 
 1.  Run the sample to create a TensorRT inference engine and run inference:
 	`python3 onnx_resnet50.py`
 
-	**Note:** If the TensorRT sample data is not installed in the default location, for example `/usr/src/tensorrt/data/`, the `data` directory must be specified. For example: `python3 onnx_resnet50.py -d /path/to/my/data/`
+	**Note:** If the TensorRT sample data is not installed in the default location, the `data` directory must be specified. For example: `python3 onnx_resnet50.py -d $TRT_DATADIR`
 
 2.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
 	`Correctly recognized data/samples/resnet50/reflex_camera.jpeg as reflex camera`

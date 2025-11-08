@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2022-2023 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -81,7 +81,7 @@ versions:
       - background_class
       - score_activation
       - box_coding
-    golden_io_path: "plugin/efficientNMSPlugin/EfficientNMSPlugin_PluginGoldenIO.json"
+    golden_io_path: "plugin/EfficientNMSPlugin_PluginGoldenIO.json"
     abs_tol: 1e-5
     rel_tol: 1e-5
     configs:

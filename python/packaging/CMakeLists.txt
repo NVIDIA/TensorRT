@@ -32,8 +32,14 @@ function(processWheelTemplates wheelType moduleName pyVersion)
             string(REGEX REPLACE "^tensorrt/" "" adjustedFilePath ${filePath})
             set(__srcDir ${CMAKE_CURRENT_LIST_DIR}/tensorrt)
             set(__srcFilePath ${adjustedFilePath})
-            set(__outDir ${outputDir}/${moduleName})
-            set(__outputFile ${outputDir}/${moduleName}/${adjustedFilePath})
+            # Bit of a hack branch for standalone binding wheels
+            if(wheelType STREQUAL "binding_standalone")
+                set(__outDir ${outputDir}/${moduleName}_bindings)
+                set(__outputFile ${outputDir}/${moduleName}_bindings/${adjustedFilePath})
+            else()
+                set(__outDir ${outputDir}/${moduleName})
+                set(__outputFile ${outputDir}/${moduleName}/${adjustedFilePath})
+            endif()
         elseif(filePath MATCHES "^tensorrt_libs/") # Standalone lib wheels use <module>_libs/ instead of <module>/
             string(REGEX REPLACE "^tensorrt_libs/" "" adjustedFilePath ${filePath})
             set(__srcDir ${CMAKE_CURRENT_LIST_DIR}/tensorrt_libs)
@@ -50,7 +56,9 @@ function(processWheelTemplates wheelType moduleName pyVersion)
         flagToInt(TRT_BUILD_WINML)
 
         get_target_property(TRT_OUTPUT_NAME tensorrt OUTPUT_NAME)
+        string(REGEX MATCH "[a-zA-Z_]+[a-zA-Z]" TRT_OUTPUT_NAME ${TRT_OUTPUT_NAME})
         get_target_property(PARSER_OUTPUT_NAME nvonnxparser OUTPUT_NAME)
+        string(REGEX MATCH "[a-zA-Z_]+[a-zA-Z]" PARSER_OUTPUT_NAME ${PARSER_OUTPUT_NAME})
 
         add_custom_command(
             OUTPUT ${__outputFile}
@@ -69,7 +77,9 @@ function(processWheelTemplates wheelType moduleName pyVersion)
             DEPENDS
                 ${TensorRT_SOURCE_DIR}/python/scripts/process_wheel_template.py
                 ${CMAKE_CURRENT_LIST_DIR}/${filePath}
-            VERBATIM)
+            COMMENT "Expanding wheel template ${filePath} for ${moduleName}"
+            VERBATIM
+        )
 
         list(APPEND generatedFiles ${__outputFile})
     endforeach()
@@ -98,3 +108,5 @@ add_custom_target(trt_packaging_requirements_installed DEPENDS package_install_c
 
 add_subdirectory(bindings_wheel)
 add_subdirectory(libs_wheel)
+add_subdirectory(frontend_sdist)
+add_subdirectory(metapackage)

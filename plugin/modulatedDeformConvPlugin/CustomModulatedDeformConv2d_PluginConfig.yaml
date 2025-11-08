@@ -132,7 +132,7 @@ versions:
       - dilation
       - group
       - deformable_group
-    golden_io_path: "plugin/modulatedDeformConvPlugin/CustomModulatedDeformConv2d_PluginGoldenIO.json"
+    golden_io_path: "plugin/CustomModulatedDeformConv2d_PluginGoldenIO.json"
     abs_tol: 1e-5
     rel_tol: 1e-5
     configs:
@@ -261,7 +261,7 @@ versions:
       - dilation
       - group
       - deformable_group
-    golden_io_path: "plugin/modulatedDeformConvPlugin/CustomModulatedDeformConv2d_PluginGoldenIO.json"
+    golden_io_path: "plugin/CustomModulatedDeformConv2d_PluginGoldenIO.json"
     abs_tol: 1e-5
     rel_tol: 1e-5
     configs:

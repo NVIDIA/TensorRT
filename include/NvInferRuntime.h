@@ -24,11 +24,11 @@
 //! This is the top-level API file for TensorRT extended runtime library.
 //!
 
-#include "NvInferImpl.h"
+#include "NvInferImpl.h" // IWYU pragma: export
 #define NV_INFER_INTERNAL_INCLUDE 1
-#include "NvInferPluginBase.h" // IWYU pragma: exports
+#include "NvInferPluginBase.h" // IWYU pragma: export
 #undef NV_INFER_INTERNAL_INCLUDE
-#include "NvInferRuntimeCommon.h"
+#include "NvInferRuntimeCommon.h" // IWYU pragma: export
 
 namespace nvinfer1
 {
@@ -1854,6 +1854,7 @@ protected:
 //!
 using IGpuAllocator = v_1_0::IGpuAllocator;
 
+
 //!
 //! \class IRuntime
 //!
@@ -2177,6 +2178,7 @@ public:
     {
         return mImpl->getEngineHostCodeAllowed();
     }
+
 
 protected:
     apiv::VRuntime* mImpl;
@@ -3000,13 +3002,14 @@ enum class SerializationFlag : int32_t
 {
     kEXCLUDE_WEIGHTS = 0,      //!< Exclude the weights that can be refitted.
     kEXCLUDE_LEAN_RUNTIME = 1, //!< Exclude the lean runtime.
+    kINCLUDE_REFIT = 2,        //!< Remain refittable if originally so.
 };
 
 //! Maximum number of serialization flags in SerializationFlag enum. \see SerializationFlag
 template <>
 constexpr inline int32_t EnumMax<SerializationFlag>() noexcept
 {
-    return 2;
+    return 3;
 }
 
 //!
@@ -3154,6 +3157,34 @@ public:
 protected:
     apiv::VRuntimeConfig* mImpl;
 }; // class IRuntimeConfig
+
+//!
+//! \enum EngineStat
+//!
+//! \brief The kind of engine statistics that queried from the ICudaEngine.
+//!
+//! \see ICudaEngine::getEngineStat()
+//! \see BuilderFlag::kSTRIP_PLAN
+//!
+enum class EngineStat : int32_t
+{
+    //! Return the total weight size in bytes.
+    kTOTAL_WEIGHTS_SIZE = 0,
+
+    //! Return the stripped weight size in bytes for engines built with BuilderFlag::kSTRIP_PLAN.
+    kSTRIPPED_WEIGHTS_SIZE = 1,
+};
+
+//!
+//! \brief Maximum number of engine statistic kinds in EngineStat enum.
+//!
+//! \see EngineStat
+//!
+template <>
+constexpr inline int32_t EnumMax<EngineStat>() noexcept
+{
+    return 2;
+}
 
 //!
 //! \class ICudaEngine
@@ -3827,6 +3858,10 @@ public:
     //! Serializing plan file with SerializationFlag::kEXCLUDE_WEIGHTS requires building the engine with kREFIT,
     //! kREFIT_IDENTICAL or kREFIT_INDIVIDUAL.
     //!
+    //! The only applicable scenario for SerializationFlag::kINCLUDE_REFIT is when serializing weight-stripping
+    //! engines without kEXCLUDE_WEIGHTS. By default, the resulting serialized engine is unrefittable. Setting
+    //! SerializationFlag::kINCLUDE_REFIT ensures that the serialized engine remains refittable.
+    //!
     //! \see IRuntime::deserializeCudaEngine()
     //!
     IHostMemory* serializeWithConfig(ISerializationConfig& config) const noexcept
@@ -4088,6 +4123,34 @@ public:
         char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept
     {
         return mImpl->getProfileTensorValuesV2(tensorName, profileIndex, select);
+    }
+
+    //!
+    //! \brief Get engine statistics according to the given enum value.
+    //!
+    //! \param stat The kind of statistics to query.
+    //!
+    //! If stat is kTOTAL_WEIGHTS_SIZE, the return value is the total weights size in bytes in the engine.
+    //! If stat is kSTRIPPED_WEIGHTS_SIZE, the return value is the stripped weight size in bytes for engines
+    //! built with BuilderFlag::kSTRIP_PLAN.
+    //!
+    //! When the BuilderFlag::kWEIGHT_STREAMING flag is enabled, engine weights may not be fully copied to the device.
+    //! The reported total weight size reflects the sum of all weights utilized by the engine,
+    //! which does not necessarily correspond to the actual GPU memory allocated.
+    //!
+    //! \return The kind of statistics specified by EngineStat.
+    //!
+    //! \warning if kSTRIPPED_WEIGHTS_SIZE is passed to query a normal engine, this function will
+    //! return -1 to indicate invalid enum value.
+    //!
+    //! \see EngineStat
+    //! \see BuilderFlag::kWEIGHT_STREAMING
+    //! \see setWeightStreamingBudget()
+    //! \see getStreamableWeightsSize()
+    //!
+    int64_t getEngineStat(EngineStat stat) const noexcept
+    {
+        return mImpl->getEngineStat(stat);
     }
 
 protected:

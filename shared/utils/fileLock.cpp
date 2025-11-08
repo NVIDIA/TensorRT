@@ -23,9 +23,9 @@
 namespace nvinfer1::utils
 {
 
-FileLock::FileLock(ILogger& logger, std::string const& fileName)
+FileLock::FileLock(ILogger& logger, std::string fileName)
     : mLogger(logger)
-    , mFileName(fileName)
+    , mFileName(std::move(fileName))
 {
     std::string lockFileName = mFileName + ".lock";
 #ifdef _MSC_VER
@@ -42,6 +42,7 @@ FileLock::FileLock(ILogger& logger, std::string const& fileName)
     }
 #elif defined(__QNX__)
     // Calling lockf(F_TLOCK) on QNX returns -1; the reported error is 89 (function not implemented).
+    mLogger.log(ILogger::Severity::kVERBOSE, "FileLock is not supported on QNX or GOS.");
 #else
     mHandle = fopen(lockFileName.c_str(), "wb+");
     if (mHandle == nullptr)
@@ -74,6 +75,7 @@ FileLock::~FileLock()
     }
 #elif defined(__QNX__)
     // Calling lockf(F_TLOCK) on QNX returns -1; the reported error is 89 (function not implemented).
+    mLogger.log(ILogger::Severity::kVERBOSE, "FileLock is not supported on QNX or GOS.");
 #else
     if (mDescriptor != -1)
     {

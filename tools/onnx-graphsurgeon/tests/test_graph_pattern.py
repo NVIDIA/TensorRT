@@ -19,6 +19,8 @@ import os
 
 import onnx
 
+import pytest
+
 from onnx_graphsurgeon import GraphPattern, PatternMapping
 from onnx_graphsurgeon.importers.onnx_importer import import_onnx
 from onnx_graphsurgeon.logger import G_LOGGER

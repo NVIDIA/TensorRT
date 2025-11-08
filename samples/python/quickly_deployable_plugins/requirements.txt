@@ -4,9 +4,9 @@ torch
 polygraphy
 colored
 numpy==1.26.4
-onnx==1.16.0; platform_system == "Windows"
+onnx==1.18.0; platform_system == "Windows"
 --extra-index-url https://pypi.ngc.nvidia.com
 onnx-graphsurgeon
 pyyaml==6.0.1
-requests==2.32.2
+requests==2.32.4
 tqdm==4.66.4

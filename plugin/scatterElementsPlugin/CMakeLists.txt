@@ -27,3 +27,4 @@ add_plugin_source(
     scatterElementsPluginLegacy.h
     TensorInfo.cuh
 )
+

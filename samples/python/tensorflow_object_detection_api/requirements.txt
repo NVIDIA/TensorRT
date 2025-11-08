@@ -1,4 +1,4 @@
-onnx==1.16.1
+onnx==1.18.0
 onnxruntime==1.18.1
 Pillow==11.3.0
 tf2onnx==1.16.0
@@ -7,6 +7,6 @@ cuda-python==12.9.0
 pywin32; platform_system == "Windows"
 Cython<3.0
 pyyaml==6.0.1
-requests==2.32.2
+requests==2.32.4
 tqdm==4.66.4
 numpy==1.26.4

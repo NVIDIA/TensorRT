@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,8 +73,8 @@ versions:
       - out_dims
       - type_id
       - W
-    golden_io_path: "plugin/fcPlugin/CustomFCPluginDynamic_PluginGoldenIO.json"
-    golden_reference_script: "plugin/fcPlugin/CustomFCPluginDynamic_PluginReference.py"
+    golden_io_path: "plugin/CustomFCPluginDynamic_PluginGoldenIO.json"
+    golden_reference_script: "plugin/CustomFCPluginDynamic_PluginReference.py"
     abs_tol: 1e-5
     rel_tol: 1e-5
     fp16_atol: 1e-3

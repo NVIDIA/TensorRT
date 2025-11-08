@@ -56,7 +56,7 @@ EmbLayerNormPluginDynamicLegacy::EmbLayerNormPluginDynamicLegacy(std::string con
     mWordVocabSize = wordEmb.count / mLd;
     mPosVocabSize = posEmb.count / mLd;
     mTokVocabSize = tokEmb.count / mLd;
-    mSM = getSMVersion();
+    mSM = getSmVersion();
     // mS is set during configure
 
     mBeta.convertAndCopy(beta, nvinfer1::DataType::kFLOAT);

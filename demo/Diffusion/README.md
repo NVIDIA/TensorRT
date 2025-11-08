@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.13.3 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.14 --single-branch
 cd TensorRT
 ```
 
@@ -23,8 +23,16 @@ NOTE: The demo supports CUDA>=12.0
 
 ### Install the required packages
 
+To install dependencies for modern pipelines (SDXL and later):
+
 ```bash
 source setup.sh
+```
+
+To install dependencies for legacy pipelines (SD 1.5/2.1):
+
+```bash
+REQUIREMENTS_FILE=requirements_legacy.txt source setup.sh
 ```
 
 Check your installed version using:
@@ -41,7 +49,7 @@ onnx                1.18.0
 onnx-graphsurgeon   0.5.2
 onnxruntime         1.19.2
 polygraphy          0.49.22
-tensorrt            10.13.3.9
+tensorrt            10.14.1.48
 tokenizers          0.13.3
 torch               2.8.0a0+5228986c39.nv25.6
 transformers        4.52.4
@@ -225,11 +233,17 @@ Note that a denosing-percentage is applied to the number of denoising-steps when
 ### Generate an image with Stable Diffusion v3.5-large with ControlNet guided by an image and a text prompt
 
 ```bash
-# Depth
+# Depth BF16
 python3 demo_controlnet_sd35.py "a photo of a man" --controlnet-type depth --hf-token=$HF_TOKEN --denoising-steps 40 --guidance-scale 4.5 --bf16 --download-onnx-models
 
-# Canny
+# Depth FP8
+python3 demo_controlnet_sd35.py "a photo of a man" --version=3.5-large --fp8 --controlnet-type depth --download-onnx-models --denoising-steps=40 --guidance-scale 4.5 --hf-token=$HF_TOKEN
+
+# Canny BF16
 python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
+
+# Canny FP8
+python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --version=3.5-large --fp8 --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --download-onnx-models
 
 # Blur
 python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in an action shot close-up, surfing the humongous waves, inside the tube, in the style of Kelly Slater" --controlnet-type blur --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
@@ -455,7 +469,37 @@ Memory usage captured below excludes the ONNX export step, and assumes use of th
 
 NOTE: The FP8 and FP4 Pipelines are supported on Hopper/Ada/Blackwell devices only. The FP4 pipeline is most performant on Blackwell devices.
 
-### Specify Custom Paths for ONNX models and TensorRT engines (FLUX only)
+
+### Run Cosmos2 World Foundation Models
+
+Select the prompts and export them as below
+
+```bash
+export PROMPT="A close-up shot captures a vibrant yellow scrubber vigorously working on a grimy plate, its bristles moving in circular motions to lift stubborn grease and food residue. The dish, once covered in remnants of a hearty meal, gradually reveals its original glossy surface. Suds form and bubble around the scrubber, creating a satisfying visual of cleanliness in progress. The sound of scrubbing fills the air, accompanied by the gentle clinking of the dish against the sink. As the scrubber continues its task, the dish transforms, gleaming under the bright kitchen lights, symbolizing the triumph of cleanliness over mess."
+
+export NEGATIVE_PROMPT="The video captures a series of frames showing ugly scenes, static with no motion, motion blur, over-saturation, shaky footage, low resolution, grainy texture, pixelated images, poorly lit areas, underexposed and overexposed scenes, poor color balance, washed out colors, choppy sequences, jerky movements, low frame rate, artifacting, color banding, unnatural transitions, outdated special effects, fake elements, unconvincing visuals, poorly edited content, jump cuts, visual noise, and flickering. Overall, the video is of poor quality."
+```
+
+#### 1. Generate an Image from a Text Prompt
+
+##### Run Cosmos-Predict2-2B-Text2Image
+
+```bash
+# BF16
+python3 demo_txt2image_cosmos.py "$PROMPT" --negative-prompt="$NEGATIVE_PROMPT" --hf-token=$HF_TOKEN
+```
+
+#### 2. Generate a Video guided by an Initial Video Conditioning and a Text Prompt
+
+##### Run Cosmos-Predict2-2B-Video2World (only PyTorch backend enabled)
+
+```bash
+# BF16
+python3 demo_vid2world_cosmos.py "$PROMPT" --negative-prompt="$NEGATIVE_PROMPT" --hf-token=$HF_TOKEN
+```
+
+
+### Specify Custom Paths for ONNX models and TensorRT engines (FLUX, Stable Diffusion 3.5 and Cosmos only)
 
 Custom override paths to pre-exported ONNX model files can be provided using `--custom-onnx-paths`. These ONNX models are directly used to build TRT engines without further optimization on the ONNX graphs. Paths should be a comma-separated list of <model_name>:<path> pairs. For example: `--custom-onnx-paths=transformer:/path/to/transformer.onnx,vae:/path/to/vae.onnx`. Call <PipelineClass>.get_model_names(...) for the list of supported model names.
 
@@ -467,3 +511,4 @@ Custom override paths to pre-built engine files can be provided using `--custom-
 - To accelerate engine building time use `--timing-cache <path to cache file>`. The cache file will be created if it does not already exist. Note that performance may degrade if cache files are used across multiple GPU targets. It is recommended to use timing caches only during development. To achieve the best perfromance in deployment, please build engines without timing cache.
 - Specify new directories for storing onnx and engine files when switching between versions, LoRAs, ControlNets, etc. This can be done using `--onnx-dir <new onnx dir>` and `--engine-dir <new engine dir>`.
 - Inference performance can be improved by enabling [CUDA graphs](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs) using `--use-cuda-graph`. Enabling CUDA graphs requires fixed input shapes, so this flag must be combined with `--build-static-batch` and cannot be combined with `--build-dynamic-shape`.
+

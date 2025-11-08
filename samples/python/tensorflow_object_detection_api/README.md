@@ -1,5 +1,6 @@
-# TensorFlow Object Detection API Models in TensorRT
+# [DEPRECATED] TensorFlow Object Detection API Models in TensorRT
 
+> **Notice:** This sample has been deprecated as of TensorRT 10.14 due to compatibility issues with outdated dependencies in the [tf2onnx](https://github.com/onnx/tensorflow-onnx) conversion pipeline. Users are advised to use earlier TensorRT versions if this sample is required for legacy workflows. 
 
 Support for [TensorFlow Object Detection (TFOD) API](https://github.com/tensorflow/models/tree/master/research/object_detection) models in TensorRT, including Single Shot Detector, Faster R-CNN and Mask R-CNN models. This script helps with converting, running and validating these models with TensorRT.
 

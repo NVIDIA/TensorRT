@@ -9,7 +9,6 @@ ftfy
 matplotlib
 nvtx
 onnx==1.18.0
-onnxruntime==1.19.2
 onnxscript==0.3.2
 opencv-python-headless==4.8.0.74
 scipy
@@ -21,3 +20,5 @@ peft==0.17.0
 polygraphy==0.49.22
 sentencepiece
 numpy==1.26.4
+imageio-ffmpeg
+

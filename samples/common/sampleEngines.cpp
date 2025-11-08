@@ -219,6 +219,7 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
     }
 }
 
+
 //!
 //! \brief Generate a network definition for a given model
 //!
@@ -601,6 +602,26 @@ void setLayerDeviceTypes(
             DeviceType const deviceType = match->second;
             sample::gLogInfo << "Set layer " << layerName << " to device type " << deviceType << std::endl;
             config.setDeviceType(layer, deviceType);
+        }
+    }
+}
+
+void setDecomposables(INetworkDefinition& network, DecomposableAttentions const& decomposableAttentions)
+{
+    for (int32_t layerIdx = 0; layerIdx < network.getNbLayers(); ++layerIdx)
+    {
+        auto* layer = network.getLayer(layerIdx);
+        if (layer->getType() == LayerType::kATTENTION_INPUT)
+        {
+            auto* attention = static_cast<const nvinfer1::IAttentionInputLayer*>(layer)->getAttention();
+            auto const attentionName = attention->getName();
+            auto match = findPlausible(decomposableAttentions, attentionName);
+            if (match != decomposableAttentions.end())
+            {
+                attention->setDecomposable(match->second);
+                sample::gLogInfo << "Set attention " << attentionName
+                                 << " to decomposable = " << ((match->second) ? "true" : "false") << std::endl;
+            }
         }
     }
 }
@@ -1141,6 +1162,11 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         setLayerDeviceTypes(network, config, build.layerDeviceTypes);
     }
 
+    if (!build.decomposableAttentions.empty())
+    {
+        setDecomposables(network, build.decomposableAttentions);
+    }
+
     if (!build.debugTensors.empty())
     {
         markDebugTensors(network, build.debugTensors);
@@ -1223,7 +1249,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     if (!build.remoteAutoTuningConfig.empty())
     {
         SMP_RETVAL_IF_FALSE(config.setRemoteAutoTuningConfig(build.remoteAutoTuningConfig.c_str()),
-            "Failed to set remote auto tuning configuration", false, err);
+            "Failed to set remote auto tuning config", false, err);
     }
 
     return true;
@@ -1304,7 +1330,13 @@ bool networkToSerializedEngine(
 
         if (build.safe && build.consistency)
         {
-            if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size()))
+            std::vector<std::string> pluginBuildLibPaths;
+#if ENABLE_UNIFIED_BUILDER
+            pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
+            std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
+                [](auto const& sp) { return sp.libraryName; });
+#endif
+            if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size(), pluginBuildLibPaths))
             {
                 return false;
             }
@@ -1325,6 +1357,7 @@ bool networkToSerializedEngine(
 
     return true;
 }
+
 
 //!
 //! \brief Parse a given model, create a network and an engine.
@@ -1440,8 +1473,8 @@ bool loadAsyncStreamingEngineToBuildEnv(std::string const& filepath, BuildEnviro
 }
 
 
-bool loadEngineToBuildEnv(
-    std::string const& filepath, BuildEnvironment& env, std::ostream& err, bool const enableConsistency)
+bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err,
+    SystemOptions const& sys, bool const enableConsistency)
 {
     auto const tBegin = std::chrono::high_resolution_clock::now();
     std::ifstream engineFile(filepath, std::ios::binary);
@@ -1460,7 +1493,13 @@ bool loadEngineToBuildEnv(
 
     if (enableConsistency)
     {
-        if (!checkSafeEngine(engineBlob.data(), fsize))
+        std::vector<std::string> pluginBuildLibPaths;
+#if ENABLE_UNIFIED_BUILDER
+        pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
+        std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
+            [](auto const& sp) { return sp.libraryName; });
+#endif
+        if (!checkSafeEngine(engineBlob.data(), fsize, pluginBuildLibPaths))
         {
             sample::gLogError << "Consistency validation is not enabled." << std::endl;
             return false;
@@ -1537,7 +1576,8 @@ void dumpRefittable(nvinfer1::ICudaEngine& engine)
 ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream& err)
 {
     BuildEnvironment env(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
-    return loadEngineToBuildEnv(engine, env, err, false) ? env.engine.release() : nullptr;
+    SystemOptions sys;
+    return loadEngineToBuildEnv(engine, env, err, sys, false) ? env.engine.release() : nullptr;
 }
 
 bool saveEngine(ICudaEngine const& engine, std::string const& fileName, std::ostream& err)
@@ -1569,7 +1609,7 @@ bool getEngineBuildEnv(
     {
         if (build.safe)
         {
-            createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err, build.safe && build.consistency);
+            createEngineSuccess = loadEngineToBuildEnv(build.engine, env, err, sys, build.safe && build.consistency);
         }
         else
         {
@@ -1606,6 +1646,7 @@ bool getEngineBuildEnv(
         engineFile.close();
         if (!build.safe)
         {
+            env.engine.releaseBlob();
             if (build.asyncFileReader)
             {
                 SMP_RETVAL_IF_FALSE(loadAsyncStreamingEngineToBuildEnv(build.engine, env, err),
@@ -1628,7 +1669,6 @@ bool getEngineBuildEnv(
                 engineTextFile.close();
             }
         }
-        env.engine.releaseBlob();
     }
 
     return true;
@@ -1681,6 +1721,8 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
             std::make_pair(WeightsRole::kSHIFT, layer.getShift())};
     }
     case LayerType::kACTIVATION:
+    case LayerType::kATTENTION_INPUT:
+    case LayerType::kATTENTION_OUTPUT:
     case LayerType::kASSERTION:
     case LayerType::kCAST:
     case LayerType::kCONCATENATION:
@@ -1729,6 +1771,32 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
     case LayerType::kUNSQUEEZE: return {};
     }
     return {};
+}
+
+bool refitFromOnnx(nvinfer1::ICudaEngine& engine, std::string onnxModelFile, bool multiThreading)
+{
+    sample::gLogInfo << "Refitting engine from ONNX model " << onnxModelFile << std::endl;
+    std::unique_ptr<IRefitter> refitter{createRefitter(engine)};
+    if (multiThreading && !refitter->setMaxThreads(10))
+    {
+        sample::gLogError << "Failed to set max threads to refitter." << std::endl;
+        return false;
+    }
+    std::unique_ptr<nvonnxparser::IParserRefitter> parserRefitter{createONNXRefitter(*refitter)};
+
+    if (!parserRefitter->refitFromFile(onnxModelFile.c_str()))
+    {
+        return false;
+    }
+    TrtCudaStream stream;
+    if (!refitter->refitCudaEngineAsync(stream.get()))
+    {
+        return false;
+    }
+    stream.synchronize();
+
+    sample::gLogInfo << "Engine successfully refitted from ONNX model " << onnxModelFile << std::endl;
+    return true;
 }
 
 bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine, bool multiThreading)
@@ -1891,8 +1959,8 @@ bool hasConsistencyChecker()
 
 #if ENABLE_UNIFIED_BUILDER
 
-nvinfer2::safe::consistency::IConsistencyChecker* createConsistencyChecker(
-    sample::SampleSafeRecorder& recorder, void const* serializedEngine, int32_t const engineSize) noexcept
+nvinfer2::safe::consistency::IConsistencyChecker* createConsistencyChecker(sample::SampleSafeRecorder& recorder,
+    void const* serializedEngine, int32_t const engineSize, std::vector<std::string> const& pluginBuildLibPath) noexcept
 {
     nvinfer2::safe::consistency::IConsistencyChecker* checker{nullptr};
 
@@ -1904,13 +1972,14 @@ nvinfer2::safe::consistency::IConsistencyChecker* createConsistencyChecker(
 #if !defined(_WIN32)
     constexpr char symbolName[] = "createConsistencyChecker";
     typedef ErrorCode (*CreateCheckerFn)(nvinfer2::safe::consistency::IConsistencyChecker * &checker,
-        sample::SampleSafeRecorder & recorder, void const* data, size_t size);
+        sample::SampleSafeRecorder & recorder, void const* data, size_t size,
+        std::vector<std::string> const& pluginBuildLibPath);
     if (hasSafeRuntime())
     {
         auto createFn = reinterpret_cast<CreateCheckerFn>(dlsym(consistencyCheckerLibrary.get(), symbolName));
         if (createFn != nullptr)
         {
-            ErrorCode errorCode = createFn(checker, recorder, serializedEngine, engineSize);
+            ErrorCode errorCode = createFn(checker, recorder, serializedEngine, engineSize, pluginBuildLibPath);
             if (errorCode != ErrorCode::kSUCCESS)
             {
                 return nullptr;
@@ -1922,7 +1991,8 @@ nvinfer2::safe::consistency::IConsistencyChecker* createConsistencyChecker(
 }
 #endif
 
-bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize)
+bool checkSafeEngine(
+    void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibPath)
 {
     if (!hasConsistencyChecker())
     {
@@ -1932,9 +2002,8 @@ bool checkSafeEngine(void const* serializedEngine, int64_t const engineSize)
 
 #if ENABLE_UNIFIED_BUILDER
     sample::SampleSafeRecorder recorder{nvinfer2::safe::Severity::kINFO};
-
     auto checker = std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker>(
-        createConsistencyChecker(recorder, serializedEngine, engineSize));
+        createConsistencyChecker(recorder, serializedEngine, engineSize, pluginBuildLibPath));
     if (checker.get() == nullptr)
     {
         sample::gLogError << "Failed to create consistency checker." << std::endl;

@@ -175,6 +175,7 @@ static auto const reader_v2_read = [](IStreamReaderV2& self, void* destination, 
 };
 
 
+
 // For ICudaEngine
 // TODO: Add slicing support?
 static auto const engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
@@ -1310,6 +1311,26 @@ void bindCore(py::module& m)
             "step"_a)
         .def("phase_finish", &IProgressMonitor::phaseFinish, IProgressMonitorDoc::phase_finish, "phase_name"_a);
 
+    py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
+        ExecutionContextAllocationStrategyDoc::descr, py::module_local())
+        .value("STATIC", ExecutionContextAllocationStrategy::kSTATIC, ExecutionContextAllocationStrategyDoc::STATIC)
+        .value("ON_PROFILE_CHANGE", ExecutionContextAllocationStrategy::kON_PROFILE_CHANGE,
+            ExecutionContextAllocationStrategyDoc::ON_PROFILE_CHANGE)
+        .value("USER_MANAGED", ExecutionContextAllocationStrategy::kUSER_MANAGED,
+            ExecutionContextAllocationStrategyDoc::USER_MANAGED);
+
+
+    py::class_<IRuntimeConfig>(m, "IRuntimeConfig", IRuntimeConfigDoc::descr, py::module_local())
+        .def("set_execution_context_allocation_strategy", &IRuntimeConfig::setExecutionContextAllocationStrategy,
+            IRuntimeConfigDoc::set_execution_context_allocation_strategy,
+            py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
+        .def("get_execution_context_allocation_strategy", &IRuntimeConfig::getExecutionContextAllocationStrategy,
+            IRuntimeConfigDoc::get_execution_context_allocation_strategy, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
+        ;
+
+
     py::class_<IExecutionContext>(m, "IExecutionContext", IExecutionContextDoc::descr, py::module_local())
         .def("execute_v2", lambdas::execute_v2, "bindings"_a, IExecutionContextDoc::execute_v2,
             py::call_guard<py::gil_scoped_release>{})
@@ -1381,22 +1402,15 @@ void bindCore(py::module& m)
         .def_property("unfused_tensors_debug_state", &IExecutionContext::getUnfusedTensorsDebugState,
             &IExecutionContext::setUnfusedTensorsDebugState)
         .def("get_runtime_config", &IExecutionContext::getRuntimeConfig, IExecutionContextDoc::get_runtime_config,
-            py::keep_alive<1, 0>{}, py::call_guard<py::gil_scoped_release>{});
-
-    py::enum_<ExecutionContextAllocationStrategy>(m, "ExecutionContextAllocationStrategy", py::arithmetic{},
-        ExecutionContextAllocationStrategyDoc::descr, py::module_local())
-        .value("STATIC", ExecutionContextAllocationStrategy::kSTATIC, ExecutionContextAllocationStrategyDoc::STATIC)
-        .value("ON_PROFILE_CHANGE", ExecutionContextAllocationStrategy::kON_PROFILE_CHANGE,
-            ExecutionContextAllocationStrategyDoc::ON_PROFILE_CHANGE)
-        .value("USER_MANAGED", ExecutionContextAllocationStrategy::kUSER_MANAGED,
-            ExecutionContextAllocationStrategyDoc::USER_MANAGED);
-
+            py::keep_alive<1, 0>{}, py::call_guard<py::gil_scoped_release>{})
+        ;
 
     py::enum_<SerializationFlag>(
         m, "SerializationFlag", py::arithmetic{}, SerializationFlagDoc::descr, py::module_local())
         .value("EXCLUDE_WEIGHTS", SerializationFlag::kEXCLUDE_WEIGHTS, SerializationFlagDoc::EXCLUDE_WEIGHTS)
         .value("EXCLUDE_LEAN_RUNTIME", SerializationFlag::kEXCLUDE_LEAN_RUNTIME,
-            SerializationFlagDoc::EXCLUDE_LEAN_RUNTIME);
+            SerializationFlagDoc::EXCLUDE_LEAN_RUNTIME)
+        .value("INCLUDE_REFIT", SerializationFlag::kINCLUDE_REFIT, SerializationFlagDoc::INCLUDE_REFIT);
 
     py::class_<ISerializationConfig>(m, "ISerializationConfig", ISerializationConfigDoc::descr, py::module_local())
         .def_property("flags", &ISerializationConfig::getFlags, &lambdas::serialization_config_set_flags)
@@ -1436,16 +1450,9 @@ void bindCore(py::module& m)
         .value("INPUT", TensorIOMode::kINPUT, TensorIOModeDoc::INPUT)
         .value("OUTPUT", TensorIOMode::kOUTPUT, TensorIOModeDoc::OUTPUT);
 
-    py::class_<IRuntimeConfig>(m, "IRuntimeConfig", IRuntimeConfigDoc::descr, py::module_local())
-        .def("set_execution_context_allocation_strategy", &IRuntimeConfig::setExecutionContextAllocationStrategy,
-            IRuntimeConfigDoc::set_execution_context_allocation_strategy,
-            py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC, py::keep_alive<0, 1>{},
-            py::call_guard<py::gil_scoped_release>{})
-        .def("get_execution_context_allocation_strategy", &IRuntimeConfig::getExecutionContextAllocationStrategy,
-            IRuntimeConfigDoc::get_execution_context_allocation_strategy, py::keep_alive<0, 1>{},
-            py::call_guard<py::gil_scoped_release>{})
-        ;
-
+    py::enum_<EngineStat>(m, "EngineStat", py::arithmetic{}, EngineStatDoc::descr, py::module_local())
+        .value("TOTAL_WEIGHTS_SIZE", EngineStat::kTOTAL_WEIGHTS_SIZE, EngineStatDoc::TOTAL_WEIGHTS_SIZE)
+        .value("STRIPPED_WEIGHTS_SIZE", EngineStat::kSTRIPPED_WEIGHTS_SIZE, EngineStatDoc::STRIPPED_WEIGHTS_SIZE);
 
     py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr, py::module_local())
         .def("__getitem__", lambdas::engine_getitem)
@@ -1491,36 +1498,42 @@ void bindCore(py::module& m)
 
         .def(
             "get_tensor_bytes_per_component",
-            [](ICudaEngine& self, std::string const& name) -> int32_t
-            { return self.getTensorBytesPerComponent(name.c_str()); },
+            [](ICudaEngine& self, std::string const& name) -> int32_t {
+                return self.getTensorBytesPerComponent(name.c_str());
+            },
             "name"_a, ICudaEngineDoc::get_tensor_bytes_per_component)
         .def(
             "get_tensor_bytes_per_component",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t
-            { return self.getTensorBytesPerComponent(name.c_str(), profileIndex); },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
+                return self.getTensorBytesPerComponent(name.c_str(), profileIndex);
+            },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_bytes_per_component)
 
         .def(
             "get_tensor_components_per_element",
-            [](ICudaEngine& self, std::string const& name) -> int32_t
-            { return self.getTensorComponentsPerElement(name.c_str()); },
+            [](ICudaEngine& self, std::string const& name) -> int32_t {
+                return self.getTensorComponentsPerElement(name.c_str());
+            },
             "name"_a, ICudaEngineDoc::get_tensor_components_per_element)
         .def(
             "get_tensor_components_per_element",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t
-            { return self.getTensorComponentsPerElement(name.c_str(), profileIndex); },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
+                return self.getTensorComponentsPerElement(name.c_str(), profileIndex);
+            },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_components_per_element)
 
         .def(
             "get_tensor_format",
-            [](ICudaEngine& self, std::string const& name) -> TensorFormat
-            { return self.getTensorFormat(name.c_str()); },
+            [](ICudaEngine& self, std::string const& name) -> TensorFormat {
+                return self.getTensorFormat(name.c_str());
+            },
             "name"_a, ICudaEngineDoc::get_tensor_format)
 
         .def(
             "get_tensor_format",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> TensorFormat
-            { return self.getTensorFormat(name.c_str(), profileIndex); },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> TensorFormat {
+                return self.getTensorFormat(name.c_str(), profileIndex);
+            },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_format)
 
         .def(
@@ -1538,13 +1551,15 @@ void bindCore(py::module& m)
 
         .def(
             "get_tensor_vectorized_dim",
-            [](ICudaEngine& self, std::string const& name) -> int32_t
-            { return self.getTensorVectorizedDim(name.c_str()); },
+            [](ICudaEngine& self, std::string const& name) -> int32_t {
+                return self.getTensorVectorizedDim(name.c_str());
+            },
             "name"_a, ICudaEngineDoc::get_tensor_vectorized_dim)
         .def(
             "get_tensor_vectorized_dim",
-            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t
-            { return self.getTensorVectorizedDim(name.c_str(), profileIndex); },
+            [](ICudaEngine& self, std::string const& name, int32_t profileIndex) -> int32_t {
+                return self.getTensorVectorizedDim(name.c_str(), profileIndex);
+            },
             "name"_a, "profile_index"_a, ICudaEngineDoc::get_tensor_vectorized_dim)
 
         .def("get_tensor_profile_shape", lambdas::get_tensor_profile_shape, "name"_a, "profile_index"_a,
@@ -1586,7 +1601,10 @@ void bindCore(py::module& m)
             ICudaEngineDoc::create_execution_context, py::arg("runtime_config") = nullptr, py::keep_alive<0, 1>{},
             py::call_guard<py::gil_scoped_release>{})
         .def("create_runtime_config", &ICudaEngine::createRuntimeConfig, ICudaEngineDoc::create_runtime_config,
-            py::keep_alive<0, 1>{}, py::call_guard<py::gil_scoped_release>{})
+            py::call_guard<py::gil_scoped_release>{})
+        .def("get_engine_stat", &ICudaEngine::getEngineStat, ICudaEngineDoc::get_engine_stat,
+            py::arg("stat") = EngineStat::kTOTAL_WEIGHTS_SIZE, py::keep_alive<0, 1>{},
+            py::call_guard<py::gil_scoped_release>{})
 
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
@@ -1679,7 +1697,8 @@ void bindCore(py::module& m)
         .value("MONITOR_MEMORY", BuilderFlag::kMONITOR_MEMORY, BuilderFlagDoc::MONITOR_MEMORY)
         .value("FP4", BuilderFlag::kFP4, BuilderFlagDoc::FP4)
         .value("DISTRIBUTIVE_INDEPENDENCE", BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE,
-            BuilderFlagDoc::DISTRIBUTIVE_INDEPENDENCE);
+            BuilderFlagDoc::DISTRIBUTIVE_INDEPENDENCE)
+        ;
 
     py::enum_<MemoryPoolType>(m, "MemoryPoolType", MemoryPoolTypeDoc::descr, py::module_local())
         .value("WORKSPACE", MemoryPoolType::kWORKSPACE, MemoryPoolTypeDoc::WORKSPACE)
@@ -1739,18 +1758,29 @@ void bindCore(py::module& m)
         .def_static("parse", &lambdas::parseTimingCacheKey, "text"_a, TimingCacheKeyDoc::parse)
         .def("__str__", &lambdas::convertTimingCacheKeyToString, TimingCacheKeyDoc::convertTimingCacheKeyToString);
 
+    const char* const timing_cache_deprecation_str
+        = "Deprecated in TensorRT-RTX 1.2. Timing cache operations are no-ops in TensorRT-RTX.";
+
     py::class_<TimingCacheValue>(m, "TimingCacheValue", TimingCacheValueDoc::descr, py::module_local())
         .def(py::init<uint64_t, float>())
-        .def_property("tacticHash", &lambdas::getTacticHash, &lambdas::setTacticHash)
-        .def_property("timingMSec", &lambdas::getTimingMSec, &lambdas::setTimingMSec);
+        .def_property("tacticHash", utils::deprecateInTrtRtxOnly(&lambdas::getTacticHash, timing_cache_deprecation_str),
+            utils::deprecateInTrtRtxOnly(&lambdas::setTacticHash, timing_cache_deprecation_str))
+        .def_property("timingMSec", utils::deprecateInTrtRtxOnly(&lambdas::getTimingMSec, timing_cache_deprecation_str),
+            utils::deprecateInTrtRtxOnly(&lambdas::setTimingMSec, timing_cache_deprecation_str));
 
     py::class_<ITimingCache>(m, "ITimingCache", ITimingCacheDoc::descr, py::module_local())
-        .def("serialize", &ITimingCache::serialize, ITimingCacheDoc::serialize)
-        .def("combine", &ITimingCache::combine, "input_cache"_a, "ignore_mismatch"_a, ITimingCacheDoc::combine)
-        .def("reset", &ITimingCache::reset, ITimingCacheDoc::reset)
-        .def("queryKeys", &lambdas::queryTimingCacheKeys, ITimingCacheDoc::queryKeys)
-        .def("query", &ITimingCache::query, "key"_a, ITimingCacheDoc::query)
-        .def("update", &ITimingCache::update, "key"_a, "value"_a, ITimingCacheDoc::update);
+        .def("serialize", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::serialize, timing_cache_deprecation_str),
+            ITimingCacheDoc::serialize)
+        .def("combine", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::combine, timing_cache_deprecation_str),
+            "input_cache"_a, "ignore_mismatch"_a, ITimingCacheDoc::combine)
+        .def("reset", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::reset, timing_cache_deprecation_str),
+            ITimingCacheDoc::reset)
+        .def("queryKeys", utils::deprecateInTrtRtxOnly(&lambdas::queryTimingCacheKeys, timing_cache_deprecation_str),
+            ITimingCacheDoc::queryKeys)
+        .def("query", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::query, timing_cache_deprecation_str), "key"_a,
+            ITimingCacheDoc::query)
+        .def("update", utils::deprecateMemberInTrtRtxOnly(&ITimingCache::update, timing_cache_deprecation_str), "key"_a,
+            "value"_a, ITimingCacheDoc::update);
 
     py::enum_<TilingOptimizationLevel>(
         m, "TilingOptimizationLevel", TilingOptimizationLevelDoc::descr, py::module_local())
@@ -1821,9 +1851,12 @@ void bindCore(py::module& m)
         .def("get_tactic_sources", &IBuilderConfig::getTacticSources, IBuilderConfigDoc::get_tactic_sources)
         .def("create_timing_cache", lambdas::netconfig_create_timing_cache, "serialized_timing_cache"_a,
             IBuilderConfigDoc::create_timing_cache)
-        .def("set_timing_cache", &IBuilderConfig::setTimingCache, "cache"_a, "ignore_mismatch"_a,
-            IBuilderConfigDoc::set_timing_cache, py::keep_alive<1, 2>{})
-        .def("get_timing_cache", &IBuilderConfig::getTimingCache, IBuilderConfigDoc::get_timing_cache)
+        .def("set_timing_cache",
+            utils::deprecateMemberInTrtRtxOnly(&IBuilderConfig::setTimingCache, timing_cache_deprecation_str),
+            "cache"_a, "ignore_mismatch"_a, IBuilderConfigDoc::set_timing_cache, py::keep_alive<1, 2>{})
+        .def("get_timing_cache",
+            utils::deprecateMemberInTrtRtxOnly(&IBuilderConfig::getTimingCache, timing_cache_deprecation_str),
+            IBuilderConfigDoc::get_timing_cache)
         .def("set_preview_feature", &IBuilderConfig::setPreviewFeature, "feature"_a, "enable"_a,
             IBuilderConfigDoc::set_preview_feature)
         .def("get_preview_feature", &IBuilderConfig::getPreviewFeature, "feature"_a,

@@ -29,7 +29,7 @@ np = mod.lazy_import("numpy")
 onnx = mod.lazy_import("onnx>=1.8.1")
 onnxrt = mod.lazy_import("onnxruntime>=1.10.0")
 onnxmltools = mod.lazy_import(
-    "onnxmltools==1.11.1", requires=["onnxconverter_common==1.12.2"]
+    "onnxmltools==1.11.1", requires=["onnxconverter_common>=1.12.2"]
 )
 tf = mod.lazy_import("tensorflow<2.0")
 tf2onnx = mod.lazy_import("tf2onnx")

@@ -86,7 +86,7 @@ This demo BERT application can be run within the TensorRT OSS build container. I
 
 - [NGC CLI](https://ngc.nvidia.com/setup/installers/cli) - for downloading BERT checkpoints from NGC.
 - PyPI Packages:
-  - [pycuda](https://pypi.org/project/pycuda/) (tested v2019.1.2)
+  - [cuda-python](https://pypi.org/project/cuda-python/) (tested v13.0.1)
   - [onnx](https://pypi.org/project/onnx) (tested v1.12.0)
   - [tensorflow](https://pypi.org/project/tensorflow/) (tested v2.9.1)
   - [torch](https://pypi.org/project/torch/) (tested v1.11.0)
@@ -162,7 +162,7 @@ Completing these steps should resolve the error you encountered and allow the co
 
 6. Run inference with CUDA Graph support.
 
-   A separate python `inference_c.py` script is provided to run inference with CUDA Graph support. This is necessary since CUDA Graph is only supported through CUDA C/C++ APIs, not pyCUDA. The `inference_c.py` script uses pybind11 to interface with C/C++ for CUDA graph capturing and launching. The cmdline interface is the same as `inference.py` except for an extra `--enable-graph` option.
+   A separate python `inference_c.py` script is provided to run inference with CUDA Graph support. This is necessary since CUDA Graph is only supported through CUDA C/C++ APIs. The `inference_c.py` script uses pybind11 to interface with C/C++ for CUDA graph capturing and launching. The cmdline interface is the same as `inference.py` except for an extra `--enable-graph` option.
 
    ```bash
    mkdir -p build; pushd build

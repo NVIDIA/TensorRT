@@ -19,3 +19,4 @@ add_plugin_source(
     flattenConcat.cpp
     flattenConcat.h
 )
+

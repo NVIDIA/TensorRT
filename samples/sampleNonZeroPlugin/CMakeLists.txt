@@ -20,13 +20,13 @@ add_executable(sample_non_zero_plugin
     sampleNonZeroPlugin.cpp
     nonZeroKernel.cu
 )
-target_link_libraries(sample_non_zero_plugin PRIVATE trt_samples_common)
+target_link_libraries(sample_non_zero_plugin PRIVATE trt_samples_common TRT_SAMPLES::tensorrt)
 add_dependencies(tensorrt_samples sample_non_zero_plugin)
 
 installLibraries(
     TARGETS sample_non_zero_plugin
     OPTIONAL
-    COMPONENT full
+    COMPONENT internal
 )
 
 else()

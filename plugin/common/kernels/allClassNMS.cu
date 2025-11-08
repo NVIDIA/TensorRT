@@ -360,7 +360,7 @@ struct nmsLaunchConfigSSD
         , function(function)
     {
     }
-    bool operator==(const nmsLaunchConfigSSD& other)
+    bool operator==(nmsLaunchConfigSSD const& other) const
     {
         return t_score == other.t_score && t_bbox == other.t_bbox;
     }

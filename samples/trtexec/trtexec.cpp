@@ -55,6 +55,7 @@ std::function<void*(void*, int32_t)> pCreateInferRuntimeInternal{};
 std::function<void*(void*, void*, int32_t)> pCreateInferRefitterInternal{};
 std::function<void*(void*, int32_t)> pCreateInferBuilderInternal{};
 std::function<void*(void*, void*, int)> pCreateNvOnnxParserInternal{};
+std::function<void*(void*, void*, int)> pCreateNvOnnxRefitterInternal{};
 
 //! Track runtime used for the execution of trtexec.
 //! Must be tracked as a global variable due to how library init functions APIs are organized.
@@ -96,10 +97,13 @@ bool initNvonnxparser()
     static LibraryPtr libnvonnxparserPtr{};
     auto fetchPtrs = [](DynamicLibrary* l) {
         pCreateNvOnnxParserInternal = l->symbolAddress<void*(void*, void*, int)>("createNvOnnxParser_INTERNAL");
+        pCreateNvOnnxRefitterInternal
+            = l->symbolAddress<void*(void*, void*, int)>("createNvOnnxParserRefitter_INTERNAL");
     };
     return initLibrary(libnvonnxparserPtr, kNVONNXPARSER_LIBNAME, fetchPtrs);
 #else
     pCreateNvOnnxParserInternal = createNvOnnxParser_INTERNAL;
+    pCreateNvOnnxRefitterInternal = createNvOnnxParserRefitter_INTERNAL;
     return true;
 #endif // !TRT_STATIC
 }
@@ -145,6 +149,17 @@ nvonnxparser::IParser* createONNXParser(INetworkDefinition& network)
     ASSERT(pCreateNvOnnxParserInternal != nullptr);
     return static_cast<nvonnxparser::IParser*>(
         pCreateNvOnnxParserInternal(&network, &gLogger.getTRTLogger(), NV_ONNX_PARSER_VERSION));
+}
+
+nvonnxparser::IParserRefitter* createONNXRefitter(nvinfer1::IRefitter& refitter)
+{
+    if (!initNvonnxparser())
+    {
+        return {};
+    }
+    ASSERT(pCreateNvOnnxRefitterInternal != nullptr);
+    return static_cast<nvonnxparser::IParserRefitter*>(
+        pCreateNvOnnxRefitterInternal(&refitter, &gLogger.getTRTLogger(), NV_ONNX_PARSER_VERSION));
 }
 
 #if ENABLE_UNIFIED_BUILDER
@@ -265,7 +280,7 @@ int main(int argc, char** argv)
         LibraryPtr nvinferPluginLib{};
 #endif /* TRT_STATIC */
         std::vector<LibraryPtr> pluginLibs;
-        if (gUseRuntime == RuntimeMode::kFULL)
+        if (gUseRuntime == RuntimeMode::kFULL && !options.build.safe)
         {
             sample::gLogInfo << "Loading standard plugins" << std::endl;
 #if !TRT_STATIC
@@ -282,6 +297,10 @@ int main(int argc, char** argv)
                 sample::gLogInfo << "Loading supplied plugin library: " << pluginPath << std::endl;
                 pluginLibs.emplace_back(loadLibrary(pluginPath));
             }
+        }
+        else if (gUseRuntime == RuntimeMode::kFULL && options.build.safe)
+        {
+            sample::gLogInfo << "Skipping standard plugin loading due to --safe flag" << std::endl;
         }
         else if (!options.system.plugins.empty())
         {
@@ -313,6 +332,12 @@ int main(int argc, char** argv)
         {
             sample::gLogInfo << "Skipping consistency checker on non-safety mode." << std::endl;
             options.build.consistency = false;
+        }
+
+        if (options.build.safe)
+        {
+            sample::gLogInfo << "StronglyTyped is enabled by default on safety mode." << std::endl;
+            options.build.stronglyTyped = true;
         }
 
        // Start engine building phase.
@@ -352,6 +377,16 @@ int main(int argc, char** argv)
             if (options.reporting.refit)
             {
                 dumpRefittable(*engine);
+            }
+            // Refit from ONNX model
+            if (!options.inference.refitOnnxModel.empty())
+            {
+                bool const success = refitFromOnnx(*engine, options.inference.refitOnnxModel, options.inference.threads);
+                if (!success)
+                {
+                    sample::gLogError << "Engine refit from ONNX model failed." << std::endl;
+                    return sample::gLogger.reportFail(sampleTest);
+                }
             }
             if (options.inference.timeRefit)
             {

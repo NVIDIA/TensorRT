@@ -67,7 +67,7 @@ bool hasBfloat16AtomicAdd()
   return deviceProp.major >= 8;
 }
 
-inline uint32_t getElementSize(nvinfer1::DataType t) noexcept
+inline uint32_t getElementSize(nvinfer1::DataType t)
 {
     switch (t)
     {

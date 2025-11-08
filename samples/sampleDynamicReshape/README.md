@@ -181,15 +181,8 @@ In this sample, the following layers are used. For more information about these 
 [Resize layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#resize-layer)
 The IResizeLayer implements the resize operation on an input tensor.
 
-## Preparing sample data
-
-1. Download the sample data from [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#), if not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers) and set it to `$TRT_DATADIR`.
-    ```bash
-    export TRT_DATADIR=/usr/src/tensorrt/data
-    pushd $TRT_DATADIR/mnist
-    pip3 install Pillow
-    popd
-    ```
+## Prerequisites
+1. See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
 
 ## Running the sample
 

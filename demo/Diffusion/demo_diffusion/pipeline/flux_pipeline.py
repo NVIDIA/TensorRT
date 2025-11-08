@@ -794,7 +794,7 @@ class FluxPipeline(DiffusionPipeline):
         print("|-----------------|--------------|")
         print("| {:^15} | {:>9.2f} ms |".format("Pipeline", walltime_ms))
         print("|-----------------|--------------|")
-        print("Throughput: {:.2f} image/s".format(batch_size * 1000.0 / walltime_ms))
+        print("Throughput: {:.5f} image/s".format(batch_size * 1000.0 / walltime_ms))
 
     def _check_integrity(self, images):
         integrity_checker = PixtralContentFilter(self.device)

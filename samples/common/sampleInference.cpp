@@ -193,6 +193,7 @@ nvinfer2::safe::TypedArray createTypedArray(void* const ptr, DataType const type
     case DataType::kINT32: return nvinfer2::safe::TypedArray(static_cast<int32_t*>(ptr), bufferSize);
     case DataType::kINT8: return nvinfer2::safe::TypedArray(static_cast<int8_t*>(ptr), bufferSize);
     case DataType::kINT64: return nvinfer2::safe::TypedArray(static_cast<int64_t*>(ptr), bufferSize);
+    case DataType::kBOOL: return nvinfer2::safe::TypedArray(static_cast<bool*>(ptr), bufferSize);
     default:
     {
         sample::gLogError << "Invalid tensor DataType encountered." << std::endl;
@@ -350,8 +351,9 @@ bool allocateContextMemory(InferenceEnvironmentStd& iEnv, InferenceOptions const
         auto const& ec = iEnv.contexts.at(i);
         if (inference.memoryAllocationStrategy == MemoryAllocationStrategy::kSTATIC)
         {
-            sample::gLogInfo << "Created execution context with device memory size: "
-                             << (engine->getDeviceMemorySize() / 1.0_MiB) << " MiB" << std::endl;
+            sample::gLogInfo << "Created execution context with device memory size: " <<
+                (engine->getDeviceMemorySize() / 1.0_MiB)
+                             << " MiB" << std::endl;
         }
         else
         {
@@ -816,13 +818,14 @@ TaskInferenceEnvironment::TaskInferenceEnvironment(std::string engineFile, Infer
     , batch(bs)
 {
     BuildEnvironment bEnv(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
-    loadEngineToBuildEnv(engineFile, bEnv, sample::gLogError, false);
-    iEnv = std::make_unique<InferenceEnvironmentStd>(bEnv);
-
-    CHECK(cudaSetDevice(device));
     SystemOptions system{};
     system.device = device;
     system.DLACore = DLACore;
+    loadEngineToBuildEnv(engineFile, bEnv, sample::gLogError, system, false);
+    iEnv = std::make_unique<InferenceEnvironmentStd>(bEnv);
+
+    CHECK(cudaSetDevice(device));
+
     if (!setUpStdInference(*iEnv, iOptions, system))
     {
         sample::gLogError << "Inference set up failed" << std::endl;
@@ -1142,6 +1145,8 @@ public:
     void wait(TrtCudaEvent& gpuStart)
     {
         getStream(StreamType::kINPUT).wait(gpuStart);
+        getStream(StreamType::kCOMPUTE).wait(gpuStart);
+        getStream(StreamType::kOUTPUT).wait(gpuStart);
     }
 
     void setInputData(bool sync)

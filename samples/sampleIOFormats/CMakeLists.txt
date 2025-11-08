@@ -17,13 +17,13 @@
 if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
 add_executable(sample_io_formats sampleIOFormats.cpp)
-target_link_libraries(sample_io_formats PRIVATE trt_samples_common)
+target_link_libraries(sample_io_formats PRIVATE trt_samples_common TRT_SAMPLES::tensorrt)
 add_dependencies(tensorrt_samples sample_io_formats)
 
 installLibraries(
     TARGETS sample_io_formats
     OPTIONAL
-    COMPONENT full
+    COMPONENT internal
 )
 
 else()

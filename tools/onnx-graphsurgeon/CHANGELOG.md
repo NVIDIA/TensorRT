@@ -2,6 +2,14 @@
 
 Dates are in YYYY-MM-DD format.
 
+## v0.5.9 (2025-10-28)
+
+### Fixed
+
+- Fixed a bug where the pattern matching logic would generate false positives in
+  cases where there were extra external consumers.
+
+
 ## v0.5.8 (2025-04-08)
 
 ### Fixed

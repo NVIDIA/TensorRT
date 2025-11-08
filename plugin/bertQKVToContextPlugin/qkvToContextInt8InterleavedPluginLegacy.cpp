@@ -57,7 +57,7 @@ QKVToContextInterleavedPluginLegacy::QKVToContextInterleavedPluginLegacy(std::st
     , mQkvScale(qkvScale)
     , mCtxScale(ctxScale)
 {
-    mSM = getSMVersion();
+    mSM = getSmVersion();
     // variable sequence length is only supported with the fused MHA kernels
     // we should not override mS!
     bool isSMSupported = elem(mSM,

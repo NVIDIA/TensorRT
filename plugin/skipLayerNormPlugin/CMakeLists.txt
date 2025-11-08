@@ -28,3 +28,4 @@ add_plugin_source(
     skipLayerNormPluginLegacy.cpp
     skipLayerNormPluginLegacy.h
 )
+

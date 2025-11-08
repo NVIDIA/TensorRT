@@ -218,7 +218,7 @@ struct sspcLaunchConfig
         , function(function)
     {
     }
-    bool operator==(const sspcLaunchConfig& other)
+    bool operator==(sspcLaunchConfig const& other) const
     {
         return t_score == other.t_score;
     }

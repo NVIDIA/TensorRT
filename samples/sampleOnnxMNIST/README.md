@@ -91,9 +91,10 @@ The Scale layer implements a per-tensor, per-channel, or per-element affine tran
 [Shuffle layer](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html#shuffle-layer)
 The Shuffle layer implements a reshape and transpose operator for tensors.
 
-## Preparing sample data
+## Prerequisites
+1. Preparing sample data
 
-Download the sample data from the [TensorRT release tarball](https://developer.nvidia.com/nvidia-tensorrt-download#).
+See [Preparing sample data](../README.md#preparing-sample-data) in the main samples README.
 
 ## Running the sample
 

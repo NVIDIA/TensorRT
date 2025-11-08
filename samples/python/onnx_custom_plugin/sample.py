@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,7 +143,7 @@ def main():
         print("Engine plan not saved. Building new engine...")
         engine = build_engine(TRT_MODEL_PATH)
 
-    inputs, outputs, bindings, stream = common.allocate_buffers(engine, profile_idx=0)
+    inputs, outputs, bindings = common.allocate_buffers(engine, profile_idx=0)
 
     testcases = [
         (
@@ -162,28 +162,33 @@ def main():
         testcases = [(context_text, query_text)]
 
     trt_context = engine.create_execution_context()
-    for context_text, query_text in testcases:
+    
+    # Use context manager for proper stream lifecycle management
+    with common.CudaStreamContext() as stream:
+        for context_text, query_text in testcases:
 
-        context_words, _ = preprocess(context_text)
+            context_words, _ = preprocess(context_text)
 
-        load_test_case(inputs, context_text, query_text, trt_context)
-        if not interactive:
-            print(f"Input context: {context_text}")
-            print(f"Input query: {query_text}")
-        trt_outputs = common.do_inference(
-            trt_context,
-            engine=engine,
-            bindings=bindings,
-            inputs=inputs,
-            outputs=outputs,
-            stream=stream,
-        )
-        start = trt_outputs[1].item()
-        end = trt_outputs[0].item()
-        answer = context_words[start : end + 1].flatten()
-        print(f"Model prediction: ", " ".join(answer))
-        print()
-    common.free_buffers(inputs, outputs, stream)
+            load_test_case(inputs, context_text, query_text, trt_context)
+            if not interactive:
+                print(f"Input context: {context_text}")
+                print(f"Input query: {query_text}")
+            trt_outputs = common.do_inference(
+                trt_context,
+                engine=engine,
+                bindings=bindings,
+                inputs=inputs,
+                outputs=outputs,
+                stream=stream,
+            )
+            start = trt_outputs[1].item()
+            end = trt_outputs[0].item()
+            answer = context_words[start : end + 1].flatten()
+            print(f"Model prediction: ", " ".join(answer))
+            print()
+        
+        # Note: free_buffers no longer needs stream parameter
+        common.free_buffers(inputs, outputs)
     print("Passed")
 
 

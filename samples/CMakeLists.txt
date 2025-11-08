@@ -22,6 +22,21 @@ endif()
 
 if(${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
+# Setup aliases for ease of swapping between static/dynamic TRT.
+if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
+    add_library(TRT_SAMPLES::tensorrt ALIAS tensorrt_static)
+    add_library(TRT_SAMPLES::onnxparser ALIAS nvonnxparser_static)
+
+    # Limit linking jobs to reduce memory usage.
+    # libnvinfer_static.a is multiple GB, so linking it into everything in parallel is a recipe for OOM kills.
+    # Observation is peak ~6GB per thread on x86 Linux.
+    set_property(GLOBAL PROPERTY JOB_POOLS three_jobs=3)
+    set(CMAKE_JOB_POOL_LINK three_jobs)
+else()
+    add_library(TRT_SAMPLES::tensorrt ALIAS tensorrt)
+    add_library(TRT_SAMPLES::onnxparser ALIAS nvonnxparser)
+endif()
+
 # OSS samples need the ONNX parser path to be included when each sample is built
 add_subdirectory(common)
 
@@ -48,9 +63,7 @@ if(${TRT_BUILD_SAMPLES})
     # Public (OSS) Samples
     add_sample(
         sampleCharRNN
-        sampleDynamicReshape
         sampleEditableTimingCache
-        sampleINT8API
         sampleIOFormats
         sampleNamedDimensions
         sampleOnnxMNIST
@@ -58,7 +71,11 @@ if(${TRT_BUILD_SAMPLES})
     )
 
     if (NOT ${TRT_BUILD_WINML})
-        list(APPEND SAMPLE_FOLDERS sampleNonZeroPlugin)
+        add_sample(
+            sampleDynamicReshape
+            sampleINT8API
+            sampleNonZeroPlugin
+        )
     endif()
 
     # This sample needs to link against nvinfer_plugin.
@@ -94,6 +111,3 @@ foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})
     add_subdirectory(${SAMPLE_ITER})
 endforeach(SAMPLE_ITER)
 endif()
-
-
-

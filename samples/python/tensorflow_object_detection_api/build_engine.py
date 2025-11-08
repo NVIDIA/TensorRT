@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,7 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
         super().__init__()
         self.cache_file = cache_file
         self.image_batcher = None
-        self.batch_allocation = None
+        self.batch_memory = None
         self.batch_generator = None
 
     def set_image_batcher(self, image_batcher: ImageBatcher):
@@ -60,8 +60,10 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
             np.dtype(self.image_batcher.dtype).itemsize
             * np.prod(self.image_batcher.shape)
         )
-        self.batch_allocation = common.cuda_call(cudart.cudaMalloc(size))
+        self.batch_memory = common.DeviceMem(size)
         self.batch_generator = self.image_batcher.get_batch()
+
+
 
     def get_batch_size(self):
         """
@@ -90,9 +92,9 @@ class EngineCalibrator(trt.IInt8EntropyCalibrator2):
                 )
             )
             common.memcpy_host_to_device(
-                self.batch_allocation, np.ascontiguousarray(batch)
+                self.batch_memory.device_ptr, np.ascontiguousarray(batch)
             )
-            return [int(self.batch_allocation)]
+            return [int(self.batch_memory.device_ptr)]
         except StopIteration:
             log.info("Finished calibration batches")
             return None

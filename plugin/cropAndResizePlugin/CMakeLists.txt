@@ -21,3 +21,4 @@ add_plugin_source(
     cropAndResizePluginLegacy.cpp
     cropAndResizePluginLegacy.h
 )
+

@@ -32,7 +32,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 **TensorRT GA build**
 
-- TensorRT v10.13.3.9
+- TensorRT v10.14.1.48
   - Available from direct download links listed below
 
 **System Packages**
@@ -86,24 +86,24 @@ To build the TensorRT-OSS components, you will first need the following software
 
    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
 
-   - [TensorRT 10.13.3.9 for CUDA 13.0, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.3/tars/TensorRT-10.13.3.9.Linux.x86_64-gnu.cuda-13.0.tar.gz)
-   - [TensorRT 10.13.3.9 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.3/tars/TensorRT-10.13.3.9.Linux.x86_64-gnu.cuda-12.9.tar.gz)
-   - [TensorRT 10.13.3.9 for CUDA 13.0, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.3/zip/TensorRT-10.13.3.9.Windows.win10.cuda-13.0.zip)
-   - [TensorRT 10.13.3.9 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.13.3/zip/TensorRT-10.13.3.9.Windows.win10.cuda-12.9.zip)
+   - [TensorRT 10.14.1.48 for CUDA 13.0, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-13.0.tar.gz)
+   - [TensorRT 10.14.1.48 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-12.9.tar.gz)
+   - [TensorRT 10.14.1.48 for CUDA 13.0, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/zip/TensorRT-10.14.1.48.Windows.win10.cuda-13.0.zip)
+   - [TensorRT 10.14.1.48 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/zip/TensorRT-10.14.1.48.Windows.win10.cuda-12.9.zip)
 
    **Example: Ubuntu 22.04 on x86-64 with cuda-13.0**
 
    ```bash
    cd ~/Downloads
-   tar -xvzf TensorRT-10.13.3.9.Linux.x86_64-gnu.cuda-13.0.tar.gz
-   export TRT_LIBPATH=`pwd`/TensorRT-10.13.3.9
+   tar -xvzf TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-13.0.tar.gz
+   export TRT_LIBPATH=`pwd`/TensorRT-10.14.1.48
    ```
 
    **Example: Windows on x86-64 with cuda-12.9**
 
    ```powershell
-   Expand-Archive -Path TensorRT-10.13.3.9.Windows.win10.cuda-12.9.zip
-   $env:TRT_LIBPATH="$pwd\TensorRT-10.13.3.9\lib"
+   Expand-Archive -Path TensorRT-10.14.1.48.Windows.win10.cuda-12.9.zip
+   $env:TRT_LIBPATH="$pwd\TensorRT-10.14.1.48\lib"
    ```
 
 ## Setting Up The Build Environment
@@ -112,16 +112,16 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 1. #### Generate the TensorRT-OSS build container.
 
-   **Example: Ubuntu 22.04 on x86-64 with cuda-13.0 (default)**
+   **Example: Ubuntu 24.04 on x86-64 with cuda-13.0 (default)**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-22.04.Dockerfile --tag tensorrt-ubuntu22.04-cuda13.0
+   ./docker/build.sh --file docker/ubuntu-24.04.Dockerfile --tag tensorrt-ubuntu24.04-cuda13.0
    ```
 
-   **Example: Rockylinux8 on x86-64 with cuda-12.9**
+   **Example: Rockylinux8 on x86-64 with cuda-13.0**
 
    ```bash
-   ./docker/build.sh --file docker/rockylinux8.Dockerfile --tag tensorrt-rockylinux8-cuda12.9
+   ./docker/build.sh --file docker/rockylinux8.Dockerfile --tag tensorrt-rockylinux8-cuda13.0
    ```
 
    **Example: Ubuntu 24.04 cross-compile for Jetson (aarch64) with cuda-13.0 (JetPack SDK)**
@@ -137,9 +137,9 @@ For Linux platforms, we recommend that you generate a docker container for build
    ```
 
 2. #### Launch the TensorRT-OSS build container.
-   **Example: Ubuntu 22.04 build container**
+   **Example: Ubuntu 24.04 build container**
    ```bash
-   ./docker/launch.sh --tag tensorrt-ubuntu22.04-cuda13.0 --gpus all
+   ./docker/launch.sh --tag tensorrt-ubuntu24.04-cuda13.0 --gpus all
    ```
    > NOTE:
    > <br> 1. Use the `--tag` corresponding to build container generated in Step 1.
@@ -175,7 +175,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   ```bash
   cd $TRT_OSSPATH
   mkdir -p build && cd build
-  cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DTRT_PLATFORM_ID=aarch64 -DGPU_ARCHS=110
+  cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DTRT_PLATFORM_ID=aarch64
   CC=/usr/bin/gcc make -j$(nproc)
   ```
 
@@ -186,7 +186,16 @@ For Linux platforms, we recommend that you generate a docker container for build
   ```bash
   cd $TRT_OSSPATH
   mkdir -p build && cd build
-  cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_cross.toolchain -DGPU_ARCHS=110
+  cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_cross.toolchain
+  make -j$(nproc)
+  ```
+
+  **Example: Ubuntu 24.04 Cross-Compile for DriveOS (aarch64) with cuda-13.0**
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_dos_cross.toolchain
   make -j$(nproc)
   ```
 
@@ -196,7 +205,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   cd $TRT_OSSPATH
   mkdir -p build
   cd -p build
-  cmake .. -DTRT_LIB_DIR="$env:TRT_LIBPATH" -DCUDNN_ROOT_DIR="$env:CUDNN_PATH" -DTRT_OUT_DIR="$pwd\\out"
+  cmake .. -DTRT_LIB_DIR="$env:TRT_LIBPATH" -DTRT_OUT_DIR="$pwd\\out"
   msbuild TensorRT.sln /property:Configuration=Release -m:$env:NUMBER_OF_PROCESSORS
   ```
 

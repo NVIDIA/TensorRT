@@ -41,7 +41,7 @@ namespace nvinfer1::utils
 class FileLock
 {
 public:
-    FileLock(nvinfer1::ILogger& logger, std::string const& fileName);
+    explicit FileLock(nvinfer1::ILogger& logger, std::string fileName);
     ~FileLock();
     FileLock() = delete;                           // no default ctor
     FileLock(FileLock const&) = delete;            // no copy ctor
@@ -66,7 +66,7 @@ private:
     //! The file handle on windows for the file lock.
     //!
     HANDLE mHandle{};
-#else
+#elif !defined(__QNX__)
     //!
     //! The file handle on linux for the file lock.
     //!

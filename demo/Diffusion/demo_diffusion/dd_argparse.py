@@ -79,6 +79,10 @@ def add_arguments(parser):
             "flux.1-dev-canny",
             "flux.1-dev-depth",
             "flux.1-kontext-dev",
+            "cosmos-predict2-2b-text2image",
+            "cosmos-predict2-14b-text2image",
+            "cosmos-predict2-2b-video2world",
+            "cosmos-predict2-14b-video2world",
         ),
         help="Version of Stable Diffusion",
     )
@@ -141,7 +145,7 @@ def add_arguments(parser):
         "--custom-onnx-paths",
         type=parse_key_value_pairs,
         help=(
-            "[FLUX only] Custom override paths to pre-exported ONNX model files. These ONNX models are directly used to "
+            "[FLUX, Stable Diffusion 3.5-large, Cosmos only] Custom override paths to pre-exported ONNX model files. These ONNX models are directly used to "
             "build TRT engines without further optimization on the ONNX graphs. Paths should be a comma-separated list "
             "of <model_name>:<path> pairs. For example: "
             "--custom-onnx-paths=transformer:/path/to/transformer.onnx,vae:/path/to/vae.onnx. Call "
@@ -278,6 +282,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     is_flux = args.version.startswith("flux")
     is_sd35 = args.version.startswith("3.5")
+    is_cosmos = args.version.startswith("cosmos")
 
     if args.height % 8 != 0 or args.width % 8 != 0:
         raise ValueError(
@@ -322,9 +327,11 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
             )
 
         # Check controlnet compatibility
-        if hasattr(args, "controlnet_type") and args.version != "xl-1.0":
-            raise ValueError("fp8 controlnet quantization is only supported for SDXL.")
-
+        if getattr(args, "controlnet_type", None) is not None:
+            if args.version not in ("xl-1.0", "3.5-large"):
+                raise ValueError("fp8 controlnet quantization is only supported for SDXL and SD3.5-large.")
+            if args.version == "3.5-large" and args.controlnet_type == "blur":
+                raise ValueError("Blur controlnet type is not supported for SD3.5.")
         # Check for conflicting quantization
         if args.int8:
             raise ValueError("Cannot apply both int8 and fp8 quantization, please choose only one.")
@@ -386,7 +393,9 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # Torch-fallback and Torch-inference
     if args.torch_fallback and not args.torch_inference:
-        assert is_flux or is_sd35, "PyTorch Fallback is only supported for Flux and Stable Diffusion 3.5 pipelines."
+        assert (
+            is_flux or is_sd35 or is_cosmos
+        ), "PyTorch Fallback is only supported for Flux, Stable Diffusion 3.5 and Cosmos pipelines."
         args.torch_fallback = args.torch_fallback.split(",")
 
     if args.torch_fallback and args.torch_inference:
@@ -397,7 +406,9 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # low-vram
     if args.low_vram:
-        assert is_flux or is_sd35, "low-vram mode is only supported for Flux and Stable Diffusion 3.5 pipelines."
+        assert (
+            is_flux or is_sd35 or is_cosmos
+        ), "low-vram mode is only supported for Flux, Stable Diffusion 3.5 and Cosmos pipelines."
 
     # Pack arguments
     kwargs_init_pipeline = {

@@ -91,8 +91,8 @@ void* CudnnWrapper::tryLoadingCudnn(char const* callerPluginName)
     static constexpr int32_t kSM_BLACKWELL_100 = 100;
 
     std::string errorMsgCudnnSupport
-    = "At least one plugin (" + std::string(callerPluginName) + ") that requires cuDNN is being used. TensorRT does not provide cuDNN support for Blackwell (compute capability: 10.0) and later architectures. Detected compute capability: " + std::to_string(nvinfer1::plugin::getSMVersion() / 10) + "." + std::to_string(nvinfer1::plugin::getSMVersion() % 10) + ". Please run on a platform with compute capability < 10.0, or use an alternative to " + std::string(callerPluginName) + ".";
-    PLUGIN_VALIDATE(nvinfer1::plugin::getSMVersion() < kSM_BLACKWELL_100, errorMsgCudnnSupport.c_str());
+    = "At least one plugin (" + std::string(callerPluginName) + ") that requires cuDNN is being used. TensorRT does not provide cuDNN support for Blackwell (compute capability: 10.0) and later architectures. Detected compute capability: " + std::to_string(nvinfer1::plugin::getSmVersion() / 10) + "." + std::to_string(nvinfer1::plugin::getSmVersion() % 10) + ". Please run on a platform with compute capability < 10.0, or use an alternative to " + std::string(callerPluginName) + ".";
+    PLUGIN_VALIDATE(nvinfer1::plugin::getSmVersion() < kSM_BLACKWELL_100, errorMsgCudnnSupport.c_str());
 #endif // CUDART_VERSION >= 12070 && CUDNN_MAJOR == 8
     void* cudnnLib = dllOpen(kCUDNN_PLUGIN_LIBNAME.c_str());
     std::string errorMsg = "Failed to load " + kCUDNN_PLUGIN_LIBNAME + ".";

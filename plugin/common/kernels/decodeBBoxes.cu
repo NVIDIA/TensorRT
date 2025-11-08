@@ -355,7 +355,7 @@ struct dbbLaunchConfig
         , function(function)
     {
     }
-    bool operator==(const dbbLaunchConfig& other)
+    bool operator==(dbbLaunchConfig const& other) const
     {
         return t_bbox == other.t_bbox;
     }

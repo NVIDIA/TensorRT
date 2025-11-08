@@ -17,13 +17,13 @@
 if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
 add_executable(sample_editable_timing_cache sampleEditableTimingCache.cpp)
-target_link_libraries(sample_editable_timing_cache PRIVATE trt_samples_common)
+target_link_libraries(sample_editable_timing_cache PRIVATE trt_samples_common TRT_SAMPLES::tensorrt)
 add_dependencies(tensorrt_samples sample_editable_timing_cache)
 
 installLibraries(
     TARGETS sample_editable_timing_cache
     OPTIONAL
-    COMPONENT full
+    COMPONENT internal
 )
 
 else()

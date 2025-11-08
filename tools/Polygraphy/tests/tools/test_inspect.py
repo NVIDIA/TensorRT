@@ -775,3 +775,32 @@ class TestInspectSparsity:
             ipath = ONNX_MODELS[model_name].path
             status = poly_inspect(["sparsity", ipath])
             assert status
+
+class TestDebugTensors:
+    @pytest.mark.skipif(
+        mod.version(trt.__version__) < mod.version("10.13"),
+        reason="Feature not supported before 10.13",
+    )
+    def test_unfused_debug_tensors(self, poly_run, poly_inspect):
+        with tempfile.TemporaryDirectory() as outdir:
+            model = ONNX_MODELS["matmul_2layer"].path
+
+            poly_run(
+                [
+                    model,
+                    "--trt",
+                    "--mark-unfused-tensors-as-debug-tensors",
+                    "--save-outputs",
+                    "output.json",
+                    "--save-engine",
+                    "debug_unfused.engine"
+                ],
+                cwd=outdir
+            )
+            status = poly_inspect(["model", "debug_unfused.engine", "--show", "layers", "--model-type", "engine", "--combine-tensor-info", "output.json"], cwd=outdir)
+
+            assert status.stdout.count("min") == 5
+            assert status.stdout.count("max") == 5  
+            assert status.stdout.count("avg") == 4
+
+            

@@ -718,7 +718,8 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
 
     // Add TopK layer to determine which character has highest probability.
     int reduceAxis = 0x1; // reduce across vocab axis
-    auto pred = network->addTopK(*addBiasLayer->getOutput(0), nvinfer1::TopKOperation::kMAX, 1, reduceAxis);
+    auto pred = network->addTopK(
+        *addBiasLayer->getOutput(0), nvinfer1::TopKOperation::kMAX, 1, reduceAxis, nvinfer1::DataType::kINT32);
     ASSERT(pred != nullptr);
     pred->getOutput(1)->setName(mParams.bindingNames.OUTPUT_BLOB_NAME);
 

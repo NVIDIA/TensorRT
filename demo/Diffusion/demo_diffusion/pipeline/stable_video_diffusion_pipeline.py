@@ -118,7 +118,11 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
 
         # TODO user configurable cuda_device_id
         cuda_device_id = 0
-        vram_size = cudart.cudaGetDeviceProperties(cuda_device_id)[1].totalGlobalMem
+        properties = cudart.cudaGetDeviceProperties(cuda_device_id)
+        if properties[0] != 0:
+            total_device_count = cudart.cudaGetDeviceCount()[1]
+            raise ValueError(f"Failed to get device properties for device {cuda_device_id}, total device count: {total_device_count}")
+        vram_size = properties[1].totalGlobalMem
         self.low_vram = vram_size < _GiB(40)
         if self.low_vram:
             print(f"[W] WARNING low VRAM ({vram_size/_GiB(1):.2f} GB) mode selected. Certain optimizations may be skipped.")
@@ -397,7 +401,7 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
         print('|-----------------|--------------|')
         print('| {:^15} | {:>9.2f} ms |'.format('Pipeline', walltime_ms))
         print('|-----------------|--------------|')
-        print('Throughput: {:.2f} videos/min ({} frames)'.format(batch_size*60000./walltime_ms, num_frames))
+        print('Throughput: {:.5f} videos/min ({} frames)'.format(batch_size*60000./walltime_ms, num_frames))
 
     def save_video(self, frames, pipeline, seed):
         video_name_prefix = '-'.join([pipeline, 'fp16', str(seed), str(random.randint(1000,9999))])

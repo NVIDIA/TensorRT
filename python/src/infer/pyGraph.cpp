@@ -35,13 +35,13 @@ namespace tensorrt
     // Long lambda functions should go here rather than being inlined into the bindings (1 liners are OK).
     namespace lambdas
     {
-        Weights optionalWeights(Weights* weights)
+        Weights optionalWeights(Weights* weights, DataType dtype)
         {
             if (weights)
             {
                 return *weights;
             }
-            return Weights{DataType::kFLOAT, nullptr, 0};
+            return Weights{dtype, nullptr, 0};
         }
 
         static const auto get_dynamic_range = [] (ITensor const& self) -> py::object {
@@ -148,7 +148,7 @@ namespace tensorrt
 
         static const auto add_convolution_nd = [](INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
-            return self.addConvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
+            return self.addConvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias, input.getType()));
         };
 
         IGridSampleLayer* add_grid_sample(INetworkDefinition& self, ITensor& input, ITensor& grid)
@@ -158,17 +158,17 @@ namespace tensorrt
 
         static const auto add_scale = [](INetworkDefinition& self, ITensor& input, ScaleMode mode, Weights* shift, Weights* scale, Weights* power)
         {
-            return self.addScale(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power));
+            return self.addScale(input, mode, optionalWeights(shift, input.getType()), optionalWeights(scale, input.getType()), optionalWeights(power, input.getType()));
         };
 
         static const auto add_scale_nd = [](INetworkDefinition& self, ITensor& input, ScaleMode mode, Weights* shift, Weights* scale, Weights* power, int32_t channelAxis)
         {
-            return self.addScaleNd(input, mode, optionalWeights(shift), optionalWeights(scale), optionalWeights(power), channelAxis);
+            return self.addScaleNd(input, mode, optionalWeights(shift, input.getType()), optionalWeights(scale, input.getType()), optionalWeights(power, input.getType()), channelAxis);
         };
 
         static const auto add_deconvolution_nd = [](INetworkDefinition& self, ITensor& input, int32_t numOutputMaps, Dims kernelSize, Weights kernel, Weights* bias)
         {
-            return self.addDeconvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias));
+            return self.addDeconvolutionNd(input, numOutputMaps, kernelSize, kernel, optionalWeights(bias, input.getType()));
         };
 
         static const auto add_einsum = [] (INetworkDefinition& self, const std::vector<ITensor*>& inputs, const char* equation) {
@@ -271,6 +271,12 @@ namespace tensorrt
         PY_ASSERT_RUNTIME_ERROR(status, "Failed to set CumulativeLayer's CumulativeOperation");
     }
 
+    static void attention_set_operation(IAttention& self, AttentionNormalizationOp op)
+    {
+        bool const status = self.setNormalizationOperation(op);
+        PY_ASSERT_RUNTIME_ERROR(status, "Failed to set Attention's AttentionNormalizationOp");
+    }
+
     void bindGraph(py::module& m)
     {
         // Bind to a Python enum called LayerType.
@@ -326,6 +332,8 @@ namespace tensorrt
             .value("UNSQUEEZE", LayerType::kUNSQUEEZE, LayerTypeDoc::UNSQUEEZE)
             .value("CUMULATIVE", LayerType::kCUMULATIVE, LayerTypeDoc::CUMULATIVE)
             .value("DYNAMIC_QUANTIZE", LayerType::kDYNAMIC_QUANTIZE, LayerTypeDoc::DYNAMIC_QUANTIZE)
+            .value("ATTENTION_INPUT", LayerType::kATTENTION_INPUT, LayerTypeDoc::ATTENTION_INPUT)
+            .value("ATTENTION_OUTPUT", LayerType::kATTENTION_OUTPUT, LayerTypeDoc::ATTENTION_OUTPUT)
         ; // LayerType
 
         py::enum_<TensorFormat>(m, "TensorFormat", TensorFormatDoc::descr, py::arithmetic{}, py::module_local())
@@ -670,6 +678,7 @@ namespace tensorrt
             .def_property("k", &ITopKLayer::getK, &ITopKLayer::setK)
             .def_property("axes", &ITopKLayer::getReduceAxes, &ITopKLayer::setReduceAxes)
             .def("set_input", &ITopKLayer::setInput, "index"_a, "tensor"_a, ITopKLayerDoc::set_input)
+            .def_property("indices_type", &ITopKLayer::getIndicesType, &ITopKLayer::setIndicesType)
         ;
 
         py::enum_<MatrixOperation>(m, "MatrixOperation", MatrixOperationDoc::descr, py::module_local())
@@ -793,6 +802,7 @@ namespace tensorrt
             .def_property("bounding_box_format", &INMSLayer::getBoundingBoxFormat, &INMSLayer::setBoundingBoxFormat)
             .def_property("topk_box_limit", &INMSLayer::getTopKBoxLimit, &INMSLayer::setTopKBoxLimit)
             .def("set_input", &INMSLayer::setInput, "index"_a, "tensor"_a, INMSLayerDoc::set_input)
+            .def_property("indices_type", &INMSLayer::getIndicesType, &INMSLayer::setIndicesType)
         ;
 
         py::enum_<FillOperation>(m, "FillOperation", FillOperationDoc::descr, py::module_local())
@@ -840,6 +850,7 @@ namespace tensorrt
         ;
 
         py::class_<INonZeroLayer, ILayer, std::unique_ptr<INonZeroLayer,py::nodelete>>(m, "INonZeroLayer", INonZeroLayerDoc::descr, py::module_local())
+            .def_property("indices_type", &INonZeroLayer::getIndicesType, &INonZeroLayer::setIndicesType)
         ;
 
         py::class_<IReverseSequenceLayer, ILayer, std::unique_ptr<IReverseSequenceLayer, py::nodelete>>(m, "IReverseSequenceLayer", IReverseSequenceLayerDoc::descr, py::module_local())
@@ -869,6 +880,36 @@ namespace tensorrt
             .def_property("op", &ICumulativeLayer::getOperation, &cumulative_layer_set_operation)
             .def_property("exclusive", &ICumulativeLayer::getExclusive, &ICumulativeLayer::setExclusive)
             .def_property("reverse", &ICumulativeLayer::getReverse, &ICumulativeLayer::setReverse)
+        ;
+
+        py::enum_<AttentionNormalizationOp>(m, "AttentionNormalizationOp", AttentionNormalizationOpDoc::descr, py::module_local())
+            .value("NONE", AttentionNormalizationOp::kNONE, AttentionNormalizationOpDoc::NONE)
+            .value("SOFTMAX", AttentionNormalizationOp::kSOFTMAX, AttentionNormalizationOpDoc::SOFTMAX)
+        ;
+
+        py::class_<IAttention, std::unique_ptr<IAttention, py::nodelete>>(m, "IAttention", IAttentionDoc::descr, py::module_local())
+            .def_property("mask", &IAttention::getMask, &IAttention::setMask)
+            .def_property("norm_op", &IAttention::getNormalizationOperation, &attention_set_operation)
+            .def_property("decomposable", &IAttention::getDecomposable, &IAttention::setDecomposable)
+            .def_property("causal", &IAttention::getCausal, &IAttention::setCausal)
+            .def_property("name", &IAttention::getName, &IAttention::setName)
+            .def_property("normalization_quantize_scale", &IAttention::getNormalizationQuantizeScale, &IAttention::setNormalizationQuantizeScale)
+            .def_property("normalization_quantize_to_type", &IAttention::getNormalizationQuantizeToType, &IAttention::setNormalizationQuantizeToType)
+            .def_property_readonly("num_inputs", &IAttention::getNbInputs)
+            .def_property_readonly("num_outputs", &IAttention::getNbOutputs)
+            .def("set_input", &IAttention::setInput, "index"_a, "tensor"_a, IAttentionDoc::set_input)
+            .def("get_input", &IAttention::getInput, "index"_a, IAttentionDoc::get_input)
+            .def("get_output", &IAttention::getOutput, "index"_a, IAttentionDoc::get_output)
+        ;
+
+        py::class_<IAttentionBoundaryLayer, ILayer, std::unique_ptr<IAttentionBoundaryLayer, py::nodelete>>(m, "IAttentionBoundaryLayer", IAttentionBoundaryLayerDoc::descr, py::module_local())
+            .def_property_readonly("attention", &IAttentionBoundaryLayer::getAttention, py::return_value_policy::reference_internal)
+        ;
+
+        py::class_<IAttentionInputLayer, IAttentionBoundaryLayer, std::unique_ptr<IAttentionInputLayer, py::nodelete>>(m, "IAttentionInputLayer", IAttentionInputLayerDoc::descr, py::module_local())
+        ;
+
+        py::class_<IAttentionOutputLayer, IAttentionBoundaryLayer, std::unique_ptr<IAttentionOutputLayer, py::nodelete>>(m, "IAttentionOutputLayer", IAttentionOutputLayerDoc::descr, py::module_local())
         ;
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
@@ -921,7 +962,9 @@ namespace tensorrt
                 INetworkDefinitionDoc::add_slice, py::return_value_policy::reference_internal)
             .def("add_reduce", &INetworkDefinition::addReduce, "input"_a, "op"_a, "axes"_a, "keep_dims"_a,
                 INetworkDefinitionDoc::add_reduce, py::return_value_policy::reference_internal)
-            .def("add_topk", &INetworkDefinition::addTopK, "input"_a, "op"_a, "k"_a, "axes"_a,
+            .def("add_topk", static_cast<ITopKLayer* (INetworkDefinition::*)(ITensor&, TopKOperation, int32_t, uint32_t)>(&INetworkDefinition::addTopK), "input"_a, "op"_a, "k"_a, "axes"_a,
+                INetworkDefinitionDoc::add_topk, py::return_value_policy::reference_internal)
+            .def("add_topk", static_cast<ITopKLayer* (INetworkDefinition::*)(ITensor&, TopKOperation, int32_t, uint32_t, DataType)>(&INetworkDefinition::addTopK), "input"_a, "op"_a, "k"_a, "axes"_a, "indices_type"_a,
                 INetworkDefinitionDoc::add_topk, py::return_value_policy::reference_internal)
             .def("add_gather", &INetworkDefinition::addGather, "input"_a, "indices"_a, "axis"_a,
                 INetworkDefinitionDoc::add_gather, py::return_value_policy::reference_internal)
@@ -965,8 +1008,10 @@ namespace tensorrt
                  py::return_value_policy::reference_internal)
             .def("add_grid_sample", &INetworkDefinition::addGridSample, "input"_a, "grid"_a,
                   INetworkDefinitionDoc::add_grid_sample, py::return_value_policy::reference_internal)
-            .def("add_nms", &INetworkDefinition::addNMS, "boxes"_a,
-                "scores"_a, "max_output_boxes_per_class"_a, INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
+            .def("add_nms", static_cast<INMSLayer* (INetworkDefinition::*)(ITensor&, ITensor&, ITensor&)>(&INetworkDefinition::addNMS), "boxes"_a, "scores"_a, "max_output_boxes_per_class"_a,
+                INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
+            .def("add_nms", static_cast<INMSLayer* (INetworkDefinition::*)(ITensor&, ITensor&, ITensor&, DataType)>(&INetworkDefinition::addNMS), "boxes"_a, "scores"_a, "max_output_boxes_per_class"_a, "indices_type"_a,
+                INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
             .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims const&, FillOperation, DataType)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, "output_type"_a, INetworkDefinitionDoc::add_fill)
             .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims const&, FillOperation)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
             .def("add_quantize",  static_cast<IQuantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&)>(&INetworkDefinition::addQuantize), "input"_a, "scale"_a,
@@ -985,14 +1030,17 @@ namespace tensorrt
                 py::return_value_policy::reference_internal)
             .def("add_one_hot", &INetworkDefinition::addOneHot, "indices"_a, "values"_a, "depth"_a, "axis"_a,
                 INetworkDefinitionDoc::add_one_hot, py::return_value_policy::reference_internal)
-            .def("add_non_zero", &INetworkDefinition::addNonZero, "input"_a, INetworkDefinitionDoc::add_non_zero,
-                py::return_value_policy::reference_internal)
+            .def("add_non_zero", static_cast<INonZeroLayer* (INetworkDefinition::*)(ITensor&)>(&INetworkDefinition::addNonZero), "input"_a,
+                INetworkDefinitionDoc::add_non_zero, py::return_value_policy::reference_internal)
+            .def("add_non_zero", static_cast<INonZeroLayer* (INetworkDefinition::*)(ITensor&, DataType)>(&INetworkDefinition::addNonZero), "input"_a, "indices_type"_a,
+                INetworkDefinitionDoc::add_non_zero, py::return_value_policy::reference_internal)
             .def("add_reverse_sequence", &INetworkDefinition::addReverseSequence, "input"_a, "sequence_lens"_a, INetworkDefinitionDoc::add_reverse_sequence,
                 py::return_value_policy::reference_internal)
             .def("add_normalization", &INetworkDefinition::addNormalization, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization,
                 py::return_value_policy::reference_internal)
             .def("add_cumulative", &INetworkDefinition::addCumulative, "input"_a, "axis"_a, "op"_a, "exclusive"_a, "reverse"_a,
                 INetworkDefinitionDoc::add_cumulative, py::return_value_policy::reference_internal)
+            .def("add_attention", &INetworkDefinition::addAttention, "query"_a, "key"_a, "value"_a, "norm_op"_a, "causal"_a, INetworkDefinitionDoc::add_attention, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)

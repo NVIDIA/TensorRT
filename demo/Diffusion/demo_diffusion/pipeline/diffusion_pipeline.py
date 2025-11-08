@@ -100,6 +100,10 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-depth",
         "flux.1-schnell",
         "flux.1-kontext-dev",
+        "cosmos-predict2-2b-text2image",
+        "cosmos-predict2-14b-text2image",
+        "cosmos-predict2-2b-video2world",
+        "cosmos-predict2-14b-video2world",
     )
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
@@ -120,6 +124,10 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-depth": "FlowMatchEuler",
         "flux.1-schnell": "FlowMatchEuler",
         "flux.1-kontext-dev": "FlowMatchEuler",
+        "cosmos-predict2-2b-text2image": "FlowMatchEuler",
+        "cosmos-predict2-14b-text2image": "FlowMatchEuler",
+        "cosmos-predict2-2b-video2world": "FlowMatchEuler",
+        "cosmos-predict2-14b-video2world": "FlowMatchEuler",
     }
 
     def __init__(
@@ -385,9 +393,10 @@ class DiffusionPipeline(ABC):
                 ), "fp8 quantization only supported for SDXL, SD1.5, SD2.1, SD3.5-large and FLUX pipelines"
                 if (
                     (self.pipeline_type.is_sd_xl() and model_name == "unetxl")
+                    or (self.version.startswith("flux.1") and model_name == "transformer")
                     or (
-                        (self.version.startswith("flux.1") or self.version.startswith("3.5-large"))
-                        and model_name == "transformer"
+                        self.version.startswith("3.5-large")
+                        and ("transformer" in model_name or "controlnet" in model_name)
                     )
                     or (model_name == "unet")
                 ):
@@ -622,6 +631,7 @@ class DiffusionPipeline(ABC):
             else:
                 self.is_native_export_supported(model_config)
 
+        dynamo = True if self.pipeline_type.is_video2world() and model_name == "transformer" else False
         if do_export_onnx or do_export_weights_map:
             if not model_config['use_int8'] and not model_config['use_fp8']:
                 obj.export_onnx(
@@ -633,6 +643,7 @@ class DiffusionPipeline(ABC):
                     enable_lora_merge=model_config["do_lora_merge"],
                     static_shape=static_shape,
                     lora_loader=self.lora_loader,
+                    dynamo=dynamo,
                 )
             else:
                 print(f"[I] Generating quantized ONNX model: {model_config['onnx_path']}")
@@ -656,6 +667,7 @@ class DiffusionPipeline(ABC):
                     opt_image_width,
                     custom_model=quantized_model,
                     static_shape=static_shape,
+                    dynamo=dynamo,
                 )
 
         # FIXME do_export_weights_map needs ONNX graph

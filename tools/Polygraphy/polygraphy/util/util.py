@@ -291,6 +291,14 @@ def unpack_args(args, num):
 
 
 @mod.export()
+def sanitize_filename(path):
+    """
+    Sanitizes a path so it can be used as a filename
+    """
+    return path.replace(os.path.sep, "_")
+
+
+@mod.export()
 class NamedTemporaryFile:
     """
     Cross-platform temporary file implementation. Unlike tempfile.NamedTemporaryFile,
@@ -560,7 +568,9 @@ def _get_num_bytes(contents: Union[str, bytes, trt.IHostMemory]) -> int:
         try:
             memory_view = memoryview(contents)
         except Exception:
-            raise TypeError(f"`contents` is {contents}, which is not bytes-like. Cannot get number of bytes.")
+            raise TypeError(
+                f"`contents` is {contents}, which is not bytes-like. Cannot get number of bytes."
+            )
         return len(memory_view)
 
 
@@ -1089,6 +1099,7 @@ def try_getattr(obj, attr, default=None):
         return getattr(obj, attr)
     return default
 
+
 @mod.export()
 def contains_wildcard(target):
     """
@@ -1101,16 +1112,17 @@ def contains_wildcard(target):
     """
     return any(ch in target for ch in "*?[]!")
 
+
 @mod.export()
 def match_keys(keys, targets):
     """
-    Matching targets to keys, all matched targets will be return as a dict of the corresponding keys. The keys 
+    Matching targets to keys, all matched targets will be return as a dict of the corresponding keys. The keys
     are allowed to contain wildcards
 
     Args:
         keys (iterable): Contains normal string names and wildcards
         targets (iterable): Targets list for matching
-    
+
     Returns:
         Tuple[dict, list]:
                 A tuple including matched target to key dict and unmatched keys list
@@ -1123,6 +1135,4 @@ def match_keys(keys, targets):
                 matched_keys.append(key)
                 target_to_key[target] = key
 
-    
     return target_to_key, [name for name in keys if name not in matched_keys]
-

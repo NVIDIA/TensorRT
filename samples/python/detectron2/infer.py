@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +51,7 @@ class TensorRTInfer:
         # Setup I/O bindings
         self.inputs = []
         self.outputs = []
-        self.allocations = []
+        self.device_memories = []
         for i in range(self.engine.num_io_tensors):
             name = self.engine.get_tensor_name(i)
             is_input = False
@@ -64,16 +64,16 @@ class TensorRTInfer:
             size = np.dtype(trt.nptype(dtype)).itemsize
             for s in shape:
                 size *= s
-            allocation = common.cuda_call(cudart.cudaMalloc(size))
+            device_mem = common.DeviceMem(size)
             binding = {
                 "index": i,
                 "name": name,
                 "dtype": np.dtype(trt.nptype(dtype)),
                 "shape": list(shape),
-                "allocation": allocation,
+                "allocation": device_mem.device_ptr,
                 "size": size,
             }
-            self.allocations.append(allocation)
+            self.device_memories.append(device_mem)
             if is_input:
                 self.inputs.append(binding)
             else:
@@ -82,7 +82,7 @@ class TensorRTInfer:
         assert self.batch_size > 0
         assert len(self.inputs) > 0
         assert len(self.outputs) > 0
-        assert len(self.allocations) > 0
+        assert len(self.device_memories) > 0
 
     def input_spec(self):
         """

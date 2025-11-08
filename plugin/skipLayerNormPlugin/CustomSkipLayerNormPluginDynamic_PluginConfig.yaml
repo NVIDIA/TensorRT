@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2022-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2022-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,7 +104,7 @@ versions:
       - ld
       - beta
       - gamma
-    golden_reference_script: "plugin/skipLayerNormPlugin/CustomSkipLayerNormPluginDynamic_PluginReference.py"
+    golden_reference_script: "plugin/CustomSkipLayerNormPluginDynamic_PluginReference.py"
     abs_tol: 1e-2
     rel_tol: 1e-2
     configs:
@@ -214,7 +214,7 @@ versions:
       - type_id
       - beta
       - gamma
-    golden_reference_script: "plugin/skipLayerNormPlugin/CustomSkipLayerNormPluginDynamic_PluginReference.py"
+    golden_reference_script: "plugin/CustomSkipLayerNormPluginDynamic_PluginReference.py"
     abs_tol: 1e-2
     rel_tol: 1e-2
     configs:

@@ -23,6 +23,7 @@ import onnx
 import onnx_graphsurgeon as gs
 import torch
 from onnx import shape_inference
+from onnxconverter_common.float16 import convert_float_to_float16
 from polygraphy.backend.onnx.loader import fold_constants
 
 from demo_diffusion.model import load
@@ -46,9 +47,11 @@ def optimize_checkpoint(model, torch_inference: str):
 
 
 class Optimizer:
-    def __init__(self, onnx_graph, verbose=False):
+
+    def __init__(self, onnx_graph, verbose=False, version=None):
         self.graph = gs.import_onnx(onnx_graph)
         self.verbose = verbose
+        self.version = version
 
     def info(self, prefix):
         if self.verbose:
@@ -185,6 +188,15 @@ class Optimizer:
         onnx_graph = gs.export_onnx(self.graph)
         # Convert INT8 Zero to FP8.
         onnx_graph = convert_zp_fp8(onnx_graph)
+
+        # WAR for legacy SD pipelines
+        legacy_versions = (
+            "1.4",
+            "1.5",
+            "2.1",
+        )
+        if any(self.version.startswith(prefix) for prefix in legacy_versions):
+            onnx_graph = convert_float_to_float16(onnx_graph, keep_io_types=False, disable_shape_infer=True)
 
         self.graph = gs.import_onnx(onnx_graph)
         # Add cast nodes to Resize I/O.

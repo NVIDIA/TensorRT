@@ -27,7 +27,7 @@ from demo_diffusion.utils_sd3.other_impls import load_into
 from demo_diffusion.utils_sd3.sd3_impls import BaseModel as BaseModelSD3
 
 # List of models to import from diffusers.models
-models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel"]
+models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel", "CosmosTransformer3DModel"]
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, "diffusers.models")
 
@@ -475,9 +475,8 @@ class SD3TransformerModel(base_model.BaseModel):
             "encoder_hidden_states",
             "pooled_projections",
             "timestep",
+            "block_controlnet_hidden_states"
         ]
-        if not self.fp8:
-            input_names.append("block_controlnet_hidden_states")
         return input_names
 
     def get_output_names(self):
@@ -491,9 +490,8 @@ class SD3TransformerModel(base_model.BaseModel):
             "pooled_projections": {0: xB},
             "timestep": {0: xB},
             "latent": {0: xB, 2: "H", 3: "W"},
+            "block_controlnet_hidden_states": {1: xB, 2: "latent_dim"}
         }
-        if not self.fp8:
-            dynamic_axes["block_controlnet_hidden_states"] = {1: xB, 2: "latent_dim"}
         return dynamic_axes
 
     def get_input_profile(
@@ -535,9 +533,7 @@ class SD3TransformerModel(base_model.BaseModel):
                 (self.xB * max_batch, self.config["pooled_projection_dim"]),
             ],
             "timestep": [(self.xB * min_batch,), (self.xB * batch_size,), (self.xB * max_batch,)],
-        }
-        if not self.fp8:
-            input_profile["block_controlnet_hidden_states"] = [
+            "block_controlnet_hidden_states":  [
                 (
                     self.num_controlnet_layers,
                     self.xB * min_batch,
@@ -557,6 +553,7 @@ class SD3TransformerModel(base_model.BaseModel):
                     self.config["num_attention_heads"] * self.config["attention_head_dim"],
                 ),
             ]
+        }
 
         return input_profile
 
@@ -568,14 +565,13 @@ class SD3TransformerModel(base_model.BaseModel):
             "pooled_projections": (self.xB * batch_size, self.config["pooled_projection_dim"]),
             "timestep": (self.xB * batch_size,),
             "latent": (self.xB * batch_size, self.out_channels, latent_height, latent_width),
-        }
-        if not self.fp8:
-            shape_dict["block_controlnet_hidden_states"] = (
+            "block_controlnet_hidden_states": (
                 self.num_controlnet_layers,
                 self.xB * batch_size,
                 latent_height // self.config["patch_size"] * latent_width // self.config["patch_size"],
                 self.config["num_attention_heads"] * self.config["attention_head_dim"],
             )
+        }
         return shape_dict
 
     def get_sample_input(self, batch_size, image_height, image_width, static_shape):
@@ -600,19 +596,225 @@ class SD3TransformerModel(base_model.BaseModel):
             ),
             torch.randn(self.xB * batch_size, self.config["pooled_projection_dim"], dtype=dtype, device=self.device),
             torch.randn(self.xB * batch_size, dtype=torch.float32, device=self.device),
+            {
+                "block_controlnet_hidden_states": torch.randn(
+                    self.num_controlnet_layers,
+                    self.xB * batch_size,
+                    latent_height // self.config["patch_size"] * latent_width // self.config["patch_size"],
+                    self.config["num_attention_heads"] * self.config["attention_head_dim"],
+                    dtype=dtype,
+                device=self.device,
+                ),
+            }
         )
-        if not self.fp8:
-            sample_input += (
-                {
-                    "block_controlnet_hidden_states": torch.randn(
-                        self.num_controlnet_layers,
-                        self.xB * batch_size,
-                        latent_height // self.config["patch_size"] * latent_width // self.config["patch_size"],
-                        self.config["num_attention_heads"] * self.config["attention_head_dim"],
-                        dtype=dtype,
-                        device=self.device,
-                    ),
-                }
+
+        return sample_input
+
+
+class CosmosTransformerModel(base_model.BaseModel):
+    def __init__(
+        self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        fp16=False,
+        tf32=False,
+        int8=False,
+        fp8=False,
+        bf16=False,
+        max_batch_size=16,
+        text_maxlen=77,
+        build_strongly_typed=False,
+        weight_streaming=False,
+        weight_streaming_budget_percentage=None,
+    ):
+        super(CosmosTransformerModel, self).__init__(
+            version,
+            pipeline,
+            device=device,
+            hf_token=hf_token,
+            verbose=verbose,
+            framework_model_dir=framework_model_dir,
+            fp16=fp16,
+            tf32=tf32,
+            int8=int8,
+            fp8=fp8,
+            bf16=bf16,
+            max_batch_size=max_batch_size,
+            text_maxlen=text_maxlen,
+        )
+        self.subfolder = "transformer"
+        self.transformer_model_dir = load.get_checkpoint_dir(
+            self.framework_model_dir, self.version, self.pipeline, self.subfolder
+        )
+        if not os.path.exists(self.transformer_model_dir):
+            self.config = CosmosTransformer3DModel.load_config(self.path, subfolder=self.subfolder, token=self.hf_token)
+        else:
+            print(f"[I] Load CosmosTransformer3DModel config from: {self.transformer_model_dir}")
+            self.config = CosmosTransformer3DModel.load_config(self.transformer_model_dir)
+        self.build_strongly_typed = build_strongly_typed
+        self.weight_streaming = weight_streaming
+        self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
+
+    def get_model(self, torch_inference=""):
+        model_opts = (
+            {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
+        )
+        if not load.is_model_cached(self.transformer_model_dir, model_opts, self.hf_safetensor):
+            model = CosmosTransformer3DModel.from_pretrained(
+                self.path,
+                subfolder=self.subfolder,
+                use_safetensors=self.hf_safetensor,
+                token=self.hf_token,
+                **model_opts,
+            ).to(self.device)
+            model.save_pretrained(self.transformer_model_dir, **model_opts)
+        else:
+            print(f"[I] Load CosmosTransformer3DModel model from: {self.transformer_model_dir}")
+            model = CosmosTransformer3DModel.from_pretrained(self.transformer_model_dir, **model_opts).to(self.device)
+        if torch_inference:
+            model.to(memory_format=torch.channels_last)
+        if self.fp16:
+            model.transformer_blocks[6].attn1.norm_q.float().to(self.device)
+
+        model = optimizer.optimize_checkpoint(model, torch_inference)
+        return model.to(self.device)
+
+    def get_input_names(self):
+        input_names = [
+            "hidden_states",
+            "timestep",
+            "encoder_hidden_states",
+            "padding_mask",
+        ]
+        if self.pipeline_type.is_video2world():
+            input_names.append("fps")
+            input_names.append("condition_mask")
+        return input_names
+
+    def get_output_names(self):
+        return ["latent"]
+
+    def get_dynamic_axes(self):
+        dynamic_axes = {
+            "hidden_states": {0: "B", 2: "latent_frames", 3: "latent_H", 4: "latent_W"},
+            "timestep": {0: "B"},
+            "encoder_hidden_states": {0: "B"},
+            "padding_mask": {0: "B", 2: "H", 3: "W"},
+        }
+        if self.pipeline_type.is_video2world():
+            dynamic_axes["fps"] = {0: "B"}
+            dynamic_axes["condition_mask"] = {0: "B", 2: "latent_frames", 3: "latent_H", 4: "latent_W"}
+
+        return dynamic_axes
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        (
+            min_batch,
+            max_batch,
+            min_image_height,
+            max_image_height,
+            min_image_width,
+            max_image_width,
+            min_latent_height,
+            max_latent_height,
+            min_latent_width,
+            max_latent_width,
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape)
+        latent_frames = 24 if self.pipeline_type.is_video2world() else 1
+        latent_channels = (
+            self.config["in_channels"] - 1 if self.pipeline_type.is_video2world() else self.config["in_channels"]
+        )
+        input_profile = {
+            "hidden_states": [
+                (min_batch, latent_channels, latent_frames, min_latent_height, min_latent_width),
+                (batch_size, latent_channels, latent_frames, latent_height, latent_width),
+                (max_batch, latent_channels, latent_frames, max_latent_height, max_latent_width),
+            ],
+            "timestep": [(min_batch,), (batch_size,), (max_batch,)],
+            "encoder_hidden_states": [
+                (min_batch, self.text_maxlen, self.config["text_embed_dim"]),
+                (batch_size, self.text_maxlen, self.config["text_embed_dim"]),
+                (max_batch, self.text_maxlen, self.config["text_embed_dim"]),
+            ],
+            "padding_mask": [
+                (1, 1, min_image_height, min_image_width),
+                (1, 1, image_height, image_width),
+                (1, 1, max_image_height, max_image_width),
+            ],
+        }
+        if self.pipeline_type.is_video2world():
+            input_profile["fps"] = [(min_batch,), (batch_size,), (max_batch,)]
+            input_profile["condition_mask"] = [
+                (min_batch, 1, latent_frames, min_latent_height, min_latent_width),
+                (batch_size, 1, latent_frames, latent_height, latent_width),
+                (max_batch, 1, latent_frames, max_latent_height, max_latent_width),
+            ]
+        return input_profile
+
+    def get_shape_dict(self, batch_size, image_height, image_width):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        # TODO: get latent_frames from infer call
+        latent_frames = 24 if self.pipeline_type.is_video2world() else 1
+        latent_channels = (
+            self.config["in_channels"] - 1 if self.pipeline_type.is_video2world() else self.config["in_channels"]
+        )
+        shape_dict = {
+            "hidden_states": (batch_size, latent_channels, latent_frames, latent_height, latent_width),
+            "timestep": (batch_size,),
+            "encoder_hidden_states": (batch_size, self.text_maxlen, self.config["text_embed_dim"]),
+            "padding_mask": (1, 1, image_height, image_width),
+            "latent": (batch_size, self.config["in_channels"], latent_frames, latent_height, latent_width),
+        }
+
+        if self.pipeline_type.is_video2world():
+            shape_dict["fps"] = (batch_size,)
+            shape_dict["condition_mask"] = (batch_size, 1, latent_frames, latent_height, latent_width)
+        return shape_dict
+
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape):
+        latent_height, latent_width = self.check_dims(batch_size, image_height, image_width)
+        dtype = torch.float32
+        assert not (self.fp16 and self.bf16), "fp16 and bf16 cannot be enabled simultaneously"
+        tensor_dtype = torch.bfloat16 if self.bf16 else (torch.float16 if self.fp16 else torch.float32)
+        latent_frames = 1
+        latent_channels = (
+            self.config["in_channels"] - 1 if self.pipeline_type.is_video2world() else self.config["in_channels"]
+        )
+        sample_input = (
+            {
+                "hidden_states": torch.randn(
+                    batch_size,
+                    latent_channels,
+                    latent_frames,
+                    latent_height,
+                    latent_width,
+                    dtype=tensor_dtype,
+                    device=self.device,
+                ),
+                "timestep": torch.tensor([1.0] * batch_size, dtype=tensor_dtype, device=self.device),
+                "encoder_hidden_states": torch.randn(
+                    batch_size, self.text_maxlen, self.config["text_embed_dim"], dtype=tensor_dtype, device=self.device
+                ),
+                "padding_mask": torch.ones(
+                    batch_size, 1, image_height, image_width, dtype=tensor_dtype, device=self.device
+                ),
+            },
+        )
+        if self.pipeline_type.is_video2world():
+            sample_input[-1]["fps"] = torch.tensor([30] * batch_size, dtype=dtype, device=self.device)
+            sample_input[-1]["condition_mask"] = torch.randn(
+                batch_size,
+                1,
+                latent_frames,
+                latent_height,
+                latent_width,
+                dtype=tensor_dtype,
+                device=self.device,
             )
 
         return sample_input

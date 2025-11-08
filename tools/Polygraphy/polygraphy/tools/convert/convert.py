@@ -56,7 +56,7 @@ class Convert(Tool):
             OnnxLoadArgs(allow_from_tf=True),
             OnnxSaveArgs(output_opt=False),
             DataLoaderArgs(),  # For int8 calibration
-            TrtConfigArgs(allow_engine_capability=True, allow_tensor_formats=True),
+            TrtConfigArgs(allow_engine_capability=True, allow_tensor_formats=True, allow_compute_capabilities=True),
             TrtLoadPluginsArgs(),
             TrtLoadNetworkArgs(allow_tensor_formats=True),
             TrtLoadEngineBytesArgs(),

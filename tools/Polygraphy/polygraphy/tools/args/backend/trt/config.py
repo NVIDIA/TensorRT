@@ -19,6 +19,7 @@ import os
 
 from polygraphy import constants, mod, util
 from polygraphy.common import TensorMetadata
+from polygraphy import config as polygraphy_config
 from polygraphy.logger import G_LOGGER, LogMode
 from polygraphy.mod.trt_importer import tensorrt_module_and_version_string
 from polygraphy.tools.args import util as args_util
@@ -116,6 +117,7 @@ class TrtConfigArgs(BaseArgs):
         allow_custom_input_shapes: bool = None,
         allow_engine_capability: bool = None,
         allow_tensor_formats: bool = None,
+        allow_compute_capabilities: bool = None,
     ):
         """
         Args:
@@ -134,6 +136,9 @@ class TrtConfigArgs(BaseArgs):
             allow_tensor_formats (bool):
                     Whether to allow tensor formats and related options to be set.
                     Defaults to False.
+            allow_compute_capabilities (bool):
+                    Whether to allow compute capabilities options to be set.
+                    Defaults to False.
         """
         super().__init__()
         self._precision_constraints_default = util.default(
@@ -145,6 +150,7 @@ class TrtConfigArgs(BaseArgs):
         self._allow_custom_input_shapes = util.default(allow_custom_input_shapes, True)
         self._allow_engine_capability = util.default(allow_engine_capability, False)
         self._allow_tensor_formats = util.default(allow_tensor_formats, False)
+        self._allow_compute_capabilities = util.default(allow_compute_capabilities, False)
 
     def add_parser_args_impl(self):
         self.group.add_argument(
@@ -442,7 +448,7 @@ class TrtConfigArgs(BaseArgs):
             help="The verbosity of NVTX annotations in the generated engine."
             "Values come from the names of values in the `trt.ProfilingVerbosity` enum and are case-insensitive. "
             "For example, `--profiling-verbosity detailed`. "
-            "Defaults to 'verbose'.",
+            "Defaults to 'detailed'.",
             default=None,
         )
 
@@ -485,6 +491,25 @@ class TrtConfigArgs(BaseArgs):
             "Values come from the names of values in the `trt.TilingOptimizationLevel` enum and are case-insensitive.",
             default=None,
         )
+
+        if polygraphy_config.USE_TENSORRT_RTX and self._allow_compute_capabilities:
+            compute_capabilities_group = self.group.add_mutually_exclusive_group()
+
+            compute_capabilities_group.add_argument(
+                "--use-gpu",
+                help="Use the current GPU device as target for engine compilation. "
+                "Equivalent to setting ComputeCapability.CURRENT.",
+                action="store_true",
+                default=None,
+            )
+
+            compute_capabilities_group.add_argument(
+                "--compute-capabilities",
+                help="Specify target compute capabilities for engine compilation. "
+                "Values should be major.minor versions (e.g., '7.5 8.0 8.6').",
+                nargs="+",
+                default=None,
+            )
 
     def parse_impl(self, args):
         """
@@ -532,6 +557,8 @@ class TrtConfigArgs(BaseArgs):
             weight_streaming (bool): Whether to enable weight streaming for the TensorRT Engine.
             runtime_platform (str): A string representing the target runtime platform enum value.
             tiling_optimization_level (str): The tiling optimization level.
+            use_gpu (bool): Whether to use the current GPU device as target for engine compilation.
+            compute_capabilities (List[Tuple[int, int]]): List of (major, minor) compute capability tuples to target for engine compilation.
         """
 
         trt_min_shapes = args_util.get(args, "trt_min_shapes", default=[])
@@ -709,6 +736,26 @@ class TrtConfigArgs(BaseArgs):
                 "TilingOptimizationLevel", tiling_optimization_level
             )
 
+        # Parse compute capabilities arguments if enabled and TensorRT-RTX is available
+        self.use_gpu = False
+        self.compute_capabilities = None
+
+        if self._allow_compute_capabilities and polygraphy_config.USE_TENSORRT_RTX:
+            self.use_gpu = args_util.get(args, "use_gpu", default=False)
+            compute_capabilities_list = args_util.get(args, "compute_capabilities")
+
+            if compute_capabilities_list:
+                # Parse compute capabilities from list of strings
+                try:
+                    capabilities = []
+                    for cap_str in compute_capabilities_list:
+                        major, minor = map(int, cap_str.split('.'))
+                        capabilities.append((major, minor))
+                    self.compute_capabilities = capabilities
+                except ValueError:
+                    G_LOGGER.critical(f"Invalid compute capabilities format: {compute_capabilities_list}. "
+                                      "Expected format: space-separated 'major.minor' versions (e.g., '7.5 8.0').")
+
     def add_to_script_impl(self, script):
         profiles = []
         for profile_dict in self.profile_dicts:
@@ -798,6 +845,8 @@ class TrtConfigArgs(BaseArgs):
                 self.runtime_platform,
                 self.quantization_flags,
                 self.tiling_optimization_level,
+                self.use_gpu,
+                self.compute_capabilities,
             ]
         ):
             script.add_import(imports=tensorrt_module_and_version_string(), imp_as="trt")
@@ -812,23 +861,37 @@ class TrtConfigArgs(BaseArgs):
                 name=self.trt_config_func_name,
             )
         else:
+            # Use CreateConfigRTX if TensorRT-RTX is enabled, otherwise use CreateConfig
+            if polygraphy_config.USE_TENSORRT_RTX:
+                config_class = "CreateConfigRTX"
+                config_alias = "CreateTrtConfigRTX"
+                extra_args = {
+                    "use_gpu": self.use_gpu,
+                    "compute_capabilities": self.compute_capabilities,
+                }
+            else:
+                config_class = "CreateConfig"
+                config_alias = "CreateTrtConfig"
+                extra_args = {
+                    "tf32": self.tf32,
+                    "fp16": self.fp16,
+                    "bf16": self.bf16,
+                    "int8": self.int8,
+                    "fp8": self.fp8,
+                    "calibrator": calibrator,
+                    "use_dla": self.use_dla,
+                    "allow_gpu_fallback": self.allow_gpu_fallback,
+                }
+
             config_loader_str = make_invocable_if_nondefault(
-                "CreateTrtConfig",
-                tf32=self.tf32,
-                fp16=self.fp16,
-                bf16=self.bf16,
-                int8=self.int8,
-                fp8=self.fp8,
+                config_alias,
                 precision_constraints=self.precision_constraints,
                 restricted=self.restricted,
                 profiles=profile_name,
-                calibrator=calibrator,
                 load_timing_cache=self.load_timing_cache,
                 algorithm_selector=algo_selector,
                 sparse_weights=self.sparse_weights,
                 tactic_sources=self.tactic_sources,
-                use_dla=self.use_dla,
-                allow_gpu_fallback=self.allow_gpu_fallback,
                 memory_pool_limits=self.memory_pool_limits,
                 refittable=self.refittable,
                 strip_plan=self.strip_plan,
@@ -847,13 +910,25 @@ class TrtConfigArgs(BaseArgs):
                 weight_streaming=self.weight_streaming,
                 runtime_platform=self.runtime_platform,
                 tiling_optimization_level=self.tiling_optimization_level,
+                **extra_args
             )
+            
+            if config_loader_str is None and polygraphy_config.USE_TENSORRT_RTX:
+                config_loader_str = make_invocable(config_alias)
+
             if config_loader_str is not None:
-                script.add_import(
-                    imports="CreateConfig",
-                    frm="polygraphy.backend.trt",
-                    imp_as="CreateTrtConfig",
-                )
+                if polygraphy_config.USE_TENSORRT_RTX:
+                    script.add_import(
+                        imports=config_class,
+                        frm="polygraphy.backend.tensorrt_rtx",
+                        imp_as=config_alias,
+                    )
+                else:
+                    script.add_import(
+                        imports=config_class,
+                        frm="polygraphy.backend.trt",
+                        imp_as=config_alias,
+                    )
 
         if config_loader_str is not None:
             config_loader_name = script.add_loader(
@@ -908,7 +983,13 @@ class TrtConfigArgs(BaseArgs):
         Returns:
             trt.IBuilderConfig: The TensorRT builder configuration.
         """
-        from polygraphy.backend.trt import CreateConfig
+        # Use CreateConfigRTX if TensorRT-RTX is enabled, otherwise use CreateConfig
+        if polygraphy_config.USE_TENSORRT_RTX:
+            from polygraphy.backend.tensorrt_rtx import CreateConfigRTX
+            default_loader = CreateConfigRTX()
+        else:
+            from polygraphy.backend.trt import CreateConfig
+            default_loader = CreateConfig()
 
-        loader = util.default(args_util.run_script(self.add_to_script), CreateConfig())
+        loader = util.default(args_util.run_script(self.add_to_script), default_loader)
         return loader(builder, network)
