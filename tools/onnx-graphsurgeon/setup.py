@@ -29,6 +29,7 @@ def no_publish():
 
 
 REQUIRED_PACKAGES = [
+    "ml_dtypes",
     "numpy",
     "onnx>=1.14.0,<=1.16.1",
 ]
