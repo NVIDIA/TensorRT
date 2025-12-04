@@ -1,0 +1,67 @@
+================================================================================
+CHANGES MADE TO FIX GITHUB ISSUE #4606
+================================================================================
+
+Issue: Clip layer upper bound not respected by TRT 10.x in MatMul->Add->Clip chains
+File Modified: parsers/onnx/onnxOpImporters.cpp
+Location: DEFINE_BUILTIN_OP_IMPORTER(Clip) function, after line 717
+
+================================================================================
+CHANGE DESCRIPTION
+================================================================================
+
+Added workaround to detect when Clip has min=0 and finite max, and force
+the use of elementwise operations instead of IActivationLayer to prevent
+TensorRT's incorrect optimization.
+
+================================================================================
+CODE ADDED (after extracting alpha and beta values, before activationHelper call)
+================================================================================
+
+    // Workaround for TensorRT 10.x bug: When Clip follows MatMul->Add with min=0 and finite max,
+    // TensorRT incorrectly optimizes it as unbounded ReLU, losing the upper bound.
+    // Force elementwise path in this case to preserve the upper bound.
+    // See GitHub issue #4606
+    constexpr float kEpsilon = 1e-6F;
+    bool const isMinZero = (alpha >= -kEpsilon && alpha <= kEpsilon);
+    bool const hasFiniteMax = (beta < std::numeric_limits<float>::max());
+    if (isMinZero && hasFiniteMax)
+    {
+        // Use elementwise operations to avoid TensorRT's incorrect optimization
+        auto type = convertToTensor(inputs.at(0), ctx).getType();
+        if (type == DataType::kHALF)
+        {
+            return elementwiseClipHelper<half_float::half>(
+                ctx, node, inputs, numInputs, ::ONNX_NAMESPACE::TensorProto::FLOAT16);
+        }
+        if (type == DataType::kBF16)
+        {
+            return elementwiseClipHelper<BFloat16>(
+                ctx, node, inputs, numInputs, ::ONNX_NAMESPACE::TensorProto::BFLOAT16);
+        }
+        // Default to float for other types
+        return elementwiseClipHelper<float>(ctx, node, inputs, numInputs, ::ONNX_NAMESPACE::TensorProto::FLOAT);
+    }
+
+================================================================================
+TESTING ARTIFACTS CREATED
+================================================================================
+
+1. test_clip_fix.py - Python script to generate test ONNX models
+2. matmul_add_clip_test.onnx - Test model with MatMul->Add->Clip(0,6) pattern
+3. simple_clip_test.onnx - Simple Clip(0,6) test model
+4. ISSUE_4606_FIX.md - Comprehensive documentation
+5. SOLUTION_SUMMARY.md - Solution summary
+6. CHANGES.txt - This file
+
+================================================================================
+VERIFICATION COMMANDS
+================================================================================
+
+# Verify the fix is present:
+grep -A 20 "Workaround for TensorRT 10.x bug" parsers/onnx/onnxOpImporters.cpp
+
+# Test with polygraphy (requires TensorRT installation):
+polygraphy run --trt --onnxrt matmul_add_clip_test.onnx --val-range [-10,10] --iterations 100
+
+================================================================================
