@@ -214,13 +214,13 @@ class TestOnnxExporter(object):
                 onnx.TensorProto.BFLOAT16,
                 np.uint16,
                 0.02,
-                onnx.numpy_helper.bfloat16_to_float32,
+                np.float32,
             ),
             (
                 onnx.TensorProto.FLOAT8E4M3FN,
                 np.uint8,
                 0.35,
-                lambda x, dims: onnx.numpy_helper.float8e4m3_to_float32(x, dims, fn=True, uz=False),
+                lambda x, dims: np.float32(x),
             ),
         ],
     )
