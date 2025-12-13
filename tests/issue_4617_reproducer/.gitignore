@@ -1,0 +1,13 @@
+# Build artifacts
+*.o
+*.so
+test
+test_stress
+valgrind_output.txt
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
