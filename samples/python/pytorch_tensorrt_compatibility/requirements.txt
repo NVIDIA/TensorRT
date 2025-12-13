@@ -1,0 +1,20 @@
+# Requirements for PyTorch + TensorRT Compatibility Example
+# This example demonstrates how to use PyTorch and TensorRT together
+# without CUDA context conflicts by using cuda-python instead of PyCUDA
+
+# Core requirements
+tensorrt>=8.0.0
+cuda-python>=11.0.0
+numpy>=1.19.0
+
+# Optional: PyTorch for demonstrating interoperability
+# Uncomment the appropriate line for your CUDA version:
+
+# For CUDA 11.8
+# torch>=2.0.0
+
+# For CUDA 12.1
+# torch>=2.1.0
+
+# Note: Install PyTorch separately with the appropriate CUDA version
+# Visit https://pytorch.org/get-started/locally/ for installation instructions
