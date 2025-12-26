@@ -18,6 +18,7 @@
 #ifndef TRT_SAMPLE_UTILS_H
 #define TRT_SAMPLE_UTILS_H
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -174,6 +175,11 @@ std::string sanitizeRemoteAutoTuningConfig(const std::string& config);
 //! @param argv Array of argument strings
 //! @return Vector of sanitized argument strings
 std::vector<std::string> sanitizeArgv(int32_t argc, char** argv);
+
+//! Check if a file path is writable by testing write access to the parent directory
+//! @param path The file path to check
+//! @return true if the path is writable, false otherwise
+bool canWriteFile(std::string const& path);
 
 } // namespace sample
 

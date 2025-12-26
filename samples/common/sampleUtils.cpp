@@ -775,4 +775,34 @@ std::vector<std::string> sanitizeArgv(int32_t argc, char** argv)
     return sanitizedArgs;
 }
 
+bool canWriteFile(std::string const& path)
+{
+    namespace fs = std::filesystem;
+    fs::path p(path);
+    fs::path dir = p.has_parent_path() ? p.parent_path() : fs::current_path();
+
+    // Check if the directory exists and is a directory
+    if (!fs::exists(dir) || !fs::is_directory(dir))
+    {
+        return false;
+    }
+
+    // Try to create a temporary file to test write permissions
+    fs::path const tempFilePath = dir / ".writetest.tmp";
+    std::ofstream test(tempFilePath.string(), std::ios::out | std::ios::trunc);
+    if (!test.is_open())
+    {
+        return false;
+    }
+    test << "test";
+    bool const ok = test.good();
+    test.close();
+
+    // Clean up the temporary file
+    std::error_code ec;
+    fs::remove(tempFilePath, ec);
+
+    return ok;
+}
+
 } // namespace sample
