@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from typing import List, Sequence, Union
 
-import ml_dtypes
 import numpy as np
 import onnx
 import onnx.numpy_helper
@@ -132,12 +131,12 @@ class NumpyArrayConverter(object):
 
 _NUMPY_ARRAY_CONVERTERS = {
     onnx.TensorProto.BFLOAT16: NumpyArrayConverter(
-        np.uint16, ml_dtypes.bfloat16
+        np.uint16, onnx.helper.float32_to_bfloat16
     ),
     # FP8 in TensorRT supports negative zeros, no infinities
     # See https://onnx.ai/onnx/technical/float8.html#papers
     onnx.TensorProto.FLOAT8E4M3FN: NumpyArrayConverter(
-        np.uint8, lambda x: ml_dtypes.float8_e4m3fn(x)
+        np.uint8, lambda x: onnx.helper.float32_to_float8e4m3(x, fn=True, uz=False)
     ),
 }
 
