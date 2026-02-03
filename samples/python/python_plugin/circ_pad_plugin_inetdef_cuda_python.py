@@ -342,7 +342,7 @@ if __name__ == "__main__":
     plg_registry.register_creator(my_plugin_creator, "")
 
     # Create plugin object
-    builder, network = create_network()
+    builder, network = create_network(strongly_typed=True)
     plg_creator = plg_registry.get_plugin_creator("CircPadPlugin", "1", "")
     plugin_fields_list = [
         trt.PluginField(
@@ -366,7 +366,7 @@ if __name__ == "__main__":
     # Build engine
     config = builder.create_builder_config()
     engine = engine_from_network(
-        (builder, network), CreateConfig(fp16=precision == trt.float16)
+        (builder, network), CreateConfig()
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")

@@ -98,6 +98,7 @@ class IIfConditionalOutputLayer;
 class IInt8Calibrator;
 #endif // !STRIP_TRT_RTX_INTERNAL_API
 class IIteratorLayer;
+class IKVCacheUpdateLayer;
 class ILayer;
 class ILoop;
 class ILoopOutputLayer;
@@ -117,6 +118,7 @@ class IPluginFactory;
 class IPluginLayer;
 class IPluginRegistry;
 class IPluginV2Layer;
+class IRotaryEmbeddingLayer;
 class IRuntimeConfig;
 
 namespace v_1_0
@@ -189,6 +191,7 @@ enum class ElementWiseOperation : int32_t;
 enum class EngineCapability : int32_t;
 enum class FillOperation : int32_t;
 enum class GatherMode : int32_t;
+enum class KVCacheMode : int32_t;
 enum class LayerInformationFormat : int32_t;
 enum class LayerType : int32_t;
 enum class LoopOutput : int32_t;
@@ -424,6 +427,8 @@ public:
         IRuntimeConfig* runtimeConfig) noexcept = 0;
     TRT_NODISCARD virtual IRuntimeConfig* createRuntimeConfig() noexcept = 0;
     TRT_NODISCARD virtual int64_t getEngineStat(EngineStat stat) const noexcept = 0;
+    // Added in TensorRT 10.15
+    TRT_NODISCARD virtual char const* getAliasedInputTensor(char const* tensorName) const noexcept = 0;
 };
 
 class VExecutionContext : public VRoot
@@ -963,6 +968,8 @@ public:
     TRT_NODISCARD virtual ITensor* getNormalizationQuantizeScale() const noexcept = 0;
     TRT_NODISCARD virtual bool setNormalizationQuantizeToType(DataType type) noexcept = 0;
     TRT_NODISCARD virtual DataType getNormalizationQuantizeToType() const noexcept = 0;
+    TRT_NODISCARD virtual bool setMetadata(char const* docString) noexcept = 0;
+    TRT_NODISCARD virtual char const* getMetadata() const noexcept = 0;
 };     // class VAttention
 
 class VSelectLayer : public VRoot
@@ -1003,6 +1010,8 @@ public:
     virtual void setAxis(int32_t axis) noexcept = 0;
     virtual DataType getToType() const noexcept = 0;
     virtual void setToType(DataType toType) noexcept = 0;
+    virtual Dims getBlockShape() const noexcept = 0;
+    virtual bool setBlockShape(Dims const& blockShape) noexcept = 0;
 };
 
 class VDequantizeLayer : public VRoot
@@ -1012,19 +1021,23 @@ public:
     virtual void setAxis(int32_t axis) noexcept = 0;
     virtual DataType getToType() const noexcept = 0;
     virtual void setToType(DataType toType) noexcept = 0;
+    virtual Dims getBlockShape() const noexcept = 0;
+    virtual bool setBlockShape(Dims const& blockShape) noexcept = 0;
 };
 
 class VDynamicQuantizeLayer : public VRoot
 {
 public:
-    virtual int32_t getAxis() const noexcept = 0;
-    virtual void setAxis(int32_t axis) noexcept = 0;
-    virtual int32_t getBlockSize() const noexcept = 0;
-    virtual void setBlockSize(int32_t axis) noexcept = 0;
+    TRT_DEPRECATED virtual int32_t getAxis() const noexcept = 0;
+    TRT_DEPRECATED virtual void setAxis(int32_t axis) noexcept = 0;
+    TRT_DEPRECATED virtual int32_t getBlockSize() const noexcept = 0;
+    TRT_DEPRECATED virtual void setBlockSize(int32_t axis) noexcept = 0;
     virtual DataType getScaleType() const noexcept = 0;
     virtual void setScaleType(DataType axis) noexcept = 0;
     virtual DataType getToType() const noexcept = 0;
     virtual void setToType(DataType toType) noexcept = 0;
+    virtual Dims getBlockShape() const noexcept = 0;
+    virtual void setBlockShape(Dims const& blockShape) noexcept = 0;
 };
 
 class VScatterLayer : public VRoot
@@ -1093,6 +1106,7 @@ public:
     virtual int64_t getNbGroups() const noexcept = 0;
     virtual void setComputePrecision(DataType type) noexcept = 0;
     virtual DataType getComputePrecision() const noexcept = 0;
+    virtual bool isV2() const noexcept = 0;
 }; // class VNormalizationLayer
 
 class VSqueezeLayer : public VRoot
@@ -1113,6 +1127,23 @@ public:
     virtual void setReverse(bool reverse) noexcept = 0;
     virtual bool getReverse() const noexcept = 0;
 }; // class VCumulativeLayer
+
+class VRotaryEmbeddingLayer : public VRoot
+{
+public:
+    virtual void setInterleaved(bool interleaved) noexcept = 0;
+    virtual bool getInterleaved() const noexcept = 0;
+    virtual bool setRotaryEmbeddingDim(int32_t rotaryEmbeddingDim) noexcept = 0;
+    virtual int32_t getRotaryEmbeddingDim() const noexcept = 0;
+    virtual void setInput(int32_t index, ITensor& input) noexcept = 0;
+}; // class VRotaryEmbeddingLayer
+
+class VKVCacheUpdateLayer : public VRoot
+{
+public:
+    TRT_NODISCARD virtual bool setCacheMode(KVCacheMode cacheMode) noexcept = 0;
+    TRT_NODISCARD virtual KVCacheMode getCacheMode() const noexcept = 0;
+}; // class VKVCacheUpdateLayer
 
 
 class VNetworkDefinition : public VRoot
@@ -1205,23 +1236,26 @@ public:
     virtual ISqueezeLayer* addSqueeze(ITensor& input, ITensor& axes) noexcept = 0;
     virtual IUnsqueezeLayer* addUnsqueeze(ITensor& input, ITensor& axes) noexcept = 0;
     virtual IDynamicQuantizeLayer* addDynamicQuantize(
-        ITensor& input, int32_t axis, int32_t blockSize, DataType toType, DataType scaleType) noexcept
-        = 0;
+        ITensor& input, int32_t axis, int32_t blockSize, DataType toType, DataType scaleType) noexcept = 0;
     virtual ICumulativeLayer* addCumulative(
-        ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept
-        = 0;
+        ITensor& input, ITensor& axis, CumulativeOperation operation, bool exclusive, bool reverse) noexcept = 0;
     virtual bool markUnfusedTensorsAsDebugTensors() noexcept = 0;
     virtual bool unmarkUnfusedTensorsAsDebugTensors() noexcept = 0;
     virtual ITopKLayer* addTopKV2(
-        ITensor& input, TopKOperation op, int32_t k, uint32_t reduceAxes, DataType indicesType) noexcept
-        = 0;
+        ITensor& input, TopKOperation op, int32_t k, uint32_t reduceAxes, DataType indicesType) noexcept = 0;
     virtual INonZeroLayer* addNonZeroV2(ITensor& input, DataType indicesType) noexcept = 0;
     virtual INMSLayer* addNMSV2(
-        ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass, DataType indicesType) noexcept
-        = 0;
+        ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass, DataType indicesType) noexcept = 0;
     virtual IAttention* addAttention(
-        ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp, bool isCausal) noexcept
-        = 0;
+        ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp, bool isCausal) noexcept = 0;
+    virtual IRotaryEmbeddingLayer* addRotaryEmbedding(ITensor& input, ITensor& cosCache, ITensor& sinCache,
+        bool interleaved, int32_t rotaryEmbeddingDim) noexcept = 0;
+    virtual IDynamicQuantizeLayer* addDynamicQuantizeV2(
+        ITensor& input, Dims const& blockShape, DataType toType, DataType scaleType) noexcept = 0;
+    virtual IKVCacheUpdateLayer* addKVCacheUpdate(
+        ITensor& cache, ITensor& update, ITensor& writeIndices, KVCacheMode cacheMode) noexcept = 0;
+    virtual INormalizationLayer* addNormalizationV2(
+            ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept = 0;
 };
 
 #if !STRIP_TRT_RTX_INTERNAL_API

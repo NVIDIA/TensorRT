@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -347,35 +347,6 @@ public:
     }
 
     //!
-    //! \brief Templated print function that dumps buffers of arbitrary type to std::ostream.
-    //!        rowCount parameter controls how many elements are on each line.
-    //!        A rowCount of 1 means that there is only 1 element on each line.
-    //!
-    template <typename T>
-    void print(std::ostream& os, void* buf, size_t bufSize, size_t rowCount)
-    {
-        assert(rowCount != 0);
-        assert(bufSize % sizeof(T) == 0);
-        T* typedBuf = static_cast<T*>(buf);
-        size_t numItems = bufSize / sizeof(T);
-        for (int32_t i = 0; i < static_cast<int>(numItems); i++)
-        {
-            // Handle rowCount == 1 case
-            if (rowCount == 1 && i != static_cast<int>(numItems) - 1)
-                os << typedBuf[i] << std::endl;
-            else if (rowCount == 1)
-                os << typedBuf[i];
-            // Handle rowCount > 1 case
-            else if (i % rowCount == 0)
-                os << typedBuf[i];
-            else if (i % rowCount == rowCount - 1)
-                os << " " << typedBuf[i] << std::endl;
-            else
-                os << " " << typedBuf[i];
-        }
-    }
-
-    //!
     //! \brief Copy the contents of input host buffers to input device buffers synchronously.
     //!
     void copyInputToDevice()
@@ -419,7 +390,7 @@ private:
                        : mManagedBuffers[record->second]->deviceBuffer.data());
     }
 
-    bool tenosrIsInput(const std::string& tensorName) const
+    bool tensorIsInput(const std::string& tensorName) const
     {
         return mEngine->getTensorIOMode(tensorName.c_str()) == nvinfer1::TensorIOMode::kINPUT;
     }
@@ -434,7 +405,7 @@ private:
                                               : mManagedBuffers[n.second]->hostBuffer.data();
             size_t const byteSize = mManagedBuffers[n.second]->hostBuffer.nbBytes();
             const cudaMemcpyKind memcpyType = deviceToHost ? cudaMemcpyDeviceToHost : cudaMemcpyHostToDevice;
-            if ((copyInput && tenosrIsInput(n.first)) || (!copyInput && !tenosrIsInput(n.first)))
+            if ((copyInput && tensorIsInput(n.first)) || (!copyInput && !tensorIsInput(n.first)))
             {
                 if (async)
                     CHECK(cudaMemcpyAsync(dstPtr, srcPtr, byteSize, memcpyType, stream));

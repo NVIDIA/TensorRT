@@ -43,14 +43,13 @@
 #include <unordered_map>
 #include <vector>
 using namespace nvinfer1;
-using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_int8_api";
 
 struct SampleINT8APIPreprocessing
 {
     // Preprocessing values are available here:
-    // https://github.com/onnx/models/tree/master/models/image_classification/resnet
+    // https://github.com/onnx/models/tree/main/validated/vision/classification/resnet
     std::vector<int> inputDims{1, 3, 224, 224};
 };
 
@@ -82,10 +81,6 @@ struct SampleINT8APIParams
 //!
 class SampleINT8API
 {
-private:
-    template <typename T>
-    using SampleUniquePtr = std::unique_ptr<T>;
-
 public:
     SampleINT8API(const SampleINT8APIParams& params)
         : mParams(params)
@@ -110,7 +105,7 @@ public:
     SampleINT8APIParams mParams; //!< Stores Sample Parameter
 
 private:
-    SampleUniquePtr<IRuntime> mRuntime{}; //!< The TensorRT Runtime used to deserialize the engine.
+    std::unique_ptr<IRuntime> mRuntime{}; //!< The TensorRT Runtime used to deserialize the engine.
 
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
 
@@ -128,12 +123,12 @@ private:
     //!
     //! \brief Reads the ppm input image, preprocesses, and stores the result in a managed buffer
     //!
-    bool prepareInput(const samplesCommon::BufferManager& buffers);
+    bool prepareInput(samplesCommon::BufferManager const& buffers);
 
     //!
     //! \brief Verifies that the output is correct and prints it
     //!
-    bool verifyOutput(const samplesCommon::BufferManager& buffers) const;
+    bool verifyOutput(samplesCommon::BufferManager const& buffers) const;
 
     //!
     //! \brief Populate per-tensor dynamic range values
@@ -143,17 +138,17 @@ private:
     //!
     //! \brief  Sets custom dynamic range for network tensors
     //!
-    bool setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
+    bool setDynamicRange(nvinfer1::INetworkDefinition& network);
 
     //!
     //! \brief  Sets computation precision for network layers
     //!
-    void setLayerPrecision(SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
+    void setLayerPrecision(nvinfer1::INetworkDefinition const& network);
 
     //!
     //! \brief  Write network tensor names to a file.
     //!
-    void writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INetworkDefinition>& network);
+    void writeNetworkTensorNames(nvinfer1::INetworkDefinition const& network);
 };
 
 //!
@@ -207,12 +202,12 @@ bool SampleINT8API::readPerTensorDynamicRangeValues()
     while (std::getline(iDynamicRangeStream, line))
     {
         std::istringstream iline(line);
-        std::string token;
-        std::getline(iline, token, delim);
-        std::string tensorName = token;
-        std::getline(iline, token, delim);
-        float dynamicRange = std::stof(token);
-        mPerTensorDynamicRangeMap[tensorName] = dynamicRange;
+        std::string tensorName;
+        std::getline(iline, tensorName, delim);
+        std::string dynamicRangeStr;
+        std::getline(iline, dynamicRangeStr, delim);
+        float dynamicRange = std::stof(dynamicRangeStr);
+        mPerTensorDynamicRangeMap.insert_or_assign(std::move(tensorName), dynamicRange);
     }
     return true;
 }
@@ -220,12 +215,12 @@ bool SampleINT8API::readPerTensorDynamicRangeValues()
 //!
 //! \brief  Sets computation precision for network layers
 //!
-void SampleINT8API::setLayerPrecision(SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+void SampleINT8API::setLayerPrecision(nvinfer1::INetworkDefinition const& network)
 {
     sample::gLogInfo << "Setting Per Layer Computation Precision" << std::endl;
-    for (int i = 0; i < network->getNbLayers(); ++i)
+    for (int i = 0; i < network.getNbLayers(); ++i)
     {
-        auto layer = network->getLayer(i);
+        auto layer = network.getLayer(i);
         if (mParams.verbose)
         {
             std::string layerName = layer->getName();
@@ -261,7 +256,7 @@ void SampleINT8API::setLayerPrecision(SampleUniquePtr<nvinfer1::INetworkDefiniti
 //!
 //! \brief  Write network tensor names to a file.
 //!
-void SampleINT8API::writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+void SampleINT8API::writeNetworkTensorNames(nvinfer1::INetworkDefinition const& network)
 {
     sample::gLogInfo << "Sample requires to run with per-tensor dynamic range." << std::endl;
     sample::gLogInfo
@@ -272,9 +267,9 @@ void SampleINT8API::writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INet
     std::ofstream tensorsFile{mParams.networkTensorsFileName};
 
     // Iterate through network inputs to write names of input tensors.
-    for (int i = 0; i < network->getNbInputs(); ++i)
+    for (int i = 0; i < network.getNbInputs(); ++i)
     {
-        std::string tName = network->getInput(i)->getName();
+        std::string tName = network.getInput(i)->getName();
         tensorsFile << "TensorName: " << tName << std::endl;
         if (mParams.verbose)
         {
@@ -283,12 +278,12 @@ void SampleINT8API::writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INet
     }
 
     // Iterate through network layers.
-    for (int i = 0; i < network->getNbLayers(); ++i)
+    for (int i = 0; i < network.getNbLayers(); ++i)
     {
         // Write output tensors of a layer to the file.
-        for (int j = 0; j < network->getLayer(i)->getNbOutputs(); ++j)
+        for (int j = 0; j < network.getLayer(i)->getNbOutputs(); ++j)
         {
-            std::string tName = network->getLayer(i)->getOutput(j)->getName();
+            std::string tName = network.getLayer(i)->getOutput(j)->getName();
             tensorsFile << "TensorName: " << tName << std::endl;
             if (mParams.verbose)
             {
@@ -308,7 +303,7 @@ void SampleINT8API::writeNetworkTensorNames(const SampleUniquePtr<nvinfer1::INet
 //!
 //! \brief  Sets custom dynamic range for network tensors
 //!
-bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+bool SampleINT8API::setDynamicRange(nvinfer1::INetworkDefinition& network)
 {
     // populate per-tensor dynamic range
     if (!readPerTensorDynamicRangeValues())
@@ -329,12 +324,12 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
             << std::endl;
     }
     // set dynamic range for network input tensors
-    for (int i = 0; i < network->getNbInputs(); ++i)
+    for (int i = 0; i < network.getNbInputs(); ++i)
     {
-        std::string tName = network->getInput(i)->getName();
+        std::string tName = network.getInput(i)->getName();
         if (mPerTensorDynamicRangeMap.find(tName) != mPerTensorDynamicRangeMap.end())
         {
-            if (!network->getInput(i)->setDynamicRange(
+            if (!network.getInput(i)->setDynamicRange(
                     -mPerTensorDynamicRangeMap.at(tName), mPerTensorDynamicRangeMap.at(tName)))
             {
                 return false;
@@ -350,9 +345,9 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
     }
 
     // set dynamic range for layer output tensors
-    for (int i = 0; i < network->getNbLayers(); ++i)
+    for (int i = 0; i < network.getNbLayers(); ++i)
     {
-        auto lyr = network->getLayer(i);
+        auto lyr = network.getLayer(i);
         for (int j = 0, e = lyr->getNbOutputs(); j < e; ++j)
         {
             std::string tName = lyr->getOutput(j)->getName();
@@ -424,7 +419,7 @@ bool SampleINT8API::setDynamicRange(SampleUniquePtr<nvinfer1::INetworkDefinition
 //!
 //! \brief Preprocess inputs and allocate host/device input buffers
 //!
-bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
+bool SampleINT8API::prepareInput(samplesCommon::BufferManager const& buffers)
 {
     if (samplesCommon::toLower(samplesCommon::getFileType(mParams.imageFileName)).compare("ppm") != 0)
     {
@@ -467,10 +462,10 @@ bool SampleINT8API::prepareInput(const samplesCommon::BufferManager& buffers)
 //!
 //! \brief Verifies that the output is correct and prints it
 //!
-bool SampleINT8API::verifyOutput(const samplesCommon::BufferManager& buffers) const
+bool SampleINT8API::verifyOutput(samplesCommon::BufferManager const& buffers) const
 {
     // copy output host buffer data for further processing
-    const float* probPtr = static_cast<const float*>(buffers.getHostBuffer(mInOut.at("output")));
+    float const* probPtr = static_cast<float const*>(buffers.getHostBuffer(mInOut.at("output")));
     std::vector<float> output(probPtr, probPtr + mOutputDims.d[1]);
 
     auto inds = samplesCommon::argMagnitudeSort(output.cbegin(), output.cend());
@@ -504,21 +499,21 @@ bool SampleINT8API::verifyOutput(const samplesCommon::BufferManager& buffers) co
 //!
 sample::Logger::TestResult SampleINT8API::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         sample::gLogError << "Unable to create builder object." << std::endl;
         return sample::Logger::TestResult::kFAILED;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
     if (!network)
     {
         sample::gLogError << "Unable to create network object." << mParams.referenceFileName << std::endl;
         return sample::Logger::TestResult::kFAILED;
     }
 
-    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    auto config = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
     if (!config)
     {
         sample::gLogError << "Unable to create config object." << mParams.referenceFileName << std::endl;
@@ -526,7 +521,7 @@ sample::Logger::TestResult SampleINT8API::build()
     }
 
     auto parser
-        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+        = std::unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
     if (!parser)
     {
         sample::gLogError << "Unable to create parser object." << mParams.referenceFileName << std::endl;
@@ -534,8 +529,9 @@ sample::Logger::TestResult SampleINT8API::build()
     }
 
     // Parse ONNX model file to populate TensorRT INetwork
-    int verbosity = (int) nvinfer1::ILogger::Severity::kERROR;
-    if (!parser->parseFromFile(mParams.modelFileName.c_str(), verbosity))
+    constexpr auto kVERBOSITY
+        = static_cast<std::underlying_type_t<nvinfer1::ILogger::Severity>>(nvinfer1::ILogger::Severity::kERROR);
+    if (!parser->parseFromFile(mParams.modelFileName.c_str(), kVERBOSITY))
     {
         sample::gLogError << "Unable to parse ONNX model file: " << mParams.modelFileName << std::endl;
         return sample::Logger::TestResult::kFAILED;
@@ -543,11 +539,11 @@ sample::Logger::TestResult SampleINT8API::build()
 
     if (mParams.writeNetworkTensors)
     {
-        writeNetworkTensorNames(network);
+        writeNetworkTensorNames(*network);
         return sample::Logger::TestResult::kWAIVED;
     }
 
-    // Configure buider
+    // Configure builder
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
 
     // Enable INT8 model. Required to set custom per-tensor dynamic range or INT8 Calibration
@@ -556,10 +552,10 @@ sample::Logger::TestResult SampleINT8API::build()
     config->setInt8Calibrator(nullptr);
 
     // force layer to execute with required precision
-    setLayerPrecision(network);
+    setLayerPrecision(*network);
 
     // set INT8 Per Tensor Dynamic range
-    if (!setDynamicRange(network))
+    if (!setDynamicRange(*network))
     {
         sample::gLogError << "Unable to set per-tensor dynamic range." << std::endl;
         return sample::Logger::TestResult::kFAILED;
@@ -573,14 +569,14 @@ sample::Logger::TestResult SampleINT8API::build()
     }
     config->setProfileStream(*profileStream);
 
-    SampleUniquePtr<nvinfer1::ITimingCache> timingCache;
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache;
     if (!mParams.timingCacheFile.empty())
     {
         timingCache
             = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
-    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    std::unique_ptr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         sample::gLogError << "Unable to build serialized plan." << std::endl;
@@ -595,7 +591,7 @@ sample::Logger::TestResult SampleINT8API::build()
 
     if (!mRuntime)
     {
-        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+        mRuntime = std::unique_ptr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
     }
 
     if (!mRuntime)
@@ -605,8 +601,7 @@ sample::Logger::TestResult SampleINT8API::build()
     }
 
     // build TRT engine
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(plan->data(), plan->size()));
     if (!mEngine)
     {
         sample::gLogError << "Unable to build cuda engine." << std::endl;
@@ -633,7 +628,7 @@ sample::Logger::TestResult SampleINT8API::infer()
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine);
 
-    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
     {
         return sample::Logger::TestResult::kFAILED;

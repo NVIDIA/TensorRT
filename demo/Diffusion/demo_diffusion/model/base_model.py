@@ -31,7 +31,7 @@ from demo_diffusion.model.lora import merge_loras
 class BaseModel:
     def __init__(
         self,
-        version="1.5",
+        version="1.4",
         pipeline=None,
         device="cuda",
         hf_token="",
@@ -56,7 +56,7 @@ class BaseModel:
         self.path = load.get_path(version, pipeline)
         self.device = device
         self.hf_token = hf_token
-        self.hf_safetensor = not (pipeline.is_inpaint() and version in ("1.4", "1.5"))
+        self.hf_safetensor = True
         self.verbose = verbose
         self.framework_model_dir = framework_model_dir
 
@@ -120,6 +120,7 @@ class BaseModel:
         onnx_opset,
         opt_image_height,
         opt_image_width,
+        opt_num_frames=None,
         custom_model=None,
         enable_lora_merge=False,
         static_shape=False,
@@ -142,20 +143,26 @@ class BaseModel:
                         export_kwargs["dynamic_shapes"] = self.get_dynamic_axes()
                     else:
                         export_kwargs["dynamic_axes"] = self.get_dynamic_axes()
-                    inputs = self.get_sample_input(1, opt_image_height, opt_image_width, static_shape)
-                    torch.onnx.export(
-                        model,
-                        inputs,
-                        onnx_path,
-                        export_params=True,
-                        opset_version=onnx_opset,
-                        do_constant_folding=self.do_constant_folding,
-                        input_names=self.get_input_names(),
-                        output_names=self.get_output_names(),
-                        verbose=False,
-                        dynamo=dynamo,
-                        **export_kwargs,
+                    
+                    inputs = self.get_sample_input(
+                        1, opt_image_height, opt_image_width, static_shape,
+                        **({'num_frames': opt_num_frames} if opt_num_frames else {})
                     )
+                    
+                    with torch.no_grad():
+                        torch.onnx.export(
+                            model,
+                            inputs,
+                            onnx_path,
+                            export_params=True,
+                            do_constant_folding=self.do_constant_folding,
+                            input_names=self.get_input_names(),
+                            output_names=self.get_output_names(),
+                            verbose=False,
+                            dynamo=dynamo,
+                            opset_version=onnx_opset,
+                            **export_kwargs,
+                        )
 
                 if custom_model:
                     with torch.inference_mode():
@@ -253,15 +260,20 @@ class BaseModel:
         opt.info(self.name + ": finished")
         return onnx_opt_graph
 
-    def check_dims(self, batch_size, image_height, image_width):
+    def check_dims(self, batch_size, image_height, image_width, num_frames=None):
         assert batch_size >= self.min_batch and batch_size <= self.max_batch
         latent_height = image_height // self.compression_factor
         latent_width = image_width // self.compression_factor
         assert latent_height >= self.min_latent_shape and latent_height <= self.max_latent_shape
         assert latent_width >= self.min_latent_shape and latent_width <= self.max_latent_shape
+        
+        if num_frames:
+            latent_frames = (self.num_frames - 1) // self.temporal_compression_factor + 1
+            return (latent_height, latent_width, latent_frames)
+        
         return (latent_height, latent_width)
 
-    def get_minmax_dims(self, batch_size, image_height, image_width, static_batch, static_shape):
+    def get_minmax_dims(self, batch_size, image_height, image_width, static_batch, static_shape, num_frames=None):
         min_batch = batch_size if static_batch else self.min_batch
         max_batch = batch_size if static_batch else self.max_batch
         latent_height = image_height // self.compression_factor
@@ -274,6 +286,14 @@ class BaseModel:
         max_latent_height = latent_height if static_shape else self.max_latent_shape
         min_latent_width = latent_width if static_shape else self.min_latent_shape
         max_latent_width = latent_width if static_shape else self.max_latent_shape
+        
+        frame_dims = ()
+        if num_frames:
+            latent_frames = (num_frames - 1) // self.temporal_compression_factor + 1
+            min_latent_frames = latent_frames if static_shape else self.min_latent_frames
+            max_latent_frames = latent_frames if static_shape else self.max_latent_frames
+            frame_dims = (min_latent_frames, max_latent_frames)
+        
         return (
             min_batch,
             max_batch,
@@ -285,4 +305,5 @@ class BaseModel:
             max_latent_height,
             min_latent_width,
             max_latent_width,
+            *frame_dims
         )

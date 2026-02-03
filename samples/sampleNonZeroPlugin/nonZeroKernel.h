@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +22,7 @@
 #include <cstdint>
 
 template <typename T>
-void nonZeroIndicesImpl(T const* X, int32_t* indices, int32_t* count, int32_t const* K, int32_t R, int32_t C,
+void nonZeroIndicesImpl(T const* X, int32_t* indices, int64_t* count, int64_t const* K, int32_t R, int32_t C,
     bool rowOrder, cudaStream_t stream);
 
 #endif // SAMPLE_NONZERO_KERNEL_H

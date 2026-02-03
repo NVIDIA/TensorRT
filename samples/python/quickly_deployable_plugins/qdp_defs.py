@@ -107,12 +107,13 @@ def non_zero_plugin_reg(
 ) -> Tuple[trtp.TensorDesc, trtp.TensorDesc]:
     upper_bound = inp0.shape_expr[0] * inp0.shape_expr[1]
     st = trtp.size_tensor(upper_bound // 2, upper_bound)
+    st.dtype = trt.int64
     return trtp.from_shape_expr((st.expr(), 2), dtype=trt.int32), st
 
 
 @trtp.autotune("sample::non_zero_plugin")
 def non_zero_plugin_autotune(inp0, outputs) -> List[trtp.AutoTuneCombination]:
-    return [trtp.AutoTuneCombination("FP32|FP16, INT32, INT32")]
+    return [trtp.AutoTuneCombination("FP32|FP16, INT32, INT64")]
 
 
 @trtp.impl("sample::non_zero_plugin")

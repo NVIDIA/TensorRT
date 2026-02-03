@@ -49,24 +49,10 @@ def get_path(version: str, pipeline: "pipeline.DiffusionPipeline", controlnets: 
             return f"stabilityai/stable-diffusion-3.5-large-controlnet-{controlnets}"
         return ["lllyasviel/sd-controlnet-" + modality for modality in controlnets]
 
-    if version in ("1.4", "1.5") and pipeline.is_inpaint():
-        return "benjamin-paine/stable-diffusion-v1-5-inpainting"
     elif version == "1.4":
         return "CompVis/stable-diffusion-v1-4"
-    elif version == "1.5":
-        return "KiwiXR/stable-diffusion-v1-5"
     elif version == "dreamshaper-7":
         return "Lykon/dreamshaper-7"
-    elif version in ("2.0-base", "2.0") and pipeline.is_inpaint():
-        return "stabilityai/stable-diffusion-2-inpainting"
-    elif version == "2.0-base":
-        return "stabilityai/stable-diffusion-2-base"
-    elif version == "2.0":
-        return "stabilityai/stable-diffusion-2"
-    elif version == "2.1-base":
-        return "stabilityai/stable-diffusion-2-1-base"
-    elif version == "2.1":
-        return "stabilityai/stable-diffusion-2-1"
     elif version == "xl-1.0" and pipeline.is_sd_xl_base():
         return "stabilityai/stable-diffusion-xl-base-1.0"
     elif version == "xl-1.0" and pipeline.is_sd_xl_refiner():
@@ -97,6 +83,8 @@ def get_path(version: str, pipeline: "pipeline.DiffusionPipeline", controlnets: 
         return "black-forest-labs/FLUX.1-Depth-dev"
     elif version == "flux.1-kontext-dev":
         return "black-forest-labs/FLUX.1-Kontext-dev"
+    elif version == "wan2.2-t2v-a14b":
+        return "Wan-AI/Wan2.2-T2V-A14B-Diffusers"
     elif version == "cosmos-predict2-2b-text2image":
         return "nvidia/Cosmos-Predict2-2B-Text2Image"
     elif version == "cosmos-predict2-14b-text2image":

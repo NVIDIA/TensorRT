@@ -101,6 +101,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+October 2025
+Migrate to strongly typed APIs.
+
 June 2022
 This `README.md` file was recreated, updated and reviewed.
 

@@ -1,5 +1,32 @@
 # TensorRT OSS Release Changelog
 
+## 10.15 GA - 2026-2-2
+
+- Sample changes
+  - Added 2 safety samples sampleSafeMNIST, and sampleSafePluginV3 to demonstrate how to use TensorRT with the safety workflow.
+  - Added trtSafeExec to accompany the safety workflow release.
+  - Added python/stream_writer to showcase how to serialize a TensorRT engine directly to a custom stream using the IStreamWriter interface, rather than writing to a file or a contiguous memory buffer.
+  - Added python/strongly_type_autocast to demonstrate how to convert FP32 ONNX models to mixed precision (FP32-FP16) using ModelOpt's AutoCast tool and subsequently building the engine with TensorRT's Strong Typing mode.
+  - Added sampleCudla to demonstrate how to use the cuDLA API to run TensorRT engines on the Deep Learning Accelerator (DLA) hardware, which is available on NVIDIA Jetson and DRIVE platforms.
+  - Deprecated sampleCharRNN.
+
+- Plugin changes
+  - Deprecated bertQKVToContextPlugin and will be removed in a future release. No alternatives are planned to be provided.
+
+- Parser changes
+  - Added support for `RotaryEmbedding`, `RMSNormalization` and `TensorScatter` for improved LLM model support
+  - Added more specialized quantization ops for models quantized through TensorRT ModelOptimizer.
+  - Added `kREPORT_CAPABILITY_DLA` flag to enable per-node validation when building DLA engines through TensorRT.
+  - Added `kENABLE_PLUGIN_OVERRIDE` flag to enable TensorRT plugin override for nodes that share names with user plugins.
+  - Improved error reporting for models with multiple subgraphs, such as `Loop` or `Scan` nodes.
+
+- Demo changes
+  - demoDiffusion: 
+          - Stable Diffusion 1.5, 2.0 and 2.1 pipelines have been deprecated and removed.
+          - Added support for Wan2.2-T2V-A14B Text to Video pipeline
+           
+  
+
 ## 10.14 GA - 2025-11-7
 - Sample changes
   - Replace all pycuda usages with cuda-python APIs

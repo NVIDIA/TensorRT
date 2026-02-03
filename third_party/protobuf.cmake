@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,12 +68,13 @@ macro(configure_protobuf VERSION)
     endif()
     set(protolibType STATIC)
 
-    if ((${CMAKE_SYSTEM_NAME} STREQUAL "Linux") AND NOT(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64"))
+    if(CMAKE_CROSSCOMPILING)
         message(STATUS "Setting up another Protobuf build for cross compilation targeting ${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}")
         # In case of cross-compilation for QNX requires additional CXX flags
-        if(${CMAKE_SYSTEM_NAME} STREQUAL "qnx")
+        if(${CMAKE_SYSTEM_NAME} STREQUAL "QNX")
             message("Conigure compilation flags for qnx")
-            set(PROTOBUF_CXXFLAGS "-D__EXT_POSIX1_198808 -D_POSIX_C_SOURCE=200112L -D_QNX_SOURCE -D_FILE_OFFSET_BITS=64 ${PROTOBUF_CXXFLAGS}")
+            set(PROTOBUF_CXXFLAGS "${CMAKE_CXX_FLAGS} ${PROTOBUF_CXXFLAGS}")
+            set(PROTOBUF_CFLAGS "${CMAKE_C_FLAGS} ${PROTOBUF_CFLAGS}")
         endif()
         ExternalProject_Add(${Protobuf_TARGET}_${CMAKE_SYSTEM_PROCESSOR}
             PREFIX ${Protobuf_TARGET}_${CMAKE_SYSTEM_PROCESSOR}
@@ -81,6 +82,7 @@ macro(configure_protobuf VERSION)
             UPDATE_COMMAND ""
             CONFIGURE_COMMAND ${CMAKE_COMMAND} ${Protobuf_INSTALL_DIR}/${Protobuf_TARGET}_${CMAKE_SYSTEM_PROCESSOR}/src/${Protobuf_TARGET}_${CMAKE_SYSTEM_PROCESSOR}/cmake
                 -G${CMAKE_GENERATOR}
+                -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
                 -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
                 -DCMAKE_POSITION_INDEPENDENT_CODE=ON
                 -DCMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}

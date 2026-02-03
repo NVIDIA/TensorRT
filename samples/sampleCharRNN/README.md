@@ -1,4 +1,4 @@
-# Building An RNN Network Layer By Layer
+# [DEPRECATED] Building An RNN Network Layer By Layer
 
 **Table Of Contents**
 - [Description](#description)
@@ -120,6 +120,9 @@ documentation.
 
 
 # Changelog
+
+October 2025
+Migrate to strongly typed APIs.
 
 September 2025
 * Use new addTopK API with indices type.

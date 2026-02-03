@@ -15,4 +15,4 @@
 # limitations under the License.
 #
 
-from tensorrt_bindings.plugin import *
+from ##TENSORRT_MODULE##_bindings.plugin import *

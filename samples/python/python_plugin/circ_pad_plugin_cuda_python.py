@@ -347,7 +347,7 @@ if __name__ == "__main__":
 
     # build engine
     build_engine = EngineFromNetwork(
-        NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision == np.float16)
+        NetworkFromOnnxPath(onnx_path, strongly_typed=True), CreateConfig()
     )
 
     Y_ref = np.pad(X, [[0, 0], [0, 0], [pads[0], pads[1]], [pads[2], pads[3]]], "wrap")

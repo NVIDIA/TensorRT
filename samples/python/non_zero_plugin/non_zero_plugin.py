@@ -50,20 +50,21 @@ non_zero_half_kernel = r'''
 #include <cuda_fp16.h>
 extern "C" __global__
 void find_non_zero_indices_half(
-    half const* X, int* indices, int* count, int R, int C)
+    half const* X, int* indices, unsigned long long* count, int R, int C)
 {
+    static_assert(sizeof(unsigned long long) == 8U, "unsigned long long must be 8 bytes in NVCC");
     int row = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Check if the row index is within bounds
     if (row < R)
     {
-
         for (int col = 0; col < C; ++col)
         {
             half const z = static_cast<half>(0.F);
             if (X[col + C * row] != z)
             {
-                int index = atomicAdd(count, 1); // Increment count atomically and get the previous value
+                // Increment count atomically and get the previous value
+                unsigned long long index = atomicAdd(count, 1ULL);
                 indices[2 * index] = row;
                 indices[2 * index + 1] = col;
             }
@@ -75,19 +76,20 @@ void find_non_zero_indices_half(
 non_zero_float_kernel = r'''
 extern "C" __global__
 void find_non_zero_indices_float(
-    float const* X, int* indices, int* count, int R, int C)
+    float const* X, int* indices, unsigned long long* count, int R, int C)
 {
+    static_assert(sizeof(unsigned long long) == 8U, "unsigned long long must be 8 bytes in NVCC");
     int row = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Check if the row index is within bounds
     if (row < R)
     {
-
         for (int col = 0; col < C; ++col)
         {
             if (X[col + C * row] != 0.F)
             {
-                int index = atomicAdd(count, 1); // Increment count atomically and get the previous value
+                // Increment count atomically and get the previous value
+                unsigned long long index = atomicAdd(count, 1ULL);
                 indices[2 * index] = row;
                 indices[2 * index + 1] = col;
             }
@@ -119,7 +121,7 @@ class NonZeroPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
         return self
 
     def get_output_data_types(self, input_types):
-        return [trt.DataType.INT32, trt.DataType.INT32]
+        return [trt.DataType.INT32, trt.DataType.INT64]
 
     def get_output_shapes(self, inputs, shape_inputs, exprBuilder):
         # First output is 2-D
@@ -164,8 +166,8 @@ class NonZeroPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
         elif pos == 1:
             type_ok = in_out[1].desc.type == trt.DataType.INT32
         else: # pos == 2
-            # size tensor outputs must be NCHW INT32
-            type_ok = in_out[2].desc.type == trt.DataType.INT32
+            # size tensor outputs must be NCHW INT64
+            type_ok = in_out[2].desc.type == trt.DataType.INT64
 
         return in_out[pos].desc.format == trt.TensorFormat.LINEAR and type_ok
 
@@ -216,7 +218,7 @@ class NonZeroPlugin(trt.IPluginV3, trt.IPluginV3OneCore, trt.IPluginV3OneBuild, 
                 outputs[0], 2 * volume(input_desc[0].dims), np.int32
             )
 
-            out_1_mem = UnownedMemory(outputs[1], 1, np.int32)
+            out_1_mem = UnownedMemory(outputs[1], 1, np.int64)
 
             a_t = torch.as_tensor(inp_mem.d, device="cuda")
             out = torch.nonzero(a_t)
@@ -303,7 +305,7 @@ if __name__ == "__main__":
         onnx_path = "test_NonZeroPlugin.onnx"
         inputX = gs.Variable(name="X", shape=inp_shape, dtype=precision)
         Y = gs.Variable(name="Y", dtype=np.int32)
-        Y_num = gs.Variable(name="Y_num", dtype=np.int32)
+        Y_num = gs.Variable(name="Y_num", dtype=np.int64)
         nonZeroPluginNode = gs.Node(
             name="NonZeroPlugin",
             op="NonZeroPlugin",
@@ -316,11 +318,11 @@ if __name__ == "__main__":
 
         # build engine
         build_engine = EngineFromNetwork(
-            NetworkFromOnnxPath(onnx_path), CreateConfig(fp16=precision==np.float16)
+            NetworkFromOnnxPath(onnx_path, strongly_typed=True), CreateConfig()
         )
     else:
         # Create plugin object
-        builder, network = create_network()
+        builder, network = create_network(strongly_typed=True)
         plg_creator = plg_registry.get_creator("NonZeroPlugin", "1", "")
         plugin_fields_list = [
             trt.PluginField("backend", args.backend.encode(), trt.PluginFieldType.CHAR)
@@ -333,13 +335,13 @@ if __name__ == "__main__":
         out = network.add_plugin_v3([inputX], [], plugin)
         out.get_output(0).name = "Y"
         network.mark_output(tensor=out.get_output(0))
-        build_engine = engine_from_network((builder, network), CreateConfig(fp16=precision==trt.float16))
+        build_engine = engine_from_network((builder, network), CreateConfig())
 
     # Compare against Numpy's nonzero
     Y_ref = np.transpose(np.nonzero(X))
 
     # Run
-    with TrtRunner(build_engine, "trt_runner")as runner:
+    with TrtRunner(build_engine, "trt_runner") as runner:
         outputs = runner.infer({"X": X})
         Y = outputs["Y"]
         Y = Y[np.lexsort(np.fliplr(Y).T)]
@@ -348,5 +350,3 @@ if __name__ == "__main__":
             print("Inference result correct!")
         else:
             print("Inference result incorrect!")
-
-

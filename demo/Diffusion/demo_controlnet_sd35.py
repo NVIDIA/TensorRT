@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+# Configure dependencies before any external imports
+from demo_diffusion import deps
+deps.configure("sd")
+
 import argparse
 
 import torch

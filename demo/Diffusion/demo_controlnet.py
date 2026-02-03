@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+# Configure dependencies before any external imports
+from demo_diffusion import deps
+deps.configure("sd")
+
 import argparse
 
 import controlnet_aux
@@ -76,7 +80,7 @@ if __name__ == "__main__":
                     canny_image = controlnet_aux.CannyDetector()(canny_image)
                 else:
                     raise ValueError(
-                        f"This demo supports ControlNets for v1.5 and SDXL base pipelines only. Version provided: {args.version}"
+                        f"This demo supports ControlNets for v1.4 and SDXL base pipelines only. Version provided: {args.version}"
                     )
                 input_images.append(canny_image.resize((args.width, args.height)))
             elif controlnet == "normal":

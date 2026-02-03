@@ -49,7 +49,7 @@ def run_add(enable_autotune=False):
 
     BLOCK_SIZE = 256
 
-    builder, network = create_network()
+    builder, network = create_network(strongly_typed=True)
     x = torch.randint(10, (10, 3, 32, 32), dtype=torch.float32, device="cuda")
 
     # Populate network
@@ -65,7 +65,7 @@ def run_add(enable_autotune=False):
 
     engine = engine_from_network(
         (builder, network),
-        CreateConfig(fp16=True),
+        CreateConfig(),
     )
 
     with TrtRunner(engine, "trt_runner") as runner:
@@ -83,7 +83,7 @@ def run_add(enable_autotune=False):
 
 
 def run_inplace_add():
-    builder, network = create_network()
+    builder, network = create_network(strongly_typed=True)
     x = torch.ones((10, 3, 32, 32), dtype=torch.float32, device="cuda")
 
     x_clone = x.clone()
@@ -104,7 +104,7 @@ def run_inplace_add():
 
     # Enable preview feature for aliasing plugin I/O
     config = CreateConfig(
-        fp16=True, preview_features=[trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03]
+        preview_features=[trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03]
     )
 
     engine = engine_from_network(
@@ -130,7 +130,7 @@ def run_inplace_add():
 
 
 def run_non_zero():
-    builder, network = create_network()
+    builder, network = create_network(strongly_typed=True)
     inp_shape = (128, 128)
 
     X = np.random.normal(size=inp_shape).astype(trt.nptype(trt.DataType.FLOAT))
@@ -154,7 +154,7 @@ def run_non_zero():
 
     engine = engine_from_network(
         (builder, network),
-        config=CreateConfig(fp16=True),
+        config=CreateConfig(),
     )
 
     Y_ref = np.transpose(np.nonzero(X))
@@ -195,7 +195,7 @@ def run_circ_pad(
         engine = engine_from_bytes(bytes_from_path(engine_path))
     else:
         if mode == "inetdef":
-            builder, network = create_network()
+            builder, network = create_network(strongly_typed=True)
             i_x = network.add_input(name="x", dtype=trt.DataType.FLOAT, shape=x.shape)
             out = network.add_plugin(trtp.op.sample.circ_pad_plugin(i_x, pads=pads), aot = aot)
             out.get_output(0).name = "y"
@@ -203,7 +203,7 @@ def run_circ_pad(
 
             engine = engine_from_network(
                 (builder, network),
-                CreateConfig(fp16=True),
+                CreateConfig(),
             )
         elif mode == "onnx":
             if artifacts_dir is None:
@@ -227,7 +227,7 @@ def run_circ_pad(
             onnx.save(gs.export_onnx(graph), onnx_path)
 
             engine = engine_from_network(
-                network_from_onnx_path(onnx_path), CreateConfig(fp16=True)
+                network_from_onnx_path(onnx_path, strongly_typed=True), CreateConfig()
             )
         else:
             raise ValueError(f"Unknown mode {mode}")

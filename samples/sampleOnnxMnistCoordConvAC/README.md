@@ -135,7 +135,7 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 
 3.  Run the sample to build and run the MNIST engine from the ONNX model.
     ```
-    ./sample_onnx_mnist_coord_conv_ac [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+    ./sample_onnx_mnist_coord_conv_ac [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]
     ```
 
 4. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
@@ -206,8 +206,6 @@ Usage: ./sample_onnx_mnist_coord_conv_ac [-h or --help] [-d or --datadir=<path t
 --help Display help information
 --datadir Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use (data/samples/mnist/, data/mnist/)
 --useDLACore=N Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
---int8 Run in Int8 mode.
---fp16 Run in FP16 mode.
 ```
 
 # Additional resources
@@ -224,7 +222,7 @@ The following resources provide a deeper understanding about the ONNX project an
 - [Github: ONNX-TensorRT Open source parser](https://github.com/onnx/onnx-tensorrt)
 
 **Models**
-- [MNIST - Handwritten Digit Recognition](https://github.com/onnx/models/tree/master/mnist)
+- [MNIST - Handwritten Digit Recognition](https://github.com/onnx/models/tree/main/validated/vision/classification/mnist)
 - [GitHub: ONNX Models](https://github.com/onnx/models)
 
 **Documentation**
@@ -238,6 +236,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 
 # Changelog
+
+October 2025
+Migrate to strongly typed APIs.
 
 April 2020
 This `README.md` file was recreated, updated and reviewed.

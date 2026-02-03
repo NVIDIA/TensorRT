@@ -21,11 +21,13 @@ import numpy as np
 from ._utils import _numpy_to_plugin_field_type, _built_in_to_plugin_field_type
 from ._tensor import TensorDesc, Tensor, Shape, ShapeExpr, ShapeExprs, SymIntExpr, SymExprs, SymInt32
 from ._export import IS_AOT_ENABLED
+
 if IS_AOT_ENABLED:
     from ._tensor import KernelLaunchParams
 from ._autotune import _TypeFormatCombination
 
 from ._export import public_api
+
 
 class _TemplatePluginBase(
     trt.IPluginV3,
@@ -86,11 +88,7 @@ class _TemplatePluginBase(
             if key in self.impl_attr_names:
                 if isinstance(value, np.ndarray):
                     if np.dtype(value.dtype) == np.float16:
-                        fields.append(
-                            trt.PluginField(
-                                key, value.tobytes(), trt.PluginFieldType.UNKNOWN
-                            )
-                        )
+                        fields.append(trt.PluginField(key, value.tobytes(), trt.PluginFieldType.UNKNOWN))
                     else:
                         fields.append(
                             trt.PluginField(
@@ -100,13 +98,9 @@ class _TemplatePluginBase(
                             )
                         )
                 elif isinstance(value, str):
-                    fields.append(
-                        trt.PluginField(key, value.encode(), trt.PluginFieldType.CHAR)
-                    )
+                    fields.append(trt.PluginField(key, value.encode(), trt.PluginFieldType.CHAR))
                 elif isinstance(value, bytes):
-                    fields.append(
-                        trt.PluginField(key, value, trt.PluginFieldType.UNKNOWN)
-                    )
+                    fields.append(trt.PluginField(key, value, trt.PluginFieldType.UNKNOWN))
                 else:
                     fields.append(
                         trt.PluginField(
@@ -150,16 +144,13 @@ class _TemplatePluginBase(
 
             output_exprs.append(exprs)
 
+        SymIntExpr._exprBuilder = None
         return output_exprs
 
     def configure_plugin(self, inputs, outputs):
         self.curr_comb = _TypeFormatCombination()
-        self.curr_comb.types = [inp.desc.type for inp in inputs] + [
-            out.desc.type for out in outputs
-        ]
-        self.curr_comb.layouts = [inp.desc.format for inp in inputs] + [
-            out.desc.format for out in outputs
-        ]
+        self.curr_comb.types = [inp.desc.type for inp in inputs] + [out.desc.type for out in outputs]
+        self.curr_comb.layouts = [inp.desc.format for inp in inputs] + [out.desc.format for out in outputs]
 
     def get_supported_format_combinations(self, in_out, num_inputs):
         if self.autotune_function is not None:
@@ -182,9 +173,7 @@ class _TemplatePluginBase(
                     self.output_descs[i - num_inputs].scale = desc.desc.scale
                     self.output_descs[i - num_inputs]._immutable = True
 
-            self.autotune_combs = self.autotune_function(
-                *self.input_descs, *val, self.output_descs
-            )
+            self.autotune_combs = self.autotune_function(*self.input_descs, *val, self.output_descs)
 
         if len(self.autotune_combs) == 0:
             default_comb = [None] * len(in_out)
@@ -192,9 +181,7 @@ class _TemplatePluginBase(
             for j in range(len(in_out)):
                 default_comb[j] = trt.PluginTensorDesc()
                 default_comb[j].type = (
-                    self.input_types[j]
-                    if j < num_inputs
-                    else self.output_descs[j - num_inputs].dtype
+                    self.input_types[j] if j < num_inputs else self.output_descs[j - num_inputs].dtype
                 )
                 default_comb[j].format = trt.TensorFormat.LINEAR
                 comb.types[j] = default_comb[j].type
@@ -216,9 +203,7 @@ class _TemplatePluginBase(
             if value is not None:
                 value.update(set(comb.tactics) if comb.tactics is not None else set())
             else:
-                self.supported_combs[comb] = (
-                    set(comb.tactics) if comb.tactics is not None else set()
-                )
+                self.supported_combs[comb] = set(comb.tactics) if comb.tactics is not None else set()
                 for j in range(len(in_out)):
                     curr_comb = trt.PluginTensorDesc()
                     curr_comb.type = comb.types[j]
@@ -237,6 +222,7 @@ class _TemplatePluginBase(
 
     def set_tactic(self, tactic):
         self._tactic = tactic
+
 
 class _TemplateJITPlugin(_TemplatePluginBase, trt.IPluginV3QuickRuntime):
     def __init__(self, name, namespace, num_outputs):
@@ -318,20 +304,18 @@ class _TemplateJITPlugin(_TemplatePluginBase, trt.IPluginV3QuickRuntime):
             val = ()
 
         if self.expects_tactic:
-            self.impl_function(
-                *input_tensors, *val, output_tensors, stream, self._tactic
-            )
+            self.impl_function(*input_tensors, *val, output_tensors, stream, self._tactic)
         else:
             self.impl_function(*input_tensors, *val, output_tensors, stream=stream)
 
     def clone(self):
-        cloned_plugin = _TemplateJITPlugin(
-            self.plugin_name, self.plugin_namespace, self.num_outputs
-        )
+        cloned_plugin = _TemplateJITPlugin(self.plugin_name, self.plugin_namespace, self.num_outputs)
         cloned_plugin.__dict__.update(self.__dict__)
         return cloned_plugin
 
+
 if IS_AOT_ENABLED:
+
     class _TemplateAOTPlugin(
         _TemplatePluginBase,
         trt.IPluginV3QuickAOTBuild,
@@ -351,7 +335,7 @@ if IS_AOT_ENABLED:
             aot_impl_attr_names,
             aot_impl_function,
             autotune_attr_names,
-            autotune_function
+            autotune_function,
         ):
             self.register_function = register_function
             self.aot_impl_function = aot_impl_function
@@ -426,7 +410,9 @@ if IS_AOT_ENABLED:
                 raise TypeError(f"PTX/CUBIN must be a 'str' or 'bytes'.  Got: {type(ptx)}.")
 
             if not isinstance(launch_params, KernelLaunchParams):
-                raise TypeError(f"Launch params must be a 'tensorrt.plugin.KernelLaunchParams'.  Got: {type(launch_params)}.")
+                raise TypeError(
+                    f"Launch params must be a 'tensorrt.plugin.KernelLaunchParams'.  Got: {type(launch_params)}."
+                )
 
             if not isinstance(extra_args, SymExprs):
                 raise TypeError(f"Extra args must be a 'tensorrt.plugin.SymIntExprs'.  Got: {type(extra_args)}.")
@@ -448,12 +434,12 @@ if IS_AOT_ENABLED:
                     raise TypeError(f"Extra args must be a 'tensorrt.plugin.SymInt32'.  Got: {type(arg)}.")
                 symExprSetter[i] = arg()
 
+            SymIntExpr._exprBuilder = None
+
         def get_timing_cache_id(self):
             return ""
 
         def clone(self):
-            cloned_plugin = _TemplateAOTPlugin(
-                self.plugin_name, self.plugin_namespace, self.num_outputs
-            )
+            cloned_plugin = _TemplateAOTPlugin(self.plugin_name, self.plugin_namespace, self.num_outputs)
             cloned_plugin.__dict__.update(self.__dict__)
             return cloned_plugin

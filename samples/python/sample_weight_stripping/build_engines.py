@@ -42,13 +42,12 @@ def convert_size(size_bytes):
 
 def main(args):
 
-    with trt.Builder(TRT_LOGGER) as builder, builder.create_network(0) as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
+    with trt.Builder(TRT_LOGGER) as builder, builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED)) as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
         with open(args.original_onnx, 'rb') as onnx_model:
             parser.parse(onnx_model.read())
 
         with builder.create_builder_config() as config:
 
-            config.set_flag(trt.BuilderFlag.FP16)
             config.set_flag(trt.BuilderFlag.STRIP_PLAN)
 
             cache = config.create_timing_cache(b"")

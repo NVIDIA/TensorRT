@@ -12,10 +12,11 @@
 ### 2. TensorRT API Samples
 | Sample | Language | Format | Description |
 |---|---|---|---|
-| [sampleCharRNN](sampleCharRNN) | C++ | INetwork | Building An RNN Network Layer By Layer |
+| [[DEPRECATED] sampleCharRNN](sampleCharRNN) | C++ | INetwork | Building An RNN Network Layer By Layer |
+| [sampleCudla](sampleCudla) | C++ | INetwork | Using The CuDLA API To Run A TensorRT Engine (aarch64 only) |
 | [sampleDynamicReshape](sampleDynamicReshape) | C++ | ONNX | Digit Recognition With Dynamic Shapes In TensorRT |
 | [sampleEditableTimingCache](sampleEditableTimingCache) | C++ | INetwork | Create a deterministic build using editable timing cache |
-| [sampleINT8API](sampleINT8API) | C++ | ONNX | Performing Inference In INT8 Precision |
+| [[DEPRECATED] sampleINT8API](sampleINT8API) | C++ | ONNX | Performing Inference In INT8 Precision |
 | [sampleNamedDimensions](sampleNamedDimensions) | C++ | ONNX | Working with named input dimensions |
 | [sampleNonZeroPlugin](sampleNonZeroPlugin) | C++ | INetwork | Adding plugin with data-dependent output shapes |
 | [sampleOnnxMnistCoordConvAC](sampleOnnxMnistCoordConvAC) | C++ | ONNX | Implementing CoordConv with a custom plugin |
@@ -36,6 +37,13 @@
 | [[DEPRECATED] efficientdet](python/efficientdet) | Python | ONNX | EfficientDet Object Detection with TensorRT |
 | [[DEPRECATED] tensorflow_object_detection_api](python/tensorflow_object_detection_api) | Python | ONNX | TensorFlow Object Detection API Models in TensorRT |
 | [[DEPRECATED] yolov3_onnx](python/yolov3_onnx) | Python | ONNX | Object Detection Using YOLOv3 With TensorRT ONNX Backend |
+
+### 4. Safety Samples
+| Sample | Language | Format | Description |
+|---|---|---|---|
+| [sampleSafeMNIST](sampleSafeMNIST) | C++ | ONNX | Build a Safety Engine for MNIST |
+| [sampleSafePluginV3](sampleSafePluginV3) | C++ | ONNX | Use Safety-Supported Plugins With Safety Engines |
+| [trtSafeExec](trtSafeExec) | C++ | ONNX | TensorRT Command-Line Wrapper With Safety Options |
 
 ## Preparing sample data
 

@@ -41,11 +41,6 @@ using namespace nvinfer1;
 using namespace sample;
 using namespace samplesCommon;
 
-#if ENABLE_UNIFIED_BUILDER
-using namespace nvinfer2::safe;
-__attribute__((weak)) std::shared_ptr<sample::SampleSafeRecorder> gSafeRecorder
-    = std::make_shared<sample::SampleSafeRecorder>(nvinfer2::safe::Severity::kINFO);
-#endif
 
 namespace
 {
@@ -162,44 +157,6 @@ nvonnxparser::IParserRefitter* createONNXRefitter(nvinfer1::IRefitter& refitter)
         pCreateNvOnnxRefitterInternal(&refitter, &gLogger.getTRTLogger(), NV_ONNX_PARSER_VERSION));
 }
 
-#if ENABLE_UNIFIED_BUILDER
-
-bool processSafetyPluginLibrary(nvinfer2::safe::ISafePluginRegistry* safetyPluginRegistry, DynamicLibrary* libPtr,
-    samplesSafeCommon::SafetyPluginLibraryArgument const& pluginArgs)
-{
-    if (libPtr == nullptr)
-    {
-        sample::gLogError << "Cannot open safety plugin library " << pluginArgs.libraryName << std::endl;
-        return false;
-    }
-    std::string const pluginGetterSymbolName{"getSafetyPluginCreator"};
-    auto pGetSafetyPluginCreator
-        = libPtr->symbolAddress<void*(char const*, char const*)>(pluginGetterSymbolName.c_str());
-    if (pGetSafetyPluginCreator == nullptr)
-    {
-        sample::gLogError << "Cannot find plugin creator getter symbol from plugin library: " << pluginArgs.libraryName
-                          << std::endl;
-        sample::gLogError << "Please ensure interface function is correctly implemented and exported." << std::endl;
-        return false;
-    }
-
-    for (auto const& pluginAttr : pluginArgs.pluginAttrs)
-    {
-        auto pluginCreator = static_cast<IPluginCreatorInterface*>(
-            pGetSafetyPluginCreator(pluginAttr.pluginNamespace.c_str(), pluginAttr.pluginName.c_str()));
-        if (pluginCreator == nullptr)
-        {
-            sample::gLogInfo << "Cannot find plugin " << pluginAttr.pluginNamespace << "::" << pluginAttr.pluginName
-                             << " in the safety plugin library: " << pluginArgs.libraryName << std::endl;
-            continue;
-        }
-        sample::gLogInfo << "Registering " << pluginAttr.pluginNamespace << "::" << pluginAttr.pluginName
-                         << " for TensorRT safety." << std::endl;
-        safetyPluginRegistry->registerCreator(*pluginCreator, pluginAttr.pluginNamespace.c_str(), *gSafeRecorder);
-    }
-    return true;
-}
-#endif
 
 using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
@@ -269,13 +226,17 @@ int main(int argc, char** argv)
             sample::setReportableSeverity(ILogger::Severity::kVERBOSE);
         }
         std::string const jitInVersion;
-        setCudaDevice(options.system.device, sample::gLogInfo);
+        if (!options.build.cpuOnly)
+        {
+            setCudaDevice(options.system.device, sample::gLogInfo);
+        }
         sample::gLogInfo << std::endl;
         sample::gLogInfo << "TensorRT version: " << NV_TENSORRT_MAJOR << "." << NV_TENSORRT_MINOR << "."
                          << NV_TENSORRT_PATCH << jitInVersion << std::endl;
 
         // Record specified runtime
         gUseRuntime = options.build.useRuntime;
+
 #if !TRT_STATIC
         LibraryPtr nvinferPluginLib{};
 #endif /* TRT_STATIC */
@@ -306,22 +267,6 @@ int main(int argc, char** argv)
         {
             throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
         }
-#if ENABLE_UNIFIED_BUILDER
-        auto safetyPluginRegistry = sample::safe::getSafePluginRegistry(*gSafeRecorder);
-        ASSERT(safetyPluginRegistry != nullptr);
-
-        if (!options.system.safetyPlugins.empty())
-        {
-            for (auto const& safetyPluginArg : options.system.safetyPlugins)
-            {
-                sample::gLogInfo << "Loading supplied safety plugin library with manual registration: "
-                                 << safetyPluginArg.libraryName << std::endl;
-                auto pluginLib = loadLibrary(safetyPluginArg.libraryName);
-                processSafetyPluginLibrary(safetyPluginRegistry, pluginLib.get(), safetyPluginArg);
-                pluginLibs.emplace_back(std::move(pluginLib));
-            }
-        }
-#endif // ENABLE_UNIFIED_BUILDER
         if (options.build.safe && !sample::hasSafeRuntime())
         {
             sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
@@ -340,7 +285,28 @@ int main(int argc, char** argv)
             options.build.stronglyTyped = true;
         }
 
-       // Start engine building phase.
+// Windows does not have setenv call
+#if !defined(_WIN32)
+        // Set CPU-only environment variable if the option is enabled
+        if (options.build.cpuOnly)
+        {
+            // The use of `TRT_INTERNAL_OPTIONS` is special to TensorRT 10.15 and will disappear in later releases.
+            sample::gLogInfo << "Setting CPU-only mode" << std::endl;
+            char* internalOptions = std::getenv("TRT_INTERNAL_OPTIONS");
+            std::string internalOptionsStr;
+            if (internalOptions)
+            {
+                internalOptionsStr = std::string(internalOptions) + " --cpu_only=1";
+            }
+            else
+            {
+                internalOptionsStr = "--cpu_only=1";
+            }
+            setenv("TRT_INTERNAL_OPTIONS", internalOptionsStr.c_str(), 1);
+        }
+#endif // !defined(_WIN32)
+
+        // Start engine building phase.
         std::unique_ptr<BuildEnvironment> bEnv(new BuildEnvironment(options.build.safe, options.build.versionCompatible,
             options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath,
             sampleTest.getCmdline()));
@@ -353,9 +319,6 @@ int main(int argc, char** argv)
             return sample::gLogger.reportFail(sampleTest);
         }
 
-#if ENABLE_UNIFIED_BUILDER
-        safetyPluginRegistry->setSafeRecorder(*gSafeRecorder);
-#endif // ENABLE_UNIFIED_BUILDER
 
         // Exit as version is already printed during getEngineBuildEnv
         if (options.build.getPlanVersionOnly)
@@ -425,12 +388,8 @@ int main(int argc, char** argv)
         }
         else
         {
-#if ENABLE_UNIFIED_BUILDER
-            iEnv = std::make_unique<InferenceEnvironmentSafe>(*bEnv);
-#else
             sample::gLogInfo << "--safe flag is enabled but application is not compatible with safety." << std::endl;
             return sample::gLogger.reportFail(sampleTest);
-#endif
         }
 
         // We avoid re-loading some dynamic plugins while deserializing

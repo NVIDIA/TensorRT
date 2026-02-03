@@ -297,7 +297,7 @@ options:
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
-
+- October 2025: Migrate to strongly typed APIs.
 - August 2025: Removed support for Python versions < 3.10.
 - December 2024: Added section on AOT Plugins, added contents section
 - October 2024: Initial release of this sample

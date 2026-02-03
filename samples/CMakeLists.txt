@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +38,9 @@ else()
 endif()
 
 # OSS samples need the ONNX parser path to be included when each sample is built
-add_subdirectory(common)
+if(NOT TRT_SAFETY_INFERENCE_ONLY)
+    add_subdirectory(common)
+endif()
 
 # Target which holds all enabled samples, including trtexec.
 # If TRT_BUILD_SAMPLES is disabled, this target may not build many things.
@@ -82,6 +84,22 @@ if(${TRT_BUILD_SAMPLES})
     if(${TRT_BUILD_PLUGINS})
         add_sample(sampleOnnxMnistCoordConvAC)
     endif()
+
+    if(${TRT_BUILD_ENABLE_DLA} AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT WIN32)
+        if(TARGET CUDA::cudla)
+            set(CUDLA_TARGET CUDA::cudla CACHE STRING "cuDLA library target")
+        else()
+            find_library(CUDLA_TARGET cudla HINTS
+                ${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib
+                ${CUDA_ROOT}/lib64 ${CUDA_ROOT}/lib
+                /usr/local/cuda/targets/aarch64-linux/lib)
+        endif()
+        if(CUDLA_TARGET)
+            add_sample(sampleCudla)
+        else()
+            message(STATUS "Skipping sampleCudla: cudla library not found")
+        endif()
+    endif()
 endif() # TRT_BUILD_SAMPLES
 
 include(${CMAKE_CURRENT_LIST_DIR}/workaround.cmake)
@@ -93,21 +111,59 @@ endforeach()
 else() # TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW
 
 add_custom_target(samples)
+add_custom_target(tensorrt_samples)
 
-set(OPENSOURCE_SAMPLES_LIST
-    sampleCharRNN
-    sampleDynamicReshape
-    sampleEditableTimingCache
-    sampleINT8API
-    sampleIOFormats
-    sampleNamedDimensions
-    sampleNonZeroPlugin
-    sampleOnnxMNIST
-    sampleOnnxMnistCoordConvAC
-    sampleProgressMonitor
-    trtexec)
+# Setup aliases for OSS builds (similar to new samples flow)
+if(TARGET nvinfer)
+    add_library(TRT_SAMPLES::tensorrt ALIAS nvinfer)
+endif()
 
-foreach(SAMPLE_ITER ${OPENSOURCE_SAMPLES_LIST})
-    add_subdirectory(${SAMPLE_ITER})
-endforeach(SAMPLE_ITER)
+# Define installLibraries as a no-op for OSS builds
+function(installLibraries)
+endfunction()
+
+if(TRT_SAFETY_INFERENCE_ONLY)
+    # Inference-only mode:
+    # Only build the safety samples, skipping enterprise samples.
+    add_subdirectory(sampleSafeMNIST)
+    add_subdirectory(sampleSafePluginV3)
+    add_subdirectory(trtSafeExec)
+else()
+    add_subdirectory(common)
+
+    # Normal mode:
+    # - BUILD_SAFE_SAMPLES controls whether safety samples are added.
+    # - BUILD_SAMPLES (in the OSS entrypoint) controls enterprise samples.
+    if(BUILD_SAFE_SAMPLES)
+        add_subdirectory(sampleSafeMNIST)
+        add_subdirectory(sampleSafePluginV3)
+        add_subdirectory(trtSafeExec)
+    endif()
+
+    if(BUILD_SAMPLES)
+        add_subdirectory(sampleCharRNN)
+        add_subdirectory(sampleDynamicReshape)
+        add_subdirectory(sampleEditableTimingCache)
+        add_subdirectory(sampleINT8API)
+        add_subdirectory(sampleIOFormats)
+        add_subdirectory(sampleNamedDimensions)
+        add_subdirectory(sampleNonZeroPlugin)
+        add_subdirectory(sampleOnnxMNIST)
+        add_subdirectory(sampleOnnxMnistCoordConvAC)
+        add_subdirectory(sampleProgressMonitor)
+        add_subdirectory(trtexec)
+        if(TRT_BUILD_ENABLE_DLA AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_SYSTEM_NAME STREQUAL "QNX" AND NOT WIN32)
+            find_library(CUDLA_TARGET cudla HINTS
+                ${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib
+                ${CUDA_ROOT}/lib64 ${CUDA_ROOT}/lib
+                /usr/local/cuda/targets/aarch64-linux/lib)
+            if(CUDLA_TARGET)
+                add_subdirectory(sampleCudla)
+            else()
+                message(STATUS "Skipping sampleCudla: cudla library not found")
+            endif()
+        endif()
+    endif()
+endif()
+
 endif()

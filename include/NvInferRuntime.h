@@ -3326,6 +3326,25 @@ public:
     }
 
     //!
+    //! \brief Get the input tensor name that an output tensor should alias with.
+    //!
+    //! Some operations (e.g., KVCacheUpdate) require that certain output tensors share memory with input tensors.
+    //! This method returns the name of the input tensor that a given output tensor should alias with.
+    //!
+    //! \param tensorName The name of an output tensor.
+    //!
+    //! \return The name of the input tensor to alias with, or nullptr if tensorName is not an output tensor or
+    //! the output does not alias with any input.
+    //!
+    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the
+    //! terminator.
+    //!
+    TRT_NODISCARD char const* getAliasedInputTensor(char const* tensorName) const noexcept
+    {
+        return mImpl->getAliasedInputTensor(tensorName);
+    }
+
+    //!
     //! \brief create an execution context without any device memory allocated
     //!
     //! The memory for execution of this device context must be supplied by the application.

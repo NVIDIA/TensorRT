@@ -29,9 +29,6 @@
 
 #include "NvInfer.h"
 
-#if ENABLE_UNIFIED_BUILDER
-#include "safeCommon.h"
-#endif
 
 namespace sample
 {
@@ -255,9 +252,11 @@ public:
     bool versionCompatible{false};
     bool pluginInstanceNorm{false};
     bool enableUInt8AsymmetricQuantizationDLA{false};
+    bool enablePluginOverride{false};
     bool excludeLeanRuntime{false};
     bool disableCompilationCache{false};
     bool enableMonitorMemory{false};
+    bool cpuOnly{false};
     int32_t builderOptimizationLevel{defaultBuilderOptimizationLevel};
     int32_t maxTactics{defaultMaxTactics};
     SparsityFlag sparsity{SparsityFlag::kDISABLE};
@@ -307,9 +306,6 @@ public:
     std::vector<std::string> plugins;
     std::vector<std::string> setPluginsToSerialize;
     std::vector<std::string> dynamicPlugins;
-#if ENABLE_UNIFIED_BUILDER
-    std::vector<samplesSafeCommon::SafetyPluginLibraryArgument> safetyPlugins;
-#endif
 
     void parse(Arguments& arguments) override;
 

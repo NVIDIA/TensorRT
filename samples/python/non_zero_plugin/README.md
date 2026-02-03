@@ -96,6 +96,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+October 2025
+Migrate to strongly typed APIs.
+
 August 2025
 Removed support for Python versions < 3.10.
 

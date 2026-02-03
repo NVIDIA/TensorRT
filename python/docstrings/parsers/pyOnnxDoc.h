@@ -217,6 +217,14 @@ constexpr const char* parse_model_proto = R"trtdoc(
 
 )trtdoc";
 
+constexpr const char* set_builder_config = R"trtdoc(
+    Set the BuilderConfig for the parser.
+
+    :arg builder_config: The BuilderConfig to set.
+
+    :returns: true if the BuilderConfig was set successfully, false otherwise.
+)trtdoc";
+
 } // namespace OnnxParserDoc
 
 namespace OnnxParserRefitterDoc
@@ -321,13 +329,26 @@ constexpr const char* descr = R"trtdoc(
 constexpr const char* NATIVE_INSTANCENORM = R"trtdoc(
    Parse the ONNX model into the INetworkDefinition with the intention of using TensorRT's native layer implementation over the plugin implementation for InstanceNormalization nodes.
    This flag is required when building version-compatible or hardware-compatible engines.
-   The flag is ON by default.
+   This flag is ON by default.
 )trtdoc";
 constexpr const char* ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA = R"trtdoc(
     Enable UINT8 as a quantization data type and asymmetric quantization with non-zero zero-point values in Quantize and Dequantize nodes.
-    This flag is set to be OFF by default.
     The resulting engine must be built targeting DLA version >= 3.16.
+    This flag is OFF by default.
  )trtdoc";
+constexpr const char* REPORT_CAPABILITY_DLA = R"trtdoc(
+    Parse the ONNX model with per-node validation for DLA. If this flag is set, is_subgraph_supported() will
+    also return capability in the context of DLA support.
+    When this flag is set, a valid BuilderConfig must be provided to the parser via set_builder_config().
+    This flag is OFF by default.
+ )trtdoc";
+constexpr const char* ENABLE_PLUGIN_OVERRIDE = R"trtdoc(
+    Allow a loaded plugin with the same name as an ONNX operator type to override the default ONNX implementation,
+    even if the plugin namespace attribute is not set.
+    This flag is useful for custom plugins that are intended to replace standard ONNX operators, for example to provide
+    alternative implementations or improved performance.
+    This flag is OFF by default.
+)trtdoc";
 } // namespace OnnxParserFlagDoc
 
 namespace ParserErrorDoc
@@ -379,20 +400,7 @@ constexpr const char* local_function_stack_size = R"trtdoc(
 } // namespace ParserErrorDoc
 
 constexpr const char* get_nv_onnx_parser_version = R"trtdoc(
-:returns: The Onnx version
+:returns: The Onnx Parser version
 )trtdoc";
-
-namespace IOnnxPluginFactoryDoc
-{
-constexpr const char* descr = R"trtdoc(
-    This plugin factory handles deserialization of the plugins that are built
-    into the ONNX parser. Engines with legacy plugin layers built using the ONNX parser
-    must use this plugin factory during deserialization.
-)trtdoc";
-
-constexpr const char* init = R"trtdoc(
-    :arg logger: The logger to use.
-)trtdoc";
-} // namespace IOnnxPluginFactoryDoc
 
 } // namespace tensorrt

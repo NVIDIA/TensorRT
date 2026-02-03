@@ -52,12 +52,6 @@
 #endif
 
 using namespace nvinfer1;
-#if ENABLE_UNIFIED_BUILDER
-using namespace nvinfer2::safe;
-// Provide a weak default definition that can be overridden
-__attribute__((weak)) std::shared_ptr<sample::SampleSafeRecorder> gSafeRecorder
-    = std::make_shared<sample::SampleSafeRecorder>(nvinfer2::safe::Severity::kINFO);
-#endif
 
 namespace sample
 {
@@ -76,134 +70,6 @@ std::string const& getRuntimeLibraryName(RuntimeMode const mode)
 
 #endif // !TRT_STATIC
 
-#if ENABLE_UNIFIED_BUILDER
-namespace safe
-{
-namespace
-{
-std::function<nvinfer1::ErrorCode(
-    nvinfer2::safe::ITRTGraph*&, void const*, int64_t, ISafeRecorder&, bool, ISafeMemAllocator*)>
-    pcreateTRTGraphInternal{};
-std::function<nvinfer1::ErrorCode(nvinfer2::safe::ITRTGraph* graph)> pdestroyTRTGraphInternal{};
-std::function<nvinfer2::safe::ISafePluginRegistry*(ISafeRecorder& recorder)> pgetSafePluginRegistryInternal{};
-} // namespace
-
-//! Track runtime used for the execution of trtexec.
-//! Must be tracked as a global variable due to how library init functions APIs are organized.
-RuntimeMode gUseRuntime = RuntimeMode::kSAFE;
-
-//!
-//! \brief Initialize the NVIDIA Inference Safe Runtime library
-//!
-//! This function dynamically loads the Safe TensorRT runtime library and initializes
-//! function pointers for safe TensorRT operations. It is used to set up the safe runtime
-//! environment for inference with safety-certified TensorRT engines.
-//!
-//! The function performs the following operations:
-//! - Dynamically loads the safe TensorRT runtime library
-//! - Retrieves and stores function pointers for:
-//!   - createTRTGraph: Creates a safe TRT graph from serialized engine data
-//!   - destroyTRTGraph: Destroys a safe TRT graph and releases resources
-//!   - getSafePluginRegistry: Gets the safe plugin registry for loading plugins
-//!
-//! \return true if the safe runtime library was successfully loaded and initialized,
-//!         false otherwise (e.g., in static builds or if library loading fails)
-//!
-bool initNvinferSafe()
-{
-#if !TRT_STATIC
-    static LibraryPtr libnvinfersafePtr{};
-    auto fetchPtrs = [](samplesCommon::DynamicLibrary* l) {
-        if (gUseRuntime == RuntimeMode::kSAFE)
-        {
-            pcreateTRTGraphInternal = l->symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph*&,
-                void const*, int64_t, ISafeRecorder&, bool, ISafeMemAllocator*)>("createTRTGraph");
-
-            pdestroyTRTGraphInternal
-                = l->symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph * graph)>("destroyTRTGraph");
-
-            pgetSafePluginRegistryInternal
-                = l->symbolAddress<nvinfer2::safe::ISafePluginRegistry*(ISafeRecorder & recorder)>(
-                    "getSafePluginRegistry");
-        }
-    };
-    return initLibrary(libnvinfersafePtr, sample::getRuntimeLibraryName(gUseRuntime), fetchPtrs);
-#else
-    return false;
-#endif // !TRT_STATIC
-}
-
-//!
-//! \brief Create a safe TRT graph from serialized engine data
-//!
-//! This function creates a safe TRT graph from serialized engine data. It is used to create
-//! a safe TRT graph for inference with safety-certified TensorRT engines.
-//!
-nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void const* blob, int64_t size,
-    ISafeRecorder& recorder, bool useManaged, ISafeMemAllocator* allocator)
-{
-    if (!initNvinferSafe())
-    {
-        return nvinfer1::ErrorCode::kINTERNAL_ERROR;
-    }
-    ASSERT(pcreateTRTGraphInternal != nullptr);
-    return pcreateTRTGraphInternal(graph, blob, size, recorder, useManaged, allocator);
-}
-
-//!
-//! \brief Destroy a safe TRT graph and release resources
-//!
-//! This function destroys a safe TRT graph and releases the associated resources. It is used to clean up
-//! the safe TRT graph after inference with safety-certified TensorRT engines.
-//!
-nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph)
-{
-    if (!initNvinferSafe())
-    {
-        return nvinfer1::ErrorCode::kINTERNAL_ERROR;
-    }
-    ASSERT(pdestroyTRTGraphInternal != nullptr);
-    return pdestroyTRTGraphInternal(graph);
-}
-
-//!
-//! \brief Get the safe plugin registry for loading plugins
-//!
-//! This function retrieves the safe plugin registry for loading plugins. It is used to get the safe plugin registry
-//! for loading plugins with safety-certified TensorRT engines.
-//!
-nvinfer2::safe::ISafePluginRegistry* getSafePluginRegistry(ISafeRecorder& recorder)
-{
-    if (!initNvinferSafe())
-    {
-        return nullptr;
-    }
-    ASSERT(pgetSafePluginRegistryInternal != nullptr);
-    return pgetSafePluginRegistryInternal(recorder);
-}
-
-namespace
-{
-nvinfer2::safe::TypedArray createTypedArray(void* const ptr, DataType const type, uint64_t bufferSize)
-{
-    switch (type)
-    {
-    case DataType::kFLOAT: return nvinfer2::safe::TypedArray(static_cast<float*>(ptr), bufferSize);
-    case DataType::kHALF: return nvinfer2::safe::TypedArray(static_cast<nvinfer2::safe::half_t*>(ptr), bufferSize);
-    case DataType::kINT32: return nvinfer2::safe::TypedArray(static_cast<int32_t*>(ptr), bufferSize);
-    case DataType::kINT8: return nvinfer2::safe::TypedArray(static_cast<int8_t*>(ptr), bufferSize);
-    case DataType::kINT64: return nvinfer2::safe::TypedArray(static_cast<int64_t*>(ptr), bufferSize);
-    case DataType::kBOOL: return nvinfer2::safe::TypedArray(static_cast<bool*>(ptr), bufferSize);
-    default:
-    {
-        sample::gLogError << "Invalid tensor DataType encountered." << std::endl;
-        return nvinfer2::safe::TypedArray{};
-    }
-    }
-}
-} // namespace
-} // namespace safe
-#endif
 
 template <class TMapType, class TEngineType>
 bool validateTensorNames(TMapType const& map, TEngineType const* engine, int32_t const endBindingIndex)
@@ -254,19 +120,24 @@ private:
         auto const* bindingInOutStr = tensorInfo.isInput ? "Input" : "Output";
         for (auto& binding : bindings)
         {
-            auto const input = findPlausible(inputs, name);
-            if (tensorInfo.isInput && input != inputs.end())
+            if (tensorInfo.isInput)
             {
-                sample::gLogInfo << "Using values loaded from " << input->second << " for input " << name << std::endl;
-                binding->addBinding(tensorInfo, input->second);
+                auto const input = findPlausible(inputs, name);
+                if (input != inputs.end())
+                {
+                    sample::gLogInfo << "Using values loaded from " << input->second << " for input " << name
+                                     << std::endl;
+                    binding->addBinding(tensorInfo, input->second);
+                }
+                else
+                {
+                    sample::gLogInfo << "Using random values for input " << name << std::endl;
+                    binding->addBinding(tensorInfo);
+                }
             }
             else
             {
-                if (tensorInfo.isInput)
-                {
-                    sample::gLogInfo << "Using random values for input " << name << std::endl;
-                }
-                binding->addBinding(tensorInfo);
+                binding->addBinding(tensorInfo, "", mEngine->getAliasedInputTensor(name));
             }
             if (tensorInfo.isDynamic)
             {
@@ -289,12 +160,30 @@ private:
             sample::gLogError << "Invalid tensor names found in --loadInputs flag." << std::endl;
             return false;
         }
+
+        // Process inputs first to ensure aliased outputs can reference them
+        std::vector<TensorInfo> outputTensors;
+        outputTensors.reserve(endBindingIndex);
+
         for (int32_t b = 0; b < endBindingIndex; b++)
         {
             TensorInfo tensorInfo;
             tensorInfo.bindingIndex = b;
             getTensorInfo(tensorInfo);
             tensorInfo.updateVolume(batch);
+            if (tensorInfo.isInput)
+            {
+                fillOneBinding(tensorInfo);
+            }
+            else
+            {
+                outputTensors.emplace_back(tensorInfo);
+            }
+        }
+
+        // Then process outputs (may alias with inputs)
+        for (auto const& tensorInfo : outputTensors)
+        {
             fillOneBinding(tensorInfo);
         }
         return true;
@@ -409,120 +298,10 @@ void contractInt64ToInt32(std::vector<int64_t>& shapeData)
 
 bool setUpInference(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
-#if ENABLE_UNIFIED_BUILDER
-    if (iEnv.safe)
-    {
-        return setUpSafeInference(static_cast<InferenceEnvironmentSafe&>(iEnv), inference, system);
-    }
-#endif
 
     return setUpStdInference(static_cast<InferenceEnvironmentStd&>(iEnv), inference, system);
 }
 
-#if ENABLE_UNIFIED_BUILDER
-void getSafeTensorInfo(uint32_t profileIndex, nvinfer2::safe::ITRTGraph* safeGraph, TensorInfo& tensorInfo)
-{
-    nvinfer2::safe::TensorDescriptor desc;
-    auto const b = tensorInfo.bindingIndex;
-    const char* name = nullptr;
-    safeGraph->getIOTensorName(name, b);
-    tensorInfo.name = name;
-    safeGraph->getIOTensorDescriptor(desc, name);
-    tensorInfo.dims = desc.shape;
-    tensorInfo.isDynamic = std::any_of(
-        tensorInfo.dims.d, tensorInfo.dims.d + tensorInfo.dims.nbDims, [](int32_t dim) { return dim == -1; });
-    tensorInfo.strides = desc.stride;
-    tensorInfo.isInput = desc.ioMode == TensorIOMode::kINPUT;
-    tensorInfo.dataType = desc.dataType;
-}
-
-bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& inference, SystemOptions const& system)
-{
-    int32_t device{};
-    CHECK(cudaGetDevice(&device));
-
-    cudaDeviceProp properties;
-    CHECK(cudaGetDeviceProperties(&properties, device));
-    int32_t const isIntegrated{properties.integrated};
-
-    ASSERT(sample::hasSafeRuntime());
-    ASSERT(sample::safe::initNvinferSafe());
-
-    auto safeEngineBlob = iEnv.engine.getBlob();
-    SMP_RETVAL_IF_FALSE(safeEngineBlob.data != nullptr, "Engine blob is empty.", false, sample::gLogError);
-    SMP_RETVAL_IF_FALSE(iEnv.engine.checkDLASafe(),
-        "Safe DLA engine built with kDLA_STANDALONE should not be infered in TRT!", false, sample::gLogError);
-
-    std::unique_ptr<nvinfer2::safe::ITRTGraph> safeGraph;
-
-    // Use managed memory on integrated devices when transfers are skipped
-    // and when it is explicitly requested on the commandline.
-    bool useManagedMemory{(inference.skipTransfers && isIntegrated) || inference.useManaged};
-
-    nvinfer2::safe::ITRTGraph* tempGraph = nullptr;
-    if (sample::safe::createSafeTRTGraph(
-            tempGraph, safeEngineBlob.data, safeEngineBlob.size, *gSafeRecorder, true, nullptr)
-        != nvinfer2::safe::ErrorCode::kSUCCESS)
-    {
-        sample::gLogError << "Create Safe TRT Graph Failed." << std::endl;
-    }
-    safeGraph.reset(tempGraph);
-
-    // Release serialized blob to save memory space.
-    iEnv.engine.releaseBlob();
-
-    for (int32_t s = 0; s < inference.infStreams; ++s)
-    {
-        nvinfer2::safe::ITRTGraph* clonedGraph{nullptr};
-
-        safeGraph->clone(clonedGraph, *gSafeRecorder); // return errorcode
-        iEnv.mClonedGraphs.emplace_back(clonedGraph);
-        iEnv.bindings.emplace_back(std::make_unique<BindingsSafe>(useManagedMemory));
-    }
-
-    int64_t endBindingIndex = 0;
-    safeGraph->getNbIOTensors(endBindingIndex);
-
-    for (int32_t b = 0; b < endBindingIndex; b++)
-    {
-        TensorInfo tensorInfo;
-        tensorInfo.bindingIndex = b;
-        getSafeTensorInfo(inference.optProfileIndex, safeGraph.get(), tensorInfo);
-        tensorInfo.updateVolume(1);
-        auto const name = tensorInfo.name;
-        auto const* bindingInOutStr = tensorInfo.isInput ? "Input" : "Output";
-        for (auto& binding : iEnv.bindings)
-        {
-            auto const input = findPlausible(inference.inputs, name);
-            if (tensorInfo.isInput && input != inference.inputs.end())
-            {
-                sample::gLogInfo << "Using values loaded from " << input->second << " for input " << name << std::endl;
-                binding->addBinding(tensorInfo, input->second);
-            }
-            else
-            {
-                if (tensorInfo.isInput)
-                {
-                    sample::gLogInfo << "Using random values for input " << name << std::endl;
-                }
-                binding->addBinding(tensorInfo);
-            }
-            if (tensorInfo.isDynamic)
-            {
-                sample::gLogInfo << bindingInOutStr << " binding for " << name
-                                 << " is dynamic and will be created during execution using OutputAllocator."
-                                 << std::endl;
-            }
-            else
-            {
-                sample::gLogInfo << bindingInOutStr << " binding for " << name << " with dimensions " << tensorInfo.dims
-                                 << " is created." << std::endl;
-            }
-        }
-    }
-    return true;
-}
-#endif
 
 bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
@@ -875,17 +654,6 @@ struct Enqueue
     nvinfer1::IExecutionContext& mContext;
 };
 
-#if ENABLE_UNIFIED_BUILDER
-struct SafeEnqueue
-{
-    explicit SafeEnqueue(nvinfer2::safe::ITRTGraph& graph)
-        : mGraph(graph)
-    {
-    }
-
-    nvinfer2::safe::ITRTGraph& mGraph;
-};
-#endif
 
 //!
 //! \class EnqueueExplicit
@@ -935,40 +703,6 @@ private:
     BindingsStd const& mBindings;
 };
 
-#if ENABLE_UNIFIED_BUILDER
-//!
-//! \class EnqueueExplicitSafe
-//! \brief Functor to safeEnqueue inference with explict batch
-//!
-class EnqueueExplicitSafe : private SafeEnqueue
-{
-
-public:
-    explicit EnqueueExplicitSafe(nvinfer2::safe::ITRTGraph& graph, BindingsSafe const& bindings)
-        : SafeEnqueue(graph)
-        , mBindings(bindings)
-    {
-        ASSERT(mBindings.setTensorAddresses(graph));
-    }
-
-    bool operator()(TrtCudaStream& stream) const
-    {
-        try
-        {
-            bool const result = (mGraph.executeAsync(stream.get()) == nvinfer1::ErrorCode::kSUCCESS);
-            return result;
-        }
-        catch (const std::exception&)
-        {
-            return false;
-        }
-        return false;
-    }
-
-private:
-    BindingsSafe const& mBindings;
-};
-#endif
 
 //!
 //! \class EnqueueGraph
@@ -1002,28 +736,6 @@ public:
     nvinfer1::IExecutionContext& mContext;
 };
 
-#if ENABLE_UNIFIED_BUILDER
-//!
-//! \class EnqueueGraphSafe
-//! \brief Functor to enqueue inference from CUDA Graph
-//!
-class EnqueueGraphSafe
-{
-
-public:
-    explicit EnqueueGraphSafe(nvinfer2::safe::ITRTGraph& graph)
-        : mGraph(graph)
-    {
-    }
-
-    bool operator()(TrtCudaStream& stream) const
-    {
-        return mGraph.executeAsync(stream.get()) == nvinfer1::ErrorCode::kSUCCESS;
-    }
-
-    nvinfer2::safe::ITRTGraph& mGraph;
-};
-#endif
 
 using EnqueueFunction = std::function<bool(TrtCudaStream&)>;
 
@@ -1298,65 +1010,6 @@ private:
     }
 };
 
-#if ENABLE_UNIFIED_BUILDER
-//!
-//! \class IterationSafe
-//! \brief Inference iteration and streams management for safe inference
-//!
-class IterationSafe : public IterationBase
-{
-public:
-    explicit IterationSafe(
-        int32_t id, InferenceOptions const& inference, nvinfer2::safe::ITRTGraph& graph, BindingsSafe& bindings)
-        : IterationBase(id, inference, bindings)
-    {
-        createEnqueueFunction(inference, graph, bindings);
-    }
-
-private:
-    void createEnqueueFunction(
-        InferenceOptions const& inference, nvinfer2::safe::ITRTGraph& graph, BindingsSafe& bindings)
-    {
-        mEnqueue = EnqueueFunction(EnqueueExplicitSafe(graph, bindings));
-        if (inference.graph)
-        {
-            sample::gLogInfo << "Capturing CUDA graph for the current execution context" << std::endl;
-
-            TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
-            // Avoid capturing initialization calls by executing the enqueue function at least
-            // once before starting CUDA graph capture.
-            auto const ret = mEnqueue(stream);
-            if (!ret)
-            {
-                throw std::runtime_error("Inference enqueue failed.");
-            }
-            stream.synchronize();
-
-            mGraph.beginCapture(stream);
-            // The built TRT engine may contain operations that are not permitted under CUDA graph capture mode.
-            // When the stream is capturing, the enqueue call may return false if the current CUDA graph capture fails.
-            if (mEnqueue(stream))
-            {
-                mGraph.endCapture(stream);
-                mEnqueue = EnqueueFunction(EnqueueGraphSafe(graph));
-                sample::gLogInfo << "Successfully captured CUDA graph for the current execution context" << std::endl;
-            }
-            else
-            {
-                mGraph.endCaptureOnError(stream);
-                // Ensure any CUDA error has been cleaned up.
-                CHECK(cudaGetLastError());
-                sample::gLogWarning << "The built TensorRT engine contains operations that are not permitted under "
-                                       "CUDA graph capture mode."
-                                    << std::endl;
-                sample::gLogWarning << "The specified --useCudaGraph flag has been ignored. The inference will be "
-                                       "launched without using CUDA graph launch."
-                                    << std::endl;
-            }
-        }
-    }
-};
-#endif
 
 bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePoint const& cpuStart,
     TrtCudaEvent const& gpuStart, int iterations, float maxDurationMs, float warmupMs,
@@ -1433,51 +1086,6 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
 
         CHECK(cudaSetDevice(device));
 
-#if ENABLE_UNIFIED_BUILDER
-        if (iEnv.safe)
-        {
-            //! Function to make one iteration:
-            auto makeIteration = [&](int32_t s) -> std::unique_ptr<IterationSafe> {
-                int32_t const streamId{threadIdx * streamsPerThread + s};
-                auto iteration = std::make_unique<IterationSafe>(streamId, inference,
-                    *static_cast<InferenceEnvironmentSafe&>(iEnv).mClonedGraphs[streamId],
-                    *static_cast<InferenceEnvironmentSafe&>(iEnv).bindings[streamId]);
-                if (inference.skipTransfers)
-                {
-                    iteration->setInputData(true);
-                }
-                return iteration;
-            };
-
-            std::vector<std::unique_ptr<IterationBase>> iStreams;
-            for (int32_t s = 0; s < streamsPerThread; ++s)
-            {
-                iStreams.emplace_back(makeIteration(s));
-            }
-
-            for (auto& s : iStreams)
-            {
-                s->wait(sync.gpuStart);
-            }
-            std::vector<InferenceTrace> localTrace;
-            if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs,
-                    localTrace, inference.skipTransfers, inference.idle))
-            {
-                std::lock_guard<std::mutex> lock{sync.mutex};
-                iEnv.error = true;
-            }
-            if (inference.skipTransfers)
-            {
-                for (auto& s : iStreams)
-                {
-                    s->fetchOutputData(true);
-                }
-            }
-            std::lock_guard<std::mutex> lock{sync.mutex};
-            trace.insert(trace.end(), localTrace.begin(), localTrace.end());
-            return;
-        }
-#endif
 
         //! Function to make one iteration:
         auto makeIteration = [&](int32_t s) -> std::unique_ptr<IterationStd> {
@@ -1886,7 +1494,8 @@ void Binding::dump(std::ostream& os, Dims dims, Dims strides, int32_t vectorDim,
     }
 }
 
-void BindingsBase::addBinding(TensorInfo const& tensorInfo, std::string const& fileName /*= ""*/)
+void BindingsBase::addBinding(
+    TensorInfo const& tensorInfo, std::string const& fileName /*= ""*/, char const* aliasedInputTensor /*= nullptr*/)
 {
     auto const b = tensorInfo.bindingIndex;
     while (mBindings.size() <= static_cast<size_t>(b))
@@ -1898,15 +1507,26 @@ void BindingsBase::addBinding(TensorInfo const& tensorInfo, std::string const& f
     mBindings[b].isInput = tensorInfo.isInput;
     mBindings[b].volume = tensorInfo.vol;
     mBindings[b].dataType = tensorInfo.dataType;
+
+    // Check if this output should alias with an input
+    if (!tensorInfo.isInput && aliasedInputTensor != nullptr)
+    {
+        // Share the same buffer as the input and skip buffer allocation
+        auto const aliasedIndex = mNames.at(aliasedInputTensor);
+        mBindings[b].buffer = mBindings[aliasedIndex].buffer;
+        mDevicePointers[b] = mDevicePointers[aliasedIndex];
+        return;
+    }
+
     //! Make a UnifiedMirroredBuffer if useManaged or Discrete othereise:
-    auto makeBuffer = [](bool useManaged) -> std::unique_ptr<IMirroredBuffer> {
+    auto makeBuffer = [](bool useManaged) -> std::shared_ptr<IMirroredBuffer> {
         if (useManaged)
         {
-            return std::make_unique<UnifiedMirroredBuffer>();
+            return std::make_shared<UnifiedMirroredBuffer>();
         }
         else
         {
-            return std::make_unique<DiscreteMirroredBuffer>();
+            return std::make_shared<DiscreteMirroredBuffer>();
         }
     };
     if (tensorInfo.isDynamic)
@@ -2096,108 +1716,4 @@ bool BindingsStd::setTensorAddresses(nvinfer1::IExecutionContext& context) const
     return true;
 }
 
-#if ENABLE_UNIFIED_BUILDER
-namespace
-{
-Dims getBindingDimensions(ITRTGraph& graph, std::string const& name)
-{
-    nvinfer2::safe::TensorDescriptor desc;
-    graph.getIOTensorDescriptor(desc, name.c_str());
-    return desc.shape;
-}
-} // namespace
-
-void BindingsSafe::dumpBindingDimensions(std::string const& name, ITRTGraph const& graph, std::ostream& os) const
-{
-    // Do not add a newline terminator, because the caller may be outputting a JSON string.
-    os << getBindingDimensions(const_cast<ITRTGraph&>(graph), name);
-}
-
-void BindingsSafe::dumpBindingValues(ITRTGraph const& graph, int32_t binding, std::ostream& os,
-    std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
-{
-    char const* tensorName;
-    graph.getIOTensorName(tensorName, binding);
-    nvinfer2::safe::TensorDescriptor desc;
-    graph.getIOTensorDescriptor(desc, tensorName);
-    Dims dims = desc.shape;
-    Dims strides = desc.stride;
-    // int32_t vectorDim = desc.vectorizedDim;
-    // int32_t const spv = desc.componentsPerVector;
-
-    mBindings[binding].dump(os, dims, strides, -1, -1, separator);
-}
-
-void BindingsSafe::dumpRawBindingToFiles(ITRTGraph& graph, std::ostream& os) const
-{
-    os << "Dumping I/O Bindings to RAW Files:" << std::endl;
-    for (auto const& n : mNames)
-    {
-        auto name = n.first;
-        auto bIndex = n.second;
-        auto const& binding = mBindings[bIndex];
-        void* outputBuffer{};
-        if (binding.outputAllocator != nullptr)
-        {
-            outputBuffer = binding.outputAllocator->getBuffer()->getHostBuffer();
-        }
-        else
-        {
-            outputBuffer = binding.buffer->getHostBuffer();
-        }
-
-        Dims dims = getBindingDimensions(graph, name);
-        std::string dimsStr;
-        std::string dotStr;
-
-        for (int32_t i = 0; i < dims.nbDims; i++)
-        {
-            dimsStr += dotStr + std::to_string(dims.d[i]);
-            dotStr = ".";
-        }
-
-        std::string const bindingTypeStr = (binding.isInput ? "input" : "output");
-
-        std::stringstream fileName;
-        fileName << genFilenameSafeString(name) << "." << bindingTypeStr << "." << dimsStr << "." << binding.dataType
-                 << ".raw";
-
-        os << "Writing file for " << bindingTypeStr << " binding " << name << " (with datatype " << binding.dataType
-           << " and dimensions " << dimsStr << ") to " << fileName.str() << std::endl;
-
-        std::ofstream f(fileName.str(), std::ios::out | std::ios::binary);
-        ASSERT(f && "Cannot open file for write");
-        f.write(static_cast<char*>(outputBuffer), samplesCommon::getNbBytes(binding.dataType, binding.volume));
-        f.close();
-    }
-}
-
-bool BindingsSafe::setTensorAddresses(ITRTGraph& graph) const
-{
-    for (auto const& b : mNames)
-    {
-        auto const name = b.first.c_str();
-        nvinfer2::safe::TensorDescriptor desc;
-        graph.getIOTensorDescriptor(desc, name);
-        bool onGpu = desc.memPlacement == nvinfer2::safe::MemoryPlacement::kGPU
-            || desc.memPlacement == nvinfer2::safe::MemoryPlacement::kNONE;
-        if (onGpu)
-        {
-            if (mBindings[b.second].outputAllocator != nullptr)
-            {
-                nvinfer2::safe::TypedArray tensor = safe::createTypedArray(
-                    mBindings[b.second].outputAllocator->getBuffer(), desc.dataType, desc.sizeInBytes);
-                graph.setIOTensorAddress(name, tensor);
-            }
-            else
-            {
-                nvinfer2::safe::TypedArray tensor
-                    = safe::createTypedArray(mDevicePointers[b.second], desc.dataType, desc.sizeInBytes);
-                graph.setIOTensorAddress(name, tensor);
-            }
-        }
-    }
-    return true;
-}
-#endif
 } // namespace sample

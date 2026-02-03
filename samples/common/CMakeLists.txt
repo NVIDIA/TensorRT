@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: LicenseRef-NvidiaProprietary
 #
 # NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
@@ -10,7 +10,7 @@
 
 add_library(trt_samples_common STATIC)
 
-target_sources(trt_samples_common PRIVATE
+set(SAMPLE_SOURCES
     argsParser.h
     BatchStream.h
     bfloat16.cpp
@@ -45,6 +45,7 @@ target_sources(trt_samples_common PRIVATE
     sampleUtils.h
     streamReader.h
 )
+target_sources(trt_samples_common PRIVATE ${SAMPLE_SOURCES})
 
 if (MSVC)
     enable_language(C)
@@ -55,27 +56,45 @@ endif()
 
 target_include_directories(trt_samples_common PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../shared
 )
 
-
-target_link_libraries(trt_samples_common PUBLIC
-    trt_global_definitions
-    trt_shared
-    Threads::Threads
-    dl
-    TRT::cudart
-    $<COMPILE_ONLY:TRT_SAMPLES::tensorrt> # Each sample individually must determine its linkage to TRT.
-    TRT_SAMPLES::onnxparser
-)
-
-# For statically-linked samples, we need to upgrade the link to always link TRT rather than letting the samples decide.
-if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
+# OSS build mode
+if(NOT TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW)
     target_link_libraries(trt_samples_common PUBLIC
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,TRT_SAMPLES::tensorrt> # Has to be whole archive so we keep the builder resources correctly.
+        Threads::Threads
+        ${CUDA_LIBRARIES}
     )
+    if(NOT WIN32 AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "QNX")
+        target_link_libraries(trt_samples_common PUBLIC dl)
+    endif()
+    
+    # Link nvinfer if available
+    if(TARGET nvinfer)
+        target_link_libraries(trt_samples_common PUBLIC nvinfer)
+    endif()
+else()
+    # Internal build mode
+    target_link_libraries(trt_samples_common PUBLIC
+        trt_global_definitions
+        trt_shared
+        Threads::Threads
+        dl
+        TRT::cudart
+        $<COMPILE_ONLY:TRT_SAMPLES::tensorrt> # Each sample individually must determine its linkage to TRT.
+        TRT_SAMPLES::onnxparser
+    )
+
+    # For statically-linked samples, we need to upgrade the link to always link TRT rather than letting the samples decide.
+    if(${TRT_BUILD_SAMPLES_LINK_STATIC_TRT})
+        target_link_libraries(trt_samples_common PUBLIC
+            $<LINK_LIBRARY:WHOLE_ARCHIVE,TRT_SAMPLES::tensorrt> # Has to be whole archive so we keep the builder resources correctly.
+        )
+    endif()
+
+    if(${TRT_BUILD_ENABLE_DLA})
+        target_link_libraries(trt_samples_common PUBLIC NVDLA::compiler)
+    endif()
 endif()
 
-
-if(${TRT_BUILD_ENABLE_DLA})
-    target_link_libraries(trt_samples_common PUBLIC NVDLA::compiler)
-endif()

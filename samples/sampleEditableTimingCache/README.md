@@ -103,4 +103,7 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+October 2025
+  - Migrate to strongly typed APIs.
+
 # Known issues

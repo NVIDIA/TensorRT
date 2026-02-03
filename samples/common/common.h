@@ -211,16 +211,6 @@ using nvinfer1::utils::buildTimingCacheFromFile;
 using nvinfer1::utils::saveCacheFile;
 using nvinfer1::utils::updateTimingCacheFile;
 
-template <typename T>
-inline std::shared_ptr<T> infer_object(T* obj)
-{
-    if (!obj)
-    {
-        throw std::runtime_error("Failed to create object");
-    }
-    return std::shared_ptr<T>(obj);
-}
-
 // Swaps endianness of an integral type.
 template <typename T, typename std::enable_if_t<std::is_integral<T>::value, int> = 0>
 inline T swapEndianness(const T& value)
@@ -300,20 +290,8 @@ inline void* safeCudaMalloc(size_t memSize)
 
 inline bool isDebug()
 {
-    return (std::getenv("TENSORRT_DEBUG") ? true : false);
+    return std::getenv("TENSORRT_DEBUG") != nullptr;
 }
-
-struct InferDeleter
-{
-    template <typename T>
-    void operator()(T* obj) const
-    {
-        delete obj;
-    }
-};
-
-template <typename T>
-using SampleUniquePtr = std::unique_ptr<T>;
 
 static auto StreamDeleter = [](cudaStream_t* pStream) {
     if (pStream)
@@ -1056,16 +1034,6 @@ inline int32_t getMaxPersistentCacheSize()
     return maxPersistentL2CacheSize;
 }
 
-inline bool isDataTypeSupported(nvinfer1::DataType dataType)
-{
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(createBuilder());
-    if (!builder)
-    {
-        return false;
-    }
-
-    return true;
-}
 } // namespace samplesCommon
 
 inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)

@@ -44,15 +44,7 @@ function(buildBindingsWheel moduleName pyVersion isStandalone)
 
     string(REPLACE "." "" pyVerStr ${pyVersion})
 
-    if (MSVC)
-        if(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_WIN10})
-            set(wheelPlatform win_amd64)
-        else()
-            message(FATAL_ERROR "Unable to determine python binding wheel platform name for TRT Platform: ${TRT_BUILD_PLATFORM}")
-        endif()
-    else()
-        set(wheelPlatform linux_${TRT_CONFIG_ARCH})
-    endif()
+    get_wheel_platform(${isStandalone} wheelPlatform)
 
     set(wheelTemplateFiles
         tensorrt/__init__.py

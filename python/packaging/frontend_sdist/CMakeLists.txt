@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,14 @@ function(buildFrontendWheel moduleName)
     set(wheelTemplateFiles
         tensorrt/__init__.py
         tensorrt/plugin/__init__.py
+        tensorrt/plugin/_lib.py
+        tensorrt/plugin/_autotune.py
+        tensorrt/plugin/_export.py
+        tensorrt/plugin/_plugin_class.py
+        tensorrt/plugin/_tensor.py
+        tensorrt/plugin/_top_level.py
+        tensorrt/plugin/_utils.py
+        tensorrt/plugin/_validate.py
         LICENSE.txt
         setup.cfg
         setup.py

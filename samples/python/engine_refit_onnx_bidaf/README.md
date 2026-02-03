@@ -12,7 +12,7 @@
 
 ## Description
 
-This sample shows how to refit an engine built from an ONNX model via parsers. A modified version of the [ONNX BiDAF model](https://github.com/onnx/models/tree/master/text/machine_comprehension/bidirectional_attention_flow) is used as the sample model, which implements the Bi-Directional Attention Flow (BiDAF) network described in the paper [Bidirectional Attention Flow for Machine Comprehension](https://arxiv.org/abs/1611.01603).
+This sample shows how to refit an engine built from an ONNX model via parsers. A modified version of the [ONNX BiDAF model](https://github.com/onnx/models/tree/main/validated/text/machine_comprehension/bidirectional_attention_flow) is used as the sample model, which implements the Bi-Directional Attention Flow (BiDAF) network described in the paper [Bidirectional Attention Flow for Machine Comprehension](https://arxiv.org/abs/1611.01603).
 
 ## How does this sample work?
 
@@ -142,6 +142,9 @@ The following resources provide a deeper understanding about the model used in t
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+October 2025
+  - Migrate to strongly typed APIs.
 
 August 2025:
   - Removed support for Python versions < 3.10.

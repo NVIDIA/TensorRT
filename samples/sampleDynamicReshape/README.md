@@ -28,13 +28,13 @@ This sample creates an engine for resizing an input with dynamic dimensions to a
 Specifically, this sample:
 -   Creates a network with dynamic input dimensions to act as a preprocessor for the model
 -   Parses an ONNX MNIST model to create a second network
--   Builds engines for both networks and does calibration if running in int8
+-   Builds engines for both networks
 -   Runs inference using both engines
 
 ### Creating the preprocessing network
 
 First, create a network with full dims support:
-`auto preprocessorNetwork = makeUnique(builder->createNetworkV2(0));`
+`auto preprocessorNetwork = std::unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)));`
 
 Next, add an input layer that accepts an input with a dynamic shape, followed by a resize layer that will reshape the input to the shape the model expects:
 ```
@@ -50,7 +50,7 @@ The -1 dimensions denote dimensions that will be supplied at runtime.
 
 First, create an empty full-dims network, and parser:
 ```
-auto network = makeUnique(builder->createNetworkV2(0));
+auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)));
 auto parser = nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger());
 ```
 
@@ -63,7 +63,7 @@ parser->parseFromFile(locateFile(mParams.onnxFileName, mParams.dataDirs).c_str()
 
 When building the preprocessor engine, also provide an optimization profile so that TensorRT knows which input shapes to optimize for:
 ```
-auto preprocessorConfig = makeUnique(builder->createBuilderConfig());
+auto preprocessorConfig = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
 auto profile = builder->createOptimizationProfile();
 ```
 
@@ -75,34 +75,9 @@ profile->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{1, 1, 5
 preprocessorConfig->addOptimizationProfile(profile);
 ```
 
-Create an optimization profile for calibration:
-```
-auto profileCalib = builder->createOptimizationProfile();
-const int calibBatchSize{256};
-profileCalib->setDimensions(input->getName(), OptProfileSelector::kMIN, Dims4{calibBatchSize, 1, 28, 28});
-profileCalib->setDimensions(input->getName(), OptProfileSelector::kOPT, Dims4{calibBatchSize, 1, 28, 28});
-profileCalib->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{calibBatchSize, 1, 28, 28});
-preprocessorConfig->setCalibrationProfile(profileCalib);
-```
-
-Prepare and set int8 calibrator if running in int8 mode:
-```
-std::unique_ptr<IInt8Calibrator> calibrator;
-if (mParams.int8)
-{
-    preprocessorConfig->setFlag(BuilderFlag::kINT8);    
-    const int nCalibBatches{10}; 
-    MNISTBatchStream calibrationStream(calibBatchSize, nCalibBatches, "train-images-idx3-ubyte",
-        "train-labels-idx1-ubyte", mParams.dataDirs);
-    calibrator.reset(new Int8EntropyCalibrator2<MNISTBatchStream>(
-        calibrationStream, 0, "MNISTPreprocessor", "input"));
-    preprocessorConfig->setInt8Calibrator(calibrator.get());
-}
-```
-
 Run engine build with config: 
 ```
-SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan = makeUnique(
+auto preprocessorPlan = std::unique_ptr<nvinfer1::IHostMemory>(
         builder->buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
 if (!preprocessorPlan)
 {
@@ -110,7 +85,7 @@ if (!preprocessorPlan)
     return false;
 }
 
-mPreprocessorEngine = makeUnique(
+mPreprocessorEngine = std::unique_ptr<nvinfer1::ICudaEngine>(
     runtime->deserializeCudaEngine(preprocessorPlan->data(), preprocessorPlan->size()));
 if (!mPreprocessorEngine)
 {
@@ -127,18 +102,16 @@ network->unmarkOutput(*network->getOutput(0));
 network->markOutput(*softmax->getOutput(0));
 ```
 
-A calibrator and a calibration profile are set the same way as above for the preprocessor engine config. `calibBatchSize` is set to 1 for the prediction engine as ONNX model has an explicit batch.
-
 Finally, build as normal:
 ```
-SampleUniquePtr<nvinfer1::IHostMemory> predictionPlan = makeUnique(builder->buildSerializedNetwork(*network, *config));
+auto predictionPlan = std::unique_ptr<nvinfer1::IHostMemory>(builder->buildSerializedNetwork(*network, *config));
 if (!predictionPlan)
 {
     sample::gLogError << "Prediction serialized engine build failed." << std::endl;
     return false;
 }
 
-mPredictionEngine = makeUnique(
+mPredictionEngine = std::unique_ptr<nvinfer1::ICudaEngine>(
     runtime->deserializeCudaEngine(predictionPlan->data(), predictionPlan->size()));
 if (!mPredictionEngine)
 {
@@ -190,12 +163,12 @@ The IResizeLayer implements the resize operation on an input tensor.
 
 2.  Run the sample.
     ```bash
-    ./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+    ./sample_dynamic_reshape [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]
     ```
 
     For example:
     ```bash
-    ./sample_dynamic_reshape --datadir $TRT_DATADIR/mnist --fp16
+    ./sample_dynamic_reshape --datadir $TRT_DATADIR/mnist
     ```
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
@@ -280,7 +253,7 @@ The following resources provide a deeper understanding of dynamic shapes.
 - [GitHub: ONNX-TensorRT open source parser](https://github.com/onnx/onnx-tensorrt)
 
 **Models**
-- [MNIST - Handwritten Digit Recognition](https://github.com/onnx/models/tree/master/mnist)
+- [MNIST - Handwritten Digit Recognition](https://github.com/onnx/models/tree/main/validated/vision/classification/mnist)
 - [GitHub: ONNX Models](https://github.com/onnx/models)
 
 **Documentation**
@@ -294,6 +267,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 
 # Changelog
+
+October 2025
+Migrate to strongly typed APIs.
 
 February 2020
 This is the second release of the `README.md` file and sample.

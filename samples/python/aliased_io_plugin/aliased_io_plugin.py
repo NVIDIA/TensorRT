@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -400,7 +400,7 @@ if __name__ == "__main__":
     my_plugin_creator = ScatterAddPluginCreator()
     plg_registry.register_creator(my_plugin_creator, "")
 
-    builder, network = create_network()
+    builder, network = create_network(strongly_typed=True)
     input_x_T = network.add_input(name="X", dtype=precision, shape=input_x.shape)
     input_src_T = network.add_input(name="src", dtype=precision, shape=input_src.shape)
     input_idx_T = network.add_input(name="idx", dtype=trt.int64, shape=input_idx.shape)
@@ -424,13 +424,11 @@ if __name__ == "__main__":
         matmul_layer.get_output(0), type=trt.ActivationType.RELU
     )
     softmax_layer = network.add_softmax(relu_layer.get_output(0))
-    softmax_layer.get_output(0).dtype = precision
     softmax_layer.get_output(0).name = "softmax"
     network.mark_output(tensor=softmax_layer.get_output(0))
     build_engine = engine_from_network(
         (builder, network),
         CreateConfig(
-            fp16=precision == trt.float16,
             preview_features=[trt.PreviewFeature.ALIASED_PLUGIN_IO_10_03],
         ),
     )

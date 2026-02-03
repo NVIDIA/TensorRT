@@ -42,7 +42,6 @@
 #include <iostream>
 #include <sstream>
 using namespace nvinfer1;
-using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_onnx_mnist_coord_conv_ac";
 
@@ -82,15 +81,15 @@ private:
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
     int mNumber{0};             //!< The number to classify
 
-    SampleUniquePtr<IRuntime> mRuntime{};           //!< The TensorRT Runtime used to deserialize the engine.
+    std::unique_ptr<IRuntime> mRuntime{};           //!< The TensorRT Runtime used to deserialize the engine.
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
     //!
     //! \brief Parses an ONNX model for MNIST and creates a TensorRT network
     //!
-    bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-        SampleUniquePtr<nvonnxparser::IParser>& parser);
+    bool constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+        std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+        std::unique_ptr<nvonnxparser::IParser>& parser);
 
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
@@ -114,26 +113,27 @@ private:
 bool SampleOnnxMnistCoordConvAC::build()
 {
     initLibNvInferPlugins(&sample::gLogger, "");
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(
+        builder->createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)));
     if (!network)
     {
         return false;
     }
 
-    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    auto config = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
     if (!config)
     {
         return false;
     }
 
     auto parser
-        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+        = std::unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
     if (!parser)
     {
         return false;
@@ -153,7 +153,7 @@ bool SampleOnnxMnistCoordConvAC::build()
     }
     config->setProfileStream(*profileStream);
 
-    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
 
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
@@ -162,7 +162,7 @@ bool SampleOnnxMnistCoordConvAC::build()
             = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
-    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    std::unique_ptr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return false;
@@ -176,7 +176,7 @@ bool SampleOnnxMnistCoordConvAC::build()
 
     if (!mRuntime)
     {
-        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+        mRuntime = std::unique_ptr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
     }
 
     if (!mRuntime)
@@ -184,8 +184,7 @@ bool SampleOnnxMnistCoordConvAC::build()
         return false;
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(plan->data(), plan->size()));
     if (!mEngine)
     {
         return false;
@@ -210,25 +209,15 @@ bool SampleOnnxMnistCoordConvAC::build()
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleOnnxMnistCoordConvAC::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-    SampleUniquePtr<nvonnxparser::IParser>& parser)
+bool SampleOnnxMnistCoordConvAC::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+    std::unique_ptr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
         static_cast<int>(sample::gLogger.getReportableSeverity()));
     if (!parsed)
     {
         return false;
-    }
-
-    if (mParams.fp16)
-    {
-        config->setFlag(BuilderFlag::kFP16);
-    }
-    if (mParams.int8)
-    {
-        config->setFlag(BuilderFlag::kINT8);
-        samplesCommon::setAllDynamicRanges(network.get(), 127.0F, 127.0F);
     }
 
     samplesCommon::enableDLA(builder.get(), config.get(), mParams.dlaCore);
@@ -247,7 +236,7 @@ bool SampleOnnxMnistCoordConvAC::infer()
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine);
 
-    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
     {
         return false;
@@ -377,8 +366,6 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.inputTensorNames.push_back("conv1");
     params.outputTensorNames.push_back("fc2");
     params.dlaCore = args.useDLACore;
-    params.int8 = args.runInInt8;
-    params.fp16 = args.runInFp16;
     params.timingCacheFile = args.timingCacheFile;
 
     return params;
@@ -402,8 +389,6 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--timingCacheFile  Specify path to a timing cache file. If it does not already exist, it will be "
               << "created." << std::endl;
-    std::cout << "--int8             Run in Int8 mode." << std::endl;
-    std::cout << "--fp16             Run in FP16 mode." << std::endl;
 }
 
 int main(int argc, char** argv)

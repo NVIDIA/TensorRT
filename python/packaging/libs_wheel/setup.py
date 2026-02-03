@@ -22,11 +22,6 @@ distribution_package_name = "##TENSORRT_MODULE##_cu##CUDA_MAJOR##_libs"
 import_package_name = "##TENSORRT_MODULE##_libs"
 
 
-def get_requirements():
-    reqs = [f"cuda-toolkit[cudart] >=##CUDA_MAJOR##,<{##CUDA_MAJOR## + 1}"]
-    return reqs
-
-
 setup(
     name=distribution_package_name,
     version="##TENSORRT_PYTHON_VERSION##",
@@ -40,7 +35,6 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     packages=[import_package_name],
-    install_requires=get_requirements(),
     package_data={import_package_name: ["*.so*", "*.pyd", "*.pdb", "*.dll*"]},
     include_package_data=True,
     zip_safe=True,

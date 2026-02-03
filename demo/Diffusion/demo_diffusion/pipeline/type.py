@@ -22,7 +22,7 @@ class PIPELINE_TYPE(enum.Enum):
     TXT2IMG = enum.auto()
     IMG2IMG = enum.auto()
     IMG2VID = enum.auto()
-    INPAINT = enum.auto()
+    TXT2VID = enum.auto()
     CONTROLNET = enum.auto()
     XL_CONTROLNET = enum.auto()
     XL_BASE = enum.auto()
@@ -40,8 +40,8 @@ class PIPELINE_TYPE(enum.Enum):
     def is_img2vid(self):
         return self == self.IMG2VID
 
-    def is_inpaint(self):
-        return self == self.INPAINT
+    def is_txt2vid(self):
+        return self == self.TXT2VID
 
     def is_controlnet(self):
         return self in (self.CONTROLNET, self.XL_CONTROLNET)

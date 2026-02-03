@@ -28,6 +28,7 @@
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace sample
 {
@@ -242,6 +243,18 @@ inline LogStreamConsumer& operator<<(LogStreamConsumer& logger, const nvinfer1::
         {
             os << (i ? "x" : "") << dims.d[i];
         }
+    }
+    return logger;
+}
+
+template <typename First, typename Second>
+inline LogStreamConsumer& operator<<(LogStreamConsumer& logger, const std::pair<First, Second>& value)
+{
+    if (logger.getShouldLog())
+    {
+        std::lock_guard<std::mutex> guard(logger.getMutex());
+        auto& os = static_cast<std::ostream&>(logger);
+        os << "(" << value.first << ", " << value.second << ")";
     }
     return logger;
 }

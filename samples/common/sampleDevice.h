@@ -530,7 +530,7 @@ class OutputAllocator : public nvinfer1::IOutputAllocator
 {
 public:
     //! Construct, using buffer as the backing storage:
-    explicit OutputAllocator(std::unique_ptr<IMirroredBuffer> buffer)
+    explicit OutputAllocator(std::shared_ptr<IMirroredBuffer> buffer)
         : mBuffer{std::move(buffer)}
     {
         ASSERT(mBuffer);
@@ -575,7 +575,7 @@ public:
     }
 
 private:
-    std::unique_ptr<IMirroredBuffer> mBuffer;
+    std::shared_ptr<IMirroredBuffer> mBuffer;
     uint64_t mSize{};
     nvinfer1::Dims mFinalDims;
 };

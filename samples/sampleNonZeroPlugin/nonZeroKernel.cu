@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,7 @@ inline __device__ int32_t isZero(half const& a)
 
 template <typename T>
 __global__ void findNonZeroIndicesKernel(
-    T const* X, int32_t* indices, int32_t* count, int32_t const* K, int32_t R, int32_t C, int32_t rowOrder)
+    T const* X, int32_t* indices, unsigned long long* count, unsigned long long const* K, int32_t R, int32_t C, int32_t rowOrder)
 {
     int32_t col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -44,7 +44,7 @@ __global__ void findNonZeroIndicesKernel(
         {
             if (!isZero(X[row * C + col]))
             {
-                int32_t index = atomicAdd(count, 1); // Increment count atomically and get the previous value
+                unsigned long long index = atomicAdd(count, 1ULL); // Increment count atomically and get the previous value
                 if (indices)
                 {
                     if(rowOrder == 0)
@@ -64,18 +64,19 @@ __global__ void findNonZeroIndicesKernel(
 }
 
 template <typename T>
-void nonZeroIndicesImpl(T const* X, int32_t* indices, int32_t* count, int32_t const* K, int32_t R, int32_t C,
+void nonZeroIndicesImpl(T const* X, int32_t* indices, int64_t* count, int64_t const* K, int32_t R, int32_t C,
     bool rowOrder, cudaStream_t stream)
 {
     constexpr int32_t kBLOCK_SIZE = 256;
     int32_t const blocksPerGrid = (C + kBLOCK_SIZE - 1) / kBLOCK_SIZE;
 
+    static_assert(sizeof(unsigned long long) == 8U, "unsigned long long must be 8 bytes in NVCC");
     findNonZeroIndicesKernel<<<blocksPerGrid, kBLOCK_SIZE, 0, stream>>>(
-        X, indices, count, K, R, C, static_cast<int32_t>(rowOrder));
+        X, indices, reinterpret_cast<unsigned long long*>(count), reinterpret_cast<unsigned long long const*>(K), R, C, static_cast<int32_t>(rowOrder));
 }
 
 #define NONZERO_SPECIALIZED_IMPL(T)                                                                                    \
-    template void nonZeroIndicesImpl<T>(T const* X, int32_t* indices, int32_t* count, int32_t const* K, int32_t R,     \
+    template void nonZeroIndicesImpl<T>(T const* X, int32_t* indices, int64_t* count, int64_t const* K, int32_t R,     \
         int32_t C, bool rowOrder, cudaStream_t stream);
 
 NONZERO_SPECIALIZED_IMPL(float)

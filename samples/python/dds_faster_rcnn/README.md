@@ -95,6 +95,9 @@ This will perform object detection on the test image and save the output to the 
 
 # Changelog
 
+October 2025
+Migrate to strongly typed APIs.
+
 August 2025
 Removed support for Python versions < 3.10.
 

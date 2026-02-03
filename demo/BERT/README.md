@@ -1,4 +1,6 @@
-# BERT Inference Using TensorRT
+# BERT Inference Using TensorRT [DEPRECATED]
+
+> This demo has been deprecated since TensorRT 10.15 given the deprecation of the [bertQKVToContextPlugin](../../plugin/bertQKVToContextPlugin/README.md).
 
 This subfolder of the BERT TensorFlow repository, tested and maintained by NVIDIA, provides scripts to perform high-performance inference using NVIDIA TensorRT.
 

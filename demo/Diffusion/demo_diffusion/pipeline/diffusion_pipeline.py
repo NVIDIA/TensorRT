@@ -82,12 +82,7 @@ class DiffusionPipeline(ABC):
     """
     VALID_DIFFUSION_PIPELINES = (
         "1.4",
-        "1.5",
         "dreamshaper-7",
-        "2.0-base",
-        "2.0",
-        "2.1-base",
-        "2.1",
         "xl-1.0",
         "xl-turbo",
         "svd-xt-1.1",
@@ -100,6 +95,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-depth",
         "flux.1-schnell",
         "flux.1-kontext-dev",
+        "wan2.2-t2v-a14b",
         "cosmos-predict2-2b-text2image",
         "cosmos-predict2-14b-text2image",
         "cosmos-predict2-2b-video2world",
@@ -107,12 +103,7 @@ class DiffusionPipeline(ABC):
     )
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
-        "1.5": "PNDM",
         "dreamshaper-7": "PNDM",
-        "2.0-base": "DDIM",
-        "2.0": "DDIM",
-        "2.1-base": "PNDM",
-        "2.1": "DDIM",
         "xl-1.0": "Euler",
         "xl-turbo": "EulerA",
         "3.5-large": "FlowMatchEuler",
@@ -124,6 +115,7 @@ class DiffusionPipeline(ABC):
         "flux.1-dev-depth": "FlowMatchEuler",
         "flux.1-schnell": "FlowMatchEuler",
         "flux.1-kontext-dev": "FlowMatchEuler",
+        "wan2.2-t2v-a14b": "UniPC",
         "cosmos-predict2-2b-text2image": "FlowMatchEuler",
         "cosmos-predict2-14b-text2image": "FlowMatchEuler",
         "cosmos-predict2-2b-video2world": "FlowMatchEuler",
@@ -133,7 +125,7 @@ class DiffusionPipeline(ABC):
     def __init__(
         self,
         dd_path,
-        version="1.5",
+        version="1.4",
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
         bf16=False,
         max_batch_size=16,
@@ -256,7 +248,7 @@ class DiffusionPipeline(ABC):
             "PNDM" : PNDMScheduler,
             "UniPC" : UniPCMultistepScheduler,
             "DDPMWuerstchen" : DDPMWuerstchenScheduler,
-            "FlowMatchEuler": FlowMatchEulerDiscreteScheduler
+            "FlowMatchEuler": FlowMatchEulerDiscreteScheduler,
         }
         try:
             scheduler_class = scheduler_class_map[scheduler]
@@ -341,9 +333,14 @@ class DiffusionPipeline(ABC):
             for model_name, obj in self.models.items():
                 if self.torch_fallback[model_name]:
                     continue
-                self.shape_dicts[model_name] = obj.get_shape_dict(batch_size, image_height, image_width)
+                shape_dict = obj.get_shape_dict(
+                    batch_size, image_height, image_width, 
+                    **({'num_frames': obj.num_frames} if hasattr(obj, 'num_frames') and obj.num_frames else {})
+                )
+                
+                self.shape_dicts[model_name] = shape_dict
                 if not self.low_vram:
-                    self.engine[model_name].allocate_buffers(shape_dict=obj.get_shape_dict(batch_size, image_height, image_width), device=self.device)
+                    self.engine[model_name].allocate_buffers(shape_dict=shape_dict, device=self.device)
 
     @abstractmethod
     def _initialize_models(self, *args, **kwargs):
@@ -377,20 +374,18 @@ class DiffusionPipeline(ABC):
             # 8-bit/4-bit precision inference
             if int8:
                 assert self.pipeline_type.is_sd_xl_base() or self.version in [
-                    "1.5",
-                    "2.1",
-                    "2.1-base",
-                ], "int8 quantization only supported for SDXL, SD1.5 and SD2.1 pipeline"
+                    "1.4",
+                ], "int8 quantization only supported for SDXL and SD1.4 pipeline"
                 if (self.pipeline_type.is_sd_xl() and model_name == "unetxl") or (model_name == "unet"):
                     config["use_int8"] = True
 
             elif fp8:
                 assert (
                     self.pipeline_type.is_sd_xl()
-                    or self.version in ["1.5", "2.1", "2.1-base"]
+                    or self.version in ["1.4"]
                     or self.version.startswith("flux.1")
                     or self.version.startswith("3.5-large")
-                ), "fp8 quantization only supported for SDXL, SD1.5, SD2.1, SD3.5-large and FLUX pipelines"
+                ), "fp8 quantization only supported for SDXL, SD1.4, SD3.5-large and FLUX pipelines"
                 if (
                     (self.pipeline_type.is_sd_xl() and model_name == "unetxl")
                     or (self.version.startswith("flux.1") and model_name == "transformer")
@@ -528,8 +523,6 @@ class DiffusionPipeline(ABC):
         elif model_config['use_fp8']:
             if self.version.startswith("flux.1"):
                 quant_config = SD_FP8_BF16_FLUX_MMDIT_BMM2_FP8_OUTPUT_CONFIG
-            elif self.version == "2.1":
-                quant_config = SD_FP8_FP32_DEFAULT_CONFIG
             else:
                 quant_config = SD_FP8_FP16_DEFAULT_CONFIG
 
@@ -631,7 +624,14 @@ class DiffusionPipeline(ABC):
             else:
                 self.is_native_export_supported(model_config)
 
-        dynamo = True if self.pipeline_type.is_video2world() and model_name == "transformer" else False
+        dynamo = True if (self.pipeline_type.is_video2world() and model_name == "transformer") or (self.pipeline_type.is_txt2vid() and (model_name in ["transformer", "transformer_2"])) else False
+        
+        export_kwargs = {
+            "static_shape": static_shape,
+            "dynamo": dynamo,
+            **({'opt_num_frames': obj.num_frames} if hasattr(obj, 'num_frames') and obj.num_frames else {})
+        }
+        
         if do_export_onnx or do_export_weights_map:
             if not model_config['use_int8'] and not model_config['use_fp8']:
                 obj.export_onnx(
@@ -641,9 +641,8 @@ class DiffusionPipeline(ABC):
                     opt_image_height,
                     opt_image_width,
                     enable_lora_merge=model_config["do_lora_merge"],
-                    static_shape=static_shape,
                     lora_loader=self.lora_loader,
-                    dynamo=dynamo,
+                    **export_kwargs,
                 )
             else:
                 print(f"[I] Generating quantized ONNX model: {model_config['onnx_path']}")
@@ -666,8 +665,7 @@ class DiffusionPipeline(ABC):
                     opt_image_height,
                     opt_image_width,
                     custom_model=quantized_model,
-                    static_shape=static_shape,
-                    dynamo=dynamo,
+                    **export_kwargs,
                 )
 
         # FIXME do_export_weights_map needs ONNX graph
@@ -684,6 +682,12 @@ class DiffusionPipeline(ABC):
         weight_streaming = getattr(obj, 'weight_streaming', False)
         int8amp = model_config.get('use_int8', False)
         precision_constraints = 'prefer' if int8amp else 'none'
+        input_profile = obj.get_input_profile(
+            opt_batch_size, opt_image_height, opt_image_width, 
+            static_batch=static_batch, static_shape=static_shape,
+            **({'num_frames': obj.num_frames} if hasattr(obj, 'num_frames') and obj.num_frames else {})
+        )
+        
         engine.build(
             model_config["onnx_opt_path"],
             strongly_typed=strongly_typed,
@@ -691,9 +695,7 @@ class DiffusionPipeline(ABC):
             tf32=tf32amp,
             bf16=bf16amp,
             int8=int8amp,
-            input_profile=obj.get_input_profile(
-                opt_batch_size, opt_image_height, opt_image_width, static_batch=static_batch, static_shape=static_shape
-            ),
+            input_profile=input_profile,
             enable_refit=model_config["do_engine_refit"],
             enable_all_tactics=enable_all_tactics,
             timing_cache=timing_cache,
@@ -805,6 +807,7 @@ class DiffusionPipeline(ABC):
             download_onnx_models (bool):
                 Download pre-exported ONNX models
         """
+        
         self._initialize_models(framework_model_dir, int8, fp8, fp4)
 
         model_configs = self._prepare_model_configs(enable_refit, int8, fp8, fp4)

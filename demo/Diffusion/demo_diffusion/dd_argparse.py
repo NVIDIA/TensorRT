@@ -58,15 +58,10 @@ def add_arguments(parser):
     parser.add_argument(
         "--version",
         type=str,
-        default="1.5",
+        default="1.4",
         choices=(
             "1.4",
-            "1.5",
             "dreamshaper-7",
-            "2.0-base",
-            "2.0",
-            "2.1-base",
-            "2.1",
             "xl-1.0",
             "xl-turbo",
             "svd-xt-1.1",
@@ -247,12 +242,12 @@ def add_arguments(parser):
         "--torch-fallback",
         default=None,
         type=str,
-        help="[FLUX only] Comma separated list of models to be inferenced using torch instead of TRT. For example --torch-fallback t5,transformer. If --torch-inference set, this parameter will be ignored.",
+        help="[FLUX, SD3.5, and Wan] Comma separated list of models to be inferenced using PyTorch instead of TRT. For example --torch-fallback text_encoder,transformer,transformer_2. If --torch-inference set, this parameter will be ignored.",
     )
     parser.add_argument(
         "--low-vram",
         action="store_true",
-        help="[FLUX only] Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default.",
+        help="[FLUX, SD3.5, and Wan] Optimize for low VRAM usage, possibly at the expense of inference performance. Disabled by default.",
     )
     parser.add_argument("--seed", type=int, default=None, help="Seed for random generator to get consistent results")
     parser.add_argument("--output-dir", default="output", help="Output directory for logs and image artifacts")
@@ -282,6 +277,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     is_flux = args.version.startswith("flux")
     is_sd35 = args.version.startswith("3.5")
+    is_wan = args.version.startswith("wan")
     is_cosmos = args.version.startswith("cosmos")
 
     if args.height % 8 != 0 or args.width % 8 != 0:
@@ -314,16 +310,16 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # Quantized pipeline
     # int8 support
-    if args.int8 and not any(args.version.startswith(prefix) for prefix in ("xl", "1.4", "1.5", "2.1")):
-        raise ValueError("int8 quantization is only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipelines.")
+    if args.int8 and not any(args.version.startswith(prefix) for prefix in ("xl", "1.4")):
+        raise ValueError("int8 quantization is only supported for SDXL and SD1.4 pipelines.")
 
     # fp8 support validation
     if args.fp8:
         # Check version compatibility
-        supported_versions = ("xl", "1.4", "1.5", "2.1", "3.5-large")
+        supported_versions = ("xl", "1.4", "3.5-large")
         if not (any(args.version.startswith(prefix) for prefix in supported_versions) or is_flux):
             raise ValueError(
-                "fp8 quantization is only supported for SDXL, SD1.4, SD1.5, SD2.1, SD3.5-large and FLUX pipelines."
+                "fp8 quantization is only supported for SDXL, SD1.4, SD3.5-large and FLUX pipelines."
             )
 
         # Check controlnet compatibility
@@ -359,7 +355,7 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
             if sm_version == 90 and is_flux:
                 override_quant_level(3.0, "FP8")
             else:
-                override_quant_level(3.0 if args.version in ("1.4", "1.5") else 4.0, "FP8")
+                override_quant_level(3.0 if args.version == "1.4" else 4.0, "FP8")
 
         elif args.int8:
             override_quant_level(3.0, "INT8")
@@ -374,8 +370,8 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
 
     # Handle LoRA
     # FLUX canny and depth official LoRAs are not supported because they modify the transformer architecture, conflicting with refit
-    if args.lora_path and not any(args.version.startswith(prefix) for prefix in ("1.5", "2.1", "xl", "flux.1-dev", "flux.1-schnell")):
-        raise ValueError("LoRA adapter support is only supported for SD1.5, SD2.1, SDXL, FLUX.1-dev and FLUX.1-schnell pipelines")
+    if args.lora_path and not any(args.version.startswith(prefix) for prefix in ("xl", "flux.1-dev", "flux.1-schnell")):
+        raise ValueError("LoRA adapter support is only supported for SDXL, FLUX.1-dev and FLUX.1-schnell pipelines")
 
     if args.lora_weight:
         for weight in (weight for weight in args.lora_weight if not 0 <= weight <= 1):
@@ -394,8 +390,8 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     # Torch-fallback and Torch-inference
     if args.torch_fallback and not args.torch_inference:
         assert (
-            is_flux or is_sd35 or is_cosmos
-        ), "PyTorch Fallback is only supported for Flux, Stable Diffusion 3.5 and Cosmos pipelines."
+            is_flux or is_sd35 or is_wan or is_cosmos
+        ), "PyTorch Fallback is only supported for Flux, Stable Diffusion 3.5, Wan and Cosmos pipelines."
         args.torch_fallback = args.torch_fallback.split(",")
 
     if args.torch_fallback and args.torch_inference:
@@ -407,8 +403,8 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
     # low-vram
     if args.low_vram:
         assert (
-            is_flux or is_sd35 or is_cosmos
-        ), "low-vram mode is only supported for Flux, Stable Diffusion 3.5 and Cosmos pipelines."
+            is_flux or is_sd35 or is_wan or is_cosmos
+        ), "low-vram mode is only supported for Flux, Stable Diffusion 3.5, Wan and Cosmos pipelines."
 
     # Pack arguments
     kwargs_init_pipeline = {

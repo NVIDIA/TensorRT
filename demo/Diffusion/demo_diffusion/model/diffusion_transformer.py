@@ -27,7 +27,7 @@ from demo_diffusion.utils_sd3.other_impls import load_into
 from demo_diffusion.utils_sd3.sd3_impls import BaseModel as BaseModelSD3
 
 # List of models to import from diffusers.models
-models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel", "CosmosTransformer3DModel"]
+models_to_import = ["FluxTransformer2DModel", "SD3Transformer2DModel", "WanTransformer3DModel", "CosmosTransformer3DModel"]
 for model in models_to_import:
     globals()[model] = import_from_diffusers(model, "diffusers.models")
 
@@ -608,6 +608,219 @@ class SD3TransformerModel(base_model.BaseModel):
             }
         )
 
+        return sample_input
+
+
+class WanTransformerModel(base_model.BaseModel):
+    def __init__(
+        self,
+        version,
+        pipeline,
+        device,
+        hf_token,
+        verbose,
+        framework_model_dir,
+        subfolder="transformer",
+        fp16=False,
+        tf32=False,
+        bf16=True,
+        fp8=False,
+        int8=False,
+        max_batch_size=1,
+        text_maxlen=512,
+        num_frames=81,
+        height=720,
+        width=1280,
+        build_strongly_typed=True,
+        weight_streaming=False,
+        weight_streaming_budget_percentage=None,
+    ):
+        super(WanTransformerModel, self).__init__(
+            version,
+            pipeline,
+            device=device,
+            hf_token=hf_token,
+            verbose=verbose,
+            framework_model_dir=framework_model_dir,
+            fp16=fp16,
+            tf32=tf32,
+            bf16=bf16,
+            fp8=fp8,
+            int8=int8,
+            max_batch_size=max_batch_size,
+            text_maxlen=text_maxlen,
+            embedding_dim=4096,
+            compression_factor=8,
+        )
+        
+        self.subfolder = subfolder
+        self.transformer_model_dir = load.get_checkpoint_dir(
+            self.framework_model_dir, self.version, self.pipeline, self.subfolder
+        )
+
+        if not os.path.exists(self.transformer_model_dir):
+            self.config = WanTransformer3DModel.load_config(
+                self.path, subfolder=self.subfolder, token=self.hf_token
+            )
+        else:
+            print(f"[I] Load WanTransformer3DModel config from: {self.transformer_model_dir}")
+            self.config = WanTransformer3DModel.load_config(self.transformer_model_dir)
+        
+        self.build_strongly_typed = build_strongly_typed
+        self.weight_streaming = weight_streaming
+        self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
+        self.do_constant_folding = False
+        self.latent_channels = self.config.get("in_channels", 16)
+        self.temporal_compression_factor = 4
+        self.num_frames = num_frames
+        self.min_latent_frames = 81 # hardcode to 81 frames for Wan 2.2
+        self.max_latent_frames = 81
+
+    def get_model(self, torch_inference=""):
+        model_opts = {"torch_dtype": torch.bfloat16} if self.bf16 else {}
+        
+        if not load.is_model_cached(self.transformer_model_dir, model_opts, self.hf_safetensor):
+            model = WanTransformer3DModel.from_pretrained(
+                self.path,
+                subfolder=self.subfolder,
+                use_safetensors=self.hf_safetensor,
+                token=self.hf_token,
+                **model_opts,
+            ).to(self.device)
+            model.save_pretrained(self.transformer_model_dir, **model_opts)
+        else:
+            print(f"[I] Load WanTransformer3DModel model from: {self.transformer_model_dir}")
+            model = WanTransformer3DModel.from_pretrained(self.transformer_model_dir, **model_opts).to(self.device)
+        
+        if torch_inference:
+            model.to(memory_format=torch.channels_last)
+        
+        model = optimizer.optimize_checkpoint(model, torch_inference)
+        return model
+
+    def get_input_names(self):
+        return [
+            "hidden_states",
+            "timestep",
+            "encoder_hidden_states",
+        ]
+
+    def get_output_names(self):
+        return ["denoised_latents"]
+
+    def get_dynamic_axes(self):
+        return {
+            "hidden_states": {
+                0: "batch",
+                2: "frames",
+                3: "latent_height",
+                4: "latent_width"
+            },
+            "timestep": {
+                0: "batch"
+            },
+            "encoder_hidden_states": {
+                0: "batch",
+            },
+        }
+
+    def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape, num_frames):
+        latent_height, latent_width, latent_frames = self.check_dims(
+            batch_size, image_height, image_width, num_frames
+        )
+
+        (
+            min_batch,
+            max_batch,
+            _,
+            _,
+            _,
+            _,
+            min_latent_height,
+            max_latent_height,
+            min_latent_width,
+            max_latent_width,
+            min_latent_frames,
+            max_latent_frames
+        ) = self.get_minmax_dims(batch_size, image_height, image_width, static_batch, static_shape, num_frames)
+
+        input_profile = {
+            "hidden_states": [
+                (min_batch, self.latent_channels, min_latent_frames, min_latent_height, min_latent_width),
+                (batch_size, self.latent_channels, latent_frames, latent_height, latent_width),
+                (max_batch, self.latent_channels, max_latent_frames, max_latent_height, max_latent_width),
+            ],
+            "timestep": [
+                (min_batch,),
+                (batch_size,),
+                (max_batch,)
+            ],
+            "encoder_hidden_states": [
+                (min_batch, self.text_maxlen, self.embedding_dim),
+                (batch_size, self.text_maxlen, self.embedding_dim),
+                (max_batch, self.text_maxlen, self.embedding_dim),
+            ],
+        }
+        
+        return input_profile
+
+    def get_shape_dict(self, batch_size, image_height, image_width, num_frames):
+        latent_height, latent_width, latent_frames = self.check_dims(
+            batch_size, image_height, image_width, num_frames
+        )
+        return {
+            "hidden_states": (
+                batch_size,
+                self.latent_channels,
+                latent_frames,
+                latent_height,
+                latent_width
+            ),
+            "timestep": (batch_size,),
+            "encoder_hidden_states": (
+                batch_size,
+                self.text_maxlen,
+                self.embedding_dim
+            ),
+            "denoised_latents": (
+                batch_size,
+                self.latent_channels,
+                latent_frames,
+                latent_height,
+                latent_width
+            ),
+        }
+    
+    def get_sample_input(self, batch_size, image_height, image_width, static_shape, num_frames):
+        latent_height, latent_width, latent_frames = self.check_dims(
+            batch_size, image_height, image_width, num_frames
+        )
+        
+        assert (self.bf16), "transformer must be BF16"
+        dtype = torch.bfloat16 if self.bf16 else torch.float32
+        
+        timesteps = torch.tensor([999], dtype=torch.long, device=self.device) if self.subfolder == "transformer" else torch.tensor([1], dtype=torch.long, device=self.device)
+        
+        sample_input = (
+            torch.randn(
+                batch_size,
+                self.latent_channels,
+                latent_frames,
+                latent_height,
+                latent_width,
+                dtype=dtype,
+                device=self.device,
+            ),
+            timesteps,
+            torch.randn(
+                batch_size,
+                self.text_maxlen,
+                self.embedding_dim,
+                dtype=dtype,
+                device=self.device,
+            ),
+        )
+        
         return sample_input
 
 

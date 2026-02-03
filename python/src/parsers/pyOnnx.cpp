@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -217,13 +217,19 @@ void bindOnnx(py::module& m)
             OnnxParserDoc::load_model_proto, py::call_guard<py::gil_scoped_release>{})
         .def("load_initializer", lambdas::pLoadInitializer, "name"_a, "data"_a, "size"_a,
             OnnxParserDoc::load_initializer)
-        .def("parse_model_proto", &IParser::parseModelProto, OnnxParserDoc::parse_model_proto);
+        .def("parse_model_proto", &IParser::parseModelProto, OnnxParserDoc::parse_model_proto)
+        .def("set_builder_config", &IParser::setBuilderConfig, "builder_config"_a, OnnxParserDoc::set_builder_config,
+            py::keep_alive<1, 2>{});
 
     py::enum_<OnnxParserFlag>(m, "OnnxParserFlag", OnnxParserFlagDoc::descr, py::module_local())
         .value("NATIVE_INSTANCENORM", OnnxParserFlag::kNATIVE_INSTANCENORM, OnnxParserFlagDoc::NATIVE_INSTANCENORM)
         .value("ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA",
             OnnxParserFlag::kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA,
-            OnnxParserFlagDoc::ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA);
+            OnnxParserFlagDoc::ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA)
+        .value(
+            "REPORT_CAPABILITY_DLA", OnnxParserFlag::kREPORT_CAPABILITY_DLA, OnnxParserFlagDoc::REPORT_CAPABILITY_DLA)
+        .value("ENABLE_PLUGIN_OVERRIDE", OnnxParserFlag::kENABLE_PLUGIN_OVERRIDE,
+            OnnxParserFlagDoc::ENABLE_PLUGIN_OVERRIDE);
 
     py::enum_<ErrorCode>(m, "ErrorCode", ErrorCodeDoc::descr, py::module_local())
         .value("SUCCESS", ErrorCode::kSUCCESS)
