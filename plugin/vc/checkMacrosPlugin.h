@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -194,8 +194,10 @@ inline void caughtError(std::exception const& e)
         }                                                                                                              \
     } while (0)
 
+// On MSVC, nested macros don't expand correctly without some help, so use TRT_EXPAND to help it out.
+#define TRT_EXPAND(x) x
 #define GET_MACRO(_1, _2, NAME, ...) NAME
-#define PLUGIN_VALIDATE(...) GET_MACRO(__VA_ARGS__, PLUGIN_VALIDATE_MSG, PLUGIN_VALIDATE_DEFAULT, )(__VA_ARGS__)
+#define PLUGIN_VALIDATE(...) TRT_EXPAND(GET_MACRO(__VA_ARGS__, PLUGIN_VALIDATE_MSG, PLUGIN_VALIDATE_DEFAULT, )(__VA_ARGS__))
 
 // Logs failed condition and throws a PluginError.
 // PLUGIN_ASSERT will eventually perform this function, at which point PLUGIN_VALIDATE

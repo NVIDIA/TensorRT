@@ -41,7 +41,6 @@
 #include <random>
 #include <sstream>
 using namespace nvinfer1;
-using samplesCommon::SampleUniquePtr;
 
 std::string const kSAMPLE_NAME = "TensorRT.sample_non_zero_plugin";
 
@@ -53,12 +52,12 @@ void nonZeroIndicesHelper(nvinfer1::DataType type, void const* X, void* indices,
     if (type == nvinfer1::DataType::kFLOAT)
     {
         nonZeroIndicesImpl<float>(static_cast<float const*>(X), static_cast<int32_t*>(indices),
-            static_cast<int32_t*>(count), static_cast<int32_t const*>(K), R, C, rowOrder, stream);
+            static_cast<int64_t*>(count), static_cast<int64_t const*>(K), R, C, rowOrder, stream);
     }
     else if (type == nvinfer1::DataType::kHALF)
     {
         nonZeroIndicesImpl<half>(static_cast<half const*>(X), static_cast<int32_t*>(indices),
-            static_cast<int32_t*>(count), static_cast<int32_t const*>(K), R, C, rowOrder, stream);
+            static_cast<int64_t*>(count), static_cast<int64_t const*>(K), R, C, rowOrder, stream);
     }
     else
     {
@@ -158,8 +157,8 @@ public:
         }
         else // pos == 2
         {
-            // size tensor outputs must be NCHW INT32
-            typeOk = inOut[2].desc.type == DataType::kINT32;
+            // size tensor outputs must be NCHW INT64
+            typeOk = inOut[2].desc.type == DataType::kINT64;
         }
 
         return inOut[pos].desc.format == PluginFormat::kLINEAR && typeOk;
@@ -169,7 +168,7 @@ public:
         DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override
     {
         outputTypes[0] = DataType::kINT32;
-        outputTypes[1] = DataType::kINT32;
+        outputTypes[1] = DataType::kINT64;
         return 0;
     }
 
@@ -223,11 +222,11 @@ public:
             return -1;
         }
 
-        cudaMemsetAsync(outputs[1], 0, sizeof(int32_t), stream);
+        cudaMemsetAsync(outputs[1], 0, sizeof(int64_t), stream);
 
-        if (workspace == nullptr)
+        if (!mRowOrder && workspace == nullptr)
         {
-            sample::gLogError << "Unsupported: workspace is null" << std::endl;
+            sample::gLogError << "Unsupported: workspace is needed but is null" << std::endl;
             return -1;
         }
 
@@ -237,8 +236,8 @@ public:
             // elements so as to write the non-zero indices at the correct places. Therefore, we will launch the kernel
             // twice: first, only to calculate the total non-zero count, which will be stored in workspace; and
             // then to actually write the non-zero indices to the outputs[0] buffer.
-            cudaMemsetAsync(workspace, 0, sizeof(int32_t), stream);
-            nonZeroIndicesHelper(type, inputs[0], nullptr, workspace, 0, R, C, mRowOrder, stream);
+            cudaMemsetAsync(workspace, 0, sizeof(int64_t), stream);
+            nonZeroIndicesHelper(type, inputs[0], nullptr, workspace, nullptr, R, C, mRowOrder, stream);
             nonZeroIndicesHelper(type, inputs[0], outputs[0], outputs[1], workspace, R, C, mRowOrder, stream);
         }
         else
@@ -268,7 +267,7 @@ public:
     size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
         DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override
     {
-        return sizeof(int32_t);
+        return sizeof(int64_t);
     }
 
 private:
@@ -371,6 +370,11 @@ public:
 private:
     NonZeroParams mParams; //!< The parameters for the sample.
 
+    //! The PluginCreator instance used to create NonZeroPlugin.
+    //! The instance needs to stay alive across build and infer stages so that the entry in PluginRegistry remains valid
+    //! throughout.
+    NonZeroPluginCreator mPluginCreator;
+
     nvinfer1::Dims mInputDims;  //!< The dimensions of the input to the network.
     nvinfer1::Dims mOutputDims; //!< The dimensions of the output to the network.
 
@@ -382,8 +386,8 @@ private:
     //!
     //! \brief Creates a TensorRT network and inserts a NonZero plugin
     //!
-    bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config);
+    bool constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+        std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config);
 
     //!
     //! \brief Reads the input and stores the result in a managed buffer
@@ -406,26 +410,27 @@ private:
 //!
 bool SampleNonZeroPlugin::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    NetworkDefinitionCreationFlags flags = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED);
+    auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(flags));
     if (!network)
     {
         return false;
     }
 
-    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    auto config = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
     if (!config)
     {
         return false;
     }
 
-    auto pluginCreator = std::make_unique<NonZeroPluginCreator>();
-    getPluginRegistry()->registerCreator(*pluginCreator, "");
+    bool const registered = getPluginRegistry()->registerCreator(mPluginCreator, "");
+    ASSERT(registered && "Registration of NonZeroPluginCreator failed");
 
     auto constructed = constructNetwork(builder, network, config);
     if (!constructed)
@@ -441,7 +446,7 @@ bool SampleNonZeroPlugin::build()
     }
     config->setProfileStream(*profileStream);
 
-    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    std::unique_ptr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return false;
@@ -453,8 +458,7 @@ bool SampleNonZeroPlugin::build()
         return false;
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(plan->data(), plan->size()));
     if (!mEngine)
     {
         return false;
@@ -479,14 +483,9 @@ bool SampleNonZeroPlugin::build()
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleNonZeroPlugin::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config)
+bool SampleNonZeroPlugin::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config)
 {
-    if (mParams.fp16)
-    {
-        config->setFlag(BuilderFlag::kFP16);
-    }
-
     std::default_random_engine generator(mSeed);
     std::uniform_int_distribution<int32_t> distr(10, 25);
 
@@ -495,11 +494,20 @@ bool SampleNonZeroPlugin::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& 
     auto* in = network->addInput("Input", DataType::kFLOAT, {2, {R, C}});
     ASSERT(in != nullptr);
 
+    if (mParams.fp16)
+    {
+        auto castLayer = network->addCast(*in, DataType::kHALF);
+        ASSERT(castLayer != nullptr);
+        in = castLayer->getOutput(0);
+    }
+
     std::vector<PluginField> const vecPF{{"rowOrder", &mParams.rowOrder, PluginFieldType::kINT32, 1}};
     PluginFieldCollection pfc{static_cast<int32_t>(vecPF.size()), vecPF.data()};
 
     auto pluginCreator = static_cast<IPluginCreatorV3One*>(getPluginRegistry()->getCreator("NonZeroPlugin", "0", ""));
+    ASSERT(pluginCreator != nullptr && "NonZeroPluginCreator not properly registered to registry");
     auto plugin = std::unique_ptr<IPluginV3>(pluginCreator->createPlugin("NonZeroPlugin", &pfc, TensorRTPhase::kBUILD));
+    ASSERT(plugin != nullptr && "NonZeroPlugin construction failed");
 
     std::vector<ITensor*> inputsVec{in};
     auto pluginNonZeroLayer = network->addPluginV3(inputsVec.data(), inputsVec.size(), nullptr, 0, *plugin);
@@ -532,7 +540,7 @@ bool SampleNonZeroPlugin::infer()
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine, ioVolumes);
 
-    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
     {
         return false;
@@ -632,7 +640,7 @@ bool SampleNonZeroPlugin::verifyOutput(samplesCommon::BufferManager const& buffe
 {
     float* input = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     int32_t* output = static_cast<int32_t*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
-    int32_t count = *static_cast<int32_t*>(buffers.getHostBuffer(mParams.outputTensorNames[1]));
+    int64_t count = *static_cast<int64_t*>(buffers.getHostBuffer(mParams.outputTensorNames[1]));
 
     std::vector<bool> covered(mInputDims.d[0] * mInputDims.d[1], false);
 

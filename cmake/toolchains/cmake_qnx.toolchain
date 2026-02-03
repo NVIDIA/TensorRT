@@ -1,5 +1,4 @@
-#
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,46 +14,123 @@
 # limitations under the License.
 #
 
+# Setup basic fixtures required for x86 -> QNX cross compile
 set(CMAKE_SYSTEM_NAME QNX)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
+set(CMAKE_C_COMPILER_TARGET gcc_ntoaarch64le)
+set(CMAKE_CXX_COMPILER_TARGET gcc_ntoaarch64le_cxx)
 
-if(DEFINED ENV{QNX_BASE})
-  set(QNX_BASE $ENV{QNX_BASE})
-  message(STATUS "Found QNX_BASE = ${QNX_BASE}")
-elseif(DEFINED ENV{TOOLS_BASE})
-  set(QNX_BASE $ENV{TOOLS_BASE}/embedded/qnx/qnx700-ga4)
-  message(STATUS "Found QNX_BASE = ${QNX_BASE}")
-else()
-  message(FATAL_ERROR "QNX_BASE was not found")
+# Ensure that the QNX toolchain location was provided.
+if(NOT DEFINED ENV{QNX_HOST} OR NOT DEFINED ENV{QNX_TARGET})
+    message(FATAL_ERROR "The environment variables QNX_HOST and QNX_TARGET must both be provided to build on QNX.")
 endif()
-
-set(ENV{QNX_HOST} ${QNX_BASE}/host/linux/x86_64)
-set(ENV{QNX_TARGET} ${QNX_BASE}/target/qnx7)
 
 set(QNX_HOST $ENV{QNX_HOST})
 set(QNX_TARGET $ENV{QNX_TARGET})
+set(CMAKE_SYSROOT $ENV{QNX_TARGET})
 
-message(STATUS "QNX_HOST = ${QNX_HOST}")
-message(STATUS "QNX_TARGET = ${QNX_TARGET}")
+if(NOT EXISTS ${QNX_HOST} OR NOT EXISTS ${QNX_TARGET})
+    message(FATAL_ERROR "The QNX_HOST (${QNX_HOST}) or QNX_TARGET (${QNX_TARGET}) paths do not exist.")
+endif()
 
-set(CMAKE_C_COMPILER ${QNX_HOST}/usr/bin/aarch64-unknown-nto-qnx7.0.0-gcc)
-set(CMAKE_CXX_COMPILER ${QNX_HOST}/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++)
+if(NOT DEFINED ENV{CUDA})
+    message(FATAL_ERROR "The environment variable CUDA must be defined to specify the CUDA version to use for QNX builds.")
+endif()
 
-set(CMAKE_C_COMPILER_TARGET aarch64-unknown-nto-qnx)
-set(CMAKE_CXX_COMPILER_TARGET aarch64-unknown-nto-qnx)
+if($ENV{CUDA} MATCHES "cuda-11.4")
+    set(QNX_VERSION 7.1.0 CACHE STRING "")
+    set(QNX_GCC_VERSION "8.3.0" CACHE STRING "")
+else()
+    set(QNX_VERSION 8.0.0 CACHE STRING "")
+    set(QNX_GCC_VERSION "12.2.0" CACHE STRING "")
+endif()
 
-set(CMAKE_C_COMPILER_FORCED TRUE)
-set(CMAKE_CXX_COMPILER_FORCED TRUE)
+set(QNX_TRIPLE aarch64-unknown-nto-qnx${QNX_VERSION})
 
-set(CUDA_TOOLKIT_ROOT_DIR ${CUDA_ROOT})
-set(CUDA_INCLUDE_DIRS ${CUDA_ROOT}/include)
+if($ENV{USE_QCC})
+    set(CMAKE_C_COMPILER ${QNX_HOST}/usr/bin/qcc)
+    set(CMAKE_CXX_COMPILER ${QNX_HOST}/usr/bin/q++)
 
-set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE STRING "" FORCE)
-set(CMAKE_CUDA_FLAGS "-I${CUDA_INCLUDE_DIRS} -Xcompiler -fPIC" CACHE STRING "" FORCE)
-set(CMAKE_CUDA_COMPILER_FORCED TRUE)
+    # QCC includes threads in the system library.
+    # CMake picks this up correctly for the main cross compiler, but not QCC.
+    set(CMAKE_HAVE_LIBC_PTHREAD TRUE)
 
-set(CUDA_LIBS -L${CUDA_ROOT}/lib)
+    # The correct platform objcopy is automatically picked up when using the cross g++, but not when using q++.
+    find_program(QNX_OBJCOPY_PATH
+        NAMES ${QNX_TRIPLE}-objcopy
+        PATHS ${QNX_HOST}/usr/bin
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    set(CMAKE_OBJCOPY ${QNX_OBJCOPY_PATH})
+else()
+    set(CMAKE_C_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-gcc)
+    set(CMAKE_CXX_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-g++)
+endif()
 
-set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcudart)
+# CUDA Host compilation needs to always use the underlying cross-compiler, and not Q++
+set(CMAKE_CUDA_HOST_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-g++)
 
-set(TRT_PLATFORM_ID "aarch64-qnx")
+# WAR: Some of the cuda headers are randomly split into this "thor" dir.
+if(${QNX_VERSION} VERSION_GREATER_EQUAL "8.0.0")
+   # include_directories(/usr/local/cuda-safe-${TRT_CUDA_VERSION}/thor/targets/aarch64-qnx/include)
+endif()
+
+# These linker behaviors aren't setup by default for QNX
+# They work the same as they would on Linux
+set(CMAKE_LINK_LIBRARY_USING_WHOLE_ARCHIVE
+    "-Wl,--whole-archive <LIBRARY> -Wl,--no-whole-archive"
+)
+set(CMAKE_LINK_LIBRARY_USING_WHOLE_ARCHIVE_SUPPORTED TRUE)
+
+set(CMAKE_LINK_GROUP_USING_RESCAN
+    "LINKER:--start-group"
+    "LINKER:--end-group"
+)
+set(CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED TRUE)
+
+# Setup required flags for QNX compilation.
+set(TRT_MAGIC_QNX_FLAGS "-D_XOPEN_SOURCE=700 -D_POSIX_C_SOURCE=2 -D_QNX_SOURCE -DQNX=1 -D__aarch64__")
+
+# The QNX8 compiler supplies this define by default, but we need to add it on QNX7.
+if(${QNX_VERSION} VERSION_LESS "8.0.0")
+    set(TRT_MAGIC_QNX_FLAGS "${TRT_MAGIC_QNX_FLAGS} -D__QNX__")
+endif()
+
+set(CMAKE_C_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
+set(CMAKE_CXX_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
+set(CMAKE_CUDA_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
+
+# librt is built-in on QNX.
+set(RT_LIB "")
+
+# CUDA configuration
+if(NOT DEFINED CUDA_ROOT AND DEFINED ENV{CUDA_ROOT})
+    set(CUDA_ROOT "$ENV{CUDA_ROOT}")
+endif()
+
+if(NOT EXISTS ${CUDA_ROOT})
+    message(FATAL_ERROR "CUDA_ROOT not defined or path '${CUDA_ROOT}' does not exist. CUDA is required for TensorRT.")
+endif()
+
+if(NOT DEFINED CMAKE_CUDA_COMPILER)
+    set(CMAKE_CUDA_COMPILER "${CUDA_ROOT}/bin/nvcc" CACHE FILEPATH "Path to nvcc compiler")
+endif()
+
+# We need to explicitly populate `CMAKE_CUDA_FLAGS` with the initial flags so they propagate to the CMake Compiler Identification phase.
+# Otherwise, they will only be initialized afterwards, which will cause the identification to fail.
+set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS_INIT})
+
+# The CUDA setup for TRT-OSS is a bit wonky, so we enable the includes globally.
+include_directories(BEFORE SYSTEM
+    ${CUDA_ROOT}/targets/aarch64-qnx/include
+)
+
+# And, well, as another consequence of that weirdness, we need to ensure that the cuda libs are on the link path.
+add_link_options(
+    "-L${CUDA_ROOT}/targets/aarch64-qnx/lib"
+    "-L${CUDA_ROOT}/targets/aarch64-qnx/lib/stubs"
+)
+
+# TRT-OSS expects this to be defined. Not really sure why.
+set(CUDART_LIB "cudart")

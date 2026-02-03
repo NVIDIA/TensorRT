@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -1566,6 +1566,12 @@ void bindCore(py::module& m)
             ICudaEngineDoc::get_tensor_profile_shape)
         .def("get_tensor_profile_values", lambdas::get_tensor_profile_values, "name"_a, "profile_index"_a,
             ICudaEngineDoc::get_tensor_profile_values)
+        .def(
+            "get_aliased_input_tensor",
+            [](ICudaEngine& self, std::string const& name) -> char const* {
+                return self.getAliasedInputTensor(name.c_str());
+            },
+            "name"_a, ICudaEngineDoc::get_aliased_input_tensor)
         // End of enqueueV3 related APIs.
         .def_property("error_recorder", &ICudaEngine::getErrorRecorder,
             py::cpp_function(&ICudaEngine::setErrorRecorder, py::keep_alive<1, 2>{}))
@@ -1603,8 +1609,7 @@ void bindCore(py::module& m)
         .def("create_runtime_config", &ICudaEngine::createRuntimeConfig, ICudaEngineDoc::create_runtime_config,
             py::call_guard<py::gil_scoped_release>{})
         .def("get_engine_stat", &ICudaEngine::getEngineStat, ICudaEngineDoc::get_engine_stat,
-            py::arg("stat") = EngineStat::kTOTAL_WEIGHTS_SIZE, py::keep_alive<0, 1>{},
-            py::call_guard<py::gil_scoped_release>{})
+            py::arg("stat") = EngineStat::kTOTAL_WEIGHTS_SIZE, py::call_guard<py::gil_scoped_release>{})
 
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
@@ -1808,7 +1813,7 @@ void bindCore(py::module& m)
         .def("reset", &IBuilderConfig::reset, IBuilderConfigDoc::reset)
         .def_property("profile_stream", lambdas::netconfig_get_profile_stream, lambdas::netconfig_set_profile_stream)
         .def("add_optimization_profile", &IBuilderConfig::addOptimizationProfile, "profile"_a,
-            IBuilderConfigDoc::add_optimization_profile)
+            IBuilderConfigDoc::add_optimization_profile, py::keep_alive<1, 2>{})
         .def_property("int8_calibrator",
             utils::deprecateMember(&IBuilderConfig::getInt8Calibrator,
                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
@@ -1826,7 +1831,7 @@ void bindCore(py::module& m)
         .def("set_calibration_profile",
             utils::deprecateMember(&IBuilderConfig::setCalibrationProfile,
                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            "profile"_a, IBuilderConfigDoc::set_calibration_profile)
+            "profile"_a, IBuilderConfigDoc::set_calibration_profile, py::keep_alive<1, 2>{})
         .def("get_calibration_profile",
             utils::deprecateMember(&IBuilderConfig::getCalibrationProfile,
                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),

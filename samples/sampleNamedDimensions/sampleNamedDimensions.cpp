@@ -42,7 +42,6 @@
 #include <random>
 #include <sstream>
 using namespace nvinfer1;
-using samplesCommon::SampleUniquePtr;
 
 std::string const gSampleName = "TensorRT.sample_named_dimensions";
 
@@ -84,21 +83,21 @@ private:
     std::vector<float> mInput0;
     std::vector<float> mInput1;
 
-    SampleUniquePtr<IRuntime> mRuntime{};           //!< The TensorRT Runtime used to deserialize the engine.
+    std::unique_ptr<IRuntime> mRuntime{};           //!< The TensorRT Runtime used to deserialize the engine.
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine; //!< The TensorRT engine used to run the network
 
     //!
     //! \brief Parses a synthetic ONNX model and creates a TensorRT network
     //!
-    bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-        SampleUniquePtr<nvonnxparser::IParser>& parser);
+    bool constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+        std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+        std::unique_ptr<nvonnxparser::IParser>& parser);
 
     //!
     //! \brief Adds an optimization profile for dynamic shapes
     //!
-    void addOptimizationProfile(SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-        SampleUniquePtr<nvinfer1::IBuilder>& builder);
+    void addOptimizationProfile(
+        std::unique_ptr<nvinfer1::IBuilderConfig>& config, std::unique_ptr<nvinfer1::IBuilder>& builder);
 
     //!
     //! \brief Reads the input  and stores the result in a managed buffer
@@ -129,26 +128,27 @@ void SampleNamedDimensions::setNamedDimension(int32_t dim)
 //!
 bool SampleNamedDimensions::build()
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    NetworkDefinitionCreationFlags flags = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED);
+    auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(flags));
     if (!network)
     {
         return false;
     }
 
-    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    auto config = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
     if (!config)
     {
         return false;
     }
 
     auto parser
-        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+        = std::unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
     if (!parser)
     {
         return false;
@@ -180,7 +180,7 @@ bool SampleNamedDimensions::build()
 
     addOptimizationProfile(config, builder);
 
-    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
 
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
@@ -189,7 +189,7 @@ bool SampleNamedDimensions::build()
             = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
-    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    std::unique_ptr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return false;
@@ -203,7 +203,7 @@ bool SampleNamedDimensions::build()
 
     if (!mRuntime)
     {
-        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+        mRuntime = std::unique_ptr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
     }
 
     if (!mRuntime)
@@ -211,8 +211,7 @@ bool SampleNamedDimensions::build()
         return false;
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(plan->data(), plan->size()));
     if (!mEngine)
     {
         return false;
@@ -224,9 +223,9 @@ bool SampleNamedDimensions::build()
 //!
 //! \brief Uses ONNX parser to create the ONNX Network and marks the output layers
 //!
-bool SampleNamedDimensions::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-    SampleUniquePtr<nvonnxparser::IParser>& parser)
+bool SampleNamedDimensions::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+    std::unique_ptr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
         static_cast<int32_t>(sample::gLogger.getReportableSeverity()));
@@ -241,8 +240,8 @@ bool SampleNamedDimensions::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>
 //!
 //! \brief Adds an optimization profile for dynamic shapes
 //!
-void SampleNamedDimensions::addOptimizationProfile(SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-    SampleUniquePtr<nvinfer1::IBuilder>& builder)
+void SampleNamedDimensions::addOptimizationProfile(
+    std::unique_ptr<nvinfer1::IBuilderConfig>& config, std::unique_ptr<nvinfer1::IBuilder>& builder)
 {
     auto const input0ProfileDims = Dims2(mNamedDimension, mInputDims[0].d[1]);
     auto profile = builder->createOptimizationProfile();
@@ -269,7 +268,7 @@ bool SampleNamedDimensions::infer()
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine);
 
-    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
     {
         return false;

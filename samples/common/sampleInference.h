@@ -31,9 +31,6 @@
 #include <string>
 #include <vector>
 
-#if ENABLE_UNIFIED_BUILDER
-#include "safeCudaAllocator.h"
-#endif
 namespace sample
 {
 using LibraryPtr = std::unique_ptr<samplesCommon::DynamicLibrary>;
@@ -99,62 +96,6 @@ bool initLibrary(LibraryPtr& libPtr, std::string const& libName, FetchPtrs fetch
 }
 #endif // !TRT_STATIC
 
-#if ENABLE_UNIFIED_BUILDER
-namespace safe
-{
-
-//!
-//! \brief Initialize the NVIDIA Inference Safe Runtime library
-//!
-//! This function dynamically loads the Safe TensorRT runtime library and initializes
-//! function pointers for safe TensorRT operations. It is used to set up the safe runtime
-//! environment for inference with safety-certified TensorRT engines.
-//!
-//! \return true if the safe runtime library was successfully loaded and initialized,
-//!         false otherwise (e.g., in static builds or if library loading fails)
-//!
-bool initNvinferSafe();
-
-//!
-//! \brief Create a safe TRT graph from serialized engine data
-//!
-//! This function creates a safe TRT graph from serialized engine data. It is used to create
-//! a safe TRT graph for inference with safety-certified TensorRT engines.
-//!
-//! \param graph: Pointer to the safe TRT graph to be created
-//! \param blob: Pointer to the serialized engine data
-//! \param size: Size of the serialized engine data
-//! \param recorder: Reference to the safe recorder
-//! \param useManaged: Flag indicating whether to use managed memory
-//! \param allocator: Pointer to the safe memory allocator
-//! \return Error code indicating the success or failure of the operation
-//!
-nvinfer1::ErrorCode createSafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph, void const* blob, int64_t size,
-    ISafeRecorder& recorder, bool useManaged, ISafeMemAllocator* allocator);
-
-//!
-//! \brief Destroy a safe TRT graph and release resources
-//!
-//! This function destroys a safe TRT graph and releases the associated resources. It is used to clean up
-//! the safe TRT graph after inference with safety-certified TensorRT engines.
-//!
-//! \param graph: Pointer to the safe TRT graph to be destroyed
-//! \return Error code indicating the success or failure of the operation
-//!
-nvinfer1::ErrorCode destroySafeTRTGraph(nvinfer2::safe::ITRTGraph*& graph);
-
-//!
-//! \brief Get the safe plugin registry for loading plugins
-//!
-//! This function retrieves the safe plugin registry for loading plugins. It is used to get the safe plugin registry
-//! for loading plugins with safety-certified TensorRT engines.
-//!
-//! \param recorder: Reference to the safe recorder
-//! \return Pointer to the safe plugin registry
-//!
-nvinfer2::safe::ISafePluginRegistry* getSafePluginRegistry(ISafeRecorder& recorder);
-} // namespace safe
-#endif
 
 struct InferenceEnvironmentBase
 {
@@ -206,26 +147,6 @@ struct InferenceEnvironmentStd : public InferenceEnvironmentBase
     std::list<std::vector<int64_t>> inputShapeTensorValues;
 };
 
-#if ENABLE_UNIFIED_BUILDER
-// Forward declaration of BindingsSafe
-class BindingsSafe;
-
-struct InferenceEnvironmentSafe : public InferenceEnvironmentBase
-{
-    InferenceEnvironmentSafe() = delete;
-    InferenceEnvironmentSafe(InferenceEnvironmentSafe const& other) = delete;
-    InferenceEnvironmentSafe(InferenceEnvironmentSafe&& other) = delete;
-    InferenceEnvironmentSafe(BuildEnvironment& bEnv)
-        : InferenceEnvironmentBase(bEnv)
-    {
-    }
-
-    std::vector<std::unique_ptr<BindingsSafe>> bindings;
-    inline void* getClonedGraph(int32_t streamIdx);
-
-    std::vector<std::unique_ptr<nvinfer2::safe::ITRTGraph>> mClonedGraphs;
-};
-#endif
 
 inline nvinfer1::IExecutionContext* InferenceEnvironmentStd::getContext(int32_t streamIdx)
 {
@@ -237,12 +158,6 @@ inline nvinfer1::IExecutionContext* InferenceEnvironmentStd::getContext(int32_t 
 //!
 bool setUpInference(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, SystemOptions const& system);
 
-#if ENABLE_UNIFIED_BUILDER
-//!
-//! \brief Set up graphs and bindings for safe inference
-//!
-bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& inference, SystemOptions const& system);
-#endif
 
 //!
 //! \brief Set up contexts and bindings for standard inference
@@ -269,7 +184,7 @@ std::string getLayerInformation(
 struct Binding
 {
     bool isInput{false};
-    std::unique_ptr<IMirroredBuffer> buffer;
+    std::shared_ptr<IMirroredBuffer> buffer; // shared_ptr to allow aliasing between inputs and outputs
     std::unique_ptr<OutputAllocator> outputAllocator;
     int64_t volume{0};
     nvinfer1::DataType dataType{nvinfer1::DataType::kFLOAT};
@@ -310,7 +225,8 @@ public:
     {
     }
 
-    void addBinding(TensorInfo const& tensorInfo, std::string const& fileName = "");
+    void addBinding(
+        TensorInfo const& tensorInfo, std::string const& fileName = "", char const* aliasedInputTensor = nullptr);
 
     void** getDeviceBuffers();
 
@@ -411,62 +327,6 @@ public:
 
     bool setTensorAddresses(nvinfer1::IExecutionContext& context) const;
 };
-#if ENABLE_UNIFIED_BUILDER
-class BindingsSafe : public BindingsBase
-{
-public:
-    BindingsSafe() = delete;
-    explicit BindingsSafe(bool useManaged)
-        : BindingsBase(useManaged)
-    {
-    }
-
-    void dumpInputs(ITRTGraph const& graph, std::ostream& os) const
-    {
-        auto isInput = [](Binding const& b) { return b.isInput; };
-        dumpBindings(graph, isInput, os);
-    }
-
-    void dumpOutputs(ITRTGraph const& graph, std::ostream& os) const
-    {
-        auto isOutput = [](Binding const& b) { return !b.isInput; };
-        dumpBindings(graph, isOutput, os);
-    }
-
-    void dumpBindings(ITRTGraph const& graph, std::ostream& os) const
-    {
-        auto all = [](Binding const& b) { return true; };
-        dumpBindings(graph, all, os);
-    }
-
-    void dumpBindings(ITRTGraph const& graph, std::function<bool(Binding const&)> predicate, std::ostream& os) const
-    {
-        for (auto const& n : mNames)
-        {
-            auto const name = n.first;
-            auto const binding = n.second;
-            if (predicate(mBindings[binding]))
-            {
-                os << n.first << ": (";
-                dumpBindingDimensions(name, graph, os);
-                os << ")" << std::endl;
-
-                dumpBindingValues(graph, binding, os);
-                os << std::endl;
-            }
-        }
-    }
-
-    void dumpBindingDimensions(std::string const& name, ITRTGraph const& graph, std::ostream& os) const;
-
-    void dumpBindingValues(ITRTGraph const& graph, int32_t binding, std::ostream& os,
-        std::string const& separator = " ", int32_t batch = 1) const;
-
-    void dumpRawBindingToFiles(ITRTGraph& graph, std::ostream& os) const;
-
-    bool setTensorAddresses(ITRTGraph& graph) const;
-};
-#endif
 
 struct TaskInferenceEnvironment
 {

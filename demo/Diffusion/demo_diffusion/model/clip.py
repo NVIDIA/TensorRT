@@ -51,7 +51,6 @@ def get_clipwithproj_embedding_dim(version: str, subfolder: str) -> int:
 def get_clip_embedding_dim(version, pipeline):
     if version in (
         "1.4",
-        "1.5",
         "dreamshaper-7",
         "flux.1-dev",
         "flux.1-schnell",
@@ -60,8 +59,6 @@ def get_clip_embedding_dim(version, pipeline):
         "flux.1-kontext-dev",
     ):
         return 768
-    elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):
-        return 1024
     elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_base():
         return 768
     elif version in ("sd3"):

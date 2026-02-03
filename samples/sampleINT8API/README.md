@@ -1,5 +1,6 @@
-# Performing Inference In INT8 Precision
+# [DEPRECATED] Performing Inference In INT8 Precision
 
+> **Notice:** This sample has been deprecated because implicit quantization has been deprecated in TensorRT. Users are advised to use explicit quantization. 
 
 **Table Of Contents**
 - [Description](#description)
@@ -293,8 +294,8 @@ The following resources provide a deeper understanding how to perform inference 
 - [8-bit Inference with TensorRT](http://on-demand.gputechconf.com/gtc/2017/presentation/s7310-8-bit-inference-with-tensorrt.pdf)
 
 **Models:**
-- [ONNX ResNet-50 model](https://github.com/onnx/models/tree/master/vision/classification/resnet/model)
-- [Image Classification Model Files](https://github.com/onnx/models/tree/master/vision/classification)
+- [ONNX ResNet-50 model](https://github.com/onnx/models/tree/main/validated/vision/classification/resnet)
+- [Image Classification Model Files](https://github.com/onnx/models/tree/main/validated/vision/classification)
 
 **Blogs:**
 - [Why are Eight Bits Enough for Deep Neural Networks?](https://petewarden.com/2015/05/23/why-are-eight-bits-enough-for-deep-neural-networks/)

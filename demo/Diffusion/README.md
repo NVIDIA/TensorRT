@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.14 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.15 --single-branch
 cd TensorRT
 ```
 
@@ -16,46 +16,73 @@ cd TensorRT
 Install nvidia-docker using [these intructions](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker).
 
 ```bash
-docker run --rm -it --gpus all -v $PWD:/workspace nvcr.io/nvidia/pytorch:25.08-py3 /bin/bash
+# Create a directory for persistent dependencies
+mkdir -p deps
+
+# Launch container with volume mounts
+docker run --rm -it --gpus all \
+  -v $PWD:/workspace \
+  -v $PWD/deps:/workspace/deps \
+  nvcr.io/nvidia/pytorch:25.09-py3 /bin/bash
 ```
+
+> **NOTE:** Mounting `/workspace/deps` as a volume ensures dependencies persist across container restarts. After initial installation, subsequent container launches will reuse the installed dependencies.
 
 NOTE: The demo supports CUDA>=12.0
 
 ### Install the required packages
 
-To install dependencies for modern pipelines (SDXL and later):
+This demo uses a family-based dependency management system. Install dependencies for the model families you want to use:
 
+**Install all dependencies (recommended for first-time users):**
 ```bash
-source setup.sh
+python3 setup.py all
 ```
 
-To install dependencies for legacy pipelines (SD 1.5/2.1):
-
+**Or install specific model families:**
 ```bash
-REQUIREMENTS_FILE=requirements_legacy.txt source setup.sh
+# SD family: SD 1.4, SDXL, SD3, SD3.5, SVD (Stable Video Diffusion), Stable Cascade
+python3 setup.py sd
+
+# Flux family: Flux.1-dev, Flux.1-schnell, Flux.1-Canny, Flux.1-Depth, Flux.1-Kontext
+python3 setup.py flux
+
+# Cosmos family: Cosmos-Predict2 text2image, video2world
+python3 setup.py cosmos
 ```
 
-Check your installed version using:
-`python3 -c 'import tensorrt;print(tensorrt.__version__)'`
+**Additional options:**
+```bash
+# Force reinstall even if already installed
+python3 setup.py all --force
+
+# Install dependencies to a custom location
+# Option 1 (recommended): set the env var and install
+export TENSORRT_DIFFUSION_DEPS_ROOT=/custom/path/deps
+python3 setup.py all
+
+# Option 2: install to a path without changing this shell
+# Remember to export the env var in the environment that runs the demos,
+# so deps.configure() can find the custom path.
+python3 setup.py all --deps-root /custom/path/deps
+# Then, before running any demo scripts:
+export TENSORRT_DIFFUSION_DEPS_ROOT=/custom/path/deps
+```
+
+**Check installation status:**
+```bash
+python3 -c "from demo_diffusion import deps; deps.print_status()"
+```
+
+Check your installed TensorRT version using:
+```bash
+python3 -c 'import tensorrt; print(tensorrt.__version__)'
+```
 
 > NOTE: Alternatively, you can download and install TensorRT packages from [NVIDIA TensorRT Developer Zone](https://developer.nvidia.com/tensorrt).
 
-
 > NOTE: demoDiffusion has been tested on systems with NVIDIA H100, A100, L40, T4, and RTX4090 GPUs, and the following software configuration.
 
-```
-diffusers           0.35.0
-onnx                1.18.0
-onnx-graphsurgeon   0.5.2
-onnxruntime         1.19.2
-polygraphy          0.49.22
-tensorrt            10.14.1.48
-tokenizers          0.13.3
-torch               2.8.0a0+5228986c39.nv25.6
-transformers        4.52.4
-controlnet-aux      0.0.6
-nvidia-modelopt     0.31.0
-```
 
 # Running demoDiffusion
 
@@ -64,10 +91,10 @@ nvidia-modelopt     0.31.0
 ```bash
 python3 demo_txt2img.py --help
 python3 demo_img2img.py --help
-python3 demo_inpaint.py --help
 python3 demo_controlnet.py --help
 python3 demo_txt2img_xl.py --help
 python3 demo_txt2img_flux.py --help
+python3 demo_txt2vid_wan.py --help
 ```
 
 ### HuggingFace user access token
@@ -84,15 +111,15 @@ export HF_TOKEN=<your access token>
 python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN
 ```
 
-### Faster Text-to-image using SD1.5 or SD2.1 INT8 & FP8 quantization using ModelOpt
+### Faster Text-to-image using SD1.4 INT8 & FP8 quantization using ModelOpt
 
-Run the below command to generate an image with SD1.5 or SD2.1 in INT8
+Run the below command to generate an image with SD1.4 in INT8
 
 ```bash
 python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --int8
 ```
 
-Run the below command to generate an image with SD1.5 or SD2.1 in FP8. (FP8 is only supported on Hopper and Ada.)
+Run the below command to generate an image with SD1.4 in FP8. (FP8 is only supported on Hopper and Ada.)
 
 ```bash
 python3 demo_txt2img.py "a beautiful photograph of Mt. Fuji during cherry blossom" --hf-token=$HF_TOKEN --fp8
@@ -105,17 +132,6 @@ wget https://raw.githubusercontent.com/CompVis/stable-diffusion/main/assets/stab
 
 python3 demo_img2img.py "A fantasy landscape, trending on artstation" --hf-token=$HF_TOKEN --input-image=sketch-mountains-input.jpg
 ```
-
-### Generate an inpainted image guided by an image, mask and a text prompt
-
-```bash
-wget https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo.png -O dog-on-bench.png
-wget https://raw.githubusercontent.com/CompVis/latent-diffusion/main/data/inpainting_examples/overture-creations-5sI6fQgYIuo_mask.png -O dog-mask.png
-
-python3 demo_inpaint.py "a mecha robot sitting on a bench" --hf-token=$HF_TOKEN --input-image=dog-on-bench.png --mask-image=dog-mask.png
-```
-
-> NOTE: inpainting is only supported in versions `1.5` and `2.0`.
 
 ### Generate an image with ControlNet guided by image(s) and text prompt(s)
 
@@ -133,6 +149,8 @@ Examples:
 Multiple ControlNet types can also be specified to combine the conditionings. While specifying multiple conditionings, controlnet scales should also be provided. The scales signify the importance of each conditioning in relation with the other. For example, to condition using `openpose` and `canny` with scales of 1.0 and 0.8 respectively, the arguments provided would be `--controlnet-type openpose canny` and `--controlnet-scale 1.0 0.8`. Note that the number of controlnet scales provided should match the number of controlnet types.
 
 ### Generate an image with Stable Diffusion XL guided by a single text prompt
+
+> **NOTE:** SDXL and later Stable Diffusion models require sd dependencies to be installed. Install with: `python3 setup.py sd`
 
 Run the below command to generate an image with Stable Diffusion XL
 
@@ -180,7 +198,7 @@ Run the below command to generate an image with Stable Diffusion XL in FP8. (FP8
 python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --version xl-1.0 --onnx-dir onnx-sdxl --engine-dir engine-sdxl --fp8
 ```
 
-> Note that INT8 & FP8 quantization is only supported for SDXL, SD1.5, SD2.1 and SD2.1-base, and won't work with LoRA weights. FP8 quantization is only supported on Hopper and Ada. Some prompts may produce better inputs with fewer denoising steps (e.g. `--denoising-steps 20`) but this will repeat the calibration, ONNX export, and engine building processes for the U-Net.
+> Note that INT8 & FP8 quantization is only supported for SDXL, and won't work with LoRA weights. FP8 quantization is only supported on Hopper and Ada. Some prompts may produce better inputs with fewer denoising steps (e.g. `--denoising-steps 20`) but this will repeat the calibration, ONNX export, and engine building processes for the U-Net.
 
 For step-by-step tutorials to run INT8 & FP8 inference on stable diffusion models, please refer to examples in [TensorRT ModelOpt diffusers sample](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/diffusers).
 
@@ -308,6 +326,8 @@ python3 demo_stable_cascade.py --onnx-opset=16 "Anthropomorphic cat dressed as a
 > NOTE: The denoising steps and guidance scale for the Prior and Decoder models are configured using --prior-denoising-steps, --prior-guidance-scale, --decoder-denoising-steps, and --decoder-guidance-scale respectively.
 
 ### Generating Images with Flux
+
+> **NOTE:** Flux models require Flux family dependencies. Install with: `python3 setup.py flux`
 
 #### 1. Generate an Image from a Text Prompt
 
@@ -472,6 +492,8 @@ NOTE: The FP8 and FP4 Pipelines are supported on Hopper/Ada/Blackwell devices on
 
 ### Run Cosmos2 World Foundation Models
 
+> **NOTE:** Cosmos models require Cosmos family dependencies. Install with: `python3 setup.py cosmos`
+
 Select the prompts and export them as below
 
 ```bash
@@ -504,6 +526,18 @@ python3 demo_vid2world_cosmos.py "$PROMPT" --negative-prompt="$NEGATIVE_PROMPT" 
 Custom override paths to pre-exported ONNX model files can be provided using `--custom-onnx-paths`. These ONNX models are directly used to build TRT engines without further optimization on the ONNX graphs. Paths should be a comma-separated list of <model_name>:<path> pairs. For example: `--custom-onnx-paths=transformer:/path/to/transformer.onnx,vae:/path/to/vae.onnx`. Call <PipelineClass>.get_model_names(...) for the list of supported model names.
 
 Custom override paths to pre-built engine files can be provided using `--custom-engine-paths`. Paths should be a comma-separated list of <model_name>:<path> pairs. For example: `--custom-onnx-paths=transformer:/path/to/transformer.plan,vae:/path/to/vae.plan`.
+
+### Generate a video from a text prompt using Wan
+
+Run the below command to generate 81 frames of video at 720×1280 resolution using Wan 2.2. Due to the high memory requirements of this model, it is recommended to enable `--low-vram` and use a Blackwell device.
+
+```bash
+# Default (81 frames, 720x1280) with --low-vram enabled
+python3 demo_txt2vid_wan.py "A serene bamboo forest with sunlight filtering through the leaves" --hf-token=$HF_TOKEN --low-vram
+
+# Adjust denoising steps, guidance scales, negative prompt, seed, warmup runs
+python3 demo_txt2vid_wan.py "Ocean waves crashing on a beach at sunset" --hf-token=$HF_TOKEN --low-vram --denoising-steps 50 --guidance-scale 4.5 --guidance-scale-2 3.5 --negative-prompt "blurry, low quality, static" --seed 42 --num-warmup-runs 0
+```
 
 ## Configuration options
 

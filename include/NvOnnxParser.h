@@ -117,6 +117,16 @@ enum class OnnxParserFlag : int32_t
     //! in Quantize and Dequantize nodes. This flag is set to be OFF by default.
     //! The resulting engine must be built targeting DLA version >= 3.16.
     kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA = 1,
+    //! Parse the ONNX model with per-node validation for DLA. If the model is not fully supported by DLA, then
+    //! parsing will fail. If this flag is set, isSubGraphSupported() will also return capability in the context of DLA
+    //! support. When this flag is set, a valid IBuilderConfig must be provided to the parser via setBuilderConfig().
+    // This flag is set to be OFF by default.
+    kREPORT_CAPABILITY_DLA = 2,
+    //! Allow a loaded plugin with the same name as an ONNX operator type to override the default ONNX implementation,
+    //! even if the plugin namespace attribute is not set.
+    //! Useful for custom plugins that replace standard ONNX operators, such as alternative implementations for better
+    //! performance. This flag is set to be OFF by default.
+    kENABLE_PLUGIN_OVERRIDE = 3
 };
 
 //!
@@ -127,7 +137,7 @@ enum class OnnxParserFlag : int32_t
 template <>
 constexpr inline int32_t EnumMax<OnnxParserFlag>() noexcept
 {
-    return 2;
+    return 3;
 }
 
 //!
@@ -473,6 +483,13 @@ public:
     //! \see getNbErrors() getError() loadModelProto() loadModelProtoFromFile()
     //!
     virtual bool parseModelProto() noexcept = 0;
+
+    //!
+    //! \brief Set the BuilderConfig for the parser.
+    //!
+    //! \return true if the IBuilderConfig was set successfully, false otherwise.
+    //!
+    virtual bool setBuilderConfig(const nvinfer1::IBuilderConfig* const builderConfig) noexcept = 0;
 };
 
 //!

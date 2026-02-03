@@ -14,7 +14,7 @@
 
 ## Description
 
-This sample, sampleIOFormats, uses a Onnx model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md) and performs engine building and inference using TensorRT. The correctness of outputs is then compared to the golden reference. Specifically, it shows how to use APIs to explicitly specify input formats to `TensorFormat::kLINEAR` for Float32, and additionally `TensorFormat::kCHW2` and `TensorFormat::kHWC8` for Float16 and INT8 precision.
+This sample, sampleIOFormats, uses a Onnx model that was trained on the [MNIST dataset](https://github.com/NVIDIA/DIGITS/blob/master/docs/GettingStarted.md) and performs engine building and inference using TensorRT. The correctness of outputs is then compared to the golden reference. Specifically, it shows how to use APIs to explicitly specify input formats to `TensorFormat::kLINEAR`, `TensorFormat::kHWC` and `TensorFormat::kCHW32` for Float32.
 
 ## How does this sample work?
 
@@ -51,12 +51,15 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 3.  Verify that all 10 digits match correctly. If the sample runs successfully, you should see output similar to the following:
 	```
 	&&&& RUNNING TensorRT.sample_io_formats # ./sample_io_formats
-	[I] The test chooses MNIST as the network and recognizes a randomly generated digit
-	[I] Firstly it runs the FP32 as the golden data, then INT8/FP16 with different formats will be tested
-	[I]
-	[I] Building and running a FP32 GPU inference to get golden input/output
-	[I] [TRT] Detected 1 input and 1 output network tensors.
-	[I] Input:
+	[I] Build TRT engine with different IO data type and formats. Ensure that built engine abide by them
+	[I] Testing datatype FP32 with format kLINEAR
+	[I] Building and running a GPU inference engine with specified I/O formats.
+	... (omitted message)
+	[I] Testing datatype FP32 with format kHWC
+	[I] Building and running a GPU inference engine with specified I/O formats.
+	... (omitted message)
+	[I] Testing datatype FP32 with format kCHW32
+	[I] Building and running a GPU inference engine with specified I/O formats.
 	... (omitted message)
 	&&&& PASSED TensorRT.sample_io_formats
 	```
@@ -86,6 +89,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 
 ## Changelog
+
+**October 2025**
+- Migrate to strongly typed APIs.
 
 **August 2022**
 - Migrated code from parsing a `caffe` model to an `onnx` model.

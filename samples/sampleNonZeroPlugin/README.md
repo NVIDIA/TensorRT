@@ -172,6 +172,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 # Changelog
 
+October 2025
+Migrate to strongly typed APIs.
+
 March 2024
 This is the first version of this `README.md` file.
 

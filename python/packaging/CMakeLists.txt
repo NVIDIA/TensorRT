@@ -94,17 +94,66 @@ add_custom_target(tensorrt_python_wheels)
 # This is similar to CMAKE_ARCHIVE_OUTPUT_DIRECTORY, but for wheels.
 set(TRT_WHEEL_OUTPUT_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>/dist" CACHE PATH "")
 
+
 # Add a custom command to run pip install for the requirements.txt file.
 # We need to run this only once prior to any calls to setup.py.
+execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import sys; print(sys.prefix != sys.base_prefix)"
+    OUTPUT_VARIABLE python_is_venv
+)
+
+# Note: If python is running in a virtual environment, then pip will error out
+# on the use of --user for `pip install`. If we are in a virtual environment,
+# we install into that virtual environment. Otherwise, we install into the user
+# environment.
+if("${python_is_venv}" STREQUAL "True")
+    set(maybe_userflag)
+else()
+    set(maybe_userflag "--user")
+endif()
+
 add_custom_command(
     OUTPUT package_install_cache.txt
-    COMMAND ${Python3_EXECUTABLE} -m pip install --user -r ${TensorRT_SOURCE_DIR}/python/packaging/requirements.txt
+    COMMAND ${Python3_EXECUTABLE} -m pip install ${maybe_userflag} -r ${TensorRT_SOURCE_DIR}/python/packaging/requirements.txt ${maybe_pypi_index}
     COMMAND ${CMAKE_COMMAND} -E touch package_install_cache.txt
     DEPENDS ${TensorRT_SOURCE_DIR}/python/packaging/requirements.txt
     VERBATIM
 )
 # Custom commands that call setup.py should depend on this target so that the requirements are installed first.
 add_custom_target(trt_packaging_requirements_installed DEPENDS package_install_cache.txt)
+
+# Computes the current wheel platform name and stores it the variable named by outVar.
+#
+# \param isStandalone Boolean indicating whether to compute the platform for a standalone wheel.
+# \param outVar Name of the variable to store the resulting platform name in.
+# \returns wheelPlatform The computed wheel platform name. Standalone wheels use manylinux tags.
+function(get_wheel_platform isStandalone outVar)
+    if(WIN32)
+        set(wheelPlatform win_amd64)
+    elseif(isStandalone)
+        if(NOT GLIBC_VERSION)
+            # Determine glibc version for standalone wheels
+            execute_process(
+                COMMAND ldd --version
+                OUTPUT_VARIABLE LDD_OUTPUT
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+            )
+
+            if(LDD_OUTPUT MATCHES "([0-9]+\\.[0-9]+)")
+                set(GLIBC_VERSION ${CMAKE_MATCH_1} CACHE STRING "Detected glibc version for standalone wheels")
+            else()
+                message(FATAL_ERROR "Failed to determine glibc version from ldd output: ${LDD_OUTPUT}")
+            endif()
+        endif()
+
+        string(REPLACE "." "_" GLIBC_VERSION_FLAT ${GLIBC_VERSION})
+        set(wheelPlatform manylinux_${GLIBC_VERSION_FLAT}_${TRT_CONFIG_ARCH})
+    else()
+        set(wheelPlatform linux_${TRT_CONFIG_ARCH})
+    endif()
+
+    set(${outVar} ${wheelPlatform} PARENT_SCOPE)
+endfunction()
 
 add_subdirectory(bindings_wheel)
 add_subdirectory(libs_wheel)

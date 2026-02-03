@@ -37,7 +37,7 @@ def get_plan(onnx_file_path, engine_file_path, version_compatible):
         import tensorrt as trt
 
         builder = trt.Builder(TRT_LOGGER)
-        network = builder.create_network(0)
+        network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))
         parser = trt.OnnxParser(network, TRT_LOGGER)
 
         # Parse model file

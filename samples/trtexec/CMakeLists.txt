@@ -75,6 +75,7 @@ if(${TRT_BUILD_TRTEXEC_STATIC})
     )
 endif()
 
+
 else() # TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW - old flow below.
 
 set(SAMPLE_SOURCES

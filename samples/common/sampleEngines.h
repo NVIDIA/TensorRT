@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -123,19 +123,48 @@ public:
     //!
     EngineBlob const getBlob() const
     {
-        ASSERT((!mFileReader || !mFileReader->isOpen())
+        ASSERT(!(mFileReader && mFileReader->isOpen())
             && "Attempting to access the glob when there is an open file reader!");
-        ASSERT((!mAsyncFileReader || !mAsyncFileReader->isOpen())
+        ASSERT(!(mAsyncFileReader && mAsyncFileReader->isOpen())
             && "Attempting to access the glob when there is an open async file reader!");
         if (!mEngineBlob.empty())
         {
-            return EngineBlob{const_cast<void*>(static_cast<void const*>(mEngineBlob.data())), mEngineBlob.size()};
+            // 'EngineBlob' is a non-owning view over a byte buffer. We intentionally avoid copying the data here.
+            // 'EngineBlob' stores a non-const pointer (`void*`) for legacy reasons, but callers must treat the buffer
+            // as read-only (e.g. writing to disk / passing to deserialize APIs).
+            return EngineBlob{static_cast<void*>(const_cast<uint8_t*>(mEngineBlob.data())), mEngineBlob.size()};
         }
         if (mEngineBlobHostMemory != nullptr && mEngineBlobHostMemory->size() > 0)
         {
             return EngineBlob{mEngineBlobHostMemory->data(), mEngineBlobHostMemory->size()};
         }
         ASSERT(false && "Attempting to access an empty engine!");
+        return EngineBlob{nullptr, 0};
+    }
+
+    //!
+    //! \brief Get the underlying blob storing serialized engine if present, otherwise return an empty blob.
+    //!
+    //! Unlike getBlob(), this function does NOT assert if the blob is empty. This is useful for optional artifacts
+    //! such as kernel text generated via `trtexec --dumpKernelText`.
+    //!
+    EngineBlob const getBlobOrEmpty() const
+    {
+        ASSERT(!(mFileReader && mFileReader->isOpen())
+            && "Attempting to access the glob when there is an open file reader!");
+        ASSERT(!(mAsyncFileReader && mAsyncFileReader->isOpen())
+            && "Attempting to access the glob when there is an open async file reader!");
+        if (!mEngineBlob.empty())
+        {
+            // NOTE: `EngineBlob` is a non-owning view over a byte buffer. We intentionally avoid copying the data here.
+            // `EngineBlob` stores a non-const pointer (`void*`) for legacy reasons, but callers must treat the buffer
+            // as read-only (e.g. writing to disk / passing to deserialize APIs).
+            return EngineBlob{static_cast<void*>(const_cast<uint8_t*>(mEngineBlob.data())), mEngineBlob.size()};
+        }
+        if (mEngineBlobHostMemory != nullptr && mEngineBlobHostMemory->size() > 0)
+        {
+            return EngineBlob{mEngineBlobHostMemory->data(), mEngineBlobHostMemory->size()};
+        }
         return EngineBlob{nullptr, 0};
     }
 
@@ -351,15 +380,14 @@ bool timeRefit(const nvinfer1::INetworkDefinition& network, nvinfer1::ICudaEngin
 void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::vector<IOFormat> const& inputFormats,
     std::vector<IOFormat> const& outputFormats, std::string const& calibrationFile);
 
-//!
+
 //! \brief Check if safe runtime is loaded.
-//!
-bool hasSafeRuntime();
+[[nodiscard]] bool hasSafeRuntime();
 
 //!
 //! \brief Run consistency check on serialized engine.
 //!
-bool checkSafeEngine(
+[[nodiscard]] bool checkSafeEngine(
     void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibPath);
 
 bool loadStreamingEngineToBuildEnv(std::string const& engine, BuildEnvironment& env, std::ostream& err);

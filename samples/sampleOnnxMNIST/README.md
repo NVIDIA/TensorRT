@@ -56,7 +56,7 @@ To build the engine, create the builder and pass a logger created for TensorRT w
 `IBuilder* builder = createInferBuilder(sample::gLogger);`
 
 To build the engine from the generated TensorRT network, issue the following call:
-`SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};`
+`std::unique_ptr<nvinfer1::IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};`
 
 After you build the engine, verify that the engine is running properly by confirming the output is what you expected. The output format of this sample should be the same as the output of sampleMNIST.
 
@@ -102,7 +102,7 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 
 2.  Run the sample to build and run the MNIST engine from the ONNX model.
 	```
-	./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>] [--int8 or --fp16]
+	./sample_onnx_mnist [-h or --help] [-d or --datadir=<path to data directory>] [--useDLACore=<int>]
 	```
 
 3.  Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
@@ -180,7 +180,7 @@ The following resources provide a deeper understanding about the ONNX project an
 - [Github: ONNX-TensorRT Open source parser](https://github.com/onnx/onnx-tensorrt)
 
 **Models**
-- [MNIST - Handwritten Digit Recognition](https://github.com/onnx/models/tree/master/mnist)
+- [MNIST - Handwritten Digit Recognition](https://github.com/onnx/models/tree/main/validated/vision/classification/mnist)
 - [GitHub: ONNX Models](https://github.com/onnx/models)
 
 **Documentation**
@@ -194,6 +194,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 
 
 # Changelog
+
+October 2025
+Migrate to strongly typed APIs.
 
 March 2019
 This `README.md` file was recreated, updated and reviewed.

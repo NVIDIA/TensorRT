@@ -52,17 +52,15 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 
 2. Run the sample to perform inference on the digit:
     ```bash
-    ./sample_progress_monitor [-h] [--datadir=/path/to/data/dir/] [--useDLA=N] [--fp16 or --int8]
+    ./sample_progress_monitor [-h] [--datadir=/path/to/data/dir/] [--useDLA=N]
     ```
 
     For example:
     ```bash
-    ./sample_progress_monitor --datadir $TRT_DATADIR/mnist --fp16
+    ./sample_progress_monitor --datadir $TRT_DATADIR/mnist
     ```
 
 	This sample reads the `mnist.onnx` file to build the network:
-
-	This sample can be run in FP16 and INT8 modes as well.
 
 	**Note:** By default, the sample expects these files to be in either the `data/samples/mnist/` or `data/mnist/` directories. The list of default directories can be changed by adding one or more paths with `--datadir=/new/path/` as a command line argument.
 
@@ -153,8 +151,6 @@ Usage: ./sample_progress_monitor [-h or --help] [-d or --datadir=<path to data d
 --help Display help information
 --datadir Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use (data/samples/mnist/, data/mnist/)
 --useDLACore=N Specify a DLA engine for layers that support DLA. Value can range from 0 to n-1, where n is the number of DLA engines on the platform.
---int8 Run in Int8 mode.
---fp16 Run in FP16 mode.
 ```
 
 # Additional resources
@@ -174,6 +170,9 @@ The following resources provide a deeper understanding about sampleProgressMonit
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+
+**October 2025**
+- Migrate to strongly typed APIs.
 
 **May 2023**
 - This `README.md` file was created and reviewed.

@@ -32,14 +32,14 @@ To build the TensorRT-OSS components, you will first need the following software
 
 **TensorRT GA build**
 
-- TensorRT v10.14.1.48
+- TensorRT v10.15.1.29
   - Available from direct download links listed below
 
 **System Packages**
 
 - [CUDA](https://developer.nvidia.com/cuda-toolkit)
   - Recommended versions:
-  - cuda-13.0.0
+  - cuda-13.1.0
   - cuda-12.9.0
 - [CUDNN (optional)](https://developer.nvidia.com/cudnn)
   - cuDNN 8.9
@@ -86,24 +86,24 @@ To build the TensorRT-OSS components, you will first need the following software
 
    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
 
-   - [TensorRT 10.14.1.48 for CUDA 13.0, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-13.0.tar.gz)
-   - [TensorRT 10.14.1.48 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-12.9.tar.gz)
-   - [TensorRT 10.14.1.48 for CUDA 13.0, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/zip/TensorRT-10.14.1.48.Windows.win10.cuda-13.0.zip)
-   - [TensorRT 10.14.1.48 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/zip/TensorRT-10.14.1.48.Windows.win10.cuda-12.9.zip)
+   - [TensorRT 10.15.1.29 for CUDA 13.1, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.15.1/tars/TensorRT-10.15.1.29.Linux.x86_64-gnu.cuda-13.1.tar.gz)
+   - [TensorRT 10.15.1.29 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.15.1/tars/TensorRT-10.15.1.29.Linux.x86_64-gnu.cuda-12.9.tar.gz)
+   - [TensorRT 10.15.1.29 for CUDA 13.1, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.15.1/zip/TensorRT-10.15.1.29.Windows.win10.cuda-13.1.zip)
+   - [TensorRT 10.15.1.29 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.15.1/zip/TensorRT-10.15.1.29.Windows.win10.cuda-12.9.zip)
 
-   **Example: Ubuntu 22.04 on x86-64 with cuda-13.0**
+   **Example: Ubuntu 22.04 on x86-64 with cuda-13.1**
 
    ```bash
    cd ~/Downloads
-   tar -xvzf TensorRT-10.14.1.48.Linux.x86_64-gnu.cuda-13.0.tar.gz
-   export TRT_LIBPATH=`pwd`/TensorRT-10.14.1.48
+   tar -xvzf TensorRT-10.15.1.29.Linux.x86_64-gnu.cuda-13.1.tar.gz
+   export TRT_LIBPATH=`pwd`/TensorRT-10.15.1.29/lib
    ```
 
    **Example: Windows on x86-64 with cuda-12.9**
 
    ```powershell
-   Expand-Archive -Path TensorRT-10.14.1.48.Windows.win10.cuda-12.9.zip
-   $env:TRT_LIBPATH="$pwd\TensorRT-10.14.1.48\lib"
+   Expand-Archive -Path TensorRT-10.15.1.29.Windows.win10.cuda-12.9.zip
+   $env:TRT_LIBPATH="$pwd\TensorRT-10.15.1.29\lib"
    ```
 
 ## Setting Up The Build Environment
@@ -112,34 +112,34 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 1. #### Generate the TensorRT-OSS build container.
 
-   **Example: Ubuntu 24.04 on x86-64 with cuda-13.0 (default)**
+   **Example: Ubuntu 24.04 on x86-64 with cuda-13.1 (default)**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-24.04.Dockerfile --tag tensorrt-ubuntu24.04-cuda13.0
+   ./docker/build.sh --file docker/ubuntu-24.04.Dockerfile --tag tensorrt-ubuntu24.04-cuda13.1
    ```
 
-   **Example: Rockylinux8 on x86-64 with cuda-13.0**
+   **Example: Rockylinux8 on x86-64 with cuda-13.1**
 
    ```bash
-   ./docker/build.sh --file docker/rockylinux8.Dockerfile --tag tensorrt-rockylinux8-cuda13.0
+   ./docker/build.sh --file docker/rockylinux8.Dockerfile --tag tensorrt-rockylinux8-cuda13.1
    ```
 
-   **Example: Ubuntu 24.04 cross-compile for Jetson (aarch64) with cuda-13.0 (JetPack SDK)**
+   **Example: Ubuntu 24.04 cross-compile for Jetson (aarch64) with cuda-13.1 (JetPack SDK)**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda13.0
+   ./docker/build.sh --file docker/ubuntu-cross-aarch64.Dockerfile --tag tensorrt-jetpack-cuda13.1
    ```
 
-   **Example: Ubuntu 24.04 on aarch64 with cuda-13.0**
+   **Example: Ubuntu 24.04 on aarch64 with cuda-13.1**
 
    ```bash
-   ./docker/build.sh --file docker/ubuntu-24.04-aarch64.Dockerfile --tag tensorrt-aarch64-ubuntu24.04-cuda13.0
+   ./docker/build.sh --file docker/ubuntu-24.04-aarch64.Dockerfile --tag tensorrt-aarch64-ubuntu24.04-cuda13.1
    ```
 
 2. #### Launch the TensorRT-OSS build container.
    **Example: Ubuntu 24.04 build container**
    ```bash
-   ./docker/launch.sh --tag tensorrt-ubuntu24.04-cuda13.0 --gpus all
+   ./docker/launch.sh --tag tensorrt-ubuntu24.04-cuda13.1 --gpus all
    ```
    > NOTE:
    > <br> 1. Use the `--tag` corresponding to build container generated in Step 1.
@@ -152,7 +152,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 
 - Generate Makefiles and build
 
-  **Example: Linux (x86-64) build with default cuda-13.0**
+  **Example: Linux (x86-64) build with default cuda-13.1**
 
   ```bash
   cd $TRT_OSSPATH
@@ -161,7 +161,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  **Example: Linux (aarch64) build with default cuda-13.0**
+  **Example: Linux (aarch64) build with default cuda-13.1**
 
   ```bash
   cd $TRT_OSSPATH
@@ -170,7 +170,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  **Example: Native build on Jetson Thor (aarch64) with cuda-13.0**
+  **Example: Native build on Jetson Thor (aarch64) with cuda-13.1**
 
   ```bash
   cd $TRT_OSSPATH
@@ -181,7 +181,7 @@ For Linux platforms, we recommend that you generate a docker container for build
 
   > NOTE: C compiler must be explicitly specified via CC= for native aarch64 builds of protobuf.
 
-  **Example: Ubuntu 24.04 Cross-Compile for Jetson Thor (aarch64) with cuda-13.0 (JetPack)**
+  **Example: Ubuntu 24.04 Cross-Compile for Jetson Thor (aarch64) with cuda-13.1 (JetPack)**
 
   ```bash
   cd $TRT_OSSPATH
@@ -190,7 +190,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  **Example: Ubuntu 24.04 Cross-Compile for DriveOS (aarch64) with cuda-13.0**
+  **Example: Ubuntu 24.04 Cross-Compile for DriveOS (aarch64) with cuda-13.1**
 
   ```bash
   cd $TRT_OSSPATH
@@ -199,17 +199,17 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  **Example: Native builds on Windows (x86) with cuda-13.0**
+  **Example: Native builds on Windows (x86) with cuda-13.1**
 
   ```bash
   cd $TRT_OSSPATH
-  mkdir -p build
-  cd -p build
+  New-Item -ItemType Directory -Path build
+  cd build
   cmake .. -DTRT_LIB_DIR="$env:TRT_LIBPATH" -DTRT_OUT_DIR="$pwd\\out"
   msbuild TensorRT.sln /property:Configuration=Release -m:$env:NUMBER_OF_PROCESSORS
   ```
 
-  > NOTE: The default CUDA version used by CMake is 13.0. To override this, for example to 12.9, append `-DCUDA_VERSION=12.9` to the cmake command.
+  > NOTE: The default CUDA version used by CMake is 13.1. To override this, for example to 12.9, append `-DCUDA_VERSION=12.9` to the cmake command.
 
 - Required CMake build arguments are:
   - `TRT_LIB_DIR`: Path to the TensorRT installation directory containing libraries.
@@ -223,6 +223,8 @@ For Linux platforms, we recommend that you generate a docker container for build
   - `BUILD_PARSERS`: Specify if the parsers should be built, for example [`ON`] | `OFF`. If turned OFF, CMake will try to find precompiled versions of the parser libraries to use in compiling samples. First in `${TRT_LIB_DIR}`, then on the system. If the build type is Debug, then it will prefer debug builds of the libraries before release versions if available.
   - `BUILD_PLUGINS`: Specify if the plugins should be built, for example [`ON`] | `OFF`. If turned OFF, CMake will try to find a precompiled version of the plugin library to use in compiling samples. First in `${TRT_LIB_DIR}`, then on the system. If the build type is Debug, then it will prefer debug builds of the libraries before release versions if available.
   - `BUILD_SAMPLES`: Specify if the samples should be built, for example [`ON`] | `OFF`.
+  - `BUILD_SAFE_SAMPLES`: Specify if safety samples should be built, for example [`ON`] | `OFF`.
+  - `TRT_SAFETY_INFERENCE_ONLY`: Specify if only build the safety inference components, for example [`ON`] | `OFF`. If turned ON, all other components will be turned OFF except `BUILD_SAFE_SAMPLES`.
   - `GPU_ARCHS`: GPU (SM) architectures to target. By default we generate CUDA code for all major SMs. Specific SM versions can be specified here as a quoted space-separated list to reduce compilation time and binary size. Table of compute capabilities of NVIDIA GPUs can be found [here](https://developer.nvidia.com/cuda-gpus). Examples: - NVidia A100: `-DGPU_ARCHS="80"` - RTX 50 series: `-DGPU_ARCHS="120"` - Multiple SMs: `-DGPU_ARCHS="80 120"`
   - `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation). Currently supported options: `x86_64` (default).
 

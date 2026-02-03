@@ -67,7 +67,7 @@ endif()
 set(CMAKE_SKIP_BUILD_RPATH True)
 
 # CUDA targets
-set(DEFAULT_CUDA_VERSION 13.0.0)
+set(DEFAULT_CUDA_VERSION 13.1.0)
 set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
 message(STATUS "CUDA version set to ${CUDA_VERSION}")
 
@@ -92,7 +92,7 @@ endif()
 set(BERT_GENCODES)
 # Generate SASS for each architecture
 foreach(arch ${CMAKE_CUDA_ARCHITECTURES})
-    if (${arch} GREATER_EQUAL 75)
+    if (${arch} GREATER_EQUAL 75 AND NOT ${arch} EQUAL 110)
         set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
     endif()
     set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
@@ -101,7 +101,7 @@ endforeach()
 # Generate PTX for the last architecture in the list.
 list(GET CMAKE_CUDA_ARCHITECTURES -1 LATEST_SM)
 set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-if (${LATEST_SM} GREATER_EQUAL 75)
+if (${LATEST_SM} GREATER_EQUAL 75 AND NOT ${arch} EQUAL 110)
     set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
 endif()
 
@@ -122,6 +122,131 @@ endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 option(BUILD_PLUGINS "Build TensorRT plugin" ON)
 option(BUILD_PARSERS "Build TensorRT parsers" ON)
 option(BUILD_SAMPLES "Build TensorRT samples" ON)
+option(BUILD_SAFE_SAMPLES "Build TensorRT safety samples" OFF)
+option(TRT_SAFETY_INFERENCE_ONLY "Build only the safety inference components (no safety builders)" OFF)
+
+############################################################################################
+# Early dependency discovery
+# These must be found before they are used in target definitions
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+# QNX has built-in threading support and doesn't need FindThreads
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "QNX")
+    find_package(Threads REQUIRED)
+else()
+    # For QNX, create a dummy Threads::Threads target if it doesn't exist
+    if(NOT TARGET Threads::Threads)
+        add_library(Threads::Threads INTERFACE IMPORTED GLOBAL)
+        # QNX threading is built into libc, no explicit linking needed
+    endif()
+endif()
+
+## find_package(CUDA) is broken for cross-compilation. Enable CUDA language instead.
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    find_package(CUDA ${CUDA_VERSION} REQUIRED)
+endif()
+
+include_directories(
+    ${CUDA_INCLUDE_DIRS}
+)
+
+############################################################################################
+# Safety runtime libraries (libnvinfer_safe) used by safety samples and
+# inference-only builds.
+if(BUILD_SAFE_SAMPLES OR TRT_SAFETY_INFERENCE_ONLY)
+    set(TRT_NVINFER_SAFE_NAME "nvinfer_safe")
+
+    # Shared safety runtime.
+    find_library(nvinfer_safe_path
+        ${TRT_NVINFER_SAFE_NAME}
+        PATHS ${TRT_LIB_DIR}
+        NO_CMAKE_FIND_ROOT_PATH
+    )
+    if(NOT nvinfer_safe_path)
+        message(FATAL_ERROR "nvinfer_safe library not found. Please ensure safety runtime libraries are available in TRT_LIB_DIR ('${TRT_LIB_DIR}').")
+    endif()
+    add_library(TRTSAFE::nvinfer_safe_shared SHARED IMPORTED)
+    set_target_properties(TRTSAFE::nvinfer_safe_shared PROPERTIES IMPORTED_LOCATION ${nvinfer_safe_path})
+
+    target_link_libraries(TRTSAFE::nvinfer_safe_shared INTERFACE cuda) # nvinfer_safe needs the cuda driver.
+
+    # Debug runtime library (provides debugging features like tensor dumping).
+    set(nvinfer_safe_debug_lib_name "${TRT_NVINFER_SAFE_NAME}_debug")
+    find_library(nvinfer_safe_debug_path
+        ${nvinfer_safe_debug_lib_name}
+        PATHS ${TRT_LIB_DIR}
+        NO_CMAKE_FIND_ROOT_PATH
+    )
+    if(NOT nvinfer_safe_debug_path)
+        message(FATAL_ERROR "nvinfer_safe_debug library not found. Please ensure debug runtime library is available in TRT_LIB_DIR.")
+    endif()
+    add_library(TRTSAFE::nvinfer_safe_debug SHARED IMPORTED)
+    set_target_properties(TRTSAFE::nvinfer_safe_debug PROPERTIES IMPORTED_LOCATION ${nvinfer_safe_debug_path})
+
+    # Headers for the safety runtime.
+    # Try to find include directory relative to lib dir first, then fall back to standard locations
+    if(EXISTS "${TRT_LIB_DIR}/../include/NvInfer.h")
+        target_include_directories(TRTSAFE::nvinfer_safe_shared INTERFACE ${TRT_LIB_DIR}/../include)
+        target_include_directories(TRTSAFE::nvinfer_safe_debug INTERFACE ${TRT_LIB_DIR}/../include)
+    elseif(EXISTS "/usr/include/NvInfer.h")
+        target_include_directories(TRTSAFE::nvinfer_safe_shared INTERFACE /usr/include)
+        target_include_directories(TRTSAFE::nvinfer_safe_debug INTERFACE /usr/include)
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInfer.h")
+        target_include_directories(TRTSAFE::nvinfer_safe_shared INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_include_directories(TRTSAFE::nvinfer_safe_debug INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    else()
+        message(WARNING "Could not find TensorRT headers. Please ensure they are installed.")
+    endif()
+
+    # On QNX, TRT depends on DLA symbols stored in the DriveOS PDK.
+    # Since trying to find these shared libs at link time will be difficult, we ignore unresolved symbols in shared libs.
+    if(CMAKE_SYSTEM_NAME STREQUAL "QNX")
+        target_link_options(TRTSAFE::nvinfer_safe_shared INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
+        target_link_options(TRTSAFE::nvinfer_safe_debug INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
+    endif()
+endif()
+
+# OSS safety inference-only mode: require safety samples and disable enterprise
+# components.
+if(TRT_SAFETY_INFERENCE_ONLY)
+    if(NOT BUILD_SAFE_SAMPLES)
+        set(BUILD_SAFE_SAMPLES ON CACHE BOOL "Build TensorRT safety samples" FORCE)
+    endif()
+
+    set(TRT_SAFETY_INFERENCE_ONLY ON CACHE BOOL "" FORCE)
+
+    # Disable enterprise OSS components for this configuration.
+    set(BUILD_PLUGINS OFF CACHE BOOL "" FORCE)
+    set(BUILD_PARSERS OFF CACHE BOOL "" FORCE)
+    set(BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
+
+    # Add CUDA library directory early so all samples can find it
+    if(CUDA_TOOLKIT_ROOT_DIR)
+        link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib ${CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/lib)
+    endif()
+
+    # Interface target for safety samples in inference-only mode.
+    add_library(trt_global_definitions INTERFACE)
+
+    target_link_libraries(trt_global_definitions INTERFACE
+        TRTSAFE::nvinfer_safe_shared
+        cudart
+        Threads::Threads
+    )
+
+    if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "QNX")
+        target_link_libraries(trt_global_definitions INTERFACE dl rt)
+    endif()
+    target_include_directories(trt_global_definitions INTERFACE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/samples/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/shared
+        ${CUDA_INCLUDE_DIRS}
+    )
+    target_compile_options(trt_global_definitions INTERFACE
+        $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+    )
+endif()
 
 # C++17
 set(CMAKE_CXX_STANDARD 17)
@@ -160,8 +285,6 @@ message(STATUS "cuDNN version set to ${CUDNN_VERSION}")
 set_ifndef(PROTOBUF_VERSION ${DEFAULT_PROTOBUF_VERSION})
 message(STATUS "Protobuf version set to ${PROTOBUF_VERSION}")
 
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
 if (BUILD_PLUGINS OR BUILD_PARSERS)
     include(third_party/protobuf.cmake)
 endif()
@@ -171,14 +294,6 @@ if(NOT CUB_ROOT_DIR)
   endif()
 endif()
 
-## find_package(CUDA) is broken for cross-compilation. Enable CUDA language instead.
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    find_package(CUDA ${CUDA_VERSION} REQUIRED)
-endif()
-
-include_directories(
-    ${CUDA_INCLUDE_DIRS}
-)
 if(BUILD_PARSERS)
     configure_protobuf(${PROTOBUF_VERSION})
 endif()
@@ -206,7 +321,16 @@ find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED "${TRT_LIB_DIR}")
 if (DEFINED USE_CUGFX)
     find_library(CUDART_LIB cugfx_dll HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
 else()
-    find_library(CUDART_LIB cudart_static HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
+    # DriveOS platforms use cudart.so instead of cudart_static. This isn't the most sophisticated check, but it's correct.
+    if(CUDA_VERSION VERSION_GREATER_EQUAL 12.0)
+        set(CUDART_LIB_NAME cudart_static)
+        set(CMAKE_CUDA_RUNTIME_LIBRARY "static")
+    else()
+        set(CUDART_LIB_NAME cudart)
+        set(CMAKE_CUDA_RUNTIME_LIBRARY "shared")
+    endif()
+
+    find_library(CUDART_LIB ${CUDART_LIB_NAME} HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
 endif()
 
 if (NOT MSVC)
@@ -241,6 +365,11 @@ else()
     find_library_create_target(${nvonnxparser_lib_name} ${nvonnxparser_lib_name} SHARED "${HINT_PATHS}")
 endif()
 
-if(BUILD_SAMPLES)
+# Samples:
+# - BUILD_SAMPLES controls the regular (enterprise/OSS) samples via
+#   samples/CMakeLists.txt.
+# - BUILD_SAFE_SAMPLES controls the safety samples (builder + infer parts).
+#   Both can be enabled at the same time if desired.
+if(BUILD_SAMPLES OR BUILD_SAFE_SAMPLES)
     add_subdirectory(samples)
 endif()

@@ -48,8 +48,6 @@
 
 using namespace nvinfer1;
 
-using samplesCommon::SampleUniquePtr;
-
 namespace
 {
 
@@ -456,7 +454,7 @@ struct LayerKernel
 //! the kernel used by it.
 void extractLayerKernels(ICudaEngine const* engine, std::vector<LayerKernel>& table)
 {
-    SampleUniquePtr<IEngineInspector> inspector{engine->createEngineInspector()};
+    std::unique_ptr<IEngineInspector> inspector{engine->createEngineInspector()};
 
     int32_t numLayers = engine->getNbLayers();
 
@@ -525,16 +523,18 @@ int32_t main(int32_t argc, char* argv[])
 
         ProfilingLogger profilingLogger(sample::gLogger.getTRTLogger());
 
-        SampleUniquePtr<IBuilder> builder{createInferBuilder(profilingLogger)};
+        std::unique_ptr<IBuilder> builder{createInferBuilder(profilingLogger)};
         FAIL_IF_NOT(builder, "Failed to create inference builder.");
 
-        SampleUniquePtr<INetworkDefinition> network{builder->createNetworkV2(0)};
+        NetworkDefinitionCreationFlags flags = 1U
+            << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED);
+        std::unique_ptr<INetworkDefinition> network{builder->createNetworkV2(flags)};
         FAIL_IF_NOT(network, "Failed to create network.");
 
         ILayer const* matMul1 = buildGraph(network.get());
         std::string const opName = matMul1->getName();
 
-        SampleUniquePtr<IBuilderConfig> config{builder->createBuilderConfig()};
+        std::unique_ptr<IBuilderConfig> config{builder->createBuilderConfig()};
         FAIL_IF_NOT(config, "Failed to create builder config.");
 
         // Tell the builder to save the name of tactic used by each layer
@@ -548,19 +548,19 @@ int32_t main(int32_t argc, char* argv[])
         config->setFlag(BuilderFlag::kEDITABLE_TIMING_CACHE);
 
         // Provide the builder with an empty timing cache.
-        SampleUniquePtr<ITimingCache> timingCache{config->createTimingCache(nullptr, 0)};
+        std::unique_ptr<ITimingCache> timingCache{config->createTimingCache(nullptr, 0)};
         FAIL_IF_NOT(timingCache, "Failed to set timing cache.");
 
         FAIL_IF_NOT(config->setTimingCache(*timingCache, true), "Failed to set timing cache.");
 
         // Build the first engine.
-        SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+        std::unique_ptr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
         FAIL_IF_NOT(plan, "Failed to build serialized engine.");
 
-        SampleUniquePtr<IRuntime> runtime{createInferRuntime(profilingLogger)};
+        std::unique_ptr<IRuntime> runtime{createInferRuntime(profilingLogger)};
         FAIL_IF_NOT(runtime, "Failed to create the runtime.");
 
-        SampleUniquePtr<ICudaEngine> engine{runtime->deserializeCudaEngine(plan->data(), plan->size())};
+        std::unique_ptr<ICudaEngine> engine{runtime->deserializeCudaEngine(plan->data(), plan->size())};
         FAIL_IF_NOT(engine, "Failed to deserialize the engine.");
 
         // Extract layers' information of the first engine.
@@ -583,10 +583,10 @@ int32_t main(int32_t argc, char* argv[])
         CHECK_RETURN(setTactic(timingCache.get(), opRecord.key, newTactic->hash), EXIT_FAILURE);
 
         // Build the second engine, with the modified timing cache.
-        SampleUniquePtr<IHostMemory> newPlan{builder->buildSerializedNetwork(*network, *config)};
+        std::unique_ptr<IHostMemory> newPlan{builder->buildSerializedNetwork(*network, *config)};
         FAIL_IF_NOT(newPlan, "Failed to build the engine again.");
 
-        SampleUniquePtr<ICudaEngine> newEngine{runtime->deserializeCudaEngine(newPlan->data(), newPlan->size())};
+        std::unique_ptr<ICudaEngine> newEngine{runtime->deserializeCudaEngine(newPlan->data(), newPlan->size())};
         FAIL_IF_NOT(newEngine, "Failed to deserialize the engine again.");
 
         // Extract layers' information of the second engine.

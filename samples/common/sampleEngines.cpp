@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +17,14 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <map>
 #include <random>
 #include <set>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -37,10 +39,8 @@
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
-#if ENABLE_UNIFIED_BUILDER
-#include "NvInferConsistency.h"
-#include "safeErrorRecorder.h"
-#endif
+
+// cspell:ignore calib CUFILE nvonnxparser
 
 using namespace nvinfer1;
 
@@ -62,7 +62,7 @@ public:
     {
     }
 
-    virtual int64_t write(void const* data, int64_t nbBytes) final
+    int64_t write(void const* data, int64_t nbBytes) final
     {
         SMP_RETVAL_IF_FALSE(
             (mStream.is_open() && mStream.good()), "Cannot write to FileStreamWriter", -1, sample::gLogError);
@@ -260,6 +260,10 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         {
             parser.onnxParser->setFlag(OnnxParserFlag::kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA);
         }
+        if (build.enablePluginOverride)
+        {
+            parser.onnxParser->setFlag(OnnxParserFlag::kENABLE_PLUGIN_OVERRIDE);
+        }
         if (!parser.onnxParser->parseFromFile(
                 model.baseModel.model.c_str(), static_cast<int>(sample::gLogger.getReportableSeverity())))
         {
@@ -416,7 +420,8 @@ bool setTensorDynamicRange(INetworkDefinition const& network, float inRange = 2.
                 if (!input->setDynamicRange(-dynRange, dynRange))
                 {
                     return false;
-                }}
+                }
+            }
         }
         for (int32_t o = 0; o < layer->getNbOutputs(); o++)
         {
@@ -771,6 +776,20 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         if (!build.inputFormats.empty())
         {
             int32_t inputFormatIndex = broadcastInputFormats ? 0 : i;
+            if (build.stronglyTyped)
+            {
+                auto const inferredType = input->getType();
+                bool const typeMatches = build.inputFormats[inputFormatIndex].first == inferredType;
+                if (!typeMatches)
+                {
+                    std::ostringstream msg;
+                    msg << "Input tensor \"" << input->getName() << "\": Requested input type "
+                        << build.inputFormats[inputFormatIndex].first
+                        << " via --inputIOFormats does not match the inferred type " << inferredType
+                        << " for a strongly typed network. Failing build.";
+                    SMP_RETVAL_IF_FALSE(typeMatches, msg.str(), false, err);
+                }
+            }
             input->setType(build.inputFormats[inputFormatIndex].first);
             input->setAllowedFormats(build.inputFormats[inputFormatIndex].second);
         }
@@ -908,6 +927,21 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         if (!build.outputFormats.empty())
         {
             int32_t outputFormatIndex = broadcastOutputFormats ? 0 : i;
+            // For strongly typed networks, log an error if the requested output type differs from the inferred type.
+            if (build.stronglyTyped)
+            {
+                auto const inferredType = output->getType();
+                bool const typeMatches = build.outputFormats[outputFormatIndex].first == inferredType;
+                if (!typeMatches)
+                {
+                    std::ostringstream msg;
+                    msg << "Output tensor \"" << output->getName() << "\": Requested output type "
+                        << build.outputFormats[outputFormatIndex].first
+                        << " via --outputIOFormats does not match the inferred type " << inferredType
+                        << " for a strongly typed network. Failing build.";
+                    SMP_RETVAL_IF_FALSE(typeMatches, msg.str(), false, err);
+                }
+            }
             output->setType(build.outputFormats[outputFormatIndex].first);
             output->setAllowedFormats(build.outputFormats[outputFormatIndex].second);
         }
@@ -1274,17 +1308,25 @@ bool networkToSerializedEngine(
         "Network And Config setup failed", false, err);
 
     std::unique_ptr<ITimingCache> timingCache{};
-    // Try to load cache from file. Create a fresh cache if the file doesn't exist
-    if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
+    if (!build.cpuOnly)
     {
-        timingCache = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), *config, build.timingCacheFile);
+        // Try to load cache from file. Create a fresh cache if the file doesn't exist
+        if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
+        {
+            timingCache
+                = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), *config, build.timingCacheFile);
+        }
     }
 
     // CUDA stream used for profiling by the builder.
-    auto profileStream = samplesCommon::makeCudaStream();
-    SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
-    config->setProfileStream(*profileStream);
-
+    auto profileStream = build.cpuOnly
+        ? std::unique_ptr<cudaStream_t, decltype(samplesCommon::StreamDeleter)>{nullptr, samplesCommon::StreamDeleter}
+        : samplesCommon::makeCudaStream();
+    if (!build.cpuOnly)
+    {
+        SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
+        config->setProfileStream(*profileStream);
+    }
     auto const tBegin = std::chrono::high_resolution_clock::now();
 
     if (!(build.safe || build.buildDLAStandalone) && build.save)
@@ -1331,11 +1373,6 @@ bool networkToSerializedEngine(
         if (build.safe && build.consistency)
         {
             std::vector<std::string> pluginBuildLibPaths;
-#if ENABLE_UNIFIED_BUILDER
-            pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
-            std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
-                [](auto const& sp) { return sp.libraryName; });
-#endif
             if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size(), pluginBuildLibPaths))
             {
                 return false;
@@ -1349,12 +1386,14 @@ bool networkToSerializedEngine(
     float const buildTime = std::chrono::duration<float>(tEnd - tBegin).count();
     sample::gLogInfo << "Engine built in " << buildTime << " sec." << std::endl;
 
-    if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
+    if (!build.cpuOnly)
     {
-        auto timingCache = config->getTimingCache();
-        samplesCommon::updateTimingCacheFile(gLogger.getTRTLogger(), build.timingCacheFile, timingCache, builder);
+        if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
+        {
+            auto timingCache = config->getTimingCache();
+            samplesCommon::updateTimingCacheFile(gLogger.getTRTLogger(), build.timingCacheFile, timingCache, builder);
+        }
     }
-
     return true;
 }
 
@@ -1446,6 +1485,7 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getMissingLayerWei
     // Allocate buffers for the items and get them.
     std::vector<nvinfer1::WeightsRole> weightsRoles(nbMissing);
     refitter.getMissing(nbMissing, layerNames.data(), weightsRoles.data());
+    // Convert null names in `layerNames` to empty strings:
     std::vector<std::string> layerNameStrs(nbMissing);
     std::transform(layerNames.begin(), layerNames.end(), layerNameStrs.begin(), [](char const* name) {
         if (name == nullptr)
@@ -1454,7 +1494,7 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getMissingLayerWei
         }
         return std::string{name};
     });
-    return {layerNameStrs, weightsRoles};
+    return {std::move(layerNameStrs), std::move(weightsRoles)};
 }
 } // namespace
 
@@ -1494,11 +1534,6 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
     if (enableConsistency)
     {
         std::vector<std::string> pluginBuildLibPaths;
-#if ENABLE_UNIFIED_BUILDER
-        pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
-        std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
-            [](auto const& sp) { return sp.libraryName; });
-#endif
         if (!checkSafeEngine(engineBlob.data(), fsize, pluginBuildLibPaths))
         {
             sample::gLogError << "Consistency validation is not enabled." << std::endl;
@@ -1577,7 +1612,16 @@ ICudaEngine* loadEngine(std::string const& engine, int32_t DLACore, std::ostream
 {
     BuildEnvironment env(/* isSafe */ false, /* versionCompatible */ false, DLACore, "", getTempfileControlDefaults());
     SystemOptions sys;
-    return loadEngineToBuildEnv(engine, env, err, sys, false) ? env.engine.release() : nullptr;
+    if (!loadEngineToBuildEnv(engine, env, err, sys, false))
+    {
+        return nullptr;
+    }
+    // Trigger deserialization before releasing ownership
+    if (env.engine.get() == nullptr)
+    {
+        return nullptr;
+    }
+    return env.engine.release();
 }
 
 bool saveEngine(ICudaEngine const& engine, std::string const& fileName, std::ostream& err)
@@ -1660,13 +1704,19 @@ bool getEngineBuildEnv(
         }
         if (build.safe && build.dumpKernelText)
         {
-            auto& kernelTextBlob = env.kernelText.getBlob();
-            if (kernelTextBlob.data != nullptr)
+            auto const engineTextFileName = build.engine + ".txt";
+            auto const kernelTextBlob = env.kernelText.getBlobOrEmpty();
+            if (kernelTextBlob.data != nullptr && kernelTextBlob.size > 0)
             {
-                std::ofstream engineTextFile(build.engine + ".txt");
+                std::ofstream engineTextFile(engineTextFileName);
                 engineTextFile.write(static_cast<char const*>(kernelTextBlob.data), kernelTextBlob.size);
                 SMP_RETVAL_IF_FALSE(!engineTextFile.fail(), "Saving engine kernel text to file failed.", false, err);
                 engineTextFile.close();
+            }
+            else
+            {
+                sample::gLogWarning << "Kernel text was not produced; skipping dump to " << engineTextFileName
+                                    << std::endl;
             }
         }
     }
@@ -1739,6 +1789,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
     case LayerType::kGRID_SAMPLE:
     case LayerType::kIDENTITY:
     case LayerType::kITERATOR:
+    case LayerType::kKVCACHE_UPDATE:
     case LayerType::kLOOP_OUTPUT:
     case LayerType::kLRN:
     case LayerType::kMATRIX_MULTIPLY:
@@ -1758,6 +1809,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
     case LayerType::kREDUCE:
     case LayerType::kRESIZE:
     case LayerType::kREVERSE_SEQUENCE:
+    case LayerType::kROTARY_EMBEDDING:
     case LayerType::kSCATTER:
     case LayerType::kSELECT:
     case LayerType::kSHAPE:
@@ -1893,133 +1945,63 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
 
 namespace
 {
-void* initSafeRuntime()
-{
-    void* handle{nullptr};
-    // Currently libnvinfer_safe_debug.so for samplesCommon::isDebug() is not ready.
 #if !defined(_WIN32)
-    std::string const dllName{"libnvinfer_safe.so"};
-#if SANITIZER_BUILD
-    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
-#else
-    // RTLD_GLOBAL is used for symbol resolution of subsequently loaded plugin libraries
-    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_GLOBAL);
-#endif
-#endif
-    return handle;
-}
-
-void* initConsistencyCheckerLibrary()
-{
-    void* handle{nullptr};
-#if !defined(_WIN32)
-    std::string const dllName{"libnvinfer_checker_shared.so"};
-#if SANITIZER_BUILD
-    handle = dlopen(dllName.c_str(), RTLD_LAZY | RTLD_NODELETE);
-#else
-    handle = dlopen(dllName.c_str(), RTLD_LAZY);
-#endif
-#endif
-    return handle;
-}
-
-#if !defined(_WIN32)
+//! A function-object that calls `dlclose(handle)`.
 struct DllDeleter
 {
-    void operator()(void* handle)
+    void operator()(void* handle) const noexcept
     {
-        if (handle != nullptr)
-        {
-            dlclose(handle);
-        }
+        dlclose(handle);
     }
 };
-const std::unique_ptr<void, DllDeleter> safeRuntimeLibrary{initSafeRuntime()};
-const std::unique_ptr<void, DllDeleter> consistencyCheckerLibrary{initConsistencyCheckerLibrary()};
-#endif
+
+//! If available, \return std::unique_ptr<void, DllDeleter>{dlopen(dllName, nonSanitizerFlags)} unless SANITIZER_BUILD,
+//! in which case dlopen with `RTLD_LAZY | RTLD_NODELETE` flags.
+[[nodiscard]] auto doDlopen(char const* dllName, int32_t nonSanitizerFlags)
+{
+    auto flags = nonSanitizerFlags;
+#if SANITIZER_BUILD
+    // Sanitizer builds override the flags:
+    flags = RTLD_LAZY | RTLD_NODELETE;
+#endif // SANITIZER_BUILD
+    return std::unique_ptr<void, DllDeleter>{dlopen(dllName, flags)};
+}
+
+[[nodiscard]] auto initSafeRuntime()
+{
+    // Currently libnvinfer_safe_debug.so for samplesCommon::isDebug() is not ready.
+    return doDlopen("libnvinfer_safe.so", RTLD_LAZY | RTLD_GLOBAL);
+}
+
+[[nodiscard]] auto initConsistencyCheckerLibrary()
+{
+    return doDlopen("libnvinfer_checker_shared.so", RTLD_LAZY);
+}
+
+static auto const kSAFE_RUNTIME_LIBRARY{initSafeRuntime()};
+static auto const kCONSISTENCY_CHECKER_LIBRARY{initConsistencyCheckerLibrary()};
+#else
+static constexpr auto kSAFE_RUNTIME_LIBRARY = nullptr;
+static constexpr auto kCONSISTENCY_CHECKER_LIBRARY = nullptr;
+#endif // !defined(_WIN32)
+
 } // namespace
+
 
 bool hasSafeRuntime()
 {
-#if defined(_WIN32)
-    return false;
-#else
-    return (safeRuntimeLibrary != nullptr);
-#endif
+    return kSAFE_RUNTIME_LIBRARY != nullptr;
 }
 
 bool hasConsistencyChecker()
 {
-#if defined(_WIN32)
-    return false;
-#else
-    return (consistencyCheckerLibrary != nullptr);
-#endif
+    return kCONSISTENCY_CHECKER_LIBRARY != nullptr;
 }
-
-#if ENABLE_UNIFIED_BUILDER
-
-nvinfer2::safe::consistency::IConsistencyChecker* createConsistencyChecker(sample::SampleSafeRecorder& recorder,
-    void const* serializedEngine, int32_t const engineSize, std::vector<std::string> const& pluginBuildLibPath) noexcept
-{
-    nvinfer2::safe::consistency::IConsistencyChecker* checker{nullptr};
-
-    if (serializedEngine == nullptr || engineSize == 0)
-    {
-        return checker;
-    }
-
-#if !defined(_WIN32)
-    constexpr char symbolName[] = "createConsistencyChecker";
-    typedef ErrorCode (*CreateCheckerFn)(nvinfer2::safe::consistency::IConsistencyChecker * &checker,
-        sample::SampleSafeRecorder & recorder, void const* data, size_t size,
-        std::vector<std::string> const& pluginBuildLibPath);
-    if (hasSafeRuntime())
-    {
-        auto createFn = reinterpret_cast<CreateCheckerFn>(dlsym(consistencyCheckerLibrary.get(), symbolName));
-        if (createFn != nullptr)
-        {
-            ErrorCode errorCode = createFn(checker, recorder, serializedEngine, engineSize, pluginBuildLibPath);
-            if (errorCode != ErrorCode::kSUCCESS)
-            {
-                return nullptr;
-            }
-        }
-    }
-#endif
-    return checker;
-}
-#endif
 
 bool checkSafeEngine(
     void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibPath)
 {
-    if (!hasConsistencyChecker())
-    {
-        sample::gLogError << "Cannot perform consistency check because the checker is not loaded.." << std::endl;
-        return false;
-    }
-
-#if ENABLE_UNIFIED_BUILDER
-    sample::SampleSafeRecorder recorder{nvinfer2::safe::Severity::kINFO};
-    auto checker = std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker>(
-        createConsistencyChecker(recorder, serializedEngine, engineSize, pluginBuildLibPath));
-    if (checker.get() == nullptr)
-    {
-        sample::gLogError << "Failed to create consistency checker." << std::endl;
-        return false;
-    }
-    sample::gLogInfo << "Start consistency checking." << std::endl;
-    if (!checker->validate())
-    {
-        sample::gLogError << "Consistency validation failed." << std::endl;
-        return false;
-    }
-    sample::gLogInfo << "Consistency validation passed." << std::endl;
-    return true;
-#else
     return false;
-#endif
 }
 
 } // namespace sample

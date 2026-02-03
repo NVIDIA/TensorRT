@@ -277,6 +277,12 @@ namespace tensorrt
         PY_ASSERT_RUNTIME_ERROR(status, "Failed to set Attention's AttentionNormalizationOp");
     }
 
+    static void kv_cache_update_layer_set_cache_mode(IKVCacheUpdateLayer& self, KVCacheMode mode)
+    {
+        bool const status = self.setCacheMode(mode);
+        PY_ASSERT_RUNTIME_ERROR(status, "Failed to set KVCacheUpdateLayer's KVCacheMode");
+    }
+
     void bindGraph(py::module& m)
     {
         // Bind to a Python enum called LayerType.
@@ -334,6 +340,8 @@ namespace tensorrt
             .value("DYNAMIC_QUANTIZE", LayerType::kDYNAMIC_QUANTIZE, LayerTypeDoc::DYNAMIC_QUANTIZE)
             .value("ATTENTION_INPUT", LayerType::kATTENTION_INPUT, LayerTypeDoc::ATTENTION_INPUT)
             .value("ATTENTION_OUTPUT", LayerType::kATTENTION_OUTPUT, LayerTypeDoc::ATTENTION_OUTPUT)
+            .value("ROTARY_EMBEDDING", LayerType::kROTARY_EMBEDDING, LayerTypeDoc::ROTARY_EMBEDDING)
+            .value("KV_CACHE_UPDATE", LayerType::kKVCACHE_UPDATE, LayerTypeDoc::KV_CACHE_UPDATE)
         ; // LayerType
 
         py::enum_<TensorFormat>(m, "TensorFormat", TensorFormatDoc::descr, py::arithmetic{}, py::module_local())
@@ -480,16 +488,19 @@ namespace tensorrt
 
         py::class_<IQuantizeLayer, ILayer, std::unique_ptr<IQuantizeLayer, py::nodelete>>(m, "IQuantizeLayer", IQuantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IQuantizeLayer::getAxis, &IQuantizeLayer::setAxis)
+            .def_property("block_shape", &IQuantizeLayer::getBlockShape, &IQuantizeLayer::setBlockShape)
             .def_property("to_type", &IQuantizeLayer::getToType, &IQuantizeLayer::setToType)
         ;
 
         py::class_<IDequantizeLayer, ILayer, std::unique_ptr<IDequantizeLayer, py::nodelete>>(m, "IDequantizeLayer", IDequantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IDequantizeLayer::getAxis, &IDequantizeLayer::setAxis)
+            .def_property("block_shape", &IDequantizeLayer::getBlockShape, &IDequantizeLayer::setBlockShape)
             .def_property("to_type", &IDequantizeLayer::getToType, &IDequantizeLayer::setToType)
         ;
         py::class_<IDynamicQuantizeLayer, ILayer, std::unique_ptr<IDynamicQuantizeLayer, py::nodelete>>(m, "IDynamicQuantizeLayer", IDynamicQuantizeLayerDoc::descr, py::module_local())
             .def_property("axis", &IDynamicQuantizeLayer::getAxis, &IDynamicQuantizeLayer::setAxis)
             .def_property("block_size", &IDynamicQuantizeLayer::getBlockSize, &IDynamicQuantizeLayer::setBlockSize)
+            .def_property("block_shape", &IDynamicQuantizeLayer::getBlockShape, &IDynamicQuantizeLayer::setBlockShape)
             .def_property("to_type", &IDynamicQuantizeLayer::getToType, &IDynamicQuantizeLayer::setToType)
             .def_property("scale_type", &IDynamicQuantizeLayer::getScaleType, &IDynamicQuantizeLayer::setScaleType)
         ;
@@ -863,6 +874,7 @@ namespace tensorrt
             .def_property("axes", &INormalizationLayer::getAxes, &INormalizationLayer::setAxes)
             .def_property("num_groups", &INormalizationLayer::getNbGroups, &INormalizationLayer::setNbGroups)
             .def_property("compute_precision", &INormalizationLayer::getComputePrecision, &INormalizationLayer::setComputePrecision)
+            .def_property_readonly("is_v2", &INormalizationLayer::isV2)
         ;
         py::class_<ISqueezeLayer, ILayer, std::unique_ptr<ISqueezeLayer, py::nodelete>>(m, "ISqueezeLayer", ISqueezeLayerDoc::descr, py::module_local())
             .def("set_input", &ISqueezeLayer::setInput, "index"_a, "tensor"_a, ISqueezeLayerDoc::set_input)
@@ -893,6 +905,7 @@ namespace tensorrt
             .def_property("decomposable", &IAttention::getDecomposable, &IAttention::setDecomposable)
             .def_property("causal", &IAttention::getCausal, &IAttention::setCausal)
             .def_property("name", &IAttention::getName, &IAttention::setName)
+            .def_property("metadata", &IAttention::getMetadata, &IAttention::setMetadata)
             .def_property("normalization_quantize_scale", &IAttention::getNormalizationQuantizeScale, &IAttention::setNormalizationQuantizeScale)
             .def_property("normalization_quantize_to_type", &IAttention::getNormalizationQuantizeToType, &IAttention::setNormalizationQuantizeToType)
             .def_property_readonly("num_inputs", &IAttention::getNbInputs)
@@ -910,6 +923,21 @@ namespace tensorrt
         ;
 
         py::class_<IAttentionOutputLayer, IAttentionBoundaryLayer, std::unique_ptr<IAttentionOutputLayer, py::nodelete>>(m, "IAttentionOutputLayer", IAttentionOutputLayerDoc::descr, py::module_local())
+        ;
+
+        py::class_<IRotaryEmbeddingLayer, ILayer, std::unique_ptr<IRotaryEmbeddingLayer, py::nodelete>>(m, "IRotaryEmbeddingLayer", IRotaryEmbeddingLayerDoc::descr, py::module_local())
+            .def_property("interleaved", &IRotaryEmbeddingLayer::getInterleaved, &IRotaryEmbeddingLayer::setInterleaved)
+            .def_property("rotary_embedding_dim", &IRotaryEmbeddingLayer::getRotaryEmbeddingDim, &IRotaryEmbeddingLayer::setRotaryEmbeddingDim)
+            .def("set_input", &IRotaryEmbeddingLayer::setInput, "index"_a, "tensor"_a, IRotaryEmbeddingLayerDoc::set_input)
+        ;
+
+        py::enum_<KVCacheMode>(m, "KVCacheMode", KVCacheModeDoc::descr, py::module_local())
+            .value("LINEAR", KVCacheMode::kLINEAR, KVCacheModeDoc::LINEAR)
+        ;
+
+        py::class_<IKVCacheUpdateLayer, ILayer, std::unique_ptr<IKVCacheUpdateLayer, py::nodelete>>(m, "IKVCacheUpdateLayer", IKVCacheUpdateLayerDoc::descr, py::module_local())
+            .def_property("cache_mode", &IKVCacheUpdateLayer::getCacheMode, &kv_cache_update_layer_set_cache_mode)
+            .def("set_input", &IKVCacheUpdateLayer::setInput, "index"_a, "tensor"_a, IKVCacheUpdateLayerDoc::set_input)
         ;
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
@@ -1024,6 +1052,8 @@ namespace tensorrt
                 INetworkDefinitionDoc::add_dequantize, py::return_value_policy::reference_internal)
             .def("add_dynamic_quantize",  static_cast<IDynamicQuantizeLayer* (INetworkDefinition::*)(ITensor&, int32_t, int32_t, DataType, DataType)>(&INetworkDefinition::addDynamicQuantize), "input"_a, "axis"_a, "block_size"_a, "output_type"_a, "scale_type"_a,
                 INetworkDefinitionDoc::add_dynamic_quantize, py::return_value_policy::reference_internal)
+            .def("add_dynamic_quantize_v2",  static_cast<IDynamicQuantizeLayer* (INetworkDefinition::*)(ITensor&, Dims const&, DataType, DataType)>(&INetworkDefinition::addDynamicQuantizeV2), "input"_a, "block_shape"_a, "output_type"_a, "scale_type"_a,
+                INetworkDefinitionDoc::add_dynamic_quantize_v2, py::return_value_policy::reference_internal)
             .def("add_if_conditional", &INetworkDefinition::addIfConditional, INetworkDefinitionDoc::add_if_conditional,
                 py::return_value_policy::reference_internal)
             .def("add_einsum", lambdas::add_einsum, "inputs"_a, "equation"_a, INetworkDefinitionDoc::add_einsum,
@@ -1041,6 +1071,10 @@ namespace tensorrt
             .def("add_cumulative", &INetworkDefinition::addCumulative, "input"_a, "axis"_a, "op"_a, "exclusive"_a, "reverse"_a,
                 INetworkDefinitionDoc::add_cumulative, py::return_value_policy::reference_internal)
             .def("add_attention", &INetworkDefinition::addAttention, "query"_a, "key"_a, "value"_a, "norm_op"_a, "causal"_a, INetworkDefinitionDoc::add_attention, py::return_value_policy::reference_internal)
+            .def("add_rotary_embedding", &INetworkDefinition::addRotaryEmbedding, "input"_a, "cos_cache"_a, "sin_cache"_a, "interleaved"_a, "rotary_embedding_dim"_a,
+                INetworkDefinitionDoc::add_rotary_embedding, py::return_value_policy::reference_internal)
+            .def("add_kv_cache_update", &INetworkDefinition::addKVCacheUpdate, "cache"_a, "update"_a, "write_indices"_a, "cache_mode"_a,
+                INetworkDefinitionDoc::add_kv_cache_update, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)
@@ -1067,6 +1101,8 @@ namespace tensorrt
             .def("unmark_unfused_tensors_as_debug_tensors", &INetworkDefinition::unmarkUnfusedTensorsAsDebugTensors, INetworkDefinitionDoc::unmark_unfused_tensors_as_debug_tensors)
             .def("add_squeeze", &INetworkDefinition::addSqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_squeeze, py::return_value_policy::reference_internal)
             .def("add_unsqueeze", &INetworkDefinition::addUnsqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_unsqueeze, py::return_value_policy::reference_internal)
+            .def("add_normalization_v2", &INetworkDefinition::addNormalizationV2, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization_v2,
+                py::return_value_policy::reference_internal)
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization
             .def("serialize", lambdas::network_serialize, INetworkDefinitionDoc::serialize)

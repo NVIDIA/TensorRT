@@ -272,20 +272,6 @@ WeightStreamingBudget stringToValue<WeightStreamingBudget>(std::string const& op
     return budget;
 }
 
-#if ENABLE_UNIFIED_BUILDER
-template <>
-samplesSafeCommon::SafetyPluginLibraryArgument stringToValue<samplesSafeCommon::SafetyPluginLibraryArgument>(
-    std::string const& option)
-{
-    samplesSafeCommon::SafetyPluginLibraryArgument argument;
-    auto status = parseSafetyPluginArgument(option, argument);
-    if (!status)
-    {
-        throw std::invalid_argument(std::string("Invalid Safety plugin library option: " + option));
-    }
-    return argument;
-}
-#endif
 
 
 template <typename T>
@@ -1099,8 +1085,8 @@ void getTempfileControls(Arguments& arguments, char const* argument, TempfileCon
 
 void BuildOptions::parse(Arguments& arguments)
 {
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument)
-    {
+    getAndDelOption(arguments, "--cpuOnly", cpuOnly);
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -1225,11 +1211,11 @@ void BuildOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--best", best);
     if (best)
     {
-        int8 = (samplesCommon::getSmVersion() != 0x0a03);
+        int8 = (cpuOnly ? true : samplesCommon::getSmVersion() != 0x0a03);
         fp16 = true;
 
         // BF16 only supported on Ampere+
-        if (samplesCommon::getSmVersion() >= 0x0800)
+        if (cpuOnly || samplesCommon::getSmVersion() >= 0x0800)
         {
             bf16 = true;
         }
@@ -1263,6 +1249,7 @@ void BuildOptions::parse(Arguments& arguments)
     }
 
     getAndDelOption(arguments, "--uint8AsymmetricQuantizationDLA", enableUInt8AsymmetricQuantizationDLA);
+    getAndDelOption(arguments, "--enablePluginOverride", enablePluginOverride);
     getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
     getAndDelOption(arguments, "--noCompilationCache", disableCompilationCache);
     getAndDelOption(arguments, "--monitorMemory", enableMonitorMemory);
@@ -1310,7 +1297,7 @@ void BuildOptions::parse(Arguments& arguments)
                             << std::endl;
     }
     // Print a message to tell users that --noTF32 can be added to improve accuracy with performance cost.
-    if (samplesCommon::getSmVersion() >= 0x0800)
+    if (cpuOnly || samplesCommon::getSmVersion() >= 0x0800)
     {
         if (!(stronglyTyped || fp16 || bf16 || int8 || fp8 || int4))
         {
@@ -1660,6 +1647,18 @@ void BuildOptions::parse(Arguments& arguments)
         throw std::invalid_argument(
             "Remote auto tuning is not supported in standard build. Use --safe flag to enable it.");
     }
+
+    if (cpuOnly)
+    {
+        if (!safe)
+        {
+            throw std::invalid_argument("CPU-only mode (--cpuOnly) requires --safe flag to be enabled.");
+        }
+        if (remoteAutoTuningConfig.empty())
+        {
+            throw std::invalid_argument("CPU-only mode (--cpuOnly) requires --remoteAutoTuningConfig to be specified.");
+        }
+    }
 }
 
 void SystemOptions::parse(Arguments& arguments)
@@ -1672,10 +1671,6 @@ void SystemOptions::parse(Arguments& arguments)
         sample::gLogWarning << "--plugins flag has been deprecated, use --staticPlugins flag instead." << std::endl;
         plugins.emplace_back(pluginName);
     }
-    while (getAndDelOption(arguments, "--staticPlugins", pluginName))
-    {
-        plugins.emplace_back(pluginName);
-    }
     while (getAndDelOption(arguments, "--setPluginsToSerialize", pluginName))
     {
         setPluginsToSerialize.emplace_back(pluginName);
@@ -1684,14 +1679,13 @@ void SystemOptions::parse(Arguments& arguments)
     {
         dynamicPlugins.emplace_back(pluginName);
     }
-#if ENABLE_UNIFIED_BUILDER
-    samplesSafeCommon::SafetyPluginLibraryArgument safetyPluginOption;
-    while (getAndDelOption(arguments, "--safetyPlugins", safetyPluginOption))
-    {
-        safetyPlugins.emplace_back(std::move(safetyPluginOption));
-    }
-#endif // ENABLE_UNIFIED_BUILDER
     getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
+    std::string staticPluginName;
+    // Enable static plugin as internal option for TRT_WINML.
+    while (getAndDelOption(arguments, "--staticPlugins", staticPluginName))
+    {
+        plugins.emplace_back(staticPluginName);
+    }
 }
 
 constexpr int64_t WeightStreamingBudget::kDISABLE;
@@ -1893,28 +1887,20 @@ void AllOptions::parse(Arguments& arguments)
         if (build.buildDLAStandalone)
         {
             build.skipInference = true;
-            auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt, bool isInput)
-            {
-                return fmt.empty()
-                    ? false
-                    : std::all_of(fmt.begin(), fmt.end(),
-                        [&](IOFormat const& pair)
-                        {
-                            bool supported{false};
-                            bool const isDLA_LINEAR{
-                                pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kDLA_LINEAR)};
-                            bool const isHWC4{pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW4)
-                                || pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kDLA_HWC4)};
-                            bool const isCHW32{
-                                pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW32)};
-                            bool const isCHW16{
-                                pair.second == 1U << static_cast<int32_t>(nvinfer1::TensorFormat::kCHW16)};
-                            supported |= pair.first == nvinfer1::DataType::kINT8
-                                && (isDLA_LINEAR || (isInput ? isHWC4 : false) || isCHW32);
-                            supported |= pair.first == nvinfer1::DataType::kHALF
-                                && (isDLA_LINEAR || (isInput ? isHWC4 : false) || isCHW16);
-                            return supported;
-                        });
+            auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt, bool isInput) {
+                return !fmt.empty() && std::all_of(fmt.begin(), fmt.end(), [&](IOFormat const& pair) {
+                    auto const& [dataType, tensorFormats] = pair;
+                    using TF = nvinfer1::TensorFormat;
+                    using nvinfer1::DataType;
+
+                    bool const isDLA_LINEAR{tensorFormats == 1U << static_cast<int32_t>(TF::kDLA_LINEAR)};
+                    bool const isHWC4{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW4)
+                        || tensorFormats == 1U << static_cast<int32_t>(TF::kDLA_HWC4)};
+                    bool const isCHW32{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW32)};
+                    bool const isCHW16{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW16)};
+                    return (dataType == DataType::kINT8 && (isDLA_LINEAR || (isInput && isHWC4) || isCHW32))
+                        || (dataType == DataType::kHALF && (isDLA_LINEAR || (isInput && isHWC4) || isCHW16));
+                });
             };
             if (!checkSafeDLAFormats(build.inputFormats, true) || !checkSafeDLAFormats(build.outputFormats, false))
             {
@@ -2304,6 +2290,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
           "ONNX Plugin InstanceNorm: " << boolToEnabled(options.pluginInstanceNorm)                                     << std::endl <<
           "ONNX kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA flag: " << boolToEnabled(options.enableUInt8AsymmetricQuantizationDLA) << std::endl <<
+          "ONNX kENABLE_PLUGIN_OVERRIDE flag: " << boolToEnabled(options.enablePluginOverride) << std::endl <<
           "TensorRT runtime: " << options.useRuntime                                                                    << std::endl <<
           "Lean DLL Path: " << options.leanDLLPath                                                                      << std::endl <<
           "Tempfile Controls: "; printTempfileControls(os, options.tempfileControls)                                    << std::endl <<
@@ -2323,6 +2310,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "timingCacheFile: " << options.timingCacheFile                                                                << std::endl <<
           "Enable Compilation Cache: "<< boolToEnabled(!options.disableCompilationCache) << std::endl <<
           "Enable Monitor Memory: "<< boolToEnabled(options.enableMonitorMemory) << std::endl <<
+          "CPU Only Mode: "<< boolToEnabled(options.cpuOnly) << std::endl <<
           "errorOnTimingCacheMiss: "  << boolToEnabled(options.errorOnTimingCacheMiss)                                  << std::endl <<
           "Preview Features: "; printPreviewFlags(os, options)                                                          << std::endl <<
           "MaxAuxStreams: "   << options.maxAuxStreams                                                                  << std::endl <<
@@ -2622,6 +2610,8 @@ void BuildOptions::help(std::ostream& os)
           "                                     onnx parser to allow UINT8 as a quantization data type and import zero point values directly"       "\n"
           "                                     without converting to float type or all-zero values. Should only be set with DLA software version"  "\n"
           "                                     >= 3.16."                                                                                           "\n"
+          "  --enablePluginOverride             Set `kENABLE_PLUGIN_OVERRIDE` to true in the ONNX parser. This allows the ONNX parser to use"       "\n"
+          "                                     a plugin implementation over the standard ONNX operator implementation when parsing."               "\n"
         R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"        "\n"
           "                                     not support building an engine."                                                                    "\n"
         R"(                                         runtime::= "full"|"lean"|"dispatch")"                                                           "\n"
@@ -2630,6 +2620,9 @@ void BuildOptions::help(std::ostream& os)
           "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
           "                                     valid lean runtime to use when loading the engine."     "\n"
           "  --monitorMemory                    Enable memory monitor report for debugging usage. (default = disabled)"                             "\n"
+          "                                     Disables CUDA timing cache and profile streams. Only allowed when building"                       "\n"
+          "                                     a safe engine (--safe) with remote auto-tuning (--remoteAutoTuningConfig)."                      "\n"
+          "                                     (default = disabled)"                                                                             "\n"
           "  --sparsity=spec                    Control sparsity (default = disabled). "                                                            "\n"
         R"(                                     Sparsity: spec ::= "disable", "enable", "force")"                                                   "\n"
           "                                     Note: Description about each of these options is as below"                                          "\n"

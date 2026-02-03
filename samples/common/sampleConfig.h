@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -321,7 +321,7 @@ public:
     bool isDebug() const noexcept
     {
 #if ONNX_DEBUG
-        return (std::getenv("ONNX_DEBUG") ? true : false);
+        return std::getenv("ONNX_DEBUG") != nullptr;
 #else
         return false;
 #endif

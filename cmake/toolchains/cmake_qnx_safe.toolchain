@@ -1,0 +1,135 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+set(CMAKE_SYSTEM_NAME QNX)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+set(CMAKE_C_COMPILER_TARGET gcc_ntoaarch64le)
+set(CMAKE_CXX_COMPILER_TARGET gcc_ntoaarch64le_cxx)
+
+# Ensure that the QNX toolchain location was provided.
+if(NOT DEFINED ENV{QNX_HOST} OR NOT DEFINED ENV{QNX_TARGET})
+    message(FATAL_ERROR "The environment variables QNX_HOST and QNX_TARGET must both be provided to build on QNX.")
+endif()
+
+set(QNX_HOST $ENV{QNX_HOST})
+set(QNX_TARGET $ENV{QNX_TARGET})
+set(CMAKE_SYSROOT $ENV{QNX_TARGET})
+
+if(NOT EXISTS ${QNX_HOST} OR NOT EXISTS ${QNX_TARGET})
+    message(FATAL_ERROR "The QNX_HOST (${QNX_HOST}) or QNX_TARGET (${QNX_TARGET}) paths do not exist.")
+endif()
+
+if(NOT DEFINED ENV{CUDA})
+    message(FATAL_ERROR "The environment variable CUDA must be defined to specify the CUDA version to use for QNX-Safe builds.")
+endif()
+
+if($ENV{CUDA} MATCHES "cuda-11.4")
+    set(QNX_VERSION 7.1.0 CACHE STRING "")
+    set(QNX_GCC_VERSION "8.3.0" CACHE STRING "")
+else()
+    set(QNX_VERSION 8.0.0 CACHE STRING "")
+    set(QNX_GCC_VERSION "12.2.0" CACHE STRING "")
+endif()
+
+set(QNX_TRIPLE aarch64-unknown-nto-qnx${QNX_VERSION})
+
+set(CMAKE_C_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-gcc)
+set(CMAKE_CXX_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-g++)
+set(CMAKE_CUDA_HOST_COMPILER ${QNX_HOST}/usr/bin/${QNX_TRIPLE}-g++ CACHE FILEPATH "")
+
+# These linker behaviors aren't setup by default for QNX
+# They work the same as they would on Linux
+set(CMAKE_LINK_LIBRARY_USING_WHOLE_ARCHIVE
+    "-Wl,--whole-archive <LIBRARY> -Wl,--no-whole-archive"
+)
+set(CMAKE_LINK_LIBRARY_USING_WHOLE_ARCHIVE_SUPPORTED TRUE)
+
+set(CMAKE_LINK_GROUP_USING_RESCAN
+    "LINKER:--start-group"
+    "LINKER:--end-group"
+)
+set(CMAKE_LINK_GROUP_USING_RESCAN_SUPPORTED TRUE)
+
+# Setup required flags for QNX compilation.
+set(TRT_MAGIC_QNX_FLAGS "-D_XOPEN_SOURCE=700 -D_POSIX_C_SOURCE=2 -D_QNX_SOURCE -DQNX=1 -D__aarch64__ -DIS_QNX_SAFE=1")
+
+# The QNX8 compiler supplies this define by default, but we need to add it on QNX7.
+if(${QNX_VERSION} VERSION_LESS "8.0.0")
+    set(TRT_MAGIC_QNX_FLAGS "${TRT_MAGIC_QNX_FLAGS} -D__QNX__")
+endif()
+
+# QNX-Specific include directories.
+include_directories(BEFORE SYSTEM
+    ${QNX_HOST}/usr/lib/gcc/${QNX_TRIPLE}/${QNX_GCC_VERSION}/include
+    ${QNX_TARGET}/usr/include/c++/${QNX_GCC_VERSION}/${QNX_TRIPLE}
+    # ${QNX_TARGET}/usr/include/c++/${QNX_GCC_VERSION}
+    ${QNX_TARGET}/usr/include
+    /usr/include/aarch64-unknown-nto-qnx-safety # TensorRT Safety Headers are installed here.
+)
+
+set(CMAKE_C_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
+set(CMAKE_CXX_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
+set(CMAKE_CUDA_FLAGS_INIT ${TRT_MAGIC_QNX_FLAGS})
+
+# The CMake test compilation depends on linking against cudadevrt, which is unavailable in SafeCUDA.
+# This allows us to test that the compiler works without testing the behavior of the linker.
+set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
+
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+# CUDA configuration
+if(NOT DEFINED CUDA_ROOT AND DEFINED ENV{CUDA_ROOT})
+    set(CUDA_ROOT "$ENV{CUDA_ROOT}")
+endif()
+
+if(NOT EXISTS ${CUDA_ROOT})
+    message(FATAL_ERROR "CUDA_ROOT not defined or path '${CUDA_ROOT}' does not exist. CUDA is required for TensorRT.")
+endif()
+
+if(NOT DEFINED CMAKE_CUDA_COMPILER)
+    set(CMAKE_CUDA_COMPILER "${CUDA_ROOT}/bin/nvcc" CACHE FILEPATH "Path to nvcc compiler")
+endif()
+
+# We need to set a couple additional flags to compile with SafeCUDA.
+# 1. SafeCUDA does not contain cudadevrt, so we need to disable it by setting --cudadevrt=none
+# 2. SafeCUDA depends on the QNX Slogger2 library, which must be linked via -lslog2. It is a system library for QNX-Safe.
+set(CMAKE_CUDA_FLAGS_INIT "${CMAKE_CUDA_FLAGS_INIT} --cudadevrt=none -lslog2")
+
+# We need to explicitly populate `CMAKE_CUDA_FLAGS` with the initial flags so they propagate to the CMake Compiler Identification phase.
+# Otherwise, they will only be initialized afterwards, which will cause the identification to fail.
+set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS_INIT})
+
+# The CUDA setup for TRT-OSS is a bit wonky, so we enable the includes globally.
+include_directories(BEFORE SYSTEM
+    ${CUDA_ROOT}/targets/aarch64-qnx-safe/include
+)
+
+link_directories(
+    ${CUDA_ROOT}/targets/aarch64-qnx-safe/lib
+    ${CUDA_ROOT}/targets/aarch64-qnx-safe/lib/stubs
+)
+
+add_link_options(
+    "LINKER:-rpath-link=${CUDA_ROOT}/targets/aarch64-qnx-safe/lib"
+    "LINKER:-rpath-link=${CUDA_ROOT}/targets/aarch64-qnx-safe/lib/stubs"
+)
+
+# Disable CMake-based cudart support as we handle the linkage manually.
+set(CMAKE_CUDA_RUNTIME_LIBRARY "none" CACHE INTERNAL "The used CUDA runtime library type. Disabled by TRT as TRT manages the linkage itself.")

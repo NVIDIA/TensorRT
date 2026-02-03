@@ -533,6 +533,7 @@ class AutoencoderKLWanModel(base_model.BaseModel):
             bf16=bf16,
             max_batch_size=max_batch_size,
         )
+        self.is_wan_pipeline = version.startswith("wan")
         self.subfolder = "vae"
         self.vae_decoder_model_dir = load.get_checkpoint_dir(
             self.framework_model_dir, self.version, self.pipeline, self.subfolder
@@ -544,9 +545,13 @@ class AutoencoderKLWanModel(base_model.BaseModel):
             self.config = AutoencoderKLWan.load_config(self.vae_decoder_model_dir)
 
     def get_model(self, torch_inference=""):
-        model_opts = (
-            {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
-        )
+        if self.is_wan_pipeline:
+            print(f"[I] Using float32 precision for Wan 2.2 VAE decoder")
+            model_opts = {"torch_dtype": torch.float32}
+        else:
+            model_opts = (
+                {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
+            )
         if not load.is_model_cached(self.vae_decoder_model_dir, model_opts, self.hf_safetensor):
             model = AutoencoderKLWan.from_pretrained(
                 self.path,
@@ -598,7 +603,6 @@ class AutoencoderKLWanModel(base_model.BaseModel):
         return torch.randn(
             batch_size, self.config["z_dim"], 1, latent_height, latent_width, dtype=dtype, device=self.device
         )
-
 
 class AutoencoderKLWanEncoderModelWrapper(torch.nn.Module):
     def __init__(self, model):

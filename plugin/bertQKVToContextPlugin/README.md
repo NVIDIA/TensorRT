@@ -1,4 +1,5 @@
-# bertQKVToContextPlugin
+# bertQKVToContextPlugin [DEPRECATED]
+**This plugin has been deprecated since TensorRT 10.15 and will be removed in a future release. No alternatives are planned to be provided.**
 
 **Table Of Contents**
 - [Description](#description)
@@ -57,7 +58,6 @@ The parameters are defined below and consists of the following attributes:
 |`float`   |`input_qkv_scale`                        |  3, 6                             |The int8 scale for the input qkv tensor when explicit precision is used, default 1.f.
 |`float`   |`output_ctx_scale`                       |  3, 6                             |The int8 scale for the output context tensor when explicit precision is used, default 1.f.
 
-Note: version 1, 2, 3 are deprecated and will be removed in a future release; please use their corresponding updated versions: 4, 5, 6 respectively.
 
 ## Additional resources
 
@@ -72,6 +72,8 @@ documentation.
 
 
 ## Changelog
+Oct 2025
+Deprecated this plugin. No alternatives are planned to be provided.
 
 Jan 2025
 Added precompiled kernel cubins for gb100 (compute capability 10.0) and gb20x (compute capability 12.0) platforms.

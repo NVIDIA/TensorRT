@@ -136,7 +136,7 @@ public:
     virtual bool isDebug() const noexcept
     {
 #if ONNX_DEBUG
-        return (std::getenv("ONNX_DEBUG") ? true : false);
+        return std::getenv("ONNX_DEBUG") != nullptr;
 #else
         return false;
 #endif

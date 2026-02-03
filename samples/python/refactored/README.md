@@ -23,5 +23,8 @@ This directory contains refactored and improved versions of TensorRT samples, de
 
 # Changelog
 
+October 2025
+Migrate to strongly typed APIs.
+
 August 2025
 Removed support for Python versions < 3.10.

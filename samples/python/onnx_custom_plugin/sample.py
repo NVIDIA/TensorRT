@@ -56,7 +56,7 @@ TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 def build_engine(model_path):
 
     builder = trt.Builder(TRT_LOGGER)
-    network = builder.create_network(0)
+    network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))
     config = builder.create_builder_config()
     config.set_tactic_sources(
         config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS)

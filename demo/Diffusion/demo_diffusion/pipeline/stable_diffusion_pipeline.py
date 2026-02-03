@@ -80,12 +80,7 @@ TRT_LOGGER = trt.Logger(trt.Logger.ERROR)
 class StableDiffusionPipeline:
     SCHEDULER_DEFAULTS = {
         "1.4": "PNDM",
-        "1.5": "PNDM",
         "dreamshaper-7": "PNDM",
-        "2.0-base": "DDIM",
-        "2.0": "DDIM",
-        "2.1-base": "PNDM",
-        "2.1": "DDIM",
         "xl-1.0" : "Euler",
         "xl-turbo": "EulerA",
         "svd-xt-1.1": "Euler",
@@ -96,7 +91,7 @@ class StableDiffusionPipeline:
     """
     def __init__(
         self,
-        version='1.5',
+        version='1.4',
         pipeline_type=PIPELINE_TYPE.TXT2IMG,
         max_batch_size=16,
         denoising_steps=30,
@@ -122,7 +117,7 @@ class StableDiffusionPipeline:
 
         Args:
             version (str):
-                The version of the pipeline. Should be one of [1.4, 1.5, 2.0, 2.0-base, 2.1, 2.1-base]
+                The version of the pipeline. Should be one of [1.4, SDXL]
             pipeline_type (PIPELINE_TYPE):
                 Type of current pipeline.
             max_batch_size (int):
@@ -185,7 +180,7 @@ class StableDiffusionPipeline:
         self.pipeline_type = pipeline_type
         if self.pipeline_type.is_txt2img():
             self.stages = ['clip','unet','vae']
-        elif self.pipeline_type.is_img2img() or self.pipeline_type.is_inpaint():
+        elif self.pipeline_type.is_img2img():
             self.stages = ['vae_encoder', 'clip','unet','vae']
         elif self.pipeline_type.is_sd_xl_base():
             self.stages = ['clip', 'clip2', 'unetxl']
@@ -292,8 +287,6 @@ class StableDiffusionPipeline:
         del self.stream
 
     def cachedModelName(self, model_name):
-        if self.pipeline_type.is_inpaint():
-            model_name += '_inpaint'
         return model_name
 
     def getOnnxPath(self, model_name, onnx_dir, opt=True, suffix=''):
@@ -463,12 +456,12 @@ class StableDiffusionPipeline:
         use_int8 = dict.fromkeys(model_names, False)
         use_fp8 = dict.fromkeys(model_names, False)
         if int8:
-            assert self.pipeline_type.is_sd_xl_base() or self.version in ["1.4", "1.5", "2.1", "2.1-base"], "int8 quantization only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipeline"
+            assert self.pipeline_type.is_sd_xl_base() or self.version == "1.4", "int8 quantization only supported for SDXL and SD1.4 pipeline"
             model_name = 'unetxl' if self.pipeline_type.is_sd_xl() else 'unet'
             use_int8[model_name] = True
             model_suffix[model_name] += f"-int8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
         elif fp8:
-            assert self.pipeline_type.is_sd_xl() or self.version in ["1.4", "1.5", "2.1", "2.1-base"], "fp8 quantization only supported for SDXL, SD1.4, SD1.5 and SD2.1 pipeline"
+            assert self.pipeline_type.is_sd_xl() or self.version == "1.4", "fp8 quantization only supported for SDXL and SD1.4 pipeline"
             model_name = 'unetxl' if self.pipeline_type.is_sd_xl() else 'unet'
             use_fp8[model_name] = True
             model_suffix[model_name] += f"-fp8.l{quantization_level}.bs2.s{self.denoising_steps}.c{calibration_size}.p{quantization_percentile}.a{quantization_alpha}"
@@ -552,7 +545,7 @@ class StableDiffusionPipeline:
                                 self.denoising_steps
                             )
                         elif use_fp8[model_name]:
-                            quant_config = SD_FP8_FP32_DEFAULT_CONFIG if self.version == "2.1" else SD_FP8_FP16_DEFAULT_CONFIG
+                            quant_config = SD_FP8_FP16_DEFAULT_CONFIG
 
                         # Handle LoRA
                         if do_lora_merge[model_name]:
@@ -931,7 +924,6 @@ class StableDiffusionPipeline:
         image_width,
         input_image=None,
         image_strength=0.75,
-        mask_image=None,
         controlnet_scales=None,
         aesthetic_score=6.0,
         negative_aesthetic_score=2.5,
@@ -952,11 +944,9 @@ class StableDiffusionPipeline:
             image_width (int):
                 Width (in pixels) of the image to be generated. Must be a multiple of 8.
             input_image (image):
-                Input image used to initialize the latents or to be inpainted.
+                Input image used to initialize the latents.
             image_strength (float):
                 Strength of transformation applied to input_image. Must be between 0 and 1.
-            mask_image (image):
-                Mask image containg the region to be inpainted.
             controlnet_scales (torch.Tensor)
                 A tensor which containes ControlNet scales, essential for multi ControlNet.
                 Must be equal to number of Controlnets.
@@ -1008,7 +998,7 @@ class StableDiffusionPipeline:
                 denoise_kwargs.update({'controlnet_imgs': input_image, 'controlnet_scales': controlnet_scales})
 
             # Pre-process and VAE encode input image
-            if self.pipeline_type.is_img2img() or self.pipeline_type.is_inpaint() or self.pipeline_type.is_sd_xl_refiner():
+            if self.pipeline_type.is_img2img() or self.pipeline_type.is_sd_xl_refiner():
                 assert input_image != None
                 # Initialize timesteps and pre-process input image
                 timesteps, num_inference_steps = self.get_timesteps(self.denoising_steps, image_strength)
@@ -1021,15 +1011,6 @@ class StableDiffusionPipeline:
                 # Add noise to latents using timesteps
                 noise = torch.randn(image_latents.shape, generator=self.generator, device=self.device, dtype=torch.float32)
                 latents = self.scheduler.add_noise(image_latents, noise, latent_timestep)
-            elif self.pipeline_type.is_inpaint():
-                mask, mask_image = self.preprocess_images(
-                    batch_size, image_module.prepare_mask_and_masked_image(input_image, mask_image)
-                )
-                mask = torch.nn.functional.interpolate(mask, size=(latent_height, latent_width))
-                mask = torch.cat([mask] * 2)
-                masked_image_latents = self.encode_image(mask_image)
-                masked_image_latents = torch.cat([masked_image_latents] * 2)
-                denoise_kwargs.update({'mask': mask, 'masked_image_latents': masked_image_latents})
 
             # CLIP text encoder(s)
             if self.pipeline_type.is_sd_xl():

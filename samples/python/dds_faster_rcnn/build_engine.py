@@ -58,7 +58,7 @@ class EngineBuilder:
         :param onnx_path: The path to the ONNX graph to load.
         """
 
-        self.network = self.builder.create_network(0)
+        self.network = self.builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))
         self.parser = trt.OnnxParser(self.network, self.trt_logger)
 
         onnx_path = os.path.realpath(onnx_path)

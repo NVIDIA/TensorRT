@@ -37,10 +37,8 @@ for model in models_to_import:
 
 
 def get_unet_embedding_dim(version, pipeline):
-    if version in ("1.4", "1.5", "dreamshaper-7"):
+    if version in ("1.4", "dreamshaper-7"):
         return 768
-    elif version in ("2.0", "2.0-base", "2.1", "2.1-base"):
-        return 1024
     elif version in ("xl-1.0", "xl-turbo") and pipeline.is_sd_xl_base():
         return 2048
     elif version in ("cascade"):
@@ -128,7 +126,7 @@ class UNetModel(base_model.BaseModel):
         )
         self.subfolder = "unet"
         self.controlnets = load.get_path(version, pipeline, controlnets) if controlnets else None
-        self.unet_dim = 9 if pipeline.is_inpaint() else 4
+        self.unet_dim = 4
         self.xB = 2 if do_classifier_free_guidance else 1  # batch multiplier
 
     def get_model(self, torch_inference=""):
@@ -324,7 +322,7 @@ class UNetXLModel(base_model.BaseModel):
             embedding_dim=get_unet_embedding_dim(version, pipeline),
         )
         self.subfolder = "unet"
-        self.unet_dim = 9 if pipeline.is_inpaint() else 4
+        self.unet_dim = 4
         self.time_dim = 5 if pipeline.is_sd_xl_refiner() else 6
         self.xB = 2 if do_classifier_free_guidance else 1  # batch multiplier
 

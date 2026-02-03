@@ -62,12 +62,6 @@ function(get_all_fatbin_archs OUT_VAR OUT_VAR_CROSS)
     list(APPEND ARCH_LIST "ptx")
     
     set(ARCH_LIST_CROSS ${ARCH_LIST})
-    # Cask5 does not include sm100 cubins. Exclude sm100 for both
-    # cross-OS support and native Windows build.
-    list(FILTER ARCH_LIST_CROSS EXCLUDE REGEX "sm100")
-    if(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_WIN10})
-        list(FILTER ARCH_LIST EXCLUDE REGEX "sm100")
-    endif()
     set(${OUT_VAR} ${ARCH_LIST} PARENT_SCOPE)
     set(${OUT_VAR_CROSS} ${ARCH_LIST_CROSS} PARENT_SCOPE)
 endfunction()

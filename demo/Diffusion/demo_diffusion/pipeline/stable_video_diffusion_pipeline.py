@@ -569,7 +569,7 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
 
         Args:
             input_image (image):
-                Input image used to initialize the latents or to be inpainted.
+                Input image used to initialize the latents.
             image_height (int):
                 Height (in pixels) of the image to be generated. Must be a multiple of 8.
             image_width (int):

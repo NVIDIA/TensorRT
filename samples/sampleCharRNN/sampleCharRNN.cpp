@@ -48,8 +48,8 @@
 #include "cuda_runtime_api.h"
 #include "logger.h"
 #include "sampleEngines.h"
+
 using namespace nvinfer1;
-using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_char_rnn";
 
@@ -171,7 +171,7 @@ protected:
     //!
     //! \brief Add inputs to the TensorRT network and configure LSTM layers using network definition API.
     //!
-    virtual nvinfer1::ILayer* addLSTMLayers(SampleUniquePtr<nvinfer1::INetworkDefinition>& network) = 0;
+    virtual nvinfer1::ILayer* addLSTMLayers(std::unique_ptr<nvinfer1::INetworkDefinition>& network) = 0;
 
     //!
     //! \brief Converts RNN weights from TensorFlow's format to TensorRT's format.
@@ -188,7 +188,7 @@ protected:
     SampleCharRNNParams mParams;
 
     nvinfer1::ITensor* addReshape(
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, nvinfer1::ITensor& tensor, nvinfer1::Dims dims);
+        std::unique_ptr<nvinfer1::INetworkDefinition>& network, nvinfer1::ITensor& tensor, nvinfer1::Dims dims);
 
 private:
     //!
@@ -199,8 +199,8 @@ private:
     //!
     //! \brief Create full model using the TensorRT network definition API and build the engine.
     //!
-    void constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config);
+    void constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+        std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config);
 
     //!
     //! \brief Looks up the embedding tensor for a given char and copies it to input buffer
@@ -210,7 +210,7 @@ private:
     //!
     //! \brief Perform one time step of inference with the TensorRT execution context
     //!
-    bool stepOnce(samplesCommon::BufferManager& buffers, SampleUniquePtr<nvinfer1::IExecutionContext>& context,
+    bool stepOnce(samplesCommon::BufferManager& buffers, std::unique_ptr<nvinfer1::IExecutionContext>& context,
         cudaStream_t& stream);
 
     //!
@@ -255,10 +255,10 @@ protected:
     //!
     //! \brief Add inputs to the TensorRT network and configure LSTM layers using network definition API.
     //!
-    nvinfer1::ILayer* addLSTMLayers(SampleUniquePtr<nvinfer1::INetworkDefinition>& network) final;
+    nvinfer1::ILayer* addLSTMLayers(std::unique_ptr<nvinfer1::INetworkDefinition>& network) final;
 
 private:
-    nvinfer1::ILayer* addLSTMCell(SampleUniquePtr<nvinfer1::INetworkDefinition>& network, const LstmIO& inputTensors,
+    nvinfer1::ILayer* addLSTMCell(std::unique_ptr<nvinfer1::INetworkDefinition>& network, const LstmIO& inputTensors,
         nvinfer1::ITensor* sequenceSize, const LstmParams& params, LstmIO& outputTensors);
 };
 
@@ -319,17 +319,18 @@ bool SampleCharRNNBase::build()
     if (mParams.loadEngine.empty())
     {
         auto builder
-            = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+            = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
         if (!builder)
         {
             return false;
         }
-        auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+        auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(
+            builder->createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)));
         if (!network)
         {
             return false;
         }
-        auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+        auto config = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
         if (!config)
         {
             return false;
@@ -350,8 +351,7 @@ bool SampleCharRNNBase::build()
     else
     {
         sample::gLogInfo << "Loading engine from: " << mParams.loadEngine << std::endl;
-        mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-            sample::loadEngine(mParams.loadEngine, -1, std::cerr), samplesCommon::InferDeleter());
+        mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(sample::loadEngine(mParams.loadEngine, -1, std::cerr));
     }
 
     if (!mEngine)
@@ -513,7 +513,7 @@ nvinfer1::Weights SampleCharRNNBase::convertRNNBias(nvinfer1::Weights input)
     return nvinfer1::Weights{input.type, ptr, input.count * 2};
 }
 
-nvinfer1::ILayer* SampleCharRNNLoop::addLSTMCell(SampleUniquePtr<nvinfer1::INetworkDefinition>& network,
+nvinfer1::ILayer* SampleCharRNNLoop::addLSTMCell(std::unique_ptr<nvinfer1::INetworkDefinition>& network,
     const LstmIO& inputTensors, nvinfer1::ITensor* sequenceSize, const LstmParams& params, LstmIO& outputTensors)
 {
     nvinfer1::ILoop* sequenceLoop = network->addLoop();
@@ -587,14 +587,14 @@ nvinfer1::ILayer* SampleCharRNNLoop::addLSTMCell(SampleUniquePtr<nvinfer1::INetw
 }
 
 nvinfer1::ITensor* SampleCharRNNBase::addReshape(
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, nvinfer1::ITensor& tensor, nvinfer1::Dims dims)
+    std::unique_ptr<nvinfer1::INetworkDefinition>& network, nvinfer1::ITensor& tensor, nvinfer1::Dims dims)
 {
     nvinfer1::IShuffleLayer* shuffle = network->addShuffle(tensor);
     shuffle->setReshapeDimensions(dims);
     return shuffle->getOutput(0);
 }
 
-nvinfer1::ILayer* SampleCharRNNLoop::addLSTMLayers(SampleUniquePtr<nvinfer1::INetworkDefinition>& network)
+nvinfer1::ILayer* SampleCharRNNLoop::addLSTMLayers(std::unique_ptr<nvinfer1::INetworkDefinition>& network)
 {
     nvinfer1::ILayer* dataOut{nullptr};
 
@@ -689,8 +689,8 @@ nvinfer1::ILayer* SampleCharRNNLoop::addLSTMLayers(SampleUniquePtr<nvinfer1::INe
 //! \param weightMap Map that contains all the weights required by the model.
 //! \param modelStream The stream within which the engine is serialized once built.
 //!
-void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config)
+void SampleCharRNNBase::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config)
 {
     // add RNNv2 layer and set its parameters
     auto rnn = addLSTMLayers(network);
@@ -725,9 +725,8 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
 
     // Mark the outputs for the network
     network->markOutput(*pred->getOutput(1));
-    pred->getOutput(1)->setType(nvinfer1::DataType::kINT32);
 
-    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
     if (!mParams.timingCacheFile.empty())
     {
         timingCache
@@ -736,7 +735,7 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
 
     sample::gLogInfo << "Done constructing network..." << std::endl;
 
-    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    std::unique_ptr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return;
@@ -754,8 +753,7 @@ void SampleCharRNNBase::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& bu
         return;
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(plan->data(), plan->size()));
 }
 
 //!
@@ -769,7 +767,7 @@ bool SampleCharRNNBase::infer()
     // Create RAII buffer manager object
     samplesCommon::BufferManager buffers(mEngine, 0);
 
-    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
 
     if (!context)
     {
@@ -864,7 +862,7 @@ void SampleCharRNNBase::copyEmbeddingToInput(samplesCommon::BufferManager& buffe
 //! \brief Perform one time step of inference with the TensorRT execution context
 //!
 bool SampleCharRNNBase::stepOnce(
-    samplesCommon::BufferManager& buffers, SampleUniquePtr<nvinfer1::IExecutionContext>& context, cudaStream_t& stream)
+    samplesCommon::BufferManager& buffers, std::unique_ptr<nvinfer1::IExecutionContext>& context, cudaStream_t& stream)
 {
     // Asynchronously copy data from host input buffers to device input buffers
     buffers.copyInputToDeviceAsync(stream);

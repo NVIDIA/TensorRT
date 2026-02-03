@@ -21,6 +21,7 @@ import torch
 from transformers import (
     AutoConfig,
     T5EncoderModel,
+    UMT5EncoderModel,
 )
 
 from demo_diffusion.model import base_model, load, optimizer
@@ -69,6 +70,7 @@ class T5Model(base_model.BaseModel):
         else:
             print(f"[I] Load T5Encoder Config from: {self.t5_model_dir}")
             self.config = AutoConfig.from_pretrained(self.t5_model_dir)
+        self.is_umt5 = getattr(self.config, 'model_type', '') == 'umt5'
         self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
@@ -78,8 +80,9 @@ class T5Model(base_model.BaseModel):
         model_opts = (
             {"torch_dtype": torch.float16} if self.fp16 else {"torch_dtype": torch.bfloat16} if self.bf16 else {}
         )
+        EncoderModelClass = UMT5EncoderModel if self.is_umt5 else T5EncoderModel
         if not load.is_model_cached(self.t5_model_dir, model_opts, self.hf_safetensor, model_name="model"):
-            model = T5EncoderModel.from_pretrained(
+            model = EncoderModelClass.from_pretrained(
                 self.path,
                 subfolder=self.subfolder,
                 use_safetensors=self.hf_safetensor,
@@ -88,8 +91,9 @@ class T5Model(base_model.BaseModel):
             ).to(self.device)
             model.save_pretrained(self.t5_model_dir, **model_opts)
         else:
-            print(f"[I] Load T5EncoderModel model from: {self.t5_model_dir}")
-            model = T5EncoderModel.from_pretrained(self.t5_model_dir, **model_opts).to(self.device)
+            print(f"[I] Load {EncoderModelClass.__name__} model from: {self.t5_model_dir}")
+            model = EncoderModelClass.from_pretrained(self.t5_model_dir, **model_opts).to(self.device)
+        
         model = optimizer.optimize_checkpoint(model, torch_inference)
         return model
 

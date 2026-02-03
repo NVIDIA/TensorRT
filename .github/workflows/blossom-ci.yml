@@ -42,7 +42,6 @@ jobs:
         github.actor == 'rajeevsrao' ||
         github.actor == 'kevinch-nv' ||
         github.actor == 'ttyio' ||
-        github.actor == 'samurdhikaru' ||
         github.actor == 'zerollzeng' ||
         github.actor == 'nvpohanh' ||
         github.actor == 'poweiw'

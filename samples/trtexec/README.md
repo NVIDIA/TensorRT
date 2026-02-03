@@ -38,7 +38,13 @@ data.tofile("data.bin")
 This binary file can be be loaded by trtexec during inference by using the `--loadInputs` flag:
 
 ```
-./trtexec --onnx=model.onnx --loadInputs="data":data.bin
+./trtexec --onnx=model.onnx --loadInputs=data:data.bin
+```
+
+The name of the input can be optionally wrapped in single quotes to support absolute paths on Windows:
+
+```
+.\trtexec.exe --onnx=model.onnx --loadInputs='data':C:\Users\TRT\data.bin
 ```
 
 ## Building `trtexec`

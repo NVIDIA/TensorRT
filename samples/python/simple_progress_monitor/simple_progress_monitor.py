@@ -126,7 +126,7 @@ TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 # The Onnx path is used for Onnx models.
 def build_engine_onnx(model_file):
     builder = trt.Builder(TRT_LOGGER)
-    network = builder.create_network(0)
+    network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))
     config = builder.create_builder_config()
     if not sys.stdout.isatty():
         print(

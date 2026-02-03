@@ -53,7 +53,6 @@
 #include <vector>
 
 using namespace nvinfer1;
-using samplesCommon::SampleUniquePtr;
 
 std::string const gSampleName = "TensorRT.sample_io_formats";
 
@@ -86,25 +85,6 @@ public:
             this->dims[3] = dims.d[3];
             this->dims[4] = 1;
         }
-        else if (format == TensorFormat::kCHW2)
-        {
-
-            this->dims[0] = dims.d[0];
-            this->dims[1] = divUp(dims.d[1], 2);
-            this->dims[2] = dims.d[2];
-            this->dims[3] = dims.d[3];
-            this->dims[4] = 2;
-            this->scalarPerVector = 2;
-        }
-        else if (format == TensorFormat::kCHW4)
-        {
-            this->dims[0] = dims.d[0];
-            this->dims[1] = divUp(dims.d[1], 4);
-            this->dims[2] = dims.d[2];
-            this->dims[3] = dims.d[3];
-            this->dims[4] = 4;
-            this->scalarPerVector = 4;
-        }
         else if (format == TensorFormat::kCHW32)
         {
             this->dims[0] = dims.d[0];
@@ -114,14 +94,13 @@ public:
             this->dims[4] = 32;
             this->scalarPerVector = 32;
         }
-        else if (format == TensorFormat::kHWC8)
+        else if (format == TensorFormat::kHWC)
         {
             this->dims[0] = dims.d[0];
             this->dims[1] = dims.d[2];
             this->dims[2] = dims.d[3];
-            this->dims[3] = divUp(dims.d[1], 8) * 8;
+            this->dims[3] = dims.d[1];
             this->dims[4] = 1;
-            this->scalarPerVector = 8;
             this->channelPivot = true;
         }
     }
@@ -268,11 +247,11 @@ private:
     //!
     //! \brief Parses an ONNX model for MNIST and creates a TensorRT network
     //!
-    bool constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-        SampleUniquePtr<nvonnxparser::IParser>& parser);
+    bool constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+        std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+        std::unique_ptr<nvonnxparser::IParser>& parser);
 
-    SampleUniquePtr<IRuntime> mRuntime{};                    //!< The TensorRT Runtime used to deserialize the engine.
+    std::unique_ptr<IRuntime> mRuntime{};                    //!< The TensorRT Runtime used to deserialize the engine.
     std::shared_ptr<nvinfer1::ICudaEngine> mEngine{nullptr}; //!< The TensorRT engine used to run the network
 
 public:
@@ -353,26 +332,27 @@ bool SampleIOFormats::verify(TypeSpec const& spec)
 //!
 bool SampleIOFormats::build(int32_t dataWidth)
 {
-    auto builder = SampleUniquePtr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         return false;
     }
 
-    auto network = SampleUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0));
+    auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(
+        builder->createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)));
     if (!network)
     {
         return false;
     }
 
-    auto config = SampleUniquePtr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
+    auto config = std::unique_ptr<nvinfer1::IBuilderConfig>(builder->createBuilderConfig());
     if (!config)
     {
         return false;
     }
 
     auto parser
-        = SampleUniquePtr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+        = std::unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
     if (!parser)
     {
         return false;
@@ -389,22 +369,6 @@ bool SampleIOFormats::build(int32_t dataWidth)
 
     mEngine.reset();
 
-    if (dataWidth == 1)
-    {
-        config->setFlag(BuilderFlag::kINT8);
-        network->getInput(0)->setType(DataType::kINT8);
-        network->getOutput(0)->setType(DataType::kINT8);
-        network->getInput(0)->setDynamicRange(-1.0F, 1.0F);
-        constexpr float kTENSOR_DYNAMIC_RANGE = 4.0F;
-        samplesCommon::setAllDynamicRanges(network.get(), kTENSOR_DYNAMIC_RANGE, kTENSOR_DYNAMIC_RANGE);
-    }
-    if (dataWidth == 2)
-    {
-        config->setFlag(BuilderFlag::kFP16);
-        network->getInput(0)->setType(DataType::kHALF);
-        network->getOutput(0)->setType(DataType::kHALF);
-    }
-
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
 
     // CUDA stream used for profiling by the builder.
@@ -415,7 +379,7 @@ bool SampleIOFormats::build(int32_t dataWidth)
     }
     config->setProfileStream(*profileStream);
 
-    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
 
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
@@ -424,7 +388,7 @@ bool SampleIOFormats::build(int32_t dataWidth)
             = samplesCommon::buildTimingCacheFromFile(sample::gLogger.getTRTLogger(), *config, mParams.timingCacheFile);
     }
 
-    SampleUniquePtr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
+    std::unique_ptr<IHostMemory> plan{builder->buildSerializedNetwork(*network, *config)};
     if (!plan)
     {
         return false;
@@ -438,7 +402,7 @@ bool SampleIOFormats::build(int32_t dataWidth)
 
     if (!mRuntime)
     {
-        mRuntime = SampleUniquePtr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
+        mRuntime = std::unique_ptr<IRuntime>(createInferRuntime(sample::gLogger.getTRTLogger()));
     }
 
     if (!mRuntime)
@@ -446,8 +410,7 @@ bool SampleIOFormats::build(int32_t dataWidth)
         return false;
     }
 
-    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(
-        mRuntime->deserializeCudaEngine(plan->data(), plan->size()), samplesCommon::InferDeleter());
+    mEngine = std::shared_ptr<nvinfer1::ICudaEngine>(mRuntime->deserializeCudaEngine(plan->data(), plan->size()));
     if (!mEngine)
     {
         return false;
@@ -472,9 +435,9 @@ bool SampleIOFormats::build(int32_t dataWidth)
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleIOFormats::constructNetwork(SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    SampleUniquePtr<nvinfer1::INetworkDefinition>& network, SampleUniquePtr<nvinfer1::IBuilderConfig>& config,
-    SampleUniquePtr<nvonnxparser::IParser>& parser)
+bool SampleIOFormats::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+    std::unique_ptr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
         static_cast<int32_t>(sample::gLogger.getReportableSeverity()));
@@ -501,7 +464,7 @@ bool SampleIOFormats::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
 
     CHECK(cudaMemcpy(devInput.get(), inputBuf.buffer, inputBuf.getBufferSize(), cudaMemcpyHostToDevice));
 
-    auto context = SampleUniquePtr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
+    auto context = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
     {
         return false;
@@ -631,16 +594,10 @@ int32_t main(int32_t argc, char** argv)
 
     samplesCommon::OnnxSampleParams params = initializeSampleParams(args);
 
-    std::vector<TypeSpec> fp16TypeSpec = {
-        TypeSpec{DataType::kHALF, TensorFormat::kLINEAR, "kLINEAR"},
-        TypeSpec{DataType::kHALF, TensorFormat::kCHW2, "kCHW2"},
-        TypeSpec{DataType::kHALF, TensorFormat::kHWC8, "kHWC8"},
-    };
-
-    std::vector<TypeSpec> int8TypeSpec = {
-        TypeSpec{DataType::kINT8, TensorFormat::kLINEAR, "kLINEAR"},
-        TypeSpec{DataType::kINT8, TensorFormat::kCHW4, "kCHW4"},
-        TypeSpec{DataType::kINT8, TensorFormat::kCHW32, "kCHW32"},
+    std::vector<TypeSpec> fp32TypeSpec = {
+        TypeSpec{DataType::kFLOAT, TensorFormat::kLINEAR, "kLINEAR"},
+        TypeSpec{DataType::kFLOAT, TensorFormat::kHWC, "kHWC"},
+        TypeSpec{DataType::kFLOAT, TensorFormat::kCHW32, "kCHW32"},
     };
 
     SampleIOFormats sample(params);
@@ -649,27 +606,14 @@ int32_t main(int32_t argc, char** argv)
         << "Build TRT engine with different IO data type and formats. Ensure that built engine abide by them"
         << std::endl;
 
-    // Test FP16 formats
-    for (auto spec : fp16TypeSpec)
+    // Test FP32 formats
+    for (auto spec : fp32TypeSpec)
     {
-        sample::gLogInfo << "Testing datatype FP16 with format " << spec.formatName << std::endl;
+        sample::gLogInfo << "Testing datatype FP32 with format " << spec.formatName << std::endl;
         sample.mTensorFormat = spec.format;
         SampleBuffer inputBuf, outputBuf;
 
-        if (!process<half_float::half>(sample, sampleTest, inputBuf, outputBuf, spec))
-        {
-            return sample::gLogger.reportFail(sampleTest);
-        }
-    }
-
-    // Test INT8 formats
-    for (auto spec : int8TypeSpec)
-    {
-        sample::gLogInfo << "Testing datatype INT8 with format " << spec.formatName << std::endl;
-        sample.mTensorFormat = spec.format;
-        SampleBuffer inputBuf, outputBuf;
-
-        if (!process<int8_t>(sample, sampleTest, inputBuf, outputBuf, spec))
+        if (!process<float>(sample, sampleTest, inputBuf, outputBuf, spec))
         {
             return sample::gLogger.reportFail(sampleTest);
         }

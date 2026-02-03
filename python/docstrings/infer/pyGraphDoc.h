@@ -78,8 +78,11 @@ constexpr const char* CUMULATIVE = R"trtdoc(Cumulative layer)trtdoc";
 constexpr const char* DYNAMIC_QUANTIZE = R"trtdoc(DynamicQuantize layer)trtdoc";
 constexpr const char* ATTENTION_INPUT = R"trtdoc(Attention input layer)trtdoc";
 constexpr const char* ATTENTION_OUTPUT = R"trtdoc(Attention output layer)trtdoc";
+constexpr const char* KV_CACHE_UPDATE = R"trtdoc(KVCacheUpdate layer)trtdoc";
 constexpr const char* SPLIT_TO_RAGGED = R"trtdoc(SplitToRagged layer)trtdoc";
 constexpr const char* CONCAT_FROM_RAGGED = R"trtdoc(ConcatFromRagged layer)trtdoc";
+constexpr const char* ROTARY_EMBEDDING = R"trtdoc(Rotary Embedding layer)trtdoc";
+constexpr const char* DIST_COLLECTIVE = R"trtdoc(DistCollective layer)trtdoc";
 } // namespace LayerTypeDoc
 
 namespace TensorFormatDoc
@@ -206,8 +209,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar dynamic_range: :class:`Tuple[float, float]` [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization. A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
-)trtdoc"
-    ;
+)trtdoc";
 
 constexpr const char* set_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
@@ -1962,7 +1964,6 @@ constexpr const char* set_input = R"trtdoc(
 
 } // namespace IUnsqueezeLayerDoc
 
-
 namespace CumulativeOperationDoc
 {
 constexpr const char* descr = R"trtdoc(The cumulative operations that may be performed by a Cumulative layer)trtdoc";
@@ -2042,6 +2043,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar decomposable: :class:`bool` Specifies whether decomposition into primitive ops is allowed when no attention fusion is supported. Default to False.
     :ivar causal: :class:`bool` Specifies whether the attention will run a causal inference. Cannot be used together with mask.
     :ivar name: :class:`str` The name of the attention.
+    :ivar metadata: :class:`str` The metadata of the attention.
     :ivar normalization_quantize_scale: :class:`ITensor` The quantization scale for the attention normalization output.
     :ivar normalization_quantize_to_type: :class:`DataType` The datatype the attention normalization is quantized to.
     :ivar num_inputs: :class:`int` The number of inputs of the attention.
@@ -2090,6 +2092,68 @@ constexpr const char* get_output = R"trtdoc(
 )trtdoc";
 
 } // namespace IAttentionDoc
+
+namespace IRotaryEmbeddingLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A RotaryEmbedding layer in :class:`INetworkDefinition`.
+
+    :ivar interleaved: :class:`bool` Specifies whether the input tensor is in interleaved format, i.e., whether the 2-d vectors rotated are taken from adjacent 2 elements in the hidden dimension.
+    :ivar rotary_embedding_dim: :class:`int` Specifies the hidden dimension that participates in RoPE.
+)trtdoc";
+
+constexpr const char* set_input = R"trtdoc(
+    Set the input tensor specified by the given index.
+
+    :arg index: The index of the input tensor.
+    :arg tensor: The input tensor.
+
+    The indices are as follows:
+
+    Input 0 is the input activation tensor.
+    Input 1 is the cosine cache tensor.
+    Input 2 is the sine cache tensor.
+    Input 3 (optional) is the positionIds tensor, which is used for indexing into the cosine and sine caches.
+)trtdoc";
+} // namespace IRotaryEmbeddingLayerDoc
+
+namespace KVCacheModeDoc
+{
+constexpr const char* descr = R"trtdoc(The cache modes supported by a KVCacheUpdate layer)trtdoc";
+constexpr const char* LINEAR = R"trtdoc()trtdoc";
+} // namespace KVCacheModeDoc
+
+namespace IKVCacheUpdateLayerDoc
+{
+constexpr const char* descr = R"trtdoc(
+    A KVCacheUpdate layer in a :class:`INetworkDefinition` .
+
+    This layer caches Key (K) or Value (V) tensors for reuse in subsequent attention computations.
+    Users provide newly computed K/V values, and the layer will output the updated K/V cache.
+    The write_indices input specifies where to write K/V updates for each sequence in the batch.
+    Separate KVCacheUpdate layers should be used for K and V.
+
+    :ivar cache_mode: :class:`KVCacheMode` The mode of the KVCacheUpdate layer.
+)trtdoc";
+
+constexpr const char* set_input = R"trtdoc(
+    Sets the input tensor specified by the given index.
+
+    The indices are as follows:
+
+    =====   ==================================================================================
+    Index   Description
+    =====   ==================================================================================
+        0     cache.
+        1     update.
+        2     write_indices.
+    =====   ==================================================================================
+
+    :arg index: The index of the input tensor.
+    :arg tensor: The input tensor.
+)trtdoc";
+
+} // namespace IKVCacheUpdateLayerDoc
 
 namespace INetworkDefinitionDoc
 {
@@ -2764,6 +2828,18 @@ constexpr const char* add_dynamic_quantize = R"trtdoc(
     :returns: The new DynamicQuantization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
+constexpr const char* add_dynamic_quantize_v2 = R"trtdoc(
+    Add a dynamic quantization layer to the network.
+    See :class:`IDynamicQuantizeLayer` for more information.
+
+    :arg input: A tensor to quantize.
+    :arg block_shape: The shape of the block.
+    :arg output_type: The data type of the quantized output tensor.
+    :arg scale_type: The data type of the scale factor used for quantizing the input data.
+
+    :returns: The new DynamicQuantization layer, or :class:`None` if it could not be created.
+)trtdoc";
+
 constexpr const char* add_split_to_ragged = R"trtdoc(
     Add a dynamic quantization layer to the network.
     See :class:`IDynamicQuantizeLayer` for more information.
@@ -2822,6 +2898,8 @@ constexpr char const* add_reverse_sequence = R"trtdoc(
 )trtdoc";
 
 constexpr char const* add_normalization = R"trtdoc(
+    [DEPRECATED] Deprecated in TensorRT 10.15. Superseded by add_normalization_v2.
+
     Adds a Normalization layer to the network.
     See :class:`Normalization` for more information.
 
@@ -2832,6 +2910,37 @@ constexpr char const* add_normalization = R"trtdoc(
         The bit in position i of bitmask axes corresponds to explicit dimension i of the result.
         E.g., the least significant bit corresponds to the first explicit dimension and the next to least
         significant bit corresponds to the second explicit dimension.
+
+    The normalization layer works by performing normalization of the tensor input on the specified axesMask.
+    The result is then scaled by multiplying with scale and adding bias.
+
+    The shape of scale and bias must be the same, and must have the same rank and be
+    unidirectionally broadcastable to the shape of input. Given a 4D NCHW input tensor, the expected shapes
+    for scale and bias are:
+    * [1, C, 1, 1] for InstanceNormalization
+    * [1, G, 1, 1] for GroupNormalization. Use :func:`INetworkDefinition.add_normalization_v2` instead if [1, C, 1, 1] shapes for scale and bias are required.
+
+    :returns: the new Normalization layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_normalization_v2 = R"trtdoc(
+    Adds a Normalization layer to the network.
+    See :class:`Normalization` for more information.
+
+    :arg input: The input tensor to the layer.
+    :arg scale: The scale tensor used to scale the normalized output.
+    :arg bias: The bias tensor used to scale the normalized output.
+    :arg axesMask: The axes on which to perform mean calculations.
+        The bit in position i of bitmask axes corresponds to explicit dimension i of the result.
+        E.g., the least significant bit corresponds to the first explicit dimension and the next to least
+        significant bit corresponds to the second explicit dimension.
+
+    The normalization layer works by performing normalization of the tensor input on the specified axesMask.
+    The result is then scaled by multiplying with scale and adding bias.
+
+    The shapes of scale and bias must be the same, and must have the same rank and be
+    unidirectionally broadcastable to the shape of input. In the case of InstanceNorm or GroupNorm,
+    the shapes of scale and bias are expected to be [1, C, 1, 1] in the case of a 4D NCHW input tensor.
 
     :returns: the new Normalization layer, or :class:`None` if it could not be created.
 )trtdoc";
@@ -2881,6 +2990,33 @@ constexpr const char* add_attention = R"trtdoc(
     :arg causal: The boolean that specifies whether an attention will run casual inference.
 
     :returns: The new Attention, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_rotary_embedding = R"trtdoc(
+    Add a RotaryEmbedding layer to the network.
+    See :class:`IRotaryEmbeddingLayer` for more information.
+
+    :arg input: The input activation tensor to the layer.
+    :arg cos_cache: The cosine cache tensor for use in RoPE computation.
+    :arg sin_cache: The sine cache tensor for use in RoPE computation.
+    :arg interleaved: Whether the input tensor is in interleaved format, i.e., whether the 2-d vectors rotated are taken from adjacent 2 elements in the hidden dimension.
+    :arg rotary_embedding_dim: The hidden dimension that participates in RoPE.
+
+    An optional input, position_ids, can be provided using :func:`set_input` with index 3. If provided, it is used to index into cos_cache and sin_cache.
+
+    :returns: The new RotaryEmbedding layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr const char* add_kv_cache_update = R"trtdoc(
+    Add a KVCacheUpdate layer to the network.
+    See :class:`IKVCacheUpdateLayer` for more information.
+
+    :arg cache: The key/value cache tensor for the layer. The user is responsible for properly allocating and binding the tensor memory.
+    :arg update: The newly updated key/value tensor for the layer.
+    :arg write_indices: The write indices tensor for key/value cache updates.
+    :arg cache_mode: The mode of the KVCacheUpdate layer. For TensorRT 10.15, only `LINEAR` mode is supported.
+
+    :returns: The new KVCacheUpdate layer, or :class:`None` if it could not be created.
 )trtdoc";
 
 } // namespace INetworkDefinitionDoc

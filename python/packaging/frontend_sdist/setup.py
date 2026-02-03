@@ -62,17 +62,6 @@ def run_pip_command(args, call_func):
         return call_func([pip_path] + args, env=env)
 
 
-# check wheel availability using information from https://github.com/pypa/packaging/blob/23.1/src/packaging/markers.py#L175-L190
-if sys.platform not in ("linux", "win32"):
-    raise RuntimeError("TensorRT currently only builds wheels for Linux and Windows")
-if sys.implementation.name != "cpython":
-    raise RuntimeError("TensorRT currently only builds wheels for CPython")
-if platform.machine() not in ("x86_64", "AMD64", "aarch64"):
-    raise RuntimeError("TensorRT currently only builds wheels for x86_64 and ARM SBSA processors")
-if "tegra" in platform.release():
-    raise RuntimeError("TensorRT does not currently build wheels for Tegra systems")
-
-
 class InstallCommand(install):
     def run(self):
         # pip-inside-pip hack ref #3080

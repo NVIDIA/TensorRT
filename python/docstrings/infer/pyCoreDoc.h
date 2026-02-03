@@ -447,7 +447,7 @@ constexpr char const* set_optimization_profile_async = R"trtdoc(
     :arg stream_handle: cuda stream on which the work to switch optimization profile can be enqueued
 
     When an optimization profile is switched via this API, TensorRT may require that data is copied via cudaMemcpyAsync. It is the
-    application’s responsibility to guarantee that synchronization between the profile sync stream and the enqueue stream occurs.
+    application's responsibility to guarantee that synchronization between the profile sync stream and the enqueue stream occurs.
 
     :returns: :class:`True` if the optimization profile was set successfully
 )trtdoc";
@@ -639,7 +639,7 @@ constexpr char const* process_debug_tensor = R"trtdoc(
     :arg addr: pointer to buffer
     :arg type: data Type of the tensor
     :arg shape: shape of the tensor
-    :arg name: name name of the tensor
+    :arg name: name of the tensor
     :arg stream: Cuda stream object
 
     :returns: True on success, False otherwise.
@@ -899,6 +899,18 @@ constexpr char const* get_tensor_profile_shape = R"trtdoc(
 
     :arg name: The tensor name.
     :arg profile_index: The index of the profile.
+)trtdoc";
+
+constexpr char const* get_aliased_input_tensor = R"trtdoc(
+    Determine if an output tensor is aliased with an input tensor.
+
+    For certain operations like KVCacheUpdate, the output tensor may share the same memory
+    buffer as the input tensor to avoid unnecessary copies. This method returns the name
+    of the input tensor that shares memory with the given output tensor name. If the given
+    tensor name is not an output tensor or the output does not alias with any input, ``None`` should be returned.
+
+    :arg name: The output tensor name.
+    :returns: The name of the input tensor that is aliased with this output.
 )trtdoc";
 
 constexpr char const* get_device_memory_size_for_profile = R"trtdoc(

@@ -109,6 +109,8 @@ enum class LayerType : int32_t
     kDYNAMIC_QUANTIZE = 50,   //!< Dynamic Quantize layer.
     kATTENTION_INPUT = 51,    //!< Attention Input.
     kATTENTION_OUTPUT = 52,   //!< Attention Output.
+    kROTARY_EMBEDDING = 53,   //!< Rotary Embedding layer.
+    kKVCACHE_UPDATE = 54,     //!< KV Cache Update layer.
 };
 
 //!
@@ -119,7 +121,7 @@ enum class LayerType : int32_t
 template <>
 constexpr inline int32_t EnumMax<LayerType>() noexcept
 {
-    return 53;
+    return 55;
 }
 
 //!
@@ -5535,6 +5537,30 @@ public:
     }
 
     //!
+    //! \brief Set the shape of the quantization block.
+    //!
+    //! \see getBlockShape()
+    //! Allowed values are positive values and -1 which denotes a fully blocked dimension.
+    //! Returns true if the block shape was set successfully, false if the block shape is invalid.
+    //! The default value is empty Dims.
+    //!
+    bool setBlockShape(Dims const& blockShape) noexcept
+    {
+        return mImpl->setBlockShape(blockShape);
+    }
+
+    //!
+    //! \brief Get the shape of the quantization block.
+    //!
+    //! The default value is empty Dims.
+    //! \see setBlockShape()
+    //!
+    TRT_NODISCARD Dims getBlockShape() const noexcept
+    {
+        return mImpl->getBlockShape();
+    }
+
+    //!
     //! \brief Set the Quantize layer output type.
     //!
     //! \param toType The DataType of the output tensor.
@@ -5663,13 +5689,41 @@ public:
     }
 
     //!
+    //! \brief Set the shape of the quantization block.
+    //!
+    //! \param blockShape The shape of the quantization block.
+    //!
+    //! Set the shape of the quantization block.
+    //! Allowed values are positive values and -1 which denotes a fully blocked dimension.
+    //! Returns true if the block shape was set successfully, false if the block shape is invalid.
+    //! The default value is empty Dims.
+    //!
+    //! \see getBlockShape()
+    //!
+    bool setBlockShape(Dims const& blockShape) noexcept
+    {
+        return mImpl->setBlockShape(blockShape);
+    }
+
+    //!
+    //! \brief Get the shape of the quantization block.
+    //!
+    //! The default value is empty Dims.
+    //! \see setBlockShape()
+    //!
+    TRT_NODISCARD Dims getBlockShape() const noexcept
+    {
+        return mImpl->getBlockShape();
+    }
+
+    //!
     //! \brief Set the Dequantize layer output type.
     //!
     //! \param toType The DataType of the output tensor.
     //!
-    //! Set the output type of the dequantize layer. Valid values are DataType::kFLOAT, DataType::kHALF and DataType::kBF16.
-    //! If the network is strongly typed, setToType must be used to set the output type, and use of setOutputType
-    //! is an error. Otherwise, types passed to setOutputType and setToType must be the same.
+    //! Set the output type of the dequantize layer. Valid values are DataType::kFLOAT, DataType::kHALF and
+    //! DataType::kBF16. If the network is strongly typed, setToType must be used to set the output type, and use of
+    //! setOutputType is an error. Otherwise, types passed to setOutputType and setToType must be the same.
     //!
     //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
     //!
@@ -5764,7 +5818,7 @@ public:
     //! \param scaleType The scale factors data type.
     //!
     //! Set the scale-factors type.
-    //! Valid values are DataType::kFP8 (NVFP4 quantization) and DataType::kE8M0 (MXFP8 quantization).
+    //! Valid values are DataType::kFP8, DataType::kE8M0 or DataType::kFLOAT.
     //!
     void setScaleType(DataType scaleType) noexcept
     {
@@ -5792,7 +5846,7 @@ public:
     //!
     //! \see getAxis()
     //!
-    void setAxis(int32_t axis) noexcept
+    TRT_DEPRECATED void setAxis(int32_t axis) noexcept
     {
         mImpl->setAxis(axis);
     }
@@ -5802,7 +5856,7 @@ public:
     //!
     //! \see setAxis()
     //!
-    int32_t getAxis() const noexcept
+    TRT_DEPRECATED int32_t getAxis() const noexcept
     {
         return mImpl->getAxis();
     }
@@ -5815,7 +5869,7 @@ public:
     //!
     //! \see getBlockSize()
     //!
-    void setBlockSize(int32_t size) noexcept
+    TRT_DEPRECATED void setBlockSize(int32_t size) noexcept
     {
         mImpl->setBlockSize(size);
     }
@@ -5825,9 +5879,34 @@ public:
     //!
     //! \see setBlockSize()
     //!
-    int32_t getBlockSize() const noexcept
+    TRT_DEPRECATED int32_t getBlockSize() const noexcept
     {
         return mImpl->getBlockSize();
+    }
+
+    //!
+    //! \brief Set the shape of the quantization block.
+    //!
+    //! Note: The block shape rank must match the input rank.
+    //! The default value is empty Dims.
+    //!
+    //! \see getBlockShape()
+    //!
+    void setBlockShape(Dims const& blockShape) noexcept
+    {
+        mImpl->setBlockShape(blockShape);
+    }
+
+    //!
+    //! \brief Get the shape of the quantization block.
+    //!
+    //! The default value is empty Dims.
+    //!
+    //! \see setBlockShape()
+    //!
+    Dims getBlockShape() const noexcept
+    {
+        return mImpl->getBlockShape();
     }
 
 protected:
@@ -6544,6 +6623,16 @@ public:
         return mImpl->getComputePrecision();
     }
 
+    //!
+    //! \brief Returns true if this layer was created through addNormalizationV2().
+    //!
+    //! \return Whether the layer was created through addNormalizationV2().
+    //!
+    TRT_NODISCARD bool isV2() const noexcept
+    {
+        return mImpl->isV2();
+    }
+
 protected:
     apiv::VNormalizationLayer* mImpl;
     virtual ~INormalizationLayer() noexcept = default;
@@ -6553,8 +6642,8 @@ protected:
 //!
 //! \class ISqueezeLayer
 //!
-//! \brief Layer that represents a squeeze operation, removing unit dimensions of the input tensor
-//! on a set of axes.
+//! \brief Layer that represents a squeeze operation, removing unit dimensions of the first input tensor
+//! on a set of axes specified by the second input tensor.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -6562,7 +6651,7 @@ class ISqueezeLayer : public ILayer
 {
 public:
     //!
-    //! \brief Append or replace an input of this layer with a specific tensor
+    //! \brief Append or replace an input of this layer with a specific tensor.
     //!
     //! \param index The index of the input to modify.
     //! \param tensor The new input tensor.
@@ -6571,7 +6660,7 @@ public:
     //! The indices are as follows:
     //!
     //! - 0: Input data tensor.
-    //! - 1: The axes to remove. Must resolvable to a constant Int32 or Int64 1D shape tensor.
+    //! - 1: The axes to remove. Must resolve to a constant Int32 or Int64 1D shape tensor.
     //!
     using ILayer::setInput;
 
@@ -6583,7 +6672,8 @@ protected:
 //!
 //! \class IUnsqueezeLayer
 //!
-//! \brief Layer that represents an unsqueeze operation, which reshapes the input tensor by inserting unit-length dimensions at specified axes of the output.
+//! \brief Layer that represents an unsqueeze operation, which reshapes the first input tensor by inserting unit-length
+//! dimensions to the output at the axes specified by the second input tensor.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -6591,7 +6681,7 @@ class IUnsqueezeLayer : public ILayer
 {
 public:
     //!
-    //! \brief Append or replace an input of this layer with a specific tensor
+    //! \brief Append or replace an input of this layer with a specific tensor.
     //!
     //! \param index The index of the input to modify.
     //! \param tensor The new input tensor.
@@ -6600,7 +6690,8 @@ public:
     //! The indices are as follows:
     //!
     //! - 0: Input data tensor.
-    //! - 1: The output axes at which unit-length dimensions are inserted. Must resolvable to a constant Int32 or Int64 1D shape tensor.
+    //! - 1: The output axes at which unit-length dimensions are inserted. Must resolve to a constant Int32 or
+    //! Int64 1D shape tensor.
     //!
     using ILayer::setInput;
 
@@ -6898,6 +6989,10 @@ protected:
 //! * NormalizationQuantizeScale (optional) contains the quantization scale for the attention normalization output.
 //!   It is a tensor of type kFLOAT, kHALF or kBF16 with dimension 0 or 1.
 //!
+//! \see
+//! https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-transformers.html#multi-head-attention-fusion
+//! for the complete matrix of fused kernel support.
+//!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
 class IAttention : public INoCopy
@@ -6930,10 +7025,10 @@ public:
     //!
     //! \brief Set whether a mask will be used for the normalization operation.
     //!
-    //! \param mask the mask tensor of type kBOOL or the same data type of
-    //! BMM1 output with shape [batchSize, sequenceLengthQuery, sequenceLengthKeyValue]. For a kBOOL mask, a True value
-    //! indicates that the corresponding position is allowed to attend. For other data types, the mask values will
-    //! be added to the BMM1 output, known as an add mask.
+    //! \param mask the mask tensor of type kBOOL or the same data type of BMM1 output with 4d shape broadcastable to
+    //! [batchSize, numHeadsQuery, sequenceLengthQuery, sequenceLengthKeyValue]. For a kBOOL mask, a True value
+    //! indicates that the corresponding position is allowed to attend. For other data types, the mask values will be
+    //! added to the BMM1 output, known as an add mask.
     //!
     //! \see getMask
     //!
@@ -7147,10 +7242,205 @@ public:
         return mImpl->getNormalizationQuantizeToType();
     }
 
+    //!
+    //! \brief Set the metadata for IAttention.
+    //!
+    //! The metadata is emitted in the JSON returned by IEngineInspector with
+    //! ProfilingVerbosity set to kDETAILED.
+    //!
+    //! \param metadata The per-layer metadata.
+    //!
+    //! \warning The string name must be null-terminated and be at most 4096 bytes including the terminator.
+    //!
+    //! \see getMetadata()
+    //! \see getLayerInformation()
+    //!
+    //! \return True if the metadata is set successfully, false otherwise.
+    //!
+    bool setMetadata(char const* metadata) noexcept
+    {
+        return mImpl->setMetadata(metadata);
+    }
+
+    //!
+    //! \brief Get the metadata of IAttention.
+    //!
+    //! \return The metadata as a null-terminated C-style string. If setMetadata() has not been called,
+    //!         an empty string "" will be returned as a default value.
+    //!
+    //! \see setMetadata()
+    //!
+    char const* getMetadata() const noexcept
+    {
+        return mImpl->getMetadata();
+    }
+
 
 protected:
     apiv::VAttention* mImpl;
     virtual ~IAttention() noexcept = default;
+};
+
+//! \class IRotaryEmbeddingLayer
+//!
+//! \brief Layer that implements Rotary Position Embedding (RoPE) (https://arxiv.org/abs/2104.09864).
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IRotaryEmbeddingLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Set whether the input is in interleaved format, i.e., whether the 2-d vectors rotated are taken from adjacent 2 elements in the hidden dimension. The default value is false.
+    //!
+    //! \see getInterleaved
+    //!
+    void setInterleaved(bool interleaved) noexcept
+    {
+        mImpl->setInterleaved(interleaved);
+    }
+
+
+    //!
+    //! \brief Get whether the input is in interleaved format. The default value is false.
+    //!
+    //! \see setInterleaved
+    //!
+    TRT_NODISCARD bool getInterleaved() const noexcept
+    {
+        return mImpl->getInterleaved();
+    }
+
+
+    //!
+    //! \brief Set the number of hidden dimensions participating in RoPE. The default value is 0, representing H, i.e., all hidden dimensions in each head. Must be non-negative and even.
+    //!
+    //! \see getRotaryEmbeddingDim
+    //!
+    TRT_NODISCARD bool setRotaryEmbeddingDim(int32_t rotaryEmbeddingDim) noexcept
+    {
+        return mImpl->setRotaryEmbeddingDim(rotaryEmbeddingDim);
+    }
+
+
+    //!
+    //! \brief Get the number of hidden dimensions participating in RoPE. The default value is 0, representing H, i.e., all hidden dimensions in each head.
+    //!
+    //! \see setRotaryEmbeddingDim
+    //!
+    TRT_NODISCARD int32_t getRotaryEmbeddingDim() const noexcept
+    {
+        return mImpl->getRotaryEmbeddingDim();
+    }
+
+
+    //!
+    //! \brief Append or replace an input of this layer with a specific tensor
+    //!
+    //! \param index the index of the input to modify.
+    //! \param tensor the new input tensor
+    //!
+    //! The indices are as follows:
+    //!
+    //! Input 0 is the input activation tensor.
+    //! Input 1 is the cosine cache tensor.
+    //! Input 2 is the sine cache tensor.
+    //! Input 3 (optional) is the positionIds tensor, which is used for indexing into the cosine and sine caches.
+    //!
+    using ILayer::setInput;
+
+
+protected:
+    apiv::VRotaryEmbeddingLayer* mImpl;
+    virtual ~IRotaryEmbeddingLayer() noexcept = default;
+};
+
+//!
+//! \enum KVCacheMode
+//!
+//! \brief Enumerates the KVCache modes that may be performed by a KVCacheUpdate layer.
+//!
+enum class KVCacheMode : int32_t
+{
+    kLINEAR = 0, //!< Linear mode.
+};
+
+namespace impl
+{
+//!
+//! Maximum number of elements in KVCacheMode enum.
+//!
+//! \see KVCacheMode
+//!
+template <>
+struct EnumMaxImpl<KVCacheMode>
+{
+    static constexpr int32_t kVALUE = 1;
+};
+
+} // namespace impl
+
+//! \class IKVCacheUpdateLayer
+//!
+//! \brief Layer that represents a KVCacheUpdate operation.
+//!
+//! The KVCacheUpdate layer is used to cache the key or value tensors for the attention mechanism.
+//! K and V use separate KVCacheUpdate layers.
+//!
+//! An IKVCacheUpdateLayer has three inputs (`cache`, `update`, `writeIndices`) and one output.
+//! In `kLINEAR` mode, for each batch element i, the layer copies the update tensor into the cache starting at
+//! position `writeIndices[i]`. Assuming no out-of-bounds writes occur, the operation for each sequence position
+//! s in [0, sequenceLength) is:
+//! \code
+//! output[i, :, writeIndices[i] + s, :] = update[i, :, s, :]
+//! \endcode
+//!
+//! The output performs in-place updates on the cache tensor, so they must share the same device memory address.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IKVCacheUpdateLayer : public ILayer
+{
+public:
+    //!
+    //! \brief Append or replace an input of this layer with a specific tensor.
+    //!
+    //! \param index the index of the input to modify.
+    //! \param tensor the new input tensor.
+    //!
+    //! The indices are as follows:
+    //!
+    //! Input 0 is the input cache tensor.
+    //! Input 1 is the input update tensor.
+    //! Input 2 is the input writeIndices tensor.
+    //!
+    using ILayer::setInput;
+
+    //!
+    //! \brief Set the mode of the KVCacheUpdate layer.
+    //!
+    //! \param cacheMode The mode of the KVCacheUpdate layer. For TensorRT 10.15, only `kLINEAR` mode is supported.
+    //!
+    //! \return True if cache mode is set successfully, false otherwise.
+    //!
+    bool setCacheMode(KVCacheMode cacheMode) noexcept
+    {
+        return mImpl->setCacheMode(cacheMode);
+    }
+
+    //!
+    //! \brief Get the mode of the KVCacheUpdate layer.
+    //!
+    //! \return The mode of the KVCacheUpdate layer.
+    //!
+    KVCacheMode getCacheMode() const noexcept
+    {
+        return mImpl->getCacheMode();
+    }
+
+protected:
+    apiv::VKVCacheUpdateLayer* mImpl;
+    virtual ~IKVCacheUpdateLayer() noexcept = default;
 };
 
 //!
@@ -8505,10 +8795,34 @@ public:
     //!
     //! \see IDynamicQuantizeLayer
     //!
-    IDynamicQuantizeLayer* addDynamicQuantize(
+    TRT_DEPRECATED IDynamicQuantizeLayer* addDynamicQuantize(
         ITensor& input, int32_t axis, int32_t blockSize, DataType outputType, DataType scaleType) noexcept
     {
         return mImpl->addDynamicQuantize(input, axis, blockSize, outputType, scaleType);
+    }
+
+    //!
+    //! \brief Add a dynamic quantization layer to the network.
+    //!
+    //! This layer performs dynamic block quantization of its input tensor and outputs the
+    //! quantized data and the computed block scale factors.
+    //!
+    //! \param input The input tensor to be quantized. Its data type must be one of DataType::kFLOAT,
+    //! DataType::kHALF, or DataType::kBF16.
+    //! \param blockShape Defines the block shape for the quantization. Must match the input tensor rank.
+    //! \param outputType The data type of the quantized output tensor, must be DataType::kFP4, DataType::kFP8 or
+    //! DataType::kINT8. Future calls to set output type using setToType or setOutputType must be consistent.
+    //! \param scaleType The data type of the scale factor used for quantizing the input data, must be DataType::kFP8,
+    //! DataType::kE8M0 or DataType::kFLOAT.
+    //!
+    //! \return The new dynamic quantization layer, or nullptr if it could not be created.
+    //!
+    //! \see IDynamicQuantizeLayer
+    //!
+    IDynamicQuantizeLayer* addDynamicQuantizeV2(
+        ITensor& input, Dims const& blockShape, DataType outputType, DataType scaleType) noexcept
+    {
+        return mImpl->addDynamicQuantizeV2(input, blockShape, outputType, scaleType);
     }
 
     //!
@@ -8617,14 +8931,20 @@ public:
     //! The normalization layer works by performing normalization of the tensor \p input on the specified \p axesMask.
     //! The result is then scaled by multiplying with \p scale and adding \p bias.
     //!
-    //! The shape of \p scale and \p bias are expected the be the same, and must have the same rank and be
-    //! unidirectionally broadcastable to the shape of \p input.
+    //! The shapes of \p scale and \p bias must be the same, and must have the same rank and be
+    //! unidirectionally broadcastable to the shape of \p input. Given a 4D NCHW input tensor, the expected shapes
+    //! for \p scale and \p bias are:
+    //! * [1, C, 1, 1] for InstanceNormalization
+    //! * [1, G, 1, 1] for GroupNormalization. Use addNormalizationV2() instead if [1, C, 1, 1] shapes for \p scale
+    //! and \p bias are required.
     //!
     //! \see INormalizationLayer
     //!
     //! \return The new normalization layer, or nullptr if it could not be created.
     //!
-    INormalizationLayer* addNormalization(ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept
+    //! \deprecated Deprecated in TensorRT 10.15. Superseded by addNormalizationV2().
+    //!
+    TRT_DEPRECATED INormalizationLayer* addNormalization(ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept
     {
         return mImpl->addNormalization(input, scale, bias, axesMask);
     }
@@ -8677,6 +8997,65 @@ public:
         ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp, bool causal) noexcept
     {
         return mImpl->addAttention(query, key, value, normOp, causal);
+    }
+
+    //! \brief Add a Rotary Position Embedding (RoPE) layer to the network.
+    //!
+    //! \param input The input activation tensor to the layer. The shape must be (batchSize, numHeads, sequenceLength, headSize).
+    //! \param cosCache The cosine cache tensor for use in RoPE computation. See the following explanation for the shape requirement.
+    //! \param sinCache The sine cache tensor for use in RoPE computation. See the following explanation for the shape requirement.
+    //! \param interleaved Whether the \p input is in interleaved format, i.e., whether the 2-d vectors rotated are taken from adjacent 2 elements in the hidden dimension.
+    //! \param rotaryEmbeddingDim The hidden dimension that participates in RoPE.
+    //!
+    //! The RotaryEmbedding layer applies RoPE to the \p input, using \p cosCache and \p sinCache.
+    //! An optional input, positionIds, can be provided using setInput with index 3. If provided, it is used to index into \p cosCache and \p sinCache.
+    //!
+    //! If \p positionIds is not provided, \p cosCache and \p sinCache must have shape (batchSize, sequenceLength, headSize / 2) if \p rotaryEmbeddingDim is 0, or (batchSize, sequenceLength, rotaryEmbeddingDim / 2) otherwise.
+    //! If \p positionIds is provided, \p cosCache and \p sinCache must have shape (maxPositionId+1, headSize / 2) if \p rotaryEmbeddingDim is 0, or (maxPositionId+1, rotaryEmbeddingDim / 2) otherwise.
+    //! \p positionIds, if provided, must have shape (batchSize, sequenceLength).
+    //!
+    //! \see IRotaryEmbeddingLayer
+    //!
+    //! \return The new RotaryEmbedding layer, or nullptr if it could not be created.
+    //!
+    IRotaryEmbeddingLayer* addRotaryEmbedding(ITensor& input, ITensor& cosCache, ITensor& sinCache, bool interleaved, int32_t rotaryEmbeddingDim) noexcept
+    {
+        return mImpl->addRotaryEmbedding(input, cosCache, sinCache, interleaved, rotaryEmbeddingDim);
+    }
+
+    //!
+    //! \brief Add a KVCacheUpdate layer to the network.
+    //!
+    //! \param cache The key/value cache tensor for the layer. The user is responsible for properly allocating
+    //! and binding the tensor memory.
+    //! \param update The newly updated key/value tensor for the layer.
+    //! \param writeIndices The write indices tensor for key/value cache updates.
+    //! \param cacheMode The mode of the KVCacheUpdate layer. For TensorRT 10.15, only `kLINEAR` mode is supported.
+    //!
+    //! The expected tensor shapes are as follows:
+    //! - `cache`: [batchSize, numHeads, maxSequenceLength, headSize]
+    //! - `update`: [batchSize, numHeads, sequenceLength, headSize]
+    //! - `writeIndices`: [batchSize]
+    //!
+    //! The `cache` and `update` tensors must have the same data type, which can be DataType::kFLOAT,
+    //! DataType::kHALF, or DataType::kBF16. Quantized data types are not supported.
+    //! The `writeIndices` tensor must be DataType::kINT32 or DataType::kINT64.
+    //!
+    //! The layer performs in-place updates on the cache tensor. Therefore, the user must ensure that
+    //! the `cache` tensor and the corresponding output tensor share the same device memory address
+    //! before execution.
+    //!
+    //! \warning In `kLINEAR` mode, each update must satisfy the condition
+    //! `writeIndices[i] + sequenceLength <= maxSequenceLength`. Out-of-bound updates will be ignored silently.
+    //!
+    //! \see IKVCacheUpdateLayer
+    //!
+    //! \return The new KVCacheUpdate layer, or nullptr if it could not be created.
+    //!
+    IKVCacheUpdateLayer* addKVCacheUpdate(
+        ITensor& cache, ITensor& update, ITensor& writeIndices, KVCacheMode cacheMode) noexcept
+    {
+        return mImpl->addKVCacheUpdate(cache, update, writeIndices, cacheMode);
     }
 
     //!
@@ -8766,6 +9145,32 @@ public:
     IUnsqueezeLayer* addUnsqueeze(ITensor& input, ITensor& axes) noexcept
     {
         return mImpl->addUnsqueeze(input, axes);
+    }
+
+    //! \brief Add a normalization layer to the network.
+    //!
+    //! \param input The input tensor to the layer.
+    //! \param scale The scale tensor used to scale the normalized output.
+    //! \param bias The bias tensor used to scale the normalized output.
+    //! \param axesMask The axes on which to perform mean calculations.
+    //!        The bit in position i of bitmask axesMask corresponds to explicit dimension i of the result.
+    //!        E.g., the least significant bit corresponds to the first explicit dimension and the next to least
+    //!        significant bit corresponds to the second explicit dimension.
+    //!
+    //! The normalization layer works by performing normalization of the tensor \p input on the specified \p axesMask.
+    //! The result is then scaled by multiplying with \p scale and adding \p bias.
+    //!
+    //! The shapes of \p scale and \p bias are expected the be the same, and must have the same rank and be
+    //! unidirectionally broadcastable to the shape of \p input. In the case of InstanceNorm or GroupNorm,
+    //! the shapes of \p scale and \p bias are expected to be [1, C, 1, 1] in the case of a 4D NCHW input tensor.
+    //!
+    //! \see INormalizationLayer
+    //!
+    //! \return The new normalization layer, or nullptr if it could not be created.
+    //!
+    TRT_NODISCARD INormalizationLayer* addNormalizationV2(ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept
+    {
+        return mImpl->addNormalizationV2(input, scale, bias, axesMask);
     }
 
 protected:
@@ -9680,8 +10085,8 @@ struct TimingCacheValue
 //! The timing cache is created or initialized by IBuilderConfig. It can be shared across builder instances
 //! to reduce the builder wallclock time.
 //!
-//! \warning It is a known issue that the same timing cache may not guarantee stable engine build reproducibility
-//!          in all cases.
+//! \warning Rebuilding the same engine multiple times using the same timing cache will always yield a correct
+//!          engine but the selected tactics and formats may vary between generated engine instances, if weak typing is used.
 //!
 //! \see IBuilderConfig
 //!

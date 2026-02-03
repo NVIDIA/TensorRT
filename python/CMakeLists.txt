@@ -1,11 +1,11 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-
+#
 # http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -30,8 +30,12 @@ else()
 endif()
 set(TRT_BUILD_PYTHON_EXTERNALS_PATH ${DEFAULT_PY_EXT_PATH} CACHE PATH "Path to the parent folder of pybind11 and the many versioned python headers/libs.")
 
-set(TRT_BUILD_PYTHON_PY_VERSIONS 3.8 3.9 3.10 3.11 3.12 3.13 CACHE STRING "The list of python versions to build bindings for.")
+set(BUILD_PYTHON_PY_VERSIONS 3.8 3.9 3.10 3.11 3.12 3.13)
 
+
+set(TRT_BUILD_PYTHON_PY_VERSIONS ${BUILD_PYTHON_PY_VERSIONS} CACHE STRING "The list of python versions to build TensorRT bindings for.")
+
+message(STATUS "TRT_BUILD_PYTHON_PY_VERSIONS: ${TRT_BUILD_PYTHON_PY_VERSIONS}")
 
 if(NOT ${TRT_BUILD_WINML})
     set(TRT_PYTHON_MODULE_NAMES
@@ -101,8 +105,7 @@ function(createBindingLibrary moduleName pyVersion)
     add_subdirectory(src ${SUBDIR_BINARY_DIR_PREFIX}/src)
 
     target_link_libraries(${libName} PRIVATE
-        pybind11::headers
-        pybind11::opt_size
+        pybind11::module
     )
 
     if(MSVC)
@@ -132,8 +135,6 @@ function(createBindingLibrary moduleName pyVersion)
         set(PYCONFIG_H_PATH "x86_64-linux-gnu/python${pyVersion}")
     elseif(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_AARCH64})
         set(PYCONFIG_H_PATH "aarch64-linux-gnu/python${pyVersion}")
-    elseif(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_WIN10})
-        set(PYCONFIG_H_PATH "win/python${pyVersion}")
     else()
         message(FATAL_ERROR "The current platform \"${TRT_BUILD_PLATFORM}\" cannot be used to build the TRT Python Bindings.")
     endif()

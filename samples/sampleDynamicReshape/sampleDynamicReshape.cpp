@@ -28,7 +28,6 @@
 #define DEFINE_TRT_ENTRYPOINTS 1
 
 #include "BatchStream.h"
-#include "EntropyCalibrator.h"
 #include "argsParser.h"
 #include "buffers.h"
 #include "common.h"
@@ -38,12 +37,12 @@
 #include "NvInfer.h"
 #include <cuda_runtime_api.h>
 #include <random>
+
 using namespace nvinfer1;
-using samplesCommon::SampleUniquePtr;
 
 const std::string gSampleName = "TensorRT.sample_dynamic_reshape";
 
-//! \brief The SampleDynamicReshape class implementes the dynamic reshape sample.
+//! \brief The SampleDynamicReshape class implements the dynamic reshape sample.
 //!
 //! \details This class builds one engine that resizes a given input to the correct size, and a
 //! second engine based on an ONNX MNIST model that generates a prediction.
@@ -72,36 +71,30 @@ public:
     bool infer();
 
 private:
-    bool buildPreprocessorEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream);
-    bool buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
-        const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream);
+    [[nodiscard]] bool buildPreprocessorEngine(
+        nvinfer1::IBuilder& builder, nvinfer1::IRuntime& runtime, cudaStream_t profileStream);
+    [[nodiscard]] bool buildPredictionEngine(
+        nvinfer1::IBuilder& builder, nvinfer1::IRuntime& runtime, cudaStream_t profileStream);
 
-    Dims loadPGMFile(const std::string& fileName);
-    bool validateOutput(int digit);
+    [[nodiscard]] Dims loadPGMFile(const std::string& fileName);
+    [[nodiscard]] bool validateOutput(int digit);
 
     samplesCommon::OnnxSampleParams mParams; //!< The parameters for the sample.
 
     nvinfer1::Dims mPredictionInputDims;  //!< The dimensions of the input of the MNIST model.
     nvinfer1::Dims mPredictionOutputDims; //!< The dimensions of the output of the MNIST model.
 
-    SampleUniquePtr<nvinfer1::IRuntime> mRuntime{nullptr};
+    std::unique_ptr<nvinfer1::IRuntime> mRuntime{nullptr};
 
     // Engine plan files used for inference. One for resizing inputs, another for prediction.
-    SampleUniquePtr<nvinfer1::ICudaEngine> mPreprocessorEngine{nullptr}, mPredictionEngine{nullptr};
+    std::unique_ptr<nvinfer1::ICudaEngine> mPreprocessorEngine{nullptr}, mPredictionEngine{nullptr};
 
-    SampleUniquePtr<nvinfer1::IExecutionContext> mPreprocessorContext{nullptr}, mPredictionContext{nullptr};
+    std::unique_ptr<nvinfer1::IExecutionContext> mPreprocessorContext{nullptr}, mPredictionContext{nullptr};
 
     samplesCommon::ManagedBuffer mInput{};          //!< Host and device buffers for the input.
     samplesCommon::DeviceBuffer mPredictionInput{}; //!< Device buffer for the output of the preprocessor, i.e. the
                                                     //!< input to the prediction model.
-    samplesCommon::ManagedBuffer mOutput{};         //!< Host buffer for the ouptut
-
-    template <typename T>
-    SampleUniquePtr<T> makeUnique(T* t)
-    {
-        return SampleUniquePtr<T>{t};
-    }
+    samplesCommon::ManagedBuffer mOutput{};         //!< Host buffer for the output
 };
 
 //!
@@ -115,14 +108,14 @@ private:
 //!
 bool SampleDynamicReshape::build()
 {
-    auto builder = makeUnique(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
+    auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
     {
         sample::gLogError << "Create inference builder failed." << std::endl;
         return false;
     }
 
-    mRuntime = makeUnique(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
+    mRuntime = std::unique_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
     if (!mRuntime)
     {
         sample::gLogError << "Runtime object creation failed." << std::endl;
@@ -140,8 +133,8 @@ bool SampleDynamicReshape::build()
             return false;
         }
 
-        bool result = buildPredictionEngine(builder, mRuntime, *profileStream)
-            && buildPreprocessorEngine(builder, mRuntime, *profileStream);
+        bool result = buildPredictionEngine(*builder, *mRuntime, *profileStream)
+            && buildPreprocessorEngine(*builder, *mRuntime, *profileStream);
         return result;
     }
     catch (std::runtime_error& e)
@@ -156,11 +149,12 @@ bool SampleDynamicReshape::build()
 //!
 //! \return false if error in build preprocessor engine.
 //!
-bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
+bool SampleDynamicReshape::buildPreprocessorEngine(
+    nvinfer1::IBuilder& builder, nvinfer1::IRuntime& runtime, cudaStream_t profileStream)
 {
     // Create the preprocessor engine using a network that supports full dimensions (createNetworkV2).
-    auto preprocessorNetwork = makeUnique(builder->createNetworkV2(0));
+    auto preprocessorNetwork = std::unique_ptr<INetworkDefinition>(
+        builder.createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)));
     if (!preprocessorNetwork)
     {
         sample::gLogError << "Create network failed." << std::endl;
@@ -174,7 +168,7 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
     preprocessorNetwork->markOutput(*resizeLayer->getOutput(0));
 
     // Finally, configure and build the preprocessor engine.
-    auto preprocessorConfig = makeUnique(builder->createBuilderConfig());
+    auto preprocessorConfig = std::unique_ptr<IBuilderConfig>{builder.createBuilderConfig()};
     if (!preprocessorConfig)
     {
         sample::gLogError << "Create builder config failed." << std::endl;
@@ -182,7 +176,7 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
     }
 
     // Create an optimization profile so that we can specify a range of input dimensions.
-    auto profile = builder->createOptimizationProfile();
+    auto profile = builder.createOptimizationProfile();
     // This profile will be valid for all images whose size falls in the range of [(1, 1, 1, 1), (1, 1, 56, 56)]
     // but TensorRT will optimize for (1, 1, 28, 28)
     // We do not need to check the return of setDimension and addOptimizationProfile here as all dims are explicitly set
@@ -191,29 +185,7 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
     profile->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{1, 1, 56, 56});
     preprocessorConfig->addOptimizationProfile(profile);
 
-    // Create a calibration profile.
-    auto profileCalib = builder->createOptimizationProfile();
-    const int calibBatchSize{256};
-    // We do not need to check the return of setDimension and setCalibrationProfile here as all dims are explicitly set
-    profileCalib->setDimensions(input->getName(), OptProfileSelector::kMIN, Dims4{calibBatchSize, 1, 28, 28});
-    profileCalib->setDimensions(input->getName(), OptProfileSelector::kOPT, Dims4{calibBatchSize, 1, 28, 28});
-    profileCalib->setDimensions(input->getName(), OptProfileSelector::kMAX, Dims4{calibBatchSize, 1, 28, 28});
-    preprocessorConfig->setCalibrationProfile(profileCalib);
-    preprocessorConfig->setProfileStream(profileStream);
-
-    std::unique_ptr<IInt8Calibrator> calibrator;
-    if (mParams.int8)
-    {
-        preprocessorConfig->setFlag(BuilderFlag::kINT8);
-        const int nCalibBatches{10};
-        MNISTBatchStream calibrationStream(
-            calibBatchSize, nCalibBatches, "train-images-idx3-ubyte", "train-labels-idx1-ubyte", mParams.dataDirs);
-        calibrator.reset(
-            new Int8EntropyCalibrator2<MNISTBatchStream>(calibrationStream, 0, "MNISTPreprocessor", "input"));
-        preprocessorConfig->setInt8Calibrator(calibrator.get());
-    }
-
-    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
 
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
@@ -222,8 +194,8 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
             sample::gLogger.getTRTLogger(), *preprocessorConfig, mParams.timingCacheFile);
     }
 
-    SampleUniquePtr<nvinfer1::IHostMemory> preprocessorPlan
-        = makeUnique(builder->buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
+    auto preprocessorPlan = std::unique_ptr<nvinfer1::IHostMemory>(
+        builder.buildSerializedNetwork(*preprocessorNetwork, *preprocessorConfig));
     if (!preprocessorPlan)
     {
         sample::gLogError << "Preprocessor serialized engine build failed." << std::endl;
@@ -233,11 +205,11 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
     if (timingCache != nullptr && !mParams.timingCacheFile.empty())
     {
         samplesCommon::updateTimingCacheFile(
-            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), builder);
     }
 
-    mPreprocessorEngine
-        = makeUnique(runtime->deserializeCudaEngine(preprocessorPlan->data(), preprocessorPlan->size()));
+    mPreprocessorEngine = std::unique_ptr<nvinfer1::ICudaEngine>(
+        runtime.deserializeCudaEngine(preprocessorPlan->data(), preprocessorPlan->size()));
     if (!mPreprocessorEngine)
     {
         sample::gLogError << "Preprocessor engine deserialization failed." << std::endl;
@@ -267,18 +239,24 @@ bool SampleDynamicReshape::buildPreprocessorEngine(const SampleUniquePtr<nvinfer
 //!
 //! \return false if error in build prediction engine.
 //!
-bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1::IBuilder>& builder,
-    const SampleUniquePtr<nvinfer1::IRuntime>& runtime, cudaStream_t profileStream)
+bool SampleDynamicReshape::buildPredictionEngine(
+    nvinfer1::IBuilder& builder, nvinfer1::IRuntime& runtime, cudaStream_t profileStream)
 {
     // Create a network using the parser.
-    auto network = makeUnique(builder->createNetworkV2(0));
+    auto network = std::unique_ptr<INetworkDefinition>(
+        builder.createNetworkV2(1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)));
     if (!network)
     {
         sample::gLogError << "Create network failed." << std::endl;
         return false;
     }
 
-    auto parser = samplesCommon::infer_object(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+    auto const parser
+        = std::unique_ptr<nvonnxparser::IParser>(nvonnxparser::createParser(*network, sample::gLogger.getTRTLogger()));
+    if (parser == nullptr)
+    {
+        throw std::runtime_error("Failed to create ONNX parser");
+    }
     bool parsingSuccess
         = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
             static_cast<int>(sample::gLogger.getReportableSeverity()));
@@ -300,44 +278,16 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     mPredictionOutputDims = network->getOutput(0)->getDimensions();
 
     // Create a builder config
-    auto config = makeUnique(builder->createBuilderConfig());
+    auto config = std::unique_ptr<IBuilderConfig>(builder.createBuilderConfig());
     if (!config)
     {
         sample::gLogError << "Create builder config failed." << std::endl;
         return false;
     }
-    if (mParams.fp16)
-    {
-        config->setFlag(BuilderFlag::kFP16);
-    }
-    if (mParams.bf16)
-    {
-        config->setFlag(BuilderFlag::kBF16);
-    }
     config->setProfileStream(profileStream);
 
-    auto profileCalib = builder->createOptimizationProfile();
-    const auto inputName = mParams.inputTensorNames[0].c_str();
-    const int calibBatchSize{1};
-    // We do not need to check the return of setDimension and setCalibrationProfile here as all dims are explicitly set
-    profileCalib->setDimensions(inputName, OptProfileSelector::kMIN, Dims4{calibBatchSize, 1, 28, 28});
-    profileCalib->setDimensions(inputName, OptProfileSelector::kOPT, Dims4{calibBatchSize, 1, 28, 28});
-    profileCalib->setDimensions(inputName, OptProfileSelector::kMAX, Dims4{calibBatchSize, 1, 28, 28});
-    config->setCalibrationProfile(profileCalib);
-
-    std::unique_ptr<IInt8Calibrator> calibrator;
-    if (mParams.int8)
-    {
-        config->setFlag(BuilderFlag::kINT8);
-        int nCalibBatches{10};
-        MNISTBatchStream calibrationStream(
-            calibBatchSize, nCalibBatches, "train-images-idx3-ubyte", "train-labels-idx1-ubyte", mParams.dataDirs);
-        calibrator.reset(
-            new Int8EntropyCalibrator2<MNISTBatchStream>(calibrationStream, 0, "MNISTPrediction", inputName));
-        config->setInt8Calibrator(calibrator.get());
-    }
-    // Build the prediciton engine.
-    SampleUniquePtr<nvinfer1::ITimingCache> timingCache{};
+    // Build the prediction engine.
+    std::unique_ptr<nvinfer1::ITimingCache> timingCache{};
 
     // Load timing cache
     if (!mParams.timingCacheFile.empty())
@@ -347,8 +297,7 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     }
 
     // Build the prediction engine.
-    SampleUniquePtr<nvinfer1::IHostMemory> predictionPlan
-        = makeUnique(builder->buildSerializedNetwork(*network, *config));
+    auto predictionPlan = std::unique_ptr<nvinfer1::IHostMemory>(builder.buildSerializedNetwork(*network, *config));
     if (!predictionPlan)
     {
         sample::gLogError << "Prediction serialized engine build failed." << std::endl;
@@ -358,10 +307,11 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
     if (timingCache != nullptr && !mParams.timingCacheFile.empty())
     {
         samplesCommon::updateTimingCacheFile(
-            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), *builder);
+            sample::gLogger.getTRTLogger(), mParams.timingCacheFile, timingCache.get(), builder);
     }
 
-    mPredictionEngine = makeUnique(runtime->deserializeCudaEngine(predictionPlan->data(), predictionPlan->size()));
+    mPredictionEngine = std::unique_ptr<nvinfer1::ICudaEngine>(
+        runtime.deserializeCudaEngine(predictionPlan->data(), predictionPlan->size()));
     if (!mPredictionEngine)
     {
         sample::gLogError << "Prediction engine deserialization failed." << std::endl;
@@ -382,15 +332,14 @@ bool SampleDynamicReshape::buildPredictionEngine(const SampleUniquePtr<nvinfer1:
 //!
 bool SampleDynamicReshape::prepare()
 {
-    mPreprocessorContext = makeUnique(mPreprocessorEngine->createExecutionContext());
+    mPreprocessorContext = std::unique_ptr<IExecutionContext>(mPreprocessorEngine->createExecutionContext());
     if (!mPreprocessorContext)
     {
         sample::gLogError << "Preprocessor context build failed." << std::endl;
         return false;
     }
 
-
-    mPredictionContext = makeUnique(mPredictionEngine->createExecutionContext());
+    mPredictionContext = std::unique_ptr<IExecutionContext>(mPredictionEngine->createExecutionContext());
     if (!mPredictionContext)
     {
         sample::gLogError << "Prediction context build failed." << std::endl;
@@ -532,9 +481,6 @@ samplesCommon::OnnxSampleParams initializeSampleParams(const samplesCommon::Args
     params.onnxFileName = "mnist.onnx";
     params.inputTensorNames.push_back("Input3");
     params.outputTensorNames.push_back("Plus214_Output_0");
-    params.int8 = args.runInInt8;
-    params.fp16 = args.runInFp16;
-    params.bf16 = args.runInBf16;
     params.timingCacheFile = args.timingCacheFile;
     return params;
 }
@@ -554,9 +500,6 @@ void printHelpInfo()
               << std::endl;
     std::cout << "--timingCacheFile  Specify path to a timing cache file. If it does not already exist, it will be "
               << "created." << std::endl;
-    std::cout << "--int8             Run in Int8 mode." << std::endl;
-    std::cout << "--fp16             Run in FP16 mode." << std::endl;
-    std::cout << "--bf16             Run in BF16 mode." << std::endl;
 }
 
 int main(int argc, char** argv)

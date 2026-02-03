@@ -134,24 +134,7 @@ function(buildLibsWheel moduleName)
     # Creates a new custom target, and makes trt_standalone_wheel_files depend on the new target.
     add_custom_target(${filesTarget} DEPENDS ${generatedWheelFiles} ${moduleLibraryOutputFiles})
 
-    if(MSVC)
-        set(wheelPlatform win_amd64)
-    else()
-        execute_process(
-            COMMAND ldd --version
-            OUTPUT_VARIABLE LDD_OUTPUT
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-        )
-
-        if(LDD_OUTPUT MATCHES "([0-9]+\\.[0-9]+)")
-            set(GLIBC_VERSION ${CMAKE_MATCH_1})
-            string(REPLACE "." "_" GLIBC_VERSION ${GLIBC_VERSION})
-        else()
-            message(FATAL_ERROR "Failed to determine glibc version from ldd output: ${LDD_OUTPUT}")
-        endif()
-
-        set(wheelPlatform manylinux_${GLIBC_VERSION}_${TRT_CONFIG_ARCH})
-    endif()
+    get_wheel_platform(TRUE wheelPlatform)
 
     # Define the output directory for the wheel
     set(wheelOutDir ${TRT_WHEEL_OUTPUT_DIR}/libs)

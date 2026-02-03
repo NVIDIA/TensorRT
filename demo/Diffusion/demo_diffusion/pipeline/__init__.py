@@ -30,6 +30,7 @@ __all__ = [
     "StableDiffusionPipeline",
     "CosmosPipeline",
     "StableVideoDiffusionPipeline",
+    "WanPipeline",
     "PIPELINE_TYPE",
 ]
 
@@ -50,6 +51,8 @@ _LAZY_ATTRS = {
     "FluxKontextPipeline": ("demo_diffusion.pipeline.flux_pipeline", "FluxKontextPipeline"),
     # Cosmos (optional dependency: `flux`)
     "CosmosPipeline": ("demo_diffusion.pipeline.cosmos_pipeline", "CosmosPipeline"),
+    # Wan
+    "WanPipeline": ("demo_diffusion.pipeline.wan_pipeline", "WanPipeline"),
 }
 
 def __getattr__(name):
@@ -98,3 +101,4 @@ if TYPE_CHECKING:
         FluxKontextPipeline as FluxKontextPipeline,
     )
     from demo_diffusion.pipeline.cosmos_pipeline import CosmosPipeline as CosmosPipeline
+    from demo_diffusion.pipeline.wan_pipeline import WanPipeline as WanPipeline

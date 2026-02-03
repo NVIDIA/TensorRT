@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.0.0
+ARG CUDA_VERSION=13.1.0
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
-ENV TRT_VERSION 10.14.1.48
+ENV TRT_VERSION 10.15.1.29
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account and edit default account
@@ -35,7 +35,7 @@ RUN usermod -aG sudo trtuser
 RUN echo 'trtuser:nvidia' | chpasswd
 RUN mkdir -p /workspace && chown trtuser /workspace
 
-# Required to build Ubuntu 22.04 without user prompts with DLFW container
+# Required to build Ubuntu 20.04 without user prompts with DLFW container
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Update CUDA signing key
@@ -80,15 +80,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.aarch64-gnu.cuda-13.0.tar.gz \
-    && tar -xf TensorRT-10.14.1.48.Linux.aarch64-gnu.cuda-13.0.tar.gz \
-    && cp -a TensorRT-10.14.1.48/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-10.14.1.48/python/tensorrt-10.14.1.48-cp312-none-linux_aarch64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.15.1/tars/TensorRT-10.15.1.29.Linux.aarch64-gnu.cuda-13.1.tar.gz \
+    && tar -xf TensorRT-10.15.1.29.Linux.aarch64-gnu.cuda-13.1.tar.gz \
+    && cp -a TensorRT-10.15.1.29/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-10.15.1.29/python/tensorrt-10.15.1.29-cp312-none-linux_aarch64.whl ;\
     elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.14.1/tars/TensorRT-10.14.1.48.Linux.aarch64-gnu.cuda-12.9.tar.gz \
-    && tar -xf TensorRT-10.14.1.48.Linux.aarch64-gnu.cuda-12.9.tar.gz \
-    && cp -a TensorRT-10.14.1.48/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-10.14.1.48/python/tensorrt-10.14.1.48-cp312-none-linux_aarch64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.15.1/tars/TensorRT-10.15.1.29.Linux.aarch64-gnu.cuda-12.9.tar.gz \
+    && tar -xf TensorRT-10.15.1.29.Linux.aarch64-gnu.cuda-12.9.tar.gz \
+    && cp -a TensorRT-10.15.1.29/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-10.15.1.29/python/tensorrt-10.15.1.29-cp312-none-linux_aarch64.whl ;\
     else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \

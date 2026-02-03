@@ -216,7 +216,7 @@ trtexec \
     --iterations=100 --avgRuns=100
 ```
 
-If it's not already in your `$PATH`, the `trtexec` binary is usually found in `/usr/src/tensorrt/bin/trtexec`, depending on your TensorRT installation method.
+If it's not already in your `$PATH`, the `trtexec` binary is usually found in `/usr/bin/trtexec`, depending on your TensorRT installation method.
 
 An inference benchmark will run, with GPU Compute latency times printed out to the console. Depending on your environment, you should see something similar to:
 
@@ -332,4 +332,3 @@ August 2023:
   - Removed support for Python versions < 3.8.
   - Update ONNX version support to 1.14.0
   - Update ONNX Runtime version support to 1.15.1 for Python>=3.8
-

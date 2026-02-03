@@ -1,5 +1,5 @@
 numpy
-onnx
+onnx==1.18.0
 onnxruntime==1.19.2
 protobuf>=3.20.2
 pytest
