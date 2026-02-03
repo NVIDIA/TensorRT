@@ -7,3 +7,4 @@ plotly
 jupyter
 jupyterlab
 netron
+dash==2.18.2
