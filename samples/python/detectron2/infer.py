@@ -120,7 +120,7 @@ class TensorRTInfer:
             self.inputs[0]["allocation"], np.ascontiguousarray(batch)
         )
 
-        self.context.execute_v2(self.allocations)
+        self.context.execute_v2([d.device_ptr for d in self.device_memories])
         for o in range(len(outputs)):
             common.memcpy_device_to_host(outputs[o], self.outputs[o]["allocation"])
 
