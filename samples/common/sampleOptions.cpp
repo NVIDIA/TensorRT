@@ -1420,6 +1420,10 @@ void BuildOptions::parse(Arguments& arguments)
 
     if (getAndDelOption(arguments, "--saveEngine", engine))
     {
+        if (!canWriteFile(engine))
+        {
+            throw std::invalid_argument(std::string("Cannot write engine file to path: ") + engine);
+        }
         save = true;
     }
     if (load && save)
