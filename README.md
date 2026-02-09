@@ -1,4 +1,15 @@
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Documentation](https://img.shields.io/badge/TensorRT-documentation-brightgreen.svg)](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html) [![Roadmap](https://img.shields.io/badge/Roadmap-Q1_2025-brightgreen.svg)](documents/tensorrt_roadmap_2025q1.pdf)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Documentation](https://img.shields.io/badge/TensorRT-documentation-brightgreen.svg)](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html) [![Roadmap](https://img.shields.io/badge/Roadmap-Q1_2026-brightgreen.svg)](documents/tensorrt_roadmap_2026q1.pdf)
+
+# :mega::mega: Announcement :mega::mega:
+
+TensorRT 11.0 is coming soon in 2026 Q2 with powerful new capabilities designed to accelerate your AI inference workflows. With this major version bump, TensorRT's API will be streamlined and a few legacy features will be removed.
+
+We recommend migrating early for the following features:
+- Weakly-typed networks and related APIs will be removed, replaced by [Strongly Typed Networks](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/advanced.html#strongly-typed-networks).
+- Implicit quantization and related APIs will be removed, replaced by [Explicit Quantization](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-quantized-types.html#explicit-quantization)
+- IPluginV2 and related APIs will be removed, replaced by [IPluginV3](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/extending-custom-layers.html#migrating-v2-plugins-to-ipluginv3)
+- TREX tool will be removed, replaced by [Nsight Deep Learning Designer](https://docs.nvidia.com/nsight-dl-designer/UserGuide/index.html#visualizing-a-tensorrt-engine)
+- Python bindings for Python 3.9 and older versions will be removed starting TensorRT 10.16. RPM packages for RHEL/Rocky Linux 8 and RHEL/Rocky Linux 9 now depend on Python 3.12.
 
 # TensorRT Open Source Software
 
