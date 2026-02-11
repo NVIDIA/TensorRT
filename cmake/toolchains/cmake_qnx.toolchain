@@ -126,6 +126,8 @@ include_directories(BEFORE SYSTEM
     ${CUDA_ROOT}/targets/aarch64-qnx/include
 )
 
+set(CUDA_TARGET_LIB_DIR "${CUDA_ROOT}/targets/aarch64-qnx/lib" CACHE PATH "CUDA target library directory")
+
 # And, well, as another consequence of that weirdness, we need to ensure that the cuda libs are on the link path.
 add_link_options(
     "-L${CUDA_ROOT}/targets/aarch64-qnx/lib"

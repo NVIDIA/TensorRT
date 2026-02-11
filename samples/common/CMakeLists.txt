@@ -62,6 +62,10 @@ target_include_directories(trt_samples_common PUBLIC
 
 # OSS build mode
 if(NOT TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW)
+    target_sources(trt_samples_common PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../shared/utils/cacheUtils.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../shared/utils/fileLock.cpp
+    )
     target_link_libraries(trt_samples_common PUBLIC
         Threads::Threads
         ${CUDA_LIBRARIES}
