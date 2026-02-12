@@ -303,6 +303,7 @@ nvinfer2::safe::TypedArray createTypedArray(
     case DataType::kINT64: return nvinfer2::safe::TypedArray(static_cast<int64_t*>(ptr), bufferSize);
     case DataType::kINT32: return nvinfer2::safe::TypedArray(static_cast<int32_t*>(ptr), bufferSize);
     case DataType::kINT8: return nvinfer2::safe::TypedArray(static_cast<int8_t*>(ptr), bufferSize);
+    case DataType::kUINT8: return nvinfer2::safe::TypedArray(static_cast<uint8_t*>(ptr), bufferSize);
     case DataType::kBOOL: return nvinfer2::safe::TypedArray(static_cast<bool*>(ptr), bufferSize);
     default:
     {

@@ -239,6 +239,94 @@ For Linux platforms, we recommend that you generate a docker container for build
   - `GPU_ARCHS`: GPU (SM) architectures to target. By default we generate CUDA code for all major SMs. Specific SM versions can be specified here as a quoted space-separated list to reduce compilation time and binary size. Table of compute capabilities of NVIDIA GPUs can be found [here](https://developer.nvidia.com/cuda-gpus). Examples: - NVidia A100: `-DGPU_ARCHS="80"` - RTX 50 series: `-DGPU_ARCHS="120"` - Multiple SMs: `-DGPU_ARCHS="80 120"`
   - `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation). Currently supported options: `x86_64` (default).
 
+## Building TensorRT DriveOS Samples
+
+- Generate Makefiles and build
+
+  **Example: Cross-Compile for DOS7 Linux (aarch64)**
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_dos_cross.toolchain
+  make -j$(nproc)
+  ```
+
+  **Example: Cross-Compile for DOS6.5 Linux (aarch64)**
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_dos_cross.toolchain -DCUDA_VERSION=11.4 -DGPU_ARCHS=87
+  make -j$(nproc)
+  ```
+
+  **Example: Native build for DOS6.5 and DOS7 Linux (aarch64)**
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  cmake .. -DTRT_LIB_DIR=$TRT_LIBPATH -DTRT_OUT_DIR=`pwd`/out -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64-native.toolchain -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF
+  make -j$(nproc)
+  ```
+
+  **Example: Cross-Compile for DOS6.5 QNX (aarch64)**
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  export CUDA_VERSION=11.4
+  export CUDA=cuda-$CUDA_VERSION
+  export CUDA_ROOT=/usr/local/cuda-safe-$CUDA_VERSION
+  export QNX_BASE=/drive/toolchains/qnx_toolchain  # Set to your QNX toolchain installation path
+  export QNX_HOST=$QNX_BASE/host/linux/x86_64/
+  export QNX_TARGET=$QNX_BASE/target/qnx7/
+  export PATH=$PATH:$QNX_HOST/usr/bin
+  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=$CUDA_VERSION -DGPU_ARCHS=87
+  make -j$(nproc)
+  ```
+
+  > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
+  > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
+
+  **Example: Cross-Compile for DOS6.5 QNX Safety (aarch64)**
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  export CUDA_VERSION=11.4
+  export QNX_BASE=/drive/toolchains/qnx_toolchain  # Set to your QNX toolchain installation path
+  export QNX_HOST=$QNX_BASE/host/linux/x86_64/
+  export QNX_TARGET=$QNX_BASE/target/qnx7/
+  export PATH=$PATH:$QNX_HOST/usr/bin
+  export CUDA=cuda-$CUDA_VERSION
+  export CUDA_ROOT=/usr/local/cuda-safe-$CUDA_VERSION
+  cmake .. -DBUILD_SAMPLES=OFF -DBUILD_SAFE_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DTRT_SAFETY_INFERENCE_ONLY=ON -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx_safe.toolchain -DCUDA_VERSION=$CUDA_VERSION -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DGPU_ARCHS=87
+  make -j$(nproc)
+  ```
+
+  > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
+  > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
+
+  **Example: Cross-Compile for DOS7 QNX (aarch64)**
+
+  ```bash
+  cd $TRT_OSSPATH
+  mkdir -p build && cd build
+  export CUDA_VERSION=13.1
+  export CUDA=cuda-$CUDA_VERSION
+  export CUDA_ROOT=/usr/local/cuda-safe-$CUDA_VERSION
+  export QNX_BASE=/drive/toolchains/qnx_toolchain  # Set to your QNX toolchain installation path
+  export QNX_HOST=$QNX_BASE/host/linux/x86_64/
+  export QNX_TARGET=$QNX_BASE/target/qnx/
+  export PATH=$PATH:$QNX_HOST/usr/bin
+  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=$CUDA_VERSION -DGPU_ARCHS=110
+  make -j$(nproc)
+  ```
+
+  > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
+  > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
+
 # References
 
 ## TensorRT Resources
