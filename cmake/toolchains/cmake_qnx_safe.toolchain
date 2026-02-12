@@ -121,6 +121,8 @@ include_directories(BEFORE SYSTEM
     ${CUDA_ROOT}/targets/aarch64-qnx-safe/include
 )
 
+set(CUDA_TARGET_LIB_DIR "${CUDA_ROOT}/targets/aarch64-qnx-safe/lib" CACHE PATH "CUDA target library directory")
+
 link_directories(
     ${CUDA_ROOT}/targets/aarch64-qnx-safe/lib
     ${CUDA_ROOT}/targets/aarch64-qnx-safe/lib/stubs

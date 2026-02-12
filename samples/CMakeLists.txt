@@ -85,14 +85,24 @@ if(${TRT_BUILD_SAMPLES})
         add_sample(sampleOnnxMnistCoordConvAC)
     endif()
 
+    set(CUDLA_SUPPORTED OFF)
     if(${TRT_BUILD_ENABLE_DLA} AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT WIN32)
+        if(CMAKE_SYSTEM_NAME STREQUAL "QNX" AND CUDA_VERSION VERSION_GREATER_EQUAL "12.0")
+            # cuDLA is supported on DOS 6 (CUDA 11.4) but not DOS 7+ (CUDA 12.0+)
+            message(STATUS "Skipping sampleCudla: cuDLA not supported on QNX with CUDA >= 12.0 (DriveOS 7)")
+        else()
+            set(CUDLA_SUPPORTED ON)
+        endif()
+    endif()
+    if(CUDLA_SUPPORTED)
         if(TARGET CUDA::cudla)
             set(CUDLA_TARGET CUDA::cudla CACHE STRING "cuDLA library target")
         else()
             find_library(CUDLA_TARGET cudla HINTS
-                ${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib
-                ${CUDA_ROOT}/lib64 ${CUDA_ROOT}/lib
-                /usr/local/cuda/targets/aarch64-linux/lib)
+                ${CUDA_TARGET_LIB_DIR}/stubs ${CUDA_TARGET_LIB_DIR}
+                ${CUDA_TOOLKIT_ROOT_DIR}/lib/stubs ${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib
+                ${CUDA_ROOT}/lib/stubs ${CUDA_ROOT}/lib64 ${CUDA_ROOT}/lib
+                /usr/local/cuda/targets/aarch64-linux/lib/stubs /usr/local/cuda/targets/aarch64-linux/lib)
         endif()
         if(CUDLA_TARGET)
             add_sample(sampleCudla)
@@ -152,11 +162,21 @@ else()
         add_subdirectory(sampleOnnxMnistCoordConvAC)
         add_subdirectory(sampleProgressMonitor)
         add_subdirectory(trtexec)
-        if(TRT_BUILD_ENABLE_DLA AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT CMAKE_SYSTEM_NAME STREQUAL "QNX" AND NOT WIN32)
+        set(CUDLA_SUPPORTED OFF)
+        if(TRT_BUILD_ENABLE_DLA AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT WIN32)
+            if(CMAKE_SYSTEM_NAME STREQUAL "QNX" AND CUDA_VERSION VERSION_GREATER_EQUAL "12.0")
+                # cuDLA is supported on DOS 6 (CUDA 11.4) but not DOS 7+ (CUDA 12.0+)
+                message(STATUS "Skipping sampleCudla: cuDLA not supported on QNX with CUDA >= 12.0 (DriveOS 7)")
+            else()
+                set(CUDLA_SUPPORTED ON)
+            endif()
+        endif()
+        if(CUDLA_SUPPORTED)
             find_library(CUDLA_TARGET cudla HINTS
-                ${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib
-                ${CUDA_ROOT}/lib64 ${CUDA_ROOT}/lib
-                /usr/local/cuda/targets/aarch64-linux/lib)
+                ${CUDA_TARGET_LIB_DIR}/stubs ${CUDA_TARGET_LIB_DIR}
+                ${CUDA_TOOLKIT_ROOT_DIR}/lib/stubs ${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib
+                ${CUDA_ROOT}/lib/stubs ${CUDA_ROOT}/lib64 ${CUDA_ROOT}/lib
+                /usr/local/cuda/targets/aarch64-linux/lib/stubs /usr/local/cuda/targets/aarch64-linux/lib)
             if(CUDLA_TARGET)
                 add_subdirectory(sampleCudla)
             else()
