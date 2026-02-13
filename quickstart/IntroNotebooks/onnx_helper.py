@@ -85,7 +85,7 @@ class ONNXClassifierWrapper:
         # transfer input data to device
         err = cudart.cudaMemcpyAsync(
             self.d_input, batch.ctypes.data, batch.nbytes, cudart.cudaMemcpyKind.cudaMemcpyHostToDevice, self.stream
-        )
+        )[0]
         if err != cudart.cudaError_t.cudaSuccess:
             raise RuntimeError(f"Failed to copy input to device: {cudart.cudaGetErrorString(err)}")
 
@@ -99,12 +99,12 @@ class ONNXClassifierWrapper:
             self.output.nbytes,
             cudart.cudaMemcpyKind.cudaMemcpyDeviceToHost,
             self.stream,
-        )
+        )[0]
         if err != cudart.cudaError_t.cudaSuccess:
             raise RuntimeError(f"Failed to copy output from device: {cudart.cudaGetErrorString(err)}")
 
         # synchronize threads
-        err = cudart.cudaStreamSynchronize(self.stream)
+        err = cudart.cudaStreamSynchronize(self.stream)[0]
         if err != cudart.cudaError_t.cudaSuccess:
             raise RuntimeError(f"Failed to synchronize stream: {cudart.cudaGetErrorString(err)}")
 
