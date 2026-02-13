@@ -105,6 +105,36 @@ void loadFromFile(std::string const& fileName, char* dst, size_t size)
     }
 }
 
+// Check if the file at the given path can be written to.
+bool canWriteFile(const std::string& path)
+{
+    // Verify that the target directory exists
+    namespace fs = std::filesystem;
+    fs::path p(path);
+    fs::path dir = p.has_parent_path() ? p.parent_path() : fs::current_path();
+    if (!fs::exists(dir) || !fs::is_directory(dir))
+    {
+        return false;
+    }
+
+    // Try creating and writing to a temporary file in the directory
+    const fs::path tempFilePath = dir / ".writetest.tmp";
+    std::ofstream test(tempFilePath.string(), std::ios::out | std::ios::trunc);
+    if (!test.is_open())
+    {
+        return false;
+    }
+    test << "test";
+    const bool ok = test.good();
+    test.close();
+
+    // Clean up the temporary file without throwing on failure
+    std::error_code ec;
+    fs::remove(tempFilePath, ec);
+
+    return ok;
+}
+
 std::vector<std::string> splitToStringVec(std::string const& s, char separator, int64_t maxSplit)
 {
     std::vector<std::string> splitted;
