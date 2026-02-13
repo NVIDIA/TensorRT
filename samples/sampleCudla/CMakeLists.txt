@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
 add_executable(sample_cudla sampleCudla.cpp)
 target_link_libraries(sample_cudla PRIVATE trt_samples_common TRT_SAMPLES::tensorrt ${CUDLA_TARGET})
@@ -25,3 +26,14 @@ installLibraries(
     OPTIONAL
     COMPONENT internal
 )
+
+else()
+
+set(SAMPLE_SOURCES sampleCudla.cpp)
+
+include(../CMakeSamplesTemplate.txt)
+
+target_link_libraries(${TARGET_NAME} ${CUDLA_TARGET})
+target_compile_definitions(${TARGET_NAME} PRIVATE ENABLE_DLA=1)
+
+endif()

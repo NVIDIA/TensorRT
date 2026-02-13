@@ -53,8 +53,10 @@ set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER} CACHE STRING "" FORCE)
 set(CMAKE_CUDA_FLAGS "-I${CUDA_INCLUDE_DIRS} -Xcompiler=\"-fPIC ${CMAKE_CXX_FLAGS}\"" CACHE STRING "" FORCE)
 set(CMAKE_CUDA_COMPILER_FORCED TRUE)
 
-set(CUDA_LIBS -L${CUDA_ROOT}/lib)
-
+set(CUDA_LIBS -L${CUDA_ROOT}/lib/stubs -L${CUDA_ROOT}/lib)
 set(ADDITIONAL_PLATFORM_LIB_FLAGS ${CUDA_LIBS} -lcublas -lcudart -lstdc++ -lm)
 
+link_directories(${CUDA_ROOT}/lib/stubs)
 link_directories(${CUDA_ROOT}/lib)
+
+set(CMAKE_EXE_LINKER_FLAGS "-Wl,-rpath-link,${CUDA_ROOT}/lib/stubs -Wl,--allow-shlib-undefined" CACHE STRING "" FORCE)
