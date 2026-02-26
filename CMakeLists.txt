@@ -204,6 +204,9 @@ if(BUILD_SAFE_SAMPLES OR TRT_SAFETY_INFERENCE_ONLY)
         target_link_options(TRTSAFE::nvinfer_safe_shared INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
         target_link_options(TRTSAFE::nvinfer_safe_debug INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
     endif()
+
+    # Enable unified builder safety features when building safety samples or in inference-only mode.
+    add_compile_definitions(ENABLE_UNIFIED_BUILDER=1)
 endif()
 
 # OSS safety inference-only mode: require safety samples and disable enterprise
@@ -328,6 +331,15 @@ else()
     else()
         set(CUDART_LIB_NAME cudart)
         set(CMAKE_CUDA_RUNTIME_LIBRARY "shared")
+    endif()
+
+    # SafeCUDA (QNX-Safe) does not ship libcudadevrt. When CMAKE_CUDA_RUNTIME_LIBRARY
+    # is "shared" or "static", CMake automatically links -lcudadevrt for targets with
+    # CUDA sources, which breaks QNX-Safe cross-compilation. Setting it to "None"
+    # disables automatic CUDA runtime linking; cudart is still linked manually via
+    # trt_global_definitions.
+    if(TRT_SAFETY_INFERENCE_ONLY AND CMAKE_SYSTEM_NAME STREQUAL "QNX")
+        set(CMAKE_CUDA_RUNTIME_LIBRARY "None")
     endif()
 
     find_library(CUDART_LIB ${CUDART_LIB_NAME} HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)

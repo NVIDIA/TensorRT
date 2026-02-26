@@ -272,6 +272,20 @@ WeightStreamingBudget stringToValue<WeightStreamingBudget>(std::string const& op
     return budget;
 }
 
+#if ENABLE_UNIFIED_BUILDER
+template <>
+samplesSafeCommon::SafetyPluginLibraryArgument stringToValue<samplesSafeCommon::SafetyPluginLibraryArgument>(
+    std::string const& option)
+{
+    samplesSafeCommon::SafetyPluginLibraryArgument argument;
+    auto status = parseSafetyPluginArgument(option, argument);
+    if (!status)
+    {
+        throw std::invalid_argument(std::string("Invalid Safety plugin library option: " + option));
+    }
+    return argument;
+}
+#endif
 
 
 template <typename T>
@@ -1679,6 +1693,13 @@ void SystemOptions::parse(Arguments& arguments)
     {
         dynamicPlugins.emplace_back(pluginName);
     }
+#if ENABLE_UNIFIED_BUILDER
+    samplesSafeCommon::SafetyPluginLibraryArgument safetyPluginOption;
+    while (getAndDelOption(arguments, "--safetyPlugins", safetyPluginOption))
+    {
+        safetyPlugins.emplace_back(std::move(safetyPluginOption));
+    }
+#endif // ENABLE_UNIFIED_BUILDER
     getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
     std::string staticPluginName;
     // Enable static plugin as internal option for TRT_WINML.

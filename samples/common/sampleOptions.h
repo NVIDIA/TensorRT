@@ -29,6 +29,9 @@
 
 #include "NvInfer.h"
 
+#if ENABLE_UNIFIED_BUILDER
+#include "safeCommon.h"
+#endif
 
 namespace sample
 {
@@ -306,6 +309,9 @@ public:
     std::vector<std::string> plugins;
     std::vector<std::string> setPluginsToSerialize;
     std::vector<std::string> dynamicPlugins;
+#if ENABLE_UNIFIED_BUILDER
+    std::vector<samplesSafeCommon::SafetyPluginLibraryArgument> safetyPlugins;
+#endif
 
     void parse(Arguments& arguments) override;
 
