@@ -110,7 +110,9 @@ endif()
 # We need to set a couple additional flags to compile with SafeCUDA.
 # 1. SafeCUDA does not contain cudadevrt, so we need to disable it by setting --cudadevrt=none
 # 2. SafeCUDA depends on the QNX Slogger2 library, which must be linked via -lslog2. It is a system library for QNX-Safe.
-set(CMAKE_CUDA_FLAGS_INIT "${CMAKE_CUDA_FLAGS_INIT} --cudadevrt=none -lslog2")
+# 3. Use --target-directory to tell nvcc to use aarch64-qnx-safe instead of aarch64-qnx
+#    This is critical to override nvcc's internal _TARGET_DIR_ variable
+set(CMAKE_CUDA_FLAGS_INIT "${CMAKE_CUDA_FLAGS_INIT} --cudadevrt=none -lslog2 --target-directory aarch64-qnx-safe")
 
 # We need to explicitly populate `CMAKE_CUDA_FLAGS` with the initial flags so they propagate to the CMake Compiler Identification phase.
 # Otherwise, they will only be initialized afterwards, which will cause the identification to fail.

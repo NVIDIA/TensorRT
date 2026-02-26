@@ -39,6 +39,10 @@
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
+#if ENABLE_UNIFIED_BUILDER
+#include "NvInferConsistency.h"
+#include "safeErrorRecorder.h"
+#endif
 
 // cspell:ignore calib CUFILE nvonnxparser
 
@@ -1373,6 +1377,11 @@ bool networkToSerializedEngine(
         if (build.safe && build.consistency)
         {
             std::vector<std::string> pluginBuildLibPaths;
+#if ENABLE_UNIFIED_BUILDER
+            pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
+            std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
+                [](auto const& sp) { return sp.libraryName; });
+#endif
             if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size(), pluginBuildLibPaths))
             {
                 return false;
@@ -1534,6 +1543,11 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
     if (enableConsistency)
     {
         std::vector<std::string> pluginBuildLibPaths;
+#if ENABLE_UNIFIED_BUILDER
+        pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
+        std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
+            [](auto const& sp) { return sp.libraryName; });
+#endif
         if (!checkSafeEngine(engineBlob.data(), fsize, pluginBuildLibPaths))
         {
             sample::gLogError << "Consistency validation is not enabled." << std::endl;
@@ -1987,6 +2001,39 @@ static constexpr auto kCONSISTENCY_CHECKER_LIBRARY = nullptr;
 
 } // namespace
 
+#if ENABLE_UNIFIED_BUILDER
+
+std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> createConsistencyChecker(
+    sample::SampleSafeRecorder& recorder, void const* serializedEngine, int32_t const engineSize,
+    std::vector<std::string> const& pluginBuildLibPath) noexcept
+{
+
+    if (serializedEngine == nullptr || engineSize == 0)
+    {
+        return nullptr;
+    }
+
+#if !defined(_WIN32)
+    if (hasSafeRuntime())
+    {
+        constexpr char symbolName[] = "createConsistencyChecker";
+        using CreateCheckerFn = ErrorCode (*)(nvinfer2::safe::consistency::IConsistencyChecker*& checker,
+            sample::SampleSafeRecorder& recorder, void const* data, size_t size,
+            std::vector<std::string> const& pluginBuildLibPath);
+        if (auto const createFn
+            = reinterpret_cast<CreateCheckerFn>(dlsym(kCONSISTENCY_CHECKER_LIBRARY.get(), symbolName)))
+        {
+            if (nvinfer2::safe::consistency::IConsistencyChecker * checker{nullptr};
+                ErrorCode::kSUCCESS == createFn(checker, recorder, serializedEngine, engineSize, pluginBuildLibPath))
+            {
+                return std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker>{checker};
+            }
+        }
+    }
+#endif
+    return nullptr;
+}
+#endif
 
 bool hasSafeRuntime()
 {
@@ -2001,7 +2048,32 @@ bool hasConsistencyChecker()
 bool checkSafeEngine(
     void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibPath)
 {
+#if !ENABLE_UNIFIED_BUILDER
     return false;
+#else
+    if (!hasConsistencyChecker())
+    {
+        sample::gLogError << "Cannot perform consistency check because the checker is not loaded." << std::endl;
+        return false;
+    }
+
+    sample::SampleSafeRecorder recorder{nvinfer2::safe::Severity::kINFO};
+    std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> checker
+        = createConsistencyChecker(recorder, serializedEngine, engineSize, pluginBuildLibPath);
+    if (checker == nullptr)
+    {
+        sample::gLogError << "Failed to create consistency checker." << std::endl;
+        return false;
+    }
+    sample::gLogInfo << "Start consistency checking." << std::endl;
+    if (!checker->validate())
+    {
+        sample::gLogError << "Consistency validation failed." << std::endl;
+        return false;
+    }
+    sample::gLogInfo << "Consistency validation passed." << std::endl;
+    return true;
+#endif
 }
 
 } // namespace sample

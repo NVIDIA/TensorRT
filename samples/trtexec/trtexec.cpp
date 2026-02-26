@@ -41,6 +41,11 @@ using namespace nvinfer1;
 using namespace sample;
 using namespace samplesCommon;
 
+#if ENABLE_UNIFIED_BUILDER
+using namespace nvinfer2::safe;
+__attribute__((weak)) std::shared_ptr<sample::SampleSafeRecorder> gSafeRecorder
+    = std::make_shared<sample::SampleSafeRecorder>(nvinfer2::safe::Severity::kINFO);
+#endif
 
 namespace
 {
@@ -157,6 +162,60 @@ nvonnxparser::IParserRefitter* createONNXRefitter(nvinfer1::IRefitter& refitter)
         pCreateNvOnnxRefitterInternal(&refitter, &gLogger.getTRTLogger(), NV_ONNX_PARSER_VERSION));
 }
 
+#if ENABLE_UNIFIED_BUILDER
+
+bool processSafetyPluginLibrary(nvinfer2::safe::ISafePluginRegistry* safetyPluginRegistry, DynamicLibrary* libPtr,
+    samplesSafeCommon::SafetyPluginLibraryArgument const& pluginArgs)
+{
+    if (libPtr == nullptr)
+    {
+        sample::gLogError << "Cannot open safety plugin library " << pluginArgs.libraryName << std::endl;
+        return false;
+    }
+    std::string const pluginGetterSymbolName{"getSafetyPluginCreator"};
+    auto pGetSafetyPluginCreator
+        = libPtr->symbolAddress<void*(char const*, char const*)>(pluginGetterSymbolName.c_str());
+    if (pGetSafetyPluginCreator == nullptr)
+    {
+        sample::gLogError << "Cannot find plugin creator getter symbol from plugin library: " << pluginArgs.libraryName
+                          << std::endl;
+        sample::gLogError << "Please ensure interface function is correctly implemented and exported." << std::endl;
+        return false;
+    }
+
+    for (auto const& pluginAttr : pluginArgs.pluginAttrs)
+    {
+        auto pluginCreator = static_cast<IPluginCreatorInterface*>(
+            pGetSafetyPluginCreator(pluginAttr.pluginNamespace.c_str(), pluginAttr.pluginName.c_str()));
+        if (pluginCreator == nullptr)
+        {
+            sample::gLogWarning << "Plugin interface getSafetyPluginCreator return nullptr for "
+                                << pluginAttr.pluginNamespace << "::" << pluginAttr.pluginName
+                                << " in the safety plugin library: " << pluginArgs.libraryName << std::endl;
+            sample::gLogWarning
+                << "Please ensure interface function is implemented correctly and plugin name/namespace is matched."
+                << std::endl;
+            continue;
+        }
+        sample::gLogInfo << "Registering " << pluginAttr.pluginNamespace << "::" << pluginAttr.pluginName
+                         << " for TensorRT safety." << std::endl;
+        ErrorCode errorCode
+            = safetyPluginRegistry->registerCreator(*pluginCreator, pluginAttr.pluginNamespace.c_str(), *gSafeRecorder);
+        if (errorCode != ErrorCode::kSUCCESS)
+        {
+            sample::gLogWarning << "Failed to register safety plugin " << pluginAttr.pluginNamespace
+                                << "::" << pluginAttr.pluginName << std::endl;
+            if (errorCode == ErrorCode::kINVALID_ARGUMENT)
+            {
+                sample::gLogWarning << "Is getPluginName/getPluginNamespace/getPluginVersion interface implemented and "
+                                       "return non-nullptr?"
+                                    << std::endl;
+            }
+        }
+    }
+    return true;
+}
+#endif
 
 using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
@@ -267,6 +326,22 @@ int main(int argc, char** argv)
         {
             throw std::runtime_error("TRT-18412: Plugins require --useRuntime=full.");
         }
+#if ENABLE_UNIFIED_BUILDER
+        auto safetyPluginRegistry = sample::safe::getSafePluginRegistry(*gSafeRecorder);
+        ASSERT(safetyPluginRegistry != nullptr);
+
+        if (!options.system.safetyPlugins.empty())
+        {
+            for (auto const& safetyPluginArg : options.system.safetyPlugins)
+            {
+                sample::gLogInfo << "Loading supplied safety plugin library with manual registration: "
+                                 << safetyPluginArg.libraryName << std::endl;
+                auto pluginLib = loadLibrary(safetyPluginArg.libraryName);
+                processSafetyPluginLibrary(safetyPluginRegistry, pluginLib.get(), safetyPluginArg);
+                pluginLibs.emplace_back(std::move(pluginLib));
+            }
+        }
+#endif // ENABLE_UNIFIED_BUILDER
         if (options.build.safe && !sample::hasSafeRuntime())
         {
             sample::gLogError << "Safety is not supported because safety runtime library is unavailable." << std::endl;
@@ -319,6 +394,9 @@ int main(int argc, char** argv)
             return sample::gLogger.reportFail(sampleTest);
         }
 
+#if ENABLE_UNIFIED_BUILDER
+        safetyPluginRegistry->setSafeRecorder(*gSafeRecorder);
+#endif // ENABLE_UNIFIED_BUILDER
 
         // Exit as version is already printed during getEngineBuildEnv
         if (options.build.getPlanVersionOnly)
@@ -388,8 +466,12 @@ int main(int argc, char** argv)
         }
         else
         {
+#if ENABLE_UNIFIED_BUILDER
+            iEnv = std::make_unique<InferenceEnvironmentSafe>(*bEnv);
+#else
             sample::gLogInfo << "--safe flag is enabled but application is not compatible with safety." << std::endl;
             return sample::gLogger.reportFail(sampleTest);
+#endif
         }
 
         // We avoid re-loading some dynamic plugins while deserializing
