@@ -1,0 +1,110 @@
+[project]
+name = "tensorrt-diffusion"
+version = "0.1.0"
+description = "TensorRT-accelerated implementations of Stable Diffusion and other diffusion models"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+
+# Core dependencies shared across all pipeline families
+dependencies = [
+    "apex==0.9.10dev",
+    "accelerate==1.2.1",
+    "colored==2.3.1",
+    "controlnet-aux==0.0.6",
+    "cuda-python==13.0.2",
+    "ftfy==6.3.1",
+    "matplotlib==3.10.7",
+    "nvtx==0.2.13",
+    "opencv-python-headless==4.8.0.74",
+    "scipy==1.15.3",
+    "transformers==4.52.4",
+    "onnx==1.19.0",
+    "onnxscript==0.5.4",
+    "onnx-graphsurgeon==0.5.2",
+    "peft==0.17.0",
+    "polygraphy==0.49.22",
+    "sentencepiece==0.2.1",
+    "numpy==1.26.4",
+    "nvidia-modelopt[torch,onnx]==0.40.0",
+]
+
+[project.optional-dependencies]
+# Stable Diffusion family (Stability AI)
+# Pipelines: SD 1.4, SDXL, SD3, SD3.5, SVD (Stable Video Diffusion), Stable Cascade
+sd = [
+    "diffusers==0.35.2",
+    "imageio-ffmpeg",
+]
+
+# Flux family (Black Forest Labs)
+# Pipelines: Flux.1-dev, Flux.1-schnell, Flux.1-Canny, Flux.1-Depth, Flux.1-Kontext
+# NOTE: Diffusers upgrade requires Dynamo export support
+flux = [
+    "diffusers @ git+https://github.com/huggingface/diffusers.git@7298bdd8177c16eadb74f6166327f5984fd8c69d",
+    "flux @ git+https://github.com/black-forest-labs/flux.git",
+]
+
+# Cosmos family (NVIDIA)
+# Pipelines: Cosmos-Predict2 Text2Image (2B, 14B), Cosmos-Predict2 Video2World (2B, 14B), Wan2.2
+cosmos = [
+    "diffusers==0.35.2",
+    "imageio-ffmpeg",
+    "flux @ git+https://github.com/black-forest-labs/flux.git",
+]
+
+# Install all families
+all = [
+    "tensorrt-diffusion[sd]",
+    "tensorrt-diffusion[flux]",
+    "tensorrt-diffusion[cosmos]",
+]
+
+# Development dependencies
+dev = [
+    "pytest",
+    "pytest-cov",
+    "black",
+    "ruff",
+]
+
+
+[build-system]
+requires = ["poetry-core>=1.3.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+# Tell Poetry where the actual Python package is located
+packages = [{include = "demo_diffusion"}]
+
+[tool.uv]
+# Use PyPI as the main index
+index-url = "https://pypi.org/simple"
+
+# Add NVIDIA's PyPI index for nvidia-modelopt and related packages
+[[tool.uv.index]]
+name = "nvidia"
+url = "https://pypi.nvidia.com"
+explicit = true
+
+[tool.uv.sources]
+# Explicitly fetch these packages from NVIDIA's index
+nvidia-modelopt = { index = "nvidia" }
+onnx-graphsurgeon = { index = "nvidia" }
+polygraphy = { index = "nvidia" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # Line too long (handled by formatter)
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.black]
+line-length = 120
+target-version = ["py310", "py311", "py312"]
