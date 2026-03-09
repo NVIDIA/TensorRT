@@ -124,6 +124,7 @@ set(CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS_INIT})
 # The CUDA setup for TRT-OSS is a bit wonky, so we enable the includes globally.
 include_directories(BEFORE SYSTEM
     ${CUDA_ROOT}/targets/aarch64-qnx/include
+    /usr/include/aarch64-unknown-nto-qnx # TensorRT Safety Headers are installed here.
 )
 
 set(CUDA_TARGET_LIB_DIR "${CUDA_ROOT}/targets/aarch64-qnx/lib" CACHE PATH "CUDA target library directory")

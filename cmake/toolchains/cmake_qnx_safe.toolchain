@@ -76,7 +76,6 @@ endif()
 include_directories(BEFORE SYSTEM
     ${QNX_HOST}/usr/lib/gcc/${QNX_TRIPLE}/${QNX_GCC_VERSION}/include
     ${QNX_TARGET}/usr/include/c++/${QNX_GCC_VERSION}/${QNX_TRIPLE}
-    # ${QNX_TARGET}/usr/include/c++/${QNX_GCC_VERSION}
     ${QNX_TARGET}/usr/include
     /usr/include/aarch64-unknown-nto-qnx-safety # TensorRT Safety Headers are installed here.
 )
