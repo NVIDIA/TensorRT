@@ -58,7 +58,8 @@ class ToInput(Tool):
                 )
 
             # Pad to appropriate length
-            inputs += [OrderedDict()] * (len(new_inputs) - len(inputs))
+            # Use list comprehension to create separate OrderedDict instances for each iteration
+            inputs += [OrderedDict() for _ in range(len(new_inputs) - len(inputs))]
 
             for inp, new_inp in zip(inputs, new_inputs):
                 inp.update(new_inp)
