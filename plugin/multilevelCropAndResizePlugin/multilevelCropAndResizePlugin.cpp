@@ -39,7 +39,7 @@ MultilevelCropAndResizePluginCreator::MultilevelCropAndResizePluginCreator() noe
     mPluginAttributes.emplace_back(PluginField("pooled_size", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -59,7 +59,7 @@ PluginFieldCollection const* MultilevelCropAndResizePluginCreator::getFieldNames
 }
 
 IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -92,7 +92,7 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
 }
 
 IPluginV2Ext* MultilevelCropAndResizePluginCreator::deserializePlugin(
-    char const* name, void const* data, size_t length) noexcept
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -113,8 +113,8 @@ MultilevelCropAndResize::MultilevelCropAndResize(int32_t pooled_size, nvinfer1::
     PLUGIN_VALIDATE(imageSize.nbDims == 3);
     PLUGIN_VALIDATE(imageSize.d[0] > 0 && imageSize.d[1] > 0 && imageSize.d[2] > 0);
     // shape
-    mInputHeight = imageSize.d[1];
-    mInputWidth = imageSize.d[2];
+    mInputHeight = static_cast<int32_t>(imageSize.d[1]);
+    mInputWidth = static_cast<int32_t>(imageSize.d[2]);
     // Threshold to P3: Smaller -> P2
     mThresh = (224 * 224) / (4.0F);
 }
@@ -136,7 +136,7 @@ void MultilevelCropAndResize::destroy() noexcept
     delete this;
 }
 
-size_t MultilevelCropAndResize::getWorkspaceSize(int32_t) const noexcept
+size_t MultilevelCropAndResize::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
 {
     return 0;
 }
@@ -220,8 +220,8 @@ Dims MultilevelCropAndResize::getOutputDimensions(int32_t index, Dims const* inp
     return result;
 }
 
-int32_t MultilevelCropAndResize::enqueue(
-    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t MultilevelCropAndResize::enqueue(int32_t batch_size, void const* const* inputs, void* const* outputs,
+    void* /*workspace*/, cudaStream_t stream) noexcept
 {
 
     void* pooled = outputs[0];
@@ -238,8 +238,8 @@ int32_t MultilevelCropAndResize::enqueue(
 
 size_t MultilevelCropAndResize::getSerializationSize() const noexcept
 {
-    return sizeof(int32_t) * 2 + sizeof(int32_t) * 4 + sizeof(float) + sizeof(int32_t) * 2 * mFeatureMapCount
-        + sizeof(DataType);
+    return sizeof(int32_t) * 2 + sizeof(int32_t) * 4 + sizeof(float)
+        + sizeof(int32_t) * 2 * static_cast<size_t>(mFeatureMapCount) + sizeof(DataType);
 }
 
 void MultilevelCropAndResize::serialize(void* buffer) const noexcept
@@ -285,7 +285,7 @@ void MultilevelCropAndResize::deserialize(int8_t const* data, size_t length)
 
 // Return the DataType of the plugin output at the requested index
 DataType MultilevelCropAndResize::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     // return DataType::kFLOAT;
@@ -298,21 +298,21 @@ DataType MultilevelCropAndResize::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool MultilevelCropAndResize::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool MultilevelCropAndResize::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool MultilevelCropAndResize::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
-    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* /*outputTypes*/, bool const* /*inputIsBroadcast*/,
+    bool const* /*outputIsBroadcast*/, PluginFormat floatFormat, int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(supportsFormat(inputTypes[0], floatFormat));
     check_valid_inputs(inputDims, nbInputs);
@@ -325,7 +325,7 @@ void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int32_t nbI
         mROICount = dimToInt32(inputDims[0].d[0]);
         mFeatureLength = dimToInt32(inputDims[1].d[0]);
 
-        for (size_t layer = 0; layer < mFeatureMapCount; ++layer)
+        for (int32_t layer = 0; layer < mFeatureMapCount; ++layer)
         {
             mFeatureSpatialSize[layer] = {dimToInt32(inputDims[layer + 1].d[1]), dimToInt32(inputDims[layer + 1].d[2])};
         }
@@ -340,7 +340,7 @@ void MultilevelCropAndResize::configurePlugin(Dims const* inputDims, int32_t nbI
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void MultilevelCropAndResize::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

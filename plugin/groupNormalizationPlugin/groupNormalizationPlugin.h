@@ -37,6 +37,11 @@ cudaError_t scaleShiftChannelsInplace(T* inOut, int32_t const B, int32_t const C
 class GroupNormalizationPlugin final : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     GroupNormalizationPlugin(float epsilon, int32_t const nbGroups);
 
     GroupNormalizationPlugin(void const* data, size_t length);
@@ -110,11 +115,6 @@ private:
     std::shared_ptr<CudaBind<float>> mBnScales{};
     std::shared_ptr<CudaBind<float>> mBnBias{};
     size_t mNbScaleBias{};
-
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class GroupNormalizationPluginCreator : public IPluginCreator

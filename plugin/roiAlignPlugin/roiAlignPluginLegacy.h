@@ -33,6 +33,11 @@ namespace plugin
 class ROIAlign : public IPluginV2DynamicExt
 {
 public:
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
+
     ROIAlign(int32_t outputHeight, int32_t outputWidth, int32_t samplingRatio, int32_t mode, float spatialScale,
         int32_t aligned);
     ROIAlign(void const* data, size_t length);

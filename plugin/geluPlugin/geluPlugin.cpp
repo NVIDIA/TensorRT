@@ -47,8 +47,9 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, const DataType type
     if (mHasBias)
     {
         void* cudaMem{nullptr};
-        PLUGIN_CUASSERT(cudaMalloc(&cudaMem, getWeightsSize(bias, mType)));
-        PLUGIN_CUASSERT(cudaMemcpy(cudaMem, bias.values, getWeightsSize(bias, mType), cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMalloc(&cudaMem, static_cast<size_t>(getWeightsSize(bias, mType))));
+        PLUGIN_CUASSERT(
+            cudaMemcpy(cudaMem, bias.values, static_cast<size_t>(getWeightsSize(bias, mType)), cudaMemcpyHostToDevice));
         make_cuda_shared(mBiasDev, cudaMem);
     }
 }
@@ -65,7 +66,7 @@ GeluPluginDynamic::GeluPluginDynamic(const std::string name, void const* data, s
     {
         PLUGIN_VALIDATE(mLd > 0);
         char const* d = static_cast<char const*>(data);
-        make_cuda_shared(mBiasDev, deserToDev<char>(d, mLd * getElementSize(mType)));
+        make_cuda_shared(mBiasDev, deserToDev<char>(d, static_cast<size_t>(mLd) * getElementSize(mType)));
     }
 }
 // IPluginV2DynamicExt Methods
@@ -86,7 +87,7 @@ nvinfer1::IPluginV2DynamicExt* GeluPluginDynamic::clone() const noexcept
 }
 
 nvinfer1::DimsExprs GeluPluginDynamic::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
-    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+    int32_t nbInputs, nvinfer1::IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -133,7 +134,7 @@ bool GeluPluginDynamic::supportsFormatCombination(
 }
 
 void GeluPluginDynamic::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+    nvinfer1::DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     gLogVerbose << "GeluPluginDynamic configurePlugin\n";
 
@@ -149,8 +150,8 @@ void GeluPluginDynamic::configurePlugin(nvinfer1::DynamicPluginTensorDesc const*
     }
 }
 
-size_t GeluPluginDynamic::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t GeluPluginDynamic::getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -164,8 +165,8 @@ int32_t GeluPluginDynamic::enqueueTyped(
 
     if (mHasBias)
     {
-        int32_t const cols = inputVolume / mLd;
-        int32_t const rows = mLd;
+        int32_t const cols = static_cast<int32_t>(inputVolume / mLd);
+        int32_t const rows = static_cast<int32_t>(mLd);
         TDataType const* bias = static_cast<TDataType*>(mBiasDev.get());
         return computeGeluBias(output, input, bias, rows, cols, stream);
     }
@@ -189,7 +190,7 @@ int32_t GeluPluginDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
         return STATUS_FAILURE;
     }
 
-    int32_t const inputVolume = volume(inputDesc[0].dims);
+    int32_t const inputVolume = static_cast<int32_t>(volume(inputDesc[0].dims));
 
     // Our plugin outputs only one tensor.
     // Launch CUDA kernel wrapper and save its return value.
@@ -205,7 +206,7 @@ int32_t GeluPluginDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
 
 // IPluginV2Ext Methods
 nvinfer1::DataType GeluPluginDynamic::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     try
     {
@@ -252,7 +253,7 @@ void GeluPluginDynamic::terminate() noexcept
 size_t GeluPluginDynamic::getSerializationSize() const noexcept
 {
     const size_t wordSize = getElementSize(mType);
-    const size_t biasSize = mHasBias ? mLd * wordSize : 0;
+    const size_t biasSize = mHasBias ? static_cast<size_t>(mLd) * wordSize : 0;
     return sizeof(mType) + sizeof(mHasBias) + sizeof(mLd) + biasSize;
 }
 
@@ -265,7 +266,7 @@ void GeluPluginDynamic::serialize(void* buffer) const noexcept
     {
         PLUGIN_ASSERT(mLd > 0);
         char* d = static_cast<char*>(buffer);
-        serFromDev(d, static_cast<char*>(mBiasDev.get()), mLd * getElementSize(mType));
+        serFromDev(d, static_cast<char*>(mBiasDev.get()), static_cast<size_t>(mLd) * getElementSize(mType));
     }
 }
 
@@ -303,7 +304,7 @@ GeluPluginDynamicCreator::GeluPluginDynamicCreator()
     mPluginAttributes.emplace_back(PluginField("bias", nullptr, PluginFieldType::kFLOAT32, 1));
 
     // Fill PluginFieldCollection with PluginField arguments metadata
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

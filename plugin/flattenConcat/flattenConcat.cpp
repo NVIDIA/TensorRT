@@ -112,7 +112,7 @@ Dims FlattenConcat::getOutputDimensions(int32_t index, Dims const* inputs, int32
             {
                 PLUGIN_ASSERT(inputs[i].d[2] == inputs[0].d[2]);
             }
-            flattenInput = inputs[i].d[0] * inputs[i].d[1] * inputs[i].d[2];
+            flattenInput = static_cast<int32_t>(inputs[i].d[0] * inputs[i].d[1] * inputs[i].d[2]);
             outputConcatAxis += flattenInput;
         }
 
@@ -133,13 +133,13 @@ int32_t FlattenConcat::initialize() noexcept
 
 void FlattenConcat::terminate() noexcept {}
 
-size_t FlattenConcat::getWorkspaceSize(int32_t) const noexcept
+size_t FlattenConcat::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
 {
     return 0;
 }
 
-int32_t FlattenConcat::enqueue(
-    int32_t batchSize, void const* const* inputs, void* const* outputs, void*, cudaStream_t stream) noexcept
+int32_t FlattenConcat::enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* /*workspace*/,
+    cudaStream_t /*stream*/) noexcept
 {
     try
     {
@@ -182,8 +182,8 @@ int32_t FlattenConcat::enqueue(
 
 size_t FlattenConcat::getSerializationSize() const noexcept
 {
-    return sizeof(bool) + sizeof(int32_t) * (3 + mNumInputs) + sizeof(nvinfer1::Dims)
-        + (sizeof(decltype(mCopySize)::value_type) * mNumInputs);
+    return sizeof(bool) + sizeof(int32_t) * static_cast<size_t>(3 + mNumInputs) + sizeof(nvinfer1::Dims)
+        + (sizeof(decltype(mCopySize)::value_type) * static_cast<size_t>(mNumInputs));
 }
 
 void FlattenConcat::serialize(void* buffer) const noexcept
@@ -208,7 +208,7 @@ void FlattenConcat::serialize(void* buffer) const noexcept
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void FlattenConcat::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* gpuAllocator) noexcept
 {
     try
     {
@@ -227,13 +227,13 @@ void FlattenConcat::detachFromContext() noexcept {}
 
 // Return true if output tensor is broadcast across a batch.
 bool FlattenConcat::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool FlattenConcat::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool FlattenConcat::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
@@ -258,15 +258,15 @@ char const* FlattenConcat::getPluginNamespace() const noexcept
 
 // Return the DataType of the plugin output at the requested index
 DataType FlattenConcat::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
-    PLUGIN_ASSERT(index < 3);
     return DataType::kFLOAT;
 }
 
-void FlattenConcat::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void FlattenConcat::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t nbOutputs, DataType const* /*inputTypes*/, DataType const* /*outputTypes*/,
+    bool const* /*inputIsBroadcast*/, bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
+    int32_t /*maxBatchSize*/) noexcept
 {
     try
     {
@@ -292,7 +292,7 @@ void FlattenConcat::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dim
             {
                 PLUGIN_ASSERT(inputDims[i].d[2] == inputDims[0].d[2]);
             }
-            flattenInput = inputDims[i].d[0] * inputDims[i].d[1] * inputDims[i].d[2];
+            flattenInput = static_cast<int32_t>(inputDims[i].d[0] * inputDims[i].d[1] * inputDims[i].d[2]);
             mInputConcatAxis[i] = flattenInput;
             mOutputConcatAxis += mInputConcatAxis[i];
         }
@@ -300,7 +300,8 @@ void FlattenConcat::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dim
         mCopySize.resize(mNumInputs);
         for (int32_t i = 0; i < nbInputs; ++i)
         {
-            mCopySize[i] = inputDims[i].d[0] * inputDims[i].d[1] * inputDims[i].d[2] * sizeof(float);
+            mCopySize[i]
+                = static_cast<size_t>(inputDims[i].d[0] * inputDims[i].d[1] * inputDims[i].d[2]) * sizeof(float);
         }
     }
     catch (std::exception const& e)
@@ -350,7 +351,7 @@ FlattenConcatPluginCreator::FlattenConcatPluginCreator()
     mPluginAttributes.emplace_back(PluginField("axis", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("ignoreBatch", nullptr, PluginFieldType::kINT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -369,7 +370,7 @@ PluginFieldCollection const* FlattenConcatPluginCreator::getFieldNames() noexcep
     return &mFC;
 }
 
-IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -404,7 +405,7 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(char const* name, PluginF
 }
 
 IPluginV2Ext* FlattenConcatPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

@@ -49,7 +49,7 @@ public:
         return mLogStreamMutex;
     }
     LogStream()
-        : std::ostream(&buffer){};
+        : std::ostream(&buffer) {};
 };
 
 // Use mutex to protect multi-stream write to buffer
@@ -88,7 +88,7 @@ extern LogStream<ILogger::Severity::kINFO> gLogInfo;
 extern LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
 void reportValidationFailure(char const* msg, char const* file, int32_t line);
-void reportAssertion(char const* msg, char const* file, int32_t line);
+[[noreturn]] void reportAssertion(char const* msg, char const* file, int32_t line);
 void logError(char const* msg, char const* file, char const* fn, int32_t line);
 
 [[noreturn]] void throwCudaError(
@@ -173,31 +173,33 @@ inline void caughtError(std::exception const& e)
 #define PLUGIN_API_CHECK_ENUM_RANGE_RETVAL(Type, val, retval)                                                          \
     PLUGIN_API_CHECK_RETVAL(int32_t(val) >= 0 && int32_t(val) < EnumMax<Type>(), retval)
 
+#undef PLUGIN_CHECK_CUDA
 #define PLUGIN_CHECK_CUDA(call)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
-        cudaError_t status = call;                                                                                     \
-        if (status != cudaSuccess)                                                                                     \
+        cudaError_t status_check_cuda_ = call;                                                                         \
+        if (status_check_cuda_ != cudaSuccess)                                                                         \
         {                                                                                                              \
-            return status;                                                                                             \
+            return status_check_cuda_;                                                                                 \
         }                                                                                                              \
     } while (0)
 
 #define PLUGIN_CUASSERT(status_)                                                                                       \
     do                                                                                                                 \
     {                                                                                                                  \
-        auto s_ = status_;                                                                                             \
-        if (s_ != cudaSuccess)                                                                                         \
+        auto s_cuassert_ = status_;                                                                                    \
+        if (s_cuassert_ != cudaSuccess)                                                                                \
         {                                                                                                              \
-            char const* msg = cudaGetErrorString(s_);                                                                  \
-            nvinfer1::plugin::throwCudaError(__FILE__, FN_NAME, __LINE__, s_, msg);                                    \
+            char const* msg_cuassert_ = cudaGetErrorString(s_cuassert_);                                               \
+            nvinfer1::plugin::throwCudaError(__FILE__, FN_NAME, __LINE__, s_cuassert_, msg_cuassert_);                 \
         }                                                                                                              \
     } while (0)
 
 // On MSVC, nested macros don't expand correctly without some help, so use TRT_EXPAND to help it out.
 #define TRT_EXPAND(x) x
 #define GET_MACRO(_1, _2, NAME, ...) NAME
-#define PLUGIN_VALIDATE(...) TRT_EXPAND(GET_MACRO(__VA_ARGS__, PLUGIN_VALIDATE_MSG, PLUGIN_VALIDATE_DEFAULT, )(__VA_ARGS__))
+#define PLUGIN_VALIDATE(...)                                                                                           \
+    TRT_EXPAND(GET_MACRO(__VA_ARGS__, PLUGIN_VALIDATE_MSG, PLUGIN_VALIDATE_DEFAULT, )(__VA_ARGS__))
 
 // Logs failed condition and throws a PluginError.
 // PLUGIN_ASSERT will eventually perform this function, at which point PLUGIN_VALIDATE
@@ -247,8 +249,8 @@ inline void caughtError(std::exception const& e)
 #define PLUGIN_CUERROR(status_)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
-        auto s_ = status_;                                                                                             \
-        if (s_ != 0)                                                                                                   \
+        auto s_cuerror_ = status_;                                                                                     \
+        if (s_cuerror_ != 0)                                                                                           \
             nvinfer1::plugin::logError(#status_ " failure.", __FILE__, FN_NAME, __LINE__);                             \
     } while (0)
 

@@ -162,11 +162,11 @@ struct SimpleProfiler : public nvinfer1::IProfiler
         out << "========== " << value.mName << " profile ==========" << std::endl;
         float totalTime = 0;
         std::string layerNameStr = "TensorRT layer name";
-        int maxLayerNameLength = std::max(static_cast<int>(layerNameStr.size()), 70);
+        int32_t maxLayerNameLength = std::max(static_cast<int32_t>(layerNameStr.size()), 70);
         for (const auto& elem : value.mProfile)
         {
             totalTime += elem.second.time;
-            maxLayerNameLength = std::max(maxLayerNameLength, static_cast<int>(elem.first.size()));
+            maxLayerNameLength = std::max(maxLayerNameLength, static_cast<int32_t>(elem.first.size()));
         }
 
         auto old_settings = out.flags();
@@ -264,7 +264,7 @@ public:
     };
     ~TypedHostMemory() noexcept override
     {
-        delete[](ElemType*) mData;
+        delete[] (ElemType*) mData;
     }
     ElemType* raw() noexcept
     {
@@ -293,7 +293,8 @@ inline bool isDebug()
     return std::getenv("TENSORRT_DEBUG") != nullptr;
 }
 
-static auto StreamDeleter = [](cudaStream_t* pStream) {
+static auto StreamDeleter = [](cudaStream_t* pStream)
+{
     if (pStream)
     {
         static_cast<void>(cudaStreamDestroy(*pStream));
@@ -786,6 +787,7 @@ inline void writePPMFileWithBBox(const std::string& filename, vPPM ppm, std::vec
 class TimerBase
 {
 public:
+    virtual ~TimerBase() = default;
     virtual void start() {}
     virtual void stop() {}
     float microseconds() const noexcept
@@ -879,17 +881,17 @@ inline std::vector<std::string> splitString(std::string str, char delimiter = ',
 
 inline int getC(nvinfer1::Dims const& d)
 {
-    return d.nbDims >= 3 ? d.d[d.nbDims - 3] : 1;
+    return d.nbDims >= 3 ? static_cast<int>(d.d[d.nbDims - 3]) : 1;
 }
 
 inline int getH(const nvinfer1::Dims& d)
 {
-    return d.nbDims >= 2 ? d.d[d.nbDims - 2] : 1;
+    return d.nbDims >= 2 ? static_cast<int>(d.d[d.nbDims - 2]) : 1;
 }
 
 inline int getW(const nvinfer1::Dims& d)
 {
-    return d.nbDims >= 1 ? d.d[d.nbDims - 1] : 1;
+    return d.nbDims >= 1 ? static_cast<int>(d.d[d.nbDims - 1]) : 1;
 }
 
 //! Platform-agnostic wrapper around dynamic libraries.
@@ -1052,9 +1054,8 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
     constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
     constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
 
-    auto processChar = [&kALLOWED](char c) {
-        return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_';
-    };
+    auto processChar = [&kALLOWED](char c)
+    { return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_'; };
 
     std::string res;
     if (s.length() <= kMAX_FILENAME_LENGTH)

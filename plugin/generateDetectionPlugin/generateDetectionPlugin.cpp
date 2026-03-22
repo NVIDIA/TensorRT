@@ -42,7 +42,7 @@ GenerateDetectionPluginCreator::GenerateDetectionPluginCreator() noexcept
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -61,7 +61,8 @@ PluginFieldCollection const* GenerateDetectionPluginCreator::getFieldNames() noe
     return &mFC;
 }
 
-IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -109,7 +110,7 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(char const* name, Plu
 }
 
 IPluginV2Ext* GenerateDetectionPluginCreator::deserializePlugin(
-    char const* name, void const* data, size_t length) noexcept
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -165,7 +166,7 @@ int32_t GenerateDetection::initialize() noexcept
     mValidCnt = std::make_shared<CudaBind<int32_t>>(mMaxBatchSize);
 
     PLUGIN_CUASSERT(cudaMemcpy(mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()),
-        sizeof(int32_t) * mMaxBatchSize, cudaMemcpyHostToDevice));
+        sizeof(int32_t) * static_cast<size_t>(mMaxBatchSize), cudaMemcpyHostToDevice));
 
     return 0;
 }
@@ -315,11 +316,11 @@ int32_t GenerateDetection::enqueue(
             detections);
 
     PLUGIN_ASSERT(status == cudaSuccess);
-    return status;
+    return static_cast<int32_t>(status);
 }
 
 DataType GenerateDetection::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -327,33 +328,34 @@ DataType GenerateDetection::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool GenerateDetection::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool GenerateDetection::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool GenerateDetection::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void GenerateDetection::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
-    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void GenerateDetection::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t /*nbOutputs*/, DataType const* inputTypes, DataType const* /*outputTypes*/,
+    bool const* /*inputIsBroadcast*/, bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
+    int32_t maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
     PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);
 
-    mAnchorsCnt = inputDims[2].d[0];
+    mAnchorsCnt = static_cast<int32_t>(inputDims[2].d[0]);
     mType = inputTypes[0];
     mMaxBatchSize = maxBatchSize;
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void GenerateDetection::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

@@ -32,6 +32,11 @@ namespace plugin
 class PillarScatterPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     PillarScatterPlugin() = delete;
     PillarScatterPlugin(void const* data, size_t length);
     PillarScatterPlugin(size_t h, size_t w);

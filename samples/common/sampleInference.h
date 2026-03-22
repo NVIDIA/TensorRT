@@ -343,7 +343,7 @@ public:
 
     std::unordered_map<std::string, int> getBindings() const
     {
-        auto all = [](Binding const& b) { return true; };
+        auto all = [](Binding const& /*b*/) { return true; };
         return getBindings(all);
     }
 
@@ -379,7 +379,7 @@ public:
 
     void dumpBindings(nvinfer1::IExecutionContext const& context, std::ostream& os) const
     {
-        auto all = [](Binding const& b) { return true; };
+        auto all = [](Binding const& /*b*/) { return true; };
         dumpBindings(context, all, os);
     }
 
@@ -436,7 +436,7 @@ public:
 
     void dumpBindings(ITRTGraph const& graph, std::ostream& os) const
     {
-        auto all = [](Binding const& b) { return true; };
+        auto all = [](Binding const& /*b*/) { return true; };
         dumpBindings(graph, all, os);
     }
 
@@ -472,8 +472,7 @@ public:
 struct TaskInferenceEnvironment
 {
     TaskInferenceEnvironment(std::string engineFile, InferenceOptions const& inference,
-        ReportingOptions const& reporting, int32_t deviceId = 0,
-        int32_t DLACore = -1, int32_t bs = batchNotProvided);
+        ReportingOptions const& reporting, int32_t deviceId = 0, int32_t DLACore = -1, int32_t bs = batchNotProvided);
     InferenceOptions iOptions{};
     ReportingOptions rOptions{};
     int32_t device{defaultDevice};

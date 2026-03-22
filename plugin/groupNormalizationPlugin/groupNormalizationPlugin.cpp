@@ -72,8 +72,8 @@ int32_t GroupNormalizationPlugin::getNbOutputs() const noexcept
     return 1;
 }
 
-nvinfer1::DimsExprs GroupNormalizationPlugin::getOutputDimensions(
-    int32_t index, nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs GroupNormalizationPlugin::getOutputDimensions(int32_t index, nvinfer1::DimsExprs const* inputs,
+    int32_t nbInputs, nvinfer1::IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -90,7 +90,7 @@ nvinfer1::DimsExprs GroupNormalizationPlugin::getOutputDimensions(
 }
 
 void GroupNormalizationPlugin::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* gpuAllocator) noexcept
 {
     try
     {
@@ -149,28 +149,28 @@ int32_t GroupNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inpu
     float const one = 1.F;
     float const zero = 0.F;
     PLUGIN_CHECK_CUDNN(mCudnnWrapper->cudnnBatchNormalizationForwardTraining(mCudnnHandle, // handle
-        CUDNN_BATCHNORM_SPATIAL, // BatchNormMode_t, try also non persistent
-        &one,                    //
-        &zero,                   //
-        mTensorDesc,             // in/out descriptor
-        inputs[0],               // input
-        mTensorDesc,             // in/out descriptor
-        outputs[0],              // output
-        mBNTensorDesc,           //
-        mBnScales->mPtr,         // 1
-        mBnBias->mPtr,           // 0
-        0.0,                     // exponential average factor
-        nullptr,                 // resultRunningMean
-        nullptr,                 // resultRunningVar
-        mEpsilon,                //  eps
-        nullptr,                 // resultSaveMean
-        nullptr                  // resultSaveInvVar
+        CUDNN_BATCHNORM_SPATIAL,       // BatchNormMode_t, try also non persistent
+        &one,                          //
+        &zero,                         //
+        mTensorDesc,                   // in/out descriptor
+        inputs[0],                     // input
+        mTensorDesc,                   // in/out descriptor
+        outputs[0],                    // output
+        mBNTensorDesc,                 //
+        mBnScales->mPtr,               // 1
+        mBnBias->mPtr,                 // 0
+        0.0F,                          // exponential average factor
+        nullptr,                       // resultRunningMean
+        nullptr,                       // resultRunningVar
+        static_cast<double>(mEpsilon), //  eps
+        nullptr,                       // resultSaveMean
+        nullptr                        // resultSaveInvVar
         ));
 
     // Apply an additional scale and bias on each channel.
     nvinfer1::Dims inputDims = inputDesc[0].dims;
-    int32_t batchSize = inputDims.d[0];
-    int32_t nbChannels = inputDims.d[1];
+    int32_t batchSize = static_cast<int32_t>(inputDims.d[0]);
+    int32_t nbChannels = static_cast<int32_t>(inputDims.d[1]);
     auto* output = static_cast<float*>(outputs[0]);
     return scaleShiftChannelsInplace(output, batchSize, nbChannels, mChannelVolume,
         static_cast<float const*>(inputs[2]), static_cast<float const*>(inputs[1]), stream); // mBetaDev, mGammaDev,
@@ -250,8 +250,8 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
         PLUGIN_VALIDATE(nbOutputs == getNbOutputs());
 
         nvinfer1::Dims inputDims = in[0].desc.dims;
-        int32_t const batchSize = inputDims.d[0];
-        int32_t const nbChannels = inputDims.d[1];
+        int32_t const batchSize = static_cast<int32_t>(inputDims.d[0]);
+        int32_t const nbChannels = static_cast<int32_t>(inputDims.d[1]);
 
         if (batchSize <= 0 || nbChannels <= 0)
         {
@@ -267,7 +267,8 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
 
         // Allocate scale/bias tensors needed for cudnnBatchNorm.
         mNbScaleBias = batchSize * mNbGroups;
-        auto allocScaleBias = [this](std::shared_ptr<CudaBind<float>>& buf, float value) {
+        auto allocScaleBias = [this](std::shared_ptr<CudaBind<float>>& buf, float value)
+        {
             PLUGIN_VALIDATE(mNbScaleBias > 0);
             if (!buf || !buf->mPtr || buf->mSize != mNbScaleBias)
             {
@@ -276,8 +277,8 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
 
                 // Initialize values.
                 std::vector<float> const values(mNbScaleBias, value);
-                PLUGIN_CUASSERT(
-                    cudaMemcpy(buf->mPtr, values.data(), sizeof(float) * mNbScaleBias, cudaMemcpyHostToDevice));
+                PLUGIN_CUASSERT(cudaMemcpy(buf->mPtr, values.data(), sizeof(float) * static_cast<size_t>(mNbScaleBias),
+                    cudaMemcpyHostToDevice));
             }
         };
         allocScaleBias(mBnScales, 1.F);
@@ -285,7 +286,8 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
 
         // Calculate size of each group
         int32_t groupSize = nbChannels / mNbGroups;
-        mChannelVolume = pluginInternal::volume(inputDims, /*start*/ 2, /*stop*/ inputDims.nbDims);
+        mChannelVolume
+            = static_cast<int32_t>(pluginInternal::volume(inputDims, /*start*/ 2, /*stop*/ inputDims.nbDims));
 
         // Set tensor descriptor in a way that cudnnBatchNorm will perform Group Normalization.
         PLUGIN_CUDNNASSERT(mCudnnWrapper->cudnnSetTensor4dDescriptor(mTensorDesc, // descriptor
@@ -306,7 +308,7 @@ void GroupNormalizationPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc
 }
 
 nvinfer1::DataType GroupNormalizationPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     try
     {
@@ -321,8 +323,8 @@ nvinfer1::DataType GroupNormalizationPlugin::getOutputDataType(
     }
 }
 
-size_t GroupNormalizationPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t GroupNormalizationPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -351,7 +353,7 @@ GroupNormalizationPluginCreator::GroupNormalizationPluginCreator()
     mPluginAttributes.emplace_back(PluginField("eps", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("num_groups", nullptr, PluginFieldType::kINT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -389,7 +391,7 @@ void GroupNormalizationPluginCreator::setPluginNamespace(char const* libNamespac
 }
 
 IPluginV2DynamicExt* GroupNormalizationPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -425,7 +427,7 @@ IPluginV2DynamicExt* GroupNormalizationPluginCreator::createPlugin(
 }
 
 IPluginV2DynamicExt* GroupNormalizationPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

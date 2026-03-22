@@ -42,19 +42,19 @@ EmbLayerNormPluginDynamic::EmbLayerNormPluginDynamic(std::string const& name, Da
     DataType const mhaType, Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb,
     Weights const& tokEmb, bool const useFullMask)
     : mLayerName(name)
-    , mLd(beta.count)
+    , mLd(static_cast<size_t>(beta.count))
     , mType(type)
     , mMhaType(mhaType)
 {
     // Assuming Weights.count is the number of elements and not bytes
     PLUGIN_VALIDATE(beta.count == gamma.count);
     PLUGIN_VALIDATE(mLd > 0U);
-    PLUGIN_VALIDATE(wordEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(posEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(tokEmb.count % mLd == 0);
-    mWordVocabSize = wordEmb.count / mLd;
-    mPosVocabSize = posEmb.count / mLd;
-    mTokVocabSize = tokEmb.count / mLd;
+    PLUGIN_VALIDATE(static_cast<size_t>(wordEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(posEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(tokEmb.count) % mLd == 0);
+    mWordVocabSize = static_cast<size_t>(wordEmb.count) / mLd;
+    mPosVocabSize = static_cast<size_t>(posEmb.count) / mLd;
+    mTokVocabSize = static_cast<size_t>(tokEmb.count) / mLd;
     mSM = getSmVersion();
     mOutputFp16 = mType == DataType::kHALF ? 1 : 0;
     mUseFullMask = static_cast<int32_t>(useFullMask);
@@ -175,7 +175,7 @@ PluginFieldCollection const* EmbLayerNormPluginDynamic::getFieldsToSerialize() n
         mDataToSerialize.emplace_back("bert_embeddings_position_embeddings", static_cast<float const*>(mPosEmb.values),
             PluginFieldType::kFLOAT32, mPosEmb.count);
     }
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
     return &mFCToSerialize;
 }
@@ -191,9 +191,9 @@ int32_t EmbLayerNormPluginDynamic::onShapeChange(
         PLUGIN_ASSERT(nbInputs == 3);
 
         PLUGIN_ASSERT(inputs[0].dims.nbDims == 2);
-        int32_t const S = inputs[0].dims.d[SDIM];
-        mS = S;
-        int32_t const B = inputs[0].dims.d[BDIM];
+        int32_t const S = static_cast<int32_t>(inputs[0].dims.d[SDIM]);
+        mS = static_cast<size_t>(S);
+        int32_t const B = static_cast<int32_t>(inputs[0].dims.d[BDIM]);
         TRT_UNUSED B;
         PLUGIN_ASSERT(mS == static_cast<size_t>(inputs[1].dims.d[SDIM]));
         PLUGIN_ASSERT(B == inputs[1].dims.d[BDIM]);
@@ -242,7 +242,7 @@ int32_t EmbLayerNormPluginDynamic::onShapeChange(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-IPluginV3* EmbLayerNormPluginDynamic::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* EmbLayerNormPluginDynamic::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     return clone();
 }
@@ -254,8 +254,8 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const batchSize = inputDesc->dims.d[BDIM];
-        int32_t const S = inputDesc->dims.d[SDIM];
+        int32_t const batchSize = static_cast<int32_t>(inputDesc->dims.d[BDIM]);
+        int32_t const S = static_cast<int32_t>(inputDesc->dims.d[SDIM]);
         int32_t status = STATUS_FAILURE;
 
         // Our plugin outputs only one tensor
@@ -272,7 +272,8 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
             auto const tokEmb = static_cast<float const*>(mTokEmbDev.get());
             auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
 
             if (status != cudaSuccess)
             {
@@ -286,7 +287,8 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
             auto const tokEmb = static_cast<half const*>(mTokEmbDev.get());
             auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds, beta,
-                gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
 
             if (status != cudaSuccess)
             {
@@ -317,7 +319,9 @@ int32_t EmbLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, Pl
             }
             uint32_t* inputMaskX = static_cast<uint32_t*>(outputs[1]);
 
-            status = convertMask(S, batchSize, warps_m, warps_n, warps_k, inputMask, inputMaskX, stream);
+            status = convertMask(static_cast<uint32_t>(S), static_cast<uint32_t>(batchSize),
+                static_cast<uint32_t>(warps_m), static_cast<uint32_t>(warps_n), static_cast<uint32_t>(warps_k),
+                inputMask, inputMaskX, stream);
         }
         else
         {
@@ -386,7 +390,7 @@ bool EmbLayerNormPluginDynamic::supportsFormatCombination(
 }
 
 int32_t EmbLayerNormPluginDynamic::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
     IExprBuilder& exprBuilder) noexcept
 {
     try
@@ -406,7 +410,7 @@ int32_t EmbLayerNormPluginDynamic::getOutputShapes(DimsExprs const* inputs, int3
         outputs[0].nbDims = 5;
         outputs[0].d[0] = inputs[0].d[0];
         outputs[0].d[1] = inputs[0].d[1];
-        outputs[0].d[2] = exprBuilder.constant(mLd);
+        outputs[0].d[2] = exprBuilder.constant(static_cast<int64_t>(mLd));
         outputs[0].d[3] = exprBuilder.constant(1);
         outputs[0].d[4] = exprBuilder.constant(1);
 
@@ -483,14 +487,14 @@ int32_t EmbLayerNormPluginDynamic::getOutputDataTypes(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-int32_t EmbLayerNormPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+int32_t EmbLayerNormPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) noexcept
 {
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
-size_t EmbLayerNormPluginDynamic::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t EmbLayerNormPluginDynamic::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -548,7 +552,7 @@ EmbLayerNormPluginDynamicCreator::EmbLayerNormPluginDynamicCreator()
     mPluginAttributes.emplace_back(PluginField("output_fp16"));
     mPluginAttributes.emplace_back(PluginField("full_mask"));
     mPluginAttributes.emplace_back(PluginField("mha_type_id"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -568,7 +572,7 @@ PluginFieldCollection const* EmbLayerNormPluginDynamicCreator::getFieldNames() n
 }
 
 IPluginV3* EmbLayerNormPluginDynamicCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {

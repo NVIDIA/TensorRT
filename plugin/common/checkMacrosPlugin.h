@@ -61,34 +61,35 @@ public:
 
 } // namespace nvinfer1
 
+#undef PLUGIN_CHECK_CUDNN
 #define PLUGIN_CHECK_CUDNN(call)                                                                                       \
     do                                                                                                                 \
     {                                                                                                                  \
-        cudnnStatus_t status = call;                                                                                   \
-        if (status != CUDNN_STATUS_SUCCESS)                                                                            \
+        cudnnStatus_t status_check_cudnn_ = call;                                                                      \
+        if (status_check_cudnn_ != CUDNN_STATUS_SUCCESS)                                                               \
         {                                                                                                              \
-            return status;                                                                                             \
+            return status_check_cudnn_;                                                                                \
         }                                                                                                              \
     } while (0)
 
 #define PLUGIN_CUBLASASSERT(status_)                                                                                   \
     {                                                                                                                  \
-        auto s_ = status_;                                                                                             \
-        if (s_ != nvinfer1::pluginInternal::CUBLAS_STATUS_SUCCESS)                                                     \
+        auto s_cublas_ = status_;                                                                                      \
+        if (s_cublas_ != nvinfer1::pluginInternal::CUBLAS_STATUS_SUCCESS)                                              \
         {                                                                                                              \
-            nvinfer1::plugin::throwCublasError(__FILE__, FN_NAME, __LINE__, s_);                                       \
+            nvinfer1::plugin::throwCublasError(__FILE__, FN_NAME, __LINE__, s_cublas_);                                \
         }                                                                                                              \
     }
 
 #define PLUGIN_CUDNNASSERT(status_)                                                                                    \
     {                                                                                                                  \
-        auto s_ = status_;                                                                                             \
-        if (s_ != CUDNN_STATUS_SUCCESS)                                                                                \
+        auto s_cudnn_ = status_;                                                                                       \
+        if (s_cudnn_ != CUDNN_STATUS_SUCCESS)                                                                          \
         {                                                                                                              \
             nvinfer1::pluginInternal::CudnnWrapper& wrapper                                                            \
                 = nvinfer1::pluginInternal::getCudnnWrapper(/* plugin caller name */ nullptr);                         \
-            const char* msg = wrapper.cudnnGetErrorString(s_);                                                         \
-            nvinfer1::plugin::throwCudnnError(__FILE__, FN_NAME, __LINE__, s_, msg);                                   \
+            const char* msg_cudnn_ = wrapper.cudnnGetErrorString(s_cudnn_);                                            \
+            nvinfer1::plugin::throwCudnnError(__FILE__, FN_NAME, __LINE__, s_cudnn_, msg_cudnn_);                      \
         }                                                                                                              \
     }
 

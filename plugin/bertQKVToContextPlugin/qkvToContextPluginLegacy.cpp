@@ -162,7 +162,7 @@ bool QKVToContextPluginDynamicLegacy::supportsFormatCombination(
     PLUGIN_ASSERT(nbInputs == 1 + mHasImask);
     auto const* in = inOut;
     auto const* out = inOut + nbInputs;
-    int32_t packedSize = getMHAMaskPackedSize(mSM, mType, in->dims.d[SDIM]);
+    int32_t packedSize = getMHAMaskPackedSize(mSM, mType, static_cast<int32_t>(in->dims.d[SDIM]));
 
     // we only support int8 IO in fused mha runner, and we only support fused mha runner on Xavier, Turing and Ampere
     if (mType == DataType::kINT8)
@@ -282,13 +282,13 @@ void QKVToContextPluginDynamicLegacy::configurePlugin(
 
     createMHARunner();
 
-    int32_t const S = inDesc.dims.d[SDIM];
-    int32_t const B = inDesc.dims.d[BDIM] <= 0 ? in->max.d[BDIM] : inDesc.dims.d[BDIM];
+    int32_t const S = static_cast<int32_t>(inDesc.dims.d[SDIM]);
+    int32_t const B = static_cast<int32_t>(inDesc.dims.d[BDIM] <= 0 ? in->max.d[BDIM] : inDesc.dims.d[BDIM]);
     if (S <= 0)
     {
         // in dynamic shape build stage, we setup with max sequence that cannot fused
-        int32_t const Smin = in->min.d[SDIM];
-        int32_t const Smax = in->max.d[SDIM];
+        int32_t const Smin = static_cast<int32_t>(in->min.d[SDIM]);
+        int32_t const Smax = static_cast<int32_t>(in->max.d[SDIM]);
 
         if (fusedDispatcher.get())
         {
@@ -347,7 +347,7 @@ DataType QKVToContextPluginDynamicLegacy::getOutputDataType(
 }
 
 void QKVToContextPluginDynamicLegacy::attachToContext(
-    cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept
+    cudnnContext* /*cudnn*/, cublasContext* /*cublas*/, nvinfer1::IGpuAllocator* allocator) noexcept
 {
     try
     {
@@ -442,7 +442,8 @@ int32_t QKVToContextPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDe
     try
     {
         void const* const maskPtr = mHasImask ? inputs[1] : nullptr;
-        if (mHasImask && fusedDispatcher.get() && fusedDispatcher->isValid(mHeadSize, inputDesc->dims.d[SDIM]))
+        if (mHasImask && fusedDispatcher.get()
+            && fusedDispatcher->isValid(mHeadSize, static_cast<int32_t>(inputDesc->dims.d[SDIM])))
         {
             fusedDispatcher->run(
                 inputDesc[0], outputDesc[0], inputs[0], maskPtr, outputs[0], workspace, stream, mCublas);
@@ -471,7 +472,7 @@ QKVToContextPluginDynamicLegacyCreator::QKVToContextPluginDynamicLegacyCreator()
     mPluginAttributes.emplace_back(PluginField("has_mask", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("dq_probs", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -819,8 +820,8 @@ void QKVToContextVarSeqlenPluginLegacy::configurePlugin(
             PLUGIN_ASSERT(maskDesc.dims.d[0] == inDesc.dims.d[BDIM]);
         }
 
-        int32_t const S = inDesc.dims.d[SDIM] <= 0 ? in->max.d[SDIM] : inDesc.dims.d[SDIM];
-        int32_t const B = inDesc.dims.d[BDIM] <= 0 ? in->max.d[BDIM] : inDesc.dims.d[BDIM];
+        int32_t const S = static_cast<int32_t>(inDesc.dims.d[SDIM] <= 0 ? in->max.d[SDIM] : inDesc.dims.d[SDIM]);
+        int32_t const B = static_cast<int32_t>(inDesc.dims.d[BDIM] <= 0 ? in->max.d[BDIM] : inDesc.dims.d[BDIM]);
 
         if (S != mS || B != mB)
         {
@@ -844,7 +845,8 @@ void QKVToContextVarSeqlenPluginLegacy::configurePlugin(
 size_t QKVToContextVarSeqlenPluginLegacy::getWorkspaceSize(PluginTensorDesc const* inputs, int32_t /* nbInputs */,
     PluginTensorDesc const* /* outputs */, int32_t /* nbOutputs */) const noexcept
 {
-    size_t paddingWorkpaceSize = mPatcher ? mPatcher->getWorkspaceSize(inputs[0].dims.d[0], mNumHeads) : 0;
+    size_t paddingWorkpaceSize
+        = mPatcher ? mPatcher->getWorkspaceSize(static_cast<int32_t>(inputs[0].dims.d[0]), mNumHeads) : 0;
     return mDispatcher->getWorkspaceSize() + paddingWorkpaceSize;
 }
 
@@ -859,7 +861,7 @@ DataType QKVToContextVarSeqlenPluginLegacy::getOutputDataType(
 }
 
 void QKVToContextVarSeqlenPluginLegacy::attachToContext(
-    cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept
+    cudnnContext* /*cudnn*/, cublasContext* /*cublas*/, nvinfer1::IGpuAllocator* allocator) noexcept
 {
     try
     {
@@ -944,8 +946,8 @@ int32_t QKVToContextVarSeqlenPluginLegacy::enqueue(nvinfer1::PluginTensorDesc co
 
     if (mUseVarSeqlen)
     {
-        int32_t const B = inputDesc[2].dims.d[0] - 1;
-        int32_t const maxS = inputDesc[3].dims.d[0];
+        int32_t const B = static_cast<int32_t>(inputDesc[2].dims.d[0] - 1);
+        int32_t const maxS = static_cast<int32_t>(inputDesc[3].dims.d[0]);
         PLUGIN_ASSERT((maxS <= 512)
             && "No implementation for variable sequence length multi-head attention plugin with sequence > 512.");
 
@@ -980,7 +982,8 @@ int32_t QKVToContextVarSeqlenPluginLegacy::enqueue(nvinfer1::PluginTensorDesc co
         }
 
         auto runV2Kernel = [this, &S, &B, &workspace, &inputDesc, &outputDesc, &stream, &inputs, &outputs](
-                               MHARunner* dispatcher, QkvPaddingRunner* patcher, int32_t padSize) {
+                               MHARunner* dispatcher, QkvPaddingRunner* patcher, int32_t padSize)
+        {
             PLUGIN_ASSERT(dispatcher);
             // Validate that we can padding to the dispatch required head size also there is kernel exist for this
             // sequence length.
@@ -995,7 +998,7 @@ int32_t QKVToContextVarSeqlenPluginLegacy::enqueue(nvinfer1::PluginTensorDesc co
             {
                 PLUGIN_ASSERT(patcher);
                 PLUGIN_ASSERT(padSize <= patcher->getMaxPaddingHeadSize());
-                auto sumSeqLen = inputDesc[0].dims.d[0];
+                int32_t sumSeqLen = static_cast<int32_t>(inputDesc[0].dims.d[0]);
                 auto paddingWorkspace = patcher->get16BytesAlignedPointer(workspace, dispatcher->getWorkspaceSize());
                 auto ret = mPatcher->pad(inputs[0], paddingWorkspace, sumSeqLen, mNumHeads, mHeadSize, padSize, stream);
                 if (ret != cudaSuccess)
@@ -1063,7 +1066,7 @@ QKVToContextVarSeqlenPluginLegacyCreator::QKVToContextVarSeqlenPluginLegacyCreat
     mPluginAttributes.emplace_back(PluginField("var_seqlen", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("use_int8_scale_max", nullptr, PluginFieldType::kINT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

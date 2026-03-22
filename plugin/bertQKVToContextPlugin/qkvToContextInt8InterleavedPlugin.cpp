@@ -69,7 +69,7 @@ QKVToContextInterleavedPlugin::QKVToContextInterleavedPlugin(std::string const& 
 
 QKVToContextInterleavedPlugin::~QKVToContextInterleavedPlugin() {}
 
-IPluginV3* QKVToContextInterleavedPlugin::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* QKVToContextInterleavedPlugin::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     return clone();
 }
@@ -114,7 +114,7 @@ IPluginV3* QKVToContextInterleavedPlugin::clone() noexcept
 }
 
 int32_t QKVToContextInterleavedPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    DimsExprs const* /*shapeInputs*/, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
     IExprBuilder& exprBuilder) noexcept
 {
     try
@@ -172,26 +172,26 @@ bool QKVToContextInterleavedPlugin::supportsFormatCombination(
     return false;
 }
 
-int32_t QKVToContextInterleavedPlugin::onShapeChange(
-    PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept
+int32_t QKVToContextInterleavedPlugin::onShapeChange(PluginTensorDesc const* /*in*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
-int32_t QKVToContextInterleavedPlugin::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+int32_t QKVToContextInterleavedPlugin::configurePlugin(DynamicPluginTensorDesc const* /*in*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
-size_t QKVToContextInterleavedPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t QKVToContextInterleavedPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
 
 int32_t QKVToContextInterleavedPlugin::getOutputDataTypes(
-    DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept
+    DataType* outputTypes, int32_t nbOutputs, DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     try
     {
@@ -236,9 +236,9 @@ int32_t QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc
 {
     PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-    int32_t const total = inputDesc[0].dims.d[2];
-    int32_t const B = inputDesc[1].dims.d[0] - 1;
-    int32_t const maxS = inputDesc[2].dims.d[0];
+    int32_t const total = static_cast<int32_t>(inputDesc[0].dims.d[2]);
+    int32_t const B = static_cast<int32_t>(inputDesc[1].dims.d[0] - 1);
+    int32_t const maxS = static_cast<int32_t>(inputDesc[2].dims.d[0]);
     int32_t S = 384;
     if (maxS <= 128)
     {
@@ -267,9 +267,9 @@ int32_t QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc
     float scaleQkv = mUseExplicitInt8 ? mQkvScale : inputDesc[0].scale;
     float scaleCtx = mUseExplicitInt8 ? mCtxScale : outputDesc[0].scale;
 
-    float scaleBmm1 = scaleQkv * scaleQkv * 0.125; // 1 / sqrt(64)
+    float scaleBmm1 = scaleQkv * scaleQkv * 0.125f; // 1 / sqrt(64)
     float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
-    float scaleSoftmax = 1.F / mDqProbs;
+    float scaleSoftmax = 1.0f / mDqProbs;
 
     params.scale_bmm1 = reinterpret_cast<uint32_t const&>(scaleBmm1);
     params.scale_bmm2 = reinterpret_cast<uint32_t const&>(scaleBmm2);
@@ -279,8 +279,8 @@ int32_t QKVToContextInterleavedPlugin::enqueue(PluginTensorDesc const* inputDesc
     params.o_stride_in_bytes = total;
 
     params.use_int8_scale_max = mUseInt8ScaleMax;
-    params.enable_i2f_trick
-        = -double(1 << 22) * double(scaleBmm2) <= -128.F && double(1 << 22) * double(scaleBmm2) >= 127.F;
+    params.enable_i2f_trick = -static_cast<double>(1 << 22) * static_cast<double>(scaleBmm2) <= -128.0
+        && static_cast<double>(1 << 22) * static_cast<double>(scaleBmm2) >= 127.0;
 
     try
     {
@@ -310,7 +310,7 @@ PluginFieldCollection const* QKVToContextInterleavedPlugin::getFieldsToSerialize
         mDataToSerialize.emplace_back("dq_probs", &mDqProbs, PluginFieldType::kFLOAT32, 1);
     }
 
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
 
     return &mFCToSerialize;
@@ -331,7 +331,7 @@ QKVToContextInterleavedPluginCreator::QKVToContextInterleavedPluginCreator()
     mPluginAttributes.emplace_back(PluginField("input_qkv_scale", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("output_ctx_scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

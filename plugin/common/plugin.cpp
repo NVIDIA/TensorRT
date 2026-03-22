@@ -54,7 +54,8 @@ public:
         std::shared_ptr<T> result = mObservers[executionContextIdentifier].lock();
         if (result == nullptr)
         {
-            auto deleter = [this, executionContextIdentifier](T* obj) {
+            auto deleter = [this, executionContextIdentifier](T* obj)
+            {
                 if (obj == nullptr)
                 {
                     return;
@@ -67,7 +68,7 @@ public:
                 // To avoid deadlock, it's critical to release the lock here held by lk first,
                 // before destroying observedObjHolder. Hence observedObjHolder must be declared
                 // before lk.
-                std::lock_guard<std::mutex> lk{mMutex};
+                std::lock_guard<std::mutex> lk_{mMutex};
                 // Must check observer again because another thread may create new instance for
                 // this ctx just before we lock mMutex. We can't infer that the observer is
                 // stale from the fact that obj is destroyed, because shared_ptr ref-count

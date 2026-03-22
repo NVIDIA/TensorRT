@@ -77,7 +77,7 @@ EfficientNMSExplicitTFTRTPluginCreator::EfficientNMSExplicitTFTRTPluginCreator()
     mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("pad_per_class", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("clip_boxes", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -97,7 +97,7 @@ const PluginFieldCollection* EfficientNMSExplicitTFTRTPluginCreator::getFieldNam
 }
 
 IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+    const char* /*name*/, const PluginFieldCollection* fc) noexcept
 {
     try
     {
@@ -149,7 +149,7 @@ IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::createPlugin(
 }
 
 IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    const char* /*name*/, const void* serialData, size_t serialLength) noexcept
 {
     try
     {

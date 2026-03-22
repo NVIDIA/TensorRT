@@ -48,7 +48,7 @@ public:
     ~SampleErrorRecorder() noexcept override {}
     int32_t getNbErrors() const noexcept final
     {
-        return mErrorStack.size();
+        return static_cast<int32_t>(mErrorStack.size());
     }
     ErrorCode getErrorCode(int32_t errorIdx) const noexcept final
     {
@@ -134,5 +134,5 @@ private:
 
     // The error stack that holds the errors recorded by TensorRT.
     errorStack mErrorStack;
-};     // class SampleErrorRecorder
+}; // class SampleErrorRecorder
 #endif // ERROR_RECORDER_H

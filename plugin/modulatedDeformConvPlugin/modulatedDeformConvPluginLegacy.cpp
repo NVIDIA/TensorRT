@@ -96,8 +96,8 @@ nvinfer1::IPluginV2DynamicExt* ModulatedDeformableConvPluginDynamicLegacy::clone
     return nullptr;
 }
 
-nvinfer1::DimsExprs ModulatedDeformableConvPluginDynamicLegacy::getOutputDimensions(int32_t outputIndex,
-    nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs ModulatedDeformableConvPluginDynamicLegacy::getOutputDimensions(int32_t /*outputIndex*/,
+    nvinfer1::DimsExprs const* inputs, int32_t /*nbInputs*/, nvinfer1::IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -118,7 +118,7 @@ nvinfer1::DimsExprs ModulatedDeformableConvPluginDynamicLegacy::getOutputDimensi
 }
 
 bool ModulatedDeformableConvPluginDynamicLegacy::supportsFormatCombination(
-    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t /*nbInputs*/, int32_t /*nbOutputs*/) noexcept
 {
     if (pos == 0)
     {
@@ -131,8 +131,8 @@ bool ModulatedDeformableConvPluginDynamicLegacy::supportsFormatCombination(
     }
 }
 
-void ModulatedDeformableConvPluginDynamicLegacy::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* inputs,
-    int32_t nbInputs, nvinfer1::DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+void ModulatedDeformableConvPluginDynamicLegacy::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* /*inputs*/,
+    int32_t nbInputs, nvinfer1::DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) noexcept
 {
     try
     {
@@ -148,19 +148,20 @@ void ModulatedDeformableConvPluginDynamicLegacy::configurePlugin(nvinfer1::Dynam
 }
 
 size_t ModulatedDeformableConvPluginDynamicLegacy::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs,
-    int32_t nbInputs, nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+    int32_t /*nbInputs*/, nvinfer1::PluginTensorDesc const* outputs, int32_t /*nbOutputs*/) const noexcept
 {
-    int32_t sizeofDtype = nvinfer1::plugin::bert::getElementSize(outputs[0].type);
+    int32_t sizeofDtype = static_cast<int32_t>(nvinfer1::plugin::bert::getElementSize(outputs[0].type));
 
-    int32_t nInputPlane = inputs[0].dims.d[1];
-    int32_t outputHeight = outputs[0].dims.d[2];
-    int32_t outputWidth = outputs[0].dims.d[3];
-    int32_t kH = inputs[3].dims.d[2];
-    int32_t kW = inputs[3].dims.d[3];
+    int32_t nInputPlane = static_cast<int32_t>(inputs[0].dims.d[1]);
+    int32_t outputHeight = static_cast<int32_t>(outputs[0].dims.d[2]);
+    int32_t outputWidth = static_cast<int32_t>(outputs[0].dims.d[3]);
+    int32_t kH = static_cast<int32_t>(inputs[3].dims.d[2]);
+    int32_t kW = static_cast<int32_t>(inputs[3].dims.d[3]);
 
-    int64_t colSize = divUp(nInputPlane * kW * kH * outputHeight * outputWidth * sizeofDtype, 16) * 16;
+    int64_t colSize
+        = divUp(static_cast<int64_t>(nInputPlane) * kW * kH * outputHeight * outputWidth * sizeofDtype, 16) * 16;
 
-    return colSize;
+    return static_cast<size_t>(colSize);
 }
 
 int32_t ModulatedDeformableConvPluginDynamicLegacy::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
@@ -172,13 +173,13 @@ int32_t ModulatedDeformableConvPluginDynamicLegacy::enqueue(nvinfer1::PluginTens
         PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr
             && workSpace != nullptr);
 
-        int32_t batch = inputDesc[0].dims.d[0];
-        int32_t channels = inputDesc[0].dims.d[1];
-        int32_t height = inputDesc[0].dims.d[2];
-        int32_t width = inputDesc[0].dims.d[3];
-        int32_t channelsOut = outputDesc[0].dims.d[1];
-        int32_t kernelH = inputDesc[3].dims.d[2];
-        int32_t kernelW = inputDesc[3].dims.d[3];
+        int32_t batch = static_cast<int32_t>(inputDesc[0].dims.d[0]);
+        int32_t channels = static_cast<int32_t>(inputDesc[0].dims.d[1]);
+        int32_t height = static_cast<int32_t>(inputDesc[0].dims.d[2]);
+        int32_t width = static_cast<int32_t>(inputDesc[0].dims.d[3]);
+        int32_t channelsOut = static_cast<int32_t>(outputDesc[0].dims.d[1]);
+        int32_t kernelH = static_cast<int32_t>(inputDesc[3].dims.d[2]);
+        int32_t kernelW = static_cast<int32_t>(inputDesc[3].dims.d[3]);
 
         void const* x = inputs[0];
         void const* offset = inputs[1];
@@ -192,16 +193,22 @@ int32_t ModulatedDeformableConvPluginDynamicLegacy::enqueue(nvinfer1::PluginTens
         switch (data_type)
         {
         case nvinfer1::DataType::kFLOAT:
-            ModulatedDeformConvForwardCUDAKernelLauncherFloat((float*) x, (float*) weight, (float*) bias,
-                (float*) offset, (float*) mask, (float*) output, workSpace, batch, channels, height, width, channelsOut,
-                kernelW, kernelH, mStride.d[0], mStride.d[1], mPadding.d[0], mPadding.d[1], mDilation.d[0],
-                mDilation.d[1], mGroup, mDeformableGroup, im2colStep, mCublasHandle, stream);
+            ModulatedDeformConvForwardCUDAKernelLauncherFloat(static_cast<float const*>(x),
+                static_cast<float const*>(weight), static_cast<float const*>(bias), static_cast<float const*>(offset),
+                static_cast<float const*>(mask), static_cast<float*>(output), workSpace, batch, channels, height, width,
+                channelsOut, kernelW, kernelH, static_cast<int32_t>(mStride.d[0]), static_cast<int32_t>(mStride.d[1]),
+                static_cast<int32_t>(mPadding.d[0]), static_cast<int32_t>(mPadding.d[1]),
+                static_cast<int32_t>(mDilation.d[0]), static_cast<int32_t>(mDilation.d[1]), mGroup, mDeformableGroup,
+                im2colStep, mCublasHandle, stream);
             break;
         case nvinfer1::DataType::kHALF:
-            ModulatedDeformConvForwardCUDAKernelLauncherHalf((half*) x, (half*) weight, (half*) bias, (half*) offset,
-                (half*) mask, (half*) output, workSpace, batch, channels, height, width, channelsOut, kernelW, kernelH,
-                mStride.d[0], mStride.d[1], mPadding.d[0], mPadding.d[1], mDilation.d[0], mDilation.d[1], mGroup,
-                mDeformableGroup, im2colStep, mCublasHandle, stream);
+            ModulatedDeformConvForwardCUDAKernelLauncherHalf(static_cast<half const*>(x),
+                static_cast<half const*>(weight), static_cast<half const*>(bias), static_cast<half const*>(offset),
+                static_cast<half const*>(mask), static_cast<half*>(output), workSpace, batch, channels, height, width,
+                channelsOut, kernelW, kernelH, static_cast<int32_t>(mStride.d[0]), static_cast<int32_t>(mStride.d[1]),
+                static_cast<int32_t>(mPadding.d[0]), static_cast<int32_t>(mPadding.d[1]),
+                static_cast<int32_t>(mDilation.d[0]), static_cast<int32_t>(mDilation.d[1]), mGroup, mDeformableGroup,
+                im2colStep, mCublasHandle, stream);
             break;
         default: return 1;
         }
@@ -215,7 +222,7 @@ int32_t ModulatedDeformableConvPluginDynamicLegacy::enqueue(nvinfer1::PluginTens
 }
 
 nvinfer1::DataType ModulatedDeformableConvPluginDynamicLegacy::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     return inputTypes[0];
 }
@@ -265,7 +272,7 @@ void ModulatedDeformableConvPluginDynamicLegacy::destroy() noexcept
 }
 
 void ModulatedDeformableConvPluginDynamicLegacy::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, nvinfer1::IGpuAllocator* gpuAllocator) noexcept
 {
     try
     {
@@ -308,7 +315,7 @@ ModulatedDeformableConvPluginDynamicLegacyCreator::ModulatedDeformableConvPlugin
     mPluginAttributes.emplace_back(nvinfer1::PluginField("group", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(
         nvinfer1::PluginField("deformable_group", nullptr, nvinfer1::PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -365,8 +372,8 @@ nvinfer1::IPluginV2* ModulatedDeformableConvPluginDynamicLegacyCreator::createPl
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 stride.nbDims = 2;
-                stride.d[0] = static_cast<int32_t const*>(fc->fields[i].data)[0];
-                stride.d[1] = static_cast<int32_t const*>(fc->fields[i].data)[1];
+                stride.d[0] = static_cast<int64_t>(static_cast<int32_t const*>(fc->fields[i].data)[0]);
+                stride.d[1] = static_cast<int64_t>(static_cast<int32_t const*>(fc->fields[i].data)[1]);
                 PLUGIN_VALIDATE(stride.d[0] > 0);
                 PLUGIN_VALIDATE(stride.d[1] > 0);
             }
@@ -375,8 +382,8 @@ nvinfer1::IPluginV2* ModulatedDeformableConvPluginDynamicLegacyCreator::createPl
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 padding.nbDims = 2;
-                padding.d[0] = static_cast<int32_t const*>(fc->fields[i].data)[0];
-                padding.d[1] = static_cast<int32_t const*>(fc->fields[i].data)[1];
+                padding.d[0] = static_cast<int64_t>(static_cast<int32_t const*>(fc->fields[i].data)[0]);
+                padding.d[1] = static_cast<int64_t>(static_cast<int32_t const*>(fc->fields[i].data)[1]);
                 PLUGIN_VALIDATE(padding.d[0] >= 0);
                 PLUGIN_VALIDATE(padding.d[1] >= 0);
             }
@@ -385,8 +392,8 @@ nvinfer1::IPluginV2* ModulatedDeformableConvPluginDynamicLegacyCreator::createPl
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 dilation.nbDims = 2;
-                dilation.d[0] = static_cast<int32_t const*>(fc->fields[i].data)[0];
-                dilation.d[1] = static_cast<int32_t const*>(fc->fields[i].data)[1];
+                dilation.d[0] = static_cast<int64_t>(static_cast<int32_t const*>(fc->fields[i].data)[0]);
+                dilation.d[1] = static_cast<int64_t>(static_cast<int32_t const*>(fc->fields[i].data)[1]);
                 PLUGIN_VALIDATE(dilation.d[0] > 0);
                 PLUGIN_VALIDATE(dilation.d[1] > 0);
             }

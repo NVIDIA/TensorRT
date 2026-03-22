@@ -46,6 +46,11 @@ int32_t computeSkipLayerNorm(cudaStream_t stream, int32_t const ld, int32_t cons
 class SkipLayerNormPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     SkipLayerNormPluginDynamic(const std::string name, const nvinfer1::DataType type, int32_t const ld,
         nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& bias);
 
@@ -101,11 +106,6 @@ private:
     bert::WeightsWithOwnership mBias;
 
     size_t mParamWordsize{};
-
-    using IPluginV2::enqueue;
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class SkipLayerNormPluginDynamicCreator : public nvinfer1::IPluginCreator
@@ -137,6 +137,11 @@ private:
 class SkipLayerNormVarSeqlenPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     SkipLayerNormVarSeqlenPlugin(const std::string name, const nvinfer1::DataType type, nvinfer1::Weights const& beta,
         nvinfer1::Weights const& gamma, nvinfer1::Weights const& bias);
 
@@ -192,11 +197,6 @@ private:
     bert::WeightsWithOwnership mBias;
 
     size_t mParamWordsize{};
-
-    using IPluginV2::enqueue;
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class SkipLayerNormVarSeqlenPluginCreator : public nvinfer1::IPluginCreator

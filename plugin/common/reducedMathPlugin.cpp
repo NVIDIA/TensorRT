@@ -32,7 +32,7 @@ int32_t clz(int32_t x)
     return 32;
 }
 
-#define CUDNN_IS_POW_2(x) (0 == ((x) & ((x) -1)))
+#define CUDNN_IS_POW_2(x) (0 == ((x) & ((x) - 1)))
 
 int32_t find_log_2(int32_t x, bool round_up = false)
 {
@@ -72,8 +72,8 @@ void findDivisor(int32_t denom, uint32_t& mul_coeff, uint32_t& shift_coeff)
     // Once we've picked Y, then X [our mul_coeff value] is simply Y/D, rounding up,
     // and we save shift_coeff as whatever further shift we have to do beyond
     // what the umulhi() implies.
-    uint32_t p = 31 + find_log_2(denom, true);
-    uint32_t m = ((1ULL << p) + (uint32_t) denom - 1) / (uint32_t) denom;
+    uint32_t p = static_cast<uint32_t>(31 + find_log_2(denom, true));
+    uint32_t m = static_cast<uint32_t>(((1ULL << p) + static_cast<uint32_t>(denom) - 1) / static_cast<uint32_t>(denom));
     mul_coeff = m;
     shift_coeff = p - 32;
 }

@@ -42,7 +42,7 @@ ROIAlignV3PluginCreator::ROIAlignV3PluginCreator()
     mPluginAttributes.emplace_back(PluginField("sampling_ratio", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("spatial_scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -62,7 +62,7 @@ PluginFieldCollection const* ROIAlignV3PluginCreator::getFieldNames() noexcept
 }
 
 IPluginV3* ROIAlignV3PluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {
@@ -210,8 +210,8 @@ int32_t ROIAlignV3::getNbOutputs() const noexcept
     return 1;
 }
 
-int32_t ROIAlignV3::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+int32_t ROIAlignV3::configurePlugin(DynamicPluginTensorDesc const* /*in*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     return 0;
 }
@@ -256,8 +256,8 @@ int32_t ROIAlignV3::getOutputDataTypes(
     return 0;
 }
 
-int32_t ROIAlignV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
-    int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept
+int32_t ROIAlignV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* /*shapeInputs*/,
+    int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept
 {
     PLUGIN_ASSERT(inputs != nullptr);
     PLUGIN_ASSERT(nbInputs == 3);
@@ -281,8 +281,8 @@ int32_t ROIAlignV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, D
     return 0;
 }
 
-int32_t ROIAlignV3::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t ROIAlignV3::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /*outputDesc*/,
+    void const* const* inputs, void* const* outputs, void* /*workspace*/, cudaStream_t stream) noexcept
 {
     PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
@@ -346,15 +346,15 @@ int32_t ROIAlignV3::onShapeChange(
     // Check batch_indices matches rois in length
     PLUGIN_ASSERT(rois.d[0] == batchIndices.d[0]);
 
-    mFeatureLength = in[0].dims.d[1];
-    mHeight = in[0].dims.d[2];
-    mWidth = in[0].dims.d[3];
+    mFeatureLength = static_cast<int32_t>(in[0].dims.d[1]);
+    mHeight = static_cast<int32_t>(in[0].dims.d[2]);
+    mWidth = static_cast<int32_t>(in[0].dims.d[3]);
 
-    mROICount = in[1].dims.d[0];
+    mROICount = static_cast<int32_t>(in[1].dims.d[0]);
     return 0;
 }
 
-IPluginV3* ROIAlignV3::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* ROIAlignV3::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     return clone();
 }
@@ -368,13 +368,13 @@ PluginFieldCollection const* ROIAlignV3::getFieldsToSerialize() noexcept
     mDataToSerialize.emplace_back("output_width", &mOutputWidth, PluginFieldType::kINT32, 1);
     mDataToSerialize.emplace_back("sampling_ratio", &mSamplingRatio, PluginFieldType::kINT32, 1);
     mDataToSerialize.emplace_back("spatial_scale", &mSpatialScale, PluginFieldType::kFLOAT32, 1);
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
     return &mFCToSerialize;
 }
 
-size_t ROIAlignV3::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t ROIAlignV3::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }

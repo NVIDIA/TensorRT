@@ -71,19 +71,19 @@ public:
     //!
     //! \brief Constructor of LazilyDeserializedEngine.
     //!
-    LazilyDeserializedEngine(bool isSafe, bool versionCompatible, int32_t DLACore, std::string const& tempdir,
-        nvinfer1::TempfileControlFlags tempfileControls, std::string const& leanDLLPath)
-        : mIsSafe(isSafe)
-        , mVersionCompatible(versionCompatible)
-        , mDLACore(DLACore)
-        , mTempdir(tempdir)
-        , mTempfileControls(tempfileControls)
-        , mLeanDLLPath(leanDLLPath)
+    LazilyDeserializedEngine(bool isSafe_, bool versionCompatible_, int32_t DLACore_, std::string const& tempdir_,
+        nvinfer1::TempfileControlFlags tempfileControls_, std::string const& leanDLLPath_)
+        : mIsSafe(isSafe_)
+        , mVersionCompatible(versionCompatible_)
+        , mDLACore(DLACore_)
+        , mTempdir(tempdir_)
+        , mTempfileControls(tempfileControls_)
+        , mLeanDLLPath(leanDLLPath_)
     {
         // Only one of these is relevant for any given trtexec call.
         // Enabled using  --asyncFileReader flag.
         mAsyncFileReader = std::make_unique<samplesCommon::AsyncStreamReader>();
-       // Enabled using --load flag.
+        // Enabled using --load flag.
         mFileReader = std::make_unique<samplesCommon::FileStreamReader>();
     }
 
@@ -216,7 +216,6 @@ public:
         return *mAsyncFileReader;
     }
 
-
     //!
     //! \brief Get if safe mode is enabled.
     //!
@@ -237,7 +236,6 @@ private:
     std::vector<uint8_t> mEngineBlob;
     std::unique_ptr<samplesCommon::FileStreamReader> mFileReader;
     std::unique_ptr<samplesCommon::AsyncStreamReader> mAsyncFileReader;
-
 
     // Directly use the host memory of a serialized engine instead of duplicating the engine in CPU memory.
     std::unique_ptr<nvinfer1::IHostMemory> mEngineBlobHostMemory;
@@ -272,12 +270,12 @@ struct BuildEnvironment
     BuildEnvironment() = delete;
     BuildEnvironment(BuildEnvironment const& other) = delete;
     BuildEnvironment(BuildEnvironment&& other) = delete;
-    BuildEnvironment(bool isSafe, bool versionCompatible, int32_t DLACore, std::string const& tempdir,
-        nvinfer1::TempfileControlFlags tempfileControls, std::string const& leanDLLPath = "",
-        std::string const& cmdline = "")
-        : engine(isSafe, versionCompatible, DLACore, tempdir, tempfileControls, leanDLLPath)
-        , kernelText(false, false, -1, "", tempfileControls, "")
-        , cmdline(cmdline)
+    BuildEnvironment(bool isSafe_, bool versionCompatible_, int32_t DLACore_, std::string const& tempdir_,
+        nvinfer1::TempfileControlFlags tempfileControls_, std::string const& leanDLLPath_ = "",
+        std::string const& cmdline_ = "")
+        : engine(isSafe_, versionCompatible_, DLACore_, tempdir_, tempfileControls_, leanDLLPath_)
+        , kernelText(false, false, -1, "", tempfileControls_, "")
+        , cmdline(cmdline_)
     {
     }
 
@@ -379,7 +377,6 @@ bool timeRefit(const nvinfer1::INetworkDefinition& network, nvinfer1::ICudaEngin
 //!
 void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::vector<IOFormat> const& inputFormats,
     std::vector<IOFormat> const& outputFormats, std::string const& calibrationFile);
-
 
 //! \brief Check if safe runtime is loaded.
 [[nodiscard]] bool hasSafeRuntime();

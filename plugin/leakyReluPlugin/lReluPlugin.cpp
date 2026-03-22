@@ -51,13 +51,13 @@ Dims LReLU::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInp
     return inputs[0];
 }
 
-int32_t LReLU::enqueue(
-    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t LReLU::enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* /*workspace*/,
+    cudaStream_t stream) noexcept
 {
     void const* inputData = inputs[0];
     void* outputData = outputs[0];
     pluginStatus_t status = lReLUInference(stream, mBatchDim * batchSize, mNegSlope, inputData, outputData);
-    return status;
+    return static_cast<int32_t>(status);
 }
 
 size_t LReLU::getSerializationSize() const noexcept
@@ -82,7 +82,7 @@ void LReLU::configureWithFormat(Dims const* inputDims, int32_t /* nbInputs */, D
     PLUGIN_ASSERT(nbOutputs == 1);
     for (int32_t i = 0; i < inputDims[0].nbDims; ++i)
     {
-        mBatchDim *= inputDims[0].d[i];
+        mBatchDim *= static_cast<int32_t>(inputDims[0].d[i]);
     }
 }
 
@@ -138,7 +138,7 @@ LReluPluginCreator::LReluPluginCreator()
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("negSlope", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -157,7 +157,7 @@ PluginFieldCollection const* LReluPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2* LReluPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2* LReluPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -180,7 +180,8 @@ IPluginV2* LReluPluginCreator::createPlugin(char const* name, PluginFieldCollect
     return nullptr;
 }
 
-IPluginV2* LReluPluginCreator::deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept
+IPluginV2* LReluPluginCreator::deserializePlugin(
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

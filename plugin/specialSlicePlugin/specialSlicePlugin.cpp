@@ -31,7 +31,7 @@ char const* const kSPECIALSLICE_PLUGIN_NAME{"SpecialSlice_TRT"};
 
 SpecialSlicePluginCreator::SpecialSlicePluginCreator()
 {
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -50,7 +50,8 @@ PluginFieldCollection const* SpecialSlicePluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2Ext* SpecialSlicePluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* SpecialSlicePluginCreator::createPlugin(
+    char const* /*name*/, PluginFieldCollection const* /*fc*/) noexcept
 {
     try
     {
@@ -67,7 +68,8 @@ IPluginV2Ext* SpecialSlicePluginCreator::createPlugin(char const* name, PluginFi
     return nullptr;
 }
 
-IPluginV2Ext* SpecialSlicePluginCreator::deserializePlugin(char const* name, void const* data, size_t length) noexcept
+IPluginV2Ext* SpecialSlicePluginCreator::deserializePlugin(
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -84,7 +86,7 @@ IPluginV2Ext* SpecialSlicePluginCreator::deserializePlugin(char const* name, voi
     return nullptr;
 }
 
-size_t SpecialSlice::getWorkspaceSize(int32_t) const noexcept
+size_t SpecialSlice::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
 {
     return 0;
 }
@@ -185,8 +187,8 @@ Dims SpecialSlice::getOutputDimensions(int32_t index, Dims const* inputDims, int
     return output;
 }
 
-int32_t SpecialSlice::enqueue(
-    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t SpecialSlice::enqueue(int32_t batch_size, void const* const* inputs, void* const* outputs, void* /*workspace*/,
+    cudaStream_t stream) noexcept
 {
 
     specialSlice(stream, batch_size, mBboxesCnt, inputs[0], outputs[0]);
@@ -196,7 +198,7 @@ int32_t SpecialSlice::enqueue(
 
 // Return the DataType of the plugin output at the requested index
 DataType SpecialSlice::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     PLUGIN_ASSERT(index == 0);
@@ -207,32 +209,33 @@ DataType SpecialSlice::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool SpecialSlice::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool SpecialSlice::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool SpecialSlice::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void SpecialSlice::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void SpecialSlice::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t nbOutputs, DataType const* /*inputTypes*/, DataType const* /*outputTypes*/,
+    bool const* /*inputIsBroadcast*/, bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
+    int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1);
 
     PLUGIN_ASSERT(nbOutputs == 1);
 
-    mBboxesCnt = inputDims[0].d[0];
+    mBboxesCnt = static_cast<int32_t>(inputDims[0].d[0]);
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void SpecialSlice::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

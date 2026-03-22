@@ -38,7 +38,7 @@ ResizeNearestPluginCreator::ResizeNearestPluginCreator()
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -57,7 +57,7 @@ PluginFieldCollection const* ResizeNearestPluginCreator::getFieldNames() noexcep
     return &mFC;
 }
 
-IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -81,7 +81,8 @@ IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(char const* name, PluginF
     return nullptr;
 }
 
-IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(char const* name, void const* data, size_t length) noexcept
+IPluginV2Ext* ResizeNearestPluginCreator::deserializePlugin(
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -116,7 +117,7 @@ Dims ResizeNearest::getOutputDimensions(int32_t index, Dims const* inputDims, in
     {
         if (d == input.nbDims - 2 || d == input.nbDims - 1)
         {
-            output.d[d] = int32_t(input.d[d] * mScale);
+            output.d[d] = static_cast<int32_t>(static_cast<float>(input.d[d]) * mScale);
         }
         else
         {
@@ -222,19 +223,21 @@ bool ResizeNearest::supportsFormat(DataType type, PluginFormat format) const noe
     return (type == DataType::kFLOAT && format == PluginFormat::kLINEAR);
 }
 
-int32_t ResizeNearest::enqueue(
-    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t ResizeNearest::enqueue(int32_t batch_size, void const* const* inputs, void* const* outputs, void* /*workspace*/,
+    cudaStream_t stream) noexcept
 {
 
-    int32_t nchan = mOutputDims.d[0];
+    int32_t nchan = static_cast<int32_t>(mOutputDims.d[0]);
     float scale = mScale;
     int2 osize = {dimToInt32(mOutputDims.d[2]), dimToInt32(mOutputDims.d[1])};
-    int32_t istride = mInputDims.d[2];
-    int32_t ostride = mOutputDims.d[2];
-    int32_t ibatchstride = mInputDims.d[1] * istride;
-    int32_t obatchstride = mOutputDims.d[1] * ostride;
+    int32_t istride = static_cast<int32_t>(mInputDims.d[2]);
+    int32_t ostride = static_cast<int32_t>(mOutputDims.d[2]);
+    int32_t ibatchstride = static_cast<int32_t>(mInputDims.d[1]) * istride;
+    int32_t obatchstride = static_cast<int32_t>(mOutputDims.d[1]) * ostride;
     dim3 block(32, 16);
-    dim3 grid((osize.x - 1) / block.x + 1, (osize.y - 1) / block.y + 1, std::min(batch_size * nchan, 65535));
+    dim3 grid(static_cast<uint32_t>((osize.x - 1) / static_cast<int32_t>(block.x) + 1),
+        static_cast<uint32_t>((osize.y - 1) / static_cast<int32_t>(block.y) + 1),
+        static_cast<uint32_t>(std::min(batch_size * nchan, 65535)));
 
     resizeNearest(grid, block, stream, batch_size * nchan, scale, osize, static_cast<float const*>(inputs[0]), istride,
         ibatchstride, static_cast<float*>(outputs[0]), ostride, obatchstride);
@@ -244,7 +247,7 @@ int32_t ResizeNearest::enqueue(
 
 // Return the DataType of the plugin output at the requested index
 DataType ResizeNearest::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     PLUGIN_ASSERT(index == 0);
@@ -255,21 +258,21 @@ DataType ResizeNearest::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool ResizeNearest::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool ResizeNearest::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool ResizeNearest::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
 void ResizeNearest::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+    DataType const* /*inputTypes*/, DataType const* /*outputTypes*/, bool const* /*inputIsBroadcast*/,
+    bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/, int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 1);
     mInputDims = inputDims[0];
@@ -280,7 +283,7 @@ void ResizeNearest::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dim
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void ResizeNearest::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

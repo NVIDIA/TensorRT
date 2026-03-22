@@ -36,7 +36,7 @@ DetectionLayerPluginCreator::DetectionLayerPluginCreator()
     mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -316,7 +316,7 @@ int32_t DetectionLayer::enqueue(
 }
 
 DataType DetectionLayer::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer.
     return DataType::kFLOAT;
@@ -324,28 +324,29 @@ DataType DetectionLayer::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool DetectionLayer::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool DetectionLayer::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool DetectionLayer::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void DetectionLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void DetectionLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t /*nbOutputs*/, DataType const* inputTypes, DataType const* /*outputTypes*/,
+    bool const* /*inputIsBroadcast*/, bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
+    int32_t maxBatchSize) noexcept
 {
     try
     {
         checkValidInputs(inputDims, nbInputs);
         PLUGIN_VALIDATE(inputDims[0].d[0] == inputDims[1].d[0] && inputDims[1].d[0] == inputDims[2].d[0]);
 
-        mAnchorsCnt = inputDims[2].d[0];
+        mAnchorsCnt = static_cast<int32_t>(inputDims[2].d[0]);
         mType = inputTypes[0];
         mMaxBatchSize = maxBatchSize;
     }
@@ -357,7 +358,7 @@ void DetectionLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Di
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void DetectionLayer::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

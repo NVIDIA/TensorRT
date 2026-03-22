@@ -48,6 +48,11 @@ cudaError_t convertMask(uint32_t const S, uint32_t const B, uint32_t const warps
 class EmbLayerNormPluginDynamicLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     EmbLayerNormPluginDynamicLegacy(std::string const& name, nvinfer1::DataType const type,
         nvinfer1::DataType const mhaType, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma,
         nvinfer1::Weights const& word_emb, nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb,
@@ -111,11 +116,6 @@ private:
     bool mUseFullMask;
     nvinfer1::DataType mMhaType;
     int32_t mSM;
-
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class EmbLayerNormPluginDynamicLegacyCreator : public nvinfer1::IPluginCreator

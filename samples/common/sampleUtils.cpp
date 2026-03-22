@@ -166,7 +166,8 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
     TensorToLayer constO2L;
     TensorToLayer shuffleI2L;
     LayerToTensor shuffleL2O;
-    auto collectMappingInfo = [&](int32_t const idx) {
+    auto collectMappingInfo = [&](int32_t const idx)
+    {
         ILayer* l = network.getLayer(idx);
         switch (l->getType())
         {
@@ -210,7 +211,8 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
     auto isTranspose
         = [](nvinfer1::Permutation const& perm) -> bool { return (perm.order[0] == 1 && perm.order[1] == 0); };
     auto is2D = [](nvinfer1::Dims const& dims) -> bool { return dims.nbDims == 2; };
-    auto isIdenticalReshape = [](nvinfer1::Dims const& dims) -> bool {
+    auto isIdenticalReshape = [](nvinfer1::Dims const& dims) -> bool
+    {
         for (int32_t i = 0; i < dims.nbDims; ++i)
         {
             if (dims.d[i] != i || dims.d[i] != -1)
@@ -220,7 +222,8 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
         }
         return true;
     };
-    auto tensorReachedViaTranspose = [&](nvinfer1::ITensor* t, bool& needTranspose) -> ITensor* {
+    auto tensorReachedViaTranspose = [&](nvinfer1::ITensor* t, bool& needTranspose) -> ITensor*
+    {
         while (shuffleI2L.find(t) != shuffleI2L.end())
         {
             nvinfer1::IShuffleLayer* s = static_cast<nvinfer1::IShuffleLayer*>(shuffleI2L.at(t));
@@ -276,12 +279,13 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
     }
 
     // 3. Finally, sparsify the weights
-    auto sparsifyConstantWeights = [&sparseWeights](nvinfer1::IConstantLayer* layer, bool const needTranspose) {
+    auto sparsifyConstantWeights = [&sparseWeights](nvinfer1::IConstantLayer* layer, bool const needTranspose)
+    {
         Dims dims = layer->getOutput(0)->getDimensions();
         ASSERT(dims.nbDims == 2);
         int32_t const idxN = needTranspose ? 1 : 0;
-        int32_t const n = dims.d[idxN];
-        int32_t const k = dims.d[1 - idxN];
+        int32_t const n = static_cast<int32_t>(dims.d[idxN]);
+        int32_t const k = static_cast<int32_t>(dims.d[1 - idxN]);
         sparseWeights.emplace_back();
         std::vector<int8_t>& spw = sparseWeights.back();
         Weights w = layer->getWeights();
@@ -293,12 +297,12 @@ void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vec
         {
             if (dtype == nvinfer1::DataType::kFLOAT)
             {
-                spw.resize(w.count * sizeof(float));
+                spw.resize(static_cast<size_t>(w.count) * sizeof(float));
                 transpose2DWeights<float>(spw.data(), w.values, k, n);
             }
             else if (dtype == nvinfer1::DataType::kHALF)
             {
-                spw.resize(w.count * sizeof(half_float::half));
+                spw.resize(static_cast<size_t>(w.count) * sizeof(half_float::half));
                 transpose2DWeights<half_float::half>(spw.data(), w.values, k, n);
             }
 
@@ -353,8 +357,9 @@ void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int
             auto& conv = *static_cast<IConvolutionLayer*>(layer);
             auto const& dims = conv.getKernelSizeNd();
             ASSERT(dims.nbDims == 2 || dims.nbDims == 3);
-            auto const k = conv.getNbOutputMaps();
-            auto const trs = std::accumulate(dims.d, dims.d + dims.nbDims, 1, std::multiplies<int32_t>());
+            auto const k = static_cast<int32_t>(conv.getNbOutputMaps());
+            auto const trs = static_cast<int32_t>(
+                std::accumulate(dims.d, dims.d + dims.nbDims, static_cast<int64_t>(1), std::multiplies<int64_t>()));
             sparseWeights.emplace_back();
             setSparseWeights(conv, k, trs, sparseWeights.back());
         }
@@ -421,16 +426,16 @@ int32_t dataOffsetFromDims(int64_t v, Dims const& dims, Dims const& strides, int
     int32_t dataOffset = 0;
     for (int32_t dimIndex = dims.nbDims - 1; dimIndex >= 0; --dimIndex)
     {
-        int32_t dimVal = v % dims.d[dimIndex];
+        int32_t dimVal = static_cast<int32_t>(v % dims.d[dimIndex]);
         if (dimIndex == vectorDim)
         {
-            dataOffset += (dimVal / spv) * strides.d[dimIndex] * spv + dimVal % spv;
+            dataOffset += static_cast<int32_t>((dimVal / spv) * strides.d[dimIndex] * spv + dimVal % spv);
         }
         else
         {
-            dataOffset += dimVal * strides.d[dimIndex] * (vectorDim == -1 ? 1 : spv);
+            dataOffset += static_cast<int32_t>(dimVal * strides.d[dimIndex] * (vectorDim == -1 ? 1 : spv));
         }
-        v /= dims.d[dimIndex];
+        v /= static_cast<int64_t>(dims.d[dimIndex]);
         ASSERT(v >= 0);
     }
 
@@ -507,14 +512,14 @@ template <typename T>
 void sparsify(T const* values, int64_t count, int32_t k, int32_t trs, std::vector<int8_t>& sparseWeights)
 {
     auto const c = count / (k * trs);
-    sparseWeights.resize(count * sizeof(T));
+    sparseWeights.resize(static_cast<size_t>(count) * sizeof(T));
     auto* sparseValues = reinterpret_cast<T*>(sparseWeights.data());
 
     constexpr int32_t window = 4;
     constexpr int32_t nonzeros = 2;
 
-    int32_t const crs = c * trs;
-    auto const getIndex = [=](int32_t ki, int32_t ci, int32_t rsi) { return ki * crs + ci * trs + rsi; };
+    int64_t const crs = c * trs;
+    auto const getIndex = [=](int64_t ki, int64_t ci, int64_t rsi) { return ki * crs + ci * trs + rsi; };
 
     for (int64_t ki = 0; ki < k; ++ki)
     {

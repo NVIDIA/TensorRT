@@ -55,6 +55,11 @@ int32_t computeMaskedScaledSoftmax(cudaStream_t stream, int32_t const ld, int32_
 class QKVToContextPluginDynamicLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     QKVToContextPluginDynamicLegacy(std::string const name, nvinfer1::DataType const type, int32_t const hiddenSize,
         int32_t const numHeads, float const dqProbs, bool hasImask = false);
 
@@ -120,11 +125,6 @@ private:
     nvinfer1::pluginInternal::cublasHandle_t mCublas{};
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
-
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class QKVToContextPluginDynamicLegacyCreator : public nvinfer1::IPluginCreator
@@ -156,6 +156,11 @@ private:
 class QKVToContextVarSeqlenPluginLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     QKVToContextVarSeqlenPluginLegacy(std::string const name, nvinfer1::DataType const type, int32_t const hiddenSize,
         int32_t const numHeads, float const dqProbs, bool hasImask = false, bool varSeqlen = false,
         bool const useInt8ScaleMax = true);
@@ -225,11 +230,6 @@ private:
     nvinfer1::pluginInternal::cublasHandle_t mCublas{};
     // the wrapper pointer is shared among all plugins attached to the same context.
     std::shared_ptr<nvinfer1::pluginInternal::CublasWrapper> mCublasWrapper;
-
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class QKVToContextVarSeqlenPluginLegacyCreator : public nvinfer1::IPluginCreator

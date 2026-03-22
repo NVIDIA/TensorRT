@@ -42,7 +42,7 @@ EmbLayerNormPluginDynamicLegacy::EmbLayerNormPluginDynamicLegacy(std::string con
     DataType const mhaType, Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb,
     Weights const& tokEmb, bool const useFullMask)
     : mLayerName(name)
-    , mLd(beta.count)
+    , mLd(static_cast<size_t>(beta.count))
     , mType(type)
     , mUseFullMask(useFullMask)
     , mMhaType(mhaType)
@@ -50,12 +50,12 @@ EmbLayerNormPluginDynamicLegacy::EmbLayerNormPluginDynamicLegacy(std::string con
     // Assuming Weights.count is the number of elements and not bytes
     PLUGIN_VALIDATE(beta.count == gamma.count);
     PLUGIN_VALIDATE(mLd > 0U);
-    PLUGIN_VALIDATE(wordEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(posEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(tokEmb.count % mLd == 0);
-    mWordVocabSize = wordEmb.count / mLd;
-    mPosVocabSize = posEmb.count / mLd;
-    mTokVocabSize = tokEmb.count / mLd;
+    PLUGIN_VALIDATE(static_cast<size_t>(wordEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(posEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(tokEmb.count) % mLd == 0);
+    mWordVocabSize = static_cast<size_t>(wordEmb.count) / mLd;
+    mPosVocabSize = static_cast<size_t>(posEmb.count) / mLd;
+    mTokVocabSize = static_cast<size_t>(tokEmb.count) / mLd;
     mSM = getSmVersion();
     // mS is set during configure
 
@@ -150,7 +150,7 @@ DimsExprs EmbLayerNormPluginDynamicLegacy::getOutputDimensions(
             ret.nbDims = 5;
             ret.d[0] = inputs[0].d[0];
             ret.d[1] = inputs[0].d[1];
-            ret.d[2] = exprBuilder.constant(mLd);
+            ret.d[2] = exprBuilder.constant(static_cast<int64_t>(mLd));
             ret.d[3] = exprBuilder.constant(1);
             ret.d[4] = exprBuilder.constant(1);
             return ret;
@@ -253,9 +253,9 @@ void EmbLayerNormPluginDynamicLegacy::configurePlugin(DynamicPluginTensorDesc co
     PLUGIN_ASSERT(nbInputs == 3);
 
     PLUGIN_ASSERT(inputs[0].desc.dims.nbDims == 2);
-    int32_t const S = inputs[0].desc.dims.d[SDIM];
-    mS = S;
-    int32_t const B = inputs[0].desc.dims.d[BDIM];
+    int32_t const S = static_cast<int32_t>(inputs[0].desc.dims.d[SDIM]);
+    mS = static_cast<size_t>(S);
+    int32_t const B = static_cast<int32_t>(inputs[0].desc.dims.d[BDIM]);
     TRT_UNUSED B;
     PLUGIN_ASSERT(mS == static_cast<size_t>(inputs[1].desc.dims.d[SDIM]));
     PLUGIN_ASSERT(B == inputs[1].desc.dims.d[BDIM]);
@@ -297,8 +297,8 @@ void EmbLayerNormPluginDynamicLegacy::configurePlugin(DynamicPluginTensorDesc co
     PLUGIN_ASSERT(outputs[1].desc.type == DataType::kINT32);
 }
 
-size_t EmbLayerNormPluginDynamicLegacy::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t EmbLayerNormPluginDynamicLegacy::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -311,8 +311,8 @@ int32_t EmbLayerNormPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDe
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const batchSize = inputDesc->dims.d[BDIM];
-        int32_t const S = inputDesc->dims.d[SDIM];
+        int32_t const batchSize = static_cast<int32_t>(inputDesc->dims.d[BDIM]);
+        int32_t const S = static_cast<int32_t>(inputDesc->dims.d[SDIM]);
         int32_t status = STATUS_FAILURE;
 
         // Our plugin outputs only one tensor
@@ -329,7 +329,8 @@ int32_t EmbLayerNormPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDe
             auto const tokEmb = static_cast<float const*>(mTokEmbDev.get());
             auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
 
             if (status != cudaSuccess)
             {
@@ -343,7 +344,8 @@ int32_t EmbLayerNormPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDe
             auto const tokEmb = static_cast<half const*>(mTokEmbDev.get());
             auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
             status = embSkipLayerNorm<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds, beta,
-                gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
 
             if (status != cudaSuccess)
             {
@@ -374,7 +376,9 @@ int32_t EmbLayerNormPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDe
             }
             uint32_t* inputMaskX = static_cast<uint32_t*>(outputs[1]);
 
-            status = convertMask(S, batchSize, warps_m, warps_n, warps_k, inputMask, inputMaskX, stream);
+            status = convertMask(static_cast<uint32_t>(S), static_cast<uint32_t>(batchSize),
+                static_cast<uint32_t>(warps_m), static_cast<uint32_t>(warps_n), static_cast<uint32_t>(warps_k),
+                inputMask, inputMaskX, stream);
         }
         else
         {
@@ -393,7 +397,7 @@ int32_t EmbLayerNormPluginDynamicLegacy::enqueue(PluginTensorDesc const* inputDe
 
 // IPluginV2Ext Methods
 DataType EmbLayerNormPluginDynamicLegacy::getOutputDataType(
-    int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
 
     PLUGIN_ASSERT(index == 0 || index == 1);
@@ -509,7 +513,7 @@ EmbLayerNormPluginDynamicLegacyCreator::EmbLayerNormPluginDynamicLegacyCreator()
     mPluginAttributes.emplace_back(PluginField("output_fp16"));
     mPluginAttributes.emplace_back(PluginField("full_mask"));
     mPluginAttributes.emplace_back(PluginField("mha_type_id"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

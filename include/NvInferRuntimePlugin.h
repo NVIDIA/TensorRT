@@ -420,8 +420,8 @@ public:
     //!
     //! \param pluginNamespace The namespace for the plugin object.
     //!
-    //! \warning The string pluginNamespace will be NULL-terminated and have a length of 1024 bytes or less including the
-    //! NULL terminator.
+    //! \warning The string pluginNamespace will be NULL-terminated and have a length of 1024 bytes or less including
+    //! the NULL terminator.
     //!
     //! \usage
     //! - Allowed context for the API call
@@ -446,15 +446,15 @@ public:
     // @cond SuppressDoxyWarnings
     IPluginV2() = default;
     virtual ~IPluginV2() noexcept = default;
-// @endcond
+    // @endcond
 
 protected:
-// @cond SuppressDoxyWarnings
+    // @cond SuppressDoxyWarnings
     IPluginV2(IPluginV2 const&) = default;
     IPluginV2(IPluginV2&&) = default;
     IPluginV2& operator=(IPluginV2 const&) & = default;
     IPluginV2& operator=(IPluginV2&&) & = default;
-// @endcond
+    // @endcond
 };
 
 //!
@@ -672,7 +672,7 @@ protected:
     IPluginV2Ext(IPluginV2Ext&&) = default;
     IPluginV2Ext& operator=(IPluginV2Ext const&) & = default;
     IPluginV2Ext& operator=(IPluginV2Ext&&) & = default;
-// @endcond
+    // @endcond
 
     //!
     //! \brief Return the API version with which this plugin was built. The
@@ -787,15 +787,15 @@ public:
     // @cond SuppressDoxyWarnings
     IPluginV2IOExt() = default;
     ~IPluginV2IOExt() override = default;
-// @endcond
+    // @endcond
 
 protected:
-// @cond SuppressDoxyWarnings
+    // @cond SuppressDoxyWarnings
     IPluginV2IOExt(IPluginV2IOExt const&) = default;
     IPluginV2IOExt(IPluginV2IOExt&&) = default;
     IPluginV2IOExt& operator=(IPluginV2IOExt const&) & = default;
     IPluginV2IOExt& operator=(IPluginV2IOExt&&) & = default;
-// @endcond
+    // @endcond
 
     //!
     //! \brief Return the API version with which this plugin was built. The upper byte is reserved by TensorRT and is
@@ -814,8 +814,10 @@ protected:
             | (static_cast<uint32_t>(NV_TENSORRT_VERSION) & 0xFFFFFFU));
     }
 
-private:
+protected:
     // Following are obsolete base class methods, and must not be implemented or used.
+    // Kept as protected (not private) so derived classes can use `using` declarations
+    // to suppress -Woverloaded-virtual warnings.
 
     //!
     //! \brief Set plugin configuration.

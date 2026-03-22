@@ -104,7 +104,7 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextInterleavedPluginLegacy::clone() cons
 }
 
 DimsExprs QKVToContextInterleavedPluginLegacy::getOutputDimensions(
-    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t /*nbInputs*/, IExprBuilder& exprBuilder) noexcept
 {
     // Input SHAPE is 1x(3*N*H)xTotalx1 (NCHW)
     // Output SHAPE is 1x(N*H)xTotalx1
@@ -148,20 +148,20 @@ bool QKVToContextInterleavedPluginLegacy::supportsFormatCombination(
     return false;
 }
 
-void QKVToContextInterleavedPluginLegacy::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+void QKVToContextInterleavedPluginLegacy::configurePlugin(DynamicPluginTensorDesc const* /*in*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
 }
 
-size_t QKVToContextInterleavedPluginLegacy::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t QKVToContextInterleavedPluginLegacy::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
 
 // IPluginV2Ext Methods
 DataType QKVToContextInterleavedPluginLegacy::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return DataType::kINT8;
@@ -233,9 +233,9 @@ int32_t QKVToContextInterleavedPluginLegacy::enqueue(PluginTensorDesc const* inp
 {
     PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-    int32_t const total = inputDesc[0].dims.d[2];
-    int32_t const B = inputDesc[1].dims.d[0] - 1;
-    int32_t const maxS = inputDesc[2].dims.d[0];
+    int32_t const total = static_cast<int32_t>(inputDesc[0].dims.d[2]);
+    int32_t const B = static_cast<int32_t>(inputDesc[1].dims.d[0] - 1);
+    int32_t const maxS = static_cast<int32_t>(inputDesc[2].dims.d[0]);
     int32_t S = 384;
     if (maxS <= 128)
     {
@@ -264,9 +264,9 @@ int32_t QKVToContextInterleavedPluginLegacy::enqueue(PluginTensorDesc const* inp
     float scaleQkv = mUseExplicitInt8 ? mQkvScale : inputDesc[0].scale;
     float scaleCtx = mUseExplicitInt8 ? mCtxScale : outputDesc[0].scale;
 
-    float scaleBmm1 = scaleQkv * scaleQkv * 0.125; // 1 / sqrt(64)
+    float scaleBmm1 = scaleQkv * scaleQkv * 0.125f; // 1 / sqrt(64)
     float scaleBmm2 = mDqProbs * scaleQkv / scaleCtx;
-    float scaleSoftmax = 1.F / mDqProbs;
+    float scaleSoftmax = 1.0f / mDqProbs;
 
     params.scale_bmm1 = reinterpret_cast<uint32_t const&>(scaleBmm1);
     params.scale_bmm2 = reinterpret_cast<uint32_t const&>(scaleBmm2);
@@ -276,8 +276,8 @@ int32_t QKVToContextInterleavedPluginLegacy::enqueue(PluginTensorDesc const* inp
     params.o_stride_in_bytes = total;
 
     params.use_int8_scale_max = mUseInt8ScaleMax;
-    params.enable_i2f_trick
-        = -double(1 << 22) * double(scaleBmm2) <= -128.F && double(1 << 22) * double(scaleBmm2) >= 127.F;
+    params.enable_i2f_trick = -static_cast<double>(1 << 22) * static_cast<double>(scaleBmm2) <= -128.0
+        && static_cast<double>(1 << 22) * static_cast<double>(scaleBmm2) >= 127.0;
 
     try
     {
@@ -302,7 +302,7 @@ QKVToContextInterleavedPluginLegacyCreator::QKVToContextInterleavedPluginLegacyC
     mPluginAttributes.emplace_back(PluginField("input_qkv_scale", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("output_ctx_scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

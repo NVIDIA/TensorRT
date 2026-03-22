@@ -39,7 +39,7 @@ int32_t ScatterND::getNbOutputs() const noexcept
 }
 
 DimsExprs ScatterND::getOutputDimensions(
-    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t /*outputIndex*/, DimsExprs const* inputs, int32_t /*nbInputs*/, IExprBuilder& /*exprBuilder*/) noexcept
 {
     // output should have same dimensions as data tensor
     DimsExprs ret = inputs[dataTensorIdx];
@@ -77,8 +77,8 @@ bool ScatterND::supportsFormatCombination(
     return ret;
 }
 
-void ScatterND::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+void ScatterND::configurePlugin(DynamicPluginTensorDesc const* /*in*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
 }
 
@@ -87,13 +87,13 @@ int32_t ScatterND::calculateNumSlices(Dims indexTensorDims) const noexcept
     int32_t nSlices = 1;
     for (int32_t i = 0; i < indexTensorDims.nbDims - 1; i++)
     {
-        nSlices *= indexTensorDims.d[i];
+        nSlices *= static_cast<int32_t>(indexTensorDims.d[i]);
     }
     return nSlices;
 }
 
-size_t ScatterND::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t ScatterND::getWorkspaceSize(PluginTensorDesc const* inputs, int32_t /*nbInputs*/,
+    PluginTensorDesc const* outputs, int32_t /*nbOutputs*/) const noexcept
 {
     int32_t nSlices = calculateNumSlices(inputs[indexTensorIdx].dims);
     // transformCoeffs + transformed indices
@@ -107,7 +107,7 @@ void ScatterND::calculateTransformCoeff(
     for (int32_t i = indexRank - 1, nIndx = 1; i >= 0; i--)
     {
         pitches.push_back(nIndx);
-        nIndx *= dataTensorDims.d[i];
+        nIndx *= static_cast<int32_t>(dataTensorDims.d[i]);
     }
 
     std::reverse(pitches.begin(), pitches.end()); // last dimension pitch is always one (assuming linear mem)
@@ -120,9 +120,9 @@ int32_t ScatterND::calculateCopySize(Dims const& dataDims) const noexcept
     int32_t copySize = 1;
     for (int32_t i = 0; i < dataDims.nbDims; i++)
     {
-        copySize *= dataDims.d[i];
+        copySize *= static_cast<int32_t>(dataDims.d[i]);
     }
-    copySize *= sizeof(float);
+    copySize *= static_cast<int32_t>(sizeof(float));
     return copySize;
 }
 
@@ -138,7 +138,7 @@ int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc c
 
     Dims dataDims = inputDesc[dataTensorIdx].dims;
 
-    int32_t indexRank = IndexDims.d[IndexDims.nbDims - 1];
+    int32_t indexRank = static_cast<int32_t>(IndexDims.d[IndexDims.nbDims - 1]);
     PLUGIN_ASSERT(indexRank <= dataDims.nbDims);
 
     int32_t nSlices = calculateNumSlices(IndexDims);
@@ -163,7 +163,7 @@ int32_t ScatterND::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc c
 
     for (int32_t i = indexRank; i < dataDims.nbDims; i++)
     {
-        rowSize *= dataDims.d[i];
+        rowSize *= static_cast<int32_t>(dataDims.d[i]);
     }
 
     calculateTransformCoeff(dataDims, indexRank, transformCoeff);
@@ -180,7 +180,7 @@ size_t ScatterND::getSerializationSize() const noexcept
     return 0;
 }
 
-void ScatterND::serialize(void* buffer) const noexcept
+void ScatterND::serialize(void* /*buffer*/) const noexcept
 {
     return;
 }
@@ -198,14 +198,15 @@ char const* ScatterND::getPluginNamespace() const noexcept
 
 // Return the DataType of the plugin output at the requested index
 DataType ScatterND::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return inputTypes[dataTensorIdx];
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void ScatterND::attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpuAllocator* gpuAllocator) noexcept
+void ScatterND::attachToContext(
+    cudnnContext* /*cudnn*/, cublasContext* /*cublas*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
     return;
 }
@@ -265,7 +266,7 @@ PluginFieldCollection const* ScatterNDPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2Ext* ScatterNDPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* ScatterNDPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* /*fc*/) noexcept
 {
     try
     {
@@ -281,7 +282,7 @@ IPluginV2Ext* ScatterNDPluginCreator::createPlugin(char const* name, PluginField
 }
 
 IPluginV2Ext* ScatterNDPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* /*serialData*/, size_t /*serialLength*/) noexcept
 {
     try
     {

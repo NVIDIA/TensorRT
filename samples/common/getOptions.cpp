@@ -68,7 +68,7 @@ int getTRTOptionIndex(const std::vector<TRTOption>& options, const TRTOption& op
     {
         if (matches(opt, options[i]))
         {
-            return i;
+            return static_cast<int>(i);
         }
     }
     return -1;
@@ -149,13 +149,13 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
     {
         if (argv[i] == nullptr)
         {
-            return TRTParsedArgs{"Null argument at index " + std::to_string(i)};
+            return TRTParsedArgs{"Null argument at index " + std::to_string(i), {}, {}};
         }
 
         const std::string argStr(argv[i]);
         if (argStr.empty())
         {
-            return TRTParsedArgs{"Empty argument at index " + std::to_string(i)};
+            return TRTParsedArgs{"Empty argument at index " + std::to_string(i), {}, {}};
         }
 
         // No starting hyphen means it is a positional argument
@@ -167,7 +167,7 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
 
         if (argStr == "-" || argStr == "--")
         {
-            return TRTParsedArgs{"Argument does not specify an option at index " + std::to_string(i)};
+            return TRTParsedArgs{"Argument does not specify an option at index " + std::to_string(i), {}, {}};
         }
 
         // If only 1 hyphen, char after is the flag.
@@ -178,7 +178,7 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
             // Must only have 1 char after the hyphen
             if (argStr.size() > 2)
             {
-                return TRTParsedArgs{"Short arg contains more than 1 character at index " + std::to_string(i)};
+                return TRTParsedArgs{"Short arg contains more than 1 character at index " + std::to_string(i), {}, {}};
             }
             opt.shortName = argStr[1];
         }
@@ -206,13 +206,13 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
             if (!value.empty())
             {
                 parsedArgs.values[idx].second.push_back(value);
-                parsedArgs.values[idx].first = parsedArgs.values[idx].second.size();
+                parsedArgs.values[idx].first = static_cast<int>(parsedArgs.values[idx].second.size());
                 continue;
             }
 
             if (i + 1 >= argc)
             {
-                return TRTParsedArgs{"Last argument requires value, but none given"};
+                return TRTParsedArgs{"Last argument requires value, but none given", {}, {}};
             }
 
             const std::string nextArg(argv[i + 1]);
@@ -225,7 +225,7 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
             parsedArgs.values[idx].second.push_back(nextArg);
             i += 1; // Next argument already consumed
 
-            parsedArgs.values[idx].first = parsedArgs.values[idx].second.size();
+            parsedArgs.values[idx].first = static_cast<int>(parsedArgs.values[idx].second.size());
         }
         else
         {
@@ -240,7 +240,7 @@ TRTParsedArgs getOptions(int argc, const char* const* argv, const std::vector<TR
     const std::string errMsg = validateTRTOptions(options);
     if (!errMsg.empty())
     {
-        return TRTParsedArgs{errMsg};
+        return TRTParsedArgs{errMsg, {}, {}};
     }
     return parseArgs(argc, argv, options);
 }

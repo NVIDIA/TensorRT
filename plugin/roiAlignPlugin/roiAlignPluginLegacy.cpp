@@ -43,7 +43,7 @@ ROIAlignPluginCreator::ROIAlignPluginCreator()
     mPluginAttributes.emplace_back(PluginField("sampling_ratio", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("spatial_scale", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -62,7 +62,7 @@ PluginFieldCollection const* ROIAlignPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2DynamicExt* ROIAlignPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2DynamicExt* ROIAlignPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -121,7 +121,7 @@ IPluginV2DynamicExt* ROIAlignPluginCreator::createPlugin(char const* name, Plugi
 }
 
 IPluginV2DynamicExt* ROIAlignPluginCreator::deserializePlugin(
-    char const* name, void const* data, size_t length) noexcept
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -159,8 +159,8 @@ void ROIAlign::destroy() noexcept
     delete this;
 }
 
-size_t ROIAlign::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t ROIAlign::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -417,9 +417,9 @@ void ROIAlign::configurePlugin(
 
     checkValidInputs(in, nbInputs);
 
-    mFeatureLength = in[0].desc.dims.d[1];
-    mHeight = in[0].desc.dims.d[2];
-    mWidth = in[0].desc.dims.d[3];
+    mFeatureLength = static_cast<int32_t>(in[0].desc.dims.d[1]);
+    mHeight = static_cast<int32_t>(in[0].desc.dims.d[2]);
+    mWidth = static_cast<int32_t>(in[0].desc.dims.d[3]);
 
-    mROICount = in[1].desc.dims.d[0];
+    mROICount = static_cast<int32_t>(in[1].desc.dims.d[0]);
 }

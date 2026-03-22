@@ -46,11 +46,6 @@ class TRT_DEPRECATED SplitPlugin final : public nvinfer1::IPluginV2DynamicExt
     int32_t _x_stride, _y_stride, _z_stride;
     std::shared_ptr<SplitPluginDeviceVectors> deviceVectors;
 
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
-
 protected:
     void deserialize(void const* serialData, size_t serialLength) noexcept
     {
@@ -68,6 +63,11 @@ protected:
     }
 
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     SplitPlugin(int32_t axis, int32_t* const& output_lengths, int32_t noutput)
         : _axis(axis)
         , _output_lengths(std::vector<int32_t>(output_lengths, output_lengths + noutput))
@@ -132,7 +132,7 @@ public:
     }
     int32_t getNbOutputs() const noexcept override
     {
-        return _output_lengths.size();
+        return static_cast<int32_t>(_output_lengths.size());
     }
     void attachToContext(
         cudnnContext* /*cudnn*/, cublasContext* /*cublas*/, nvinfer1::IGpuAllocator* /*allocator*/) noexcept override

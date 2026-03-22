@@ -40,6 +40,8 @@ using EfficientNMSImplicitTFTRTOutputsDataType = void**;
 class EfficientNMSImplicitTFTRTPlugin : public nvinfer1::IPluginV2IOExt
 {
 public:
+    using nvinfer1::IPluginV2IOExt::configurePlugin;
+
     explicit EfficientNMSImplicitTFTRTPlugin(EfficientNMSParameters param);
     EfficientNMSImplicitTFTRTPlugin(const void* data, size_t length);
     ~EfficientNMSImplicitTFTRTPlugin() override = default;

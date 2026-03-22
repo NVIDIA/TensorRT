@@ -502,12 +502,12 @@ public:
         return mBuffer.get();
     }
 
-    void hostToDevice(TrtCudaStream& stream) override
+    void hostToDevice(TrtCudaStream& /*stream*/) override
     {
         // Does nothing since we are using unified memory.
     }
 
-    void deviceToHost(TrtCudaStream& stream) override
+    void deviceToHost(TrtCudaStream& /*stream*/) override
     {
         // Does nothing since we are using unified memory.
     }
@@ -539,7 +539,7 @@ public:
     ~OutputAllocator() override = default;
 
     void* reallocateOutput(
-        char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept override
+        char const* /*tensorName*/, void* /*currentMemory*/, uint64_t size, uint64_t alignment) noexcept override
     {
         // Some memory allocators return nullptr when allocating zero bytes, but TensorRT requires a non-null ptr
         // even for empty tensors, so allocate a dummy byte.
@@ -559,7 +559,7 @@ public:
         return reallocateOutput(tensorName, currentMemory, size, alignment);
     }
 
-    void notifyShape(char const* tensorName, nvinfer1::Dims const& dims) noexcept override
+    void notifyShape(char const* /*tensorName*/, nvinfer1::Dims const& dims) noexcept override
     {
         mFinalDims = dims;
     }
@@ -588,7 +588,6 @@ int32_t getCudaDriverVersion();
 
 //! Get the CUDA version of the current CUDA runtime.
 int32_t getCudaRuntimeVersion();
-
 
 } // namespace sample
 

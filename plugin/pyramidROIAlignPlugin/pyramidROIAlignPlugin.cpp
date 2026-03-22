@@ -43,7 +43,7 @@ PyramidROIAlignPluginCreator::PyramidROIAlignPluginCreator()
     mPluginAttributes.emplace_back(PluginField("sampling_ratio", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("legacy", nullptr, PluginFieldType::kINT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -62,7 +62,7 @@ PluginFieldCollection const* PyramidROIAlignPluginCreator::getFieldNames() noexc
     return &mFC;
 }
 
-IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -147,7 +147,7 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
 }
 
 IPluginV2Ext* PyramidROIAlignPluginCreator::deserializePlugin(
-    char const* name, void const* data, size_t length) noexcept
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -280,8 +280,8 @@ Dims PyramidROIAlign::getOutputDimensions(int32_t index, Dims const* inputs, int
     return result;
 }
 
-int32_t PyramidROIAlign::enqueue(
-    int32_t batch_size, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t PyramidROIAlign::enqueue(int32_t batch_size, void const* const* inputs, void* const* outputs,
+    void* /*workspace*/, cudaStream_t stream) noexcept
 {
     void* const pooled = outputs[0];
     cudaError_t status;
@@ -296,7 +296,9 @@ int32_t PyramidROIAlign::enqueue(
         mAbsCoords = false;
         mSamplingRatio = 1;
         float const firstThreshold
-            = (224 * 224 * 2.F / (MaskRCNNConfig::IMAGE_SHAPE.d[1] * MaskRCNNConfig::IMAGE_SHAPE.d[2])) / (4.F * 4.F);
+            = (224 * 224 * 2.F
+                  / static_cast<float>(MaskRCNNConfig::IMAGE_SHAPE.d[1] * MaskRCNNConfig::IMAGE_SHAPE.d[2]))
+            / (4.F * 4.F);
         status = roiAlign(stream, batch_size, mImageSize, mFeatureLength, mROICount, firstThreshold, mTransformCoords,
             mAbsCoords, mSwapCoords, mPlusOneCoords, mSamplingRatio, inputs[0], &inputs[1], mFeatureSpatialSize, pooled,
             mPooledSize);
@@ -309,7 +311,7 @@ int32_t PyramidROIAlign::enqueue(
         // plugin works with normalized ROI coordinates, the FPN scale must be normalized
         // by the input image size.
         float const scale = static_cast<float>(mFPNScale);
-        float const normScale = sqrtf(scale * scale / (mImageSize.y * mImageSize.x));
+        float const normScale = sqrtf(scale * scale / static_cast<float>(mImageSize.y * mImageSize.x));
         // Furthermore, the roiAlign kernel expects a first threshold instead. This is
         // the *area* of an ROI but for one level down, i.e. at the P2->P3 transition.
         float const firstThreshold = normScale * normScale / 4.F;
@@ -395,7 +397,7 @@ void PyramidROIAlign::deserialize(int8_t const* data, size_t length)
 
 // Return the DataType of the plugin output at the requested index
 DataType PyramidROIAlign::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -403,21 +405,21 @@ DataType PyramidROIAlign::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool PyramidROIAlign::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool PyramidROIAlign::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool PyramidROIAlign::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void PyramidROIAlign::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
-    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void PyramidROIAlign::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* /*outputTypes*/, bool const* /*inputIsBroadcast*/,
+    bool const* /*outputIsBroadcast*/, PluginFormat floatFormat, int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(supportsFormat(inputTypes[0], floatFormat));
     check_valid_inputs(inputDims, nbInputs);
@@ -425,8 +427,8 @@ void PyramidROIAlign::configurePlugin(Dims const* inputDims, int32_t nbInputs, D
     PLUGIN_ASSERT(nbOutputs == 1);
     PLUGIN_ASSERT(nbInputs == 1 + mFeatureMapCount);
 
-    mROICount = inputDims[0].d[0];
-    mFeatureLength = inputDims[1].d[0];
+    mROICount = static_cast<int32_t>(inputDims[0].d[0]);
+    mFeatureLength = static_cast<int32_t>(inputDims[1].d[0]);
 
     for (size_t layer = 0; layer < mFeatureMapCount; ++layer)
     {
@@ -436,7 +438,7 @@ void PyramidROIAlign::configurePlugin(Dims const* inputDims, int32_t nbInputs, D
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void PyramidROIAlign::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

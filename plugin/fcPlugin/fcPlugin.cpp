@@ -50,9 +50,9 @@ static void printPerfStructure(customMatmulPerf_t const& perf, int32_t const m, 
     AlgoProps p;
     p.populate(perf.algo);
     // Calculate GFLOPS
-    double timeAvg
-        = perf.time * 1e-3; // Convert to seconds. It has been divided by kNB_KERNEL_REPEATS in customMatmulRun().
-    double gflop = (2 * static_cast<uint64_t>(m * n) * k) * 1e-9; // Real
+    double timeAvg = static_cast<double>(perf.time)
+        * 1e-3; // Convert to seconds. It has been divided by kNB_KERNEL_REPEATS in customMatmulRun().
+    double gflop = (2 * static_cast<double>(static_cast<uint64_t>(m * n) * k)) * 1e-9; // Real
 
     gLogVerbose << "Algo=" << p.algoId << " Tile=" << p.tile << " (" << matmulTileName[p.tile] << ") K=" << p.numSplitsK
                 << " Red.Sch.=" << p.reductionScheme << " Swiz=" << p.swizzle << " Cust=" << p.customOption
@@ -117,7 +117,7 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
             }
             // For the moment only add successful findings
             perfResults.algo = algo;
-            perfResults.time = time / kNB_KERNEL_REPEATS; // Average time
+            perfResults.time = time / static_cast<float>(kNB_KERNEL_REPEATS); // Average time
             perfResults.workspaceSize = heurResult.workspaceSize;
             perfResults.wavesCount = heurResult.wavesCount;
         }
@@ -179,11 +179,14 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
 
     // Create matrix descriptors. We are good with the details here so no need to
     // set any extra attributes
+    PLUGIN_CUBLASASSERT(
+        cublasLtWrapper.cublasLtMatrixLayoutCreate(&Adesc, Atype, static_cast<uint64_t>(transa == CUBLAS_OP_N ? m : k),
+            static_cast<uint64_t>(transa == CUBLAS_OP_N ? k : m), static_cast<int64_t>(lda)));
+    PLUGIN_CUBLASASSERT(
+        cublasLtWrapper.cublasLtMatrixLayoutCreate(&Bdesc, Btype, static_cast<uint64_t>(transb == CUBLAS_OP_N ? k : n),
+            static_cast<uint64_t>(transb == CUBLAS_OP_N ? n : k), static_cast<int64_t>(ldb)));
     PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(
-        &Adesc, Atype, transa == CUBLAS_OP_N ? m : k, transa == CUBLAS_OP_N ? k : m, lda));
-    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(
-        &Bdesc, Btype, transb == CUBLAS_OP_N ? k : n, transb == CUBLAS_OP_N ? n : k, ldb));
-    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatrixLayoutCreate(&Cdesc, Ctype, m, n, ldc));
+        &Cdesc, Ctype, static_cast<uint64_t>(m), static_cast<uint64_t>(n), static_cast<int64_t>(ldc)));
 
     // Request the 4 first AlgoId available for SGEMM ( computeType = scaleType =
     // Atype = Btype = Ctype = Dtype = CUDA_R_32F)
@@ -209,7 +212,7 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
             continue;
         }
 
-        uint64_t numericImpl = -1;
+        uint64_t numericImpl = static_cast<uint64_t>(-1);
         PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS, &numericImpl, sizeof(numericImpl), nullptr));
         if (Ctype == CUDA_R_32F && numericImpl == CUBLASLT_NUMERICAL_IMPL_FLAGS_HMMA)
@@ -221,7 +224,7 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
         // Query the tiles enums supported by that algo
         PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
             &algo, CUBLASLT_ALGO_CAP_TILE_IDS, nullptr, 0, &sizeWritten));
-        int32_t nbTiles = int32_t(sizeWritten / sizeof(int32_t));
+        int32_t nbTiles = static_cast<int32_t>(sizeWritten / sizeof(int32_t));
         int32_t* tileA = new int32_t[nbTiles == 0 ? 1 : nbTiles];
         if (nbTiles == 0)
         {
@@ -259,12 +262,12 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
                 PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                     &algo, CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION, &customOption, sizeof(customOption)));
                 // Loop over the CTAs swizzling support
-                for (int32_t k = 0; k <= swizzlingMax; k++)
+                for (int32_t k_ = 0; k_ <= swizzlingMax; k_++)
                 {
                     int32_t splitkTrial = 0;
                     if (splitkSupport)
                     {
-                        splitkTrial += sizeof(splitKSequenceA) / sizeof(splitKSequenceA[0]);
+                        splitkTrial += static_cast<int32_t>(sizeof(splitKSequenceA) / sizeof(splitKSequenceA[0]));
                     }
                     // Loop over the splitK value over a fixed sequence splitKSequenceA in
                     // addition to the case where splitK is not enabled
@@ -278,7 +281,7 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
                         PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitK_val, sizeof(splitK_val)));
                         PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
-                            &algo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &k, sizeof(k)));
+                            &algo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &k_, sizeof(k_)));
                         PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
                             &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(int32_t)));
 
@@ -290,8 +293,8 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
                                 sizeof(splitKSequenceA[l - 1])));
                             // Going over all the reduction scheme
                             for (redScheme = 1; redScheme < static_cast<int32_t>(CUBLASLT_REDUCTION_SCHEME_MASK)
-                                 && (algoCount < kNB_ALGO_COMBINATIONS);
-                                 redScheme = redScheme << 1)
+                                && (algoCount < kNB_ALGO_COMBINATIONS);
+                                redScheme = redScheme << 1)
                             {
                                 if (redScheme & redMask)
                                 {
@@ -308,7 +311,7 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
                                         algoCount++;
                                     }
                                 } // end if
-                            }     // end for
+                            } // end for
                         }
                         else
                         { // Non-splitK case
@@ -327,9 +330,9 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
                             }
                         }
                     } // end l
-                }     // end k
-            }         // end customOption
-        }             // end tileIdx
+                } // end k
+            } // end customOption
+        } // end tileIdx
         delete[] tileA;
     } // end idx
 
@@ -360,7 +363,7 @@ FCPluginDynamic::FCPluginDynamic(std::string const name, DataType const type, in
     : mLayerName(name)
     , mType(type)
     , mOutDim(outDim)
-    , mNumParams(W.count)
+    , mNumParams(static_cast<int32_t>(W.count))
     , mNmax(0)
     , mK(0)
     , mWdev(nullptr)
@@ -398,7 +401,7 @@ IPluginV2DynamicExt* FCPluginDynamic::clone() const noexcept
     {
         gLogVerbose << "FCPluginDynamic clone\n";
 
-        auto* p = new FCPluginDynamic(mLayerName, mType, mOutDim, mW);
+        auto* p = new FCPluginDynamic(mLayerName, mType, static_cast<int32_t>(mOutDim), mW);
         memcpy(p->mAlgo.data, mAlgo.data, sizeof(mAlgo.data));
         p->setPluginNamespace(mNamespace.c_str());
 
@@ -411,8 +414,8 @@ IPluginV2DynamicExt* FCPluginDynamic::clone() const noexcept
     return nullptr;
 }
 
-void FCPluginDynamic::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) noexcept
+void FCPluginDynamic::attachToContext(cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/,
+    nvinfer1::IGpuAllocator* /*gpuAllocator*/) noexcept
 {
     mLtContext.attach();
 }
@@ -478,15 +481,15 @@ void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int
         auto const& inDims0 = inputs[0].desc.dims;
 
         PLUGIN_VALIDATE(inDims0.nbDims == 5);
-        mK = inDims0.d[HDIM]; // hiddensize
+        mK = static_cast<int32_t>(inDims0.d[HDIM]); // hiddensize
         // PLUGIN_ASSERT(hiddenSize * mOutDim == mNumParams);
         PLUGIN_VALIDATE(inDims0.d[3] == 1);
         PLUGIN_VALIDATE(inDims0.d[4] == 1);
 
         // m and k are mOutDim
         // n is B*S
-        int32_t const S = inputs->max.d[SDIM];
-        int32_t const B = inputs->max.d[BDIM];
+        int32_t const S = static_cast<int32_t>(inputs->max.d[SDIM]);
+        int32_t const B = static_cast<int32_t>(inputs->max.d[BDIM]);
 
         mNmax = S * B;
 
@@ -495,12 +498,12 @@ void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int
 
         if (mType == DataType::kFLOAT)
         {
-            Gemm<float> g(mOutDim, mNmax, mK, false, false);
+            Gemm<float> g(static_cast<int32_t>(mOutDim), mNmax, mK, false, false);
             mLtContext.create(g, kMAX_WORKSPACE_BYTES);
         }
         else if (mType == DataType::kHALF)
         {
-            Gemm<half> g(mOutDim, mNmax, mK, false, false);
+            Gemm<half> g(static_cast<int32_t>(mOutDim), mNmax, mK, false, false);
             mLtContext.create(g, kMAX_WORKSPACE_BYTES);
         }
         else
@@ -524,11 +527,13 @@ void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int
             }
             if (mType == DataType::kFLOAT)
             {
-                mAlgo = gemmSearch<float>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace, mSharedStream);
+                mAlgo = gemmSearch<float>(
+                    static_cast<int32_t>(mOutDim), mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace, mSharedStream);
             }
             else if (mType == DataType::kHALF)
             {
-                mAlgo = gemmSearch<half>(mOutDim, mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace, mSharedStream);
+                mAlgo = gemmSearch<half>(
+                    static_cast<int32_t>(mOutDim), mNmax, mK, kMAX_WORKSPACE_BYTES, actualWorkspace, mSharedStream);
             }
         }
 
@@ -556,8 +561,8 @@ void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int
     }
 }
 
-size_t FCPluginDynamic::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t FCPluginDynamic::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return kMAX_WORKSPACE_BYTES;
 }
@@ -572,8 +577,8 @@ int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
 
         size_t const workspaceSize = getWorkspaceSize(inputDesc, 1, outputDesc, 1);
 
-        int32_t const S = inputDesc->dims.d[SDIM];
-        int32_t const B = inputDesc->dims.d[BDIM];
+        int32_t const S = static_cast<int32_t>(inputDesc->dims.d[SDIM]);
+        int32_t const B = static_cast<int32_t>(inputDesc->dims.d[BDIM]);
         int32_t const n = S * B;
         PLUGIN_VALIDATE(n >= 0);
         mLtContext.setN(static_cast<uint64_t>(n));
@@ -583,7 +588,7 @@ int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
             auto const* const input = static_cast<float const*>(inputs[0]);
             auto* output = static_cast<float*>(outputs[0]);
 
-            Gemm<float> g(mOutDim, n, mK, false, false);
+            Gemm<float> g(static_cast<int32_t>(mOutDim), n, mK, false, false);
             if (mWdev == nullptr)
             {
                 return STATUS_FAILURE;
@@ -599,7 +604,7 @@ int32_t FCPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, PluginTensor
             auto const* const input = static_cast<half const*>(inputs[0]);
             auto* output = static_cast<half*>(outputs[0]);
 
-            Gemm<half> g(mOutDim, n, mK, false, false);
+            Gemm<half> g(static_cast<int32_t>(mOutDim), n, mK, false, false);
             if (mWdev == nullptr)
             {
                 return STATUS_FAILURE;
@@ -668,8 +673,8 @@ void FCPluginDynamic::terminate() noexcept
 size_t FCPluginDynamic::getSerializationSize() const noexcept
 {
     size_t wordSize = getElementSize(mType);
-    return wordSize * mNumParams + sizeof(mType) + sizeof(mOutDim) + sizeof(mNumParams) + sizeof(mAlgo) + sizeof(mNmax)
-        + sizeof(mK);
+    return wordSize * static_cast<size_t>(mNumParams) + sizeof(mType) + sizeof(mOutDim) + sizeof(mNumParams)
+        + sizeof(mAlgo) + sizeof(mNmax) + sizeof(mK);
 }
 
 void FCPluginDynamic::serialize(void* buffer) const noexcept
@@ -683,7 +688,7 @@ void FCPluginDynamic::serialize(void* buffer) const noexcept
 
     size_t wordSize = getElementSize(mType);
     char* d = static_cast<char*>(buffer);
-    serFromDev(d, static_cast<char*>(mWdev.get()), mNumParams * wordSize);
+    serFromDev(d, static_cast<char*>(mWdev.get()), static_cast<size_t>(mNumParams) * wordSize);
 }
 
 void FCPluginDynamic::destroy() noexcept
@@ -722,7 +727,7 @@ FCPluginDynamicCreator::FCPluginDynamicCreator()
     mPluginAttributes.emplace_back(PluginField("type_id", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("W", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

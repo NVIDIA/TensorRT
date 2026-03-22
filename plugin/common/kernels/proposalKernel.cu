@@ -32,6 +32,7 @@ namespace nvinfer1
 {
 namespace plugin
 {
+#undef PLUGIN_CHECK_CUDA
 #define PLUGIN_CHECK_CUDA(call)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -59,23 +60,23 @@ typedef pluginStatus_t frcnnStatus_t;
 
 #define DEBUG_RPN_ENABLE 0
 
-#define FRCNN_ASSERT_PARAM(exp)                                                         \
-    do                                                                                  \
-    {                                                                                   \
-        if (!(exp))                                                                     \
-        {                                                                               \
-            DEBUG_FPRINTF(stderr, "Bad param - " #exp ", %s:%d\n", __FILE__, __LINE__); \
-            return STATUS_BAD_PARAM;                                                    \
-        }                                                                               \
+#define FRCNN_ASSERT_PARAM(exp)                                                                                        \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (!(exp))                                                                                                    \
+        {                                                                                                              \
+            DEBUG_FPRINTF(stderr, "Bad param - " #exp ", %s:%d\n", __FILE__, __LINE__);                                \
+            return STATUS_BAD_PARAM;                                                                                   \
+        }                                                                                                              \
     } while (0)
 
-#define DEBUG_FPRINTF(...)        \
-    do                            \
-    {                             \
-        if (DEBUG_RPN_ENABLE)     \
-        {                         \
-            fprintf(__VA_ARGS__); \
-        }                         \
+#define DEBUG_FPRINTF(...)                                                                                             \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        if (DEBUG_RPN_ENABLE)                                                                                          \
+        {                                                                                                              \
+            fprintf(__VA_ARGS__);                                                                                      \
+        }                                                                                                              \
     } while (0)
 
 #define CUDA_MEM_ALIGN 256
@@ -83,46 +84,30 @@ typedef pluginStatus_t frcnnStatus_t;
 unsigned int hash(const void* array_, size_t size);
 int8_t* alignPtr(int8_t* ptr, uintptr_t to);
 __global__ void setOffset(int stride, int size, int* output);
-frcnnStatus_t nms(cudaStream_t stream,
-    const int N,
-    const int R,
-    const int preNmsTop,
-    const int nmsMaxOut,
-    const float iouThreshold,
-    const DType_t t_fgScores,
-    const DLayout_t l_fgScores,
-    void* fgScores,
-    const DType_t t_proposals,
-    const DLayout_t l_proposals,
-    const void* proposals,
-    void* workspace,
-    const DType_t t_rois,
-    void* rois);
+frcnnStatus_t nms(cudaStream_t stream, const int N, const int R, const int preNmsTop, const int nmsMaxOut,
+    const float iouThreshold, const DType_t t_fgScores, const DLayout_t l_fgScores, void* fgScores,
+    const DType_t t_proposals, const DLayout_t l_proposals, const void* proposals, void* workspace,
+    const DType_t t_rois, void* rois);
 int8_t* nextWorkspacePtr(int8_t* ptr, uintptr_t previousWorkspaceSize);
-
 
 template <typename TFloat>
 __device__ __host__ inline float IoU(const Bbox<TFloat>& a, const Bbox<TFloat>& b)
 {
     TFloat left = max(a.x1, b.x1), right = min(a.x2, b.x2);
     TFloat top = max(a.y1, b.y1), bottom = min(a.y2, b.y2);
-    TFloat width = max((TFloat)(right - left + (TFloat) 1.0), (TFloat) 0.0);
-    TFloat height = max((TFloat)(bottom - top + (TFloat) 1.0), (TFloat) 0.0);
+    TFloat width = max((TFloat) (right - left + (TFloat) 1.0), (TFloat) 0.0);
+    TFloat height = max((TFloat) (bottom - top + (TFloat) 1.0), (TFloat) 0.0);
     TFloat interS = width * height;
     TFloat Sa = (a.x2 - a.x1 + (TFloat) 1) * (a.y2 - a.y1 + (TFloat) 1);
     TFloat Sb = (b.x2 - b.x1 + (TFloat) 1) * (b.y2 - b.y1 + (TFloat) 1);
     return (float) interS / (float) (Sa + Sb - interS);
 }
 
-
 // NMS KERNEL FOR SMALL BATCH SIZE {{{
 template <typename T_PROPOSALS, typename T_ROIS, int DIM, int TSIZE>
 __global__ __launch_bounds__(DIM) void nmsKernel1(const int propSize,
-        Bbox<T_PROPOSALS> const* __restrict__ preNmsProposals,
-        T_ROIS* __restrict__ afterNmsProposals,
-        const int preNmsTopN,
-        const float nmsThres,
-        const int afterNmsTopN)
+    Bbox<T_PROPOSALS> const* __restrict__ preNmsProposals, T_ROIS* __restrict__ afterNmsProposals, const int preNmsTopN,
+    const float nmsThres, const int afterNmsTopN)
 {
     __shared__ bool kept_boxes[TSIZE * DIM];
     int kept = 0;
@@ -185,8 +170,7 @@ __global__ __launch_bounds__(DIM) void nmsKernel1(const int propSize,
         do
         {
             ref_box_idx++;
-        }
-        while (!kept_boxes[ref_box_idx - batch_offset] && ref_box_idx < max_box_idx);
+        } while (!kept_boxes[ref_box_idx - batch_offset] && ref_box_idx < max_box_idx);
 
         kept++;
     }
@@ -195,12 +179,8 @@ __global__ __launch_bounds__(DIM) void nmsKernel1(const int propSize,
 
 // NMS KERNEL FOR LARGE BATCH SIZE {{{
 template <typename T_PROPOSALS, typename T_ROIS, int DIM, int TSIZE>
-__global__ __launch_bounds__(DIM) void nmsKernel2(const int propSize,
-        Bbox<T_PROPOSALS> const* __restrict__ proposals,
-        T_ROIS* __restrict__ filtered,
-        const int preNmsTopN,
-        const float nmsThres,
-        const int afterNmsTopN)
+__global__ __launch_bounds__(DIM) void nmsKernel2(const int propSize, Bbox<T_PROPOSALS> const* __restrict__ proposals,
+    T_ROIS* __restrict__ filtered, const int preNmsTopN, const float nmsThres, const int afterNmsTopN)
 {
     Bbox<T_PROPOSALS> const* cProposals = proposals + blockIdx.x * propSize;
     Bbox<T_PROPOSALS> t[TSIZE];
@@ -265,8 +245,7 @@ __global__ __launch_bounds__(DIM) void nmsKernel2(const int propSize,
 
                 for (int k = 0; k < TSIZE; k++)
                 {
-                    if (index < k * DIM + threadIdx.x
-                            && IoU<T_PROPOSALS>(test, t[k]) > nmsThres)
+                    if (index < k * DIM + threadIdx.x && IoU<T_PROPOSALS>(test, t[k]) > nmsThres)
                     {
                         del |= (uint64_t) 1 << k;
                     }
@@ -279,34 +258,22 @@ __global__ __launch_bounds__(DIM) void nmsKernel2(const int propSize,
 
 // NMS LAUNCH {{{
 template <typename T_PROPOSALS, DLayout_t L_PROPOSALS, typename T_ROIS>
-frcnnStatus_t nmsLaunch(cudaStream_t stream,
-                        const int batch,
-                        const int propSize,
-                        void* proposals,
-                        void* filtered,
-                        const int preNmsTopN,
-                        const float nmsThres,
-                        const int afterNmsTopN)
+frcnnStatus_t nmsLaunch(cudaStream_t stream, const int batch, const int propSize, void* proposals, void* filtered,
+    const int preNmsTopN, const float nmsThres, const int afterNmsTopN)
 {
     const int blockSize = 1024;
 #define P1(tsize) nmsKernel1<T_PROPOSALS, T_ROIS, blockSize, (tsize)>
 #define P2(tsize) nmsKernel2<T_PROPOSALS, T_ROIS, blockSize, (tsize)>
-    void (*kernel[64])(int, Bbox<T_PROPOSALS> const*, T_ROIS*, int, float, int) =
-    {
-        P1(1), P1(2), P1(3), P1(4), P1(5), P1(6), P1(7), P1(8), P1(9), P1(10), P1(11), P1(12), P2(13), P2(14), P2(15), P2(16),
-        P2(17), P2(18), P2(19), P2(20), P2(21), P2(22), P2(23), P2(24), P2(25), P2(26), P2(27), P2(28), P2(29), P2(30), P2(31), P2(32),
-        P2(33), P2(34), P2(35), P2(36), P2(37), P2(38), P2(39), P2(40), P2(41), P2(42), P2(43), P2(44), P2(45), P2(46), P2(47), P2(48),
-        P2(49), P2(50), P2(51), P2(52), P2(53), P2(54), P2(55), P2(56), P2(57), P2(58), P2(59), P2(60), P2(61), P2(62), P2(63), P2(64)
-    };
+    void (*kernel[64])(int, Bbox<T_PROPOSALS> const*, T_ROIS*, int, float, int)
+        = {P1(1), P1(2), P1(3), P1(4), P1(5), P1(6), P1(7), P1(8), P1(9), P1(10), P1(11), P1(12), P2(13), P2(14),
+            P2(15), P2(16), P2(17), P2(18), P2(19), P2(20), P2(21), P2(22), P2(23), P2(24), P2(25), P2(26), P2(27),
+            P2(28), P2(29), P2(30), P2(31), P2(32), P2(33), P2(34), P2(35), P2(36), P2(37), P2(38), P2(39), P2(40),
+            P2(41), P2(42), P2(43), P2(44), P2(45), P2(46), P2(47), P2(48), P2(49), P2(50), P2(51), P2(52), P2(53),
+            P2(54), P2(55), P2(56), P2(57), P2(58), P2(59), P2(60), P2(61), P2(62), P2(63), P2(64)};
     FRCNN_ASSERT_PARAM(preNmsTopN < 64 * blockSize);
-    CSC(cudaMemsetAsync(filtered, 0, batch * afterNmsTopN * 4 * sizeof(T_ROIS), stream),
-        STATUS_FAILURE);
-    kernel[(preNmsTopN + blockSize - 1) / blockSize - 1] <<< batch, blockSize, 0, stream>>>(propSize,
-            (Bbox<T_PROPOSALS>*) proposals,
-            (T_ROIS*) filtered,
-            preNmsTopN,
-            nmsThres,
-            afterNmsTopN);
+    CSC(cudaMemsetAsync(filtered, 0, batch * afterNmsTopN * 4 * sizeof(T_ROIS), stream), STATUS_FAILURE);
+    kernel[(preNmsTopN + blockSize - 1) / blockSize - 1]<<<batch, blockSize, 0, stream>>>(
+        propSize, (Bbox<T_PROPOSALS>*) proposals, (T_ROIS*) filtered, preNmsTopN, nmsThres, afterNmsTopN);
     CSC(cudaGetLastError(), STATUS_FAILURE);
     return STATUS_SUCCESS;
 }
@@ -354,14 +321,7 @@ frcnnStatus_t nmsGpu(cudaStream_t stream, const int N, const int R, const int pr
     DEBUG_PRINTF("&&&& [NMS] POST CUB\n");
     DEBUG_PRINTF("&&&& [NMS] PROPOSALS %u\n", hash(proposalsOut, N * R * 4 * sizeof(float)));
     DEBUG_PRINTF("&&&& [NMS] SCORES %u\n", hash(scoresOut, N * R * sizeof(float)));
-    error = nmsLaunch<T_ROIS, NC4HW, T_ROIS>(stream,
-            N,
-            R,
-            proposalsOut,
-            rois,
-            preNmsTop,
-            iouThreshold,
-            nmsMaxOut);
+    error = nmsLaunch<T_ROIS, NC4HW, T_ROIS>(stream, N, R, proposalsOut, rois, preNmsTop, iouThreshold, nmsMaxOut);
     DEBUG_PRINTF("&&&& [NMS] POST LAUNCH\n");
     DEBUG_PRINTF("&&&& [NMS] SCORES %u\n", hash(rois, N * nmsMaxOut * 4 * sizeof(float)));
 
@@ -375,15 +335,15 @@ frcnnStatus_t nmsGpu(cudaStream_t stream, const int N, const int R, const int pr
 // }}}
 
 typedef frcnnStatus_t (*nmsFun)(cudaStream_t,
-                                const int,   // N
-                                const int,   // R
-                                const int,   // preNmsTop
-                                const int,   // nmsMaxOut
-                                const float, // iouThreshold
-                                void*,       // fgScores
-                                const void*, // proposals,
-                                void*,       // workspace,
-                                void*);      // rois
+    const int,   // N
+    const int,   // R
+    const int,   // preNmsTop
+    const int,   // nmsMaxOut
+    const float, // iouThreshold
+    void*,       // fgScores
+    const void*, // proposals,
+    void*,       // workspace,
+    void*);      // rois
 
 struct nmsLaunchConfig
 {
@@ -394,12 +354,8 @@ struct nmsLaunchConfig
     DType_t t_rois;
     nmsFun function;
 
-    nmsLaunchConfig(DType_t t_fgScores,
-                    DLayout_t l_fgScores,
-                    DType_t t_proposals,
-                    DLayout_t l_proposals,
-                    DType_t t_rois,
-                    nmsFun function)
+    nmsLaunchConfig(DType_t t_fgScores, DLayout_t l_fgScores, DType_t t_proposals, DLayout_t l_proposals,
+        DType_t t_rois, nmsFun function)
         : t_fgScores(t_fgScores)
         , l_fgScores(l_fgScores)
         , t_proposals(t_proposals)
@@ -423,26 +379,23 @@ struct nmsLaunchConfig
     bool operator==(nmsLaunchConfig const& other) const
     {
         return (t_fgScores == other.t_fgScores) && (l_fgScores == other.l_fgScores)
-               && (t_proposals == other.t_proposals) && (l_proposals == other.l_proposals)
-               && (t_rois == other.t_rois);
+            && (t_proposals == other.t_proposals) && (l_proposals == other.l_proposals) && (t_rois == other.t_rois);
     }
 };
 
 static std::vector<nmsLaunchConfig> nmsLCVec;
 #define FLOAT32 nvinfer1::DataType::kFLOAT
 
-__global__ void _inverse_transform_gpu(const float* RPN_prob, const float* RPN_regr, int N,
-                                       int INPUT_H, int INPUT_W, int RPN_H, int RPN_W, float RPN_STD_SCALING, int RPN_STRIDE,
-                                       float* ANCHOR_SIZES, int anc_size_num, float* ANCHOR_RATIOS, int anc_ratio_num, float bbox_min_size,
-                                       float* fg_scores, float* proposal_out)
+__global__ void _inverse_transform_gpu(const float* RPN_prob, const float* RPN_regr, int N, int INPUT_H, int INPUT_W,
+    int RPN_H, int RPN_W, float RPN_STD_SCALING, int RPN_STRIDE, float* ANCHOR_SIZES, int anc_size_num,
+    float* ANCHOR_RATIOS, int anc_ratio_num, float bbox_min_size, float* fg_scores, float* proposal_out)
 {
     int nthreads = N * RPN_H * RPN_W * anc_size_num * anc_ratio_num;
     int num_ancs = anc_size_num * anc_ratio_num;
 
-    for (int out_idx = threadIdx.x + blockDim.x * blockIdx.x; out_idx < nthreads;
-            out_idx += blockDim.x * gridDim.x)
+    for (int out_idx = threadIdx.x + blockDim.x * blockIdx.x; out_idx < nthreads; out_idx += blockDim.x * gridDim.x)
     {
-        //input RPN_regr: (N, A4, H, W), thread: (N, A, H, W)
+        // input RPN_regr: (N, A4, H, W), thread: (N, A, H, W)
         int idx = out_idx;
         int w = idx % RPN_W;
         idx /= RPN_W;
@@ -481,7 +434,7 @@ __global__ void _inverse_transform_gpu(const float* RPN_prob, const float* RPN_r
         ty = (ty >= 0.0f) ? ty : 0.0f;
         tw = (tw >= 0.0f) ? tw : 0.0f;
         th = (th >= 0.0f) ? th : 0.0f;
-        //clip to max
+        // clip to max
         tx = (tx <= INPUT_W - 1.0f) ? tx : (INPUT_W - 1.0f);
         ty = (ty <= INPUT_H - 1.0f) ? ty : (INPUT_H - 1.0f);
         tw = (tw <= INPUT_W - 1.0f) ? tw : (INPUT_W - 1.0f);
@@ -503,28 +456,21 @@ __global__ void _inverse_transform_gpu(const float* RPN_prob, const float* RPN_r
     }
 }
 
-
-
-cudaError_t _inverse_transform_wrapper(const float* RPN_prob, const float* RPN_regr, int N, int INPUT_H,
-                                int INPUT_W, int RPN_H, int RPN_W, float RPN_STD_SCALING, int RPN_STRIDE,  float* ANCHOR_SIZES,
-                                int anc_size_num, float* ANCHOR_RATIOS, int anc_ratio_num, float bbox_min_size, float* fg_scores,
-                                float* proposal_out, cudaStream_t stream)
+cudaError_t _inverse_transform_wrapper(const float* RPN_prob, const float* RPN_regr, int N, int INPUT_H, int INPUT_W,
+    int RPN_H, int RPN_W, float RPN_STD_SCALING, int RPN_STRIDE, float* ANCHOR_SIZES, int anc_size_num,
+    float* ANCHOR_RATIOS, int anc_ratio_num, float bbox_min_size, float* fg_scores, float* proposal_out,
+    cudaStream_t stream)
 {
     const int block_size = 1024;
-    const int grid_size = (N * anc_size_num * anc_ratio_num * RPN_H * RPN_W + block_size - 1) /
-                          (block_size);
-    _inverse_transform_gpu <<< grid_size, block_size, 0, stream>>> (RPN_prob, RPN_regr, N, INPUT_H,
-            INPUT_W, RPN_H, RPN_W, RPN_STD_SCALING, RPN_STRIDE, ANCHOR_SIZES, anc_size_num, ANCHOR_RATIOS,
-            anc_ratio_num, bbox_min_size, fg_scores, proposal_out);
+    const int grid_size = (N * anc_size_num * anc_ratio_num * RPN_H * RPN_W + block_size - 1) / (block_size);
+    _inverse_transform_gpu<<<grid_size, block_size, 0, stream>>>(RPN_prob, RPN_regr, N, INPUT_H, INPUT_W, RPN_H, RPN_W,
+        RPN_STD_SCALING, RPN_STRIDE, ANCHOR_SIZES, anc_size_num, ANCHOR_RATIOS, anc_ratio_num, bbox_min_size, fg_scores,
+        proposal_out);
 
     return cudaGetLastError();
 }
 
-size_t _proposalsForwardNMSWorkspaceSize(int N,
-                                        int A,
-                                        int H,
-                                        int W,
-                                        int nmsMaxOut)
+size_t _proposalsForwardNMSWorkspaceSize(int N, int A, int H, int W, int nmsMaxOut)
 {
     return N * A * H * W * 5 * 5 * sizeof(float) + (1 << 22);
 }
@@ -534,12 +480,10 @@ size_t _proposalsForwardBboxWorkspaceSize(int N, int A, int H, int W)
     return N * A * H * W * 4 * sizeof(float);
 }
 
-
 size_t _proposalForwardFgScoresWorkspaceSize(int N, int A, int H, int W)
 {
     return N * A * H * W * sizeof(float);
 }
-
 
 size_t anchors_buf_size(int anc_size_num, int anc_ratio_num)
 {
@@ -548,12 +492,7 @@ size_t anchors_buf_size(int anc_size_num, int anc_ratio_num)
 
 size_t calculateTotalWorkspaceSize(size_t* workspaces, int count);
 
-size_t _get_workspace_size(int N,
-                           int anc_size_num,
-                           int anc_ratio_num,
-                           int H,
-                           int W,
-                           int nmsMaxOut)
+size_t _get_workspace_size(int N, int anc_size_num, int anc_ratio_num, int H, int W, int nmsMaxOut)
 {
     size_t wss[4];
     int A = anc_size_num * anc_ratio_num;
@@ -564,26 +503,19 @@ size_t _get_workspace_size(int N,
     return calculateTotalWorkspaceSize(wss, 4);
 }
 
-
-
 template <typename T>
-frcnnStatus_t extractFgScores_gpu(cudaStream_t stream,
-                                  int N,
-                                  int A,
-                                  int H,
-                                  int W,
-                                  const void* scores,
-                                  void* fgScores)
+frcnnStatus_t extractFgScores_gpu(cudaStream_t stream, int N, int A, int H, int W, const void* scores, void* fgScores)
 {
-    //TODO custom kernel for this
+    // TODO custom kernel for this
     size_t size = A * H * W * sizeof(T);
 
     for (int n = 0; n < N; n++)
     {
         size_t offset_ld = n * A * H * W;
         size_t offset_st = n * A * H * W;
-        CSC(cudaMemcpyAsync(((T*) fgScores) + offset_st, ((T*) scores) + offset_ld, size,
-                            cudaMemcpyDeviceToDevice, stream), STATUS_FAILURE);
+        CSC(cudaMemcpyAsync(
+                ((T*) fgScores) + offset_st, ((T*) scores) + offset_ld, size, cudaMemcpyDeviceToDevice, stream),
+            STATUS_FAILURE);
     }
 
     return STATUS_SUCCESS;
@@ -600,10 +532,9 @@ cudaError_t _copy_anchors_to_gpu(cudaStream_t stream, float* ANCHOR_SIZES, int a
     return cudaSuccess;
 }
 
-
 __global__ void _normalize_rois_kernel(float* roi_after_nms, int nthreads, int width, int height)
 {
-    for(int i = threadIdx.x + blockDim.x * blockIdx.x; i < nthreads; i += blockDim.x * gridDim.x)
+    for (int i = threadIdx.x + blockDim.x * blockIdx.x; i < nthreads; i += blockDim.x * gridDim.x)
     {
         float x1 = roi_after_nms[i * 4];
         float y1 = roi_after_nms[i * 4 + 1];
@@ -616,53 +547,33 @@ __global__ void _normalize_rois_kernel(float* roi_after_nms, int nthreads, int w
     }
 }
 
-
-
-cudaError_t _normalize_rois(float* roi_after_nms, int n, int max_box_num, int input_width,
-                     int input_height, cudaStream_t stream)
+cudaError_t _normalize_rois(
+    float* roi_after_nms, int n, int max_box_num, int input_width, int input_height, cudaStream_t stream)
 {
     const int block_size = 1024;
     const int grid_size = (n * max_box_num + block_size - 1) / block_size;
-    _normalize_rois_kernel <<< grid_size, block_size, 0, stream>>>(roi_after_nms, n * max_box_num,
-            input_width, input_height);
+    _normalize_rois_kernel<<<grid_size, block_size, 0, stream>>>(
+        roi_after_nms, n * max_box_num, input_width, input_height);
 
     return cudaGetLastError();
 }
 
-
-int proposalInference_gpu(
-    cudaStream_t stream,
-    const void* rpn_prob,
-    const void* rpn_regr,
-    int batch_size,
-    int input_height,
-    int input_width,
-    int rpn_height,
-    int rpn_width,
-    int MAX_BOX_NUM,
-    int RPN_PRE_NMS_TOP_N,
-    float* ANCHOR_SIZES,
-    int anc_size_num,
-    float* ANCHOR_RATIOS,
-    int anc_ratio_num,
-    float rpn_std_scaling,
-    int rpn_stride,
-    float bbox_min_size,
-    float nms_iou_threshold,
-    void * workspace,
-    void* output)
+int proposalInference_gpu(cudaStream_t stream, const void* rpn_prob, const void* rpn_regr, int batch_size,
+    int input_height, int input_width, int rpn_height, int rpn_width, int MAX_BOX_NUM, int RPN_PRE_NMS_TOP_N,
+    float* ANCHOR_SIZES, int anc_size_num, float* ANCHOR_RATIOS, int anc_ratio_num, float rpn_std_scaling,
+    int rpn_stride, float bbox_min_size, float nms_iou_threshold, void* workspace, void* output)
 {
-    size_t nmsWorkspaceSize = _proposalsForwardNMSWorkspaceSize(batch_size, anc_size_num * anc_ratio_num,
-                              rpn_height, rpn_width, MAX_BOX_NUM);
+    size_t nmsWorkspaceSize = _proposalsForwardNMSWorkspaceSize(
+        batch_size, anc_size_num * anc_ratio_num, rpn_height, rpn_width, MAX_BOX_NUM);
     void* nmsWorkspace = workspace;
-    size_t proposalsSize = _proposalsForwardBboxWorkspaceSize(batch_size, anc_size_num * anc_ratio_num,
-                           rpn_height, rpn_width);
+    size_t proposalsSize
+        = _proposalsForwardBboxWorkspaceSize(batch_size, anc_size_num * anc_ratio_num, rpn_height, rpn_width);
     const DType_t t_proposals = nvinfer1::DataType::kFLOAT;
     const DLayout_t l_proposals = NC4HW;
     void* proposals = nextWorkspacePtr((int8_t*) nmsWorkspace, nmsWorkspaceSize);
     void* fg_scores = nextWorkspacePtr((int8_t*) proposals, proposalsSize);
-    size_t fg_scores_size = _proposalForwardFgScoresWorkspaceSize(batch_size,
-                            anc_size_num * anc_ratio_num, rpn_height, rpn_width);
+    size_t fg_scores_size
+        = _proposalForwardFgScoresWorkspaceSize(batch_size, anc_size_num * anc_ratio_num, rpn_height, rpn_width);
     void* anchor_size_buf = nextWorkspacePtr((int8_t*) fg_scores, fg_scores_size);
     void* anchor_ratio_buf = static_cast<void*>(static_cast<float*>(anchor_size_buf) + anc_size_num);
     frcnnStatus_t status;

@@ -30,6 +30,11 @@ namespace plugin
 class EfficientNMSPlugin : public IPluginV2DynamicExt
 {
 public:
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
+
     explicit EfficientNMSPlugin(EfficientNMSParameters param);
     EfficientNMSPlugin(void const* data, size_t length);
     ~EfficientNMSPlugin() override = default;

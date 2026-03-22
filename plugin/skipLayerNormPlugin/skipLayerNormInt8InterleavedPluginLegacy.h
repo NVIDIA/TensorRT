@@ -51,6 +51,11 @@ int32_t launch_large_mtron(cudaStream_t stream, int32_t const ld, int32_t const 
 class SkipLayerNormInterleavedPluginBaseLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     SkipLayerNormInterleavedPluginBaseLegacy(
         std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
@@ -99,6 +104,11 @@ protected:
 class SkipLayerNormInterleavedPluginHFaceLegacy : public SkipLayerNormInterleavedPluginBaseLegacy
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     SkipLayerNormInterleavedPluginHFaceLegacy(
         std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 
@@ -124,6 +134,11 @@ public:
 class SkipLayerNormInterleavedPluginMTronLegacy : public SkipLayerNormInterleavedPluginBaseLegacy
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     SkipLayerNormInterleavedPluginMTronLegacy(
         std::string const& name, nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma);
 

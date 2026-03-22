@@ -46,6 +46,11 @@ int32_t computeGeluBias(
 class TRT_DEPRECATED GeluPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     GeluPluginDynamic(const std::string name, const nvinfer1::DataType type, nvinfer1::Weights const& bias);
 
     GeluPluginDynamic(const std::string name, void const* data, size_t length);
@@ -95,11 +100,6 @@ private:
     bool mHasBias;
     bert::cuda_shared_ptr<void> mBiasDev;
     size_t mLd;
-
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class TRT_DEPRECATED GeluPluginDynamicCreator : public nvinfer1::IPluginCreator

@@ -126,7 +126,7 @@ PluginFieldCollection const* DisentangledAttentionPlugin::getFieldsToSerialize()
         mDataToSerialize.emplace_back("span", &mSpan, PluginFieldType::kINT32, 1);
         mDataToSerialize.emplace_back("factor", &mFactor, PluginFieldType::kFLOAT32, 1);
 
-        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
         mFCToSerialize.fields = mDataToSerialize.data();
 
         return &mFCToSerialize;
@@ -141,8 +141,8 @@ PluginFieldCollection const* DisentangledAttentionPlugin::getFieldsToSerialize()
 // IPluginV3OneBuild methods
 
 int32_t DisentangledAttentionPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
-    IExprBuilder& exprBuilder) noexcept
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -233,15 +233,18 @@ bool DisentangledAttentionPlugin::supportsFormatCombination(
 // IPluginV3OneRuntime methods
 
 template <typename TDataType>
-void DisentangledAttentionPlugin::enqueueType(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+void DisentangledAttentionPlugin::enqueueType(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /*outputDesc*/,
     void const* const* inputs, void* const* outputs, cudaStream_t stream, TDataType factor)
 {
     Dims dims0 = inputDesc[0].dims;
     Dims dims1 = inputDesc[1].dims;
     Dims dims2 = inputDesc[2].dims;
-    dim3 dimData0(dims0.d[0], dims0.d[1], dims0.d[2]);
-    dim3 dimData1(dims1.d[0], dims1.d[1], dims1.d[2]);
-    dim3 dimData2(dims2.d[0], dims2.d[1], dims2.d[2]);
+    dim3 dimData0(static_cast<unsigned int>(dims0.d[0]), static_cast<unsigned int>(dims0.d[1]),
+        static_cast<unsigned int>(dims0.d[2]));
+    dim3 dimData1(static_cast<unsigned int>(dims1.d[0]), static_cast<unsigned int>(dims1.d[1]),
+        static_cast<unsigned int>(dims1.d[2]));
+    dim3 dimData2(static_cast<unsigned int>(dims2.d[0]), static_cast<unsigned int>(dims2.d[1]),
+        static_cast<unsigned int>(dims2.d[2]));
     dim3 dimResult(dimData0);
 
     dim3 blockOptimized(kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY);
@@ -283,8 +286,8 @@ int32_t DisentangledAttentionPlugin::enqueue(PluginTensorDesc const* inputDesc, 
     }
 }
 
-size_t DisentangledAttentionPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t DisentangledAttentionPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -318,7 +321,7 @@ int32_t DisentangledAttentionPlugin::onShapeChange(
     return STATUS_FAILURE;
 }
 
-IPluginV3* DisentangledAttentionPlugin::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* DisentangledAttentionPlugin::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     try
     {
@@ -339,7 +342,7 @@ DisentangledAttentionPluginCreator::DisentangledAttentionPluginCreator()
     mPluginAttributes.emplace_back(PluginField("span", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("factor", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -359,7 +362,7 @@ PluginFieldCollection const* DisentangledAttentionPluginCreator::getFieldNames()
 }
 
 IPluginV3* DisentangledAttentionPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {

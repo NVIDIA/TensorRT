@@ -73,7 +73,7 @@ char const* Reorg<TBaseClass>::getPluginNamespace() const noexcept
 // Return the DataType of the plugin output at the requested index
 template <class TBaseClass>
 DataType Reorg<TBaseClass>::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Only 1 input and 1 output from the plugin layer
     PLUGIN_ASSERT(index == 0);
@@ -85,7 +85,7 @@ DataType Reorg<TBaseClass>::getOutputDataType(
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 template <class TBaseClass>
 void Reorg<TBaseClass>::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 
@@ -95,8 +95,8 @@ void Reorg<TBaseClass>::detachFromContext() noexcept
 {
 }
 
-ReorgDynamic::ReorgDynamic(int32_t stride)
-    : Reorg<IPluginV2DynamicExt>(stride)
+ReorgDynamic::ReorgDynamic(int32_t stride_)
+    : Reorg<IPluginV2DynamicExt>(stride_)
 {
 }
 
@@ -119,8 +119,8 @@ size_t ReorgDynamic::getSerializationSize() const noexcept
     return sizeof(int32_t);
 }
 
-size_t ReorgDynamic::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t ReorgDynamic::getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -166,22 +166,23 @@ void ReorgDynamic::configurePlugin(
     PLUGIN_ASSERT(out->desc.format == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(stride > 0);
 
-    int32_t H = in->desc.dims.d[2];
-    int32_t W = in->desc.dims.d[3];
-    PLUGIN_ASSERT(H % stride == 0);
-    PLUGIN_ASSERT(W % stride == 0);
+    int32_t H_ = static_cast<int32_t>(in->desc.dims.d[2]);
+    int32_t W_ = static_cast<int32_t>(in->desc.dims.d[3]);
+    PLUGIN_ASSERT(H_ % stride == 0);
+    PLUGIN_ASSERT(W_ % stride == 0);
 }
 
-int32_t ReorgDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t ReorgDynamic::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
+    nvinfer1::PluginTensorDesc const* /*outputDesc*/, void const* const* inputs, void* const* outputs,
+    void* /*workspace*/, cudaStream_t stream) noexcept
 {
     void const* inputData = inputs[0];
     void* outputData = outputs[0];
-    int32_t const N = inputDesc[0].dims.d[0];
-    int32_t const C = inputDesc[0].dims.d[1];
-    int32_t const H = inputDesc[0].dims.d[2];
-    int32_t const W = inputDesc[0].dims.d[3];
-    pluginStatus_t status = reorgInference(stream, N, C, H, W, stride, inputData, outputData);
+    int32_t const N = static_cast<int32_t>(inputDesc[0].dims.d[0]);
+    int32_t const C_ = static_cast<int32_t>(inputDesc[0].dims.d[1]);
+    int32_t const H_ = static_cast<int32_t>(inputDesc[0].dims.d[2]);
+    int32_t const W_ = static_cast<int32_t>(inputDesc[0].dims.d[3]);
+    pluginStatus_t status = reorgInference(stream, N, C_, H_, W_, stride, inputData, outputData);
     return status;
 }
 
@@ -200,16 +201,16 @@ IPluginV2DynamicExt* ReorgDynamic::clone() const noexcept
     return nullptr;
 }
 
-ReorgStatic::ReorgStatic(int32_t stride)
-    : Reorg<IPluginV2Ext>(stride)
+ReorgStatic::ReorgStatic(int32_t stride_)
+    : Reorg<IPluginV2Ext>(stride_)
 {
 }
 
-ReorgStatic::ReorgStatic(int32_t C, int32_t H, int32_t W, int32_t stride)
-    : Reorg<IPluginV2Ext>(stride)
-    , C(C)
-    , H(H)
-    , W(W)
+ReorgStatic::ReorgStatic(int32_t C_, int32_t H_, int32_t W_, int32_t stride_)
+    : Reorg<IPluginV2Ext>(stride_)
+    , C(C_)
+    , H(H_)
+    , W(W_)
 {
 }
 
@@ -229,7 +230,7 @@ char const* ReorgStatic::getPluginVersion() const noexcept
     return kREORG_PLUGIN_STATIC_VERSION;
 }
 
-size_t ReorgStatic::getWorkspaceSize(int32_t maxBatchSize) const noexcept
+size_t ReorgStatic::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
 {
     return 0;
 }
@@ -257,8 +258,8 @@ Dims ReorgStatic::getOutputDimensions(int32_t index, Dims const* inputs, int32_t
     return Dims3(inputs[0].d[0] * stride * stride, inputs[0].d[1] / stride, inputs[0].d[2] / stride);
 }
 
-int32_t ReorgStatic::enqueue(
-    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t ReorgStatic::enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* /*workspace*/,
+    cudaStream_t stream) noexcept
 {
     void const* inputData = inputs[0];
     void* outputData = outputs[0];
@@ -288,29 +289,29 @@ IPluginV2Ext* ReorgStatic::clone() const noexcept
 
 // Return true if output tensor is broadcast across a batch.
 bool ReorgStatic::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool ReorgStatic::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool ReorgStatic::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void ReorgStatic::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void ReorgStatic::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* /*outputTypes*/, bool const* /*inputIsBroadcast*/,
+    bool const* /*outputIsBroadcast*/, PluginFormat floatFormat, int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(nbInputs == 1);
     PLUGIN_ASSERT(nbOutputs == 1);
     PLUGIN_ASSERT(stride > 0);
-    C = inputDims[0].d[0];
-    H = inputDims[0].d[1];
-    W = inputDims[0].d[2];
+    C = static_cast<int32_t>(inputDims[0].d[0]);
+    H = static_cast<int32_t>(inputDims[0].d[1]);
+    W = static_cast<int32_t>(inputDims[0].d[2]);
     PLUGIN_ASSERT(H % stride == 0);
     PLUGIN_ASSERT(W % stride == 0);
 }
@@ -321,7 +322,7 @@ ReorgPluginCreator<TPluginClass>::ReorgPluginCreator()
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("stride", nullptr, PluginFieldType::kINT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -352,7 +353,8 @@ PluginFieldCollection const* ReorgPluginCreator<TPluginClass>::getFieldNames() n
 }
 
 template <class TPluginClass>
-IPluginV2Ext* ReorgPluginCreator<TPluginClass>::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* ReorgPluginCreator<TPluginClass>::createPlugin(
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -377,7 +379,7 @@ IPluginV2Ext* ReorgPluginCreator<TPluginClass>::createPlugin(char const* name, P
 
 template <class TPluginClass>
 IPluginV2Ext* ReorgPluginCreator<TPluginClass>::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

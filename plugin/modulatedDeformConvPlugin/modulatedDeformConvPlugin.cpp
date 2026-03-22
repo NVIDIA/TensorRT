@@ -106,8 +106,8 @@ IPluginCapability* ModulatedDeformableConvPluginDynamic::getCapabilityInterface(
 }
 
 int32_t ModulatedDeformableConvPluginDynamic::getOutputShapes(nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
-    nvinfer1::DimsExprs const* shapeInputs, int32_t nbShapeInputs, nvinfer1::DimsExprs* outputs, int32_t nbOutputs,
-    nvinfer1::IExprBuilder& exprBuilder) noexcept
+    nvinfer1::DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, nvinfer1::DimsExprs* outputs,
+    int32_t nbOutputs, nvinfer1::IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -135,7 +135,7 @@ int32_t ModulatedDeformableConvPluginDynamic::getOutputShapes(nvinfer1::DimsExpr
 }
 
 bool ModulatedDeformableConvPluginDynamic::supportsFormatCombination(
-    int32_t pos, nvinfer1::DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+    int32_t pos, nvinfer1::DynamicPluginTensorDesc const* inOut, int32_t /*nbInputs*/, int32_t /*nbOutputs*/) noexcept
 {
     try
     {
@@ -185,13 +185,13 @@ size_t ModulatedDeformableConvPluginDynamic::getWorkspaceSize(nvinfer1::DynamicP
     int32_t /* nbInputs */, nvinfer1::DynamicPluginTensorDesc const* outputs, int32_t /* nbOutputs */) const noexcept
 {
     // Calculate workspace size needed for the im2col buffer.
-    int32_t const sizeOfDtype = nvinfer1::plugin::bert::getElementSize(outputs[0].desc.type);
+    int32_t const sizeOfDtype = static_cast<int32_t>(nvinfer1::plugin::bert::getElementSize(outputs[0].desc.type));
 
-    int32_t const nInputPlane = inputs[0].desc.dims.d[1]; // Input channels
-    int32_t const outputHeight = outputs[0].desc.dims.d[2];
-    int32_t const outputWidth = outputs[0].desc.dims.d[3];
-    int32_t const kernelH = inputs[3].desc.dims.d[2]; // Weight kernel height
-    int32_t const kernelW = inputs[3].desc.dims.d[3]; // Weight kernel width
+    int32_t const nInputPlane = static_cast<int32_t>(inputs[0].desc.dims.d[1]); // Input channels
+    int32_t const outputHeight = static_cast<int32_t>(outputs[0].desc.dims.d[2]);
+    int32_t const outputWidth = static_cast<int32_t>(outputs[0].desc.dims.d[3]);
+    int32_t const kernelH = static_cast<int32_t>(inputs[3].desc.dims.d[2]); // Weight kernel height
+    int32_t const kernelW = static_cast<int32_t>(inputs[3].desc.dims.d[3]); // Weight kernel width
 
     // Calculate size needed for the intermediate 'columns' buffer used in im2col + GEMM approach.
     int64_t const colSize
@@ -211,13 +211,13 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
             && workspace != nullptr);
 
         // Extract dimensions
-        int32_t const batch = inputDescs[0].dims.d[0];
-        int32_t const channels = inputDescs[0].dims.d[1];
-        int32_t const height = inputDescs[0].dims.d[2];
-        int32_t const width = inputDescs[0].dims.d[3];
-        int32_t const channelsOut = outputDescs[0].dims.d[1];
-        int32_t const kernelH = inputDescs[3].dims.d[2]; // Weight kernel height
-        int32_t const kernelW = inputDescs[3].dims.d[3]; // Weight kernel width
+        int32_t const batch = static_cast<int32_t>(inputDescs[0].dims.d[0]);
+        int32_t const channels = static_cast<int32_t>(inputDescs[0].dims.d[1]);
+        int32_t const height = static_cast<int32_t>(inputDescs[0].dims.d[2]);
+        int32_t const width = static_cast<int32_t>(inputDescs[0].dims.d[3]);
+        int32_t const channelsOut = static_cast<int32_t>(outputDescs[0].dims.d[1]);
+        int32_t const kernelH = static_cast<int32_t>(inputDescs[3].dims.d[2]); // Weight kernel height
+        int32_t const kernelW = static_cast<int32_t>(inputDescs[3].dims.d[3]); // Weight kernel width
 
         // Get input/output pointers
         void const* inputTensor = inputs[0];
@@ -238,16 +238,20 @@ int32_t ModulatedDeformableConvPluginDynamic::enqueue(nvinfer1::PluginTensorDesc
                 static_cast<float const*>(weightTensor), static_cast<float const*>(biasTensor),
                 static_cast<float const*>(offsetTensor), static_cast<float const*>(maskTensor),
                 static_cast<float*>(outputTensor), workspace, batch, channels, height, width, channelsOut, kernelW,
-                kernelH, mStride.d[0], mStride.d[1], mPadding.d[0], mPadding.d[1], mDilation.d[0], mDilation.d[1],
-                mGroup, mDeformableGroup, im2colStep, mCublasHandle, stream);
+                kernelH, static_cast<int32_t>(mStride.d[0]), static_cast<int32_t>(mStride.d[1]),
+                static_cast<int32_t>(mPadding.d[0]), static_cast<int32_t>(mPadding.d[1]),
+                static_cast<int32_t>(mDilation.d[0]), static_cast<int32_t>(mDilation.d[1]), mGroup, mDeformableGroup,
+                im2colStep, mCublasHandle, stream);
             break;
         case nvinfer1::DataType::kHALF:
             ModulatedDeformConvForwardCUDAKernelLauncherHalf(static_cast<half const*>(inputTensor),
                 static_cast<half const*>(weightTensor), static_cast<half const*>(biasTensor),
                 static_cast<half const*>(offsetTensor), static_cast<half const*>(maskTensor),
                 static_cast<half*>(outputTensor), workspace, batch, channels, height, width, channelsOut, kernelW,
-                kernelH, mStride.d[0], mStride.d[1], mPadding.d[0], mPadding.d[1], mDilation.d[0], mDilation.d[1],
-                mGroup, mDeformableGroup, im2colStep, mCublasHandle, stream);
+                kernelH, static_cast<int32_t>(mStride.d[0]), static_cast<int32_t>(mStride.d[1]),
+                static_cast<int32_t>(mPadding.d[0]), static_cast<int32_t>(mPadding.d[1]),
+                static_cast<int32_t>(mDilation.d[0]), static_cast<int32_t>(mDilation.d[1]), mGroup, mDeformableGroup,
+                im2colStep, mCublasHandle, stream);
             break;
         default:
             // Unsupported data type
@@ -361,7 +365,7 @@ nvinfer1::PluginFieldCollection const* ModulatedDeformableConvPluginDynamic::get
         mDataToSerialize.emplace_back("group", &mGroup, PluginFieldType::kINT32, 1);
         mDataToSerialize.emplace_back("deformable_group", &mDeformableGroup, PluginFieldType::kINT32, 1);
 
-        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
         mFCToSerialize.fields = mDataToSerialize.data();
         return &mFCToSerialize;
     }
@@ -383,7 +387,7 @@ ModulatedDeformableConvPluginDynamicCreator::ModulatedDeformableConvPluginDynami
     mPluginAttributes.emplace_back(PluginField("group", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("deformable_group", nullptr, PluginFieldType::kINT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

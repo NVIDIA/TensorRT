@@ -84,7 +84,7 @@ size_t BatchTilePlugin::getWorkspaceSize(int32_t) const noexcept
 }
 
 DataType BatchTilePlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     try
     {
@@ -137,19 +137,20 @@ size_t BatchTilePlugin::getSerializationSize() const noexcept
 }
 
 bool BatchTilePlugin::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
-bool BatchTilePlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool BatchTilePlugin::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
-void BatchTilePlugin::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
-    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void BatchTilePlugin::configurePlugin(Dims const* inputDims, int32_t /*nbInputs*/, Dims const* outputDims,
+    int32_t nbOutputs, DataType const* /*inputTypes*/, DataType const* /*outputTypes*/,
+    bool const* /*inputIsBroadcast*/, bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
+    int32_t /*maxBatchSize*/) noexcept
 {
     try
     {
@@ -239,7 +240,7 @@ PluginFieldCollection const* BatchTilePluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2Ext* BatchTilePluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* BatchTilePluginCreator::createPlugin(char const* name, PluginFieldCollection const* /*fc*/) noexcept
 {
     try
     {

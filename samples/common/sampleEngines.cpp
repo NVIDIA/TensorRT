@@ -223,7 +223,6 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
     }
 }
 
-
 //!
 //! \brief Generate a network definition for a given model
 //!
@@ -637,7 +636,7 @@ void setDecomposables(INetworkDefinition& network, DecomposableAttentions const&
 
 void markDebugTensors(INetworkDefinition& network, StringSet const& debugTensors)
 {
-    for (int64_t inputIndex = 0; inputIndex < network.getNbInputs(); ++inputIndex)
+    for (int32_t inputIndex = 0; inputIndex < network.getNbInputs(); ++inputIndex)
     {
         auto* t = network.getInput(inputIndex);
         auto const tensorName = t->getName();
@@ -646,10 +645,10 @@ void markDebugTensors(INetworkDefinition& network, StringSet const& debugTensors
             network.markDebug(*t);
         }
     }
-    for (int64_t layerIndex = 0; layerIndex < network.getNbLayers(); ++layerIndex)
+    for (int32_t layerIndex = 0; layerIndex < network.getNbLayers(); ++layerIndex)
     {
         auto* layer = network.getLayer(layerIndex);
-        for (int64_t outputIndex = 0; outputIndex < layer->getNbOutputs(); ++outputIndex)
+        for (int32_t outputIndex = 0; outputIndex < layer->getNbOutputs(); ++outputIndex)
         {
             auto* t = layer->getOutput(outputIndex);
             auto const tensorName = t->getName();
@@ -662,9 +661,8 @@ void markDebugTensors(INetworkDefinition& network, StringSet const& debugTensors
 }
 void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
 {
-    auto const roundToBytes = [](double const size, bool fromMB = true) {
-        return static_cast<size_t>(size * (fromMB ? 1.0_MiB : 1.0_KiB));
-    };
+    auto const roundToBytes = [](double const size, bool fromMB = true)
+    { return static_cast<size_t>(static_cast<double>(size) * static_cast<double>(fromMB ? 1.0_MiB : 1.0_KiB)); };
     if (build.workspace >= 0)
     {
         config.setMemoryPoolLimit(MemoryPoolType::kWORKSPACE, roundToBytes(build.workspace));
@@ -703,7 +701,8 @@ void setMemoryPoolLimits(IBuilderConfig& config, BuildOptions const& build)
 
 void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
 {
-    auto const setFlag = [&](PreviewFeature feat) {
+    auto const setFlag = [&](PreviewFeature feat)
+    {
         int32_t featVal = static_cast<int32_t>(feat);
         if (build.previewFeatures.find(featVal) != build.previewFeatures.end())
         {
@@ -805,10 +804,10 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         if (isDynamicInput)
         {
             hasDynamicShapes = true;
-            for (size_t i = 0; i < build.optProfiles.size(); i++)
+            for (size_t pi = 0; pi < build.optProfiles.size(); pi++)
             {
-                auto const& optShapes = build.optProfiles[i];
-                auto profile = profiles[i];
+                auto const& optShapes = build.optProfiles[pi];
+                auto profile = profiles[pi];
                 auto const tensorName = input->getName();
                 auto shape = findPlausible(optShapes, tensorName);
                 ShapeRange shapes{};
@@ -1008,7 +1007,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     }
     if (!pluginPaths.empty())
     {
-        config.setPluginsToSerialize(pluginPaths.data(), pluginPaths.size());
+        config.setPluginsToSerialize(pluginPaths.data(), static_cast<int32_t>(pluginPaths.size()));
     }
     if (build.excludeLeanRuntime)
     {
@@ -1072,13 +1071,14 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
     auto int8IO = std::count_if(build.inputFormats.begin(), build.inputFormats.end(), isInt8)
         + std::count_if(build.outputFormats.begin(), build.outputFormats.end(), isInt8);
 
-    auto hasQDQLayers = [](INetworkDefinition& network) {
+    auto hasQDQLayers = [](INetworkDefinition& net)
+    {
         // Determine if our network has QDQ layers.
-        auto const nbLayers = network.getNbLayers();
+        auto const nbLayers = net.getNbLayers();
         for (int32_t i = 0; i < nbLayers; i++)
         {
-            auto const& layer = network.getLayer(i);
-            if (layer->getType() == LayerType::kQUANTIZE || layer->getType() == LayerType::kDEQUANTIZE)
+            auto const& layer_ = net.getLayer(i);
+            if (layer_->getType() == LayerType::kQUANTIZE || layer_->getType() == LayerType::kDEQUANTIZE)
             {
                 return true;
             }
@@ -1266,7 +1266,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
 
     config.setHardwareCompatibilityLevel(build.hardwareCompatibilityLevel);
 
-
     config.setRuntimePlatform(build.runtimePlatform);
 
     if (build.maxAuxStreams != defaultMaxAuxStreams)
@@ -1345,7 +1344,8 @@ bool networkToSerializedEngine(
         reader.read(reinterpret_cast<char*>(streamEngine.data()), engineSize);
         SMP_RETVAL_IF_FALSE((!reader.fail()), "Error when reading engine file", false, err);
         reader.close();
-        sample::gLogInfo << "Created engine with size: " << (engineSize / 1.0_MiB) << " MiB" << std::endl;
+        sample::gLogInfo << "Created engine with size: " << static_cast<double>(engineSize / 1.0_MiB) << " MiB"
+                         << std::endl;
         env.engine.setBlob(std::move(streamEngine));
     }
     else
@@ -1359,8 +1359,8 @@ bool networkToSerializedEngine(
             {
                 std::unique_ptr<IHostMemory> kernelTextPtr(kernelText);
                 env.kernelText.setBlob(kernelTextPtr);
-                sample::gLogInfo << "Created kernel CPP with size: " << (kernelText->size() / 1.0_MiB) << " MiB"
-                                 << std::endl;
+                sample::gLogInfo << "Created kernel CPP with size: "
+                                 << static_cast<double>(kernelText->size() / 1.0_MiB) << " MiB" << std::endl;
             }
             else
             {
@@ -1372,7 +1372,8 @@ bool networkToSerializedEngine(
             serializedEngine = builder.buildSerializedNetwork(*env.network, *config);
         }
         SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
-        sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
+        sample::gLogInfo << "Created engine with size: " << static_cast<double>(serializedEngine->size() / 1.0_MiB)
+                         << " MiB" << std::endl;
 
         if (build.safe && build.consistency)
         {
@@ -1399,13 +1400,13 @@ bool networkToSerializedEngine(
     {
         if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
         {
-            auto timingCache = config->getTimingCache();
-            samplesCommon::updateTimingCacheFile(gLogger.getTRTLogger(), build.timingCacheFile, timingCache, builder);
+            auto timingCacheUpdated = config->getTimingCache();
+            samplesCommon::updateTimingCacheFile(
+                gLogger.getTRTLogger(), build.timingCacheFile, timingCacheUpdated, builder);
         }
     }
     return true;
 }
-
 
 //!
 //! \brief Parse a given model, create a network and an engine.
@@ -1476,13 +1477,15 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getLayerWeightsRol
     std::vector<nvinfer1::WeightsRole> weightsRoles(nbAll);
     refitter.getAll(nbAll, layerNames.data(), weightsRoles.data());
     std::vector<std::string> layerNameStrs(nbAll);
-    std::transform(layerNames.begin(), layerNames.end(), layerNameStrs.begin(), [](char const* name) {
-        if (name == nullptr)
+    std::transform(layerNames.begin(), layerNames.end(), layerNameStrs.begin(),
+        [](char const* name)
         {
-            return std::string{};
-        }
-        return std::string{name};
-    });
+            if (name == nullptr)
+            {
+                return std::string{};
+            }
+            return std::string{name};
+        });
     return {layerNameStrs, weightsRoles};
 }
 
@@ -1496,13 +1499,15 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getMissingLayerWei
     refitter.getMissing(nbMissing, layerNames.data(), weightsRoles.data());
     // Convert null names in `layerNames` to empty strings:
     std::vector<std::string> layerNameStrs(nbMissing);
-    std::transform(layerNames.begin(), layerNames.end(), layerNameStrs.begin(), [](char const* name) {
-        if (name == nullptr)
+    std::transform(layerNames.begin(), layerNames.end(), layerNameStrs.begin(),
+        [](char const* name)
         {
-            return std::string{};
-        }
-        return std::string{name};
-    });
+            if (name == nullptr)
+            {
+                return std::string{};
+            }
+            return std::string{name};
+        });
     return {std::move(layerNameStrs), std::move(weightsRoles)};
 }
 } // namespace
@@ -1521,10 +1526,10 @@ bool loadAsyncStreamingEngineToBuildEnv(std::string const& filepath, BuildEnviro
     return true;
 }
 
-
 bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err,
     SystemOptions const& sys, bool const enableConsistency)
 {
+    static_cast<void>(sys);
     auto const tBegin = std::chrono::high_resolution_clock::now();
     std::ifstream engineFile(filepath, std::ios::binary);
     SMP_RETVAL_IF_FALSE(engineFile.good(), "", false, err << "Error opening engine file: " << filepath);
@@ -1538,7 +1543,7 @@ bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, st
     auto const tEnd = std::chrono::high_resolution_clock::now();
     float const loadTime = std::chrono::duration<float>(tEnd - tBegin).count();
     sample::gLogInfo << "Engine loaded in " << loadTime << " sec." << std::endl;
-    sample::gLogInfo << "Loaded engine with size: " << (fsize / 1.0_MiB) << " MiB" << std::endl;
+    sample::gLogInfo << "Loaded engine with size: " << static_cast<double>(fsize / 1.0_MiB) << " MiB" << std::endl;
 
     if (enableConsistency)
     {
@@ -1593,9 +1598,9 @@ bool printPlanVersion(BuildEnvironment& env, std::ostream& err)
     case 0U:
     {
         // Blob index to store the plan version may depend on the serialization version.
-        sample::gLogInfo << "Plan was created with TensorRT version " << static_cast<int32_t>(blob[24])
-        << "." << static_cast<int32_t>(blob[25]) << "." << static_cast<int32_t>(blob[26])
-        << "." << static_cast<int32_t>(blob[27]) << std::endl;
+        sample::gLogInfo << "Plan was created with TensorRT version " << static_cast<int32_t>(blob[24]) << "."
+                         << static_cast<int32_t>(blob[25]) << "." << static_cast<int32_t>(blob[26]) << "."
+                         << static_cast<int32_t>(blob[27]) << std::endl;
         return true;
     }
     }
@@ -1889,11 +1894,11 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
         std::inserter(layerRoleSet, layerRoleSet.begin()),
         [](std::string const& layerName, WeightsRole const role) { return std::make_pair(layerName, role); });
 
-    auto const isRefittable = [&layerRoleSet](char const* layerName, WeightsRole const role) {
-        return layerRoleSet.find(std::make_pair(layerName, role)) != layerRoleSet.end();
-    };
+    auto const isRefittable = [&layerRoleSet](char const* layerName, WeightsRole const role)
+    { return layerRoleSet.find(std::make_pair(layerName, role)) != layerRoleSet.end(); };
 
-    auto const setWeights = [&] {
+    auto const setWeights = [&]
+    {
         for (int32_t i = 0; i < nbLayers; i++)
         {
             auto const layer = network.getLayer(i);
@@ -1913,16 +1918,17 @@ bool timeRefit(INetworkDefinition const& network, nvinfer1::ICudaEngine& engine,
         return true;
     };
 
-    auto const reportMissingWeights = [&] {
+    auto const reportMissingWeights = [&]
+    {
         auto const& missingPair = getMissingLayerWeightsRolePair(*refitter);
-        auto const& layerNames = missingPair.first;
-        auto const& weightsRoles = missingPair.second;
-        for (size_t i = 0; i < layerNames.size(); ++i)
+        auto const& missingLayerNames = missingPair.first;
+        auto const& missingWeightsRoles = missingPair.second;
+        for (size_t i = 0; i < missingLayerNames.size(); ++i)
         {
-            sample::gLogError << "Missing (" << layerNames[i] << ", " << weightsRoles[i] << ") for refitting."
-                              << std::endl;
+            sample::gLogError << "Missing (" << missingLayerNames[i] << ", " << missingWeightsRoles[i]
+                              << ") for refitting." << std::endl;
         }
-        return layerNames.empty();
+        return missingLayerNames.empty();
     };
 
     // Skip weights validation since we are confident that the new weights are similar to the weights used to build
@@ -2023,7 +2029,7 @@ std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker> createConsiste
         if (auto const createFn
             = reinterpret_cast<CreateCheckerFn>(dlsym(kCONSISTENCY_CHECKER_LIBRARY.get(), symbolName)))
         {
-            if (nvinfer2::safe::consistency::IConsistencyChecker * checker{nullptr};
+            if (nvinfer2::safe::consistency::IConsistencyChecker* checker{nullptr};
                 ErrorCode::kSUCCESS == createFn(checker, recorder, serializedEngine, engineSize, pluginBuildLibPath))
             {
                 return std::unique_ptr<nvinfer2::safe::consistency::IConsistencyChecker>{checker};
@@ -2049,6 +2055,9 @@ bool checkSafeEngine(
     void const* serializedEngine, int64_t const engineSize, std::vector<std::string> const& pluginBuildLibPath)
 {
 #if !ENABLE_UNIFIED_BUILDER
+    static_cast<void>(serializedEngine);
+    static_cast<void>(engineSize);
+    static_cast<void>(pluginBuildLibPath);
     return false;
 #else
     if (!hasConsistencyChecker())

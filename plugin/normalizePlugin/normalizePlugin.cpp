@@ -31,10 +31,10 @@ char const* const kNORMALIZE_PLUGIN_VERSION{"1"};
 char const* const kNORMALIZE_PLUGIN_NAME{"Normalize_TRT"};
 } // namespace
 
-Normalize::Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpatial, bool channelShared, float eps)
-    : acrossSpatial(acrossSpatial)
-    , channelShared(channelShared)
-    , eps(eps)
+Normalize::Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpatial_, bool channelShared_, float eps_)
+    : acrossSpatial(acrossSpatial_)
+    , channelShared(channelShared_)
+    , eps(eps_)
 {
     gLogWarning << "NormalizePlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNormalization() to "
                    "add an INormalizationLayer."
@@ -46,15 +46,15 @@ Normalize::Normalize(Weights const* weights, int32_t nbWeights, bool acrossSpati
     mScalarScale = static_cast<float const*>(weights[0].values)[0];
 }
 
-Normalize::Normalize(Weights const* weights, int32_t nbWeights, float scalarScale, bool acrossSpatial,
-    bool channelShared, float eps, int32_t C, int32_t H, int32_t W)
+Normalize::Normalize(Weights const* weights, int32_t nbWeights, float scalarScale, bool acrossSpatial_,
+    bool channelShared_, float eps_, int32_t C_, int32_t H_, int32_t W_)
     : mScalarScale(scalarScale)
-    , acrossSpatial(acrossSpatial)
-    , channelShared(channelShared)
-    , eps(eps)
-    , C(C)
-    , H(H)
-    , W(W)
+    , acrossSpatial(acrossSpatial_)
+    , channelShared(channelShared_)
+    , eps(eps_)
+    , C(C_)
+    , H(H_)
+    , W(W_)
 {
     mNbWeights = nbWeights;
     PLUGIN_VALIDATE(nbWeights == 1);
@@ -101,7 +101,7 @@ int32_t Normalize::initialize() noexcept
 
 void Normalize::terminate() noexcept {}
 
-size_t Normalize::getWorkspaceSize(int32_t maxBatchSize) const noexcept
+size_t Normalize::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
 {
     return normalizePluginWorkspaceSize(acrossSpatial, C, H, W);
 }
@@ -192,7 +192,7 @@ char const* Normalize::getPluginNamespace() const noexcept
 
 // Return the DataType of the plugin output at the requested index
 DataType Normalize::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
@@ -200,26 +200,26 @@ DataType Normalize::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool Normalize::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool Normalize::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool Normalize::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
 void Normalize::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+    DataType const* inputTypes, DataType const* /*outputTypes*/, bool const* /*inputIsBroadcast*/,
+    bool const* /*outputIsBroadcast*/, PluginFormat floatFormat, int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
-    C = inputDims[0].d[0];
-    H = inputDims[0].d[1];
-    W = inputDims[0].d[2];
+    C = static_cast<int32_t>(inputDims[0].d[0]);
+    H = static_cast<int32_t>(inputDims[0].d[1]);
+    W = static_cast<int32_t>(inputDims[0].d[2]);
     if (channelShared)
     {
         PLUGIN_ASSERT(mWeights.count == 1);
@@ -237,7 +237,8 @@ void Normalize::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims co
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
-void Normalize::attachToContext(cudnnContext* cudnn, cublasContext* cublas, IGpuAllocator* gpuAllocator) noexcept
+void Normalize::attachToContext(
+    cudnnContext* /*cudnn*/, cublasContext* /*cublas*/, IGpuAllocator* gpuAllocator) noexcept
 {
     try
     {
@@ -299,7 +300,7 @@ NormalizePluginCreator::NormalizePluginCreator()
     mPluginAttributes.emplace_back(PluginField("nbWeights", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("eps", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -318,7 +319,7 @@ PluginFieldCollection const* NormalizePluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2Ext* NormalizePluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* NormalizePluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -378,7 +379,7 @@ IPluginV2Ext* NormalizePluginCreator::createPlugin(char const* name, PluginField
 }
 
 IPluginV2Ext* NormalizePluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

@@ -99,6 +99,11 @@ private:
 class TRT_DEPRECATED DetectionOutputDynamic : public IPluginV2DynamicExt
 {
 public:
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
+
     DetectionOutputDynamic(DetectionOutputParameters param);
     DetectionOutputDynamic(DetectionOutputParameters param, int32_t C1, int32_t C2, int32_t numPriors);
     DetectionOutputDynamic(void const* data, size_t length);

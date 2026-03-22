@@ -26,11 +26,11 @@ template <typename T>
 struct Bbox
 {
     T xmin, ymin, xmax, ymax;
-    Bbox(T xmin, T ymin, T xmax, T ymax)
-        : xmin(xmin)
-        , ymin(ymin)
-        , xmax(xmax)
-        , ymax(ymax)
+    Bbox(T xmin_, T ymin_, T xmax_, T ymax_)
+        : xmin(xmin_)
+        , ymin(ymin_)
+        , xmax(xmax_)
+        , ymax(ymax_)
     {
     }
     Bbox() = default;
@@ -43,11 +43,11 @@ struct BboxInfo
     int32_t label;
     int32_t bbox_idx;
     bool kept;
-    BboxInfo(T conf_score, int32_t label, int32_t bbox_idx, bool kept)
-        : conf_score(conf_score)
-        , label(label)
-        , bbox_idx(bbox_idx)
-        , kept(kept)
+    BboxInfo(T conf_score_, int32_t label_, int32_t bbox_idx_, bool kept_)
+        : conf_score(conf_score_)
+        , label(label_)
+        , bbox_idx(bbox_idx_)
+        , kept(kept_)
     {
     }
     BboxInfo() = default;

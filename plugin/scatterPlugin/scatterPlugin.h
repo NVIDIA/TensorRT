@@ -29,6 +29,11 @@ namespace plugin
 class ScatterND : public IPluginV2DynamicExt
 {
 public:
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
+
     ScatterND();
 
     ~ScatterND() override = default;

@@ -25,6 +25,7 @@
 
 namespace instance_norm_impl
 {
+#undef PLUGIN_CHECK_CUDA
 #define PLUGIN_CHECK_CUDA(call)                                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -35,6 +36,7 @@ namespace instance_norm_impl
         }                                                                                                              \
     } while (0)
 
+#undef PLUGIN_CHECK_CUDNN
 #define PLUGIN_CHECK_CUDNN(call)                                                                                       \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -105,7 +107,7 @@ struct InstanceNormFwdContext
     InstanceNormFwdContext()
         : sm_count(0)
         , sm_shared_size(0)
-        , sm_version(0){};
+        , sm_version(0) {};
     int32_t sm_count;
     int32_t sm_shared_size;
     int32_t sm_version;

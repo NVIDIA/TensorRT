@@ -82,6 +82,11 @@ private:
 class TRT_DEPRECATED BatchedNMSDynamicPlugin : public IPluginV2DynamicExt
 {
 public:
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
+
     BatchedNMSDynamicPlugin(NMSParameters param);
     BatchedNMSDynamicPlugin(void const* data, size_t length);
     ~BatchedNMSDynamicPlugin() override = default;

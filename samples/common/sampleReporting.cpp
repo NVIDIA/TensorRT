@@ -51,7 +51,7 @@ template <typename T>
 float findPercentile(float percentile, std::vector<InferenceTime> const& timings, T const& toFloat)
 {
     int32_t const all = static_cast<int32_t>(timings.size());
-    int32_t const exclude = static_cast<int32_t>((1 - percentile / 100) * all);
+    int32_t const exclude = static_cast<int32_t>((1.0F - percentile / 100.0F) * static_cast<float>(all));
     if (timings.empty())
     {
         return std::numeric_limits<float>::infinity();
@@ -74,7 +74,7 @@ float findMedian(std::vector<InferenceTime> const& timings, T const& toFloat)
         return std::numeric_limits<float>::infinity();
     }
 
-    int32_t const m = timings.size() / 2;
+    int32_t const m = static_cast<int32_t>(timings.size() / 2);
     if (timings.size() % 2)
     {
         return toFloat(timings[m]);
@@ -99,11 +99,13 @@ float findCoeffOfVariance(std::vector<InferenceTime> const& timings, T const& to
         return std::numeric_limits<float>::infinity();
     }
 
-    auto const metricAccumulator = [toFloat, mean](float acc, InferenceTime const& a) {
+    auto const metricAccumulator = [toFloat, mean](float acc, InferenceTime const& a)
+    {
         float const diff = toFloat(a) - mean;
         return acc + diff * diff;
     };
-    float const variance = std::accumulate(timings.begin(), timings.end(), 0.F, metricAccumulator) / timings.size();
+    float const variance
+        = std::accumulate(timings.begin(), timings.end(), 0.F, metricAccumulator) / static_cast<float>(timings.size());
 
     return std::sqrt(variance) / mean * 100.F;
 }
@@ -137,7 +139,7 @@ inline std::string dimsToString(Dims const& shape)
 void printProlog(int32_t warmups, int32_t timings, float warmupMs, float benchTimeMs, std::ostream& os)
 {
     os << "Warmup completed " << warmups << " queries over " << warmupMs << " ms" << std::endl;
-    os << "Timing trace has " << timings << " queries over " << benchTimeMs / 1000 << " s" << std::endl;
+    os << "Timing trace has " << timings << " queries over " << benchTimeMs / 1000.0F << " s" << std::endl;
 }
 
 void printTiming(std::vector<InferenceTime> const& timings, int32_t runsPerAvg, std::ostream& os)
@@ -167,8 +169,8 @@ void printTiming(std::vector<InferenceTime> const& timings, int32_t runsPerAvg, 
         if (++count == runsPerAvg)
         {
             // clang-format off
-            os << "Average on " << runsPerAvg << " runs - GPU latency: " << sum.compute / runsPerAvg
-               << " ms - Host latency: " << sum.latency() / runsPerAvg << " ms (enqueue " << sum.enq / runsPerAvg
+            os << "Average on " << runsPerAvg << " runs - GPU latency: " << sum.compute / static_cast<float>(runsPerAvg)
+               << " ms - Host latency: " << sum.latency() / static_cast<float>(runsPerAvg) << " ms (enqueue " << sum.enq / static_cast<float>(runsPerAvg)
                << " ms)" << std::endl;
             // clang-format on
             count = 0;
@@ -219,7 +221,8 @@ PerformanceResult getPerformanceResult(std::vector<InferenceTime> const& timings
     PerformanceResult result;
     result.min = metricGetter(newTimings.front());
     result.max = metricGetter(newTimings.back());
-    result.mean = std::accumulate(newTimings.begin(), newTimings.end(), 0.0F, metricAccumulator) / newTimings.size();
+    result.mean = std::accumulate(newTimings.begin(), newTimings.end(), 0.0F, metricAccumulator)
+        / static_cast<float>(newTimings.size());
     result.median = findMedian(newTimings, metricGetter);
     for (auto percentile : percentiles)
     {
@@ -232,7 +235,7 @@ PerformanceResult getPerformanceResult(std::vector<InferenceTime> const& timings
 void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, std::vector<float> const& percentiles,
     int32_t batchSize, int32_t infStreams, std::ostream& osInfo, std::ostream& osWarning, std::ostream& osVerbose)
 {
-    float const throughput = batchSize * timings.size() / walltimeMs * 1000;
+    float const throughput = static_cast<float>(batchSize) * static_cast<float>(timings.size()) / walltimeMs * 1000;
 
     auto const getLatency = [](InferenceTime const& t) { return t.latency(); };
     auto const latencyResult = getPerformanceResult(timings, getLatency, percentiles);
@@ -249,11 +252,12 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
     auto const getD2h = [](InferenceTime const& t) { return t.d2h; };
     auto const d2hResult = getPerformanceResult(timings, getD2h, percentiles);
 
-    auto const toPerfString = [&](const PerformanceResult& r) {
+    auto const toPerfString = [&](const PerformanceResult& r)
+    {
         std::stringstream s;
         s << "min = " << r.min << " ms, max = " << r.max << " ms, mean = " << r.mean << " ms, "
           << "median = " << r.median << " ms";
-        for (int32_t i = 0, n = percentiles.size(); i < n; ++i)
+        for (int32_t i = 0, n = static_cast<int32_t>(percentiles.size()); i < n; ++i)
         {
             s << ", percentile(" << percentiles[i] << "%) = " << r.percentiles[i] << " ms";
         }
@@ -269,7 +273,8 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
     osInfo << "GPU Compute Time: " << toPerfString(gpuComputeResult) << std::endl;
     osInfo << "D2H Latency: " << toPerfString(d2hResult) << std::endl;
     osInfo << "Total Host Walltime: " << walltimeMs / 1000 << " s" << std::endl;
-    osInfo << "Total GPU Compute Time: " << gpuComputeResult.mean * timings.size() / 1000 << " s" << std::endl;
+    osInfo << "Total GPU Compute Time: " << gpuComputeResult.mean * static_cast<float>(timings.size()) / 1000 << " s"
+           << std::endl;
 
     // Report warnings if the throughput is bound by other factors than GPU Compute Time.
     constexpr float kENQUEUE_BOUND_REPORTING_THRESHOLD{0.8F};
@@ -328,11 +333,12 @@ void printPerformanceReport(std::vector<InferenceTrace> const& trace, ReportingO
     float const warmupMs = infOpts.warmup;
     auto const isNotWarmup = [&warmupMs](const InferenceTrace& a) { return a.computeStart >= warmupMs; };
     auto const noWarmup = std::find_if(trace.begin(), trace.end(), isNotWarmup);
-    int32_t const warmups = noWarmup - trace.begin();
+    int32_t const warmups = static_cast<int32_t>(noWarmup - trace.begin());
     float const benchTime = trace.back().d2hEnd - noWarmup->h2dStart;
     // treat inference with explicit batch as a single query and report the throughput
     batchSize = batchSize ? batchSize : 1;
-    printProlog(warmups * batchSize, (trace.size() - warmups) * batchSize, warmupMs, benchTime, osInfo);
+    printProlog(
+        warmups * batchSize, static_cast<int32_t>(trace.size() - warmups) * batchSize, warmupMs, benchTime, osInfo);
 
     std::vector<InferenceTime> timings(trace.size() - warmups);
     std::transform(noWarmup, trace.end(), timings.begin(), traceToTiming);
@@ -425,17 +431,17 @@ void Profiler::print(std::ostream& os) const noexcept
             continue;
         }
         // clang-format off
-        os << std::setw(timeLength) << std::fixed << std::setprecision(2) << getTotalTime(p)
-           << std::setw(avgLength) << std::fixed << std::setprecision(4) << getAvgTime(p)
-           << std::setw(medLength) << std::fixed << std::setprecision(4) << getMedianTime(p)
-           << std::setw(percentageLength) << std::fixed << std::setprecision(1) << getTotalTime(p) / totalTimeMs * 100
+        os << std::setw(static_cast<int>(timeLength)) << std::fixed << std::setprecision(2) << getTotalTime(p)
+           << std::setw(static_cast<int>(avgLength)) << std::fixed << std::setprecision(4) << getAvgTime(p)
+           << std::setw(static_cast<int>(medLength)) << std::fixed << std::setprecision(4) << getMedianTime(p)
+           << std::setw(static_cast<int>(percentageLength)) << std::fixed << std::setprecision(1) << getTotalTime(p) / totalTimeMs * 100
            << "   " << p.name << std::endl;
     }
     {
-        os << std::setw(timeLength) << std::fixed << std::setprecision(2)
-           << totalTimeMs << std::setw(avgLength) << std::fixed << std::setprecision(4) << totalTimeMs / mUpdatesCount
-           << std::setw(medLength) << std::fixed << std::setprecision(4) << getMedianTime()
-           << std::setw(percentageLength) << std::fixed << std::setprecision(1) << 100.0
+        os << std::setw(static_cast<int>(timeLength)) << std::fixed << std::setprecision(2)
+           << totalTimeMs << std::setw(static_cast<int>(avgLength)) << std::fixed << std::setprecision(4) << totalTimeMs / static_cast<float>(mUpdatesCount)
+           << std::setw(static_cast<int>(medLength)) << std::fixed << std::setprecision(4) << getMedianTime()
+           << std::setw(static_cast<int>(percentageLength)) << std::fixed << std::setprecision(1) << 100.0
            << "   Total" << std::endl;
         // clang-format on
     }

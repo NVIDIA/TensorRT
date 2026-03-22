@@ -127,14 +127,14 @@ public:
         {
             // For Int4x2, each byte contains two 4-bit integers
             Int4x2 packed(mData[mIndex / 2]);
-            return packed.element(mIndex % 2);
+            return packed.element(static_cast<int32_t>(mIndex % 2));
         }
 #if CUDA_VERSION >= 12070
         else if constexpr (std::is_same_v<T, Fp4x2>)
         {
             // For Fp4x2, each byte contains two 4-bit floating point numbers
             Fp4x2 packed(mData[mIndex / 2]);
-            return packed.element(mIndex % 2);
+            return packed.element(static_cast<int32_t>(mIndex % 2));
         }
 #endif
         else
@@ -175,7 +175,7 @@ public:
 
 private:
     uint8_t const* mData;
-    int64_t mVolume;
+    [[maybe_unused]] int64_t mVolume;
     int64_t mIndex;
 };
 
@@ -203,7 +203,7 @@ public:
 
 private:
     void const* mData;
-    int64_t mVolume;
+    [[maybe_unused]] int64_t mVolume;
 };
 
 template <typename T>
@@ -250,7 +250,8 @@ void printTensorElements(T const* data, int64_t volume, std::ofstream& f)
         ? kPRINT_ELEMENTS_COUNT / 2
         : std::max(static_cast<int64_t>(0), volume - kPRINT_ELEMENTS_COUNT / 2);
 
-    auto printElement = [&f](auto value) {
+    auto printElement = [&f](auto value)
+    {
         if constexpr (isFloatingPoint<T>)
         {
             f << static_cast<float>(value);
@@ -303,12 +304,13 @@ void processTensorSummary(void const* addr_host, int64_t volume, std::ofstream& 
             float val = static_cast<float>(value);
             minVal = std::min(minVal, val);
             maxVal = std::max(maxVal, val);
-            sum += val;
+            sum += static_cast<double>(val);
         }
-        float avgVal = sum / volume;
+        float avgVal = static_cast<float>(sum / static_cast<double>(volume));
 
         // nan and inf turn into string in json
-        auto valueToStr = [](float val) -> std::string {
+        auto valueToStr = [](float val) -> std::string
+        {
             std::stringstream ss;
             if (!std::isfinite(val))
             {
@@ -338,7 +340,7 @@ void processTensorSummary(void const* addr_host, int64_t volume, std::ofstream& 
             maxVal = std::max(maxVal, val);
             sum += val;
         }
-        double avgVal = static_cast<double>(sum) / volume;
+        double avgVal = static_cast<double>(sum) / static_cast<double>(volume);
 
         f << "        \"min\": " << minVal << "," << std::endl;
         f << "        \"max\": " << maxVal << "," << std::endl;
@@ -359,7 +361,7 @@ std::string getCurrentTimeString()
 
 template <typename T>
 void writeTensorStringRecursive(T const* data, nvinfer1::Dims const& shape, int32_t currentDim, int64_t offset,
-    int64_t stride, std::ofstream& f, bool isFirstElement = true, int32_t indent = 0, int32_t maxWidth = 0)
+    int64_t stride, std::ofstream& f, bool /*isFirstElement*/ = true, int32_t indent = 0, int32_t maxWidth = 0)
 {
     bool isLastDim = currentDim == shape.nbDims - 1;
     if (isLastDim)
@@ -533,7 +535,7 @@ std::string writeStringFile(void const* addr_host, nvinfer1::DataType type, nvin
 std::string escapeJsonString(std::string_view str)
 {
     std::string result;
-    result.reserve(str.length());
+    result.reserve(str.size());
     for (char c : str)
     {
         switch (c)
@@ -751,13 +753,13 @@ bool writeNumpyFile(void const* addr_host, std::string_view dtype, nvinfer1::Dim
 
     // Pad header to 16 bytes alignment
     std::string headerStr = header.str();
-    int32_t headerLen = 10 + headerStr.length();
+    int32_t headerLen = 10 + static_cast<int32_t>(headerStr.length());
     int32_t padding = 16 - ((headerLen + 1) % 16);
     headerStr.append(padding, ' ');
     headerStr += '\n';
 
     // Write header length and header
-    uint16_t headerSize = headerStr.length();
+    uint16_t headerSize = static_cast<uint16_t>(headerStr.length());
     f.write(reinterpret_cast<char*>(&headerSize), sizeof(uint16_t));
     f.write(headerStr.c_str(), headerSize);
 
@@ -778,7 +780,8 @@ std::string writeNumpy(nvinfer1::DataType type, void const* addr_host, int64_t v
     std::vector<float> floatBuffer;
     std::vector<int8_t> int8Buffer;
 
-    auto convertToFloat = [&](std::vector<float> const& buffer) {
+    auto convertToFloat = [&](std::vector<float> const& buffer)
+    {
         sample::gLogWarning << "Converting " << getDataTypeString(type) << " to float for numpy dump of tensor '"
                             << name << "'." << std::endl;
         dtype = "<f4";
@@ -787,7 +790,8 @@ std::string writeNumpy(nvinfer1::DataType type, void const* addr_host, int64_t v
         fileName += "_to_float";
     };
 
-    auto convertToInt8 = [&](std::vector<int8_t> const& buffer) {
+    auto convertToInt8 = [&](std::vector<int8_t> const& buffer)
+    {
         sample::gLogWarning << "Converting " << getDataTypeString(type) << " to int8 for numpy dump of tensor '" << name
                             << "'." << std::endl;
         dtype = "<i1";

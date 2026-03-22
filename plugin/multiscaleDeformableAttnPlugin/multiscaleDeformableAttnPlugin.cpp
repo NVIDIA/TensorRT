@@ -119,8 +119,8 @@ int32_t MultiscaleDeformableAttnPlugin::getOutputDataTypes(
 }
 
 int32_t MultiscaleDeformableAttnPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
-    IExprBuilder& exprBuilder) noexcept
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -236,7 +236,7 @@ PluginFieldCollection const* MultiscaleDeformableAttnPlugin::getFieldsToSerializ
     {
         mDataToSerialize.clear();
         // This plugin has no fields to serialize
-        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
         mFCToSerialize.fields = mDataToSerialize.data();
         return &mFCToSerialize;
     }
@@ -248,8 +248,8 @@ PluginFieldCollection const* MultiscaleDeformableAttnPlugin::getFieldsToSerializ
 }
 
 // IPluginV3OneRuntime methods
-size_t MultiscaleDeformableAttnPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t MultiscaleDeformableAttnPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     // No workspace needed for this plugin
     return 0;
@@ -296,7 +296,7 @@ int32_t MultiscaleDeformableAttnPlugin::onShapeChange(
     return STATUS_FAILURE;
 }
 
-IPluginV3* MultiscaleDeformableAttnPlugin::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* MultiscaleDeformableAttnPlugin::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     try
     {
@@ -310,21 +310,22 @@ IPluginV3* MultiscaleDeformableAttnPlugin::attachToContext(IPluginResourceContex
     return nullptr;
 }
 
-int32_t MultiscaleDeformableAttnPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t MultiscaleDeformableAttnPlugin::enqueue(PluginTensorDesc const* inputDesc,
+    PluginTensorDesc const* /*outputDesc*/, void const* const* inputs, void* const* outputs, void* /*workspace*/,
+    cudaStream_t stream) noexcept
 {
     try
     {
         PLUGIN_VALIDATE(
             inputDesc != nullptr && inputs != nullptr && outputs != nullptr, "Null pointers found in enqueue");
 
-        int32_t const batch = inputDesc[0].dims.d[0];
-        int32_t spatialSize = inputDesc[0].dims.d[1];
-        int32_t numHeads = inputDesc[0].dims.d[2];
-        int32_t channels = inputDesc[0].dims.d[3];
-        int32_t numLevels = inputDesc[1].dims.d[0];
-        int32_t numQuery = inputDesc[3].dims.d[1];
-        int32_t numPoint = inputDesc[3].dims.d[4];
+        int32_t const batch = static_cast<int32_t>(inputDesc[0].dims.d[0]);
+        int32_t spatialSize = static_cast<int32_t>(inputDesc[0].dims.d[1]);
+        int32_t numHeads = static_cast<int32_t>(inputDesc[0].dims.d[2]);
+        int32_t channels = static_cast<int32_t>(inputDesc[0].dims.d[3]);
+        int32_t numLevels = static_cast<int32_t>(inputDesc[1].dims.d[0]);
+        int32_t numQuery = static_cast<int32_t>(inputDesc[3].dims.d[1]);
+        int32_t numPoint = static_cast<int32_t>(inputDesc[3].dims.d[4]);
         int32_t rc = 0;
 
         if (inputDesc[0].type == DataType::kFLOAT)
@@ -369,7 +370,7 @@ int32_t MultiscaleDeformableAttnPlugin::enqueue(PluginTensorDesc const* inputDes
 MultiscaleDeformableAttnPluginCreator::MultiscaleDeformableAttnPluginCreator()
 {
     mPluginAttributes.clear();
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -389,7 +390,7 @@ PluginFieldCollection const* MultiscaleDeformableAttnPluginCreator::getFieldName
 }
 
 IPluginV3* MultiscaleDeformableAttnPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* /*name*/, PluginFieldCollection const* /*fc*/, TensorRTPhase /*phase*/) noexcept
 {
     try
     {

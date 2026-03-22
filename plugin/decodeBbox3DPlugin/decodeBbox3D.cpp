@@ -126,7 +126,7 @@ nvinfer1::IPluginV2DynamicExt* DecodeBbox3DPlugin::clone() const noexcept
 }
 
 nvinfer1::DimsExprs DecodeBbox3DPlugin::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
-    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+    int32_t /*nbInputs*/, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
     try
     {
@@ -199,14 +199,14 @@ bool DecodeBbox3DPlugin::supportsFormatCombination(
     return false;
 }
 
-void DecodeBbox3DPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+void DecodeBbox3DPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t /*nbInputs*/,
+    nvinfer1::DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     try
     {
         PLUGIN_VALIDATE(in != nullptr);
-        mFeatureH = in[0].desc.dims.d[1];
-        mFeatureW = in[0].desc.dims.d[2];
+        mFeatureH = static_cast<int32_t>(in[0].desc.dims.d[1]);
+        mFeatureW = static_cast<int32_t>(in[0].desc.dims.d[2]);
     }
     catch (std::exception const& e)
     {
@@ -214,8 +214,8 @@ void DecodeBbox3DPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const
     }
 }
 
-size_t DecodeBbox3DPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t DecodeBbox3DPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     size_t mAnchorsSize = mNumClasses * 2 * 4 * sizeof(float);
     size_t mAnchorBottomHeightSize = mNumClasses * sizeof(float);
@@ -233,7 +233,7 @@ int32_t DecodeBbox3DPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
 
-        int32_t batchSize = inputDesc[0].dims.d[0];
+        int32_t batchSize = static_cast<int32_t>(inputDesc[0].dims.d[0]);
 
         // Inputs
         auto const* clsInput = static_cast<float const*>(inputs[0]);
@@ -269,7 +269,7 @@ int32_t DecodeBbox3DPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
 }
 
 nvinfer1::DataType DecodeBbox3DPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     try
     {
@@ -379,7 +379,7 @@ DecodeBbox3DPluginCreator::DecodeBbox3DPluginCreator()
     mPluginAttributes.emplace_back(PluginField("num_dir_bins", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("score_thresh", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

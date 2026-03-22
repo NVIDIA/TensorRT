@@ -52,22 +52,22 @@ DetectionOutputDynamic::DetectionOutputDynamic(DetectionOutputParameters params)
 {
 }
 
-DetectionOutput::DetectionOutput(DetectionOutputParameters params, int32_t C1, int32_t C2, int32_t numPriors)
+DetectionOutput::DetectionOutput(DetectionOutputParameters params, int32_t C1_, int32_t C2_, int32_t numPriors_)
     : param(params)
-    , C1(C1)
-    , C2(C2)
-    , numPriors(numPriors)
+    , C1(C1_)
+    , C2(C2_)
+    , numPriors(numPriors_)
     , mType(DataType::kFLOAT)
     , mScoreBits(16)
 {
 }
 
 DetectionOutputDynamic::DetectionOutputDynamic(
-    DetectionOutputParameters params, int32_t C1, int32_t C2, int32_t numPriors)
+    DetectionOutputParameters params, int32_t C1_, int32_t C2_, int32_t numPriors_)
     : param(params)
-    , C1(C1)
-    , C2(C2)
-    , numPriors(numPriors)
+    , C1(C1_)
+    , C2(C2_)
+    , numPriors(numPriors_)
     , mType(DataType::kFLOAT)
     , mScoreBits(16)
 {
@@ -139,7 +139,7 @@ void DetectionOutput::terminate() noexcept {}
 void DetectionOutputDynamic::terminate() noexcept {}
 
 // Returns output dimensions at given index
-Dims DetectionOutput::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbInputDims) noexcept
+Dims DetectionOutput::getOutputDimensions(int32_t index, Dims const* /*inputs*/, int32_t nbInputDims) noexcept
 {
     PLUGIN_ASSERT(nbInputDims == 3);
     PLUGIN_ASSERT(index == 0 || index == 1);
@@ -169,17 +169,18 @@ DimsExprs DetectionOutputDynamic::getOutputDimensions(
     if (inputs[C1_idx].d[0]->isConstant() && inputs[C1_idx].d[1]->isConstant() && inputs[C1_idx].d[2]->isConstant()
         && inputs[C1_idx].d[3]->isConstant())
     {
-        C1 = exprBuilder
-                 .operation(DimensionOperation::kPROD,
-                     *exprBuilder.operation(DimensionOperation::kPROD, *inputs[C1_idx].d[1], *inputs[C1_idx].d[2]),
-                     *inputs[C1_idx].d[3])
-                 ->getConstantValue();
+        C1 = static_cast<int32_t>(exprBuilder
+                .operation(DimensionOperation::kPROD,
+                    *exprBuilder.operation(DimensionOperation::kPROD, *inputs[C1_idx].d[1], *inputs[C1_idx].d[2]),
+                    *inputs[C1_idx].d[3])
+                ->getConstantValue());
     }
 
     if (inputs[C2_idx].d[0]->isConstant() && inputs[C2_idx].d[1]->isConstant() && inputs[C2_idx].d[2]->isConstant())
     {
-        C2 = exprBuilder.operation(DimensionOperation::kPROD, *inputs[C2_idx].d[1], *inputs[C2_idx].d[2])
-                 ->getConstantValue();
+        C2 = static_cast<int32_t>(
+            exprBuilder.operation(DimensionOperation::kPROD, *inputs[C2_idx].d[1], *inputs[C2_idx].d[2])
+                ->getConstantValue());
     }
     // Output dimensions
     // index 0 : Dimensions 1x param.keepTopK x 7
@@ -212,11 +213,11 @@ size_t DetectionOutput::getWorkspaceSize(int32_t maxBatchSize) const noexcept
         param.shareLocation, maxBatchSize, C1, C2, param.numClasses, numPriors, param.topK, mType, mType);
 }
 
-size_t DetectionOutputDynamic::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t DetectionOutputDynamic::getWorkspaceSize(PluginTensorDesc const* inputs, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
-    return detectionInferenceWorkspaceSize(
-        param.shareLocation, inputs[0].dims.d[0], C1, C2, param.numClasses, numPriors, param.topK, mType, mType);
+    return detectionInferenceWorkspaceSize(param.shareLocation, static_cast<int32_t>(inputs[0].dims.d[0]), C1, C2,
+        param.numClasses, numPriors, param.topK, mType, mType);
 }
 
 // Plugin layer implementation
@@ -253,10 +254,11 @@ int32_t DetectionOutputDynamic::enqueue(PluginTensorDesc const* inputDesc, Plugi
     void* topDetections = outputs[0];
     void* keepCount = outputs[1];
 
-    pluginStatus_t status = detectionInference(stream, inputDesc[0].dims.d[0], C1, C2, param.shareLocation,
-        param.varianceEncodedInTarget, param.backgroundLabelId, numPriors, param.numClasses, param.topK, param.keepTopK,
-        param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData, priorData, mType, confData,
-        keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid, mScoreBits, false);
+    pluginStatus_t status = detectionInference(stream, static_cast<int32_t>(inputDesc[0].dims.d[0]), C1, C2,
+        param.shareLocation, param.varianceEncodedInTarget, param.backgroundLabelId, numPriors, param.numClasses,
+        param.topK, param.keepTopK, param.confidenceThreshold, param.nmsThreshold, param.codeType, mType, locData,
+        priorData, mType, confData, keepCount, topDetections, workspace, param.isNormalized, param.confSigmoid,
+        mScoreBits, false);
     return status;
 }
 
@@ -305,7 +307,7 @@ bool DetectionOutput::supportsFormat(DataType type, PluginFormat format) const n
 }
 
 bool DetectionOutputDynamic::supportsFormatCombination(
-    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t /*nbOutputs*/) noexcept
 {
     // 3 inputs, 2 outputs, so 5 input/output in total
     PLUGIN_ASSERT(0 <= pos && pos < 5);
@@ -438,7 +440,7 @@ char const* DetectionOutputDynamic::getPluginNamespace() const noexcept
 
 // Return the DataType of the plugin output at the requested index.
 DataType DetectionOutput::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     // Two outputs
     PLUGIN_ASSERT(index == 0 || index == 1);
@@ -454,7 +456,7 @@ DataType DetectionOutput::getOutputDataType(
 }
 
 DataType DetectionOutputDynamic::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     // Two outputs
     PLUGIN_ASSERT(index == 0 || index == 1);
@@ -471,13 +473,13 @@ DataType DetectionOutputDynamic::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool DetectionOutput::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool DetectionOutput::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool DetectionOutput::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
@@ -491,8 +493,8 @@ bool DetectionOutput::canBroadcastInputAcrossBatch(int32_t inputIndex) const noe
 // format: format NCHW, NHWC etc
 // maxbatchSize: maximum batch size for the plugin layer
 void DetectionOutput::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
-    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+    int32_t nbOutputs, DataType const* inputTypes, DataType const* /*outputTypes*/, bool const* /*inputIsBroadcast*/,
+    bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/, int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(nbInputs == 3);
     PLUGIN_ASSERT(nbOutputs == 2);
@@ -511,11 +513,11 @@ void DetectionOutput::configurePlugin(Dims const* inputDims, int32_t nbInputs, D
 
     // Configure C1, C2 and numPriors
     // Input ordering  C1, C2, numPriors
-    C1 = inputDims[param.inputOrder[0]].d[0];
-    C2 = inputDims[param.inputOrder[1]].d[0];
+    C1 = static_cast<int32_t>(inputDims[param.inputOrder[0]].d[0]);
+    C2 = static_cast<int32_t>(inputDims[param.inputOrder[1]].d[0]);
 
     int32_t const nbBoxCoordinates = 4;
-    numPriors = inputDims[param.inputOrder[2]].d[1] / nbBoxCoordinates;
+    numPriors = static_cast<int32_t>(inputDims[param.inputOrder[2]].d[1] / nbBoxCoordinates);
     int32_t const numLocClasses = param.shareLocation ? 1 : param.numClasses;
 
     // Verify C1
@@ -548,11 +550,11 @@ void DetectionOutputDynamic::configurePlugin(
 
     // Configure C1, C2 and numPriors
     // Input ordering  C1, C2, numPriors
-    C1 = in[param.inputOrder[0]].desc.dims.d[1];
-    C2 = in[param.inputOrder[1]].desc.dims.d[1];
+    C1 = static_cast<int32_t>(in[param.inputOrder[0]].desc.dims.d[1]);
+    C2 = static_cast<int32_t>(in[param.inputOrder[1]].desc.dims.d[1]);
 
     int32_t const nbBoxCoordinates = 4;
-    numPriors = in[param.inputOrder[2]].desc.dims.d[2] / nbBoxCoordinates;
+    numPriors = static_cast<int32_t>(in[param.inputOrder[2]].desc.dims.d[2] / nbBoxCoordinates);
     int32_t const numLocClasses = param.shareLocation ? 1 : param.numClasses;
 
     // Verify C1
@@ -567,7 +569,7 @@ void DetectionOutputDynamic::configurePlugin(
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void DetectionOutput::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 
@@ -593,7 +595,7 @@ NMSBasePluginCreator::NMSBasePluginCreator()
     mPluginAttributes.emplace_back(PluginField("codeType", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("scoreBits", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("isBatchAgnostic", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -626,7 +628,7 @@ PluginFieldCollection const* NMSBasePluginCreator::getFieldNames() noexcept
 }
 
 // Creates the NMS plugin
-IPluginV2Ext* NMSPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* NMSPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -734,7 +736,8 @@ IPluginV2Ext* NMSPluginCreator::createPlugin(char const* name, PluginFieldCollec
     return nullptr;
 }
 
-IPluginV2DynamicExt* NMSDynamicPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2DynamicExt* NMSDynamicPluginCreator::createPlugin(
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -838,7 +841,7 @@ IPluginV2DynamicExt* NMSDynamicPluginCreator::createPlugin(char const* name, Plu
 }
 
 IPluginV2Ext* NMSPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -859,7 +862,7 @@ IPluginV2Ext* NMSPluginCreator::deserializePlugin(
 }
 
 IPluginV2DynamicExt* NMSDynamicPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

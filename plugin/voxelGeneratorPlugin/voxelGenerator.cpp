@@ -39,12 +39,12 @@ size_t constexpr kSERIALIZATION_SIZE{9 * sizeof(float) + 7 * sizeof(int32_t)};
 int32_t npRound(float x)
 {
     // half way round to nearest-even
-    int32_t x2 = lround(x * 2.0F);
-    if (x != static_cast<int32_t>(x) && x2 == x * 2.0F)
+    int32_t x2 = static_cast<int32_t>(lround(x * 2.0F));
+    if (x != static_cast<float>(static_cast<int32_t>(x)) && static_cast<float>(x2) == x * 2.0F)
     {
-        return lround(x / 2.0F + 0.5F) * 2;
+        return static_cast<int32_t>(lround(x / 2.0F + 0.5F)) * 2;
     }
-    return lround(x);
+    return static_cast<int32_t>(lround(x));
 }
 
 VoxelGeneratorPlugin::VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin,
@@ -90,7 +90,7 @@ VoxelGeneratorPlugin::VoxelGeneratorPlugin(void const* data, size_t length)
 {
     PLUGIN_ASSERT(data != nullptr);
     uint8_t const* d = reinterpret_cast<uint8_t const*>(data);
-    auto const *a = d;
+    auto const* a = d;
     mPillarNum = readFromBuffer<int32_t>(d);
     mPointNum = readFromBuffer<int32_t>(d);
     mFeatureNum = readFromBuffer<int32_t>(d);
@@ -128,7 +128,7 @@ nvinfer1::IPluginV2DynamicExt* VoxelGeneratorPlugin::clone() const noexcept
 }
 
 nvinfer1::DimsExprs VoxelGeneratorPlugin::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
-    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+    int32_t /*nbInputs*/, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
     try
     {
@@ -213,7 +213,7 @@ void VoxelGeneratorPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc con
         PLUGIN_VALIDATE(nbInputs == 2);
         PLUGIN_VALIDATE(nbOutputs == 3);
 
-        mPointFeatureNum = in[0].desc.dims.d[2];
+        mPointFeatureNum = static_cast<int32_t>(in[0].desc.dims.d[2]);
         mGridXSize = npRound((mMaxXRange - mMinXRange) / mPillarXSize);
         mGridYSize = npRound((mMaxYRange - mMinYRange) / mPillarYSize);
         mGridZSize = npRound((mMaxZRange - mMinZRange) / mPillarZSize);
@@ -224,14 +224,15 @@ void VoxelGeneratorPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc con
     }
 }
 
-size_t VoxelGeneratorPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t VoxelGeneratorPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t /*nbInputs*/,
+    nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     try
     {
-        int32_t batchSize = inputs[0].dims.d[0];
+        int32_t batchSize = static_cast<int32_t>(inputs[0].dims.d[0]);
         size_t maskSize = batchSize * mGridZSize * mGridYSize * mGridXSize * sizeof(uint32_t);
-        size_t voxelsSize = batchSize * mGridZSize * mGridYSize * mGridXSize * mPointNum * mPointFeatureNum * sizeof(float);
+        size_t voxelsSize
+            = batchSize * mGridZSize * mGridYSize * mGridXSize * mPointNum * mPointFeatureNum * sizeof(float);
         // the actual max pillar num cannot be determined, use upper bound
         size_t voxelFeaturesSize = voxelsSize;
         size_t voxelNumPointsSize = maskSize;
@@ -257,8 +258,8 @@ int32_t VoxelGeneratorPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDes
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
 
-        int32_t batchSize = inputDesc[0].dims.d[0];
-        int32_t maxNumPoints = inputDesc[0].dims.d[1];
+        int32_t batchSize = static_cast<int32_t>(inputDesc[0].dims.d[0]);
+        int32_t maxNumPoints = static_cast<int32_t>(inputDesc[0].dims.d[1]);
         // TRT-input
         float* pointCloud = const_cast<float*>((float const*) inputs[0]);
         uint32_t* pointNumPtr = const_cast<uint32_t*>((uint32_t const*) inputs[1]);
@@ -285,9 +286,10 @@ int32_t VoxelGeneratorPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDes
             nextWorkspacePtr(reinterpret_cast<int8_t*>(voxelFeatures), voxelFeaturesSize));
         // Initialize workspace memory
         PLUGIN_CUASSERT(cudaMemsetAsync(mask, 0, totalWorkspace, stream));
-        uint32_t pillarFeaturesDataSize = batchSize * mPillarNum * mPointNum * mFeatureNum * sizeof(float);
-        uint32_t coordsDataSize = batchSize * mPillarNum * 4 * sizeof(uint32_t);
-        uint32_t paramsDataSize = batchSize * sizeof(uint32_t);
+        size_t pillarFeaturesDataSize
+            = static_cast<size_t>(batchSize) * mPillarNum * mPointNum * mFeatureNum * sizeof(float);
+        size_t coordsDataSize = static_cast<size_t>(batchSize) * mPillarNum * 4 * sizeof(uint32_t);
+        size_t paramsDataSize = static_cast<size_t>(batchSize) * sizeof(uint32_t);
         PLUGIN_CUASSERT(cudaMemsetAsync(pillarFeaturesData, 0, pillarFeaturesDataSize, stream));
         PLUGIN_CUASSERT(cudaMemsetAsync(coordsData, 0, coordsDataSize, stream));
         PLUGIN_CUASSERT(cudaMemsetAsync(paramsData, 0, paramsDataSize, stream));
@@ -300,8 +302,8 @@ int32_t VoxelGeneratorPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDes
         generateBaseFeatures_launch(batchSize, mask, voxels, mGridYSize, mGridXSize, paramsData, mPillarNum, mPointNum,
             mPointFeatureNum, voxelFeatures, voxelNumPoints, coordsData, stream);
         generateFeatures_launch(batchSize, densePillarNum, voxelFeatures, voxelNumPoints, coordsData, paramsData,
-            mPillarXSize, mPillarYSize, mPillarZSize, mMinXRange, mMinYRange, mMinZRange, mFeatureNum, mPointNum, mPillarNum,
-            mPointFeatureNum, pillarFeaturesData, stream);
+            mPillarXSize, mPillarYSize, mPillarZSize, mMinXRange, mMinYRange, mMinZRange, mFeatureNum, mPointNum,
+            mPillarNum, mPointFeatureNum, pillarFeaturesData, stream);
         return 0;
     }
     catch (std::exception const& e)
@@ -312,7 +314,7 @@ int32_t VoxelGeneratorPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDes
 }
 
 nvinfer1::DataType VoxelGeneratorPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     try
     {
@@ -362,7 +364,7 @@ void VoxelGeneratorPlugin::serialize(void* buffer) const noexcept
 
     PLUGIN_ASSERT(buffer != nullptr);
     uint8_t* d = reinterpret_cast<uint8_t*>(buffer);
-    auto *a = d;
+    auto* a = d;
     writeToBuffer<int32_t>(d, mPillarNum);
     writeToBuffer<int32_t>(d, mPointNum);
     writeToBuffer<int32_t>(d, mFeatureNum);
@@ -413,7 +415,7 @@ VoxelGeneratorPluginCreator::VoxelGeneratorPluginCreator()
     mPluginAttributes.emplace_back(PluginField("point_cloud_range", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("voxel_feature_num", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("voxel_size", nullptr, PluginFieldType::kFLOAT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -432,7 +434,7 @@ PluginFieldCollection const* VoxelGeneratorPluginCreator::getFieldNames() noexce
     return &mFC;
 }
 
-IPluginV2* VoxelGeneratorPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2* VoxelGeneratorPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -493,7 +495,7 @@ IPluginV2* VoxelGeneratorPluginCreator::createPlugin(char const* name, PluginFie
 }
 
 IPluginV2* VoxelGeneratorPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

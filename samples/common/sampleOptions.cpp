@@ -71,7 +71,7 @@ int64_t getUnitMultiplier(std::string const& option)
     char lastChar = option.at(option.size() - 1);
     if (!std::isdigit(lastChar))
     {
-        char unit = std::toupper(lastChar);
+        char unit = static_cast<char>(std::toupper(lastChar));
         auto found = kUNIT_MULTIPLIERS.find(unit);
         if (found == kUNIT_MULTIPLIERS.end())
         {
@@ -103,13 +103,13 @@ int32_t stringToValue<int32_t>(const std::string& option)
 template <>
 int64_t stringToValue<int64_t>(const std::string& option)
 {
-    return std::stoi(option);
+    return static_cast<int64_t>(std::stoi(option));
 }
 
 template <>
 size_t stringToValue<size_t>(const std::string& option)
 {
-    return std::stoi(option) * getUnitMultiplier(option);
+    return static_cast<size_t>(std::stoi(option) * getUnitMultiplier(option));
 }
 
 template <>
@@ -121,11 +121,11 @@ float stringToValue<float>(const std::string& option)
 template <>
 double stringToValue<double>(const std::string& option)
 {
-    return std::stod(option) * getUnitMultiplier(option);
+    return std::stod(option) * static_cast<double>(getUnitMultiplier(option));
 }
 
 template <>
-bool stringToValue<bool>(const std::string& option)
+bool stringToValue<bool>(const std::string& /*option*/)
 {
     return true;
 }
@@ -223,11 +223,7 @@ template <>
 SparsityFlag stringToValue<SparsityFlag>(std::string const& option)
 {
     std::unordered_map<std::string, SparsityFlag> const table{
-        {"disable", SparsityFlag::kDISABLE}, {"enable", SparsityFlag::kENABLE},
-        {
-            "force", SparsityFlag::kFORCE
-        }
-    };
+        {"disable", SparsityFlag::kDISABLE}, {"enable", SparsityFlag::kENABLE}, {"force", SparsityFlag::kFORCE}};
     auto search = table.find(option);
     if (search == table.end())
     {
@@ -287,7 +283,6 @@ samplesSafeCommon::SafetyPluginLibraryArgument stringToValue<samplesSafeCommon::
 }
 #endif
 
-
 template <typename T>
 std::pair<std::string, T> splitNameAndValue(const std::string& s)
 {
@@ -346,7 +341,7 @@ template <typename T>
 std::string joinValuesToString(std::vector<T> const& list, std::string const& sep)
 {
     std::ostringstream os;
-    for (int32_t i = 0, n = list.size(); i < n; ++i)
+    for (int32_t i = 0, n = static_cast<int32_t>(list.size()); i < n; ++i)
     {
         os << list[i];
         if (i != n - 1)
@@ -718,16 +713,17 @@ bool getOptimizationProfiles(
     size_t profileIndex{};
 
     auto getShapes
-        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector) {
-              std::vector<std::string> shapeList{splitToStringVec(list, ',')};
-              for (auto const& s : shapeList)
-              {
-                  auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
-                  auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
-                  auto dims = nameDimsPair.second;
-                  insertShapesBuild(shapes, selector, tensorName, dims);
-              }
-          };
+        = [](BuildOptions::ShapeProfile& shapes, std::string const& list, nvinfer1::OptProfileSelector selector)
+    {
+        std::vector<std::string> shapeList{splitToStringVec(list, ',')};
+        for (auto const& s : shapeList)
+        {
+            auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
+            auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
+            auto dims = nameDimsPair.second;
+            insertShapesBuild(shapes, selector, tensorName, dims);
+        }
+    };
 
     while (getAndDelOptionWithPosition(arguments, argument, profileIndex, pos))
     {
@@ -964,7 +960,8 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
         return os;
     }
 
-    auto const addFlag = [&](PreviewFeature feat) {
+    auto const addFlag = [&](PreviewFeature feat)
+    {
         int32_t featVal = static_cast<int32_t>(feat);
         if (options.previewFeatures.find(featVal) != options.previewFeatures.end())
         {
@@ -1100,7 +1097,8 @@ void getTempfileControls(Arguments& arguments, char const* argument, TempfileCon
 void BuildOptions::parse(Arguments& arguments)
 {
     getAndDelOption(arguments, "--cpuOnly", cpuOnly);
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument)
+    {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -1191,27 +1189,27 @@ void BuildOptions::parse(Arguments& arguments)
         if (memPoolName == "workspace")
         {
             // use unit in MB.
-            workspace = memPoolSize / 1.0_MiB;
+            workspace = static_cast<double>(memPoolSize / 1.0_MiB);
         }
         else if (memPoolName == "dlaSRAM")
         {
             // use unit in MB.
-            dlaSRAM = memPoolSize / 1.0_MiB;
+            dlaSRAM = static_cast<double>(memPoolSize / 1.0_MiB);
         }
         else if (memPoolName == "dlaLocalDRAM")
         {
             // use unit in MB.
-            dlaLocalDRAM = memPoolSize / 1.0_MiB;
+            dlaLocalDRAM = static_cast<double>(memPoolSize / 1.0_MiB);
         }
         else if (memPoolName == "dlaGlobalDRAM")
         {
             // use unit in MB.
-            dlaGlobalDRAM = memPoolSize / 1.0_MiB;
+            dlaGlobalDRAM = static_cast<double>(memPoolSize / 1.0_MiB);
         }
         else if (memPoolName == "tacticSharedMem")
         {
             // use unit in KB.
-            tacticSharedMem = memPoolSize / 1.0_KiB;
+            tacticSharedMem = static_cast<double>(memPoolSize / 1.0_KiB);
         }
         else if (!memPoolName.empty())
         {
@@ -1477,23 +1475,22 @@ void BuildOptions::parse(Arguments& arguments)
             {
                 source = nvinfer1::TacticSource::kCUBLAS_LT;
             }
+            else if (t == "CUDNN")
+            {
+                source = nvinfer1::TacticSource::kCUDNN;
+            }
+            else if (t == "EDGE_MASK_CONVOLUTIONS")
+            {
+                source = nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS;
+            }
+            else if (t == "JIT_CONVOLUTIONS")
+            {
+                source = nvinfer1::TacticSource::kJIT_CONVOLUTIONS;
+            }
             else
-                if (t == "CUDNN")
-                {
-                    source = nvinfer1::TacticSource::kCUDNN;
-                }
-                else if (t == "EDGE_MASK_CONVOLUTIONS")
-                {
-                    source = nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS;
-                }
-                else if (t == "JIT_CONVOLUTIONS")
-                {
-                    source = nvinfer1::TacticSource::kJIT_CONVOLUTIONS;
-                }
-                else
-                {
-                    throw std::invalid_argument(std::string("Unknown tactic source: ") + t);
-                }
+            {
+                throw std::invalid_argument(std::string("Unknown tactic source: ") + t);
+            }
 
             uint32_t sourceBit = 1U << static_cast<uint32_t>(source);
 
@@ -1908,20 +1905,24 @@ void AllOptions::parse(Arguments& arguments)
         if (build.buildDLAStandalone)
         {
             build.skipInference = true;
-            auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt, bool isInput) {
-                return !fmt.empty() && std::all_of(fmt.begin(), fmt.end(), [&](IOFormat const& pair) {
-                    auto const& [dataType, tensorFormats] = pair;
-                    using TF = nvinfer1::TensorFormat;
-                    using nvinfer1::DataType;
+            auto checkSafeDLAFormats = [](std::vector<IOFormat> const& fmt, bool isInput)
+            {
+                return !fmt.empty()
+                    && std::all_of(fmt.begin(), fmt.end(),
+                        [&](IOFormat const& pair)
+                        {
+                            auto const& [dataType, tensorFormats] = pair;
+                            using TF = nvinfer1::TensorFormat;
+                            using nvinfer1::DataType;
 
-                    bool const isDLA_LINEAR{tensorFormats == 1U << static_cast<int32_t>(TF::kDLA_LINEAR)};
-                    bool const isHWC4{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW4)
-                        || tensorFormats == 1U << static_cast<int32_t>(TF::kDLA_HWC4)};
-                    bool const isCHW32{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW32)};
-                    bool const isCHW16{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW16)};
-                    return (dataType == DataType::kINT8 && (isDLA_LINEAR || (isInput && isHWC4) || isCHW32))
-                        || (dataType == DataType::kHALF && (isDLA_LINEAR || (isInput && isHWC4) || isCHW16));
-                });
+                            bool const isDLA_LINEAR{tensorFormats == 1U << static_cast<int32_t>(TF::kDLA_LINEAR)};
+                            bool const isHWC4{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW4)
+                                || tensorFormats == 1U << static_cast<int32_t>(TF::kDLA_HWC4)};
+                            bool const isCHW32{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW32)};
+                            bool const isCHW16{tensorFormats == 1U << static_cast<int32_t>(TF::kCHW16)};
+                            return (dataType == DataType::kINT8 && (isDLA_LINEAR || (isInput && isHWC4) || isCHW32))
+                                || (dataType == DataType::kHALF && (isDLA_LINEAR || (isInput && isHWC4) || isCHW16));
+                        });
             };
             if (!checkSafeDLAFormats(build.inputFormats, true) || !checkSafeDLAFormats(build.outputFormats, false))
             {
@@ -1954,7 +1955,8 @@ void TaskInferenceOptions::parse(Arguments& arguments)
 
 void SafeBuilderOptions::parse(Arguments& arguments)
 {
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument)
+    {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -2212,7 +2214,6 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType)
     return os;
 }
 
-
 std::ostream& operator<<(std::ostream& os, nvinfer1::RuntimePlatform platform)
 {
     switch (platform)
@@ -2345,16 +2346,17 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Mark Unfused Tensors As Debug Tensors: " << boolToEnabled(options.markUnfusedTensorsAsDebugTensors)   << std::endl;
     // clang-format on
 
-    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
+    auto printIOFormats = [](std::ostream& oss, const char* direction, const std::vector<IOFormat> formats)
+    {
         if (formats.empty())
         {
-            os << direction << "s format: fp32:CHW" << std::endl;
+            oss << direction << "s format: fp32:CHW" << std::endl;
         }
         else
         {
             for (const auto& f : formats)
             {
-                os << direction << ": " << f << std::endl;
+                oss << direction << ": " << f << std::endl;
             }
         }
     };
@@ -2363,7 +2365,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
     printIOFormats(os, "Output(s)", options.outputFormats);
     for (size_t i = 0; i < options.optProfiles.size(); i++)
     {
-        printShapes(os, "build", options.optProfiles[i], i);
+        printShapes(os, "build", options.optProfiles[i], static_cast<int32_t>(i));
     }
     printShapes(os, "calibration", options.shapesCalib, -1);
 
@@ -2503,17 +2505,17 @@ std::ostream& operator<<(std::ostream& os, const AllOptions& options)
 
 std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
 {
-    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats)
+    auto printIOFormats = [](std::ostream& oss, const char* direction, const std::vector<IOFormat> formats)
     {
         if (formats.empty())
         {
-            os << direction << "s format: fp32:CHW" << std::endl;
+            oss << direction << "s format: fp32:CHW" << std::endl;
         }
         else
         {
             for (const auto& f : formats)
             {
-                os << direction << ": " << f << std::endl;
+                oss << direction << ": " << f << std::endl;
             }
         }
     };
