@@ -1189,27 +1189,27 @@ void BuildOptions::parse(Arguments& arguments)
         if (memPoolName == "workspace")
         {
             // use unit in MB.
-            workspace = static_cast<double>(memPoolSize / 1.0_MiB);
+            workspace = static_cast<double>(static_cast<long double>(memPoolSize) / 1.0_MiB);
         }
         else if (memPoolName == "dlaSRAM")
         {
             // use unit in MB.
-            dlaSRAM = static_cast<double>(memPoolSize / 1.0_MiB);
+            dlaSRAM = static_cast<double>(static_cast<long double>(memPoolSize) / 1.0_MiB);
         }
         else if (memPoolName == "dlaLocalDRAM")
         {
             // use unit in MB.
-            dlaLocalDRAM = static_cast<double>(memPoolSize / 1.0_MiB);
+            dlaLocalDRAM = static_cast<double>(static_cast<long double>(memPoolSize) / 1.0_MiB);
         }
         else if (memPoolName == "dlaGlobalDRAM")
         {
             // use unit in MB.
-            dlaGlobalDRAM = static_cast<double>(memPoolSize / 1.0_MiB);
+            dlaGlobalDRAM = static_cast<double>(static_cast<long double>(memPoolSize) / 1.0_MiB);
         }
         else if (memPoolName == "tacticSharedMem")
         {
             // use unit in KB.
-            tacticSharedMem = static_cast<double>(memPoolSize / 1.0_KiB);
+            tacticSharedMem = static_cast<double>(static_cast<long double>(memPoolSize) / 1.0_KiB);
         }
         else if (!memPoolName.empty())
         {

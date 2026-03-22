@@ -159,7 +159,7 @@ int32_t GroupNormalizationPlugin::enqueue(nvinfer1::PluginTensorDesc const* inpu
         mBNTensorDesc,                 //
         mBnScales->mPtr,               // 1
         mBnBias->mPtr,                 // 0
-        0.0F,                          // exponential average factor
+        static_cast<double>(0.0F),     // exponential average factor
         nullptr,                       // resultRunningMean
         nullptr,                       // resultRunningVar
         static_cast<double>(mEpsilon), //  eps

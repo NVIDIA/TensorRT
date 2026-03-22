@@ -201,12 +201,13 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
             continue;
         }
 
-        if (options[idx].valueRequired)
+        if (options[static_cast<size_t>(idx)].valueRequired)
         {
             if (!value.empty())
             {
-                parsedArgs.values[idx].second.push_back(value);
-                parsedArgs.values[idx].first = static_cast<int>(parsedArgs.values[idx].second.size());
+                parsedArgs.values[static_cast<size_t>(idx)].second.push_back(value);
+                parsedArgs.values[static_cast<size_t>(idx)].first
+                    = static_cast<int>(parsedArgs.values[static_cast<size_t>(idx)].second.size());
                 continue;
             }
 
@@ -222,14 +223,15 @@ TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRT
                                     << "', Should this be its own flag?" << std::endl;
             }
 
-            parsedArgs.values[idx].second.push_back(nextArg);
+            parsedArgs.values[static_cast<size_t>(idx)].second.push_back(nextArg);
             i += 1; // Next argument already consumed
 
-            parsedArgs.values[idx].first = static_cast<int>(parsedArgs.values[idx].second.size());
+            parsedArgs.values[static_cast<size_t>(idx)].first
+                = static_cast<int>(parsedArgs.values[static_cast<size_t>(idx)].second.size());
         }
         else
         {
-            parsedArgs.values[idx].first += 1;
+            parsedArgs.values[static_cast<size_t>(idx)].first += 1;
         }
     }
     return parsedArgs;

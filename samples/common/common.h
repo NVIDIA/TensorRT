@@ -105,15 +105,15 @@ using namespace nvinfer1;
 #undef CHECK
 #define CHECK(status) CHECK_WITH_STREAM(status, std::cerr)
 
-constexpr long double operator"" _GiB(long double val)
+constexpr long double operator""_GiB(long double val)
 {
     return val * (1 << 30);
 }
-constexpr long double operator"" _MiB(long double val)
+constexpr long double operator""_MiB(long double val)
 {
     return val * (1 << 20);
 }
-constexpr long double operator"" _KiB(long double val)
+constexpr long double operator""_KiB(long double val)
 {
     return val * (1 << 10);
 }
@@ -536,28 +536,28 @@ inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
 {
     switch (t)
     {
-    case nvinfer1::DataType::kINT64: return 8 * vol;
+    case nvinfer1::DataType::kINT64: return static_cast<size_t>(8 * vol);
     case nvinfer1::DataType::kINT32:
-    case nvinfer1::DataType::kFLOAT: return 4 * vol;
+    case nvinfer1::DataType::kFLOAT: return static_cast<size_t>(4 * vol);
     case nvinfer1::DataType::kBF16:
-    case nvinfer1::DataType::kHALF: return 2 * vol;
+    case nvinfer1::DataType::kHALF: return static_cast<size_t>(2 * vol);
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
-    case nvinfer1::DataType::kINT8: return vol;
+    case nvinfer1::DataType::kINT8: return static_cast<size_t>(vol);
     case nvinfer1::DataType::kFP8:
 #if CUDA_VERSION < 11060
         ASSERT(false && "FP8 is not supported");
 #else
-        return vol;
+        return static_cast<size_t>(vol);
 #endif
     case nvinfer1::DataType::kE8M0:
 #if CUDA_VERSION < 12080
         ASSERT(false && "E8M0 is not supported");
 #else
-        return vol;
+        return static_cast<size_t>(vol);
 #endif // CUDA_VERSION < 12080
     case nvinfer1::DataType::kINT4:
-    case nvinfer1::DataType::kFP4: return (vol + 1) / 2;
+    case nvinfer1::DataType::kFP4: return static_cast<size_t>((vol + 1) / 2);
     }
     ASSERT(false && "Unknown element type");
 }
@@ -759,25 +759,25 @@ inline void writePPMFileWithBBox(const std::string& filename, vPPM ppm, std::vec
         for (int x = int(bbox.x1); x < int(bbox.x2); ++x)
         {
             // bbox top border
-            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3] = 255;
-            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3 + 1] = 0;
-            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y1) * ppm.w + x) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((round(bbox.y1) * ppm.w + x) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y1) * ppm.w + x) * 3 + 2)] = 0;
             // bbox bottom border
-            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3] = 255;
-            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3 + 1] = 0;
-            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y2) * ppm.w + x) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((round(bbox.y2) * ppm.w + x) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y2) * ppm.w + x) * 3 + 2)] = 0;
         }
 
         for (int y = int(bbox.y1); y < int(bbox.y2); ++y)
         {
             // bbox left border
-            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3] = 255;
-            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3 + 1] = 0;
-            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x1)) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x1)) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x1)) * 3 + 2)] = 0;
             // bbox right border
-            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3] = 255;
-            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3 + 1] = 0;
-            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x2)) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x2)) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x2)) * 3 + 2)] = 0;
         }
     }
 

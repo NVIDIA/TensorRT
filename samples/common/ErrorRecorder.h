@@ -52,11 +52,13 @@ public:
     }
     ErrorCode getErrorCode(int32_t errorIdx) const noexcept final
     {
-        return invalidIndexCheck(errorIdx) ? ErrorCode::kINVALID_ARGUMENT : (*this)[errorIdx].first;
+        return invalidIndexCheck(errorIdx) ? ErrorCode::kINVALID_ARGUMENT
+                                           : (*this)[static_cast<size_t>(errorIdx)].first;
     };
     IErrorRecorder::ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept final
     {
-        return invalidIndexCheck(errorIdx) ? "errorIdx out of range." : (*this)[errorIdx].second.c_str();
+        return invalidIndexCheck(errorIdx) ? "errorIdx out of range."
+                                           : (*this)[static_cast<size_t>(errorIdx)].second.c_str();
     }
     // This class can never overflow since we have dynamic resize via std::vector usage.
     bool hasOverflowed() const noexcept final
@@ -122,7 +124,7 @@ private:
     {
         // By converting signed to unsigned, we only need a single check since
         // negative numbers turn into large positive greater than the size.
-        size_t sIndex = index;
+        size_t sIndex = static_cast<size_t>(index);
         return sIndex >= mErrorStack.size();
     }
     // Mutex to hold when locking mErrorStack.

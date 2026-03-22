@@ -1426,7 +1426,7 @@ bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePo
         }
         if (durationMs < warmupMs) // Warming up
         {
-            if (durationMs) // Skip complete iterations
+            if (durationMs != 0.0F) // Skip complete iterations
             {
                 ++skip;
             }

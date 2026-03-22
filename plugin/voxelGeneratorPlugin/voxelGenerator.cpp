@@ -39,12 +39,12 @@ size_t constexpr kSERIALIZATION_SIZE{9 * sizeof(float) + 7 * sizeof(int32_t)};
 int32_t npRound(float x)
 {
     // half way round to nearest-even
-    int32_t x2 = static_cast<int32_t>(lround(x * 2.0F));
+    int32_t x2 = static_cast<int32_t>(lroundf(x * 2.0F));
     if (x != static_cast<float>(static_cast<int32_t>(x)) && static_cast<float>(x2) == x * 2.0F)
     {
-        return static_cast<int32_t>(lround(x / 2.0F + 0.5F)) * 2;
+        return static_cast<int32_t>(lroundf(x / 2.0F + 0.5F)) * 2;
     }
-    return static_cast<int32_t>(lround(x));
+    return static_cast<int32_t>(lroundf(x));
 }
 
 VoxelGeneratorPlugin::VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin,
