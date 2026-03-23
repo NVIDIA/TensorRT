@@ -639,12 +639,12 @@ nvinfer1::ILayer* SampleCharRNNLoop::addLSTMLayers(std::unique_ptr<nvinfer1::INe
     nvinfer1::Dims dimB{1, {4 * mParams.hiddenSize}};
     nvinfer1::Dims dim0{1, {0}};
     auto extractWeights = [](nvinfer1::Weights weights, Dims start, Dims size) -> nvinfer1::Weights {
-        const char* data = static_cast<const char*>(weights.values);
+        const char* data_ = static_cast<const char*>(weights.values);
         int64_t shift = samplesCommon::volume(start);
-        const int bufferSize = samplesCommon::getNbBytes(weights.type, shift);
+        const int bufferSize = static_cast<int>(samplesCommon::getNbBytes(weights.type, shift));
         int64_t count = samplesCommon::volume(size);
         ASSERT(shift + count <= weights.count);
-        return nvinfer1::Weights{weights.type, data + bufferSize, count};
+        return nvinfer1::Weights{weights.type, data_ + bufferSize, count};
     };
     for (int i = 0; i < mParams.layerCount; ++i)
     {
@@ -667,7 +667,7 @@ nvinfer1::ILayer* SampleCharRNNLoop::addLSTMLayers(std::unique_ptr<nvinfer1::INe
     }
 
     auto addConcatenation = [&network](std::vector<nvinfer1::ITensor*> tensors) -> nvinfer1::ITensor* {
-        nvinfer1::IConcatenationLayer* concat = network->addConcatenation(tensors.data(), tensors.size());
+        nvinfer1::IConcatenationLayer* concat = network->addConcatenation(tensors.data(), static_cast<int>(tensors.size()));
         concat->setAxis(0);
         return concat->getOutput(0);
     };
@@ -776,7 +776,7 @@ bool SampleCharRNNBase::infer()
 
     // Select a random seed string.
     srand(unsigned(time(nullptr)));
-    int sentenceIndex = rand() % mParams.inputSentences.size();
+    int sentenceIndex = static_cast<int>(rand() % mParams.inputSentences.size());
     std::string inputSentence = mParams.inputSentences[sentenceIndex];
     std::string expected = mParams.outputSentences[sentenceIndex];
     std::string genstr;

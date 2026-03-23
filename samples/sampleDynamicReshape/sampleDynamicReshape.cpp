@@ -150,7 +150,7 @@ bool SampleDynamicReshape::build()
 //! \return false if error in build preprocessor engine.
 //!
 bool SampleDynamicReshape::buildPreprocessorEngine(
-    nvinfer1::IBuilder& builder, nvinfer1::IRuntime& runtime, cudaStream_t profileStream)
+    nvinfer1::IBuilder& builder, nvinfer1::IRuntime& runtime, cudaStream_t /*profileStream*/)
 {
     // Create the preprocessor engine using a network that supports full dimensions (createNetworkV2).
     auto preprocessorNetwork = std::unique_ptr<INetworkDefinition>(
@@ -437,7 +437,7 @@ Dims SampleDynamicReshape::loadPGMFile(const std::string& fileName)
     mInput.hostBuffer.resize(inputDims);
     float* hostDataBuffer = static_cast<float*>(mInput.hostBuffer.data());
     std::transform(fileData.begin(), fileData.end(), hostDataBuffer,
-        [](uint8_t x) { return 1.0 - static_cast<float>(x / 255.0); });
+        [](uint8_t x) { return 1.0f - static_cast<float>(x) / 255.0f; });
     return inputDims;
 }
 
@@ -459,7 +459,7 @@ bool SampleDynamicReshape::validateOutput(int digit)
         ++curIndex;
     }
 
-    int predictedDigit = std::max_element(prob.begin(), prob.end()) - prob.begin();
+    int predictedDigit = static_cast<int>(std::max_element(prob.begin(), prob.end()) - prob.begin());
     return digit == predictedDigit;
 }
 

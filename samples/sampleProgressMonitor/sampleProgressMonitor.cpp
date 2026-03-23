@@ -155,7 +155,7 @@ private:
         std::ostringstream bar;
         bar << '[';
         int32_t const completedChars
-            = static_cast<int32_t>(kPROGRESS_INNER_WIDTH * steps / static_cast<float>(nbSteps));
+            = static_cast<int32_t>(static_cast<float>(kPROGRESS_INNER_WIDTH) * static_cast<float>(steps) / static_cast<float>(nbSteps));
         for (int32_t i = 0; i < completedChars; ++i)
         {
             bar << '=';
@@ -328,8 +328,8 @@ bool SampleProgressMonitor::build(IProgressMonitor* monitor)
 bool SampleProgressMonitor::processInput(
     samplesCommon::BufferManager const& buffers, std::string const& inputTensorName, int32_t inputFileIdx) const
 {
-    int32_t const inputH = mInputDims.d[2];
-    int32_t const inputW = mInputDims.d[3];
+    int32_t const inputH = static_cast<int32_t>(mInputDims.d[2]);
+    int32_t const inputW = static_cast<int32_t>(mInputDims.d[3]);
 
     // Read a random digit file.
     srand(unsigned(time(nullptr)));
@@ -364,7 +364,7 @@ bool SampleProgressMonitor::verifyOutput(
     float* prob = static_cast<float*>(buffers.getHostBuffer(outputTensorName));
     int32_t constexpr kDIGITS = 10;
 
-    std::for_each(prob, prob + kDIGITS, [](float& n) { n = exp(n); });
+    std::for_each(prob, prob + kDIGITS, [](float& n) { n = static_cast<float>(exp(n)); });
 
     float const sum = std::accumulate(prob, prob + kDIGITS, 0.F);
 
@@ -374,7 +374,7 @@ bool SampleProgressMonitor::verifyOutput(
 
     float const val = *max_ele;
 
-    int32_t const idx = max_ele - prob;
+    int32_t const idx = static_cast<int32_t>(max_ele - prob);
 
     // Print histogram of the output probability distribution.
     sample::gLogInfo << "Output:\n";
@@ -399,7 +399,7 @@ bool SampleProgressMonitor::verifyOutput(
 //! \param builder Pointer to the engine builder.
 //!
 bool SampleProgressMonitor::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
-    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& /*network*/, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
     std::unique_ptr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
@@ -432,7 +432,7 @@ bool SampleProgressMonitor::infer()
     }
 
     // Pick a random digit to try to infer.
-    srand(time(NULL));
+    srand(static_cast<unsigned>(time(NULL)));
     int32_t const digit = rand() % 10;
 
     // Read the input data into the managed buffers.

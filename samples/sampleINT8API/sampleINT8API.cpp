@@ -241,7 +241,6 @@ void SampleINT8API::setLayerPrecision(nvinfer1::INetworkDefinition const& networ
             std::string tensorName = layer->getOutput(j)->getName();
             if (mParams.verbose)
             {
-                std::string tensorName = layer->getOutput(j)->getName();
                 sample::gLogInfo << "Tensor: " << tensorName << ". OutputType: INT8" << std::endl;
             }
             // set output type of execution tensors and not shape tensors.
@@ -391,7 +390,7 @@ bool SampleINT8API::setDynamicRange(nvinfer1::INetworkDefinition& network)
                     max = std::max(max, std::abs(val));
                 }
 
-                if (!lyr->getOutput(j)->setDynamicRange(-max, max))
+                if (!lyr->getOutput(j)->setDynamicRange(static_cast<float>(-max), static_cast<float>(max)))
                 {
                     return false;
                 }
@@ -466,7 +465,7 @@ bool SampleINT8API::verifyOutput(samplesCommon::BufferManager const& buffers) co
 {
     // copy output host buffer data for further processing
     float const* probPtr = static_cast<float const*>(buffers.getHostBuffer(mInOut.at("output")));
-    std::vector<float> output(probPtr, probPtr + mOutputDims.d[1]);
+    std::vector<float> output(probPtr, probPtr + static_cast<int>(mOutputDims.d[1]));
 
     auto inds = samplesCommon::argMagnitudeSort(output.cbegin(), output.cend());
 

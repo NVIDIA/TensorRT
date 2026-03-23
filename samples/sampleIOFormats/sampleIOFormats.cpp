@@ -74,32 +74,32 @@ class BufferDesc
 public:
     BufferDesc() = default;
 
-    BufferDesc(nvinfer1::Dims dims, int32_t dataWidth, TensorFormat format)
+    BufferDesc(nvinfer1::Dims dims_, int32_t dataWidth_, TensorFormat format)
     {
-        this->dataWidth = dataWidth;
+        this->dataWidth = dataWidth_;
         if (format == TensorFormat::kLINEAR)
         {
-            this->dims[0] = dims.d[0];
-            this->dims[1] = dims.d[1];
-            this->dims[2] = dims.d[2];
-            this->dims[3] = dims.d[3];
+            this->dims[0] = static_cast<int32_t>(dims_.d[0]);
+            this->dims[1] = static_cast<int32_t>(dims_.d[1]);
+            this->dims[2] = static_cast<int32_t>(dims_.d[2]);
+            this->dims[3] = static_cast<int32_t>(dims_.d[3]);
             this->dims[4] = 1;
         }
         else if (format == TensorFormat::kCHW32)
         {
-            this->dims[0] = dims.d[0];
-            this->dims[1] = divUp(dims.d[1], 32);
-            this->dims[2] = dims.d[2];
-            this->dims[3] = dims.d[3];
+            this->dims[0] = static_cast<int32_t>(dims_.d[0]);
+            this->dims[1] = divUp(static_cast<int32_t>(dims_.d[1]), 32);
+            this->dims[2] = static_cast<int32_t>(dims_.d[2]);
+            this->dims[3] = static_cast<int32_t>(dims_.d[3]);
             this->dims[4] = 32;
             this->scalarPerVector = 32;
         }
         else if (format == TensorFormat::kHWC)
         {
-            this->dims[0] = dims.d[0];
-            this->dims[1] = dims.d[2];
-            this->dims[2] = dims.d[3];
-            this->dims[3] = dims.d[1];
+            this->dims[0] = static_cast<int32_t>(dims_.d[0]);
+            this->dims[1] = static_cast<int32_t>(dims_.d[2]);
+            this->dims[2] = static_cast<int32_t>(dims_.d[3]);
+            this->dims[3] = static_cast<int32_t>(dims_.d[1]);
             this->dims[4] = 1;
             this->channelPivot = true;
         }
@@ -144,23 +144,23 @@ public:
         dims.d[3] = 1;
     }
 
-    SampleBuffer(nvinfer1::Dims dims, int32_t dataWidth, TensorFormat format, bool isInput)
-        : dims(dims)
-        , dataWidth(dataWidth)
-        , format(format)
-        , isInput(isInput)
+    SampleBuffer(nvinfer1::Dims dims_, int32_t dataWidth_, TensorFormat format_, bool isInput_)
+        : dims(dims_)
+        , dataWidth(dataWidth_)
+        , format(format_)
+        , isInput(isInput_)
     {
 
         // Output buffer is unsqueezed to 4D in order to reuse the BufferDesc class
-        if (isInput == false)
+        if (isInput_ == false)
         {
-            dims.d[2] = dims.d[0];
-            dims.d[3] = dims.d[1];
-            dims.d[0] = 1;
-            dims.d[1] = 1;
+            dims_.d[2] = dims_.d[0];
+            dims_.d[3] = dims_.d[1];
+            dims_.d[0] = 1;
+            dims_.d[1] = 1;
         }
 
-        desc = BufferDesc(dims, dataWidth, format);
+        desc = BufferDesc(dims_, dataWidth_, format_);
 
         if (nullptr == buffer)
         {
@@ -330,7 +330,7 @@ bool SampleIOFormats::verify(TypeSpec const& spec)
 //!
 //! \return true if the engine was created successfully and false otherwise
 //!
-bool SampleIOFormats::build(int32_t dataWidth)
+bool SampleIOFormats::build(int32_t /*dataWidth*/)
 {
     auto builder = std::unique_ptr<nvinfer1::IBuilder>(nvinfer1::createInferBuilder(sample::gLogger.getTRTLogger()));
     if (!builder)
@@ -436,7 +436,7 @@ bool SampleIOFormats::build(int32_t dataWidth)
 //! \param builder Pointer to the engine builder
 //!
 bool SampleIOFormats::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
-    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& /*network*/, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
     std::unique_ptr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
@@ -548,7 +548,7 @@ void printHelpInfo()
 //! \brief Used to run the engine build and inference/reference functions
 //!
 template <typename T>
-bool process(SampleIOFormats& sample, sample::Logger::TestAtom const& sampleTest, SampleBuffer& inputBuf,
+bool process(SampleIOFormats& sample, sample::Logger::TestAtom const& /*sampleTest*/, SampleBuffer& inputBuf,
     SampleBuffer& outputBuf, TypeSpec& spec)
 {
     sample::gLogInfo << "Building and running a GPU inference engine with specified I/O formats." << std::endl;
@@ -562,8 +562,8 @@ bool process(SampleIOFormats& sample, sample::Logger::TestAtom const& sampleTest
         return false;
     }
 
-    inputBuf = SampleBuffer(sample.mInputDims, sizeof(T), sample.mTensorFormat, true);
-    outputBuf = SampleBuffer(sample.mOutputDims, sizeof(T), TensorFormat::kLINEAR, false);
+    inputBuf = SampleBuffer(sample.mInputDims, static_cast<int32_t>(sizeof(T)), sample.mTensorFormat, true);
+    outputBuf = SampleBuffer(sample.mOutputDims, static_cast<int32_t>(sizeof(T)), TensorFormat::kLINEAR, false);
 
     if (!sample.infer(inputBuf, outputBuf))
     {

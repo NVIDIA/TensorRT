@@ -80,7 +80,7 @@ public:
     {
         mDataToSerialize.clear();
         mDataToSerialize.emplace_back(PluginField("rowOrder", &mRowOrder, PluginFieldType::kINT32, 1));
-        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
         mFCToSerialize.fields = mDataToSerialize.data();
     }
 
@@ -137,14 +137,14 @@ public:
         return 2;
     }
 
-    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
-        int32_t nbOutputs) noexcept override
+    int32_t configurePlugin(DynamicPluginTensorDesc const* /*in*/, int32_t /*nbInputs*/, DynamicPluginTensorDesc const* /*out*/,
+        int32_t /*nbOutputs*/) noexcept override
     {
         return 0;
     }
 
     bool supportsFormatCombination(
-        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t /*nbInputs*/, int32_t /*nbOutputs*/) noexcept override
     {
         bool typeOk{false};
         if (pos == 0)
@@ -165,15 +165,15 @@ public:
     }
 
     int32_t getOutputDataTypes(
-        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override
+        DataType* outputTypes, int32_t /*nbOutputs*/, DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept override
     {
         outputTypes[0] = DataType::kINT32;
         outputTypes[1] = DataType::kINT64;
         return 0;
     }
 
-    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
-        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t /*nbInputs*/, DimsExprs const* /*shapeInputs*/,
+        int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t /*nbOutputs*/, IExprBuilder& exprBuilder) noexcept override
     {
         // The input tensor must be 2-D
         if (inputs[0].nbDims != 2)
@@ -207,12 +207,12 @@ public:
     }
 
     // IPluginV3OneRuntime methods
-    int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
+    int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* /*outputDesc*/, void const* const* inputs,
         void* const* outputs, void* workspace, cudaStream_t stream) noexcept override
     {
 
-        int32_t const R = inputDesc[0].dims.d[0];
-        int32_t const C = inputDesc[0].dims.d[1];
+        int32_t const R = static_cast<int32_t>(inputDesc[0].dims.d[0]);
+        int32_t const C = static_cast<int32_t>(inputDesc[0].dims.d[1]);
 
         auto type = inputDesc[0].type;
 
@@ -249,12 +249,12 @@ public:
     }
 
     int32_t onShapeChange(
-        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override
+        PluginTensorDesc const* /*in*/, int32_t /*nbInputs*/, PluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept override
     {
         return 0;
     }
 
-    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override
+    IPluginV3* attachToContext(IPluginResourceContext* /*context*/) noexcept override
     {
         return clone();
     }
@@ -264,8 +264,8 @@ public:
         return &mFCToSerialize;
     }
 
-    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+        DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept override
     {
         return sizeof(int64_t);
     }
@@ -283,7 +283,7 @@ public:
     {
         mPluginAttributes.clear();
         mPluginAttributes.emplace_back(PluginField("rowOrder", nullptr, PluginFieldType::kINT32, 1));
-        mFC.nbFields = mPluginAttributes.size();
+        mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
         mFC.fields = mPluginAttributes.data();
     }
 
@@ -302,7 +302,7 @@ public:
         return &mFC;
     }
 
-    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override
+    IPluginV3* createPlugin(char const* /*name*/, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept override
     {
         try
         {
@@ -483,8 +483,8 @@ bool SampleNonZeroPlugin::build()
 //!
 //! \param builder Pointer to the engine builder
 //!
-bool SampleNonZeroPlugin::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
-    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config)
+bool SampleNonZeroPlugin::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& /*builder*/,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& /*config*/)
 {
     std::default_random_engine generator(mSeed);
     std::uniform_int_distribution<int32_t> distr(10, 25);
@@ -510,7 +510,7 @@ bool SampleNonZeroPlugin::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& 
     ASSERT(plugin != nullptr && "NonZeroPlugin construction failed");
 
     std::vector<ITensor*> inputsVec{in};
-    auto pluginNonZeroLayer = network->addPluginV3(inputsVec.data(), inputsVec.size(), nullptr, 0, *plugin);
+    auto pluginNonZeroLayer = network->addPluginV3(inputsVec.data(), static_cast<int32_t>(inputsVec.size()), nullptr, 0, *plugin);
     ASSERT(pluginNonZeroLayer != nullptr);
     ASSERT(pluginNonZeroLayer->getOutput(0) != nullptr);
     ASSERT(pluginNonZeroLayer->getOutput(1) != nullptr);
@@ -595,8 +595,8 @@ bool SampleNonZeroPlugin::infer()
 //!
 bool SampleNonZeroPlugin::processInput(samplesCommon::BufferManager const& buffers)
 {
-    int32_t const inputH = mInputDims.d[0];
-    int32_t const inputW = mInputDims.d[1];
+    int32_t const inputH = static_cast<int32_t>(mInputDims.d[0]);
+    int32_t const inputW = static_cast<int32_t>(mInputDims.d[1]);
 
     std::vector<uint8_t> fileData(inputH * inputW);
 
@@ -609,7 +609,7 @@ bool SampleNonZeroPlugin::processInput(samplesCommon::BufferManager const& buffe
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     for (int32_t i = 0; i < inputH * inputW; ++i)
     {
-        auto const raw = 1.0 - float(fileData[i] / 255.0);
+        auto const raw = 1.0f - static_cast<float>(fileData[i]) / 255.0f;
         hostDataBuffer[i] = raw;
     }
 
@@ -640,7 +640,7 @@ bool SampleNonZeroPlugin::verifyOutput(samplesCommon::BufferManager const& buffe
 {
     float* input = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     int32_t* output = static_cast<int32_t*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
-    int64_t count = *static_cast<int64_t*>(buffers.getHostBuffer(mParams.outputTensorNames[1]));
+    int32_t count = static_cast<int32_t>(*static_cast<int64_t*>(buffers.getHostBuffer(mParams.outputTensorNames[1])));
 
     std::vector<bool> covered(mInputDims.d[0] * mInputDims.d[1], false);
 
