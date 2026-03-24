@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,13 +64,13 @@ protected:
 //! \brief List of supported engine capability flows.
 //!
 //! \details The EngineCapability determines the restrictions of a network during build time and what runtime
-//! it targets. When BuilderFlag::kSAFETY_SCOPE is not set (by default), EngineCapability::kSTANDARD does not provide
-//! any restrictions on functionality and the resulting serialized engine can be executed with TensorRT's standard
-//! runtime APIs in the nvinfer1 namespace. EngineCapability::kSAFETY provides a restricted subset of network
-//! operations that are safety certified and the resulting serialized engine can be executed with TensorRT's safe
-//! runtime APIs in the nvinfer1::safe namespace. EngineCapability::kDLA_STANDALONE provides a restricted subset of
-//! network operations that are DLA compatible and the resulting serialized engine can be executed using standalone
-//! DLA runtime APIs. See sampleCudla for an example of integrating cuDLA APIs with TensorRT APIs.
+//! it targets. EngineCapability::kSTANDARD does not provide any restrictions on functionality and the resulting
+//! serialized engine can be executed with TensorRT's standard runtime APIs in the nvinfer1 namespace.
+//! EngineCapability::kSAFETY provides a restricted subset of network operations that are safety certified and the
+//! resulting serialized engine can be executed with TensorRT's safe runtime APIs in the nvinfer2::safe namespace.
+//! EngineCapability::kDLA_STANDALONE provides a restricted subset of network operations that are DLA compatible and the
+//! resulting serialized engine can be executed using standalone DLA runtime APIs. See sampleCudla for an example of
+//! integrating cuDLA APIs with TensorRT APIs.
 //!
 enum class EngineCapability : int32_t
 {
@@ -564,14 +564,14 @@ private:
     //! \brief Set plugin configuration
     //!
     void configurePlugin(Dims const*, int32_t, Dims const*, int32_t, DataType const*, DataType const*, bool const*,
-        bool const*, PluginFormat, int32_t) noexcept override final
+        bool const*, PluginFormat, int32_t) noexcept final
     {
     }
 
     //!
     //! \brief Check if provided data type is supported
     //!
-    bool supportsFormat(DataType, PluginFormat) const noexcept override final
+    bool supportsFormat(DataType, PluginFormat) const noexcept final
     {
         return false;
     }
@@ -579,7 +579,7 @@ private:
     //!
     //! \brief Get output dimensions.
     //!
-    Dims getOutputDimensions(int32_t, Dims const*, int32_t) noexcept override final
+    Dims getOutputDimensions(int32_t, Dims const*, int32_t) noexcept final
     {
         return Dims{-1, {}};
     }
@@ -591,7 +591,7 @@ private:
     //!
     //! \deprecated Deprecated in TensorRT 10.0. Implicit batch support is removed in TensorRT 10.0.
     //!
-    TRT_DEPRECATED bool isOutputBroadcastAcrossBatch(int32_t, bool const*, int32_t) const noexcept override final
+    TRT_DEPRECATED bool isOutputBroadcastAcrossBatch(int32_t, bool const*, int32_t) const noexcept final
     {
         return false;
     }
@@ -603,7 +603,7 @@ private:
     //!
     //! \deprecated Deprecated in TensorRT 10.0. Implicit batch support is removed in TensorRT 10.0.
     //!
-    TRT_DEPRECATED bool canBroadcastInputAcrossBatch(int32_t) const noexcept override final
+    TRT_DEPRECATED bool canBroadcastInputAcrossBatch(int32_t) const noexcept final
     {
         return true;
     }
@@ -611,7 +611,7 @@ private:
     //!
     //! \brief Get required workspace size in bytes.
     //!
-    size_t getWorkspaceSize(int32_t) const noexcept override final
+    size_t getWorkspaceSize(int32_t) const noexcept final
     {
         return 0;
     }
@@ -619,7 +619,7 @@ private:
     //!
     //! \brief Run inference.
     //!
-    int32_t enqueue(int32_t, void const* const*, void* const*, void*, cudaStream_t) noexcept override final
+    int32_t enqueue(int32_t, void const* const*, void* const*, void*, cudaStream_t) noexcept final
     {
         return 1;
     }
@@ -5221,6 +5221,24 @@ public:
     bool getUnfusedTensorsDebugState() const noexcept
     {
         return mImpl->getUnfusedTensorsDebugState();
+    }
+
+    //!
+    //! \brief Set the NCCL communicator for the execution context.
+    //!
+    //! \param communicator A pointer to the communicator that is used by the execution context. The communicator is
+    //! expected to be already initialized with `ncclCommInitRank` and castable to `ncclComm_t`.
+    //!
+    //! The communicator must be uniform across all multi-device instances or undefined
+    //! behavior occurs.
+    //!
+    //! \warning The lifetime of the communicator must be longer than the execution contexts it is attached to.
+    //!
+    //! \return True if the communicator was set successfully, false otherwise.
+    //!
+    bool setCommunicator(void* communicator) noexcept
+    {
+        return mImpl->setCommunicator(communicator);
     }
 
 protected:

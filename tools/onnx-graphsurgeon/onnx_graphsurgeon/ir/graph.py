@@ -104,6 +104,7 @@ class Graph(object):
         producer_name: str = None,
         producer_version: str = None,
         functions: "Sequence[Function]" = None,
+        ir_version: int = None,
     ):
         """
         Args:
@@ -115,6 +116,7 @@ class Graph(object):
             opset (int): The ONNX opset to use when exporting this graph.
             producer_name (str): The name of the tool used to generate the model. Defaults to "".
             producer_version (str): The version of the generating tool. Defaults to "".
+            ir_version (int): The ONNX IR version to use when exporting this graph.
         """
         self.nodes = misc.default_value(nodes, [])
         self.inputs = list(misc.default_value(inputs, []))
@@ -128,6 +130,7 @@ class Graph(object):
         self.producer_name = misc.default_value(producer_name, "")
         self.producer_version = misc.default_value(producer_version, "")
         self.import_domains = import_domains
+        self.ir_version = ir_version
         # For layer() function
         self.name_idx = 0
 
@@ -229,6 +232,7 @@ class Graph(object):
         return (
             self.opset == other.opset
             and self.import_domains == other.import_domains
+            and self.ir_version == other.ir_version
             and functions_equal
             and sequences_equal(self.inputs, other.inputs)
             and sequences_equal(self.outputs, other.outputs)
@@ -548,7 +552,7 @@ class Graph(object):
             from onnx_graphsurgeon.ir.function import Function
 
             # If we've already determined the hierarchy level of the node, we should
-            # early exit before checking the visited set. If we check the visited set here, 
+            # early exit before checking the visited set. If we check the visited set here,
             # we may detect false cycles in diamond-shaped graphs.
             if get_id(node_or_func) in hierarchy_levels:
                 return hierarchy_levels[get_id(node_or_func)].level
@@ -1534,6 +1538,7 @@ class Graph(object):
             opset=copy.copy(self.opset),
             import_domains=self.import_domains,
             functions=copy.copy(self.functions),
+            ir_version=self.ir_version,
         )
 
     def __str__(self):

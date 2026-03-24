@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,8 @@
  */
 #include "multiscaleDeformableAttnPluginLegacy.h"
 #include "multiscaleDeformableAttn.h"
+
+#include <memory>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
@@ -45,9 +47,9 @@ nvinfer1::IPluginV2DynamicExt* MultiscaleDeformableAttnPluginLegacy::clone() con
 {
     try
     {
-        MultiscaleDeformableAttnPluginLegacy* plugin = new MultiscaleDeformableAttnPluginLegacy();
+        auto plugin = std::make_unique<MultiscaleDeformableAttnPluginLegacy>();
         plugin->setPluginNamespace(getPluginNamespace());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -248,8 +250,8 @@ IPluginV2* MultiscaleDeformableAttnPluginCreatorLegacy::createPlugin(
 {
     try
     {
-        MultiscaleDeformableAttnPluginLegacy* plugin = new MultiscaleDeformableAttnPluginLegacy();
-        return plugin;
+        auto plugin = std::make_unique<MultiscaleDeformableAttnPluginLegacy>();
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -263,9 +265,9 @@ IPluginV2* MultiscaleDeformableAttnPluginCreatorLegacy::deserializePlugin(
 {
     try
     {
-        auto plugin = new MultiscaleDeformableAttnPluginLegacy(serialData, serialLength);
+        auto plugin = std::make_unique<MultiscaleDeformableAttnPluginLegacy>(serialData, serialLength);
         plugin->setPluginNamespace(getPluginNamespace());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

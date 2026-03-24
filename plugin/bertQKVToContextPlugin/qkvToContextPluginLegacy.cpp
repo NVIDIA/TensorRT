@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -154,6 +155,7 @@ DimsExprs QKVToContextPluginDynamicLegacy::getOutputDimensions(
     output.d[HDIM] = exprBuilder.operation(DimensionOperation::kFLOOR_DIV, *inputs[kIIDX].d[HDIM], *three);
     return output;
 }
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool QKVToContextPluginDynamicLegacy::supportsFormatCombination(
     int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t /*nbOutputs*/) noexcept
 {
@@ -559,8 +561,8 @@ IPluginV2* QKVToContextPluginDynamicLegacyCreator::createPlugin(
             dqProbs = 1.F / 127.F;
         }
 
-        auto* p = new QKVToContextPluginDynamicLegacy(name, type, hiddenSize, numHeads, dqProbs, hasMask);
-        return p;
+        auto p = std::make_unique<QKVToContextPluginDynamicLegacy>(name, type, hiddenSize, numHeads, dqProbs, hasMask);
+        return p.release();
     }
     catch (std::exception const& e)
     {
@@ -936,6 +938,7 @@ char const* QKVToContextVarSeqlenPluginLegacy::getPluginNamespace() const noexce
     return mNamespace.c_str();
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 int32_t QKVToContextVarSeqlenPluginLegacy::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept
@@ -1090,7 +1093,7 @@ IPluginV2* QKVToContextVarSeqlenPluginLegacyCreator::createPlugin(
     int32_t hiddenSize = 0;
     // Since numHeads must always exist or validateRequiredAttributes will fail,
     // we can set numHeads to -1 so that static analysis tools don't warn about
-    // a division by zero in QKVToContextVarSeqelnPlugin constructor.
+    // a division by zero in QKVToContextVarSeqlenPlugin constructor.
     int32_t numHeads{-1};
     bool hasMask = false;
     int32_t typeId = -1;
@@ -1166,9 +1169,9 @@ IPluginV2* QKVToContextVarSeqlenPluginLegacyCreator::createPlugin(
 
     auto const useInt8ScaleMaxFlag = static_cast<bool>(useInt8ScaleMax);
 
-    QKVToContextVarSeqlenPluginLegacy* p = new QKVToContextVarSeqlenPluginLegacy(
+    auto p = std::make_unique<QKVToContextVarSeqlenPluginLegacy>(
         name, type, hiddenSize, numHeads, dqProbs, hasMask, varSeqlen, useInt8ScaleMaxFlag);
-    return p;
+    return p.release();
 }
 
 IPluginV2* QKVToContextVarSeqlenPluginLegacyCreator::deserializePlugin(

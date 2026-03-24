@@ -59,6 +59,7 @@ struct SampleSafePluginBuildArgs : public samplesCommon::Args
 //!
 //! \brief This function parses arguments specific to the sample
 //!
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool parseSampleSafePluginBuildArgs(SampleSafePluginBuildArgs& args, int32_t argc, char* argv[])
 {
     for (int32_t i = 1; i < argc; ++i)

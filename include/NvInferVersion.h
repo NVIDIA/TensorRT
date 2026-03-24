@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,9 +24,9 @@
 #define NV_INFER_VERSION_H
 
 #define TRT_MAJOR_ENTERPRISE 10
-#define TRT_MINOR_ENTERPRISE 15
-#define TRT_PATCH_ENTERPRISE 1
-#define TRT_BUILD_ENTERPRISE 29
+#define TRT_MINOR_ENTERPRISE 16
+#define TRT_PATCH_ENTERPRISE 0
+#define TRT_BUILD_ENTERPRISE 72
 #define NV_TENSORRT_MAJOR TRT_MAJOR_ENTERPRISE //!< TensorRT major version.
 #define NV_TENSORRT_MINOR TRT_MINOR_ENTERPRISE //!< TensorRT minor version.
 #define NV_TENSORRT_PATCH TRT_PATCH_ENTERPRISE //!< TensorRT patch version.

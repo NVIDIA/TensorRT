@@ -32,6 +32,7 @@ namespace nvinfer1
 namespace plugin
 {
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 IPluginV3* MaxPoolCreator::createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
     // The build phase and the deserialization phase are handled differently.
@@ -76,7 +77,7 @@ IPluginV3* MaxPoolCreator::createPlugin(char const* name, PluginFieldCollection 
             {
                 if (fields[i].data != nullptr)
                 {
-                    pType = *(static_cast<PoolingType const*>(fields[i].data));
+                    pType = *static_cast<PoolingType const*>(fields[i].data);
                 }
             }
         }
@@ -90,17 +91,17 @@ IPluginV3* MaxPoolCreator::createPlugin(char const* name, PluginFieldCollection 
         params.Px = pads[0];
         params.Py = pads[1];
 
-        MaxPoolPlugin* const plugin{new MaxPoolPlugin(params)};
-        return plugin;
+        auto plugin = std::make_unique<MaxPoolPlugin>(params);
+        return plugin.release();
     }
     else if (phase == TensorRTPhase::kRUNTIME)
     {
         nvinfer1::PluginField const* fields{fc->fields};
 
-        PoolParameters params{*(static_cast<PoolParameters const*>(fields[0].data))};
+        PoolParameters params{*static_cast<PoolParameters const*>(fields[0].data)};
 
-        MaxPoolPlugin* const plugin{new MaxPoolPlugin(params)};
-        return plugin;
+        auto plugin = std::make_unique<MaxPoolPlugin>(params);
+        return plugin.release();
     }
     return nullptr;
 }

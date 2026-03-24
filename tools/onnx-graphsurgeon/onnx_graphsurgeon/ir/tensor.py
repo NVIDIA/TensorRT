@@ -422,6 +422,18 @@ class Constant(Tensor):
 
     @export_dtype.setter
     def export_dtype(self, export_dtype):
+        if export_dtype is not None:
+            import onnx
+
+            try:
+                onnx.helper.float32_to_bfloat16
+            except AttributeError:
+                G_LOGGER.critical(
+                    "`export_dtype` is not support with this version of ONNX. "
+                    "Please use `ml_dtypes` to create the Constant with the correct data type."
+                    "Alternatively, you can downgrade ONNX to version 1.19.1 or earlier."
+                )
+
         self._export_dtype = export_dtype
 
     def __repr__(self):  # Hack to make logging output pretty.

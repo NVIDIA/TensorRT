@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <string>
 #include <utility>
@@ -332,10 +333,10 @@ IPluginV2Ext* FlattenConcat::clone() const noexcept
 {
     try
     {
-        auto* plugin = new FlattenConcat(mConcatAxisID, mIgnoreBatch, mNumInputs, mOutputConcatAxis,
+        auto plugin = std::make_unique<FlattenConcat>(mConcatAxisID, mIgnoreBatch, mNumInputs, mOutputConcatAxis,
             mInputConcatAxis.data(), mCopySize.data(), mCHW);
         plugin->setPluginNamespace(mPluginNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -392,9 +393,9 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(char const* name, PluginF
             }
         }
 
-        auto* plugin = new FlattenConcat(mConcatAxisID, mIgnoreBatch);
+        auto plugin = std::make_unique<FlattenConcat>(mConcatAxisID, mIgnoreBatch);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -410,9 +411,9 @@ IPluginV2Ext* FlattenConcatPluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call Concat::destroy()
-        IPluginV2Ext* plugin = new FlattenConcat(serialData, serialLength);
+        auto plugin = std::make_unique<FlattenConcat>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

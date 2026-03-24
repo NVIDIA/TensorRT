@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cuda_runtime.h>
+#include <memory>
 #include <vector>
 
 using namespace nvinfer1;
@@ -131,6 +132,7 @@ static cublasStatus_t customMatmulRun(cublasLtHandle_t ltHandle, // to get the c
 
 // Sample wrapper running through multiple algo and config attributes
 // combination for single precision gemm using cublasLt low-level API
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOperation_t transa, cublasOperation_t transb,
     int32_t const& m, int32_t const& n, int32_t const& k, void const* alpha,                // host pointer
     void const* A, int32_t const& lda, void const* B, int32_t const& ldb, void const* beta, // host pointer
@@ -398,11 +400,11 @@ IPluginV2DynamicExt* FCPluginDynamic::clone() const noexcept
     {
         gLogVerbose << "FCPluginDynamic clone\n";
 
-        auto* p = new FCPluginDynamic(mLayerName, mType, mOutDim, mW);
+        auto p = std::make_unique<FCPluginDynamic>(mLayerName, mType, mOutDim, mW);
         memcpy(p->mAlgo.data, mAlgo.data, sizeof(mAlgo.data));
         p->setPluginNamespace(mNamespace.c_str());
 
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {

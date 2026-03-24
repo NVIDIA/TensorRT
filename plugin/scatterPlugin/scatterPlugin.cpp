@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #include "common/half.h"
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <sstream>
 
 namespace nvinfer1::plugin
@@ -234,9 +235,9 @@ IPluginV2DynamicExt* ScatterND::clone() const noexcept
     try
     {
         // Create a new instance
-        ScatterND* plugin = new ScatterND();
+        auto plugin = std::make_unique<ScatterND>();
         plugin->setPluginNamespace(mPluginNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

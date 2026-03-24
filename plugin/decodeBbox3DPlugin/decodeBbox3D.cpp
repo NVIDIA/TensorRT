@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,8 @@
 #include "common/checkMacrosPlugin.h"
 #include "common/kernels/kernel.h"
 #include "common/templates.h"
+
+#include <memory>
 
 namespace nvinfer1::plugin
 {
@@ -112,11 +114,11 @@ nvinfer1::IPluginV2DynamicExt* DecodeBbox3DPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new DecodeBbox3DPlugin(mMinXRange, mMaxXRange, mMinYRange, mMaxYRange, mMinZRange, mMaxZRange,
-            mNumDirBins, mDirOffset, mDirLimitOffset, mAnchorBottomHeight, mAnchors, mScoreThreashold, mFeatureH,
-            mFeatureW);
+        auto plugin = std::make_unique<DecodeBbox3DPlugin>(mMinXRange, mMaxXRange, mMinYRange, mMaxYRange, mMinZRange,
+            mMaxZRange, mNumDirBins, mDirOffset, mDirLimitOffset, mAnchorBottomHeight, mAnchors, mScoreThreashold,
+            mFeatureH, mFeatureW);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -462,10 +464,10 @@ IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* /*name*/, PluginF
                 scoreThreshold = d[0];
             }
         }
-        IPluginV2* plugin = new DecodeBbox3DPlugin(pointCloudRange[0], pointCloudRange[3], pointCloudRange[1],
+        auto plugin = std::make_unique<DecodeBbox3DPlugin>(pointCloudRange[0], pointCloudRange[3], pointCloudRange[1],
             pointCloudRange[4], pointCloudRange[2], pointCloudRange[5], numDirBins, dirOffset, dirLimitOffset,
             anchorBottomHeight, anchors, scoreThreshold);
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

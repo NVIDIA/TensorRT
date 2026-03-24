@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,8 @@
 
 #include "multiscaleDeformableAttnPlugin.h"
 #include "multiscaleDeformableAttn.h"
+
+#include <memory>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
@@ -84,9 +86,9 @@ IPluginV3* MultiscaleDeformableAttnPlugin::clone() noexcept
 {
     try
     {
-        auto* plugin = new MultiscaleDeformableAttnPlugin();
+        auto plugin = std::make_unique<MultiscaleDeformableAttnPlugin>();
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

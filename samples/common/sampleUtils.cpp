@@ -156,6 +156,7 @@ bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings,
     return broadcast;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights)
 {
     using TensorToLayer = std::unordered_map<nvinfer1::ITensor*, nvinfer1::ILayer*>;
@@ -402,6 +403,11 @@ void print(std::ostream& os, T v)
 void print(std::ostream& os, int8_t v)
 {
     os << static_cast<int32_t>(v);
+}
+
+void print(std::ostream& os, uint8_t v)
+{
+    os << static_cast<uint32_t>(v);
 }
 
 void print(std::ostream& os, __half v)

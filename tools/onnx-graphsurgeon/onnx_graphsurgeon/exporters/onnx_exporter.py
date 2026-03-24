@@ -21,6 +21,7 @@ from typing import List, Sequence, Union
 import numpy as np
 import onnx
 import onnx.numpy_helper
+import ml_dtypes
 
 from onnx_graphsurgeon.exporters.base_exporter import BaseExporter
 from onnx_graphsurgeon.ir.function import Function
@@ -44,10 +45,8 @@ def dtype_to_onnx(dtype: Union[np.dtype, "onnx.TensorProto.DataType"]) -> int:
     if isinstance(dtype, int):
         return dtype
 
-    # Custom dtypes defined in `ml_dtypes`, if installed.
+    # Custom dtypes defined in `ml_dtypes`.
     try:
-        import ml_dtypes
-
         ml_dtype_to_onnx_name = {
             np.dtype(ml_dtypes.bfloat16): "BFLOAT16",
             np.dtype(ml_dtypes.float8_e4m3fn): "FLOAT8E4M3FN",
@@ -129,16 +128,24 @@ class NumpyArrayConverter(object):
         return self.func(arr)
 
 
-_NUMPY_ARRAY_CONVERTERS = {
-    onnx.TensorProto.BFLOAT16: NumpyArrayConverter(
-        np.uint16, onnx.helper.float32_to_bfloat16
-    ),
-    # FP8 in TensorRT supports negative zeros, no infinities
-    # See https://onnx.ai/onnx/technical/float8.html#papers
-    onnx.TensorProto.FLOAT8E4M3FN: NumpyArrayConverter(
-        np.uint8, lambda x: onnx.helper.float32_to_float8e4m3(x, fn=True, uz=False)
-    ),
-}
+try:
+    onnx.helper.float32_to_bfloat16
+    onnx.helper.float32_to_float8e4m3
+except AttributeError:
+    # For newer versions of ONNX, we have to create the tensor with the correct type in
+    # the first place using ml_dtypes.
+    _NUMPY_ARRAY_CONVERTERS = {}
+else:
+    _NUMPY_ARRAY_CONVERTERS = {
+        onnx.TensorProto.BFLOAT16: NumpyArrayConverter(
+            np.uint16, onnx.helper.float32_to_bfloat16
+        ),
+        # FP8 in TensorRT supports negative zeros, no infinities
+        # See https://onnx.ai/onnx/technical/float8.html#papers
+        onnx.TensorProto.FLOAT8E4M3FN: NumpyArrayConverter(
+            np.uint8, lambda x: onnx.helper.float32_to_float8e4m3(x, fn=True, uz=False)
+        ),
+    }
 
 
 # Converts a gs.Constant to an onnx tensor and convert the values according to gs.Constant.export_dtype
@@ -404,4 +411,6 @@ def export_onnx(graph: Graph, do_type_check=True, **kwargs) -> "onnx.ModelProto"
     model = onnx.helper.make_model(onnx_graph, **kwargs)
     model.producer_name = graph.producer_name
     model.producer_version = graph.producer_version
+    if graph.ir_version is not None:
+        model.ir_version = graph.ir_version
     return model

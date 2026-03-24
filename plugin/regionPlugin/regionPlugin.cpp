@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +16,7 @@
  */
 #include "regionPlugin.h"
 #include <cstring>
+#include <memory>
 
 namespace nvinfer1::plugin
 {
@@ -89,6 +90,7 @@ Region::Region(RegionParameters params, int32_t C, int32_t H, int32_t W)
 {
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 Region::Region(void const* buffer, size_t length)
 {
     char const *d = reinterpret_cast<char const*>(buffer), *a = d;
@@ -295,6 +297,7 @@ size_t Region::getSerializationSize() const noexcept
     return count;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void Region::serialize(void* buffer) const noexcept
 {
     char *d = reinterpret_cast<char*>(buffer), *a = d;
@@ -399,11 +402,11 @@ IPluginV2Ext* Region::clone() const noexcept
     try
     {
         RegionParameters params{num, coords, classes, nullptr};
-        Region* plugin = new Region(params, C, H, W);
+        auto plugin = std::make_unique<Region>(params, C, H, W);
         plugin->setPluginNamespace(mPluginNamespace.c_str());
         plugin->setSoftmaxTree(smTree);
 
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

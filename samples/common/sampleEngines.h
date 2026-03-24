@@ -285,12 +285,15 @@ struct BuildEnvironment
     //! Per TensorRT object lifetime requirements as outlined in the developer guide,
     //! factory objects must remain live while the objects created by those factories
     //! are live (with the exception of builder -> engine).
-    //! DO NOT ADJUST the declaration order here: builder -> network -> parser.
-    //! Destruction occurs in reverse declaration order: parser -> network -> builder.
+    //! DO NOT ADJUST the declaration order here: builder -> builder config -> network -> parser.
+    //! Destruction occurs in reverse declaration order: parser -> network -> builder config -> builder.
     //!@{
 
     //! The builder used to build the engine.
     std::unique_ptr<nvinfer1::IBuilder> builder;
+
+    // Builder config used to build the engine.
+    std::unique_ptr<nvinfer1::IBuilderConfig> builderConfig;
 
     //! The network used by the builder.
     std::unique_ptr<nvinfer1::INetworkDefinition> network;

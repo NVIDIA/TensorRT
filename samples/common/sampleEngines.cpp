@@ -232,6 +232,7 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
 //! \param[in,out] err Error stream
 //! \param[out] vcPluginLibrariesUsed If not nullptr, will be populated with paths to VC plugin libraries required by
 //! the parsed network.
+//! \param[in] builderConfig Builder config required for DLA capability validation.
 //!
 //! \return Parser The parser used to initialize the network and that holds the weights for the network, or an invalid
 //! parser (the returned parser converts to false if tested)
@@ -242,7 +243,7 @@ void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::
 //! \see Parser::operator bool()
 //!
 Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvinfer1::INetworkDefinition& network,
-    std::ostream& err, std::vector<std::string>* vcPluginLibrariesUsed)
+    std::ostream& err, std::vector<std::string>* vcPluginLibrariesUsed, nvinfer1::IBuilderConfig const& builderConfig)
 {
     sample::gLogInfo << "Start parsing network model." << std::endl;
     auto const tBegin = std::chrono::high_resolution_clock::now();
@@ -263,6 +264,15 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
         if (build.enableUInt8AsymmetricQuantizationDLA)
         {
             parser.onnxParser->setFlag(OnnxParserFlag::kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA);
+        }
+        if (build.reportCapabilityDLA)
+        {
+            parser.onnxParser->setFlag(OnnxParserFlag::kREPORT_CAPABILITY_DLA);
+            parser.onnxParser->setBuilderConfig(&builderConfig);
+        }
+        if (build.adjustForDLA)
+        {
+            parser.onnxParser->setFlag(OnnxParserFlag::kADJUST_FOR_DLA);
         }
         if (build.enablePluginOverride)
         {
@@ -406,6 +416,7 @@ void const* RndInt8Calibrator::readCalibrationCache(size_t& length) noexcept
     return !mCalibrationCache.empty() ? mCalibrationCache.data() : nullptr;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool setTensorDynamicRange(INetworkDefinition const& network, float inRange = 2.0F, float outRange = 4.0F)
 {
     // Ensure that all layer inputs have a dynamic range.
@@ -518,6 +529,7 @@ void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& laye
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void setLayerOutputTypes(INetworkDefinition& network, LayerOutputTypes const& layerOutputTypes)
 {
     bool const hasGlobalOutputType{layerOutputTypes.find("*") != layerOutputTypes.end()};
@@ -622,7 +634,7 @@ void setDecomposables(INetworkDefinition& network, DecomposableAttentions const&
         auto* layer = network.getLayer(layerIdx);
         if (layer->getType() == LayerType::kATTENTION_INPUT)
         {
-            auto* attention = static_cast<const nvinfer1::IAttentionInputLayer*>(layer)->getAttention();
+            auto* attention = static_cast<nvinfer1::IAttentionInputLayer const*>(layer)->getAttention();
             auto const attentionName = attention->getName();
             auto match = findPlausible(decomposableAttentions, attentionName);
             if (match != decomposableAttentions.end())
@@ -734,6 +746,7 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
     return true;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity, readability-function-size)
 bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
     INetworkDefinition& network, IBuilderConfig& config, std::unique_ptr<nvinfer1::IInt8Calibrator>& calibrator,
     std::ostream& err, std::vector<std::vector<int8_t>>& sparseWeights)
@@ -1300,15 +1313,17 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
 //!
 //! \return Whether the engine creation succeeds or fails.
 //!
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool networkToSerializedEngine(
-    BuildOptions const& build, SystemOptions const& sys, IBuilder& builder, BuildEnvironment& env, std::ostream& err)
+    BuildOptions const& build, SystemOptions const& sys, BuildEnvironment& env, std::ostream& err)
 {
-    std::unique_ptr<IBuilderConfig> config{builder.createBuilderConfig()};
+    IBuilder& builder = *env.builder;
+    IBuilderConfig& config = *env.builderConfig;
+    INetworkDefinition& network = *env.network;
     std::unique_ptr<nvinfer1::IInt8Calibrator> calibrator;
     std::vector<std::vector<int8_t>> sparseWeights;
-    SMP_RETVAL_IF_FALSE(config != nullptr, "Config creation failed", false, err);
     SMP_RETVAL_IF_FALSE(
-        setupNetworkAndConfig(build, sys, builder, *env.network, *config, calibrator, err, sparseWeights),
+        setupNetworkAndConfig(build, sys, builder, network, config, calibrator, err, sparseWeights),
         "Network And Config setup failed", false, err);
 
     std::unique_ptr<ITimingCache> timingCache{};
@@ -1318,7 +1333,7 @@ bool networkToSerializedEngine(
         if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
         {
             timingCache
-                = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), *config, build.timingCacheFile);
+                = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), config, build.timingCacheFile);
         }
     }
 
@@ -1329,7 +1344,7 @@ bool networkToSerializedEngine(
     if (!build.cpuOnly)
     {
         SMP_RETVAL_IF_FALSE(profileStream != nullptr, "Cuda stream creation failed", false, err);
-        config->setProfileStream(*profileStream);
+        config.setProfileStream(*profileStream);
     }
     auto const tBegin = std::chrono::high_resolution_clock::now();
 
@@ -1337,7 +1352,7 @@ bool networkToSerializedEngine(
     {
         auto const engineFile = build.engine;
         FileStreamWriter writer(engineFile);
-        builder.buildSerializedNetworkToStream(*env.network, *config, writer);
+        builder.buildSerializedNetworkToStream(network, config, writer);
         auto const engineSize = writer.finalize();
         std::vector<uint8_t> streamEngine(engineSize, 0);
         std::ifstream reader(engineFile, std::ios::binary);
@@ -1354,7 +1369,7 @@ bool networkToSerializedEngine(
         if (build.safe && build.save && build.dumpKernelText)
         {
             IHostMemory* kernelText{nullptr};
-            serializedEngine = builder.buildSerializedNetwork(*env.network, *config, kernelText);
+            serializedEngine = builder.buildSerializedNetwork(network, config, kernelText);
             if (kernelText != nullptr && kernelText->size() > 0)
             {
                 std::unique_ptr<IHostMemory> kernelTextPtr(kernelText);
@@ -1369,7 +1384,7 @@ bool networkToSerializedEngine(
         }
         else
         {
-            serializedEngine = builder.buildSerializedNetwork(*env.network, *config);
+            serializedEngine = builder.buildSerializedNetwork(network, config);
         }
         SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
         sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
@@ -1399,7 +1414,7 @@ bool networkToSerializedEngine(
     {
         if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
         {
-            auto timingCache = config->getTimingCache();
+            auto timingCache = config.getTimingCache();
             samplesCommon::updateTimingCacheFile(gLogger.getTRTLogger(), build.timingCacheFile, timingCache, builder);
         }
     }
@@ -1415,6 +1430,8 @@ bool modelToBuildEnv(
 {
     env.builder.reset(createBuilder());
     SMP_RETVAL_IF_FALSE(env.builder != nullptr, "Builder creation failed", false, err);
+    env.builderConfig.reset(env.builder->createBuilderConfig());
+    SMP_RETVAL_IF_FALSE(env.builderConfig != nullptr, "Builder config creation failed", false, err);
     env.builder->setErrorRecorder(&gRecorder);
     auto networkFlags = (build.stronglyTyped)
         ? 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)
@@ -1428,7 +1445,7 @@ bool modelToBuildEnv(
     std::vector<std::string> vcPluginLibrariesUsed;
     SMP_RETVAL_IF_FALSE(env.network != nullptr, "Network creation failed", false, err);
     env.parser
-        = modelToNetwork(model, build, *env.network, err, build.versionCompatible ? &vcPluginLibrariesUsed : nullptr);
+        = modelToNetwork(model, build, *env.network, err, build.versionCompatible ? &vcPluginLibrariesUsed : nullptr, *env.builderConfig);
     SMP_RETVAL_IF_FALSE(env.parser.operator bool(), "Parsing model failed", false, err);
 
     if (build.versionCompatible && !sys.ignoreParsedPluginLibs && !vcPluginLibrariesUsed.empty())
@@ -1461,7 +1478,7 @@ bool modelToBuildEnv(
     }
 
     SMP_RETVAL_IF_FALSE(
-        networkToSerializedEngine(build, sys, *env.builder, env, err), "Building engine failed", false, err);
+        networkToSerializedEngine(build, sys, env, err), "Building engine failed", false, err);
     return true;
 }
 
@@ -1658,6 +1675,7 @@ bool saveEngine(ICudaEngine const& engine, std::string const& fileName, std::ost
     return !engineFile.fail();
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool getEngineBuildEnv(
     ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
 {
@@ -1795,6 +1813,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
     case LayerType::kCONDITIONAL_OUTPUT:
     case LayerType::kCUMULATIVE:
     case LayerType::kDEQUANTIZE:
+    case LayerType::kDIST_COLLECTIVE:
     case LayerType::kDYNAMIC_QUANTIZE:
     case LayerType::kEINSUM:
     case LayerType::kELEMENTWISE:
@@ -1807,6 +1826,7 @@ std::vector<std::pair<WeightsRole, Weights>> getAllRefitWeightsForLayer(ILayer c
     case LayerType::kLOOP_OUTPUT:
     case LayerType::kLRN:
     case LayerType::kMATRIX_MULTIPLY:
+    case LayerType::kMOE:
     case LayerType::kNMS:
     case LayerType::kNON_ZERO:
     case LayerType::kNORMALIZATION:

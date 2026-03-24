@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 #include "common/templates.h"
 #include "cropAndResizePluginLegacy.h"
 #include <cstring>
+#include <memory>
 #include <vector>
 
 namespace nvinfer1::plugin
@@ -355,10 +356,10 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginLegacy::clone() const noexcept
 {
     try
     {
-        IPluginV2DynamicExt* plugin = new CropAndResizeDynamicPluginLegacy(
+        auto plugin = std::make_unique<CropAndResizeDynamicPluginLegacy>(
             mCropWidth, mCropHeight, mDepth, mInputWidth, mInputHeight, mNumBoxes);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -565,9 +566,9 @@ IPluginV2Ext* CropAndResizePluginCreator::createPlugin(char const* /* name */, P
         }
 
         PLUGIN_VALIDATE(cropWidth > 0 && cropHeight > 0);
-        IPluginV2Ext* plugin = new CropAndResizePlugin(cropWidth, cropHeight);
+        auto plugin = std::make_unique<CropAndResizePlugin>(cropWidth, cropHeight);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -605,9 +606,9 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginLegacyCreator::createPlugin(
         }
 
         PLUGIN_VALIDATE(cropWidth > 0 && cropHeight > 0);
-        IPluginV2DynamicExt* plugin = new CropAndResizeDynamicPluginLegacy(cropWidth, cropHeight);
+        auto plugin = std::make_unique<CropAndResizeDynamicPluginLegacy>(cropWidth, cropHeight);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -625,9 +626,9 @@ IPluginV2Ext* CropAndResizePluginCreator::deserializePlugin(
                        "CropAndResizeDynamic plugin."
                     << std::endl;
         // This object will be deleted when the network is destroyed,
-        IPluginV2Ext* plugin = new CropAndResizePlugin(serialData, serialLength);
+        auto plugin = std::make_unique<CropAndResizePlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -642,9 +643,9 @@ IPluginV2DynamicExt* CropAndResizeDynamicPluginLegacyCreator::deserializePlugin(
     try
     {
         // This object will be deleted when the network is destroyed,
-        IPluginV2DynamicExt* plugin = new CropAndResizeDynamicPluginLegacy(serialData, serialLength);
+        auto plugin = std::make_unique<CropAndResizeDynamicPluginLegacy>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,6 +34,7 @@ installLibraries(
     TARGETS trtexec
     OPTIONAL
     COMPONENT external
+    EXPORT TensorRT
 )
 
 # When statically linked, trtexec requires the plugins library.
@@ -73,6 +74,12 @@ if(${TRT_BUILD_TRTEXEC_STATIC})
         $<LINK_LIBRARY:WHOLE_ARCHIVE,tensorrt_static>
         $<LINK_LIBRARY:WHOLE_ARCHIVE,tensorrt_plugins_static>
     )
+    # Link as PIE and the binary will be loaded at a high address.
+    # Then, avoid conflicts with ASan's shadow memory range.
+    # MSVC does not support -pie.
+    if(NOT MSVC)
+        target_link_options(trtexec_static PRIVATE -pie)
+    endif()
 endif()
 
 

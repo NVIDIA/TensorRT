@@ -56,7 +56,7 @@ def concat(self, inputs, axis=0):
 
 
 # Create the graph.
-graph = gs.Graph()
+graph = gs.Graph(ir_version=10)
 
 # First we set up the inputs, using gs.Tensor.DYNAMIC to specify dynamic dimensions.
 graph.inputs = [

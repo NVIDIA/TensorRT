@@ -1,4 +1,15 @@
 # TensorRT OSS Release Changelog
+## 10.16 GA - 2026-3-24
+
+- General
+  - Default CUDA version updated to CUDA 13.2.
+
+- Samples
+  - Added sampleDistCollective sample to showcase multi-device execution in TensorRT.
+
+- Parsers
+  - Added kADJUST_FOR_DLA flag to adjust parsing behavior for ONNX models to be more amenable for DLA hardware execution.
+  - Added DistCollective operator support for multi-device execution in TensorRT.
 
 ## 10.15 GA - 2026-2-2
 
@@ -21,11 +32,8 @@
   - Improved error reporting for models with multiple subgraphs, such as `Loop` or `Scan` nodes.
 
 - Demo changes
-  - demoDiffusion: 
-          - Stable Diffusion 1.5, 2.0 and 2.1 pipelines have been deprecated and removed.
-          - Added support for Wan2.2-T2V-A14B Text to Video pipeline
-           
-  
+  - demoDiffusion: Stable Diffusion 1.5, 2.0 and 2.1 pipelines have been deprecated and removed.
+  - Added support for Wan2.2-T2V-A14B Text to Video pipeline
 
 ## 10.14 GA - 2025-11-7
 - Sample changes

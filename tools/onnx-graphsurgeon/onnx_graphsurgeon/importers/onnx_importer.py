@@ -53,7 +53,7 @@ ONNX_PYTHON_ATTR_MAPPING = {
 
 
 def get_onnx_tensor_shape(
-    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]
+    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto],
 ) -> List[int]:
     shape = None
     if isinstance(onnx_tensor, onnx.TensorProto) or isinstance(
@@ -119,7 +119,7 @@ def get_numpy_type(onnx_type):
 
 
 def get_onnx_tensor_dtype(
-    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]
+    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto],
 ) -> Union[np.dtype, "onnx.TensorProto.DataType"]:
     if isinstance(onnx_tensor, onnx.TensorProto):
         onnx_dtype = onnx_tensor.data_type
@@ -152,7 +152,7 @@ def get_onnx_tensor_dtype(
 
 
 def get_onnx_tensor_type(
-    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]
+    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto],
 ) -> str:
     if isinstance(onnx_tensor, onnx.TensorProto):
         onnx_type = "tensor_type"
@@ -176,7 +176,7 @@ def get_onnx_tensor_type(
 
 
 def get_onnx_tensor_type(
-    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto]
+    onnx_tensor: Union[onnx.ValueInfoProto, onnx.TensorProto],
 ) -> str:
     if isinstance(onnx_tensor, onnx.TensorProto):
         onnx_type = "tensor_type"
@@ -227,7 +227,7 @@ class OnnxImporter(BaseImporter):
     def import_tensor(
         onnx_tensor: Union[
             onnx.ValueInfoProto, onnx.TensorProto, onnx.SparseTensorProto
-        ]
+        ],
     ) -> Tensor:
         if isinstance(onnx_tensor, onnx.SparseTensorProto):
             return Constant(
@@ -423,6 +423,7 @@ class OnnxImporter(BaseImporter):
         producer_name: str = None,
         producer_version: str = None,
         functions: List[Function] = None,
+        ir_version: int = None,
     ) -> Graph:
         """
         Imports a Graph from an ONNX Graph.
@@ -435,6 +436,7 @@ class OnnxImporter(BaseImporter):
             producer_name (str): The name of the tool used to generate the model. Defaults to "".
             producer_version (str): The version of the generating tool. Defaults to "".
             functions (List[Function]): The list of custom functions which are available to use in the model.
+            ir_version (int): The IR version of the ONNX model.
         """
         functions = misc.default_value(functions, [])
         tensor_map = copy.copy(
@@ -527,6 +529,7 @@ class OnnxImporter(BaseImporter):
             opset=opset,
             import_domains=import_domains,
             functions=functions,
+            ir_version=ir_version,
         )
 
 
@@ -568,4 +571,5 @@ def import_onnx(onnx_model: "onnx.ModelProto") -> Graph:
         producer_name=onnx_model.producer_name,
         producer_version=onnx_model.producer_version,
         functions=functions,
+        ir_version=onnx_model.ir_version,
     )

@@ -29,5 +29,5 @@ Y = gs.Variable(name="Y", dtype=np.float32, shape=(1, 5, 222, 222))
 node = gs.Node(op="Conv", inputs=[X, W], outputs=[Y])
 
 # Note that initializers do not necessarily have to be graph inputs
-graph = gs.Graph(nodes=[node], inputs=[X], outputs=[Y])
+graph = gs.Graph(nodes=[node], inputs=[X], outputs=[Y], ir_version=10)
 onnx.save(gs.export_onnx(graph), "test_conv.onnx")

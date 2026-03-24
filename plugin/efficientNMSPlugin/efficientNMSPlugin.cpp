@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,8 @@
 
 #include "efficientNMSPlugin.h"
 #include "efficientNMSInference.h"
+
+#include <memory>
 
 using namespace nvinfer1;
 using nvinfer1::plugin::EfficientNMSPlugin;
@@ -152,9 +154,9 @@ IPluginV2DynamicExt* EfficientNMSPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new EfficientNMSPlugin(mParam);
+        auto plugin = std::make_unique<EfficientNMSPlugin>(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -500,9 +502,9 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(char const* name, P
             }
         }
 
-        auto* plugin = new EfficientNMSPlugin(mParam);
+        auto plugin = std::make_unique<EfficientNMSPlugin>(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -518,9 +520,9 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call EfficientNMSPlugin::destroy()
-        auto* plugin = new EfficientNMSPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<EfficientNMSPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -596,9 +598,9 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
         mParam.outputONNXIndices = true;
         mParam.numOutputBoxes = mParam.numOutputBoxesPerClass;
 
-        auto* plugin = new EfficientNMSPlugin(mParam);
+        auto plugin = std::make_unique<EfficientNMSPlugin>(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -617,9 +619,9 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::deserializePlugin(
                     << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call EfficientNMSPlugin::destroy()
-        auto* plugin = new EfficientNMSPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<EfficientNMSPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

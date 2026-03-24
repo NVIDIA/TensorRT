@@ -1,4 +1,4 @@
-triton==3.2.0; (platform_system != "Windows")
+triton==3.5.0; (platform_system != "Windows")
 torch
 --extra-index-url https://pypi.ngc.nvidia.com
 polygraphy

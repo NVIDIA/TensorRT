@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,18 +22,18 @@ namespace tensorrt
 {
 namespace OnnxParserDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     This class is used for parsing ONNX models into a TensorRT network definition
 
     :ivar num_errors: :class:`int` The number of errors that occurred during prior calls to :func:`parse`
 )trtdoc";
 
-constexpr const char* init = R"trtdoc(
+constexpr char const* init = R"trtdoc(
     :arg network: The network definition to which the parser will write.
     :arg logger: The logger to use.
 )trtdoc";
 
-constexpr const char* parse = R"trtdoc(
+constexpr char const* parse = R"trtdoc(
     Parse a serialized ONNX model into the TensorRT network.
 
     :arg model: The serialized ONNX model.
@@ -42,7 +42,7 @@ constexpr const char* parse = R"trtdoc(
     :returns: true if the model was parsed successfully
 )trtdoc";
 
-constexpr const char* parse_with_weight_descriptors = R"trtdoc(
+constexpr char const* parse_with_weight_descriptors = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.13. See load_initializers.
 
     Parse a serialized ONNX model into the TensorRT network with consideration of user provided weights.
@@ -52,7 +52,7 @@ constexpr const char* parse_with_weight_descriptors = R"trtdoc(
     :returns: true if the model was parsed successfully
 )trtdoc";
 
-constexpr const char* parse_from_file = R"trtdoc(
+constexpr char const* parse_from_file = R"trtdoc(
     Parse an ONNX model from file into a TensorRT network.
 
     :arg model: The path to an ONNX model.
@@ -60,7 +60,7 @@ constexpr const char* parse_from_file = R"trtdoc(
     :returns: true if the model was parsed successfully
 )trtdoc";
 
-constexpr const char* supports_model = R"trtdoc(
+constexpr char const* supports_model = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. See supports_model_v2.
 
     Check whether TensorRT supports a particular ONNX model.
@@ -73,7 +73,7 @@ constexpr const char* supports_model = R"trtdoc(
         The second indicates subgraphs (by node index) in the model and whether they are supported.
 )trtdoc";
 
-constexpr const char* supports_model_v2 = R"trtdoc(
+constexpr char const* supports_model_v2 = R"trtdoc(
     Check whether TensorRT supports a particular ONNX model.
     Query each subgraph with num_subgraphs, is_subgraph_supported, get_subgraph_nodes.
 
@@ -82,13 +82,13 @@ constexpr const char* supports_model_v2 = R"trtdoc(
     :returns: true if the model is supported
 )trtdoc";
 
-constexpr const char* num_subgraphs = R"trtdoc(
+constexpr char const* num_subgraphs = R"trtdoc(
     Get the number of subgraphs. Calling before \p supportsModelV2 is an undefined behavior. Will return 0 by default.
 
     :returns: Number of subgraphs
 )trtdoc";
 
-constexpr const char* is_subgraph_supported = R"trtdoc(
+constexpr char const* is_subgraph_supported = R"trtdoc(
     Returns whether the subgraph is supported. Calling before \p supportsModelV2 is an undefined behavior.
     Will return false by default.
 
@@ -96,7 +96,7 @@ constexpr const char* is_subgraph_supported = R"trtdoc(
     :returns: true if subgraph is supported
 )trtdoc";
 
-constexpr const char* get_subgraph_nodes = R"trtdoc(
+constexpr char const* get_subgraph_nodes = R"trtdoc(
     Get the nodes of the specified subgraph. Calling before \p supportsModelV2 is an undefined behavior.
     Will return an empty list by default.
 
@@ -105,30 +105,30 @@ constexpr const char* get_subgraph_nodes = R"trtdoc(
         A list of node indices in the subgraph.
 )trtdoc";
 
-constexpr const char* supports_operator = R"trtdoc(
+constexpr char const* supports_operator = R"trtdoc(
     Returns whether the specified operator may be supported by the parser.
     Note that a result of true does not guarantee that the operator will be supported in all cases (i.e., this function may return false-positives).
 
     :arg op_name:  The name of the ONNX operator to check for support
 )trtdoc";
 
-constexpr const char* get_error = R"trtdoc(
+constexpr char const* get_error = R"trtdoc(
     Get an error that occurred during prior calls to :func:`parse`
 
     :arg index: Index of the error
 )trtdoc";
 
-constexpr const char* clear_errors = R"trtdoc(
+constexpr char const* clear_errors = R"trtdoc(
     Clear errors from prior calls to :func:`parse`
 )trtdoc";
 
-constexpr const char* clear_flag = R"trtdoc(
+constexpr char const* clear_flag = R"trtdoc(
     Clears the parser flag from the enabled flags.
 
     :arg flag: The flag to clear.
 )trtdoc";
 
-constexpr const char* get_flag = R"trtdoc(
+constexpr char const* get_flag = R"trtdoc(
     Check if a build mode flag is set.
 
     :arg flag: The flag to check.
@@ -136,13 +136,13 @@ constexpr const char* get_flag = R"trtdoc(
     :returns: A `bool` indicating whether the flag is set.
 )trtdoc";
 
-constexpr const char* set_flag = R"trtdoc(
+constexpr char const* set_flag = R"trtdoc(
     Add the input parser flag to the already enabled flags.
 
     :arg flag: The flag to set.
 )trtdoc";
 
-constexpr const char* get_layer_output_tensor = R"trtdoc(
+constexpr char const* get_layer_output_tensor = R"trtdoc(
     Get the i-th output ITensor object for the ONNX layer "name".
 
    In the case of multiple nodes sharing the same name this function will return
@@ -155,7 +155,7 @@ constexpr const char* get_layer_output_tensor = R"trtdoc(
     :returns: The output tensor or None if the layer was not found or an invalid index was provided.
 )trtdoc";
 
-constexpr const char* get_used_vc_plugin_libraries = R"trtdoc(
+constexpr char const* get_used_vc_plugin_libraries = R"trtdoc(
     Query the plugin libraries needed to implement operations used by the parser in a version-compatible engine.
 
     This provides a list of plugin libraries on the filesystem needed to implement operations
@@ -170,7 +170,7 @@ constexpr const char* get_used_vc_plugin_libraries = R"trtdoc(
     :raises: :class:`RuntimeError` if an internal error occurred when trying to fetch the list of plugin libraries.
 )trtdoc";
 
-constexpr const char* load_model_proto = R"trtdoc(
+constexpr char const* load_model_proto = R"trtdoc(
     Load a serialized ONNX model into the parser. Unlike the parse(), parse_from_file(), or parse_with_weight_descriptors()
     functions, this function does not immediately convert the model into a TensorRT INetworkDefinition. Using this function
     allows users to provide their own initializers for the ONNX model through the load_initializer() function.
@@ -186,7 +186,7 @@ constexpr const char* load_model_proto = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* load_initializer = R"trtdoc(
+constexpr char const* load_initializer = R"trtdoc(
     Prompt the ONNX parser to load an initializer with user-provided binary data.
     The lifetime of the data must exceed the lifetime of the parser.
 
@@ -209,7 +209,7 @@ constexpr const char* load_initializer = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* parse_model_proto = R"trtdoc(
+constexpr char const* parse_model_proto = R"trtdoc(
 
     Begin the parsing and conversion process of the loaded ONNX model into a TensorRT INetworkDefinition.
 
@@ -217,7 +217,7 @@ constexpr const char* parse_model_proto = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* set_builder_config = R"trtdoc(
+constexpr char const* set_builder_config = R"trtdoc(
     Set the BuilderConfig for the parser.
 
     :arg builder_config: The BuilderConfig to set.
@@ -229,16 +229,16 @@ constexpr const char* set_builder_config = R"trtdoc(
 
 namespace OnnxParserRefitterDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     This is an interface designed to refit weights from an ONNX model.
 )trtdoc";
 
-constexpr const char* init = R"trtdoc(
+constexpr char const* init = R"trtdoc(
     :arg refitter: The Refitter object used to refit the model.
     :arg logger: The logger to use.
 )trtdoc";
 
-constexpr const char* refit_from_bytes = R"trtdoc(
+constexpr char const* refit_from_bytes = R"trtdoc(
     Load a serialized ONNX model from memory and perform weight refit.
 
     :arg model: The serialized ONNX model.
@@ -247,7 +247,7 @@ constexpr const char* refit_from_bytes = R"trtdoc(
     :returns: true if all the weights in the engine were refit successfully.
 )trtdoc";
 
-constexpr const char* refit_from_file = R"trtdoc(
+constexpr char const* refit_from_file = R"trtdoc(
     Load and parse a ONNX model from disk and perform weight refit.
 
     :arg model: The path to an ONNX model.
@@ -255,17 +255,17 @@ constexpr const char* refit_from_file = R"trtdoc(
     :returns: true if the model was loaded successfully, and if all the weights in the engine were refit successfully.
 )trtdoc";
 
-constexpr const char* get_error = R"trtdoc(
+constexpr char const* get_error = R"trtdoc(
     Get an error that occurred during prior calls to :func:`refitFromBytes` or :func:`refitFromFile`.
 
     :arg index: Index of the error
 )trtdoc";
 
-constexpr const char* clear_errors = R"trtdoc(
+constexpr char const* clear_errors = R"trtdoc(
     Clear errors from prior calls to :func:`refitFromBytes` or :func:`refitFromFile`.
 )trtdoc";
 
-constexpr const char* load_model_proto = R"trtdoc(
+constexpr char const* load_model_proto = R"trtdoc(
     Load a serialized ONNX model into the refitter. Unlike the refit() or refit_from_file()
     functions, this function does not immediately begin the refit process. Using this function
     allows users to provide their own initializers for the ONNX model through the load_initializer() function.
@@ -281,7 +281,7 @@ constexpr const char* load_model_proto = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* load_initializer = R"trtdoc(
+constexpr char const* load_initializer = R"trtdoc(
     Prompt the ONNX refitter to load an initializer with user-provided binary data.
     The lifetime of the data must exceed the lifetime of the refitter.
 
@@ -304,7 +304,7 @@ constexpr const char* load_initializer = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* refit_model_proto = R"trtdoc(
+constexpr char const* refit_model_proto = R"trtdoc(
 
     Begin the refit process from the loaded ONNX model.
 
@@ -316,90 +316,95 @@ constexpr const char* refit_model_proto = R"trtdoc(
 
 namespace ErrorCodeDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     The type of parser error
 )trtdoc";
 } // namespace ErrorCodeDoc
 
 namespace OnnxParserFlagDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Flags that control how an ONNX model gets parsed.
 )trtdoc";
-constexpr const char* NATIVE_INSTANCENORM = R"trtdoc(
+constexpr char const* NATIVE_INSTANCENORM = R"trtdoc(
    Parse the ONNX model into the INetworkDefinition with the intention of using TensorRT's native layer implementation over the plugin implementation for InstanceNormalization nodes.
    This flag is required when building version-compatible or hardware-compatible engines.
    This flag is ON by default.
 )trtdoc";
-constexpr const char* ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA = R"trtdoc(
+constexpr char const* ENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA = R"trtdoc(
     Enable UINT8 as a quantization data type and asymmetric quantization with non-zero zero-point values in Quantize and Dequantize nodes.
     The resulting engine must be built targeting DLA version >= 3.16.
     This flag is OFF by default.
  )trtdoc";
-constexpr const char* REPORT_CAPABILITY_DLA = R"trtdoc(
+constexpr char const* REPORT_CAPABILITY_DLA = R"trtdoc(
     Parse the ONNX model with per-node validation for DLA. If this flag is set, is_subgraph_supported() will
     also return capability in the context of DLA support.
     When this flag is set, a valid BuilderConfig must be provided to the parser via set_builder_config().
     This flag is OFF by default.
  )trtdoc";
-constexpr const char* ENABLE_PLUGIN_OVERRIDE = R"trtdoc(
+constexpr char const* ENABLE_PLUGIN_OVERRIDE = R"trtdoc(
     Allow a loaded plugin with the same name as an ONNX operator type to override the default ONNX implementation,
     even if the plugin namespace attribute is not set.
     This flag is useful for custom plugins that are intended to replace standard ONNX operators, for example to provide
     alternative implementations or improved performance.
     This flag is OFF by default.
 )trtdoc";
+constexpr char const* ADJUST_FOR_DLA = R"trtdoc(
+    Parse the ONNX model with adjustments to make layers more amenable to running on DLA.
+    This flag is OFF by default.
+ )trtdoc";
+
 } // namespace OnnxParserFlagDoc
 
 namespace ParserErrorDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An object containing information about an error
 )trtdoc";
 
-constexpr const char* code = R"trtdoc(
+constexpr char const* code = R"trtdoc(
     :returns: The error code
 )trtdoc";
 
-constexpr const char* desc = R"trtdoc(
+constexpr char const* desc = R"trtdoc(
     :returns: Description of the error
 )trtdoc";
 
-constexpr const char* file = R"trtdoc(
+constexpr char const* file = R"trtdoc(
     :returns: Source file in which the error occurred
 )trtdoc";
 
-constexpr const char* line = R"trtdoc(
+constexpr char const* line = R"trtdoc(
     :returns: Source line at which the error occurred
 )trtdoc";
 
-constexpr const char* func = R"trtdoc(
+constexpr char const* func = R"trtdoc(
     :returns: Source function in which the error occurred
 )trtdoc";
 
-constexpr const char* node = R"trtdoc(
+constexpr char const* node = R"trtdoc(
     :returns: Index of the Onnx model node in which the error occurred
 )trtdoc";
 
-constexpr const char* node_name = R"trtdoc(
+constexpr char const* node_name = R"trtdoc(
     :returns: Name of the node in the model in which the error occurred
 )trtdoc";
 
-constexpr const char* node_operator = R"trtdoc(
+constexpr char const* node_operator = R"trtdoc(
     :returns: Name of the node operation in the model in which the error occurred
 )trtdoc";
 
-constexpr const char* local_function_stack = R"trtdoc(
+constexpr char const* local_function_stack = R"trtdoc(
     :returns: Current stack trace of local functions in which the error occurred
 )trtdoc";
 
-constexpr const char* local_function_stack_size = R"trtdoc(
+constexpr char const* local_function_stack_size = R"trtdoc(
     :returns: Size of the current stack trace of local functions in which the error occurred
 )trtdoc";
 
 } // namespace ParserErrorDoc
 
-constexpr const char* get_nv_onnx_parser_version = R"trtdoc(
+constexpr char const* get_nv_onnx_parser_version = R"trtdoc(
 :returns: The Onnx Parser version
 )trtdoc";
 

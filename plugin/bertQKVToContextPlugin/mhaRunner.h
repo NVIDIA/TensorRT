@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -121,7 +121,7 @@ public:
     UnfusedMHARunner(nvinfer1::DataType const type, int32_t const numHeads, int32_t const smVersion);
     virtual ~UnfusedMHARunner();
 
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
+    void setup(int32_t S, int32_t B, int32_t headSize) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
         void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
@@ -151,7 +151,7 @@ public:
     FusedMHARunnerFP16(int32_t const numHeads, int32_t const sm);
     ~FusedMHARunnerFP16() = default; // for pimpl
 
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
+    void setup(int32_t S, int32_t B, int32_t headSize) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
         void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
@@ -179,7 +179,7 @@ public:
     FusedMHARunnerInt8(int32_t const numHeads, int32_t const sm, float const dqProbs);
     ~FusedMHARunnerInt8() = default; // for pimpl
 
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
+    void setup(int32_t S, int32_t B, int32_t headSize) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
         void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
@@ -208,7 +208,7 @@ public:
     FusedMHARunnerFP16v2(int32_t const numHeads, int32_t const sm);
     ~FusedMHARunnerFP16v2() = default; // for pimpl
 
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
+    void setup(int32_t S, int32_t B, int32_t headSize) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
         void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,
@@ -236,7 +236,7 @@ public:
     FusedMHARunnerInt8v2(int32_t const numHeads, int32_t const sm, float const dqProbs, bool const useInt8ScaleMax);
     ~FusedMHARunnerInt8v2() = default; // for pimpl
 
-    virtual void setup(int32_t S, int32_t B, int32_t headSize) override;
+    void setup(int32_t S, int32_t B, int32_t headSize) override;
 
     void run(nvinfer1::PluginTensorDesc const& inputDesc, nvinfer1::PluginTensorDesc const& outputDesc,
         void const* qkvPtr, void const* maskPtr, void* output, void* workspace, cudaStream_t stream,

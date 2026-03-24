@@ -39,9 +39,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cuda_runtime_api.h>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -331,8 +331,6 @@ bool SampleProgressMonitor::processInput(
     int32_t const inputH = mInputDims.d[2];
     int32_t const inputW = mInputDims.d[3];
 
-    // Read a random digit file.
-    srand(unsigned(time(nullptr)));
     std::vector<uint8_t> fileData(inputH * inputW);
     samplesCommon::readPGMFile(samplesCommon::locateFile(std::to_string(inputFileIdx) + ".pgm", mParams.dataDirs),
         fileData.data(), inputH, inputW);
@@ -432,8 +430,10 @@ bool SampleProgressMonitor::infer()
     }
 
     // Pick a random digit to try to infer.
-    srand(time(NULL));
-    int32_t const digit = rand() % 10;
+    int32_t const digit = std::invoke([] {
+        auto device = std::random_device();
+        return std::uniform_int_distribution<int>{0, 9}(device);
+    });
 
     // Read the input data into the managed buffers.
     // There should be just 1 input tensor.

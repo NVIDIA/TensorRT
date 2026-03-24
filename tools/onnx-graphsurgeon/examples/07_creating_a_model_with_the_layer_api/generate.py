@@ -66,7 +66,7 @@ def relu(self, a):
 ##########################################################################################################
 # The functions registered above greatly simplify the process of building the graph itself.
 
-graph = gs.Graph(opset=11)
+graph = gs.Graph(opset=11, ir_version=10)
 
 # Generates a graph which computes:
 # output = ReLU((A * X^T) + B) (.) C + D

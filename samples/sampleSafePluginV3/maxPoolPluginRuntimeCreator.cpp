@@ -88,10 +88,10 @@ IPluginV3* MaxPoolRuntimeCreator::createPlugin(
     {
         nvinfer1::PluginField const* fields{fc->fields};
 
-        PoolParameters params{*(static_cast<PoolParameters const*>(fields[0].data))};
+        PoolParameters params{*static_cast<PoolParameters const*>(fields[0].data)};
 
-        MaxPoolPluginRuntime* const plugin{new MaxPoolPluginRuntime(params)};
-        return plugin;
+        auto plugin = std::make_unique<MaxPoolPluginRuntime>(params);
+        return plugin.release();
     }
     return nullptr;
 }

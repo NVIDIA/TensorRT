@@ -303,6 +303,7 @@ void SampleINT8API::writeNetworkTensorNames(nvinfer1::INetworkDefinition const& 
 //!
 //! \brief  Sets custom dynamic range for network tensors
 //!
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool SampleINT8API::setDynamicRange(nvinfer1::INetworkDefinition& network)
 {
     // populate per-tensor dynamic range

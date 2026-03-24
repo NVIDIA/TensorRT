@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include "common/dimsHelpers.h"
 #include "common/serialize.hpp"
 
+#include <memory>
 #include <numeric>
 #include <stdexcept>
 
@@ -224,13 +225,13 @@ IPluginV2DynamicExt* GroupNormalizationPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new GroupNormalizationPlugin(mEpsilon, mNbGroups);
+        auto plugin = std::make_unique<GroupNormalizationPlugin>(mEpsilon, mNbGroups);
         plugin->setPluginNamespace(mNamespace.c_str());
         plugin->mNbScaleBias = mNbScaleBias;
         plugin->mBnScales = mBnScales;
         plugin->mBnBias = mBnBias;
         plugin->mChannelVolume = mChannelVolume;
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -412,10 +413,10 @@ IPluginV2DynamicExt* GroupNormalizationPluginCreator::createPlugin(
             }
         }
 
-        GroupNormalizationPlugin* plugin = new GroupNormalizationPlugin(epsilon, nbGroups);
+        auto plugin = std::make_unique<GroupNormalizationPlugin>(epsilon, nbGroups);
         plugin->setPluginNamespace(mNamespace.c_str());
 
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -429,10 +430,10 @@ IPluginV2DynamicExt* GroupNormalizationPluginCreator::deserializePlugin(
 {
     try
     {
-        GroupNormalizationPlugin* plugin = new GroupNormalizationPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<GroupNormalizationPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
 
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

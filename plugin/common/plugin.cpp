@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +16,7 @@
  */
 
 #include "common/plugin.h"
-#include <variant>
+#include <type_traits>
 
 namespace nvinfer1
 {
@@ -36,29 +36,31 @@ public:
     // It forces separation of memory for T and memory for control blocks.
     // So when T is released, but we still have observer weak_ptr in mObservers, the T mem block can be released.
     // creator itself must not own cudnn/cublas handle resources. Only the object it creates can.
-    PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T>()> cublasCreator)
-        : mCreator(std::move(cublasCreator))
+    template <typename CreatorFunction,
+        typename = std::enable_if_t<std::is_invocable_r_v<std::unique_ptr<T>, CreatorFunction>>>
+    explicit PerContextPluginHandleSingletonCreator(CreatorFunction&& cublasCreator)
+        : PerContextPluginHandleSingletonCreator([creator = std::forward<CreatorFunction>(cublasCreator)](char const*) {
+            return creator();
+        }) //< Adapt `cublasCreator` by ignoring the `char const*` argument.
     {
     }
 
-    PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T>(char const*)> cudnnCreator)
+    explicit PerContextPluginHandleSingletonCreator(std::function<std::unique_ptr<T>(char const*)> cudnnCreator)
         : mCreator(std::move(cudnnCreator))
     {
     }
 
     // \param executionContextIdentifier Unique pointer to identify contexts having overlapping lifetime.
     // \param callerPluginName Optional name of the plugin that invokes this creator
-    std::shared_ptr<T> operator()(void* executionContextIdentifier, char const* callerPluginName = nullptr)
+    [[nodiscard]] std::shared_ptr<T> operator()(
+        void* executionContextIdentifier, char const* callerPluginName = nullptr)
     {
         std::lock_guard<std::mutex> lk{mMutex};
-        std::shared_ptr<T> result = mObservers[executionContextIdentifier].lock();
+        auto& observer = mObservers[executionContextIdentifier];
+        std::shared_ptr<T> result = observer.lock();
         if (result == nullptr)
         {
             auto deleter = [this, executionContextIdentifier](T* obj) {
-                if (obj == nullptr)
-                {
-                    return;
-                }
                 delete obj;
                 // Clears observer to avoid growth of mObservers, in case users create/destroy
                 // plugin handle contexts frequently.
@@ -73,42 +75,27 @@ public:
                 // stale from the fact that obj is destroyed, because shared_ptr ref-count
                 // checking and observer removing are not in one atomic operation, and the
                 // observer may be changed to observe another instance.
-                auto it = mObservers.find(executionContextIdentifier);
-                if (it != mObservers.end())
+                if (auto it = mObservers.find(executionContextIdentifier); it != mObservers.end())
                 {
-                    observedObjHolder = it->second.lock();
-                    if (observedObjHolder == nullptr)
+                    if (observedObjHolder = it->second.lock(); observedObjHolder == nullptr)
                     {
-                        mObservers.erase(executionContextIdentifier);
+                        mObservers.erase(it);
                     }
                 }
             };
-            if (std::holds_alternative<std::function<std::unique_ptr<T>()>>(mCreator))
-            {
-                auto concreteCreator = std::get<std::function<std::unique_ptr<T>()>>(mCreator);
-                result = std::shared_ptr<T>{concreteCreator().release(), std::move(deleter)};
-            }
-            else if (std::holds_alternative<std::function<std::unique_ptr<T>(char const*)>>(mCreator))
-            {
-                auto concreteCreator = std::get<std::function<std::unique_ptr<T>(char const*)>>(mCreator);
-                result = std::shared_ptr<T>{concreteCreator(callerPluginName).release(), std::move(deleter)};
-            }
-            else
-            {
-                PLUGIN_ERROR("Unsupported cuDNN/cuBLAS wrapper creator type!");
-            }
+            // Note, if `std::shared_ptr<T>{...}` throws, the deleter is still called. See
+            // https://en.cppreference.com/w/cpp/memory/shared_ptr/shared_ptr.html
+            result = std::shared_ptr<T>{mCreator(callerPluginName).release(), std::move(deleter)};
+
             // Update the per-context observer with the new resource
-            mObservers.at(executionContextIdentifier) = result;
+            observer = result;
         }
 
         return result;
     };
 
 private:
-    std::variant<
-        /* createPluginCublasWrapperImpl */ std::function<std::unique_ptr<T>()>,
-        /* createPluginCudnnWrapperImpl */ std::function<std::unique_ptr<T>(char const*)>>
-        mCreator;
+    std::function<std::unique_ptr<T>(char const*)> mCreator;
     mutable std::mutex mMutex;
     // cudnn/cublas handle resources are per-context.
     std::unordered_map</*contextIdentifier*/ void*, std::weak_ptr<T>> mObservers;

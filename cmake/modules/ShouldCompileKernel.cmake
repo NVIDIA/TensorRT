@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,7 +45,7 @@ function(get_all_fatbin_archs OUT_VAR OUT_VAR_CROSS)
     foreach(SM IN LISTS NUMERIC_SMS)
         list(APPEND ARCH_LIST "sm${SM}")
     endforeach()
-    
+
     # Note: sm89 it is missing in NUMERIC_SMS since TRT treats sm89 as sm86.
     # We should add sm89 to the list to generate the builder resource for sm89.
     # If only sm86 is in the list, it means this build only supports sm86,
@@ -57,10 +57,20 @@ function(get_all_fatbin_archs OUT_VAR OUT_VAR_CROSS)
         list(APPEND ARCH_LIST "sm89")
     endif()
 
+    # On SBSA exclude sm87 explicitly since it is proxied to sm86.
+    if(${TRT_IS_ARM_SERVER})
+        list(FILTER ARCH_LIST EXCLUDE REGEX "sm87")
+    endif()
+
+    # Exclude sm103 explicitly since it is proxied to sm100.
+    list(FILTER ARCH_LIST EXCLUDE REGEX "sm103")
+    # Exclude sm121 explicitly since it is proxied to sm120.
+    list(FILTER ARCH_LIST EXCLUDE REGEX "sm121")
 
     # There is also a klib which only contains PTX code.
     list(APPEND ARCH_LIST "ptx")
-    
+
+
     set(ARCH_LIST_CROSS ${ARCH_LIST})
     set(${OUT_VAR} ${ARCH_LIST} PARENT_SCOPE)
     set(${OUT_VAR_CROSS} ${ARCH_LIST_CROSS} PARENT_SCOPE)

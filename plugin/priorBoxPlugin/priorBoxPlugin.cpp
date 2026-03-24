@@ -394,6 +394,7 @@ PluginFieldCollection const* PriorBoxPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 IPluginV2Ext* PriorBoxPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try

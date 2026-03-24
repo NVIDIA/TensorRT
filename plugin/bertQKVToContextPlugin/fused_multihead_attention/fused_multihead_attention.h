@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -219,22 +219,21 @@ template <typename TFusedMHAKernelList>
 class TFusedMHAKernelFactory
 {
 public:
-    const TFusedMHAKernelList* getXMMAKernels(const typename TFusedMHAKernelList::KernelMeta* pKernelList,
+    TFusedMHAKernelList const* getXMMAKernels(typename TFusedMHAKernelList::KernelMeta const* pKernelList,
         uint32_t nbKernels, plugin::bert::Data_type type, uint32_t sm)
     {
         static std::mutex s_mutex;
         std::lock_guard<std::mutex> lg(s_mutex);
 
-        const auto id = hashID(type, sm);
-        const auto findIter = mKernels.find(id);
-        if (findIter == mKernels.end())
+        auto const id = hashID(type, sm);
+        auto it = mKernels.find(id);
+        if (it == mKernels.end())
         {
-            TFusedMHAKernelList* newKernel = new TFusedMHAKernelList{pKernelList, nbKernels, type, sm};
+            auto newKernel = std::make_unique<TFusedMHAKernelList>(pKernelList, nbKernels, type, sm);
             newKernel->loadXMMAKernels();
-            mKernels.insert(std::make_pair(id, std::unique_ptr<TFusedMHAKernelList>(newKernel)));
-            return newKernel;
+            it = mKernels.emplace(id, std::move(newKernel)).first;
         }
-        return findIter->second.get();
+        return it->second.get();
     }
 
     static TFusedMHAKernelFactory<TFusedMHAKernelList>& Get()

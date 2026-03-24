@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #include "disentangledAttentionPlugin.h"
 #include "NvInferPlugin.h"
 #include <cuda_fp16.h>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
@@ -67,9 +68,9 @@ IPluginV3* DisentangledAttentionPlugin::clone() noexcept
 {
     try
     {
-        auto* plugin = new DisentangledAttentionPlugin(mSpan, mFactor);
+        auto plugin = std::make_unique<DisentangledAttentionPlugin>(mSpan, mFactor);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -390,9 +391,9 @@ IPluginV3* DisentangledAttentionPluginCreator::createPlugin(
         PLUGIN_VALIDATE(
             factor.value() > 0.F && factor.value() < 1.F); // factor is 1/sqrt(3d), therefore must less than 1
 
-        auto* plugin = new DisentangledAttentionPlugin(span.value(), factor.value());
+        auto plugin = std::make_unique<DisentangledAttentionPlugin>(span.value(), factor.value());
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

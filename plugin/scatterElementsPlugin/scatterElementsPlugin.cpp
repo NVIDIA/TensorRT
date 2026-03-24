@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <memory>
 
 #include "common/serialize.hpp"
 #include "scatterElementsPlugin.h"
@@ -194,9 +195,9 @@ ScatterElementsPluginV3* ScatterElementsPluginV3::clone() noexcept
 {
     try
     {
-        auto* plugin = new ScatterElementsPluginV3(mReduction, mAxis);
+        auto plugin = std::make_unique<ScatterElementsPluginV3>(mReduction, mAxis);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -319,7 +320,6 @@ IPluginV3* ScatterElementsPluginV3Creator::createPlugin(
 {
     std::string reductionArg;
     int32_t axisArg = 0;
-    ScatterElementsPluginV3* plugin = nullptr;
 
     try
     {
@@ -348,9 +348,9 @@ IPluginV3* ScatterElementsPluginV3Creator::createPlugin(
         PLUGIN_VALIDATE(kREDUCE_STR_TO_ENUM.find(reductionArg) != kREDUCE_STR_TO_ENUM.end(),
             (reductionArg + ": invalid value for 'reduction' plugin argument").c_str());
 
-        plugin = new ScatterElementsPluginV3(reductionArg, axisArg);
+        auto plugin = std::make_unique<ScatterElementsPluginV3>(reductionArg, axisArg);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception& e)
     {

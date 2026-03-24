@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #if CUDA_VERSION >= 10010
 
 #include <cstring>
+#include <memory>
 #include <set>
 #include <vector>
 
@@ -123,12 +124,12 @@ IPluginV3* EmbLayerNormPluginDynamic::clone() noexcept
     {
         BERT_DEBUG_MSG("EmbLayerNormPluginDynamic clone.");
 
-        auto p = new EmbLayerNormPluginDynamic(
+        auto p = std::make_unique<EmbLayerNormPluginDynamic>(
             mLayerName, mType, mMhaType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb, mUseFullMask == 1);
         p->mS = mS;
         p->setPluginNamespace(mNamespace.c_str());
 
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {
@@ -655,10 +656,9 @@ IPluginV3* EmbLayerNormPluginDynamicCreator::createPlugin(
 
         BERT_DEBUG_MSG("Building the Plugin...");
         DataType mhaType = static_cast<DataType>(mhaTypeId);
-        EmbLayerNormPluginDynamic* p
-            = new EmbLayerNormPluginDynamic(name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, mhaType, beta,
-                gamma, word_emb, pos_emb, tok_emb, useFullMask);
-        return p;
+        auto p = std::make_unique<EmbLayerNormPluginDynamic>(name, output_fp16 ? DataType::kHALF : DataType::kFLOAT,
+            mhaType, beta, gamma, word_emb, pos_emb, tok_emb, useFullMask);
+        return p.release();
     }
     catch (std::exception const& e)
     {

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -89,49 +89,49 @@ int64_t getUnitMultiplier(std::string const& option)
 }
 
 template <typename T>
-T stringToValue(const std::string& option)
+T stringToValue(std::string const& option)
 {
     return T{option};
 }
 
 template <>
-int32_t stringToValue<int32_t>(const std::string& option)
+int32_t stringToValue<int32_t>(std::string const& option)
 {
     return std::stoi(option);
 }
 
 template <>
-int64_t stringToValue<int64_t>(const std::string& option)
+int64_t stringToValue<int64_t>(std::string const& option)
 {
     return std::stoi(option);
 }
 
 template <>
-size_t stringToValue<size_t>(const std::string& option)
+size_t stringToValue<size_t>(std::string const& option)
 {
     return std::stoi(option) * getUnitMultiplier(option);
 }
 
 template <>
-float stringToValue<float>(const std::string& option)
+float stringToValue<float>(std::string const& option)
 {
     return std::stof(option);
 }
 
 template <>
-double stringToValue<double>(const std::string& option)
+double stringToValue<double>(std::string const& option)
 {
     return std::stod(option) * getUnitMultiplier(option);
 }
 
 template <>
-bool stringToValue<bool>(const std::string& option)
+bool stringToValue<bool>(std::string const& option)
 {
     return true;
 }
 
 template <>
-std::vector<int64_t> stringToValue<std::vector<int64_t>>(const std::string& option)
+std::vector<int64_t> stringToValue<std::vector<int64_t>>(std::string const& option)
 {
     std::vector<int64_t> shape;
     if (option == "scalar")
@@ -139,7 +139,7 @@ std::vector<int64_t> stringToValue<std::vector<int64_t>>(const std::string& opti
         return shape;
     }
     std::vector<std::string> dimsStrings = splitToStringVec(option, 'x');
-    for (const auto& d : dimsStrings)
+    for (auto const& d : dimsStrings)
     {
         shape.push_back(stringToValue<int64_t>(d));
     }
@@ -147,14 +147,14 @@ std::vector<int64_t> stringToValue<std::vector<int64_t>>(const std::string& opti
 }
 
 template <>
-nvinfer1::DataType stringToValue<nvinfer1::DataType>(const std::string& option)
+nvinfer1::DataType stringToValue<nvinfer1::DataType>(std::string const& option)
 {
     const std::unordered_map<std::string, nvinfer1::DataType> strToDT{{"fp32", nvinfer1::DataType::kFLOAT},
         {"fp16", nvinfer1::DataType::kHALF}, {"bf16", nvinfer1::DataType::kBF16}, {"int8", nvinfer1::DataType::kINT8},
         {"fp8", nvinfer1::DataType::kFP8}, {"int32", nvinfer1::DataType::kINT32}, {"int64", nvinfer1::DataType::kINT64},
         {"bool", nvinfer1::DataType::kBOOL}, {"uint8", nvinfer1::DataType::kUINT8},
         {"int4", nvinfer1::DataType::kINT4}};
-    const auto& dt = strToDT.find(option);
+    auto const& dt = strToDT.find(option);
     if (dt == strToDT.end())
     {
         throw std::invalid_argument("Invalid DataType " + option);
@@ -178,7 +178,7 @@ nvinfer1::DeviceType stringToValue<nvinfer1::DeviceType>(std::string const& opti
 }
 
 template <>
-nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string& option)
+nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(std::string const& option)
 {
     std::vector<std::string> optionStrings = splitToStringVec(option, '+');
     const std::unordered_map<std::string, nvinfer1::TensorFormat> strToFmt{{"chw", nvinfer1::TensorFormat::kLINEAR},
@@ -191,7 +191,7 @@ nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string
     nvinfer1::TensorFormats formats{};
     for (auto f : optionStrings)
     {
-        const auto& tf = strToFmt.find(f);
+        auto const& tf = strToFmt.find(f);
         if (tf == strToFmt.end())
         {
             throw std::invalid_argument(std::string("Invalid TensorFormat ") + f);
@@ -203,7 +203,7 @@ nvinfer1::TensorFormats stringToValue<nvinfer1::TensorFormats>(const std::string
 }
 
 template <>
-IOFormat stringToValue<IOFormat>(const std::string& option)
+IOFormat stringToValue<IOFormat>(std::string const& option)
 {
     IOFormat ioFormat{};
     const size_t colon = option.find(':');
@@ -289,7 +289,7 @@ samplesSafeCommon::SafetyPluginLibraryArgument stringToValue<samplesSafeCommon::
 
 
 template <typename T>
-std::pair<std::string, T> splitNameAndValue(const std::string& s)
+std::pair<std::string, T> splitNameAndValue(std::string const& s)
 {
     std::string tensorName;
     std::string valueString;
@@ -328,15 +328,15 @@ std::pair<std::string, T> splitNameAndValue(const std::string& s)
 }
 
 template <typename T>
-void splitInsertKeyValue(const std::vector<std::string>& kvList, T& map)
+void splitInsertKeyValue(std::vector<std::string> const& kvList, T& map)
 {
-    for (const auto& kv : kvList)
+    for (auto const& kv : kvList)
     {
         map.insert(splitNameAndValue<typename T::mapped_type>(kv));
     }
 }
 
-const char* boolToEnabled(bool enable)
+char const* boolToEnabled(bool enable)
 {
     return enable ? "Enabled" : "Disabled";
 }
@@ -367,7 +367,7 @@ std::string joinValuesToString(std::array<T, N> const& list, std::string const& 
 //! If it does: set its value, and return true
 //! If it does not: return false.
 template <typename T>
-bool getOption(Arguments& arguments, const std::string& option, T& value)
+bool getOption(Arguments& arguments, std::string const& option, T& value)
 {
     auto const match = arguments.find(option);
     if (match != arguments.end())
@@ -383,12 +383,12 @@ bool getOption(Arguments& arguments, const std::string& option, T& value)
 //! If it does: set its value, erase the argument and return true.
 //! If it does not: return false.
 template <typename T>
-bool getAndDelOption(Arguments& arguments, const std::string& option, T& value)
+bool getAndDelOption(Arguments& arguments, std::string const& option, T& value)
 {
     bool found = getOption(arguments, option, value);
     if (found)
     {
-        const auto match = arguments.find(option);
+        auto const match = arguments.find(option);
         arguments.erase(match);
     }
 
@@ -439,7 +439,7 @@ bool getAndDelOptionBehind(Arguments& arguments, std::string const& option, int3
 //! Check if input option exists in input arguments.
 //! If it does: set false in value, erase the argument and return true.
 //! If it does not: return false.
-bool getAndDelNegOption(Arguments& arguments, const std::string& option, bool& value)
+bool getAndDelNegOption(Arguments& arguments, std::string const& option, bool& value)
 {
     bool dummy;
     if (getAndDelOption(arguments, option, dummy))
@@ -454,9 +454,9 @@ bool getAndDelNegOption(Arguments& arguments, const std::string& option, bool& v
 //! If it does: add all the matched arg values to values vector, erase the argument and return true.
 //! If it does not: return false.
 template <typename T>
-bool getAndDelRepeatedOption(Arguments& arguments, const std::string& option, std::vector<T>& values)
+bool getAndDelRepeatedOption(Arguments& arguments, std::string const& option, std::vector<T>& values)
 {
-    const auto match = arguments.equal_range(option);
+    auto const match = arguments.equal_range(option);
     if (match.first == match.second)
     {
         return false;
@@ -471,7 +471,7 @@ bool getAndDelRepeatedOption(Arguments& arguments, const std::string& option, st
 }
 
 void insertShapesBuild(BuildOptions::ShapeProfile& shapes, nvinfer1::OptProfileSelector selector,
-    const std::string& name, const std::vector<int64_t>& dims)
+    std::string const& name, std::vector<int64_t> const& dims)
 {
     shapes[name][static_cast<size_t>(selector)] = dims;
 }
@@ -590,7 +590,7 @@ bool getShapesBuild(Arguments& arguments, BuildOptions::ShapeProfile& shapes, ch
     std::string list;
     bool retVal = getAndDelOption(arguments, argument, list);
     std::vector<std::string> shapeList{splitToStringVec(list, ',')};
-    for (const auto& s : shapeList)
+    for (auto const& s : shapeList)
     {
         auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
         auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
@@ -600,12 +600,12 @@ bool getShapesBuild(Arguments& arguments, BuildOptions::ShapeProfile& shapes, ch
     return retVal;
 }
 
-bool getShapesInference(Arguments& arguments, InferenceOptions::ShapeProfile& shapes, const char* argument)
+bool getShapesInference(Arguments& arguments, InferenceOptions::ShapeProfile& shapes, char const* argument)
 {
     std::string list;
     bool retVal = getAndDelOption(arguments, argument, list);
     std::vector<std::string> shapeList{splitToStringVec(list, ',')};
-    for (const auto& s : shapeList)
+    for (auto const& s : shapeList)
     {
         auto nameDimsPair = splitNameAndValue<std::vector<int64_t>>(s);
         auto tensorName = removeSingleQuotationMarks(nameDimsPair.first);
@@ -627,6 +627,7 @@ void fillShapes(BuildOptions::ShapeProfile& shapes, std::string const& name, Sha
         shapes, nvinfer1::OptProfileSelector::kMAX, name, sourceShapeRange[static_cast<size_t>(maxDimsSource)]);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void processShapes(BuildOptions::ShapeProfile& shapes, bool minShapes, bool optShapes, bool maxShapes, bool calib)
 {
     // Only accept optShapes only or all three of minShapes, optShapes, maxShapes when calib is set
@@ -951,6 +952,7 @@ std::string previewFeatureToString(PreviewFeature feature)
     }
     case PreviewFeature::kALIASED_PLUGIN_IO_10_03: return "kALIASED_PLUGIN_IO_10_03";
     case PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10: return "kRUNTIME_ACTIVATION_RESIZE_10_10";
+    case PreviewFeature::kMULTIDEVICE_RUNTIME_10_16: return "kMULTIDEVICE_RUNTIME_10_16";
     }
     return "Invalid Preview Feature";
     // clang-format on
@@ -974,6 +976,7 @@ std::ostream& printPreviewFlags(std::ostream& os, BuildOptions const& options)
 
     addFlag(PreviewFeature::kALIASED_PLUGIN_IO_10_03);
     addFlag(PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10);
+    addFlag(PreviewFeature::kMULTIDEVICE_RUNTIME_10_16);
 
     return os;
 }
@@ -1097,10 +1100,11 @@ void getTempfileControls(Arguments& arguments, char const* argument, TempfileCon
     }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity,readability-function-size)
 void BuildOptions::parse(Arguments& arguments)
 {
     getAndDelOption(arguments, "--cpuOnly", cpuOnly);
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, char const* argument) {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -1263,6 +1267,8 @@ void BuildOptions::parse(Arguments& arguments)
     }
 
     getAndDelOption(arguments, "--uint8AsymmetricQuantizationDLA", enableUInt8AsymmetricQuantizationDLA);
+    getAndDelOption(arguments, "--reportCapabilityDLA", reportCapabilityDLA);
+    getAndDelOption(arguments, "--adjustForDLA", adjustForDLA);
     getAndDelOption(arguments, "--enablePluginOverride", enablePluginOverride);
     getAndDelOption(arguments, "--excludeLeanRuntime", excludeLeanRuntime);
     getAndDelOption(arguments, "--noCompilationCache", disableCompilationCache);
@@ -1460,8 +1466,7 @@ void BuildOptions::parse(Arguments& arguments)
             }
             t.erase(0, 1);
 
-            const auto toUpper = [](std::string& sourceName)
-            {
+            auto const toUpper = [](std::string& sourceName) {
                 std::transform(
                     sourceName.begin(), sourceName.end(), sourceName.begin(), [](char c) { return std::toupper(c); });
                 return sourceName;
@@ -1608,6 +1613,10 @@ void BuildOptions::parse(Arguments& arguments)
         {
             feat = PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10;
         }
+        else if (featureName == "multiDeviceRuntime")
+        {
+            feat = PreviewFeature::kMULTIDEVICE_RUNTIME_10_16;
+        }
         else
         {
             throw std::invalid_argument(std::string("Unknown preview feature: ") + featureName);
@@ -1701,11 +1710,13 @@ void SystemOptions::parse(Arguments& arguments)
     }
 #endif // ENABLE_UNIFIED_BUILDER
     getAndDelOption(arguments, "--ignoreParsedPluginLibs", ignoreParsedPluginLibs);
-    std::string staticPluginName;
-    // Enable static plugin as internal option for TRT_WINML.
-    while (getAndDelOption(arguments, "--staticPlugins", staticPluginName))
+    if (this->enableStaticPlugins)
     {
-        plugins.emplace_back(staticPluginName);
+        std::string staticPluginName;
+        while (getAndDelOption(arguments, "--staticPlugins", staticPluginName))
+        {
+            plugins.emplace_back(staticPluginName);
+        }
     }
 }
 
@@ -1815,7 +1826,7 @@ void ReportingOptions::parse(Arguments& arguments)
     {
         percentiles.clear();
     }
-    for (const auto& p : percentileStrings)
+    for (auto const& p : percentileStrings)
     {
         percentiles.push_back(stringToValue<float>(p));
     }
@@ -1838,6 +1849,7 @@ bool parseHelp(Arguments& arguments)
     return helpLong || helpShort;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void AllOptions::parse(Arguments& arguments)
 {
     model.parse(arguments);
@@ -1939,6 +1951,16 @@ void AllOptions::parse(Arguments& arguments)
         {
             throw std::invalid_argument("--uint8AsymmetricQuantizationDLA is not supported without DLA cores.");
         }
+        if (system.DLACore < 0 && build.reportCapabilityDLA)
+        {
+            throw std::invalid_argument("--reportCapabilityDLA is not supported without DLA cores.");
+        }
+        if (system.DLACore < 0 && build.adjustForDLA)
+        {
+            sample::gLogWarning << "--adjustForDLA was set, but no DLA cores are available. "
+                                << "The parser's behavior will be modified, but the network will run on GPU."
+                                << std::endl;
+        }
     }
 }
 
@@ -1954,7 +1976,7 @@ void TaskInferenceOptions::parse(Arguments& arguments)
 
 void SafeBuilderOptions::parse(Arguments& arguments)
 {
-    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, const char* argument) {
+    auto getFormats = [&arguments](std::vector<IOFormat>& formatsVector, char const* argument) {
         std::string list;
         getAndDelOption(arguments, argument, list);
         std::vector<std::string> formats{splitToStringVec(list, ',')};
@@ -2003,7 +2025,7 @@ void SafeBuilderOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--sparsity", sparsity);
 }
 
-std::ostream& operator<<(std::ostream& os, const BaseModelOptions& options)
+std::ostream& operator<<(std::ostream& os, BaseModelOptions const& options)
 {
     os << "=== Model Options ===" << std::endl;
 
@@ -2022,7 +2044,7 @@ std::ostream& operator<<(std::ostream& os, const BaseModelOptions& options)
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const ModelOptions& options)
+std::ostream& operator<<(std::ostream& os, ModelOptions const& options)
 {
     os << options.baseModel;
     switch (options.baseModel.format)
@@ -2032,7 +2054,7 @@ std::ostream& operator<<(std::ostream& os, const ModelOptions& options)
     }
 
     os << "Output:";
-    for (const auto& o : options.outputs)
+    for (auto const& o : options.outputs)
     {
         os << " " << o;
     }
@@ -2231,10 +2253,10 @@ std::ostream& operator<<(std::ostream& os, nvinfer1::RuntimePlatform platform)
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const ShapeRange& dims)
+std::ostream& operator<<(std::ostream& os, ShapeRange const& dims)
 {
     int32_t i = 0;
-    for (const auto& d : dims)
+    for (auto const& d : dims)
     {
         if (!d.size())
         {
@@ -2289,7 +2311,7 @@ std::ostream& operator<<(std::ostream& os, StringSet const& stringSet)
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
+std::ostream& operator<<(std::ostream& os, BuildOptions const& options)
 {
     // if loadEngine is specified, BuildOptions are N/A
     if (options.load)
@@ -2311,6 +2333,8 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Version Compatible: " << boolToEnabled(options.versionCompatible)                                            << std::endl <<
           "ONNX Plugin InstanceNorm: " << boolToEnabled(options.pluginInstanceNorm)                                     << std::endl <<
           "ONNX kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA flag: " << boolToEnabled(options.enableUInt8AsymmetricQuantizationDLA) << std::endl <<
+          "ONNX kREPORT_CAPABILITY_DLA flag: " << boolToEnabled(options.reportCapabilityDLA) << std::endl <<
+          "ONNX kADJUST_FOR_DLA flag: " << boolToEnabled(options.adjustForDLA) << std::endl <<
           "ONNX kENABLE_PLUGIN_OVERRIDE flag: " << boolToEnabled(options.enablePluginOverride) << std::endl <<
           "TensorRT runtime: " << options.useRuntime                                                                    << std::endl <<
           "Lean DLL Path: " << options.leanDLLPath                                                                      << std::endl <<
@@ -2345,7 +2369,7 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
           "Mark Unfused Tensors As Debug Tensors: " << boolToEnabled(options.markUnfusedTensorsAsDebugTensors)   << std::endl;
     // clang-format on
 
-    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats) {
+    auto printIOFormats = [](std::ostream& os, char const* direction, const std::vector<IOFormat> formats) {
         if (formats.empty())
         {
             os << direction << "s format: fp32:CHW" << std::endl;
@@ -2370,20 +2394,23 @@ std::ostream& operator<<(std::ostream& os, const BuildOptions& options)
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
+std::ostream& operator<<(std::ostream& os, SystemOptions const& options)
 {
     // clang-format off
     os << "=== System Options ==="                                                                << std::endl <<
 
           "Device: "  << options.device                                                           << std::endl <<
           "DLACore: " << (options.DLACore != -1 ? std::to_string(options.DLACore) : "")           << std::endl;
-    os << "Plugins:";
-
-    for (const auto& p : options.plugins)
+    if (options.enableStaticPlugins)
     {
-        os << " " << p;
+        os << "Loaded static plugins:";
+
+        for (const auto& p : options.plugins)
+        {
+            os << " " << p;
+        }
+        os << std::endl;
     }
-    os << std::endl;
 
     os << "setPluginsToSerialize:";
 
@@ -2407,7 +2434,7 @@ std::ostream& operator<<(std::ostream& os, const SystemOptions& options)
     // clang-format on
 }
 
-std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
+std::ostream& operator<<(std::ostream& os, InferenceOptions const& options)
 {
     // clang-format off
     os << "=== Inference Options ==="                                     << std::endl <<
@@ -2458,7 +2485,7 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
     // clang-format on
 
     os << "Inputs:" << std::endl;
-    for (const auto& input : options.inputs)
+    for (auto const& input : options.inputs)
     {
         os << input.first << "<-" << input.second << std::endl;
     }
@@ -2477,7 +2504,7 @@ std::ostream& operator<<(std::ostream& os, const InferenceOptions& options)
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const ReportingOptions& options)
+std::ostream& operator<<(std::ostream& os, ReportingOptions const& options)
 {
     // clang-format off
     os << "=== Reporting Options ==="                                                     << std::endl <<
@@ -2495,16 +2522,15 @@ std::ostream& operator<<(std::ostream& os, const ReportingOptions& options)
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const AllOptions& options)
+std::ostream& operator<<(std::ostream& os, AllOptions const& options)
 {
     os << options.model << options.build << options.system << options.inference << options.reporting << std::endl;
     return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
+std::ostream& operator<<(std::ostream& os, SafeBuilderOptions const& options)
 {
-    auto printIOFormats = [](std::ostream& os, const char* direction, const std::vector<IOFormat> formats)
-    {
+    auto printIOFormats = [](std::ostream& os, char const* direction, const std::vector<IOFormat> formats) {
         if (formats.empty())
         {
             os << direction << "s format: fp32:CHW" << std::endl;
@@ -2540,8 +2566,8 @@ std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options)
 
     printIOFormats(os, "Input(s)", options.inputFormats);
     printIOFormats(os, "Output(s)", options.outputFormats);
-    os << "Plugins:";
-    for (const auto& p : options.plugins)
+    os << "Loaded static plugins:";
+    for (auto const& p : options.plugins)
     {
         os << " " << p;
     }
@@ -2628,15 +2654,20 @@ void BuildOptions::help(std::ostream& os)
           "  --pluginInstanceNorm, --pi         Set `kNATIVE_INSTANCENORM` to false in the ONNX parser. This will cause the ONNX parser to use"     "\n"
           "                                     a plugin InstanceNorm implementation over the native implementation when parsing."                  "\n"
           "  --uint8AsymmetricQuantizationDLA   Set `kENABLE_UINT8_AND_ASYMMETRIC_QUANTIZATION_DLA` to true in the ONNX parser. This directs the"   "\n"
-          "                                     onnx parser to allow UINT8 as a quantization data type and import zero point values directly"       "\n"
+          "                                     ONNX parser to allow UINT8 as a quantization data type and import zero point values directly"       "\n"
           "                                     without converting to float type or all-zero values. Should only be set with DLA software version"  "\n"
           "                                     >= 3.16."                                                                                           "\n"
+          "  --reportCapabilityDLA              Set `kREPORT_CAPABILITY_DLA` to true in the ONNX parser. This signals the ONNX parser to validate"  "\n"
+          "                                     that all nodes in the model can run on DLA. This flag is set to be OFF by default."                 "\n"
+          "  --adjustForDLA                     Set `kADJUST_FOR_DLA` to true in the ONNX parser. This signals the ONNX parser to opportunistically""\n"
+          "                                     rewrite or modify layers to make them more amenable to running on DLA. This flag is set to be OFF"  "\n"
+          "                                     by default."                                                                                        "\n"
           "  --enablePluginOverride             Set `kENABLE_PLUGIN_OVERRIDE` to true in the ONNX parser. This allows the ONNX parser to use"       "\n"
           "                                     a plugin implementation over the standard ONNX operator implementation when parsing."               "\n"
         R"(  --useRuntime=runtime               TensorRT runtime to execute engine. "lean" and "dispatch" require loading VC engine and do)"        "\n"
           "                                     not support building an engine."                                                                    "\n"
         R"(                                         runtime::= "full"|"lean"|"dispatch")"                                                           "\n"
-          "  --leanDLLPath=<file>               External lean runtime DLL to use in version compatible mode."                                      "\n"
+          "  --leanDLLPath=<file>               External lean runtime DLL to use in version compatible mode."                                       "\n"
           "  --excludeLeanRuntime               When --versionCompatible is enabled, this flag indicates that the generated engine should"          "\n"
           "                                     not include an embedded lean runtime. If this is set, the user must explicitly specify a"           "\n"
           "                                     valid lean runtime to use when loading the engine."     "\n"
@@ -2781,17 +2812,25 @@ void BuildOptions::help(std::ostream& os)
           "                                     Example: ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib" "\n"
           "  --refitFromOnnx                    Refit the loaded engine with the weights from the provided ONNX model."                              "\n"
           "                                     The model should be identical to the one used to generate the engine."                              "\n"
+          "  --cpuOnly                          Build the engine with CPU-only mode. No local GPU is required on the build machine."                "\n"
+          "                                     Must be specified with --remoteAutoTuningConfig and --safe flags."                                  "\n"
           ;
     // clang-format on
     os << std::flush;
 }
 
-void SystemOptions::help(std::ostream& os)
+void SystemOptions::help(std::ostream& os, bool const enableStaticPlugins)
 {
     // clang-format off
     os << "=== System Options ==="                                                                         << std::endl <<
-          "  --device=N                  Select cuda device N (default = "         << defaultDevice << ")" << std::endl <<
-          "  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)"   << std::endl <<
+          "  --device=N                  Select cuda device N (default = "         << defaultDevice << ")" << std::endl;
+
+    if (enableStaticPlugins)
+    {
+        os << "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl;
+    }
+
+    os << "  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)"   << std::endl <<
           "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl <<
           "  --dynamicPlugins            Plugin library (.so) to load dynamically and may be serialized with the engine if they are included in --setPluginsToSerialize (can be specified multiple times)" << std::endl <<
           "  --setPluginsToSerialize     Plugin library (.so) to be serialized with the engine (can be specified multiple times)" << std::endl <<
@@ -2935,7 +2974,7 @@ void helpHelp(std::ostream& os)
     // clang-format on
 }
 
-void AllOptions::help(std::ostream& os)
+void AllOptions::help(std::ostream& os, bool const enableStaticPlugins)
 {
     ModelOptions::help(os);
     os << std::endl;
@@ -2945,7 +2984,7 @@ void AllOptions::help(std::ostream& os)
     os << std::endl;
     ReportingOptions::help(os);
     os << std::endl;
-    SystemOptions::help(os);
+    SystemOptions::help(os, enableStaticPlugins);
     os << std::endl;
     helpHelp(os);
 }

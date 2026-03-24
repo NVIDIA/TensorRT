@@ -406,6 +406,10 @@ def process_pipeline_args(args: argparse.Namespace) -> Tuple[Dict[str, Any], Dic
             is_flux or is_sd35 or is_wan or is_cosmos
         ), "low-vram mode is only supported for Flux, Stable Diffusion 3.5, Wan and Cosmos pipelines."
 
+    # Disable SDXL LCM pipeline
+    if args.version == "xl-1.0" and args.scheduler == "LCM":
+        raise ValueError("SDXL pipeline does not support the LCM scheduler currently. Please use a different scheduler.")
+
     # Pack arguments
     kwargs_init_pipeline = {
         "version": args.version,

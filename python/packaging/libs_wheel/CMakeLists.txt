@@ -35,13 +35,13 @@ function(buildLibsWheel moduleName)
     set(wheelTemplateFiles
         tensorrt_libs/__init__.py
         LICENSE.txt
-        setup.cfg
-        setup.py
+        pyproject.toml
     )
 
     # Expands all template files for the libs for the target module. The python version is unused (and set to 0).
     # File paths starting with "tensorrt_libs/" are expanded into "${moduleName}_libs/".
     processWheelTemplates(libs ${moduleName} 0 ${wheelTemplateFiles})
+    copyTRTBuildBackend()
 
     # Determine which targets are packed into the wheel.
     if(${moduleName} STREQUAL "tensorrt_dispatch")
@@ -132,18 +132,24 @@ function(buildLibsWheel moduleName)
     )
 
     # Creates a new custom target, and makes trt_standalone_wheel_files depend on the new target.
-    add_custom_target(${filesTarget} DEPENDS ${generatedWheelFiles} ${moduleLibraryOutputFiles})
+    add_custom_target(${filesTarget} DEPENDS ${generatedWheelFiles} ${moduleLibraryOutputFiles} ${copiedBuildBackend})
 
     get_wheel_platform(TRUE wheelPlatform)
 
     # Define the output directory for the wheel
     set(wheelOutDir ${TRT_WHEEL_OUTPUT_DIR}/libs)
-    set(wheelOutputFile ${wheelOutDir}/${moduleName}_cu${CUDAToolkit_VERSION_MAJOR}_libs-${TensorRT_PACKAGE_VERSION}-py2.py3-none-${wheelPlatform}.whl)
+    set(wheelOutputFile ${wheelOutDir}/${moduleName}_cu${CUDAToolkit_VERSION_MAJOR}_libs-${TensorRT_PACKAGE_VERSION}-py3-none-${wheelPlatform}.whl)
 
-    # Add a custom command to build the wheel
+    # Add a custom command to build the wheel using PEP 517 compliant build frontend.
+    # The custom tensorrt_build_backend handles wheel tag customization via config settings.
     add_custom_command(
         OUTPUT ${wheelOutputFile}
-        COMMAND ${Python3_EXECUTABLE} setup.py -q bdist_wheel --plat-name=${wheelPlatform} --dist-dir=${wheelOutDir}
+        COMMAND
+            ${Python3_EXECUTABLE} -m build --wheel --no-isolation
+                --config-setting=--quiet
+                --config-setting=python-tag=py3
+                --config-setting=plat-name=${wheelPlatform}
+                --outdir ${wheelOutDir}
         WORKING_DIRECTORY ${generatedFileOutDir}
         DEPENDS ${filesTarget} trt_packaging_requirements_installed
         VERBATIM

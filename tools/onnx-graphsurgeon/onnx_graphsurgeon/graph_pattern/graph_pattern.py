@@ -376,7 +376,7 @@ class GraphPattern:
                         if c.id in used_consumer_ids or c.id in mapped_onnx_nodes:
                             continue
                         # Try to extend mapping with this branch. Use copies to allow backtracking on failure.
-                        mapping_copy = copy.deepcopy(mapping)
+                        mapping_copy = copy.copy(mapping)
                         mapped_onnx_nodes_copy = set(mapped_onnx_nodes)
                         ok = self._match_node(
                             consumer_node,
@@ -548,7 +548,7 @@ class GraphPattern:
                 for oc in candidate_consumers:
                     if oc.id in used_candidate_ids or oc.id in mapped_onnx_nodes:
                         continue
-                    mapping_copy = copy.deepcopy(mapping)
+                    mapping_copy = copy.copy(mapping)
                     mapped_onnx_nodes_copy = set(mapped_onnx_nodes)
                     ok = self._match_node(
                         output_node,

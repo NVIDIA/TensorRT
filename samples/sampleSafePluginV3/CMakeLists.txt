@@ -1,12 +1,19 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
 #
-# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
-# property and proprietary rights in and to this material, related
-# documentation and any modifications thereto. Any use, reproduction,
-# disclosure or distribution of this material and related documentation
-# without an express license agreement from NVIDIA CORPORATION or
-# its affiliates is strictly prohibited.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
 if(NOT TRT_SAFETY_INFERENCE_ONLY)
     add_executable(sample_plugin_safe_build
@@ -26,6 +33,13 @@ if(NOT TRT_SAFETY_INFERENCE_ONLY)
     if(TARGET nvonnxparser)
         target_link_libraries(sample_plugin_safe_build PRIVATE nvonnxparser)
     endif()
+    if(TRT_OUT_DIR)
+        set_target_properties(sample_plugin_safe_build
+            PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+        )
+    endif()
+
     add_dependencies(tensorrt_samples sample_plugin_safe_build)
 
     installLibraries(
@@ -55,6 +69,13 @@ else()
     )
 endif()
 
+if(TRT_OUT_DIR)
+    set_target_properties(sample_plugin_safe_infer
+        PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    )
+endif()
+
 add_dependencies(tensorrt_samples sample_plugin_safe_infer)
 
 installLibraries(
@@ -77,34 +98,41 @@ if(NOT TRT_SAFETY_INFERENCE_ONLY)
         maxPoolPluginCreatorInterface.cpp
         maxPoolKernel.cu
     )
-    
+
     target_compile_definitions(sample_safe_plugin_build_lib PRIVATE
         GEN_PLUGIN_LIB=1  # Enable getSafetyPluginCreator export
     )
-    
+
     target_link_libraries(sample_safe_plugin_build_lib PRIVATE
         trt_samples_common
         TRT_SAMPLES::tensorrt
         TRTSAFE::nvinfer_safe_shared
     )
-    
+
     # Link ONNX parser if available
     if(TARGET nvonnxparser)
         target_link_libraries(sample_safe_plugin_build_lib PRIVATE nvonnxparser)
     endif()
-    
+
     target_include_directories(sample_safe_plugin_build_lib PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../common
         ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     )
-    
-    set_target_properties(sample_safe_plugin_build_lib PROPERTIES
-        OUTPUT_NAME "sample_safe_plugin_v3"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-    )
-    
+
+    if(TRT_OUT_DIR)
+        set_target_properties(sample_safe_plugin_build_lib PROPERTIES
+            OUTPUT_NAME "sample_safe_plugin_v3"
+            LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+        )
+    else()
+        set_target_properties(sample_safe_plugin_build_lib PROPERTIES
+            OUTPUT_NAME "sample_safe_plugin_v3"
+            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+        )
+    endif()
+
     add_dependencies(tensorrt_samples sample_safe_plugin_build_lib)
-    
+
     installLibraries(
         TARGETS sample_safe_plugin_build_lib
         OPTIONAL
@@ -137,10 +165,17 @@ else()
     )
 endif()
 
-set_target_properties(sample_safe_plugin_runtime_lib PROPERTIES
-    OUTPUT_NAME "sample_safe_plugin_v3_safe"
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-)
+if(TRT_OUT_DIR)
+    set_target_properties(sample_safe_plugin_runtime_lib PROPERTIES
+        OUTPUT_NAME "sample_safe_plugin_v3_safe"
+        LIBRARY_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
+    )
+else()
+    set_target_properties(sample_safe_plugin_runtime_lib PROPERTIES
+        OUTPUT_NAME "sample_safe_plugin_v3_safe"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    )
+endif()
 
 add_dependencies(tensorrt_samples sample_safe_plugin_runtime_lib)
 

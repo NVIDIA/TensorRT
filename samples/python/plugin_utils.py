@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,8 +46,6 @@ def volume(d):
     return np.prod(d)
 
 
-
-
 def getComputeCapacity(devID):
     major = cuda_call(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMajor, devID))
     minor = cuda_call(cudart.cudaDeviceGetAttribute(cudart.cudaDeviceAttr.cudaDevAttrComputeCapabilityMinor, devID))
@@ -80,7 +78,7 @@ class KernelHelper:
             opts = [
                 b"--fmad=true",
                 arch_arg,
-                "--include-path={}".format(include_dirs).encode("UTF-8"),
+                '--include-path={}'.format(include_dirs).encode("UTF-8"),
                 b"--std=c++11",
                 b"-default-device",
             ]

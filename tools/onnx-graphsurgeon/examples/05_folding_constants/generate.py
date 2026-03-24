@@ -45,5 +45,5 @@ nodes = [
     gs.Node("Add", inputs=[input, e], outputs=[output]),
 ]
 
-graph = gs.Graph(nodes=nodes, inputs=[input], outputs=[output])
+graph = gs.Graph(nodes=nodes, inputs=[input], outputs=[output], ir_version=10)
 onnx.save(gs.export_onnx(graph), "model.onnx")

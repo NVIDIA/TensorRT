@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,8 @@
 
 #include "efficientNMSExplicitTFTRTPlugin.h"
 #include "efficientNMSPlugin/efficientNMSInference.h"
+
+#include <memory>
 
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Explicit Batch
 // and Dymamic Shape modes
@@ -56,11 +58,11 @@ IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new EfficientNMSExplicitTFTRTPlugin(mParam);
+        auto plugin = std::make_unique<EfficientNMSExplicitTFTRTPlugin>(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -137,11 +139,11 @@ IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::createPlugin(
             }
         }
 
-        auto* plugin = new EfficientNMSExplicitTFTRTPlugin(mParam);
+        auto plugin = std::make_unique<EfficientNMSExplicitTFTRTPlugin>(mParam);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }
@@ -155,11 +157,11 @@ IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call EfficientNMSPlugin::destroy()
-        auto* plugin = new EfficientNMSExplicitTFTRTPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<EfficientNMSExplicitTFTRTPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
-    catch (const std::exception& e)
+    catch (std::exception const& e)
     {
         caughtError(e);
     }

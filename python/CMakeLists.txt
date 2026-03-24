@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,7 @@ if(MSVC)
 else()
     set(DEFAULT_PY_EXT_PATH "/externals")
 endif()
-set(TRT_BUILD_PYTHON_EXTERNALS_PATH ${DEFAULT_PY_EXT_PATH} CACHE PATH "Path to the parent folder of pybind11 and the many versioned python headers/libs.")
+set(TRT_BUILD_PYTHON_EXTERNALS_PATH ${DEFAULT_PY_EXT_PATH} CACHE PATH "Path to the parent folder of the many versioned python headers/libs.")
 
 set(BUILD_PYTHON_PY_VERSIONS 3.8 3.9 3.10 3.11 3.12 3.13)
 
@@ -52,9 +52,9 @@ if(NOT ${TRT_BUILD_ONNX_PARSER})
     list(REMOVE_ITEM TRT_PYTHON_MODULE_NAMES "tensorrt")
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 20 CACHE STRING "")
+set(CMAKE_CXX_STANDARD_REQUIRED ON CACHE BOOL "")
+set(CMAKE_CXX_EXTENSIONS OFF CACHE BOOL "")
 
 find_package(
     Python3
@@ -64,7 +64,7 @@ find_package(
 
 # Disable automatic python detection since we need to build bindings for many python versions in one go.
 set(PYBIND11_NOPYTHON ON CACHE INTERNAL "")
-add_subdirectory(${TRT_BUILD_PYTHON_EXTERNALS_PATH}/pybind11 ${CMAKE_CURRENT_BINARY_DIR}/externals/pybind11)
+include(FetchPyBind11)
 
 # Pybind11 would normally enable this by default, but does not do so under NOPYTHON mode, so we do it manually.
 if(${TRT_BUILD_PLATFORM} STREQUAL ${TRT_PLATFORM_X86})
@@ -157,7 +157,6 @@ function(createBindingLibrary moduleName pyVersion)
         "include"
         "docstrings"
     )
-
 
     # Setup links against the TRT Libraries.
     if(${moduleName} STREQUAL "tensorrt")

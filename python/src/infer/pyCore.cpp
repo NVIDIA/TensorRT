@@ -175,7 +175,6 @@ static auto const reader_v2_read = [](IStreamReaderV2& self, void* destination, 
 };
 
 
-
 // For ICudaEngine
 // TODO: Add slicing support?
 static auto const engine_getitem = [](ICudaEngine& self, int32_t pyIndex) {
@@ -941,6 +940,7 @@ public:
     }
 };
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void bindCore(py::module& m)
 {
     class PyLogger : public ILogger
@@ -1401,6 +1401,8 @@ void bindCore(py::module& m)
             IExecutionContextDoc::set_all_tensors_debug_state)
         .def_property("unfused_tensors_debug_state", &IExecutionContext::getUnfusedTensorsDebugState,
             &IExecutionContext::setUnfusedTensorsDebugState)
+        .def("set_communicator", &IExecutionContext::setCommunicator, "communicator"_a,
+            IExecutionContextDoc::set_communicator)
         .def("get_runtime_config", &IExecutionContext::getRuntimeConfig, IExecutionContextDoc::get_runtime_config,
             py::keep_alive<1, 0>{}, py::call_guard<py::gil_scoped_release>{})
         ;
@@ -1610,7 +1612,6 @@ void bindCore(py::module& m)
             py::call_guard<py::gil_scoped_release>{})
         .def("get_engine_stat", &ICudaEngine::getEngineStat, ICudaEngineDoc::get_engine_stat,
             py::arg("stat") = EngineStat::kTOTAL_WEIGHTS_SIZE, py::call_guard<py::gil_scoped_release>{})
-
         .def("__del__", &utils::doNothingDel<ICudaEngine>);
 
     py::enum_<AllocatorFlag>(m, "AllocatorFlag", py::arithmetic{}, AllocatorFlagDoc::descr, py::module_local())
@@ -1722,7 +1723,9 @@ void bindCore(py::module& m)
         .value("ALIASED_PLUGIN_IO_10_03", PreviewFeature::kALIASED_PLUGIN_IO_10_03,
             PreviewFeatureDoc::ALIASED_PLUGIN_IO_10_03)
         .value("RUNTIME_ACTIVATION_RESIZE_10_10", PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10,
-            PreviewFeatureDoc::RUNTIME_ACTIVATION_RESIZE_10_10);
+            PreviewFeatureDoc::RUNTIME_ACTIVATION_RESIZE_10_10)
+        .value("MULTIDEVICE_RUNTIME_10_16", PreviewFeature::kMULTIDEVICE_RUNTIME_10_16,
+            PreviewFeatureDoc::MULTIDEVICE_RUNTIME_10_16);
 
     py::enum_<HardwareCompatibilityLevel>(
         m, "HardwareCompatibilityLevel", HardwareCompatibilityLevelDoc::descr, py::module_local())
@@ -1763,7 +1766,7 @@ void bindCore(py::module& m)
         .def_static("parse", &lambdas::parseTimingCacheKey, "text"_a, TimingCacheKeyDoc::parse)
         .def("__str__", &lambdas::convertTimingCacheKeyToString, TimingCacheKeyDoc::convertTimingCacheKeyToString);
 
-    const char* const timing_cache_deprecation_str
+    char const* const timing_cache_deprecation_str
         = "Deprecated in TensorRT-RTX 1.2. Timing cache operations are no-ops in TensorRT-RTX.";
 
     py::class_<TimingCacheValue>(m, "TimingCacheValue", TimingCacheValueDoc::descr, py::module_local())

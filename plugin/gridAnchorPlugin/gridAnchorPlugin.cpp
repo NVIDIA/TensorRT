@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <vector>
 
@@ -350,9 +351,9 @@ IPluginV2Ext* GridAnchorGenerator::clone() const noexcept
 {
     try
     {
-        IPluginV2Ext* plugin = new GridAnchorGenerator(mParam.data(), mNumLayers, mPluginName.c_str());
+        auto plugin = std::make_unique<GridAnchorGenerator>(mParam.data(), mNumLayers, mPluginName.c_str());
         plugin->setPluginNamespace(mPluginNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -390,6 +391,7 @@ PluginFieldCollection const* GridAnchorBasePluginCreator::getFieldNames() noexce
     return &mFC;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try

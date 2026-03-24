@@ -1,3 +1,5 @@
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
 Pillow==11.3.0
 torch==2.8.0
 nvidia-modelopt[onnx]==0.35.0

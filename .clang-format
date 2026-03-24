@@ -19,8 +19,30 @@ AlwaysBreakTemplateDeclarations: true
 BasedOnStyle: None
 BinPackArguments: true
 BinPackParameters: true
+# Almost the same as Allman style, but explicitly disabling BeforeLambdaBody
+# for backwards compatibility with clang-format-10 Allman style.
+# See also https://reviews.llvm.org/D44609
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel:  true
+  AfterClass:      true
+  AfterControlStatement: Always
+  AfterEnum:       true
+  AfterFunction:   true
+  AfterNamespace:  true
+  AfterObjCDeclaration: true
+  AfterStruct:     true
+  AfterUnion:      true
+  AfterExternBlock: true
+  BeforeCatch:     true
+  BeforeElse:      true
+  BeforeLambdaBody: false
+  BeforeWhile:     false
+  IndentBraces:    false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
 BreakBeforeBinaryOperators: All
-BreakBeforeBraces: Allman
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializersBeforeComma: true
 ColumnLimit:     120
@@ -61,6 +83,7 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Left
 PointerBindsToType: false
+QualifierAlignment: Right
 ReflowComments:  true
 SortIncludes:    true
 SpaceAfterCStyleCast: true
@@ -77,4 +100,3 @@ Standard:        Cpp11
 StatementMacros: [API_ENTRY_TRY,TRT_TRY]
 TabWidth:        4
 UseTab:          Never
-...

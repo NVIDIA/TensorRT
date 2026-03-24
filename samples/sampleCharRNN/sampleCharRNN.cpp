@@ -774,9 +774,11 @@ bool SampleCharRNNBase::infer()
         return false;
     }
 
+    ASSERT(!mParams.inputSentences.empty());
     // Select a random seed string.
-    srand(unsigned(time(nullptr)));
-    int sentenceIndex = rand() % mParams.inputSentences.size();
+    auto gen = std::mt19937{std::random_device{}()};
+    auto dist = std::uniform_int_distribution<size_t>{0, mParams.inputSentences.size() - 1};
+    auto const sentenceIndex = dist(gen);
     std::string inputSentence = mParams.inputSentences[sentenceIndex];
     std::string expected = mParams.outputSentences[sentenceIndex];
     std::string genstr;

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <memory>
 
 #include "common/serialize.hpp"
 #include "scatterElementsPluginKernel.h"
@@ -168,9 +169,9 @@ void ScatterElementsPluginV2::destroy() noexcept
 
 IPluginV2DynamicExt* ScatterElementsPluginV2::clone() const noexcept
 {
-    auto* plugin = new ScatterElementsPluginV2(mReduction, mAxis);
+    auto plugin = std::make_unique<ScatterElementsPluginV2>(mReduction, mAxis);
     plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    return plugin.release();
 }
 
 void ScatterElementsPluginV2::configurePlugin(
@@ -259,7 +260,6 @@ IPluginV2DynamicExt* ScatterElementsPluginV2Creator::createPlugin(
 {
     std::string reductionArg;
     int32_t axisArg = 0;
-    ScatterElementsPluginV2* plugin = nullptr;
 
     try
     {
@@ -288,22 +288,23 @@ IPluginV2DynamicExt* ScatterElementsPluginV2Creator::createPlugin(
         PLUGIN_VALIDATE(kREDUCE_STR_TO_ENUM.find(reductionArg) != kREDUCE_STR_TO_ENUM.end(),
             (reductionArg + ": invalid value for 'reduction' plugin argument").c_str());
 
-        plugin = new ScatterElementsPluginV2(reductionArg, axisArg);
+        auto plugin = std::make_unique<ScatterElementsPluginV2>(reductionArg, axisArg);
         plugin->setPluginNamespace(mNamespace.c_str());
+        return plugin.release();
     }
     catch (std::exception& e)
     {
         caughtError(e);
     }
-    return plugin;
+    return nullptr;
 }
 
 IPluginV2DynamicExt* ScatterElementsPluginV2Creator::deserializePlugin(
     char const* name, void const* serialData, size_t serialLength) noexcept
 {
-    ScatterElementsPluginV2* plugin = new ScatterElementsPluginV2(serialData, serialLength);
+    auto plugin = std::make_unique<ScatterElementsPluginV2>(serialData, serialLength);
     plugin->setPluginNamespace(mNamespace.c_str());
-    return plugin;
+    return plugin.release();
 }
 
 } // namespace nvinfer1::plugin

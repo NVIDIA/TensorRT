@@ -67,7 +67,7 @@ endif()
 set(CMAKE_SKIP_BUILD_RPATH True)
 
 # CUDA targets
-set(DEFAULT_CUDA_VERSION 13.1.0)
+set(DEFAULT_CUDA_VERSION 13.2)
 set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
 message(STATUS "CUDA version set to ${CUDA_VERSION}")
 
@@ -204,7 +204,6 @@ if(BUILD_SAFE_SAMPLES OR TRT_SAFETY_INFERENCE_ONLY)
         target_link_options(TRTSAFE::nvinfer_safe_shared INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
         target_link_options(TRTSAFE::nvinfer_safe_debug INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
     endif()
-
     # Enable unified builder safety features when building safety samples or in inference-only mode.
     add_compile_definitions(ENABLE_UNIFIED_BUILDER=1)
 endif()
@@ -252,7 +251,7 @@ if(TRT_SAFETY_INFERENCE_ONLY)
 endif()
 
 # C++17
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

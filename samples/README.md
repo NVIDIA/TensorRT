@@ -62,7 +62,6 @@ Many samples require the TensorRT sample data package. If not already mounted un
 After extraction, the data directory structure should be:
 ```
 $TRT_DATADIR/
-├── char-rnn/
 ├── int8_api/
 ├── mnist/
 └── resnet50/

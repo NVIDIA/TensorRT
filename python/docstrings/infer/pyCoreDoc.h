@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -616,6 +616,16 @@ constexpr char const* get_runtime_config = R"trtdoc(
 
     :returns: The runtime configuration.
 )trtdoc";
+constexpr char const* set_communicator = R"trtdoc(
+    Set the NCCL communicator for the execution context.
+
+    :param communicator: A pointer to the NCCL communicator that is used by the execution context.
+
+    The communicator must be uniform across all multi-device instances or undefined
+    behavior occurs.
+
+    :returns: True if the communicator was set successfully, False otherwise.
+)trtdoc";
 
 
 } // namespace IExecutionContextDoc
@@ -761,8 +771,7 @@ constexpr char const* descr = R"trtdoc(
     :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
     :ivar weight_streaming_budget_v2: Set and get the current weight streaming budget for inference. The budget may be set any non-negative value. A value of 0 streams the most weights. Values equal to streamable_weights_size (default) or larger will disable weight streaming.
     :ivar weight_streaming_scratch_memory_size: The amount of scratch memory required by a TensorRT ExecutionContext to perform inference. This value may change based on the current weight streaming budget. Please use the V2 memory APIs, engine.device_memory_size_v2 and ExecutionContext.set_device_memory() to provide memory which includes the current weight streaming scratch memory. Not specifying these APIs or using the V1 APIs will not include this memory, so TensorRT will resort to allocating itself.
-    )trtdoc"
-    ;
+    )trtdoc";
 
 // Documentation bug with parameters on these three functions because they are overloaded.
 constexpr char const* serialize = R"trtdoc(
@@ -1157,7 +1166,8 @@ constexpr char const* TF32
 constexpr char const* SPARSE_WEIGHTS
     = R"trtdoc(Allow the builder to examine weights and use optimized functions when weights have suitable sparsity.)trtdoc";
 constexpr char const* SAFETY_SCOPE
-    = R"trtdoc(Change the allowed parameters in the EngineCapability.STANDARD flow to match the restrictions that EngineCapability.SAFETY check against for DeviceType.GPU and EngineCapability.DLA_STANDALONE check against the DeviceType.DLA case. This flag is forced to true if EngineCapability.SAFETY at build time if it is unset.)trtdoc";
+    = R"trtdoc(Change the allowed parameters in the EngineCapability.STANDARD flow to match the restrictions that EngineCapability.SAFETY check against for DeviceType.GPU and EngineCapability.DLA_STANDALONE check against the DeviceType.DLA case. This flag is forced to true if EngineCapability.SAFETY at build time if it is unset.
+               [DEPRECATED] Deprecated in TensorRT 10.16. In EngineCapability.STANDARD flow, safety restrictions are no longer supported. In EngineCapability.SAFETY and EngineCapability.DLA_STANDALONE flows, restrictions are enforced natively. This flag is retained for API compatibility but is ignored.)trtdoc";
 constexpr char const* OBEY_PRECISION_CONSTRAINTS
     = R"trtdoc(Require that layers execute in specified precisions. Build fails otherwise.
                [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
@@ -1268,6 +1278,9 @@ constexpr char const* ALIASED_PLUGIN_IO_10_03 = R"trtdoc(
 )trtdoc";
 constexpr char const* RUNTIME_ACTIVATION_RESIZE_10_10 = R"trtdoc(
     Allow update_device_memory_size_for_shapes to resize runner internal activation memory by changing the allocation algorithm. Using this feature can reduce runtime memory requirement when the actual input tensor shapes are smaller than the maximum input tensor dimensions.
+)trtdoc";
+constexpr char const* MULTIDEVICE_RUNTIME_10_16 = R"trtdoc(
+    Allow using multi-device mode in the builder. This enables running inference on multiple GPUs on supported platforms. 
 )trtdoc";
 } // namespace PreviewFeatureDoc
 
@@ -1443,10 +1456,10 @@ namespace EngineCapabilityDoc
 constexpr char const* descr = R"trtdoc(
     List of supported engine capability flows.
     The EngineCapability determines the restrictions of a network during build time and what runtime
-    it targets. When BuilderFlag::kSAFETY_SCOPE is not set (by default), EngineCapability.STANDARD does not provide any restrictions on functionality and the resulting
+    it targets. EngineCapability.STANDARD does not provide any restrictions on functionality and the resulting
     serialized engine can be executed with TensorRT's standard runtime APIs in the nvinfer1 namespace.
     EngineCapability.SAFETY provides a restricted subset of network operations that are safety certified and
-    the resulting serialized engine can be executed with TensorRT's safe runtime APIs in the `nvinfer1::safe` namespace.
+    the resulting serialized engine can be executed with TensorRT's safe runtime APIs in the `nvinfer2::safe` namespace.
     EngineCapability.DLA_STANDALONE provides a restricted subset of network operations that are DLA compatible and
     the resulting serialized engine can be executed using standalone DLA runtime APIs. See sampleCudla for an
     example of integrating cuDLA APIs with TensorRT APIs.)trtdoc";
@@ -1947,6 +1960,10 @@ constexpr char const* is_network_supported = R"trtdoc(
 
     :returns: ``True`` if network is within the scope of the restrictions specified by the builder config, ``False`` otherwise.
         This function reports the conditions that are violated to the registered :class:`ErrorRecorder` .
+
+    NOTE: A ``True`` return value does not guarantee that engine building will succeed, as backends may reject it for
+        reasons not detectable with this fast validation. To definitively check whether a network can be built with a given config,
+        use :func:`build_engine_with_config` or :func:`build_serialized_network` (depending on the engine capability).
 
     NOTE: This function will synchronize the cuda stream returned by ``config.profile_stream`` before returning.
 

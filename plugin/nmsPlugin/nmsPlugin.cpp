@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,7 @@
 #include "nmsPlugin.h"
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <vector>
 
@@ -380,13 +381,13 @@ IPluginV2Ext* DetectionOutput::clone() const noexcept
     try
     {
         // Create a new instance
-        auto* plugin = new DetectionOutput(param, C1, C2, numPriors);
+        auto plugin = std::make_unique<DetectionOutput>(param, C1, C2, numPriors);
         plugin->mType = mType;
         // Set the namespace
         plugin->setPluginNamespace(mPluginNamespace.c_str());
         // set mScoreBits
         plugin->setScoreBits(mScoreBits);
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -400,13 +401,13 @@ IPluginV2DynamicExt* DetectionOutputDynamic::clone() const noexcept
     try
     {
         // Create a new instance
-        auto* plugin = new DetectionOutputDynamic(param, C1, C2, numPriors);
+        auto plugin = std::make_unique<DetectionOutputDynamic>(param, C1, C2, numPriors);
         plugin->mType = mType;
         // Set the namespace
         plugin->setPluginNamespace(mPluginNamespace.c_str());
         // set mScoreBits
         plugin->setScoreBits(mScoreBits);
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

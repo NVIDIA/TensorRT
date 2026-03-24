@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +33,7 @@ using namespace nvinfer1;
 
 // template specialization for double/float
 template <typename TDataType,
-    typename std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, double>
+    std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, double>
             || std::is_same_v<std::decay_t<TDataType>, float>,
         TDataType>* dummy
     = nullptr>
@@ -45,7 +45,7 @@ __forceinline__ __device__ void compute_attention(
 
 // template specialization for half
 template <typename TDataType,
-    typename std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, __half>
+    std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, __half>
             || std::is_same_v<std::decay_t<TDataType>, half>,
         TDataType>* dummy
     = nullptr>
@@ -63,7 +63,7 @@ __forceinline__ __device__ void compute_attention(
 
 // template specialization for int8
 template <typename TDataType,
-    typename std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, int8_t>
+    std::enable_if_t<std::is_same_v<std::decay_t<TDataType>, int8_t>
             || std::is_same_v<std::decay_t<TDataType>, uint8_t>,
         TDataType>* dummy
     = nullptr>

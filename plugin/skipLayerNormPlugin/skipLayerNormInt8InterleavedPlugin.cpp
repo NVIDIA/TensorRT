@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION &
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@
 #include <cuda.h>
 
 #include <cstring>
+#include <memory>
 #include <vector>
 
 using namespace nvinfer1;
@@ -177,9 +178,9 @@ IPluginV3* SkipLayerNormInterleavedPluginHFace::clone() noexcept
     {
         BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginHFace clone");
 
-        auto* p = new SkipLayerNormInterleavedPluginHFace(mLayerName, mBeta, mGamma);
+        auto p = std::make_unique<SkipLayerNormInterleavedPluginHFace>(mLayerName, mBeta, mGamma);
         p->setPluginNamespace(mNamespace.c_str());
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {
@@ -194,9 +195,9 @@ IPluginV3* SkipLayerNormInterleavedPluginMTron::clone() noexcept
     {
         BERT_DEBUG_MSG("SkipLayerNormInterleavedPluginMTron clone");
 
-        auto* p = new SkipLayerNormInterleavedPluginMTron(mLayerName, mBeta, mGamma);
+        auto p = std::make_unique<SkipLayerNormInterleavedPluginMTron>(mLayerName, mBeta, mGamma);
         p->setPluginNamespace(mNamespace.c_str());
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {

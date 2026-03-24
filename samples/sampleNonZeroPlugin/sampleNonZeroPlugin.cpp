@@ -636,6 +636,7 @@ bool SampleNonZeroPlugin::processInput(samplesCommon::BufferManager const& buffe
 //!
 //! \return whether the output correctly identifies all (and only) non-zero elements
 //!
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool SampleNonZeroPlugin::verifyOutput(samplesCommon::BufferManager const& buffers)
 {
     float* input = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));

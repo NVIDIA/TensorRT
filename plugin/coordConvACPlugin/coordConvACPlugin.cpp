@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #include "coordConvACPlugin.h"
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 using namespace nvinfer1;
@@ -156,9 +157,9 @@ IPluginV2Ext* CoordConvACPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new CoordConvACPlugin(iType, iC, iH, iW, oC, oH, oW);
+        auto plugin = std::make_unique<CoordConvACPlugin>(iType, iC, iH, iW, oC, oH, oW);
         plugin->setPluginNamespace(mPluginNamespace);
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -222,9 +223,9 @@ IPluginV2Ext* CoordConvACPluginCreator::createPlugin(char const* name, PluginFie
     try
     {
         gLogWarning << "CoordConvACPlugin is deprecated since TensorRT 9.0." << std::endl;
-        CoordConvACPlugin* plugin = new CoordConvACPlugin();
+        auto plugin = std::make_unique<CoordConvACPlugin>();
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -239,9 +240,9 @@ IPluginV2Ext* CoordConvACPluginCreator::deserializePlugin(
     try
     {
         gLogWarning << "CoordConvACPlugin is deprecated since TensorRT 9.0." << std::endl;
-        CoordConvACPlugin* plugin = new CoordConvACPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<CoordConvACPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

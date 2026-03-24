@@ -1,16 +1,21 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
 #
-# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
-# property and proprietary rights in and to this material, related
-# documentation and any modifications thereto. Any use, reproduction,
-# disclosure or distribution of this material and related documentation
-# without an express license agreement from NVIDIA CORPORATION or
-# its affiliates is strictly prohibited.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
-add_library(trt_samples_common STATIC)
-
-set(SAMPLE_SOURCES
+add_library(trt_samples_common STATIC
     argsParser.h
     BatchStream.h
     bfloat16.cpp
@@ -45,9 +50,8 @@ set(SAMPLE_SOURCES
     sampleUtils.h
     streamReader.h
 )
-target_sources(trt_samples_common PRIVATE ${SAMPLE_SOURCES})
 
-if (MSVC)
+if(MSVC)
     enable_language(C)
     target_sources(trt_samples_common PRIVATE
         getOpt.c
@@ -73,7 +77,7 @@ if(NOT TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW)
     if(NOT WIN32 AND NOT ${CMAKE_SYSTEM_NAME} STREQUAL "QNX")
         target_link_libraries(trt_samples_common PUBLIC dl)
     endif()
-    
+
     # Link nvinfer if available
     if(TARGET nvinfer)
         target_link_libraries(trt_samples_common PUBLIC nvinfer)
@@ -88,6 +92,7 @@ else()
         TRT::cudart
         $<COMPILE_ONLY:TRT_SAMPLES::tensorrt> # Each sample individually must determine its linkage to TRT.
         TRT_SAMPLES::onnxparser
+        $<COMPILE_ONLY:CUDA::cupti> # Samples use cuda_profiler_api.h but do not link cupti.
     )
 
     # For statically-linked samples, we need to upgrade the link to always link TRT rather than letting the samples decide.
@@ -101,4 +106,3 @@ else()
         target_link_libraries(trt_samples_common PUBLIC NVDLA::compiler)
     endif()
 endif()
-

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,10 +58,11 @@
 #define TRT_NODISCARD_BECAUSE(REASON)
 #endif
 
-// Defines which symbols are exported
+// Defines which symbols are exported.
 #ifdef TENSORRT_BUILD_LIB
 #ifdef _MSC_VER
-#define TENSORRTAPI __declspec(dllexport)
+//On Windows, exports are controlled by .def files; not by dllexport.
+#define TENSORRTAPI
 #else
 #define TENSORRTAPI __attribute__((visibility("default")))
 #endif

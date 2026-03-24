@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,8 @@
 #include "lReluPlugin.h"
 #include "common/checkMacrosPlugin.h"
 #include "common/kernels/kernel.h"
+
+#include <memory>
 
 namespace nvinfer1::plugin
 {
@@ -122,9 +124,9 @@ IPluginV2* LReLU::clone() const noexcept
 {
     try
     {
-        IPluginV2* plugin = new LReLU(mNegSlope);
+        auto plugin = std::make_unique<LReLU>(mNegSlope);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

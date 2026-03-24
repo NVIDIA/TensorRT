@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cuda_runtime_api.h>
 #include <iostream>
+#include <memory>
 
 #define DEBUG 0
 
@@ -196,9 +197,9 @@ IPluginV2Ext* ResizeNearest::clone() const noexcept
 {
     try
     {
-        auto plugin = new ResizeNearest(*this);
+        auto plugin = std::make_unique<ResizeNearest>(*this);
         plugin->setPluginNamespace(mNameSpace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

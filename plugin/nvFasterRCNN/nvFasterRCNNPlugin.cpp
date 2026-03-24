@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <memory>
 
 namespace nvinfer1::plugin
 {
@@ -288,10 +289,10 @@ IPluginV2Ext* RPROIPlugin::clone() const noexcept
 {
     try
     {
-        IPluginV2Ext* plugin = new RPROIPlugin(params, anchorsRatiosHost, anchorsScalesHost, A, C, H, W, anchorsDev,
-            deviceSmemSize, inFeatureType, outFeatureType, inFeatureLayout);
+        auto plugin = std::make_unique<RPROIPlugin>(params, anchorsRatiosHost, anchorsScalesHost, A, C, H, W,
+            anchorsDev, deviceSmemSize, inFeatureType, outFeatureType, inFeatureLayout);
         plugin->setPluginNamespace(mPluginNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -422,6 +423,7 @@ PluginFieldCollection const* RPROIPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
 {
     try
@@ -508,9 +510,9 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldColl
 
         // This object will be deleted when the network is destroyed, which will
         // call RPROIPlugin::terminate()
-        RPROIPlugin* plugin = new RPROIPlugin(params, anchorsRatios.data(), anchorsScales.data());
+        auto plugin = std::make_unique<RPROIPlugin>(params, anchorsRatios.data(), anchorsScales.data());
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -526,9 +528,9 @@ IPluginV2Ext* RPROIPluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call RPROIPlugin::terminate()
-        RPROIPlugin* plugin = new RPROIPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<RPROIPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

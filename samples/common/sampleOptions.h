@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -255,6 +255,8 @@ public:
     bool versionCompatible{false};
     bool pluginInstanceNorm{false};
     bool enableUInt8AsymmetricQuantizationDLA{false};
+    bool reportCapabilityDLA{false};
+    bool adjustForDLA{false};
     bool enablePluginOverride{false};
     bool excludeLeanRuntime{false};
     bool disableCompilationCache{false};
@@ -305,6 +307,7 @@ class SystemOptions : public Options
 public:
     int32_t device{defaultDevice};
     int32_t DLACore{-1};
+    bool enableStaticPlugins{true};
     bool ignoreParsedPluginLibs{false};
     std::vector<std::string> plugins;
     std::vector<std::string> setPluginsToSerialize;
@@ -315,7 +318,7 @@ public:
 
     void parse(Arguments& arguments) override;
 
-    static void help(std::ostream& out);
+    static void help(std::ostream& out, bool enableStaticPlugins = true);
 };
 
 class InferenceOptions : public Options
@@ -415,7 +418,7 @@ public:
 
     void parse(Arguments& arguments) override;
 
-    static void help(std::ostream& out);
+    static void help(std::ostream& out, bool enableStaticPlugins = true);
 };
 
 class TaskInferenceOptions : public Options
@@ -439,32 +442,32 @@ void helpHelp(std::ostream& out);
 
 // Functions to print options
 
-std::ostream& operator<<(std::ostream& os, const BaseModelOptions& options);
+std::ostream& operator<<(std::ostream& os, BaseModelOptions const& options);
 
-std::ostream& operator<<(std::ostream& os, const IOFormat& format);
+std::ostream& operator<<(std::ostream& os, IOFormat const& format);
 
-std::ostream& operator<<(std::ostream& os, const ShapeRange& dims);
+std::ostream& operator<<(std::ostream& os, ShapeRange const& dims);
 
-std::ostream& operator<<(std::ostream& os, const ModelOptions& options);
+std::ostream& operator<<(std::ostream& os, ModelOptions const& options);
 
-std::ostream& operator<<(std::ostream& os, const BuildOptions& options);
+std::ostream& operator<<(std::ostream& os, BuildOptions const& options);
 
-std::ostream& operator<<(std::ostream& os, const SystemOptions& options);
+std::ostream& operator<<(std::ostream& os, SystemOptions const& options);
 
-std::ostream& operator<<(std::ostream& os, const InferenceOptions& options);
+std::ostream& operator<<(std::ostream& os, InferenceOptions const& options);
 
-std::ostream& operator<<(std::ostream& os, const ReportingOptions& options);
+std::ostream& operator<<(std::ostream& os, ReportingOptions const& options);
 
-std::ostream& operator<<(std::ostream& os, const AllOptions& options);
+std::ostream& operator<<(std::ostream& os, AllOptions const& options);
 
-std::ostream& operator<<(std::ostream& os, const SafeBuilderOptions& options);
+std::ostream& operator<<(std::ostream& os, SafeBuilderOptions const& options);
 
 std::ostream& operator<<(std::ostream& os, nvinfer1::DataType dtype);
 
 std::ostream& operator<<(std::ostream& os, nvinfer1::DeviceType devType);
 
 
-inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
+inline std::ostream& operator<<(std::ostream& os, nvinfer1::Dims const& dims)
 {
     for (int32_t i = 0; i < dims.nbDims; ++i)
     {
@@ -511,7 +514,7 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::WeightsRole ro
     return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const std::vector<int64_t>& vec)
+inline std::ostream& operator<<(std::ostream& os, std::vector<int64_t> const& vec)
 {
     for (int32_t i = 0, e = static_cast<int32_t>(vec.size()); i < e; ++i)
     {

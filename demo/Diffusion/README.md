@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.15 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/10.16 --single-branch
 cd TensorRT
 ```
 
@@ -28,7 +28,7 @@ docker run --rm -it --gpus all \
 
 > **NOTE:** Mounting `/workspace/deps` as a volume ensures dependencies persist across container restarts. After initial installation, subsequent container launches will reuse the installed dependencies.
 
-NOTE: The demo supports CUDA>=12.0
+NOTE: The demo supports CUDA>=13.0
 
 ### Install the required packages
 
@@ -202,18 +202,9 @@ python3 demo_txt2img_xl.py "a photo of an astronaut riding a horse on mars" --ve
 
 For step-by-step tutorials to run INT8 & FP8 inference on stable diffusion models, please refer to examples in [TensorRT ModelOpt diffusers sample](https://github.com/NVIDIA/TensorRT-Model-Optimizer/tree/main/diffusers).
 
-### Faster Text-to-Image using SDXL + LCM (Latent Consistency Model) LoRA weights
-
-[LCM-LoRA](https://arxiv.org/abs/2311.05556) produces good quality images in 4 to 8 denoising steps instead of 30+ needed base model. Note that we use LCM scheduler and disable classifier-free-guidance by setting `--guidance-scale` to 0.
-LoRA weights are fused into the ONNX and finalized TensorRT plan files in this example.
-
-```bash
-python3 demo_txt2img_xl.py "Einstein" --version xl-1.0 --lora-path "latent-consistency/lcm-lora-sdxl" --lora-weight 1.0 --onnx-dir onnx-sdxl-lcm-nocfg --engine-dir engine-sdxl-lcm-nocfg --denoising-steps 4 --scheduler LCM --guidance-scale 0.0
-```
-
 ### Faster Text-to-Image using SDXL Turbo
 
-Even faster image generation than LCM, producing coherent images in just 1 step. Note: SDXL Turbo works best for 512x512 resolution, EulerA scheduler and classifier-free-guidance disabled.
+Produce coherent images in just 1 step. Note: SDXL Turbo works best for 512x512 resolution, EulerA scheduler and classifier-free-guidance disabled.
 
 ```bash
 python3 demo_txt2img_xl.py "Einstein" --version xl-turbo --onnx-dir onnx-sdxl-turbo --engine-dir engine-sdxl-turbo --denoising-steps 1 --scheduler EulerA --guidance-scale 0.0 --width 512 --height 512

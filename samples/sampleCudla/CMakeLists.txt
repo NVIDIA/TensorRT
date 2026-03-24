@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
 
 add_executable(sample_cudla sampleCudla.cpp)

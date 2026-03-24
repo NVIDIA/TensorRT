@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <memory>
 
 namespace nvinfer1::plugin
 {
@@ -114,11 +115,11 @@ nvinfer1::IPluginV2DynamicExt* VoxelGeneratorPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new VoxelGeneratorPlugin(mPillarNum, mPointNum, mFeatureNum, mMinXRange, mMaxXRange, mMinYRange,
-            mMaxYRange, mMinZRange, mMaxZRange, mPillarXSize, mPillarYSize, mPillarZSize, mPointFeatureNum, mGridXSize,
-            mGridYSize, mGridZSize);
+        auto plugin = std::make_unique<VoxelGeneratorPlugin>(mPillarNum, mPointNum, mFeatureNum, mMinXRange, mMaxXRange,
+            mMinYRange, mMaxYRange, mMinZRange, mMaxZRange, mPillarXSize, mPillarYSize, mPillarZSize, mPointFeatureNum,
+            mGridXSize, mGridYSize, mGridZSize);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -480,10 +481,10 @@ IPluginV2* VoxelGeneratorPluginCreator::createPlugin(char const* name, PluginFie
                 voxelSize[2] = d[2];
             }
         }
-        IPluginV2* plugin = new VoxelGeneratorPlugin(maxVoxels, maxPoints, voxelFeatureNum, pointCloudRange[0],
+        auto plugin = std::make_unique<VoxelGeneratorPlugin>(maxVoxels, maxPoints, voxelFeatureNum, pointCloudRange[0],
             pointCloudRange[3], pointCloudRange[1], pointCloudRange[4], pointCloudRange[2], pointCloudRange[5],
             voxelSize[0], voxelSize[1], voxelSize[2]);
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

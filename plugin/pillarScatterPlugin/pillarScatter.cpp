@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@
 #include "pillarScatter.h"
 #include "common/templates.h"
 #include <cstring>
+#include <memory>
 
 namespace nvinfer1::plugin
 {
@@ -42,9 +43,9 @@ nvinfer1::IPluginV2DynamicExt* PillarScatterPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new PillarScatterPlugin(feature_y_size_, feature_x_size_);
+        auto plugin = std::make_unique<PillarScatterPlugin>(feature_y_size_, feature_x_size_);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -251,8 +252,8 @@ IPluginV2* PillarScatterPluginCreator::createPlugin(char const* name, PluginFiel
                 PLUGIN_VALIDATE(targetH > 0 && targetW > 0);
             }
         }
-        IPluginV2* plugin = new PillarScatterPlugin(targetH, targetW);
-        return plugin;
+        auto plugin = std::make_unique<PillarScatterPlugin>(targetH, targetW);
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -267,8 +268,8 @@ IPluginV2* PillarScatterPluginCreator::deserializePlugin(
     try
     {
         // This object will be deleted when the network is destroyed,
-        IPluginV2* plugin = new PillarScatterPlugin(serialData, serialLength);
-        return plugin;
+        auto plugin = std::make_unique<PillarScatterPlugin>(serialData, serialLength);
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

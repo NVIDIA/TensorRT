@@ -147,7 +147,7 @@ def make_attention_attrs():
 input_embeds = gs.Variable(
     "input_embeds", dtype=np.float32, shape=("batch", "seqlen", emb_dim)
 )
-graph = gs.Graph(inputs=[input_embeds], functions=[attn])
+graph = gs.Graph(inputs=[input_embeds], functions=[attn], ir_version=10)
 out = input_embeds
 for _ in range(n_layers):
     next = graph.SelfAttention(inputs=[out], attrs=make_attention_attrs())[0]

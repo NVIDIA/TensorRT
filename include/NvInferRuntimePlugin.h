@@ -696,7 +696,7 @@ protected:
     }
 
     //!
-    //! \brief Derived classes must not implement this. In a C++11 API it would be override final.
+    //! \brief Derived classes must not implement this. In a C++11 API it would be final.
     //!
     //! IPluginV2Ext::configureWithFormat() is a NOP operation for all classes derived from IPluginV2Ext.
     //! These classes call configurePlugin() instead.

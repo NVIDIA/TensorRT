@@ -20,7 +20,7 @@ Then, that Function will serve as a default implementation for nodes in the grap
 op and domain as the Function.
 
 ```python
-graph = gs.Graph(inputs=[gs.Variable("model_input")], functions=[custom_func])
+graph = gs.Graph(inputs=[gs.Variable("model_input")], functions=[custom_func], ir_version=10)
 graph.outputs = graph.CustomOp(inputs=[graph.inputs[0]])
 ```
 

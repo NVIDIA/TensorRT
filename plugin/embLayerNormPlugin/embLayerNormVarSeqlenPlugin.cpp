@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +17,7 @@
 
 #include <cstring>
 #include <cuda.h>
+#include <memory>
 #include <set>
 #include <vector>
 
@@ -236,9 +237,10 @@ IPluginV3* EmbLayerNormVarSeqlenPluginHFace::clone() noexcept
     {
         BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginHFace clone");
 
-        auto p = new EmbLayerNormVarSeqlenPluginHFace(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
+        auto p = std::make_unique<EmbLayerNormVarSeqlenPluginHFace>(
+            mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
         p->setPluginNamespace(mNamespace.c_str());
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {
@@ -253,10 +255,11 @@ IPluginV3* EmbLayerNormVarSeqlenPluginMTron::clone() noexcept
     {
         BERT_DEBUG_MSG("EmbLayerNormVarSeqlenPluginMTron clone");
 
-        auto p = new EmbLayerNormVarSeqlenPluginMTron(mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
+        auto p = std::make_unique<EmbLayerNormVarSeqlenPluginMTron>(
+            mLayerName, mType, mBeta, mGamma, mWordEmb, mPosEmb, mTokEmb);
         p->setPluginNamespace(mNamespace.c_str());
 
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {
@@ -767,9 +770,9 @@ IPluginV3* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
         bool output_fp16 = initializeFields(name, fc, beta, gamma, word_emb, pos_emb, tok_emb);
 
         BERT_DEBUG_MSG("Building the Plugin...");
-        EmbLayerNormVarSeqlenPluginHFace* p = new EmbLayerNormVarSeqlenPluginHFace(
+        auto p = std::make_unique<EmbLayerNormVarSeqlenPluginHFace>(
             name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, beta, gamma, word_emb, pos_emb, tok_emb);
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {
@@ -798,9 +801,9 @@ IPluginV3* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(
         bool output_fp16 = initializeFields(name, fc, beta, gamma, word_emb, pos_emb, tok_emb);
 
         BERT_DEBUG_MSG("Building the Plugin...");
-        EmbLayerNormVarSeqlenPluginMTron* p = new EmbLayerNormVarSeqlenPluginMTron(
+        auto p = std::make_unique<EmbLayerNormVarSeqlenPluginMTron>(
             name, output_fp16 ? DataType::kHALF : DataType::kFLOAT, beta, gamma, word_emb, pos_emb, tok_emb);
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {

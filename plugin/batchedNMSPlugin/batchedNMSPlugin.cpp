@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -489,7 +490,7 @@ IPluginV2Ext* BatchedNMSPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new BatchedNMSPlugin(param);
+        auto plugin = std::make_unique<BatchedNMSPlugin>(param);
         plugin->mBoxesSize = mBoxesSize;
         plugin->mScoresSize = mScoresSize;
         plugin->mNumPriors = mNumPriors;
@@ -498,7 +499,7 @@ IPluginV2Ext* BatchedNMSPlugin::clone() const noexcept
         plugin->mPrecision = mPrecision;
         plugin->setScoreBits(mScoreBits);
         plugin->setCaffeSemantics(mCaffeSemantics);
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -511,7 +512,7 @@ IPluginV2DynamicExt* BatchedNMSDynamicPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new BatchedNMSDynamicPlugin(param);
+        auto plugin = std::make_unique<BatchedNMSDynamicPlugin>(param);
         plugin->mBoxesSize = mBoxesSize;
         plugin->mScoresSize = mScoresSize;
         plugin->mNumPriors = mNumPriors;
@@ -520,7 +521,7 @@ IPluginV2DynamicExt* BatchedNMSDynamicPlugin::clone() const noexcept
         plugin->mPrecision = mPrecision;
         plugin->setScoreBits(mScoreBits);
         plugin->setCaffeSemantics(mCaffeSemantics);
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -742,12 +743,12 @@ IPluginV2Ext* BatchedNMSPluginCreator::createPlugin(char const* name, PluginFiel
             }
         }
 
-        auto* plugin = new BatchedNMSPlugin(params);
+        auto plugin = std::make_unique<BatchedNMSPlugin>(params);
         plugin->setClipParam(clipBoxes);
         plugin->setScoreBits(scoreBits);
         plugin->setCaffeSemantics(caffeSemantics);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -837,12 +838,12 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::createPlugin(
             }
         }
 
-        auto* plugin = new BatchedNMSDynamicPlugin(params);
+        auto plugin = std::make_unique<BatchedNMSDynamicPlugin>(params);
         plugin->setClipParam(clipBoxes);
         plugin->setScoreBits(scoreBits);
         plugin->setCaffeSemantics(caffeSemantics);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -861,9 +862,9 @@ IPluginV2Ext* BatchedNMSPluginCreator::deserializePlugin(
                     << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call NMS::destroy()
-        auto* plugin = new BatchedNMSPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<BatchedNMSPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -882,9 +883,9 @@ IPluginV2DynamicExt* BatchedNMSDynamicPluginCreator::deserializePlugin(
                     << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call NMS::destroy()
-        auto* plugin = new BatchedNMSDynamicPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<BatchedNMSDynamicPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

@@ -42,7 +42,7 @@ FileLock::FileLock(ILogger& logger, std::string fileName)
     }
 #elif defined(__QNX__)
     // Calling lockf(F_TLOCK) on QNX returns -1; the reported error is 89 (function not implemented).
-    mLogger.log(ILogger::Severity::kVERBOSE, "FileLock is not supported on QNX or GOS.");
+    mLogger.log(ILogger::Severity::kVERBOSE, "FileLock is not supported on QNX or HOS.");
 #else
     mHandle = fopen(lockFileName.c_str(), "wb+");
     if (mHandle == nullptr)
@@ -75,7 +75,7 @@ FileLock::~FileLock()
     }
 #elif defined(__QNX__)
     // Calling lockf(F_TLOCK) on QNX returns -1; the reported error is 89 (function not implemented).
-    mLogger.log(ILogger::Severity::kVERBOSE, "FileLock is not supported on QNX or GOS.");
+    mLogger.log(ILogger::Severity::kVERBOSE, "FileLock is not supported on QNX or HOS.");
 #else
     if (mDescriptor != -1)
     {

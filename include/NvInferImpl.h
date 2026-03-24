@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -104,6 +104,8 @@ class ILoop;
 class ILoopOutputLayer;
 class ILRNLayer;
 class IMatrixMultiplyLayer;
+class IMoELayer;
+class IDistCollectiveLayer;
 class INetworkDefinition;
 class INormalizationLayer;
 class INMSLayer;
@@ -197,6 +199,7 @@ enum class LayerType : int32_t;
 enum class LoopOutput : int32_t;
 enum class MatrixOperation : int32_t;
 enum class MemoryPoolType : int32_t;
+enum class MoEActType : int32_t;
 enum class NetworkDefinitionCreationFlag : int32_t;
 enum class OptProfileSelector : int32_t;
 enum class PaddingMode : int32_t;
@@ -204,6 +207,7 @@ enum class PoolingType : int32_t;
 enum class ProfilingVerbosity : int32_t;
 enum class QuantizationFlag : int32_t;
 enum class ReduceOperation : int32_t;
+enum class CollectiveOperation : int32_t;
 enum class ResizeCoordinateTransformation : int32_t;
 enum class InterpolationMode : int32_t;
 enum class ResizeRoundMode : int32_t;
@@ -485,6 +489,7 @@ public:
     TRT_NODISCARD virtual IRuntimeConfig* getRuntimeConfig() const noexcept = 0;
     virtual bool setUnfusedTensorsDebugState(bool flag) noexcept = 0;
     virtual bool getUnfusedTensorsDebugState() const noexcept = 0;
+    virtual bool setCommunicator(void* communicator) noexcept = 0;
 };
 
 class VEngineInspector : public VRoot
@@ -548,6 +553,8 @@ public:
     virtual void resetOutputType(int32_t index) noexcept = 0;
     virtual void setMetadata(char const* docString) noexcept = 0;
     virtual char const* getMetadata() const noexcept = 0;
+    virtual bool setNbRanks(int32_t nbRanks) noexcept = 0;
+    virtual int32_t getNbRanks() const noexcept = 0;
 };
 
 class VConvolutionLayer : public VRoot
@@ -970,7 +977,9 @@ public:
     TRT_NODISCARD virtual DataType getNormalizationQuantizeToType() const noexcept = 0;
     TRT_NODISCARD virtual bool setMetadata(char const* docString) noexcept = 0;
     TRT_NODISCARD virtual char const* getMetadata() const noexcept = 0;
-};     // class VAttention
+    TRT_NODISCARD virtual bool setNbRanks(int32_t nbRanks) noexcept = 0;
+    TRT_NODISCARD virtual int32_t getNbRanks() const noexcept = 0;
+}; // class VAttention
 
 class VSelectLayer : public VRoot
 {
@@ -1145,6 +1154,31 @@ public:
     TRT_NODISCARD virtual KVCacheMode getCacheMode() const noexcept = 0;
 }; // class VKVCacheUpdateLayer
 
+class VMoELayer : public VRoot
+{
+public:
+    virtual void setGatedWeights(ITensor& fcGateWeights, ITensor& fcUpWeights, ITensor& fcDownWeights, MoEActType activationType) noexcept = 0;
+    virtual void setGatedBiases(ITensor& fcGateBiases, ITensor& fcUpBiases, ITensor& fcDownBiases) noexcept = 0;
+    virtual void setActivationType(MoEActType activationType) noexcept = 0;
+    virtual MoEActType getActivationType() const noexcept = 0;
+    virtual void setQuantizationStatic(ITensor& fcDownActivationScale, DataType dataType) noexcept = 0;
+    virtual void setQuantizationDynamicDblQ(ITensor& fcDownActivationDblQScale, DataType dataType, Dims const& blockShape, DataType dynQOutputScaleType) noexcept = 0;
+    virtual void setQuantizationToType(DataType type) noexcept = 0;
+    virtual DataType getQuantizationToType() const noexcept = 0;
+    virtual void setQuantizationBlockShape(Dims const& blockShape) noexcept = 0;
+    virtual Dims getQuantizationBlockShape() const noexcept = 0;
+    virtual void setDynQOutputScaleType(DataType type) noexcept = 0;
+    virtual DataType getDynQOutputScaleType() const noexcept = 0;
+    virtual void setSwigluParams(float limit, float alpha, float beta) noexcept = 0;
+    virtual void setSwigluParamLimit(float limit) noexcept = 0;
+    virtual float getSwigluParamLimit() const noexcept = 0;
+    virtual void setSwigluParamAlpha(float alpha) noexcept = 0;
+    virtual float getSwigluParamAlpha() const noexcept = 0;
+    virtual void setSwigluParamBeta(float beta) noexcept = 0;
+    virtual float getSwigluParamBeta() const noexcept = 0;
+    virtual void setInput(int32_t index, ITensor& tensor) noexcept = 0;
+}; // class VMoELayer
+
 
 class VNetworkDefinition : public VRoot
 {
@@ -1255,7 +1289,11 @@ public:
     virtual IKVCacheUpdateLayer* addKVCacheUpdate(
         ITensor& cache, ITensor& update, ITensor& writeIndices, KVCacheMode cacheMode) noexcept = 0;
     virtual INormalizationLayer* addNormalizationV2(
-            ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept = 0;
+        ITensor& input, ITensor& scale, ITensor& bias, uint32_t axesMask) noexcept = 0;
+    virtual IMoELayer* addMoE(
+        ITensor& hiddenStates, ITensor& selectedExpertsForTokens, ITensor& scoresForSelectedExperts) noexcept = 0;
+    virtual IDistCollectiveLayer* addDistCollective(ITensor& input, CollectiveOperation distCollectiveOp,
+        ReduceOperation reduceOp, int64_t root, int64_t* groups, int64_t groupSize) noexcept = 0;
 };
 
 #if !STRIP_TRT_RTX_INTERNAL_API
@@ -1413,7 +1451,8 @@ public:
     virtual bool buildSerializedNetworkToStream(
         INetworkDefinition& network, IBuilderConfig& config, IStreamWriter& writer) noexcept = 0;
     virtual nvinfer1::IHostMemory* buildSerializedNetworkWithKernelText(
-        INetworkDefinition& network, IBuilderConfig& config, IHostMemory*& kernelText) noexcept = 0;
+        INetworkDefinition& network, IBuilderConfig& config, IHostMemory*& kernelText) noexcept
+        = 0;
 };
 
 class VRuntimeConfig : public VRoot
@@ -1424,6 +1463,10 @@ public:
     virtual ExecutionContextAllocationStrategy getExecutionContextAllocationStrategy() const noexcept = 0;
 };
 
+
+class VDistCollectiveLayer : public VRoot
+{
+}; // VDistCollectiveLayer
 
 } // namespace apiv
 } // namespace nvinfer1

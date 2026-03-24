@@ -140,6 +140,7 @@ std::string validateTRTOptions(const std::vector<TRTOption>& options)
 //!     - an argument does not have option (i.e. "-" and "--")
 //!     - a short argument has more than 1 character
 //!     - the last argument in the list requires a value
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TRTParsedArgs parseArgs(int argc, const char* const* argv, const std::vector<TRTOption>& options)
 {
     TRTParsedArgs parsedArgs;

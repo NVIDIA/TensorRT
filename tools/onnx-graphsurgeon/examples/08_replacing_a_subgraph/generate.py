@@ -37,7 +37,7 @@ def identity(self, inp):
 
 
 # Generate the graph
-graph = gs.Graph()
+graph = gs.Graph(ir_version=10)
 
 graph.inputs = [gs.Variable("input", shape=(4, 4), dtype=np.float32)]
 

@@ -30,8 +30,7 @@ function(buildMetapackageWheel moduleName)
 
     set(wheelTemplateFiles
         LICENSE.txt
-        setup.cfg
-        setup.py
+        pyproject.toml
     )
 
     # Expands all template files for the metapackage for the target module. The python version is unused (and set to 0).
@@ -45,10 +44,10 @@ function(buildMetapackageWheel moduleName)
     set(sdistOutDir ${TRT_WHEEL_OUTPUT_DIR}/metapackage)
     set(sdistOutputFile ${sdistOutDir}/${moduleName}-${TensorRT_PACKAGE_VERSION}.tar.gz)
 
-    # Add a custom command to build the wheel
+    # Add a custom command to build the sdist using PEP 517 compliant build frontend.
     add_custom_command(
         OUTPUT ${sdistOutputFile}
-        COMMAND ${Python3_EXECUTABLE} setup.py -q sdist --dist-dir=${sdistOutDir}
+        COMMAND ${Python3_EXECUTABLE} -m build --sdist --no-isolation --config-setting=--quiet --outdir ${sdistOutDir}
         WORKING_DIRECTORY ${generatedFileOutDir}
         DEPENDS ${filesTarget} trt_packaging_requirements_installed
         VERBATIM

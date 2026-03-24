@@ -50,7 +50,9 @@ from onnx_graphsurgeon.ir.tensor import Constant, LazyValues, Tensor, Variable
 
 class TestOnnxExporter(object):
 
-    def _bytes_to_np_array(self, b: bytes, shape: Sequence[int], dtype: DTypeLike) -> NDArray:
+    def _bytes_to_np_array(
+        self, b: bytes, shape: Sequence[int], dtype: DTypeLike
+    ) -> NDArray:
         """Construct a np.array from raw bytes.
 
         For ML-specific types like float8_e3m4, `onnx.numpy_helper.to_array` does not convert to arrays with correct
@@ -73,7 +75,9 @@ class TestOnnxExporter(object):
         onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
 
         # Postcondition.
-        assert isinstance(tensor._values, LazyValues)  # Exporter should *not* load LazyValues into a numpy array.
+        assert isinstance(
+            tensor._values, LazyValues
+        )  # Exporter should *not* load LazyValues into a numpy array.
 
     def test_export_constant_tensor_to_tensor_proto(self):
         name = "constant_tensor"
@@ -83,7 +87,10 @@ class TestOnnxExporter(object):
         tensor = Constant(name=name, values=values)
         onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
         assert onnx_tensor.name == name
-        assert np.all(self._bytes_to_np_array(onnx_tensor.raw_data, onnx_tensor.dims, np.float32) == values)
+        assert np.all(
+            self._bytes_to_np_array(onnx_tensor.raw_data, onnx_tensor.dims, np.float32)
+            == values
+        )
         assert onnx_tensor.data_type == onnx.TensorProto.FLOAT
         assert tuple(onnx_tensor.dims) == shape
 
@@ -91,12 +98,21 @@ class TestOnnxExporter(object):
         """Test that `export_tensor_proto` exports a TensorProto with correct data when the target dtype is different
         from source dtype.
         """
+        try:
+            onnx.helper.float32_to_bfloat16
+        except AttributeError:
+            pytest.skip(
+                "Skipping test because current ONNX package does not have `float32_to_bfloat16`."
+            )
+
         # Precondition.
         name = "constant_tensor"
         shape = (3, 224, 224)
         values = np.random.random_sample(size=shape).astype(np.float32)
 
-        tensor = Constant(name=name, values=values, export_dtype=onnx.TensorProto.FLOAT8E4M3FN)
+        tensor = Constant(
+            name=name, values=values, export_dtype=onnx.TensorProto.FLOAT8E4M3FN
+        )
 
         # Under test.
         onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
@@ -105,7 +121,9 @@ class TestOnnxExporter(object):
         assert onnx_tensor.name == name
         assert np.all(
             np.isclose(
-                self._bytes_to_np_array(onnx_tensor.raw_data, onnx_tensor.dims, ml_dtypes.float8_e4m3fn),
+                self._bytes_to_np_array(
+                    onnx_tensor.raw_data, onnx_tensor.dims, ml_dtypes.float8_e4m3fn
+                ),
                 values,
                 atol=0.1,
             )
@@ -130,12 +148,17 @@ class TestOnnxExporter(object):
         # Postcondition.
         assert onnx_tensor.name == name
         assert np.all(
-            self._bytes_to_np_array(onnx_tensor.raw_data, onnx_tensor.dims, ml_dtypes.float8_e4m3fn) == tensor.values
+            self._bytes_to_np_array(
+                onnx_tensor.raw_data, onnx_tensor.dims, ml_dtypes.float8_e4m3fn
+            )
+            == tensor.values
         )
         assert onnx_tensor.data_type == onnx.TensorProto.FLOAT8E4M3FN
         assert tuple(onnx_tensor.dims) == shape
 
-    def test_should_export_constant_tensor_with_ml_dtype_raise_error_when_onnx_dtype_not_supported(self) -> None:
+    def test_should_export_constant_tensor_with_ml_dtype_raise_error_when_onnx_dtype_not_supported(
+        self,
+    ) -> None:
         """Test that `export_tensor_proto` raises an error when the corresponding ONNX data type is not supported and
         prompts the user to upgrade the ONNX package.
         """
@@ -153,13 +176,18 @@ class TestOnnxExporter(object):
             with pytest.raises(RuntimeError) as e:
                 OnnxExporter.export_tensor_proto(tensor)
             assert (
-                str(e.value) == "Current ONNX package does not support INT4. Please upgrade ONNX to the latest version."
+                str(e.value)
+                == "Current ONNX package does not support INT4. Please upgrade ONNX to the latest version."
             )
 
-    def test_should_export_constant_tensor_pass_when_ml_dtypes_not_installed(self) -> None:
+    def test_should_export_constant_tensor_pass_when_ml_dtypes_not_installed(
+        self,
+    ) -> None:
         """Test that `export_tensor_proto` passes when the ml_dtypes package was not installed."""
         # Precondition.
-        tensor = Constant(name="constant_tensor", values=np.random.random_sample(size=(3, 224, 224)))
+        tensor = Constant(
+            name="constant_tensor", values=np.random.random_sample(size=(3, 224, 224))
+        )
 
         with mock.patch.dict("sys.modules", {"ml_dtypes": None}):
             # Make sure that the ml_dtypes package is not installed.
@@ -178,9 +206,14 @@ class TestOnnxExporter(object):
         values = np.random.random_sample(size=shape).astype(np.float32)
 
         input_onnx_tensor = onnx.TensorProto(
-            dims=shape, data_type=onnx.TensorProto.FLOAT, raw_data=values.tobytes(), name=lazy_value_name
+            dims=shape,
+            data_type=onnx.TensorProto.FLOAT,
+            raw_data=values.tobytes(),
+            name=lazy_value_name,
         )
-        tensor = Constant(name=constant_name, values=LazyValues(tensor=input_onnx_tensor))
+        tensor = Constant(
+            name=constant_name, values=LazyValues(tensor=input_onnx_tensor)
+        )
 
         # Under test.
         exported_onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
@@ -188,7 +221,11 @@ class TestOnnxExporter(object):
         # Postcondition.
         # Importantly, the exported TensorProto's name should be `constant_name`, NOT `lazy_value_name`.
         assert exported_onnx_tensor.name == constant_name
-        assert np.all(self._bytes_to_np_array(exported_onnx_tensor.raw_data, exported_onnx_tensor.dims, np.float32))
+        assert np.all(
+            self._bytes_to_np_array(
+                exported_onnx_tensor.raw_data, exported_onnx_tensor.dims, np.float32
+            )
+        )
         assert exported_onnx_tensor.data_type == onnx.TensorProto.FLOAT
         assert tuple(exported_onnx_tensor.dims) == shape
 
@@ -208,35 +245,28 @@ class TestOnnxExporter(object):
         assert tuple(onnx_shape) == shape
 
     @pytest.mark.parametrize(
-        "export_dtype, container_dtype, threshold, onnx_to_numpy_converter",
+        "dtype, threshold",
         [
             (
-                onnx.TensorProto.BFLOAT16,
-                np.uint16,
+                ml_dtypes.bfloat16,
                 0.02,
-                onnx.numpy_helper.bfloat16_to_float32,
             ),
             (
-                onnx.TensorProto.FLOAT8E4M3FN,
-                np.uint8,
+                ml_dtypes.float8_e4m3fn,
                 0.35,
-                lambda x, dims: onnx.numpy_helper.float8e4m3_to_float32(x, dims, fn=True, uz=False),
             ),
         ],
     )
-    def test_export_numpy_unsupported_dtypes_accuracy(
-        self, export_dtype, container_dtype, threshold, onnx_to_numpy_converter
-    ):
+    def test_export_numpy_unsupported_dtypes_accuracy(self, dtype, threshold):
         name = "constant_tensor"
         shape = (3, 224, 224)
-        values = np.random.random_sample(size=shape).astype(np.float32)
+        values = np.random.random_sample(size=shape).astype(dtype)
 
-        tensor = Constant(name=name, values=values, export_dtype=export_dtype)
+        tensor = Constant(name=name, values=values)
         onnx_tensor = constant_to_onnx_tensor(tensor)
-        np_arr = np.frombuffer(onnx_tensor.raw_data, dtype=container_dtype)
-        np_arr_fp32 = onnx_to_numpy_converter(np_arr, dims=values.shape)
+        np_arr = np.frombuffer(onnx_tensor.raw_data, dtype=dtype).reshape(values.shape)
 
-        assert np.max(np.abs(np_arr_fp32 - values)) <= threshold
+        assert np.max(np.abs(np_arr - values)) <= threshold
 
     @pytest.mark.parametrize(
         "dtype, expected_type",

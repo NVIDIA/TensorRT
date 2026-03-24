@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,7 @@
 #include <cstring>
 #include <cuda.h>
 #include <iostream>
+#include <memory>
 #include <tuple>
 #include <vector>
 
@@ -403,9 +404,9 @@ IPluginV2* QKVToContextInterleavedPluginLegacyCreator::createPlugin(
 
         auto const useInt8ScaleMaxFlag = static_cast<bool>(useInt8ScaleMax);
 
-        QKVToContextInterleavedPluginLegacy* p = new QKVToContextInterleavedPluginLegacy(
+        auto p = std::make_unique<QKVToContextInterleavedPluginLegacy>(
             name, hiddenSize, numHeads, dqProbs, useInt8ScaleMaxFlag, useExplicitInt8 != 0, qkvScale, ctxScale);
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {

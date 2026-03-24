@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,7 +53,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IAlgorithmContextDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     Describes the context and requirements, that could be fulfilled by one or
     more instances of IAlgorithm.
@@ -62,10 +62,9 @@ constexpr const char* descr = R"trtdoc(
     :ivar name: :class:`str` name of the algorithm node.
     :ivar num_inputs: :class:`int`  number of inputs of the algorithm.
     :ivar num_outputs: :class:`int` number of outputs of the algorithm.
-)trtdoc"
-    ;
+)trtdoc";
 
-constexpr const char* get_shape = R"trtdoc(
+constexpr char const* get_shape = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
     Get the minimum / optimum / maximum dimensions for a dynamic input tensor.
 

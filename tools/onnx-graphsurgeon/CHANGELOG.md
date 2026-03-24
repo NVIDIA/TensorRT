@@ -2,6 +2,24 @@
 
 Dates are in YYYY-MM-DD format.
 
+
+## v0.6.1 (2026-02-17)
+
+### Fixed
+- Removed deep copies in `GraphPattern` to avoid duplicating nodes in the graph, which would lead to returning
+  invalid matched patterns.
+
+
+## v0.6.0 (2026-01-28)
+
+### Added
+- Added `ir_version` field to `Graph` to allow specifying the ONNX IR version when exporting the graph to an ONNX model.
+
+### Fixed
+- Fixed a crash with newer versions of ONNX because `onnx.helper.float32_to_bfloat16` and `onnx.helper.float32_to_float8e4m3` are not available.
+  Use `ml_dtypes` to create `Constant`s with the correct data types so that these conversion functions are not used.
+
+
 ## v0.5.9 (2025-10-28)
 
 ### Fixed

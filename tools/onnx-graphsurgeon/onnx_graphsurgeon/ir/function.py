@@ -52,6 +52,7 @@ class Function(Graph):
         import_domains: "Sequence[onnx.OperatorSetIdProto]" = None,
         functions: "Sequence[Function]" = None,
         attrs: dict = None,
+        ir_version: int = None,
     ):
         """
         Args:
@@ -82,6 +83,7 @@ class Function(Graph):
             opset=opset,
             import_domains=import_domains,
             functions=functions,
+            ir_version=ir_version,
         )
 
         # Properties of Graph that Function doesn't have.
@@ -264,6 +266,7 @@ class Function(Graph):
             import_domains=self.import_domains,
             functions=self.functions,
             attrs=new_attrs,
+            ir_version=self.ir_version,
         )
 
     def __eq__(self, other: "Function"):

@@ -284,8 +284,6 @@ bool SampleOnnxMnistCoordConvAC::processInput(const samplesCommon::BufferManager
     const int inputH = mInputDims.d[2];
     const int inputW = mInputDims.d[3];
 
-    // Read a random digit file
-    srand(unsigned(time(nullptr)));
     std::vector<uint8_t> fileData(inputH * inputW);
     mNumber = 2;
     samplesCommon::readPGMFile(samplesCommon::locateFile("2.pgm", mParams.dataDirs), fileData.data(), inputH, inputW);

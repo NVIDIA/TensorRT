@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,8 +21,9 @@ import numpy as np
 from ._export import public_api, IS_AOT_ENABLED
 from abc import ABC, abstractmethod
 
+
 class SymExpr(ABC):
-    
+
     @abstractmethod
     def _op(self, op, other):
         pass
@@ -64,20 +65,23 @@ class SymExpr(ABC):
     @abstractmethod
     def constant_value(self) -> int:
         pass
-    
+
     # Evaluate the underlying trt.IDimensionExpr, if so done lazily
     @property
     @abstractmethod
     def _expr(self):
         pass
 
+
 class SymIntExprMeta(type(SymExpr)):
     pass
+
 
 class SymIntExpr(SymExpr, metaclass=SymIntExprMeta):
     """
     Symbolic integer (scalar) expression
     """
+
     _exprBuilder = None  # trt.IExprBuilder instance. Populated when a shape-calculation context is entered.
 
     def __init__(self, value: Union[int, trt.IDimensionExpr, "SymIntExpr"] = None):
@@ -121,6 +125,14 @@ class SymIntExpr(SymExpr, metaclass=SymIntExprMeta):
     def __lt__(self, other: Union[int, "SymIntExpr"]):
         return self._op(trt.DimensionOperation.LESS, other)
 
+    def __bool__(self):
+        if not self.is_constant:
+            raise RuntimeError(
+                "Cannot evaluate symbolic expression as boolean. "
+                "Use is_constant and constant_value() for conditional checks."
+            )
+        return bool(self._expr.get_constant_value())
+
     def __repr__(self):
         if self._is_dummy:
             return f"FakeSymIntExpr[id={id(self)}]"
@@ -137,9 +149,7 @@ class SymIntExpr(SymExpr, metaclass=SymIntExprMeta):
             RuntimeError: For fake :class:`SymIntExpr`\s. Check :attr:`is_fake` to determine accessibility.
         """
         if self._is_dummy:
-            raise RuntimeError(
-                "Not accessible for fake 'SymIntExpr's. Check is_fake to determine accessibility."
-            )
+            raise RuntimeError("Not accessible for fake 'SymIntExpr's. Check is_fake to determine accessibility.")
         return self._expr.is_constant()
 
     def constant_value(self) -> int:
@@ -154,7 +164,7 @@ class SymIntExpr(SymExpr, metaclass=SymIntExprMeta):
                 "Not accessible for non-constant integer expressions. Check is_constant to determine accessibility."
             )
         return self._expr.get_constant_value()
-    
+
     # Evaluate the underlying trt.IDimensionExpr, if so done lazily
     @property
     def _expr(self):
@@ -162,6 +172,7 @@ class SymIntExpr(SymExpr, metaclass=SymIntExprMeta):
 
     def _clone(self):
         return SymIntExpr(self + 0)
+
 
 class SymExprImpl(trt.ISymExpr):
     def __init__(self, expr: SymIntExpr):
@@ -175,33 +186,42 @@ class SymExprImpl(trt.ISymExpr):
             self.dtype = trt.PluginArgDataType.INT8
         else:
             raise ValueError(f"Unknown SymIntExpr type {type(expr)}")
-        
+
         self.expr = expr._expr
+
+
 @public_api()
 class SymInt32(SymIntExpr):
     """
     Symbolic expression for a 32-bit integer
     """
+
     def __init__(self, value: Union[int, trt.IDimensionExpr, SymIntExpr] = None):
         super().__init__(value)
 
     def __call__(self):
         return SymExprImpl(self)
+
+
 @public_api()
 class SymInt8(SymIntExpr):
     """
     Symbolic expression for an 8-bit integer
     """
+
     def __init__(self, value: Union[int, trt.IDimensionExpr, "SymIntExpr"] = None):
         super().__init__(value)
+
 
 @public_api()
 class SymInt16(SymIntExpr):
     """
     Symbolic expression for a 16-bit integer
     """
+
     def __init__(self, value: Union[int, trt.IDimensionExpr, "SymIntExpr"] = None):
         super().__init__(value)
+
 
 # Symbolic expression for a given dimension of a tensor
 @public_api()
@@ -209,6 +229,7 @@ class ShapeExpr(SymInt32):
     """
     Symbolic expression for single dimension of a tensor
     """
+
     def __init__(self, value: Union[int, trt.IDimensionExpr, "ShapeExpr", SymIntExpr] = None):
         """
         Args:
@@ -231,10 +252,17 @@ class ShapeExpr(SymInt32):
 
     def _op(self, op: trt.DimensionOperation, other: Union[int, "ShapeExpr"]):
         if self._is_size_tensor:
-            raise ValueError("It is not permitted to perform binary operations on size tensor expressions") # trt limitation
+            raise ValueError(
+                "It is not permitted to perform binary operations on size tensor expressions"
+            )  # trt limitation
         if self._is_dummy:
             return ShapeExpr()
         return ShapeExpr(super()._op(op, other))
+
+    def __bool__(self):
+        if self._is_dummy:
+            raise RuntimeError("Cannot evaluate fake ShapeExpr as boolean. " "Check is_fake first.")
+        return super().__bool__()
 
     def __repr__(self):
         if self._is_dummy:
@@ -269,9 +297,7 @@ class ShapeExpr(SymInt32):
             RuntimeError: For fake :class:`ShapeExpr`\s. Check :attr:`is_fake` to determine accessibility.
         """
         if self._is_dummy:
-            raise RuntimeError(
-                "Not accessible for fake 'ShapeExpr's. Check is_fake to determine accessibility."
-            )
+            raise RuntimeError("Not accessible for fake 'ShapeExpr's. Check is_fake to determine accessibility.")
         return super().is_constant
 
     def constant_value(self) -> int:
@@ -293,6 +319,7 @@ class ShapeExpr(SymInt32):
         ret._is_size_tensor = self._is_size_tensor
         return ret
 
+
 @public_api()
 class SizeTensorShapeExpr(ShapeExpr):
     """
@@ -301,6 +328,7 @@ class SizeTensorShapeExpr(ShapeExpr):
     A shape expression that represent a size tensor
 
     """
+
     def __init__(self, size_tensor_desc: "SizeTensorDesc"):
         """
         .. note:: It is recommended to use :attr:`SizeTensorDesc.expr` to get a :class:`SizeTensorShapeExpr` representing a size tensor
@@ -311,14 +339,14 @@ class SizeTensorShapeExpr(ShapeExpr):
         self._size_tensor_desc = size_tensor_desc
 
     def _op(self, op: trt.DimensionOperation, other: Union[int, "ShapeExpr"]):
-        raise ValueError("It is not permitted to perform binary operations on size tensor expressions") # TRT limitation
+        raise ValueError(
+            "It is not permitted to perform binary operations on size tensor expressions"
+        )  # TRT limitation
 
     @property
     def is_constant(self):
         if self._is_dummy:
-            raise RuntimeError(
-                "Not accessible for fake 'ShapeExpr's. Check is_fake to determine accessibility."
-            )
+            raise RuntimeError("Not accessible for fake 'ShapeExpr's. Check is_fake to determine accessibility.")
         return False
 
     @property
@@ -326,11 +354,14 @@ class SizeTensorShapeExpr(ShapeExpr):
         if self._int_expr is not None:
             return self._int_expr
 
-        self._int_expr = super()._exprBuilder.declare_size_tensor(self._size_tensor_desc.index, self._size_tensor_desc.opt._expr, self._size_tensor_desc.upper_bound._expr)
+        self._int_expr = super()._exprBuilder.declare_size_tensor(
+            self._size_tensor_desc.index, self._size_tensor_desc.opt._expr, self._size_tensor_desc.upper_bound._expr
+        )
         return self._int_expr
-    
+
     def __repr__(self):
         return f"ShapeExpr[is_size_tensor = True, id={id(self)}]"
+
 
 def _from_scalar(s):
     if isinstance(s, int):
@@ -339,6 +370,7 @@ def _from_scalar(s):
         raise ValueError("Float symbolic expressions are not supported")
     else:
         raise ValueError(f"Unsupported type: '{type(s)}'")
+
 
 # Iterable holding `ShapeExpr`s
 @public_api()
@@ -377,7 +409,7 @@ class SymExprs:
     def __setitem__(self, index, expr):
         if index >= self._length:
             raise IndexError("Index out of range")
-        
+
         if not isinstance(expr, SymExpr):
             expr = _from_scalar(expr)
 
@@ -386,9 +418,10 @@ class SymExprs:
     def __repr__(self):
         return f"SymExprs[{', '.join([s.__repr__() for s in self._exprs])}]"
 
+
 @public_api()
 class ShapeExprs(SymExprs):
-    def __init__(self, length, _is_dummy = False):
+    def __init__(self, length, _is_dummy=False):
         """
         Iterable holding :class:`ShapeExpr`\s, representing a tensor shape
 
@@ -396,8 +429,10 @@ class ShapeExprs(SymExprs):
             length (int): Number of dimensions of the tensor
         """
         if length > trt.Dims.MAX_DIMS:
-            raise ValueError(f"ShapeExprs can only support up to trt.Dims.MAX_DIMS = {trt.Dims.MAX_DIMS} dimensions. {length} given.")
-        
+            raise ValueError(
+                f"ShapeExprs can only support up to trt.Dims.MAX_DIMS = {trt.Dims.MAX_DIMS} dimensions. {length} given."
+            )
+
         super().__init__(length)
 
         self._is_dummy = _is_dummy
@@ -415,7 +450,7 @@ class ShapeExprs(SymExprs):
         inst = cls(len(shape_exprs_))
         inst._exprs = list(shape_exprs_)
         return inst
-    
+
     def numel(self) -> ShapeExpr:
         """
         Returns a symbolic expression for the number of elements
@@ -428,14 +463,14 @@ class ShapeExprs(SymExprs):
     def __setitem__(self, index, value):
         if index >= self._length:
             raise IndexError("Index out of range")
-        
+
         if not isinstance(value, ShapeExpr):
             if not isinstance(value, int):
                 raise ValueError(f"Value should be int or ShapeExpr. Got '{type(value)}'")
             value = ShapeExpr(value)
 
         self._exprs[index] = value
-    
+
     def __repr__(self):
         return f"ShapeExprs[{', '.join([s.__repr__() for s in self._exprs])}]"
 
@@ -443,7 +478,8 @@ class ShapeExprs(SymExprs):
         ret = ShapeExprs.from_tuple((e._clone() for e in self._exprs))
         ret._is_dummy = self._is_dummy
         return ret
-    
+
+
 @public_api()
 class SymIntExprs(SymExprs):
     def __init__(self, length):
@@ -452,7 +488,7 @@ class SymIntExprs(SymExprs):
 
         Args:
             length (int): Number of symbolic expressions in the iterable
-        """   
+        """
         super().__init__(length)
 
     @classmethod
@@ -470,16 +506,17 @@ class SymIntExprs(SymExprs):
     def __setitem__(self, index, value):
         if index >= self._length:
             raise IndexError("Index out of range")
-        
+
         if not isinstance(value, SymIntExpr):
             if not isinstance(value, int):
                 raise ValueError(f"Value should be int or SymIntExpr. Got '{type(value)}'")
             value = SymIntExpr(value)
 
         self._exprs[index] = value
-    
+
     def __repr__(self):
         return f"SymIntExprs[{', '.join([s.__repr__() for s in self._exprs])}]"
+
 
 # Numerical representation of a tensor shape
 @public_api()
@@ -487,9 +524,8 @@ class Shape:
     """
     Numerical representation of a tensor shape
     """
-    def __init__(
-        self, tensor_desc: Union[Tuple[int], trt.DynamicPluginTensorDesc, trt.PluginTensorDesc] = None
-    ):
+
+    def __init__(self, tensor_desc: Union[Tuple[int], trt.DynamicPluginTensorDesc, trt.PluginTensorDesc] = None):
         self._is_dynamic = None  # set lazily
         if isinstance(tensor_desc, trt.DynamicPluginTensorDesc):
             self._length = len(tensor_desc.desc.dims)
@@ -505,7 +541,9 @@ class Shape:
             self._length = 0
             self._shapes = trt.Dims(0)
         else:
-            raise ValueError("Unsupported type used for constructing trt.plugin.Shape! tensor_desc must be a Tuple[int], trt.DynamicPluginTensorDesc, or trt.PluginTensorDesc")
+            raise ValueError(
+                "Unsupported type used for constructing trt.plugin.Shape! tensor_desc must be a Tuple[int], trt.DynamicPluginTensorDesc, or trt.PluginTensorDesc"
+            )
 
     def numel(self) -> int:
         """
@@ -554,7 +592,7 @@ class Shape:
             raise ValueError("opt property is only accessible if is_dynamic is true")
         if not hasattr(self, "_desc"):
             raise AttributeError(
-            "Shape object has at least one dynamic dimension, but no information is available on 'opt' property."
+                "Shape object has at least one dynamic dimension, but no information is available on 'opt' property."
             )
         return tuple(self._desc.opt)
 
@@ -567,7 +605,7 @@ class Shape:
             raise ValueError("min property is only accessible if is_dynamic is true")
         if not hasattr(self, "_desc"):
             raise AttributeError(
-            "Shape object has at least one dynamic dimension, but no information is available on 'min' property."
+                "Shape object has at least one dynamic dimension, but no information is available on 'min' property."
             )
         return tuple(self._desc.min)
 
@@ -580,7 +618,7 @@ class Shape:
             raise ValueError("max property is only accessible if is_dynamic is true")
         if not hasattr(self, "_desc"):
             raise AttributeError(
-            "Shape object has at least one dynamic dimension, but no information is available on 'max' property."
+                "Shape object has at least one dynamic dimension, but no information is available on 'max' property."
             )
         return tuple(self._desc.max)
 
@@ -603,7 +641,14 @@ class TensorDesc:
     Descriptor for a tensor
     A `TensorDesc` never contains nor refers to any tensor data.
     """
-    def __init__(self, shape_expr: ShapeExprs = None, dtype: trt.DataType = None, format: trt.TensorFormat = None, scale: float = None):
+
+    def __init__(
+        self,
+        shape_expr: ShapeExprs = None,
+        dtype: trt.DataType = None,
+        format: trt.TensorFormat = None,
+        scale: float = None,
+    ):
         """
         Args:
             shape_expr (ShapeExprs): The data with which to initialize the tensor.
@@ -774,7 +819,6 @@ class TensorDesc:
         self._validate_has_shape()
         return self._scale
 
-
     @shape_expr.setter
     def shape_expr(self, value):
         self._shape_expr = value
@@ -835,6 +879,7 @@ class TensorDesc:
             raise ValueError("Cannot modify immutable TensorDesc properties")
         super().__setattr__(name, value)
 
+
 @public_api()
 class SizeTensorDesc(TensorDesc):
     """
@@ -842,6 +887,7 @@ class SizeTensorDesc(TensorDesc):
 
     Descriptor for a size tensor: a scalar of either INT32 or INT64 data type used to express the extent of a data-dependent dimension.
     """
+
     def __init__(self, opt: ShapeExpr, upper_bound: ShapeExpr):
         """
         Args:
@@ -902,6 +948,7 @@ class Tensor:
     Supports `__cuda_array_interface__` for interoperability with other frameworks.
 
     """
+
     def __init__(self):
         self._data_ptr = None
         self._shape = None
@@ -1007,9 +1054,7 @@ class Tensor:
     @property
     def __cuda_array_interface__(self):
         if self._dtype in [trt.DataType.BF16, trt.DataType.FP8, trt.DataType.INT4]:
-            raise ValueError(
-                f"Handling {self._dtype} via '__cuda_array_interface__' is not supported"
-            )
+            raise ValueError(f"Handling {self._dtype} via '__cuda_array_interface__' is not supported")
 
         desc = {
             "shape": tuple(self._shape),
@@ -1021,9 +1066,7 @@ class Tensor:
             self._data_ptr,
             False,
         )  # torch does not support read_only flag. Always set to False -- it is user's responsibility to respect implied read-write restriction(s).
-        desc["strides"] = tuple(
-            [s * np.dtype(trt.nptype(self._dtype)).itemsize for s in self._strides]
-        )
+        desc["strides"] = tuple([s * np.dtype(trt.nptype(self._dtype)).itemsize for s in self._strides])
 
         return desc
 
@@ -1091,7 +1134,9 @@ class Tensor:
         cloned._aliased_to = self
         return cloned
 
+
 if IS_AOT_ENABLED:
+
     @public_api()
     class KernelLaunchParams:
         """
@@ -1104,14 +1149,17 @@ if IS_AOT_ENABLED:
             block_z (Union[int, trt.IDimensionExpr, SymInt32], optional): The z dimension of each thread block. Defaults to 1.
             shared_mem (Union[int, trt.IDimensionExpr, SymInt32], optional): Shared-memory per thread block in bytes. Defaults to 0.
         """
-        def __init__(self,
-                    grid_x: Union[int, trt.IDimensionExpr, SymInt32] = 1,
-                    grid_y: Union[int, trt.IDimensionExpr, SymInt32] = 1,
-                    grid_z: Union[int, trt.IDimensionExpr, SymInt32] = 1,
-                    block_x: Union[int, trt.IDimensionExpr, SymInt32] = 1,
-                    block_y: Union[int, trt.IDimensionExpr, SymInt32] = 1,
-                    block_z: Union[int, trt.IDimensionExpr, SymInt32] = 1,
-                    shared_mem: Union[int, trt.IDimensionExpr, SymInt32] = 0):
+
+        def __init__(
+            self,
+            grid_x: Union[int, trt.IDimensionExpr, SymInt32] = 1,
+            grid_y: Union[int, trt.IDimensionExpr, SymInt32] = 1,
+            grid_z: Union[int, trt.IDimensionExpr, SymInt32] = 1,
+            block_x: Union[int, trt.IDimensionExpr, SymInt32] = 1,
+            block_y: Union[int, trt.IDimensionExpr, SymInt32] = 1,
+            block_z: Union[int, trt.IDimensionExpr, SymInt32] = 1,
+            shared_mem: Union[int, trt.IDimensionExpr, SymInt32] = 0,
+        ):
             self.grid_x = SymInt32(grid_x)
             self.grid_y = SymInt32(grid_y)
             self.grid_z = SymInt32(grid_z)
@@ -1119,7 +1167,6 @@ if IS_AOT_ENABLED:
             self.block_y = SymInt32(block_y)
             self.block_z = SymInt32(block_z)
             self.shared_mem = SymInt32(shared_mem)
-
 
         def __setattr__(self, name, value):
             if name in ["grid_x", "grid_y", "grid_z", "block_x", "block_y", "block_z", "shared_mem"]:

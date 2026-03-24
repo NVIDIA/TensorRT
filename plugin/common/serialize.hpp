@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +17,9 @@
 #pragma once
 
 #include <cstring>
-#include <vector>
-#include <cassert>
+#include <stdexcept>
 #include <type_traits>
+#include <vector>
 
 #include <iostream>
 using std::cerr;
@@ -41,7 +41,7 @@ struct Serializer
 };
 
 template <typename T>
-struct Serializer<T, typename std::enable_if_t<std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_pod_v<T>>>
+struct Serializer<T, std::enable_if_t<std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_pod_v<T>>>
 {
     static size_t serialized_size(T const&)
     {
@@ -54,7 +54,10 @@ struct Serializer<T, typename std::enable_if_t<std::is_arithmetic_v<T> || std::i
     }
     static void deserialize(void const** buffer, size_t* buffer_size, T* value)
     {
-        assert(*buffer_size >= sizeof(T));
+        if (*buffer_size < sizeof(T))
+        {
+            throw std::runtime_error("Deserialization error: buffer too small for scalar value");
+        }
         ::memcpy(value, *buffer, sizeof(T));
         reinterpret_cast<char const*&>(*buffer) += sizeof(T);
         *buffer_size -= sizeof(T);
@@ -73,19 +76,21 @@ struct Serializer<const char*>
         ::strcpy(static_cast<char*>(*buffer), value);
         reinterpret_cast<char*&>(*buffer) += strlen(value) + 1;
     }
-    static void deserialize(void const** buffer, size_t* buffer_size, const char** value)
+    static void deserialize(void const** buffer, size_t* buffer_size, char const** value)
     {
         *value = static_cast<char const*>(*buffer);
-        size_t data_size = strnlen(*value, *buffer_size) + 1;
-        assert(*buffer_size >= data_size);
+        size_t const data_size = strnlen(*value, *buffer_size) + 1;
+        if (*buffer_size < data_size)
+        {
+            throw std::runtime_error("Deserialization error: buffer too small for C string");
+        }
         reinterpret_cast<char const*&>(*buffer) += data_size;
         *buffer_size -= data_size;
     }
 };
 
 template <typename T>
-struct Serializer<std::vector<T>,
-    typename std::enable_if_t<std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_pod_v<T>>>
+struct Serializer<std::vector<T>, std::enable_if_t<std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_pod_v<T>>>
 {
     static size_t serialized_size(std::vector<T> const& value)
     {
@@ -102,9 +107,14 @@ struct Serializer<std::vector<T>,
     {
         size_t size;
         deserialize_value(buffer, buffer_size, &size);
+        // Single division-based check covers both integer overflow (size*sizeof(T) wraps)
+        // and out-of-bounds memcpy, and must happen before resize() to prevent DoS.
+        if (size > *buffer_size / sizeof(T))
+        {
+            throw std::runtime_error("Deserialization error: vector size exceeds available buffer");
+        }
+        size_t const nbyte = size * sizeof(T);
         value->resize(size);
-        size_t nbyte = value->size() * sizeof(T);
-        assert(*buffer_size >= nbyte);
         ::memcpy(value->data(), *buffer, nbyte);
         reinterpret_cast<char const*&>(*buffer) += nbyte;
         *buffer_size -= nbyte;
@@ -129,9 +139,11 @@ struct Serializer<std::string>
     {
         size_t nbyte;
         deserialize_value(buffer, buffer_size, &nbyte);
+        if (nbyte > *buffer_size)
+        {
+            throw std::runtime_error("Deserialization error: string size exceeds available buffer");
+        }
         value->resize(nbyte);
-        assert(value->size() == nbyte);
-        assert(*buffer_size >= nbyte);
         ::memcpy(const_cast<char*>(value->data()), *buffer, nbyte);
         reinterpret_cast<char const*&>(*buffer) += nbyte;
         *buffer_size -= nbyte;

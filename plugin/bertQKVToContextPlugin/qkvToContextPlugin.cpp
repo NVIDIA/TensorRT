@@ -192,6 +192,7 @@ int32_t QKVToContextPluginDynamic::getOutputShapes(DimsExprs const* inputs, int3
     return pluginStatus_t::STATUS_FAILURE;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool QKVToContextPluginDynamic::supportsFormatCombination(
     int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t /*nbOutputs*/) noexcept
 {
@@ -1205,6 +1206,7 @@ char const* QKVToContextVarSeqlenPlugin::getPluginNamespace() const noexcept
     return mNamespace.c_str();
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 int32_t QKVToContextVarSeqlenPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
     cudaStream_t stream) noexcept

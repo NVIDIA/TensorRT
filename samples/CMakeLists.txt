@@ -17,7 +17,7 @@
 
 # Require the ONNX parser to build samples or trtexec.
 if((${TRT_BUILD_SAMPLES} OR ${TRT_BUILD_TRTEXEC}) AND NOT ${TRT_BUILD_ONNX_PARSER})
-    message(FATAL_ERROR "Building trtexec and/or the other samples requires that TRT_BUILD_ONNX_PARSER=ON")
+    message(FATAL_ERROR "Building trtexec (TRT_BUILD_TRTEXEC=${TRT_BUILD_TRTEXEC}) and/or the other samples (TRT_BUILD_SAMPLES=${TRT_BUILD_SAMPLES}) requires that TRT_BUILD_ONNX_PARSER=ON")
 endif()
 
 if(${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
@@ -80,15 +80,24 @@ if(${TRT_BUILD_SAMPLES})
         )
     endif()
 
+    if(${TRT_BUILD_ENABLE_MULTIDEVICE})
+        if(NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/workaround.cmake")
+            add_sample(sampleDistCollective)
+        endif()
+    endif()
+
     # This sample needs to link against nvinfer_plugin.
     if(${TRT_BUILD_PLUGINS})
         add_sample(sampleOnnxMnistCoordConvAC)
     endif()
 
+    if(${TRT_BUILD_ENABLE_DLA})
+        add_sample(dlaLoadableExtractor)
+    endif()
+
     set(CUDLA_SUPPORTED OFF)
     if(${TRT_BUILD_ENABLE_DLA} AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT WIN32)
         if(CMAKE_SYSTEM_NAME STREQUAL "QNX" AND CUDA_VERSION VERSION_GREATER_EQUAL "12.0")
-            # cuDLA is supported on DOS 6 (CUDA 11.4) but not DOS 7+ (CUDA 12.0+)
             message(STATUS "Skipping sampleCudla: cuDLA not supported on QNX with CUDA >= 12.0 (DriveOS 7)")
         else()
             set(CUDLA_SUPPORTED ON)
@@ -112,7 +121,9 @@ if(${TRT_BUILD_SAMPLES})
     endif()
 endif() # TRT_BUILD_SAMPLES
 
-include(${CMAKE_CURRENT_LIST_DIR}/workaround.cmake)
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/workaround.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/workaround.cmake)
+endif()
 
 foreach(FOLDER IN LISTS trtSampleFolders)
     add_subdirectory(${FOLDER})
@@ -162,10 +173,17 @@ else()
         add_subdirectory(sampleOnnxMnistCoordConvAC)
         add_subdirectory(sampleProgressMonitor)
         add_subdirectory(trtexec)
+
+        if(${TRT_BUILD_ENABLE_MULTIDEVICE})
+            # Sample requires NCCL, which is not available when cross-compiling.
+            if(NOT CMAKE_CROSSCOMPILING)
+                add_subdirectory(sampleDistCollective)
+            endif()
+        endif()
+
         set(CUDLA_SUPPORTED OFF)
         if(TRT_BUILD_ENABLE_DLA AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT WIN32)
             if(CMAKE_SYSTEM_NAME STREQUAL "QNX" AND CUDA_VERSION VERSION_GREATER_EQUAL "12.0")
-                # cuDLA is supported on DOS 6 (CUDA 11.4) but not DOS 7+ (CUDA 12.0+)
                 message(STATUS "Skipping sampleCudla: cuDLA not supported on QNX with CUDA >= 12.0 (DriveOS 7)")
             else()
                 set(CUDLA_SUPPORTED ON)

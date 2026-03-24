@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.1.0
+ARG CUDA_VERSION=13.2.0
 ARG OS_VERSION=24.04
 
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.15.1.29
+ENV TRT_VERSION 10.16.0.72
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Setup user account and edit default account
@@ -38,7 +38,6 @@ RUN mkdir -p /workspace && chown trtuser /workspace
 
 # Install requried libraries + aarch64 toolchains
 RUN apt-get update && apt-get install -y software-properties-common
-RUN add-apt-repository ppa:ubuntu-toolchain-r/test
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     wget \
@@ -51,7 +50,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bzip2 \
     unzip \
     build-essential \
-    g++-aarch64-linux-gnu
+    g++-aarch64-linux-gnu \
+    libnccl2 \
+    libnccl-dev \
+    openmpi-bin \
+    libopenmpi-dev
 
 # Install python3
 RUN apt-get install -y --no-install-recommends \
@@ -76,17 +79,17 @@ RUN cd /tmp && \
     rm ./cmake-3.27.9-Linux-x86_64.sh
 
 # Install CUDA cross compile toolchain
-RUN wget https://developer.download.nvidia.com/compute/cuda/13.1.0/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-1-local_13.1.0-1_all.deb && \
-    dpkg -i cuda-repo-cross-sbsa-ubuntu2404-13-1-local_13.1.0-1_all.deb && \
-    cp /var/cuda-repo-cross-sbsa-ubuntu2404-13-1-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
+RUN wget https://developer.download.nvidia.com/compute/cuda/13.2.0/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-2-local_13.2.0-1_all.deb && \
+    dpkg -i cuda-repo-cross-sbsa-ubuntu2404-13-2-local_13.2.0-1_all.deb && \
+    cp /var/cuda-repo-cross-sbsa-ubuntu2404-13-2-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
     apt-get update && \
-    apt-get -y install cuda-cross-sbsa-13-1
+    apt-get -y install cuda-cross-sbsa-13-2
 
 # Unpack libnvinfer.
 
-RUN wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.15.1/tars/TensorRT-10.15.1.29.Linux.aarch64-gnu.cuda-13.1.tar.gz && \
-    tar -xf TensorRT-10.15.1.29.Linux.aarch64-gnu.cuda-13.1.tar.gz && \
-    cp -a TensorRT-10.15.1.29/lib/*.so* /usr/lib/aarch64-linux-gnu
+RUN wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.0/tars/TensorRT-10.16.0.72.Linux.aarch64-gnu.cuda-13.1.tar.gz && \
+    tar -xf TensorRT-10.16.0.72.Linux.aarch64-gnu.cuda-13.1.tar.gz && \
+    cp -a TensorRT-10.16.0.72/lib/*.so* /usr/lib/aarch64-linux-gnu
 
 # Link required library
 RUN cd /usr/aarch64-linux-gnu/lib && ln -sf librt.so.1 librt.so

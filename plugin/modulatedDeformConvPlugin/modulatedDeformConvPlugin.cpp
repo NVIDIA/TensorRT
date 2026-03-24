@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,7 @@
 
 #include "modulatedDeformConvPlugin.h"
 #include <algorithm>
+#include <memory>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
@@ -71,10 +72,10 @@ nvinfer1::IPluginV3* ModulatedDeformableConvPluginDynamic::clone() noexcept
 {
     try
     {
-        auto* plugin = new ModulatedDeformableConvPluginDynamic(
+        auto plugin = std::make_unique<ModulatedDeformableConvPluginDynamic>(
             mLayerName, mStride, mPadding, mDilation, mDeformableGroup, mGroup);
         plugin->setPluginNamespace(getPluginNamespace());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -402,6 +403,7 @@ nvinfer1::PluginFieldCollection const* ModulatedDeformableConvPluginDynamicCreat
     return &mFC;
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 nvinfer1::IPluginV3* ModulatedDeformableConvPluginDynamicCreator::createPlugin(
     char const* name, nvinfer1::PluginFieldCollection const* fc, nvinfer1::TensorRTPhase phase) noexcept
 {

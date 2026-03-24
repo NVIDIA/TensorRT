@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,6 +55,13 @@ def main():
 
     with open(target_path, 'r', encoding="utf-8") as file:
         contents = file.read()
+
+        if args.trt_module == "tensorrt_rtx":
+            readme_text = """NVIDIA TensorRT RTX is an SDK for high-performance AI inference on NVIDIA RTX GPUs. It includes a Just-in-Time compiler for fast on-device inference optimizations that enable portable deployments and runtime performance specialization. It also introduces convenience features such as built-in CUDA graph support, runtime cache, and a simplified development workflow."""
+        else:
+            readme_text = """NVIDIA TensorRT is an SDK that facilitates high-performance machine learning inference. It is designed to work in a complementary fashion with training frameworks such as PyTorch. It focuses specifically on running an already-trained network quickly and efficiently on NVIDIA hardware."""
+
+        contents = contents.replace("##TENSORRT_README##", readme_text)
         contents = contents.replace("##TENSORRT_MODULE##", args.trt_module)
         contents = contents.replace("##TENSORRT_PYTHON_VERSION##", args.trt_py_version)
         contents = contents.replace("##CUDA_MAJOR##", args.cuda_version.split(".")[0])

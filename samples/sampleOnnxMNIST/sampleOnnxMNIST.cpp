@@ -37,9 +37,8 @@
 #include <cuda_runtime_api.h>
 
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
-#include <sstream>
+#include <random>
 using namespace nvinfer1;
 
 const std::string gSampleName = "TensorRT.sample_onnx_mnist";
@@ -273,9 +272,12 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
     const int inputW = mInputDims.d[3];
 
     // Read a random digit file
-    srand(unsigned(time(nullptr)));
     std::vector<uint8_t> fileData(inputH * inputW);
-    mNumber = rand() % 10;
+    mNumber = std::invoke([] {
+        auto dist = std::uniform_int_distribution<int>{0, 9};
+        auto gen = std::mt19937{std::random_device{}()};
+        return dist(gen);
+    });
     samplesCommon::readPGMFile(
         samplesCommon::locateFile(std::to_string(mNumber) + ".pgm", mParams.dataDirs), fileData.data(), inputH, inputW);
 

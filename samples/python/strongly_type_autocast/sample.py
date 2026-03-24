@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +38,7 @@ class Sample:
             sys.exit(1)   
         self.mnist_dir = mnist_dir
         self.working_dir = working_dir
-        self.origin_onnx_path = os.path.join(self.mnist_dir, "mnist.onnx")
+        self.origin_onnx_path = os.path.join(self.mnist_dir, "mnist-12.onnx")
         self.converted_onnx_path = os.path.join(self.working_dir, "mnist_converted.onnx")
         self.trt_engine_path = os.path.join(self.working_dir, "mnist_converted.engine")
         self.origin_output_path = os.path.join(self.working_dir, "origin_output.npz")
@@ -136,7 +136,7 @@ class Sample:
     # Run onnxruntime infer stage
     def infer_with_onnxrt(self, onnx_path, output_file_name):
         print(f"Start onnxruntime infer on {onnx_path}.")
-        sess = onnxruntime.InferenceSession(onnx_path)
+        sess = onnxruntime.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
         runner = OnnxrtRunner(sess)
         self.infer_with_runner(runner, output_file_name)
 

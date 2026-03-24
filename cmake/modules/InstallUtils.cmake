@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,13 +22,14 @@ include(GNUInstallDirs)
 #   installLibraries(
 #     TARGETS target1 [target2 ...]
 #     [COMPONENT component]       # Optional component name for packaging
+#     [EXPORT export]             # Optional export set name.
 #     [CONFIGURATIONS config1 [config2 ...]]  # Optional configurations to install
 #   )
 function(installLibraries)
     cmake_parse_arguments(
         ARG                       # Prefix for parsed args
         "OPTIONAL;RUNTIME_ONLY"   # Options (flags)
-        "COMPONENT"               # Single value args
+        "COMPONENT;EXPORT"        # Single value args
         "TARGETS;CONFIGURATIONS"  # Multi-value args
         ${ARGN}
     )
@@ -51,6 +52,10 @@ function(installLibraries)
         set(optional_arg OPTIONAL)
     endif()
 
+    if(ARG_EXPORT)
+        set(export_arg EXPORT ${ARG_EXPORT})
+    endif()
+
     # When RUNTIME_ONLY is passed, we only want to install .dll files.
     # Instead of also installing the import library (.lib) files.
     # This is only relevant on Windows since Linux doesn't have this distinction.
@@ -66,6 +71,7 @@ function(installLibraries)
         ${optional_arg}
         ${component_arg}
         ${config_arg}
+        ${export_arg}
         ${runtime_only_arg}
     )
 

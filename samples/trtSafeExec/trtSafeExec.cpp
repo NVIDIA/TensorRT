@@ -180,11 +180,10 @@ private:
 
 //! Similar to C++20 template function std::ssize.
 template <class C>
-constexpr auto signedSize(C const& c) ->
-    typename std::common_type_t<std::ptrdiff_t, std::make_signed_t<decltype(c.size())>>
+constexpr auto signedSize(C const& c) -> std::common_type_t<std::ptrdiff_t, std::make_signed_t<decltype(c.size())>>
 {
     /* polyspace +2 RTE:OVFL [Justified:Low] */
-    return static_cast<typename std::common_type_t<std::ptrdiff_t, std::make_signed_t<decltype(c.size())>>>(c.size());
+    return static_cast<std::common_type_t<std::ptrdiff_t, std::make_signed_t<decltype(c.size())>>>(c.size());
 }
 
 bool parseString(std::string const& arg, std::string const& name, std::string& value)
@@ -543,6 +542,7 @@ int64_t volume(TDims const& dims, TDims const& strides, uint64_t bytesPerCompone
 //!
 //! \brief This function parses arguments specific to the sample
 //!
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
 {
     std::string val;
@@ -1230,7 +1230,12 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
         safeLogError(*recorders[0], "Engine blob is empty.");
         return false;
     }
-    registerSafetyPlugins(*gSafeRecorder, args.pluginLibraries);
+    // Register plugins only on the first run. When separateProfileRun is enabled, doInference() is called
+    // twice (normal run then profile run); registering again would assert with "existing plugins" error.
+    if (!isProfileRun)
+    {
+        registerSafetyPlugins(*gSafeRecorder, args.pluginLibraries);
+    }
 
     if (!isProfileRun)
     {

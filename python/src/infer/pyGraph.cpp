@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +25,8 @@
 #if ENABLE_INETWORK_SERIALIZE
 #include "NvInferSerialize.h"
 #endif
+
+#include <vector>
 
 #include "infer/pyGraphDoc.h"
 
@@ -262,7 +264,18 @@ namespace tensorrt
                 return py::cast(self.getBeta());
         };
 
-
+        static auto add_dist_collective_adapter = [](
+                INetworkDefinition& net,
+                ITensor& inp,
+                CollectiveOperation collective_op,
+                py::object reduce_op,
+                py::object root,
+                py::object pyGroups
+        )
+        {
+            std::vector<int64_t> grp = pyGroups.is_none() ? std::vector<int64_t>() : pyGroups.cast<std::vector<int64_t>>();
+            return net.addDistCollective(inp, collective_op, reduce_op.cast<ReduceOperation>(), root.cast<int64_t>(), grp.data(), grp.size());
+        };
     } /* lambdas */
 
     static void cumulative_layer_set_operation(ICumulativeLayer& self, CumulativeOperation op)
@@ -342,6 +355,8 @@ namespace tensorrt
             .value("ATTENTION_OUTPUT", LayerType::kATTENTION_OUTPUT, LayerTypeDoc::ATTENTION_OUTPUT)
             .value("ROTARY_EMBEDDING", LayerType::kROTARY_EMBEDDING, LayerTypeDoc::ROTARY_EMBEDDING)
             .value("KV_CACHE_UPDATE", LayerType::kKVCACHE_UPDATE, LayerTypeDoc::KV_CACHE_UPDATE)
+            .value("MOE", LayerType::kMOE, LayerTypeDoc::MOE)
+            .value("DIST_COLLECTIVE", LayerType::kDIST_COLLECTIVE, LayerTypeDoc::DIST_COLLECTIVE)
         ; // LayerType
 
         py::enum_<TensorFormat>(m, "TensorFormat", TensorFormatDoc::descr, py::arithmetic{}, py::module_local())
@@ -384,6 +399,10 @@ namespace tensorrt
         py::class_<ILayer, std::unique_ptr<ILayer, py::nodelete>>(m, "ILayer", ILayerDoc::descr, py::module_local())
             .def_property("name", &ILayer::getName, &ILayer::setName)
             .def_property("metadata", &ILayer::getMetadata, &ILayer::setMetadata)
+            .def_property("num_ranks", &ILayer::getNbRanks, [](ILayer& self, int32_t nbRanks) {
+                PY_ASSERT_RUNTIME_ERROR(self.setNbRanks(nbRanks),
+                    "Failed to set num_ranks. Only IDistCollectiveLayer supports num_ranks > 1 via ILayer.");
+            }, ILayerDoc::num_ranks)
             .def_property_readonly("type", &ILayer::getType)
             .def_property_readonly("num_inputs", &ILayer::getNbInputs)
             .def_property_readonly("num_outputs", &ILayer::getNbOutputs)
@@ -618,6 +637,7 @@ namespace tensorrt
             .value("MAX", ReduceOperation::kMAX, ReduceOperationDoc::MAX)
             .value("MIN", ReduceOperation::kMIN, ReduceOperationDoc::MIN)
             .value("AVG", ReduceOperation::kAVG, ReduceOperationDoc::AVG)
+            .value("NONE", ReduceOperation::kNONE, ReduceOperationDoc::NONE)
         ;
 
         py::class_<IReduceLayer, ILayer, std::unique_ptr<IReduceLayer, py::nodelete>>(m, "IReduceLayer", IReduceLayerDoc::descr, py::module_local())
@@ -701,6 +721,14 @@ namespace tensorrt
         py::class_<IMatrixMultiplyLayer, ILayer, std::unique_ptr<IMatrixMultiplyLayer, py::nodelete>>(m, "IMatrixMultiplyLayer", IMatrixMultiplyLayerDoc::descr, py::module_local())
             .def_property("op0", [](IMatrixMultiplyLayer& self) {return self.getOperation(0);}, [](IMatrixMultiplyLayer& self, MatrixOperation op) {return self.setOperation(0, op);})
             .def_property("op1", [](IMatrixMultiplyLayer& self) {return self.getOperation(1);}, [](IMatrixMultiplyLayer& self, MatrixOperation op) {return self.setOperation(1, op);})
+        ;
+
+        py::enum_<CollectiveOperation>(m, "CollectiveOperation", CollectiveOperationDoc::descr, py::module_local())
+        .value("ALL_REDUCE", CollectiveOperation::kALL_REDUCE, CollectiveOperationDoc::ALL_REDUCE)
+        .value("ALL_GATHER", CollectiveOperation::kALL_GATHER, CollectiveOperationDoc::ALL_GATHER)
+        .value("BROADCAST", CollectiveOperation::kBROADCAST, CollectiveOperationDoc::BROADCAST)
+        .value("REDUCE", CollectiveOperation::kREDUCE, CollectiveOperationDoc::REDUCE)
+        .value("REDUCE_SCATTER", CollectiveOperation::kREDUCE_SCATTER, CollectiveOperationDoc::REDUCE_SCATTER)
         ;
 
         py::class_<IRaggedSoftMaxLayer, ILayer, std::unique_ptr<IRaggedSoftMaxLayer, py::nodelete>>(m, "IRaggedSoftMaxLayer", IRaggedSoftMaxLayerDoc::descr, py::module_local());
@@ -882,8 +910,7 @@ namespace tensorrt
         py::class_<IUnsqueezeLayer, ILayer, std::unique_ptr<IUnsqueezeLayer, py::nodelete>>(m, "IUnsqueezeLayer", IUnsqueezeLayerDoc::descr, py::module_local())
             .def("set_input", &IUnsqueezeLayer::setInput, "index"_a, "tensor"_a, IUnsqueezeLayerDoc::set_input)
         ;
-
-
+        py::class_<IDistCollectiveLayer, ILayer, std::unique_ptr<IDistCollectiveLayer, py::nodelete>>(m, "IDistCollectiveLayer", IDistCollectiveLayerDoc::descr, py::module_local());
         py::enum_<CumulativeOperation>(m, "CumulativeOperation", CumulativeOperationDoc::descr, py::module_local())
             .value("SUM", CumulativeOperation::kSUM, CumulativeOperationDoc::SUM)
         ;
@@ -913,6 +940,10 @@ namespace tensorrt
             .def("set_input", &IAttention::setInput, "index"_a, "tensor"_a, IAttentionDoc::set_input)
             .def("get_input", &IAttention::getInput, "index"_a, IAttentionDoc::get_input)
             .def("get_output", &IAttention::getOutput, "index"_a, IAttentionDoc::get_output)
+            .def_property("num_ranks", &IAttention::getNbRanks, [](IAttention& self, int32_t nbRanks) {
+                PY_ASSERT_RUNTIME_ERROR(self.setNbRanks(nbRanks), "Failed to set num_ranks. Value must be >= 1.");
+            }, IAttentionDoc::num_ranks)
+
         ;
 
         py::class_<IAttentionBoundaryLayer, ILayer, std::unique_ptr<IAttentionBoundaryLayer, py::nodelete>>(m, "IAttentionBoundaryLayer", IAttentionBoundaryLayerDoc::descr, py::module_local())
@@ -938,6 +969,27 @@ namespace tensorrt
         py::class_<IKVCacheUpdateLayer, ILayer, std::unique_ptr<IKVCacheUpdateLayer, py::nodelete>>(m, "IKVCacheUpdateLayer", IKVCacheUpdateLayerDoc::descr, py::module_local())
             .def_property("cache_mode", &IKVCacheUpdateLayer::getCacheMode, &kv_cache_update_layer_set_cache_mode)
             .def("set_input", &IKVCacheUpdateLayer::setInput, "index"_a, "tensor"_a, IKVCacheUpdateLayerDoc::set_input)
+        ;
+
+        py::enum_<MoEActType>(m, "MoEActType", MoEActTypeDoc::descr, py::module_local())
+            .value("NONE", MoEActType::kNONE, MoEActTypeDoc::NONE)
+            .value("SILU", MoEActType::kSILU, MoEActTypeDoc::SILU)
+        ;
+
+        py::class_<IMoELayer, ILayer, std::unique_ptr<IMoELayer, py::nodelete>>(m, "IMoELayer", IMoELayerDoc::descr, py::module_local())
+            .def("set_gated_weights", &IMoELayer::setGatedWeights, "fc_gate_weights"_a, "fc_up_weights"_a, "fc_down_weights"_a, "activation_type"_a, IMoELayerDoc::set_gated_weights)
+            .def("set_gated_biases", &IMoELayer::setGatedBiases, "fc_gate_biases"_a, "fc_up_biases"_a, "fc_down_biases"_a, IMoELayerDoc::set_gated_biases)
+            .def_property("activation_type", &IMoELayer::getActivationType, &IMoELayer::setActivationType)
+            .def("set_quantization_static", &IMoELayer::setQuantizationStatic, "fc_down_activation_scale"_a, "data_type"_a, IMoELayerDoc::set_quantization_static)
+            .def("set_quantization_dynamic_dbl_q", &IMoELayer::setQuantizationDynamicDblQ, "fc_down_activation_dbl_q_scale"_a, "data_type"_a, "block_shape"_a, "dyn_q_output_scale_type"_a, IMoELayerDoc::set_quantization_dynamic_dbl_q)
+            .def_property("quantization_to_type", &IMoELayer::getQuantizationToType, &IMoELayer::setQuantizationToType)
+            .def_property("quantization_block_shape", &IMoELayer::getQuantizationBlockShape, &IMoELayer::setQuantizationBlockShape)
+            .def_property("dyn_q_output_scale_type", &IMoELayer::getDynQOutputScaleType, &IMoELayer::setDynQOutputScaleType)
+            .def("set_swiglu_params", &IMoELayer::setSwigluParams, "limit"_a, "alpha"_a, "beta"_a, IMoELayerDoc::set_swiglu_params)
+            .def_property("swiglu_param_limit", &IMoELayer::getSwigluParamLimit, &IMoELayer::setSwigluParamLimit)
+            .def_property("swiglu_param_alpha", &IMoELayer::getSwigluParamAlpha, &IMoELayer::setSwigluParamAlpha)
+            .def_property("swiglu_param_beta", &IMoELayer::getSwigluParamBeta, &IMoELayer::setSwigluParamBeta)
+            .def("set_input", &IMoELayer::setInput, "index"_a, "tensor"_a, IMoELayerDoc::set_input)
         ;
 
         // Weights must be kept alive for the duration of the network. py::keep_alive is critical here!
@@ -1075,6 +1127,8 @@ namespace tensorrt
                 INetworkDefinitionDoc::add_rotary_embedding, py::return_value_policy::reference_internal)
             .def("add_kv_cache_update", &INetworkDefinition::addKVCacheUpdate, "cache"_a, "update"_a, "write_indices"_a, "cache_mode"_a,
                 INetworkDefinitionDoc::add_kv_cache_update, py::return_value_policy::reference_internal)
+            .def("add_moe", &INetworkDefinition::addMoE, "hidden_states"_a, "selected_experts_for_tokens"_a, "scores_for_selected_experts"_a,
+                INetworkDefinitionDoc::add_moe, py::return_value_policy::reference_internal)
             .def("remove_tensor", &INetworkDefinition::removeTensor, "tensor"_a, INetworkDefinitionDoc::remove_tensor)
             .def("unmark_output", &INetworkDefinition::unmarkOutput, "tensor"_a, INetworkDefinitionDoc::unmark_output)
             .def("mark_output_for_shapes", &INetworkDefinition::markOutputForShapes, "tensor"_a, INetworkDefinitionDoc::mark_output_for_shapes)
@@ -1103,6 +1157,11 @@ namespace tensorrt
             .def("add_unsqueeze", &INetworkDefinition::addUnsqueeze, "input"_a, "axes"_a, INetworkDefinitionDoc::add_unsqueeze, py::return_value_policy::reference_internal)
             .def("add_normalization_v2", &INetworkDefinition::addNormalizationV2, "input"_a, "scale"_a, "bias"_a, "axesMask"_a, INetworkDefinitionDoc::add_normalization_v2,
                 py::return_value_policy::reference_internal)
+            .def("add_dist_collective",
+            lambdas::add_dist_collective_adapter,
+            "input"_a, "dist_collective_op"_a, "reduce_op"_a, "root"_a, "groups"_a,
+            INetworkDefinitionDoc::add_dist_collective,
+            py::return_value_policy::reference_internal)
 #if ENABLE_INETWORK_SERIALIZE
             // Serialization
             .def("serialize", lambdas::network_serialize, INetworkDefinitionDoc::serialize)

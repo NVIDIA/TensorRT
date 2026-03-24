@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include "common/templates.h"
 
 #include <cuda_runtime.h>
+#include <memory>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
@@ -189,9 +190,9 @@ IPluginV2Ext* BatchTilePlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new BatchTilePlugin(mLayerName, mCopySize);
+        auto plugin = std::make_unique<BatchTilePlugin>(mLayerName, mCopySize);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -247,9 +248,9 @@ IPluginV2Ext* BatchTilePluginCreator::createPlugin(char const* name, PluginField
                        "ISliceLayer with SampleMode::kWRAP."
                     << std::endl;
         PLUGIN_VALIDATE(name != nullptr);
-        auto* plugin = new BatchTilePlugin(name);
+        auto plugin = std::make_unique<BatchTilePlugin>(name);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

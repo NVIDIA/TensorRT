@@ -19,6 +19,7 @@
 #include <array>
 #include <chrono>
 #include <cuda.h>
+#include <optional>
 #include <cuda_profiler_api.h>
 #include <functional>
 #include <iterator>
@@ -283,7 +284,7 @@ private:
             else
             {
                 sample::gLogInfo << bindingInOutStr << " binding for " << name << " with dimensions " << tensorInfo.dims
-                                 << " is created." << std::endl;
+                                 << " and type " << tensorInfo.dataType << " is created." << std::endl;
             }
         }
     }
@@ -428,6 +429,30 @@ void contractInt64ToInt32(std::vector<int64_t>& shapeData)
     shapeData.resize((size + 1) / 2);
 }
 
+void setPersistentCacheLimit(
+    nvinfer1::IExecutionContext* ec, InferenceOptions const& inference, std::optional<cudaDeviceProp> const& properties)
+{
+    int32_t const persistentCacheLimit = samplesCommon::getMaxPersistentCacheSize() * inference.persistentCacheRatio;
+    sample::gLogInfo << "Setting persistentCacheLimit to " << persistentCacheLimit << " bytes." << std::endl;
+
+    // try to increase the persistent cache size if it is less than the requested size
+    if (properties && properties->persistingL2CacheMaxSize < persistentCacheLimit)
+    {
+        sample::gLogWarning << "persistentCacheLimit is greater than the device's cudaLimitPersistingL2CacheSize "
+                               "limit ("
+                            << properties->persistingL2CacheMaxSize << " bytes), trying to increase the device's limit."
+                            << std::endl;
+        cudaError_t error = cudaDeviceSetLimit(cudaLimitPersistingL2CacheSize, persistentCacheLimit);
+        if (error != cudaSuccess)
+        {
+            sample::gLogWarning << "Failed to increase persistent cache size, continuing with the device's max "
+                                   "persisting cache size configuration."
+                                << std::endl;
+        }
+    }
+    ec->setPersistentCacheLimit(persistentCacheLimit);
+}
+
 } // namespace
 
 
@@ -550,14 +575,60 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
 }
 #endif
 
+IExecutionContext* setupExecutionContext(
+    nvinfer1::ICudaEngine* engine, InferenceOptions const& inference, std::optional<cudaDeviceProp> const& properties)
+{
+    IExecutionContext* ec{nullptr};
+
+    //! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
+    auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
+        return s == MemoryAllocationStrategy::kSTATIC
+            // Let TRT pre-allocate and manage the memory.
+            ? ExecutionContextAllocationStrategy::kSTATIC
+            // Allocate based on the current profile or runtime shapes.
+            : ExecutionContextAllocationStrategy::kUSER_MANAGED;
+    };
+
+    ec = engine->createExecutionContext(getExecutionContextAllocationStrategy(inference.memoryAllocationStrategy));
+    if (ec == nullptr)
+    {
+        sample::gLogError << "Unable to create execution context. " << std::endl;
+        return nullptr;
+    }
+    ec->setNvtxVerbosity(inference.nvtxVerbosity);
+
+    setPersistentCacheLimit(ec, inference, properties);
+
+    cudaStream_t s;
+    CHECK(cudaStreamCreate(&s));
+    auto setProfile = ec->setOptimizationProfileAsync(inference.optProfileIndex, s);
+    CHECK(cudaStreamSynchronize(s));
+    CHECK(cudaStreamDestroy(s));
+
+    if (!setProfile)
+    {
+        sample::gLogError << "Set optimization profile failed. " << std::endl;
+        if (inference.infStreams > 1)
+        {
+            sample::gLogError
+                << "Please ensure that the engine is built with preview feature profileSharing0806 enabled. "
+                << std::endl;
+        }
+        return nullptr;
+    }
+    return ec;
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
+    std::optional<cudaDeviceProp> properties{};
     int32_t device{};
     CHECK(cudaGetDevice(&device));
 
-    cudaDeviceProp properties;
-    CHECK(cudaGetDeviceProperties(&properties, device));
-    int32_t const isIntegrated{properties.integrated};
+    properties = std::make_optional<cudaDeviceProp>();
+    CHECK(cudaGetDeviceProperties(&properties.value(), device));
+    int32_t const isIntegrated{properties.value().integrated};
     // Use managed memory on integrated devices when transfers are skipped
     // and when it is explicitly requested on the commandline.
     bool useManagedMemory{(inference.skipTransfers && isIntegrated) || inference.useManaged};
@@ -634,55 +705,17 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
                             << std::endl;
     }
 
-    cudaStream_t setOptProfileStream;
-    CHECK(cudaStreamCreate(&setOptProfileStream));
-
     for (int32_t s = 0; s < inference.infStreams; ++s)
     {
-        IExecutionContext* ec{nullptr};
-
-        //! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
-        auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
-            return s == MemoryAllocationStrategy::kSTATIC
-                // Let TRT pre-allocate and manage the memory.
-                ? ExecutionContextAllocationStrategy::kSTATIC
-                // Allocate based on the current profile or runtime shapes.
-                : ExecutionContextAllocationStrategy::kUSER_MANAGED;
-        };
-
-        ec = engine->createExecutionContext(getExecutionContextAllocationStrategy(inference.memoryAllocationStrategy));
+        IExecutionContext* ec = setupExecutionContext(engine, inference, properties);
         if (ec == nullptr)
         {
-            sample::gLogError << "Unable to create execution context for stream " << s << "." << std::endl;
+            sample::gLogError << "Unable to create execution context for inference stream " << s << ". " << std::endl;
             return false;
         }
-        ec->setNvtxVerbosity(inference.nvtxVerbosity);
-
-        int32_t const persistentCacheLimit
-            = samplesCommon::getMaxPersistentCacheSize() * inference.persistentCacheRatio;
-        sample::gLogInfo << "Setting persistentCacheLimit to " << persistentCacheLimit << " bytes." << std::endl;
-        ec->setPersistentCacheLimit(persistentCacheLimit);
-
-        auto setProfile = ec->setOptimizationProfileAsync(inference.optProfileIndex, setOptProfileStream);
-        CHECK(cudaStreamSynchronize(setOptProfileStream));
-
-        if (!setProfile)
-        {
-            sample::gLogError << "Set optimization profile failed. " << std::endl;
-            if (inference.infStreams > 1)
-            {
-                sample::gLogError
-                    << "Please ensure that the engine is built with preview feature profileSharing0806 enabled. "
-                    << std::endl;
-            }
-            return false;
-        }
-
         iEnv.contexts.emplace_back(ec);
         iEnv.bindings.emplace_back(std::make_unique<BindingsStd>(useManagedMemory));
     }
-
-    CHECK(cudaStreamDestroy(setOptProfileStream));
 
     if (iEnv.profiler)
     {
@@ -1384,6 +1417,7 @@ private:
 };
 #endif
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePoint const& cpuStart,
     TrtCudaEvent const& gpuStart, int iterations, float maxDurationMs, float warmupMs,
     std::vector<InferenceTrace>& trace, bool skipTransfers, float idleMs)

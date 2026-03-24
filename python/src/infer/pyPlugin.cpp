@@ -2977,22 +2977,25 @@ std::vector<py::object>* getCreatorsUtil(
     auto vec = std::make_unique<std::vector<py::object>>(numCreators);
     try
     {
-        std::generate(vec->begin(), vec->end(), [&ptr, i = 0]() mutable -> py::object {
-            if (std::strcmp(ptr[i]->getInterfaceInfo().kind, "PLUGIN CREATOR_V1") == 0)
-            {
-                return py::cast(static_cast<IPluginCreator const*>(ptr[i++]));
-            }
-            if (std::strcmp(ptr[i]->getInterfaceInfo().kind, "PLUGIN CREATOR_V3ONE") == 0)
-            {
-                return py::cast(static_cast<IPluginCreatorV3One const*>(ptr[i++]));
-            }
-            if (std::strcmp(ptr[i]->getInterfaceInfo().kind, "PLUGIN CREATOR_V3QUICK") == 0)
-            {
-                return py::cast(static_cast<IPluginCreatorV3Quick const*>(ptr[i++]));
-            }
-            utils::throwPyError(PyExc_RuntimeError, "Unknown plugin creator type");
-            return py::none{};
-        });
+        std::transform(
+            ptr, ptr + numCreators, vec->begin(), [](IPluginCreatorInterface* const interface) -> py::object {
+                using namespace std::literals::string_view_literals;
+                auto const& kind = interface->getInterfaceInfo().kind;
+                if (kind == "PLUGIN CREATOR_V1"sv)
+                {
+                    return py::cast(static_cast<IPluginCreator const*>(interface));
+                }
+                if (kind == "PLUGIN CREATOR_V3ONE"sv)
+                {
+                    return py::cast(static_cast<IPluginCreatorV3One const*>(interface));
+                }
+                if (kind == "PLUGIN CREATOR_V3QUICK"sv)
+                {
+                    return py::cast(static_cast<IPluginCreatorV3Quick const*>(interface));
+                }
+                utils::throwPyError(PyExc_RuntimeError, "Unknown plugin creator type");
+                return py::none{};
+            });
         return vec.release();
     }
     catch (std::exception const& e)

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 #include "common/templates.h"
 #include <cmath>
 #include <cstring>
+#include <memory>
 #include <stdio.h>
 #include <vector>
 
@@ -477,11 +478,11 @@ IPluginV2Ext* ProposalPlugin::clone() const noexcept
 {
     try
     {
-        IPluginV2Ext* plugin = new ProposalPlugin(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth, mRpnStdScaling,
+        auto plugin = std::make_unique<ProposalPlugin>(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth, mRpnStdScaling,
             mRpnStride, mBboxMinSize, mNmsIouThreshold, mPreNmsTopN, mMaxBoxNum, &mAnchorSizes[0], mAnchorSizeNum,
             &mAnchorRatios[0], mAnchorRatioNum);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -494,11 +495,11 @@ IPluginV2DynamicExt* ProposalDynamicPlugin::clone() const noexcept
 {
     try
     {
-        auto* plugin = new ProposalDynamicPlugin(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth, mRpnStdScaling,
-            mRpnStride, mBboxMinSize, mNmsIouThreshold, mPreNmsTopN, mMaxBoxNum, &mAnchorSizes[0], mAnchorSizeNum,
-            &mAnchorRatios[0], mAnchorRatioNum);
+        auto plugin = std::make_unique<ProposalDynamicPlugin>(mInputHeight, mInputWidth, mRpnHeight, mRpnWidth,
+            mRpnStdScaling, mRpnStride, mBboxMinSize, mNmsIouThreshold, mPreNmsTopN, mMaxBoxNum, &mAnchorSizes[0],
+            mAnchorSizeNum, &mAnchorRatios[0], mAnchorRatioNum);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -871,11 +872,11 @@ IPluginV2DynamicExt* ProposalDynamicPluginCreator::createPlugin(
         PLUGIN_VALIDATE(roiMinSize >= 0.0F);
         PLUGIN_VALIDATE(nmsIouThreshold > 0.0F);
 
-        IPluginV2DynamicExt* plugin = new ProposalDynamicPlugin(inputHeight, inputWidth, kRPN_STD_SCALING, rpnStride,
+        auto plugin = std::make_unique<ProposalDynamicPlugin>(inputHeight, inputWidth, kRPN_STD_SCALING, rpnStride,
             roiMinSize, nmsIouThreshold, preNmsTopN, postNmsTopN, &anchorSizes[0], anchorSizes.size(), &anchorRatios[0],
             anchorRatios.size());
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -893,9 +894,9 @@ IPluginV2Ext* ProposalPluginCreator::deserializePlugin(
                        "ProposalDynamic plugin."
                     << std::endl;
         // This object will be deleted when the network is destroyed,
-        IPluginV2Ext* plugin = new ProposalPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<ProposalPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -910,9 +911,9 @@ IPluginV2DynamicExt* ProposalDynamicPluginCreator::deserializePlugin(
     try
     {
         // This object will be deleted when the network is destroyed,
-        IPluginV2DynamicExt* plugin = new ProposalDynamicPlugin(serialData, serialLength);
+        auto plugin = std::make_unique<ProposalDynamicPlugin>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

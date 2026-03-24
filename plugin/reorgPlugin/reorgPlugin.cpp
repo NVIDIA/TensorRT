@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 #include "reorgPlugin.h"
+
+#include <memory>
 
 namespace nvinfer1::plugin
 {
@@ -189,9 +191,9 @@ IPluginV2DynamicExt* ReorgDynamic::clone() const noexcept
 {
     try
     {
-        ReorgDynamic* plugin = new ReorgDynamic(stride);
+        auto plugin = std::make_unique<ReorgDynamic>(stride);
         plugin->setPluginNamespace(mPluginNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -275,9 +277,9 @@ IPluginV2Ext* ReorgStatic::clone() const noexcept
 {
     try
     {
-        ReorgStatic* plugin = new ReorgStatic(C, H, W, stride);
+        auto plugin = std::make_unique<ReorgStatic>(C, H, W, stride);
         plugin->setPluginNamespace(mPluginNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@
 #include "disentangledAttentionPluginLegacy.h"
 #include "NvInferPlugin.h"
 #include <cuda_fp16.h>
+#include <memory>
 #include <numeric>
 #include <stdexcept>
 
@@ -180,9 +181,9 @@ IPluginV2DynamicExt* DisentangledAttentionPluginLegacy::clone() const noexcept
 {
     try
     {
-        auto* plugin = new DisentangledAttentionPluginLegacy(mSpan, mFactor);
+        auto plugin = std::make_unique<DisentangledAttentionPluginLegacy>(mSpan, mFactor);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -342,10 +343,10 @@ IPluginV2DynamicExt* DisentangledAttentionPluginCreatorLegacy::createPlugin(
         PLUGIN_VALIDATE(span >= 0);
         PLUGIN_VALIDATE(factor > 0.F && factor < 1.F); // factor is 1/sqrt(3d), therefore must less than 1
 
-        DisentangledAttentionPluginLegacy* plugin = new DisentangledAttentionPluginLegacy(span, factor);
+        auto plugin = std::make_unique<DisentangledAttentionPluginLegacy>(span, factor);
         plugin->setPluginNamespace(mNamespace.c_str());
 
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {
@@ -359,10 +360,10 @@ IPluginV2DynamicExt* DisentangledAttentionPluginCreatorLegacy::deserializePlugin
 {
     try
     {
-        DisentangledAttentionPluginLegacy* plugin = new DisentangledAttentionPluginLegacy(serialData, serialLength);
+        auto plugin = std::make_unique<DisentangledAttentionPluginLegacy>(serialData, serialLength);
         plugin->setPluginNamespace(mNamespace.c_str());
 
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

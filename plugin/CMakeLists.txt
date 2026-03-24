@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,7 +73,6 @@ set(TRT_PLUGIN_NAMES
 )
 
 
-
 if(${TRT_BUILD_INCLUDE_BERT_QKV_PLUGIN})
     list(APPEND TRT_PLUGIN_NAMES
         bertQKVToContextPlugin
@@ -93,8 +92,9 @@ foreach(PLUGIN_NAME IN LISTS TRT_PLUGIN_NAMES)
 endforeach()
 
 set(trt_plugin_include_dirs
-    ${TensorRT_SOURCE_DIR}/externals
-    ${CMAKE_CURRENT_LIST_DIR}
+    $<BUILD_LOCAL_INTERFACE:${TensorRT_SOURCE_DIR}/externals>
+    $<BUILD_LOCAL_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 target_include_directories(trt_plugins PUBLIC ${trt_plugin_include_dirs})
@@ -106,8 +106,8 @@ target_link_libraries(trt_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
 target_link_libraries(trt_vc_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
 
 # Use true link dependencies on the global definitions and cudart.
-target_link_libraries(trt_plugins PUBLIC trt_global_definitions TRT::cudart trt_cccl_headers)
-target_link_libraries(trt_vc_plugins PUBLIC trt_global_definitions TRT::cudart)
+target_link_libraries(trt_plugins PRIVATE trt_global_definitions TRT::cudart)
+target_link_libraries(trt_vc_plugins PRIVATE trt_global_definitions TRT::cudart)
 
 foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
     get_numeric_sm(${SM} "SM")
@@ -124,21 +124,22 @@ target_compile_definitions(trt_vc_plugins PRIVATE
 
 # Create all the library targets, reusing the objects we've compiled in the first step.
 add_library(tensorrt_plugins SHARED)
+target_link_libraries(tensorrt_plugins PRIVATE trt_plugins)
+
 add_library(tensorrt_plugins_internal SHARED)
+target_link_libraries(tensorrt_plugins_internal PRIVATE trt_plugins)
+
 add_library(tensorrt_plugins_static STATIC)
-foreach(lib tensorrt_plugins tensorrt_plugins_internal tensorrt_plugins_static)
-    target_link_libraries(${lib} PRIVATE trt_plugins)
-endforeach()
+target_bundle_libraries(tensorrt_plugins_static PRIVATE trt_plugins)
 
 add_library(tensorrt_vc_plugins SHARED)
-add_library(tensorrt_vc_plugins_static STATIC)
-foreach(lib tensorrt_vc_plugins tensorrt_vc_plugins_static)
-    target_link_libraries(${lib} PRIVATE trt_vc_plugins)
-endforeach()
+target_link_libraries(tensorrt_vc_plugins PRIVATE trt_vc_plugins)
 
-if (NOT MSVC)
+add_library(tensorrt_vc_plugins_static STATIC)
+target_bundle_libraries(tensorrt_vc_plugins_static PRIVATE trt_plugins)
+
+if(NOT MSVC)
     set(trt_plugins_link_options
-        "LINKER:--version-script=${CMAKE_CURRENT_LIST_DIR}/exports.map"
         "LINKER:-z,relro"
         "LINKER:-Bsymbolic"
         "LINKER:--no-undefined"
@@ -172,19 +173,20 @@ set_target_properties(
                OUTPUT_NAME nvinfer_plugin
                VERSION ${TensorRT_VERSION}
                SOVERSION ${TRT_MAJOR}
-               LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports.map
+)
+
+apply_export_map(
+    TARGETS tensorrt_plugins
 )
 
 update_windows_output_name(tensorrt_plugins ${TRT_MAJOR} ${TRT_MINOR})
 
-if (NOT MSVC)
+if(NOT MSVC)
     set(trt_plugins_internal_link_options
-        "LINKER:--version-script=${TensorRT_SOURCE_DIR}/Exports-plugin_internal.map"
         "LINKER:-z,relro"
         "LINKER:-Bsymbolic"
         "LINKER:--no-undefined"
         "LINKER:--no-as-needed"
-        "$<$<CONFIG:Release>:LINKER:--strip-all>"
     )
 else()
     set(trt_plugins_internal_link_options)
@@ -204,7 +206,6 @@ set_target_properties(
                OUTPUT_NAME nvinfer_plugin_internal
                VERSION ${TensorRT_VERSION}
                SOVERSION ${TRT_MAJOR}
-               LINK_DEPENDS ${TensorRT_SOURCE_DIR}/Exports-plugin_internal.map
 )
 
 update_windows_output_name(tensorrt_plugins_internal ${TRT_MAJOR} ${TRT_MINOR})
@@ -212,7 +213,7 @@ update_windows_output_name(tensorrt_plugins_internal ${TRT_MAJOR} ${TRT_MINOR})
 ### Static Plugin Setup
 set(trt_plugin_static_dependencies
     tensorrt_static
-    trt_global_definitions
+    $<BUILD_LOCAL_INTERFACE:trt_global_definitions>
 )
 
 target_include_directories(tensorrt_plugins_static PRIVATE ${trt_plugin_include_dirs})
@@ -225,7 +226,7 @@ set_target_properties(
                OUTPUT_NAME nvinfer_plugin_static
                VERSION ${TensorRT_VERSION}
                SOVERSION ${TRT_MAJOR}
-               LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports.map)
+               LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports/nvinfer_plugin.map)
 
 if(NOT ${TRT_BUILD_ENABLE_STATIC_LIBS})
     set_target_properties(tensorrt_plugins_static
@@ -238,7 +239,6 @@ smoke_test_static_lib(tensorrt_plugins_static)
 ### VC Plugin Setup
 if (NOT MSVC)
     set(trt_vc_plugins_link_options
-        "LINKER:--version-script=${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map"
         "LINKER:-z,relro"
         "LINKER:-Bsymbolic"
         "LINKER:--no-undefined"
@@ -262,7 +262,10 @@ set_target_properties(
                 OUTPUT_NAME nvinfer_vc_plugin
                 VERSION ${TensorRT_VERSION}
                 SOVERSION ${TRT_MAJOR}
-                LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map
+)
+
+apply_export_map(
+    TARGETS tensorrt_vc_plugins
 )
 
 update_windows_output_name(tensorrt_vc_plugins ${TRT_MAJOR} ${TRT_MINOR})
@@ -278,7 +281,7 @@ set_target_properties(
                 OUTPUT_NAME nvinfer_vc_plugin_static
                 VERSION ${TensorRT_VERSION}
                 SOVERSION ${TRT_MAJOR}
-                LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports-vfc_plugin.map)
+                LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/exports/nvinfer_vc_plugin.map)
 
 if(NOT ${TRT_BUILD_ENABLE_STATIC_LIBS})
     set_target_properties(tensorrt_vc_plugins_static
@@ -294,15 +297,24 @@ if(${TRT_BUILD_STUB_LIBS} AND NOT MSVC)
 endif()
 
 installLibraries(
-    TARGETS tensorrt_plugins tensorrt_plugins_static tensorrt_vc_plugins tensorrt_vc_plugins_static
+    TARGETS tensorrt_plugins tensorrt_vc_plugins
     OPTIONAL
     COMPONENT external
+    EXPORT TensorRT
+)
+
+installLibraries(
+    TARGETS tensorrt_plugins_static tensorrt_vc_plugins_static
+    OPTIONAL
+    COMPONENT external
+    EXPORT TensorRT_Static
 )
 
 installLibraries(
     TARGETS tensorrt_plugins_internal
     OPTIONAL
     COMPONENT internal
+    EXPORT TensorRT_Internal
 )
 
 else() # TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW
@@ -315,8 +327,8 @@ set(VFC_TARGET_NAME ${nvinfer_vc_plugin_lib_name})
 set(VFC_SHARED_TARGET ${VFC_TARGET_NAME})
 
 set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-set(PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports.map)
-set(VFC_PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports-vfc_plugin.map)
+set(PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports/nvinfer_plugin.map)
+set(VFC_PLUGIN_EXPORT_MAP ${TARGET_DIR}/exports/nvinfer_vc_plugin.map)
 
 if(${CMAKE_BUILD_TYPE} MATCHES "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
@@ -406,7 +418,6 @@ if(BERT_GENCODES)
 endif()
 
 include_directories(common common/kernels ${CMAKE_SOURCE_DIR}/third_party)
-
 
 foreach(PLUGIN_ITER ${PLUGIN_LISTS})
     include_directories(${PLUGIN_ITER})

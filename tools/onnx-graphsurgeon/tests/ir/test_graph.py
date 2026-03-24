@@ -42,7 +42,9 @@ def shape(self, inp):
 
 @Graph.register()
 def cast(self, inp, to):
-    return self.layer(op="Cast", inputs=[inp], outputs=["cast_out"], attrs={"to": to})[0]
+    return self.layer(op="Cast", inputs=[inp], outputs=["cast_out"], attrs={"to": to})[
+        0
+    ]
 
 
 @Graph.register()
@@ -121,7 +123,9 @@ def slice(self, data, starts=None, ends=None, axes=None, steps=None):
 
 @gs.Graph.register()
 def nested(self, inp, graph):
-    return self.layer(op="Nested", inputs=[inp], outputs=["nested_out"], attrs={"body": graph})[0]
+    return self.layer(
+        op="Nested", inputs=[inp], outputs=["nested_out"], attrs={"body": graph}
+    )[0]
 
 
 @gs.Graph.register()
@@ -168,7 +172,9 @@ def quantize_linear(self, inp, out_scale, out_zero_point, axis=1):
 @gs.Graph.register()
 def pad(self, data, pads, constant_value=None):
     constant_value = misc.default_value(constant_value, Variable.empty())
-    out = self.layer(op="Pad", inputs=[data, pads, constant_value], outputs=["pad_out"])[0]
+    out = self.layer(
+        op="Pad", inputs=[data, pads, constant_value], outputs=["pad_out"]
+    )[0]
     out.dtype = data.dtype
     return out
 
@@ -178,7 +184,9 @@ def softmax(self, data, axis=None):
     attrs = {}
     if axis is not None:
         attrs["axis"] = axis
-    out = self.layer(op="Softmax", inputs=[data], outputs=["softmax_out"], attrs=attrs)[0]
+    out = self.layer(op="Softmax", inputs=[data], outputs=["softmax_out"], attrs=attrs)[
+        0
+    ]
     out.dtype = data.dtype
     return out
 
@@ -198,7 +206,9 @@ def make_nested_graph():
     subgraph_outputs = [Variable("subgraph_out")]
 
     subgraph_identity0 = Node(op="Identity", inputs=[id_out], outputs=[subgraph_id_out])
-    subgraph_identity1 = Node(op="Identity", inputs=[subgraph_id_out], outputs=subgraph_outputs)
+    subgraph_identity1 = Node(
+        op="Identity", inputs=[subgraph_id_out], outputs=subgraph_outputs
+    )
 
     subgraph = Graph(
         nodes=[subgraph_identity0, subgraph_identity1],
@@ -207,7 +217,9 @@ def make_nested_graph():
     )
 
     nested_out = Variable("nested_out")
-    nested_node = Node(op="Nested", attrs={"body": subgraph}, inputs=[inp], outputs=[nested_out])
+    nested_node = Node(
+        op="Nested", attrs={"body": subgraph}, inputs=[inp], outputs=[nested_out]
+    )
 
     return Graph(nodes=[identity, nested_node], inputs=[inp], outputs=[nested_out])
 
@@ -227,7 +239,9 @@ def very_nested_graph():
         name="subgraph2",
         nodes=[Node("Add", attrs={"x": inner_subgraph_1, "y": inner_subgraph_2})],
     )
-    outer_subgraph_3 = Graph(name="subgraph3", nodes=[Node("Add", attrs={"x": inner_subgraph_3, "y": 3.14})])
+    outer_subgraph_3 = Graph(
+        name="subgraph3", nodes=[Node("Add", attrs={"x": inner_subgraph_3, "y": 3.14})]
+    )
     node_1 = Node(
         op="Add",
         attrs={
@@ -245,15 +259,21 @@ class TestBasic(object):
     def test_generate_name(self):
         graph = Graph()
         generated_names = set()
-        existing_names = {"name_{}".format(i) for i in range(50, 150)}  # names_50 to names_149
+        existing_names = {
+            "name_{}".format(i) for i in range(50, 150)
+        }  # names_50 to names_149
         num_names = 100
         for idx in range(num_names):
             generated_names.add(graph._generate_name("name", existing_names))
         assert len(generated_names) == num_names  # 100 unique generated_names
-        assert len(generated_names.intersection(existing_names)) == 0  # no generated_names in existing_names
+        assert (
+            len(generated_names.intersection(existing_names)) == 0
+        )  # no generated_names in existing_names
         expected_names = {"name_{}".format(i) for i in range(0, 50)}
         expected_names.update({"name_{}".format(i) for i in range(150, 200)})
-        assert generated_names == expected_names  # expect 'names_0' to 'names_49', 'names_150' to 'names_199'
+        assert (
+            generated_names == expected_names
+        )  # expect 'names_0' to 'names_49', 'names_150' to 'names_199'
 
     def test_equal(self, nested_graph):
         assert nested_graph == nested_graph
@@ -290,7 +310,9 @@ class TestBasic(object):
 
     def test_subgraphs_recursive(self, very_nested_graph):
         unrelated_graph = Graph(name="unrelated")
-        subgraph_names = {subgraph.name for subgraph in very_nested_graph.subgraphs(recursive=True)}
+        subgraph_names = {
+            subgraph.name for subgraph in very_nested_graph.subgraphs(recursive=True)
+        }
         assert subgraph_names == {
             "subgraph1",
             "subgraph2",
@@ -337,7 +359,9 @@ class TestRegister(object):
     def test_register_name_conflict(self):
         @Graph.register()
         def fake_mul(self, a, b):
-            return self.layer(op="Add", domain="domain1", inputs=[a, b], outputs=["mul_out"])
+            return self.layer(
+                op="Add", domain="domain1", inputs=[a, b], outputs=["mul_out"]
+            )
 
         func = Function("fake_mul", domain="domain2")
         graph = Graph(functions=[func])
@@ -348,12 +372,20 @@ class TestRegister(object):
 
 class TestLayer(object):
     def test_layer_default_naming(self):
-        node1 = Node(name="onnx_graphsurgeon_node_0", op="Identity")  # injecting default name
-        node2 = Node(name="onnx_graphsurgeon_node_1", op="Identity")  # injecting default name again
+        node1 = Node(
+            name="onnx_graphsurgeon_node_0", op="Identity"
+        )  # injecting default name
+        node2 = Node(
+            name="onnx_graphsurgeon_node_1", op="Identity"
+        )  # injecting default name again
         graph = Graph(nodes=[node1, node2])
-        graph.layer(op="Identity")  # new default name should be onnx_graphsurgeon_node_2
+        graph.layer(
+            op="Identity"
+        )  # new default name should be onnx_graphsurgeon_node_2
         assert graph.nodes[-1].name == "onnx_graphsurgeon_node_2"
-        graph.layer(op="Identity")  # new default name should be onnx_graphsurgeon_node_3
+        graph.layer(
+            op="Identity"
+        )  # new default name should be onnx_graphsurgeon_node_3
         assert graph.nodes[-1].name == "onnx_graphsurgeon_node_3"
 
     def test_layer_with_attrs(self):
@@ -386,8 +418,14 @@ class TestLayer(object):
 
         outputs = graph.layer(op="Fake", inputs=[x0, x1], outputs=[y0, y1])
         assert len(graph.nodes) == 1
-        assert [prefix in tensor.name for prefix, tensor in zip([x0, x1], graph.nodes[-1].inputs)]
-        assert [prefix in tensor.name for prefix, tensor in zip([y0, y1], graph.nodes[-1].outputs)]
+        assert [
+            prefix in tensor.name
+            for prefix, tensor in zip([x0, x1], graph.nodes[-1].inputs)
+        ]
+        assert [
+            prefix in tensor.name
+            for prefix, tensor in zip([y0, y1], graph.nodes[-1].outputs)
+        ]
         assert graph.nodes[-1].outputs == outputs
 
     def test_layer_with_arrays(self):
@@ -398,7 +436,10 @@ class TestLayer(object):
         graph = Graph()
 
         outputs = graph.layer(op="Fake", inputs=[x0, x1], outputs=[y0, y1])
-        assert [prefix in tensor.name for prefix, tensor in zip([y0, y1], graph.nodes[-1].outputs)]
+        assert [
+            prefix in tensor.name
+            for prefix, tensor in zip([y0, y1], graph.nodes[-1].outputs)
+        ]
         assert len(graph.nodes) == 1
         assert graph.nodes[-1].inputs[0].values == x0
         assert graph.nodes[-1].inputs[1].values == x1
@@ -412,7 +453,10 @@ class TestLayer(object):
         graph = Graph()
 
         outputs = graph.layer(op="Fake", inputs=[x0, x1], outputs=[y0, y1])
-        assert [prefix in tensor.name for prefix, tensor in zip([y0, y1], graph.nodes[-1].outputs)]
+        assert [
+            prefix in tensor.name
+            for prefix, tensor in zip([y0, y1], graph.nodes[-1].outputs)
+        ]
         assert len(graph.nodes) == 1
         assert graph.nodes[-1].inputs[0].values == x0
         assert graph.nodes[-1].inputs[1].values == x1
@@ -422,7 +466,9 @@ class TestLayer(object):
 class TestFunctionCall(object):
     def make_graph_and_func(self):
         func_output = Variable("test_output", shape=[1, 2, 3], dtype=np.int32)
-        func = Function("TestFunction", inputs=[Variable("test_input")], outputs=[func_output])
+        func = Function(
+            "TestFunction", inputs=[Variable("test_input")], outputs=[func_output]
+        )
         graph = Graph(functions=[func])
         return graph, func_output
 
@@ -567,7 +613,12 @@ def toposort_diamond_graph():
         Node(op="Add", name="Test0", inputs=inputs, outputs=[intermediate0]),
         # If the end of the diamond shape occurs before the branches, it can trigger a path
         # where a false cycle is detected - this test guards against that.
-        Node(op="Add", name="Test3", inputs=[intermediate1, intermediate2], outputs=outputs),
+        Node(
+            op="Add",
+            name="Test3",
+            inputs=[intermediate1, intermediate2],
+            outputs=outputs,
+        ),
         Node(op="Add", name="Test1", inputs=[intermediate0], outputs=[intermediate1]),
         Node(op="Add", name="Test2", inputs=[intermediate0], outputs=[intermediate2]),
     ]
@@ -674,7 +725,9 @@ def toposort_implicit_subgraph_inputs_graph():
 
     # Subgraphs for If
     subgraph_outputs = [make_var("res")]
-    subgraph_nodes = [Node(op="Add", name="SubgraphTest0", inputs=[x1, x2], outputs=subgraph_outputs)]
+    subgraph_nodes = [
+        Node(op="Add", name="SubgraphTest0", inputs=[x1, x2], outputs=subgraph_outputs)
+    ]
     subgraph = Graph(nodes=subgraph_nodes, outputs=subgraph_outputs)
 
     nodes = [
@@ -747,7 +800,9 @@ class TestToposort(object):
         subgraph.nodes[0].inputs.append(id_out)
 
         out = Variable("output")
-        nested = Node(op="Nested", inputs=[id_out], outputs=[out], attrs={"subgraph": subgraph})
+        nested = Node(
+            op="Nested", inputs=[id_out], outputs=[out], attrs={"subgraph": subgraph}
+        )
 
         graph = Graph(nodes=[identity, nested], inputs=[inp], outputs=[out])
         graph.toposort(recurse_subgraphs=True)
@@ -756,7 +811,9 @@ class TestToposort(object):
 
     def test_function(self):
         graph, expected_node_order = toposort_multi_tier_input_graph()
-        func = Function("Test", nodes=graph.nodes, inputs=graph.inputs, outputs=graph.outputs)
+        func = Function(
+            "Test", nodes=graph.nodes, inputs=graph.inputs, outputs=graph.outputs
+        )
         func.toposort()
         assert func.nodes == expected_node_order
 
@@ -802,7 +859,7 @@ def build_basic_graph():
     nodes = [
         Node(op="Add", name="Test", inputs=inputs, outputs=outputs),
     ]
-    return Graph(nodes=nodes, inputs=inputs, outputs=outputs)
+    return Graph(nodes=nodes, inputs=inputs, outputs=outputs, ir_version=10)
 
 
 def build_two_layer_graph():
@@ -813,7 +870,7 @@ def build_two_layer_graph():
         Node(op="Add", name="Test0", inputs=inputs, outputs=[intermediate_tensor]),
         Node(op="Add", name="Test1", inputs=[intermediate_tensor], outputs=outputs),
     ]
-    return Graph(nodes=nodes, inputs=inputs, outputs=outputs)
+    return Graph(nodes=nodes, inputs=inputs, outputs=outputs, ir_version=10)
 
 
 def build_two_layer_graph_multiple_io():
@@ -824,7 +881,7 @@ def build_two_layer_graph_multiple_io():
         Node(op="Add", name="Test0", inputs=inputs, outputs=[intermediate_tensor]),
         Node(op="Add", name="Test1", inputs=[intermediate_tensor], outputs=outputs),
     ]
-    return Graph(nodes=nodes, inputs=inputs, outputs=outputs)
+    return Graph(nodes=nodes, inputs=inputs, outputs=outputs, ir_version=10)
 
 
 def build_function_with_unused_node():
@@ -858,7 +915,9 @@ class TestCleanup(object):
         graph_used_tensors = copy.copy(list(graph.tensors().values()))
 
         unused_tensor = Variable(name="Unused")
-        unused_node = Node(op="Unused", inputs=[graph.inputs[0]], outputs=[unused_tensor])
+        unused_node = Node(
+            op="Unused", inputs=[graph.inputs[0]], outputs=[unused_tensor]
+        )
         graph.nodes.append(unused_node)
 
         with graph.node_ids():
@@ -867,7 +926,9 @@ class TestCleanup(object):
             assert all([node.id in used_node_ids for node in graph_used_nodes])
             assert unused_node.id not in used_node_ids
             assert unused_tensor not in used_tensors
-            assert all([used_tensor in used_tensors for used_tensor in graph_used_tensors])
+            assert all(
+                [used_tensor in used_tensors for used_tensor in graph_used_tensors]
+            )
 
     def test_multi_tier(self):
         graph, _ = toposort_multi_tier_output_graph()
@@ -949,7 +1010,9 @@ class TestCleanup(object):
         Y = Variable("Y", dtype=np.float32, shape=(1,))
         graph = Graph(inputs=[X, Y])
 
-        X_p = graph.identity(X)  # X_p is only used by the subgraph, not in the outer graph.
+        X_p = graph.identity(
+            X
+        )  # X_p is only used by the subgraph, not in the outer graph.
 
         subgraph_inp = Variable("subgraph_input", dtype=np.float32, shape=(1,))
         subgraph = Graph(inputs=[subgraph_inp])
@@ -1142,7 +1205,7 @@ def simple_foldable():
     # output = input + c
     weights = np.ones(shape=(1, 3), dtype=np.float32)
 
-    graph = Graph()
+    graph = Graph(ir_version=10)
     inp = Variable("input", shape=(1, 3), dtype=np.float32)
     c = graph.add(weights, weights, name="c")
     out = graph.add(inp, c, name="out")
@@ -1162,7 +1225,7 @@ def one_hop_foldable():
     # output = input + e
     weights = np.ones(shape=(1, 3), dtype=np.float32)
 
-    graph = Graph()
+    graph = Graph(ir_version=10)
     inp = Variable("input", shape=(1, 3), dtype=np.float32)
     c = graph.add(weights, weights, name="c")
     e = graph.add(c, weights, name="e")
@@ -1185,7 +1248,7 @@ def foldable_with_invalid_node():
     # invalid node.
     weights = np.ones(shape=(1, 3), dtype=np.float32)
 
-    graph = Graph()
+    graph = Graph(ir_version=10)
     inp = Variable("input", shape=(1, 3), dtype=np.float32)
     c = graph.add(weights, weights, name="c")
     e = graph.fake(weights, name="e")
@@ -1207,8 +1270,8 @@ def foldable_with_local_functions():
         counter += 1
         return Constant(f"constant_{counter}", np.ones(1, dtype=np.float32))
 
-    func_inner = Function("FuncInner")
-    func_outer = Function("FuncOuter")
+    func_inner = Function("FuncInner", ir_version=10)
+    func_outer = Function("FuncOuter", ir_version=10)
     funcs = [func_inner, func_outer]
 
     # func_inner(x) = x + 1
@@ -1234,7 +1297,9 @@ def foldable_with_local_functions():
     # d = a + b
     # e = c + d
     # output = e + c
-    graph = Graph(inputs=[Variable("graph_input", dtype=dtype)], functions=funcs)
+    graph = Graph(
+        inputs=[Variable("graph_input", dtype=dtype)], functions=funcs, ir_version=10
+    )
     var0 = graph.FuncInner(inputs=[const()])[0]
     var1 = graph.FuncOuter(inputs=[const()])[0]
     var2 = graph.add(const(), const())
@@ -1251,7 +1316,9 @@ class TestFoldConstants(object):
     def test_basic(self, simple_foldable, partitioning):
         inp = simple_foldable.inputs[0]
 
-        simple_foldable.fold_constants(partitioning=partitioning).cleanup(remove_unused_graph_inputs=True)
+        simple_foldable.fold_constants(partitioning=partitioning).cleanup(
+            remove_unused_graph_inputs=True
+        )
 
         # Extra node should be removed
         assert len(simple_foldable.nodes) == 1
@@ -1259,7 +1326,10 @@ class TestFoldConstants(object):
         assert simple_foldable.nodes[0].inputs[1].name == "c"
 
         # Value should be computed correctly
-        assert np.all(simple_foldable.nodes[0].inputs[1].values == np.ones(shape=(1, 3), dtype=np.float32) * 2)
+        assert np.all(
+            simple_foldable.nodes[0].inputs[1].values
+            == np.ones(shape=(1, 3), dtype=np.float32) * 2
+        )
 
     def test_one_hop(self, one_hop_foldable):
         inp = one_hop_foldable.inputs[0]
@@ -1272,7 +1342,10 @@ class TestFoldConstants(object):
         assert one_hop_foldable.nodes[0].inputs[1].name == "e"
 
         # Value should be computed correctly
-        assert np.all(one_hop_foldable.nodes[0].inputs[1].values == np.ones(shape=(1, 3), dtype=np.float32) * 3)
+        assert np.all(
+            one_hop_foldable.nodes[0].inputs[1].values
+            == np.ones(shape=(1, 3), dtype=np.float32) * 3
+        )
 
     def test_with_invalid_nodes(self, foldable_with_invalid_node):
         foldable_with_invalid_node.fold_constants(partitioning="recursive").cleanup()
@@ -1283,7 +1356,9 @@ class TestFoldConstants(object):
         assert foldable_with_invalid_node.nodes[0].op == "Fake"
         assert foldable_with_invalid_node.nodes[1].op == "Add"
         assert foldable_with_invalid_node.nodes[2].op == "Add"
-        assert np.all(tensor_map["c"].values == (np.ones(shape=(1, 3), dtype=np.float32) * 2))
+        assert np.all(
+            tensor_map["c"].values == (np.ones(shape=(1, 3), dtype=np.float32) * 2)
+        )
 
     def test_with_invalid_nodes_no_recursive(self, foldable_with_invalid_node):
         # No folding should take place without recursive partitioning
@@ -1297,7 +1372,7 @@ class TestFoldConstants(object):
 
         nodes = [Node("Add", inputs=[inp0, inp1], outputs=[out])]
 
-        graph = Graph(nodes=nodes, inputs=[inp0, inp1], outputs=[out])
+        graph = Graph(nodes=nodes, inputs=[inp0, inp1], outputs=[out], ir_version=10)
 
         graph.fold_constants().cleanup()
 
@@ -1305,7 +1380,7 @@ class TestFoldConstants(object):
         assert graph.nodes[0].inputs == [inp0, inp1]
 
     def test_const_node(self):
-        graph = Graph()
+        graph = Graph(ir_version=10)
         values = np.ones((1, 3, 3), dtype=np.int64)
         graph.outputs = [graph.constant(values=values)]
 
@@ -1318,7 +1393,7 @@ class TestFoldConstants(object):
         assert not graph.nodes
 
     def test_shape_of_constant_tensor(self):
-        graph = Graph()
+        graph = Graph(ir_version=10)
         values = np.ones((1, 3, 3), dtype=np.int64)
         const = Constant("const", values=values)
         graph.outputs = [graph.shape(const)]
@@ -1330,7 +1405,7 @@ class TestFoldConstants(object):
         assert np.all(graph.outputs[0].values == (1, 3, 3))
 
     def test_shape_of_constant_node(self):
-        graph = Graph()
+        graph = Graph(ir_version=10)
         values = np.ones((1, 3, 3), dtype=np.int64)
         const = graph.constant(values=values)
         graph.outputs = [graph.shape(const)]
@@ -1344,7 +1419,7 @@ class TestFoldConstants(object):
     # Cannot fold shape nodes if they have dynamically shaped inputs.
     def test_shape_of_variable_tensor_dynamic_shape(self):
         var = Variable("var", dtype=np.float32, shape=("", -1, 0, 4))
-        graph = Graph(inputs=[var])
+        graph = Graph(inputs=[var], ir_version=10)
         graph.outputs = [graph.shape(var)]
 
         graph.fold_constants().cleanup()
@@ -1355,7 +1430,7 @@ class TestFoldConstants(object):
 
     def test_shape_of_variable_tensor_static_shape(self):
         var = Variable("var", dtype=np.float32, shape=(1, 3, 4))
-        graph = Graph(inputs=[var])
+        graph = Graph(inputs=[var], ir_version=10)
         graph.inputs = [var]
         graph.outputs = [graph.shape(var)]
 
@@ -1366,7 +1441,7 @@ class TestFoldConstants(object):
         assert np.all(graph.outputs[0].values == (1, 3, 4))
 
     def test_shape_of_variable_tensor_multiple_shapes(self):
-        graph = Graph()
+        graph = Graph(ir_version=10)
         var = Variable("var", dtype=np.float32, shape=(1, 3, 4))
         var2 = Variable("var2", dtype=np.float32, shape=tuple())  # Scalar
         graph.inputs = [var, var2]
@@ -1382,7 +1457,7 @@ class TestFoldConstants(object):
         assert np.all(graph.outputs[2].values == tuple())
 
     def test_shape_of_variable_tensor_static_shape_no_fold(self):
-        graph = Graph()
+        graph = Graph(ir_version=10)
         var = Variable("var", dtype=np.float32, shape=(1, 3, 4))
         graph.inputs = [var]
         graph.outputs = [graph.shape(var)]
@@ -1402,9 +1477,13 @@ class TestFoldConstants(object):
         def check_no_const_loaded(graph):
             num_lazy_constants = 0
             for tensor in graph.tensors().values():
-                if isinstance(tensor, Constant) and isinstance(tensor._values, LazyValues):
+                if isinstance(tensor, Constant) and isinstance(
+                    tensor._values, LazyValues
+                ):
                     num_lazy_constants += 1
-            assert num_lazy_constants == 3  # Graph starts with 3 constants - none should be loaded.
+            assert (
+                num_lazy_constants == 3
+            )  # Graph starts with 3 constants - none should be loaded.
 
         check_no_const_loaded(graph)
         check_no_const_loaded(new_graph)
@@ -1423,7 +1502,7 @@ class TestFoldConstants(object):
         indices = np.array(indices)
 
         inp = Variable("input", dtype=np.float32, shape=shape)
-        graph = Graph(inputs=[inp])
+        graph = Graph(inputs=[inp], ir_version=10)
 
         inp_shape = graph.shape(inp)
         shape_part = graph.gather(inp_shape, indices=indices)
@@ -1482,7 +1561,7 @@ class TestFoldConstants(object):
     )
     def test_shape_slice(self, shape, starts, ends, axes, steps, expected):
         inp = Variable("input", dtype=np.float32, shape=shape)
-        graph = Graph(inputs=[inp])
+        graph = Graph(inputs=[inp], ir_version=10)
 
         inp_shape = graph.shape(inp)
         graph.outputs = [
@@ -1506,7 +1585,7 @@ class TestFoldConstants(object):
     # In the single input case, we should derive starts/ends/axes/steps from the attributes.
     def test_shape_slice_single_input(self):
         inp = Variable("input", dtype=np.int64, shape=(5, 6, 3, 2))
-        graph = Graph(inputs=[inp])
+        graph = Graph(inputs=[inp], ir_version=10)
 
         inp_shape = graph.shape(inp)
         graph.outputs = [graph.slice(inp_shape)]
@@ -1530,12 +1609,12 @@ class TestFoldConstants(object):
 
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
         Y = gs.Constant("Y", values=np.ones((1,), dtype=np.float32))
-        graph = Graph(inputs=[X, cond])
+        graph = Graph(inputs=[X, cond], ir_version=10)
 
-        then_graph = Graph(name="Then")
+        then_graph = Graph(name="Then", ir_version=10)
         then_graph.outputs = [then_graph.add(Y, Y)]
 
-        else_graph = Graph(name="Else")
+        else_graph = Graph(name="Else", ir_version=10)
         else_graph.outputs = [else_graph.add(X, else_graph.add(Y, Y))]
 
         graph.outputs = [graph.if_op(cond, then_graph, else_graph)]
@@ -1557,12 +1636,12 @@ class TestFoldConstants(object):
 
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
         Y = gs.Variable("Y", dtype=np.float32, shape=(1,))
-        graph = Graph(inputs=[X, cond])
+        graph = Graph(inputs=[X, cond], ir_version=10)
 
-        then_graph = Graph(name="Then")
+        then_graph = Graph(name="Then", ir_version=10)
         then_graph.outputs = [then_graph.relu(then_graph.add(Y, Y))]
 
-        else_graph = Graph(name="Else")
+        else_graph = Graph(name="Else", ir_version=10)
         else_graph.outputs = [else_graph.add(X, else_graph.add(Y, Y))]
 
         if_out = graph.if_op(cond, then_graph, else_graph)
@@ -1578,7 +1657,9 @@ class TestFoldConstants(object):
 
             subgraph = then_graph if cond_value else else_graph
             # Make sure subgraph intermediate tensors are renamed
-            assert graph.nodes[0].outputs[0].name == "add_out_0_subg_0_{:}".format(subgraph.name)
+            assert graph.nodes[0].outputs[0].name == "add_out_0_subg_0_{:}".format(
+                subgraph.name
+            )
             assert graph.outputs[0].inputs[0] == subgraph.nodes[-1]
             assert subgraph.nodes[-1] == graph.nodes[-1]
         else:
@@ -1592,12 +1673,12 @@ class TestFoldConstants(object):
         cond = gs.Constant("cond", values=np.array(True))
         X = gs.Variable("X", dtype=np.float32, shape=(1,))
 
-        graph = Graph(inputs=[X])
+        graph = Graph(inputs=[X], ir_version=10)
 
-        then_graph = Graph(name="Then")
+        then_graph = Graph(name="Then", ir_version=10)
         then_graph.outputs = [then_graph.add(X, X)]
 
-        else_graph = Graph(name="Else")
+        else_graph = Graph(name="Else", ir_version=10)
         else_graph.outputs = [else_graph.add(X, else_graph.add(X, X))]
 
         # Even though if_op looks foldable because it has all constant inputs,
@@ -1619,7 +1700,7 @@ class TestFoldConstants(object):
 
     def test_cast_elision_int64(self):
         X = gs.Variable("X", dtype=np.int64, shape=(1,))
-        graph = Graph(inputs=[X])
+        graph = Graph(inputs=[X], ir_version=10)
         casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
         add_out = graph.add(casted_x, casted_x)
         graph.outputs = [graph.cast(add_out, to=onnx.TensorProto.DataType.INT64)]
@@ -1630,7 +1711,7 @@ class TestFoldConstants(object):
     # Make sure we're lowering constant nodes before running cast elision
     def test_cast_elision_with_constant_node(self):
         inp = gs.Variable("inp", dtype=np.int64, shape=(1,))
-        graph = Graph(inputs=[inp])
+        graph = Graph(inputs=[inp], ir_version=10)
 
         casted_inp = graph.cast(inp, to=onnx.TensorProto.DataType.FLOAT)
         add_out = graph.add(casted_inp, graph.constant(np.array([2], dtype=np.float32)))
@@ -1645,7 +1726,9 @@ class TestFoldConstants(object):
 
         add_const_inp = graph.nodes[0].inputs[1]
         assert isinstance(add_const_inp, Constant)
-        assert add_const_inp.dtype == np.int64  # Should have been casted to match dtype of other inputs.
+        assert (
+            add_const_inp.dtype == np.int64
+        )  # Should have been casted to match dtype of other inputs.
 
     # For a graph like:
     #
@@ -1666,10 +1749,14 @@ class TestFoldConstants(object):
     @pytest.mark.parametrize("use_as_graph_output", [True, False], ids=["graph", ""])
     @pytest.mark.parametrize("use_in_other_node", [True, False], ids=["node", ""])
     # Whether to apply the effects of the first two parameters to the input `Cast` node or to the `Add` node.
-    @pytest.mark.parametrize("apply_to_input_cast", [True, False], ids=["input", "output"])
-    def test_cast_elision_multi_use_cast(self, use_as_graph_output, use_in_other_node, apply_to_input_cast):
+    @pytest.mark.parametrize(
+        "apply_to_input_cast", [True, False], ids=["input", "output"]
+    )
+    def test_cast_elision_multi_use_cast(
+        self, use_as_graph_output, use_in_other_node, apply_to_input_cast
+    ):
         X = gs.Variable("X", dtype=np.int32, shape=(1,))
-        graph = Graph(inputs=[X])
+        graph = Graph(inputs=[X], ir_version=10)
         casted_x = graph.cast(X, to=onnx.TensorProto.DataType.FLOAT)
         add_out = graph.add(casted_x, casted_x)
         uncasted_x = graph.cast(add_out, to=onnx.TensorProto.DataType.INT32)
@@ -1690,9 +1777,13 @@ class TestFoldConstants(object):
             if apply_to_input_cast:
                 assert graph.nodes[1].inputs[0] == X
                 assert graph.nodes[1].outputs[0] == uncasted_x
-                assert ops == ["Cast", "Add"] + (["Identity"] if use_in_other_node else [])
+                assert ops == ["Cast", "Add"] + (
+                    ["Identity"] if use_in_other_node else []
+                )
             else:
-                assert ops == ["Cast", "Add", "Cast"] + (["Identity"] if use_in_other_node else [])
+                assert ops == ["Cast", "Add", "Cast"] + (
+                    ["Identity"] if use_in_other_node else []
+                )
         else:
             assert ops == ["Add"]
 
@@ -1760,7 +1851,7 @@ class TestFoldConstants(object):
         layer1_should_fold,
         push_into_subgraph,
     ):
-        graph = Graph()
+        graph = Graph(ir_version=10)
 
         shape = (1,)
 
@@ -1796,17 +1887,21 @@ class TestFoldConstants(object):
     def test_no_fold_qdq(self, op, add_intermediate_layer):
         dtype = np.float32 if op == "Q" else np.int8
         inp = gs.Constant("input", np.ones(shape=(1, 3, 5, 5), dtype=dtype))
-        graph = Graph(inputs=[inp], opset=13)
+        graph = Graph(inputs=[inp], opset=13, ir_version=10)
 
         if add_intermediate_layer:
             inp = graph.identity(inp)
 
         qdq_func = graph.quantize_linear if op == "Q" else graph.dequantize_linear
-        graph.outputs = [qdq_func(inp, 1.2, np.array(0, dtype=np.int8))]  # Arbitrary scale and zero-point
+        graph.outputs = [
+            qdq_func(inp, 1.2, np.array(0, dtype=np.int8))
+        ]  # Arbitrary scale and zero-point
 
         graph.fold_constants().cleanup()
         assert len(graph.nodes) == 1
-        assert graph.nodes[0].op == "QuantizeLinear" if op == "Q" else "DequantizeLinear"
+        assert (
+            graph.nodes[0].op == "QuantizeLinear" if op == "Q" else "DequantizeLinear"
+        )
 
     @pytest.mark.parametrize(
         "should_exclude_node_func,expected_node_names",
@@ -1843,9 +1938,11 @@ class TestFoldConstants(object):
             ),
         ],
     )
-    def test_custom_should_exclude_node(self, should_exclude_node_func, expected_node_names):
+    def test_custom_should_exclude_node(
+        self, should_exclude_node_func, expected_node_names
+    ):
         inp = gs.Constant("input", np.ones(shape=(1, 3, 5, 5), dtype=np.float32))
-        graph = Graph(inputs=[inp])
+        graph = Graph(inputs=[inp], ir_version=10)
 
         add_0 = graph.add(inp, inp)  # onnx_graphsurgeon_node_1 -> add_out_0
         relu_0 = graph.relu(add_0)  # onnx_graphsurgeon_node_3 -> relu_out_2
@@ -1862,7 +1959,7 @@ class TestFoldConstants(object):
         # This should *not* prevent us from folding nodes where all other inputs are constants.
         data = gs.Constant("data", np.ones(shape=(3, 5, 5), dtype=np.float32))
         pads = gs.Constant("pads", np.zeros(shape=(6,), dtype=np.int64))
-        graph = Graph()
+        graph = Graph(ir_version=10)
 
         pad_0 = graph.pad(data, pads, constant_value=None)
         graph.outputs = [pad_0]
@@ -1881,6 +1978,7 @@ class TestFoldConstants(object):
             nodes=simple_foldable.nodes,
             inputs=simple_foldable.inputs,
             outputs=simple_foldable.outputs,
+            ir_version=10,
         )
         assert len(func.nodes) == 2
         func.fold_constants().cleanup()
@@ -1889,8 +1987,12 @@ class TestFoldConstants(object):
     def test_function_with_attributes(self):
         # Nodes that reference function attributes shouldn't be folded.
         input = Variable("input", dtype=np.float32)
-        func = Function("Test", inputs=[input], attrs={"softmax_axis": -1})
-        x = func.softmax(np.float32([[1, 2, 3]]), axis=Node.AttributeRef("softmax_axis", int))
+        func = Function(
+            "Test", inputs=[input], attrs={"softmax_axis": -1}, ir_version=10
+        )
+        x = func.softmax(
+            np.float32([[1, 2, 3]]), axis=Node.AttributeRef("softmax_axis", int)
+        )
         y = func.softmax(np.float32([[4, 5, 6]]), axis=-1)
         z = func.add(x, y)
         func.outputs += [func.add(input, z)]
@@ -1916,7 +2018,9 @@ class TestFoldConstants(object):
         graph = foldable_with_local_functions
 
         func_outer = graph.functions[1]
-        func_outer.nodes[1].inputs[0] = gs.Constant("Constant_99", values=np.array([3], dtype=np.float32))
+        func_outer.nodes[1].inputs[0] = gs.Constant(
+            "Constant_99", values=np.array([3], dtype=np.float32)
+        )
 
         graph.toposort().fold_constants(error_ok=False).cleanup()
 
@@ -1929,7 +2033,9 @@ class TestFoldConstants(object):
         graph = foldable_with_local_functions
 
         func_inner = graph.functions[0]
-        func_inner.nodes[0].inputs[0] = gs.Constant("Constant_99", values=np.array([3], dtype=np.float32))
+        func_inner.nodes[0].inputs[0] = gs.Constant(
+            "Constant_99", values=np.array([3], dtype=np.float32)
+        )
 
         graph.toposort().fold_constants(error_ok=False).cleanup()
 
@@ -1942,21 +2048,25 @@ class TestFoldConstants(object):
         graph = foldable_with_local_functions
         dtype = graph.outputs[0].dtype
 
-        func = Function("func_with_subgraph")
+        func = Function("func_with_subgraph", ir_version=10)
         func.inputs = [Variable("input")]
 
-        then_graph = Graph(name="Then")
+        then_graph = Graph(name="Then", ir_version=10)
         then_graph.outputs = [then_graph.identity(func.inputs[0])]
 
-        else_graph = Graph(name="Else")
+        else_graph = Graph(name="Else", ir_version=10)
         else_graph.functions = graph.functions
-        else_graph.outputs = else_graph.FuncInner(inputs=[func.inputs[0]], outputs=["else_out"])
+        else_graph.outputs = else_graph.FuncInner(
+            inputs=[func.inputs[0]], outputs=["else_out"]
+        )
 
         cond = func.less(func.inputs[0], Constant("Zero", np.zeros(1, dtype=dtype)))
         func.outputs = [func.if_op(cond, then_graph, else_graph)]
 
         graph.functions.append(func)
-        graph.outputs = graph.func_with_subgraph(inputs=[graph.outputs[0]], outputs=["new_output"])
+        graph.outputs = graph.func_with_subgraph(
+            inputs=[graph.outputs[0]], outputs=["new_output"]
+        )
         graph.toposort().fold_constants(error_ok=False).cleanup()
         assert len(graph.inputs) == 1
         assert len(graph.outputs) == 1
@@ -1971,7 +2081,12 @@ class TestFoldConstants(object):
         # 4) Confusing attribute name / reference name mappings
         dtype = np.float32
         opset = 18
-        func = Function("complicated_func", inputs=[Variable("input", dtype=dtype)], opset=opset)
+        func = Function(
+            "complicated_func",
+            inputs=[Variable("input", dtype=dtype)],
+            opset=opset,
+            ir_version=10,
+        )
         variables = [Variable(f"var{i}", dtype=dtype) for i in range(5)]
 
         func.nodes.append(
@@ -2032,13 +2147,15 @@ class TestFoldConstants(object):
             "keepdims": True,
             "Concat_axis": -1,
         }
-        graph = Graph(opset=opset, functions=[func])
+        graph = Graph(opset=opset, functions=[func], ir_version=10)
         input = Constant("shape", values=np.array([2, 3, 4], dtype=int))
         output = graph.complicated_func(
             inputs=[input],
             outputs=["output"],
             attrs={
-                "ConstantOfShape_value": Constant("three", values=np.array([3], dtype=dtype)),
+                "ConstantOfShape_value": Constant(
+                    "three", values=np.array([3], dtype=dtype)
+                ),
                 "axis": -1,
                 "Flatten_axis": 2,  # overrides default value
             },
@@ -2051,7 +2168,10 @@ class TestFoldConstants(object):
         assert len(graph.inputs) == 1
         assert len(graph.outputs) == 1
         assert isinstance(graph.outputs[0], Constant)
-        assert np.all(graph.outputs[0].values == np.array([[9, 9, 9, 9, 1, 2], [9, 9, 9, 9, 1, 2]]))
+        assert np.all(
+            graph.outputs[0].values
+            == np.array([[9, 9, 9, 9, 1, 2], [9, 9, 9, 9, 1, 2]])
+        )
 
 
 class TestIO(object):

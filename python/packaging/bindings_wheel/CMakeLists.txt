@@ -49,10 +49,7 @@ function(buildBindingsWheel moduleName pyVersion isStandalone)
     set(wheelTemplateFiles
         tensorrt/__init__.py
         LICENSE.txt
-        poetry.lock
         pyproject.toml
-        setup.cfg
-        setup.py
     )
 
     if(${TRT_BUILD_PLUGINS})
@@ -72,6 +69,7 @@ function(buildBindingsWheel moduleName pyVersion isStandalone)
     # Expands all template files for the bindings for the target module and python version.
     # File paths starting with "tensorrt/" are expanded into "${moduleName}/".
     processWheelTemplates(binding${standaloneMarker} ${moduleName} ${pyVersion} ${wheelTemplateFiles})
+    copyTRTBuildBackend()
 
     # We need to copy the binding library into the directory that the wheel is created from.
     set(copiedBindingLibrary ${generatedFileOutDir}/${moduleName}${bindingSuffix}/${moduleName}${CMAKE_SHARED_LIBRARY_SUFFIX})
@@ -83,7 +81,7 @@ function(buildBindingsWheel moduleName pyVersion isStandalone)
     endif()
 
     # Creates a new custom target, and makes trt_bindings_wheel_files depend on the new target.
-    add_custom_target(${filesTarget} DEPENDS ${generatedWheelFiles} ${copiedBindingLibrary})
+    add_custom_target(${filesTarget} DEPENDS ${generatedWheelFiles} ${copiedBindingLibrary} ${copiedBuildBackend})
     add_dependencies(trt_bindings_wheel_files ${filesTarget})
 
     # Copies the binding library (tensorrt.so) into the same directory as the generated files.
@@ -100,21 +98,28 @@ function(buildBindingsWheel moduleName pyVersion isStandalone)
     # Define the output directory for the wheel
     set(wheelOutDir ${TRT_WHEEL_OUTPUT_DIR}/bindings${standaloneMarker})
 
-    # The standalone binding wheels' setup.py requires that STANDALONE=1 be set in the environment to update the package directory.
+    # Wheel type determines how the build backend computes the package name
     if(isStandalone)
-        set(standalone_env_prefix ${CMAKE_COMMAND} -E env STANDALONE=1 --)
+        set(wheelType "binding_standalone")
         set(wheelOutputFile ${wheelOutDir}/${moduleName}_cu${CUDAToolkit_VERSION_MAJOR}_bindings-${TensorRT_PACKAGE_VERSION}-cp${pyVerStr}-none-${wheelPlatform}.whl)
     else()
-        set(standalone_env_prefix "")
+        set(wheelType "binding")
         set(wheelOutputFile ${wheelOutDir}/${moduleName}-${TensorRT_PACKAGE_VERSION}-cp${pyVerStr}-none-${wheelPlatform}.whl)
     endif()
 
-    # Add a custom command to build the wheel
+    # Add a custom command to build the wheel using PEP 517 compliant build frontend.
+    # The custom tensorrt_build_backend handles package naming and wheel tags via config settings.
     add_custom_command(
         OUTPUT ${wheelOutputFile}
-        COMMAND ${standalone_env_prefix} ${Python3_EXECUTABLE} setup.py -q bdist_wheel --python-tag=cp${pyVerStr} --plat-name=${wheelPlatform} --dist-dir=${wheelOutDir}
+        COMMAND
+            ${Python3_EXECUTABLE} -m build --wheel --no-isolation
+                --config-setting=--quiet
+                --config-setting=wheel-type=${wheelType}
+                --config-setting=python-tag=cp${pyVerStr}
+                --config-setting=plat-name=${wheelPlatform}
+                --outdir ${wheelOutDir}
         WORKING_DIRECTORY ${generatedFileOutDir}
-        DEPENDS ${copiedBindingLibrary} ${generatedWheelFiles} trt_packaging_requirements_installed
+        DEPENDS ${copiedBindingLibrary} ${copiedBuildBackend} ${generatedWheelFiles} trt_packaging_requirements_installed
         VERBATIM
     )
 

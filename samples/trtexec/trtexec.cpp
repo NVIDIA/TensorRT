@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -220,6 +220,7 @@ bool processSafetyPluginLibrary(nvinfer2::safe::ISafePluginRegistry* safetyPlugi
 using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 int main(int argc, char** argv)
 {
     std::string const sampleName = "TensorRT.trtexec";
@@ -232,10 +233,12 @@ int main(int argc, char** argv)
 
         Arguments args = argsToArgumentsMap(argc, argv);
         AllOptions options;
+        bool const kENABLE_STATIC_PLUGINS = true;
 
+        options.system.enableStaticPlugins = kENABLE_STATIC_PLUGINS;
         if (parseHelp(args))
         {
-            AllOptions::help(std::cout);
+            AllOptions::help(std::cout, kENABLE_STATIC_PLUGINS);
             return EXIT_SUCCESS;
         }
 
@@ -248,7 +251,7 @@ int main(int argc, char** argv)
 
                 if (!args.empty())
                 {
-                    AllOptions::help(std::cout);
+                    AllOptions::help(std::cout, kENABLE_STATIC_PLUGINS);
                     for (auto const& arg : args)
                     {
                         sample::gLogError << "Unknown option: " << arg.first << " " << arg.second.first << std::endl;
@@ -258,7 +261,7 @@ int main(int argc, char** argv)
             }
             catch (std::invalid_argument const& arg)
             {
-                AllOptions::help(std::cout);
+                AllOptions::help(std::cout, kENABLE_STATIC_PLUGINS);
                 sample::gLogError << arg.what() << std::endl;
                 failed = true;
             }
@@ -275,7 +278,7 @@ int main(int argc, char** argv)
 
         if (options.helps)
         {
-            AllOptions::help(std::cout);
+            AllOptions::help(std::cout, kENABLE_STATIC_PLUGINS);
             return sample::gLogger.reportPass(sampleTest);
         }
 

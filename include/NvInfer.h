@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -111,6 +111,8 @@ enum class LayerType : int32_t
     kATTENTION_OUTPUT = 52,   //!< Attention Output.
     kROTARY_EMBEDDING = 53,   //!< Rotary Embedding layer.
     kKVCACHE_UPDATE = 54,     //!< KV Cache Update layer.
+    kMOE = 55,                //!< MoE layer.
+    kDIST_COLLECTIVE = 56,    //!< DistCollective layer.
 };
 
 //!
@@ -121,7 +123,7 @@ enum class LayerType : int32_t
 template <>
 constexpr inline int32_t EnumMax<LayerType>() noexcept
 {
-    return 55;
+    return 57;
 }
 
 //!
@@ -154,7 +156,6 @@ enum class ActivationType : int32_t
     kGELU_ERF = 12,         //!< GELU erf activation: 0.5 * x * (1 + erf(sqrt(0.5) * x))
     kGELU_TANH = 13         //!< GELU tanh activation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (0.044715F * pow(x, 3) + x)))
 };
-
 
 namespace impl
 {
@@ -866,6 +867,39 @@ public:
     char const* getMetadata() const noexcept
     {
         return mLayer->getMetadata();
+    }
+
+    //!
+    //! \brief Set the number of ranks for multi-device execution.
+    //!
+    //! Setting nbRanks > 1 is only allowed for specific layer types that support multi-device execution:
+    //! - IDistCollectiveLayer: Determines output shape for kALL_GATHER and kREDUCE_SCATTER operations.
+    //!
+    //! For attention layers, use IAttention::setNbRanks() instead.
+    //! For all other layer types, nbRanks must be 1.
+    //!
+    //! \param nbRanks The number of ranks for multi-device execution. Must be >= 1.
+    //!
+    //! \return true if successful, false if the layer type does not support the specified nbRanks value.
+    //!
+    //! \see getNbRanks()
+    //! \see IAttention::setNbRanks()
+    //!
+    bool setNbRanks(int32_t nbRanks) noexcept
+    {
+        return mLayer->setNbRanks(nbRanks);
+    }
+
+    //!
+    //! \brief Get the number of ranks for multi-device execution.
+    //!
+    //! \return The number of ranks configured for multi-device execution. Default is 1.
+    //!
+    //! \see setNbRanks()
+    //!
+    int32_t getNbRanks() const noexcept
+    {
+        return mLayer->getNbRanks();
     }
 
 protected:
@@ -2887,17 +2921,23 @@ protected:
 //! kMAX      | negative infinity | INT_MIN | -128
 //! kMIN      | positive infinity | INT_MAX | 127
 //! kAVG      | NaN               | 0       | -128
+//! kNONE     | Undefined         | Undefined | Undefined
 //!
 //! The current version of TensorRT usually performs reduction for kINT8 via kFLOAT or kHALF.
 //! The kINT8 values show the quantized representations of the floating-point values.
+//! \note kNONE is a reduce operation which does not modify the input tensor.
+//! This is applicable to Multi-Device mode only,
+//! as a reduce operation is not mandatory for certain collective operations.
+//! See \ref INetworkDefinition::addDistCollective for more details.
 //!
 enum class ReduceOperation : int32_t
 {
-    kSUM = 0,
-    kPROD = 1,
-    kMAX = 2,
-    kMIN = 3,
-    kAVG = 4
+    kSUM = 0,  //!< Sum of the elements.
+    kPROD = 1, //!< Product of the elements.
+    kMAX = 2,  //!< Maximum of the elements.
+    kMIN = 3,  //!< Minimum of the elements.
+    kAVG = 4,  //!< Average of the elements.
+    kNONE = 5, //!< No reduction.
 };
 
 //!
@@ -2908,8 +2948,35 @@ enum class ReduceOperation : int32_t
 template <>
 constexpr inline int32_t EnumMax<ReduceOperation>() noexcept
 {
-    return 5;
+    return 6;
 }
+
+//!
+//! \enum CollectiveOperation
+//!
+//! \brief Enumerates the collective operations that may be performed by a DistCollective layer.
+//!
+//! \see IDistCollectiveLayer
+//!
+enum class CollectiveOperation : int32_t
+{
+    kALL_REDUCE = 0,     //!< All reduce.
+    kALL_GATHER = 1,     //!< All gather.
+    kBROADCAST = 2,      //!< Broadcast.
+    kREDUCE = 3,         //!< Reduce.
+    kREDUCE_SCATTER = 4, //!< Reduce scatter.
+};
+
+//!
+//! Maximum number of elements in CollectiveOperation enum.
+//!
+//! \see CollectiveOperation
+//!
+template <>
+struct impl::EnumMaxImpl<CollectiveOperation>
+{
+    static constexpr int32_t kVALUE = 5;
+};
 
 //!
 //! \class IReduceLayer
@@ -5108,12 +5175,15 @@ enum class FillOperation : int32_t
     //!    201 211 221 231
     //!
     //! A static beta b is implicitly a 1D tensor, i.e. Beta = [b].
+    //! Output type must be INT32, INT64, or FLOAT.
     kLINSPACE = 0,
 
     //! Randomly draw values from a uniform distribution.
+    //! Output type must be FLOAT or HALF.
     kRANDOM_UNIFORM = 1,
 
     //! Randomly draw values from a normal distribution.
+    //! Output type must be FLOAT or HALF.
     kRANDOM_NORMAL = 2
 };
 
@@ -5406,13 +5476,14 @@ public:
     //!
     //! \param toType The DataType of the output tensor.
     //!
-    //! Set the output type of the fill layer. Valid values are DataType::kFLOAT, DataType::kINT32,
+    //! Set the output type of the fill layer. Valid values are DataType::kFLOAT, DataType::kHALF, DataType::kINT32,
     //! and DataType::kINT64.
     //! If the network is strongly typed, setToType must be used to set the output type, and use of setOutputType
     //! is an error. Otherwise, types passed to setOutputType and setToType must be the same.
     //!
     //! \see NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
     //!
+    //! \see FillOperation for more information on which types are supported for each mode.
     void setToType(DataType toType) noexcept
     {
         mImpl->setToType(toType);
@@ -6608,7 +6679,9 @@ public:
     //!
     //! Only DataType::kFLOAT32 and DataType::kHALF are valid types for \p type.
     //!
-    void setComputePrecision(DataType type) noexcept
+    //! \deprecated Deprecated in TensorRT 10.16. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED void setComputePrecision(DataType type) noexcept
     {
         return mImpl->setComputePrecision(type);
     }
@@ -6618,7 +6691,9 @@ public:
     //!
     //! \return The datatype used for the compute precision of this layer.
     //!
-    DataType getComputePrecision() const noexcept
+    //! \deprecated Deprecated in TensorRT 10.16. Superseded by strong typing.
+    //!
+    TRT_DEPRECATED DataType getComputePrecision() const noexcept
     {
         return mImpl->getComputePrecision();
     }
@@ -7275,6 +7350,33 @@ public:
         return mImpl->getMetadata();
     }
 
+    //!
+    //! \brief Set the number of ranks for multi-device attention execution.
+    //!
+    //! When nbRanks > 1, this hints attention to perform multi-device attention.
+    //!
+    //! \param nbRanks The number of ranks. Must be >= 1.
+    //!
+    //! \return True if successful, false otherwise.
+    //!
+    //! \see getNbRanks()
+    //!
+    bool setNbRanks(int32_t nbRanks) noexcept
+    {
+        return mImpl->setNbRanks(nbRanks);
+    }
+
+    //!
+    //! \brief Get the number of ranks for multi-device execution.
+    //!
+    //! \return The number of ranks configured for multi-device attention. Default is 1.
+    //!
+    //! \see setNbRanks()
+    //!
+    int32_t getNbRanks() const noexcept
+    {
+        return mImpl->getNbRanks();
+    }
 
 protected:
     apiv::VAttention* mImpl;
@@ -7442,6 +7544,467 @@ protected:
     apiv::VKVCacheUpdateLayer* mImpl;
     virtual ~IKVCacheUpdateLayer() noexcept = default;
 };
+
+//!
+//! \enum MoEActType
+//!
+//! \brief Enumerates the activation type for the MoE layer.
+//!
+enum class MoEActType : int32_t
+{
+    kNONE = 0,
+    kSILU = 1,
+};
+
+namespace impl
+{
+
+//!
+//! Maximum number of elements in MoEActType enum.
+//!
+//! \see MoEActType
+//!
+template <>
+struct EnumMaxImpl<MoEActType>
+{
+    static constexpr int32_t kVALUE = 2;
+};
+
+} // namespace impl
+
+//!          ┌──────────────┐┌────────────────────────┐┌────────────────────────┐
+//!          │ hiddenStates ││selectedExpertsForTokens││scoresForSelectedExperts│
+//!          └──────────────┘└────────────────────────┘└────────────────────────┘
+//!                  │                    │                    │
+//!                  │                    │                    │
+//!  ┌───────────────────────────────────────────────────────────────────────────────────┐
+//!  │                                                                                   │
+//!  │  ┌──────────────────────────┐                        ┌──────────────────────────┐ │
+//!  │  │      │  Expert 0   │     │         MOE            │      │  Expert i   │     │ │
+//!  │  │      │             │     │                        │      │             │     │ │
+//!  │  │  ┌────────┐    ┌────────┐│                        │  ┌────────┐    ┌────────┐│ │
+//!  │  │  │ fcGate │    │  fcUp  ││                        │  │ fcGate │    │  fcUp  ││ │
+//!  │  │  │        │    │        ││                        │  │        │    │        ││ │
+//!  │  │  └───┬────┘    └────┬───┘│                        │  └───┬────┘    └────┬───┘│ │
+//!  │  │      │              │    │                        │      │              │    │ │
+//!  │  │ ┌──────────┐        │    │                        │ ┌──────────┐        │    │ │
+//!  │  │ │activation│        │    │                        │ │activation│        │    │ │
+//!  │  │ └────┬─────┘        │    │                        │ └────┬─────┘        │    │ │
+//!  │  │      │              │    │       .......          │      │              │    │ │
+//!  │  │      └──────┬───────┘    │                        │      └──────┬───────┘    │ │
+//!  │  │             │            │                        │             │            │ │
+//!  │  │         ┌────────┐       │                        │         ┌────────┐       │ │
+//!  │  │         │  mul   │       │                        │         │  mul   │       │ │
+//!  │  │         └───┬────┘       │                        │         └───┬────┘       │ │
+//!  │  │             │            │                        │             │            │ │
+//!  │  │         ┌───▼────┐       │                        │         ┌───▼────┐       │ │
+//!  │  │         │ fcDown │       │                        │         │ fcDown │       │ │
+//!  │  │         └───┬────┘       │                        │         └───┬────┘       │ │
+//!  │  │             │            │                        │             │            │ │
+//!  │  │         ┌───▼────┐       │                        │         ┌───▼────┐       │ │
+//!  │  │         │output 0│       │                        │         │output i│       │ │
+//!  │  │         └───┬────┘       │                        │         └───┬────┘       │ │
+//!  │  └─────────────┼────────────┘                        └─────────────┼────────────┘ │
+//!  │                │                                                   │              │
+//!  │                └───────────────────┬───────────────────────────────┘              │
+//!  │                                    │                                              │
+//!  │                                    ▼                                              │
+//!  │                            ┌───────────────┐                                      │
+//!  │                            │  weightedSum  │                                      │
+//!  │                            └───────┬───────┘                                      │
+//!  └────────────────────────────────────│──────────────────────────────────────────────┘
+//!                                       ▼
+//!                               ┌───────────────┐
+//!                               │   moeOutput   │
+//!                               └───────────────┘
+//! \class IMoELayer
+//!
+//! \brief A MoE layer in a network definition.
+//! Mixture of Experts (MoE) is a collection of experts with each expert specializing in processing different subsets of input data.
+//! The key innovation lies in using a Router that selectively activates only the specific experts needed for a given input, rather than engaging the entire neural network for every task.
+//!
+//!  Definition in the MoE layer:
+//! \p fcDown, \p fcGate, \p fcUp are three linear layers.
+//! fc(x) = x * w + b, where x is the input, w is the weight, b is the bias, * is the matrix multiplication.
+//! \p activation is the activation function.
+//! \p mul is the multiplication between the output of fc_up and the output of fc_gate.
+//! \p weightedSum is the weighted sum of the output of the experts.
+//! \p moeOutput is the output of the MoE layer.
+//!
+//! MoE is a collection of experts.
+//! Each expert is a GLU (gated linear unit), which consists by \p fcGate, \p fcUp, \p fcDown, \p activation, \p mul.
+//!
+//! Definitions and Abbreviations:
+//! \p batchSize: batch size
+//! \p seqLen: sequence length
+//! \p hiddenSize: the size of the hidden states
+//! \p numExperts: the number of experts in the MoE layer
+//! \p moeInterSize: the intermediate size of the MoE layer
+//! \p topK: the number of experts to select for each token
+//!
+//! This layer takes several activation inputs:
+//! 1. \p hiddenStates: the hidden states of the layer, with shape [batchSize, seqLen, hiddenSize]
+//! 2. \p selectedExpertsForTokens: the top K experts selected for each token, with shape [batchSize, seqLen, topK]
+//! 3. \p scoresForSelectedExperts: the scales for the selected experts per token, with shape [batchSize, seqLen, topK]
+//! The MoE will take the selected experts and the corresponding scales for the selected experts to compute the output.
+//!
+//! The weights in the MoE layer:
+//! 1. \p fcGateWeights with shape [numExperts, hiddenSize, moeInterSize]: the weight matrix for fcGate
+//! 2. \p fcUpWeights with shape [numExperts, hiddenSize, moeInterSize]: the weight matrix for fcUp
+//! 3. \p fcDownWeights with shape [numExperts, moeInterSize, hiddenSize]: the weight matrix for fcDown
+//!
+//! Several optional inputs are supported:
+//! 1. \p fcGateBias: the bias for the fcGate, with shape [numExperts, moeInterSize]
+//! 2. \p fcUpBias: the bias for the fcUp, with shape [numExperts, moeInterSize]
+//! 3. \p fcDownBias: the bias for the fcDown, with shape [numExperts, hiddenSize]
+//! All the bias are none by default. You must either set all the bias or none of them.
+//!
+//! 4. \p activation: the activation type for the MoE layer, currently only support SILU.
+//!
+//! MoE computation process description:
+//! For each token, the MoE layer computation process is as follows:
+//!
+//! 1. Input processing:
+//!    - Receive \p hiddenStates:
+//!    - Receive \p selectedExpertsForTokens:
+//!    - Receive \p scoresForSelectedExperts:
+//!
+//! 2. Expert computation for each token:
+//!    - output_i = fcDown(fcUp(hiddenStates) * activation(fcGate(hiddenStates)))
+//!
+//! 3. Expert output aggregation:
+//!    For each token, firstly select all the experts that need to be activated to do the computation.
+//!    - calculate the selected expert's output according to expert id in \p selectedExpertsForTokens for each token
+//!    - Weighted sum of each expert's output according to weights in \p scoresForSelectedExperts for each token
+//!    - Final output for the token: moeOutput = Σ(score_i * output_i)
+//! The output of MoE has the same shape as the input \p hiddenStates.
+//!
+//! \warning MoE is only supported on Thor. And performance is limited when seqLen > 16.
+//!
+//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
+//!
+class IMoELayer : public ILayer
+{
+public:
+    //!
+    //! \brief Set the weights of the experts when each expert is a GLU (gated linear unit). In each GLU, there are 3 linear layers and 1 activation function, so this function requires 3 weight tensors and 1 activation type.
+    //!
+    //! \param fcGateWeights The weights for the gate-projection layer of all experts in MoE. Shape: [numExperts, hiddenSize, moeInterSize].
+    //! \param fcUpWeights The weights for the up-projection layer of all experts in MoE. Shape: [numExperts, hiddenSize, moeInterSize].
+    //! \param fcDownWeights The weights for the down-projection layer of all experts in MoE. Shape: [numExperts, moeInterSize, hiddenSize].
+    //! \param activationType The activation function to use for the MoE layer. Currently only kSILU is supported.
+    //!
+    //! \see setActivationType()
+    //! \see getActivationType()
+    //!
+    void setGatedWeights(ITensor& fcGateWeights, ITensor& fcUpWeights, ITensor& fcDownWeights, MoEActType activationType) noexcept
+    {
+        mImpl->setGatedWeights(fcGateWeights, fcUpWeights, fcDownWeights, activationType);
+    }
+
+    //!
+    //! \brief Set the biases of the experts when each expert is a GLU (gated linear unit). In each GLU, there are 3 linear layers, so this function requires 3 bias tensors.
+    //!
+    //! \param fcGateBiases The biases for the gate-projection layer of all experts in MoE. Shape: [numExperts, moeInterSize].
+    //! \param fcUpBiases The biases for the up-projection layer of all experts in MoE. Shape: [numExperts, moeInterSize].
+    //! \param fcDownBiases The biases for the down-projection layer of all experts in MoE. Shape: [numExperts, hiddenSize].
+    //!
+    void setGatedBiases(ITensor& fcGateBiases, ITensor& fcUpBiases, ITensor& fcDownBiases) noexcept
+    {
+        mImpl->setGatedBiases(fcGateBiases, fcUpBiases, fcDownBiases);
+    }
+
+    //!
+    //! \brief Set the activation type for the MoE layer.
+    //!
+    //! \param activationType: the activation type for the MoE layer.
+    //!
+    //! \see getActivationType()
+    //!
+    void setActivationType(MoEActType activationType) noexcept
+    {
+        mImpl->setActivationType(activationType);
+    }
+
+    //!
+    //! \brief Get the activation type for the MoE layer.
+    //!
+    //! \see setActivationType()
+    //!
+    //! \return the activation type for the MoE layer.
+    //!
+    MoEActType getActivationType() const noexcept
+    {
+        return mImpl->getActivationType();
+    }
+
+    //!
+    //! \brief Configure static quantization after the mul op.
+    //!                 ┌── fcGate ── activation ───┐
+    //!                 │                           │
+    //! hiddenStates ───┤                           ├── mul ── {Q ── DQ} ── fcDown ── output
+    //!                 │                           │
+    //!                 └── fcUp ───────────────────┘
+    //! When using mul output static quantization, the user must provide:
+    //! \param fcDownActivationScale: the scale tensor.
+    //! \param dataType: the type that the activation is quantized to.
+    //! In addition, the user should also insert Q/DQ before the hiddenStates input of the MoE layer. The quantization method must be the same as the quantization method here.
+    //!
+    //! If setQuantizationDynamicDblQ is called, then previous calls to this function are overridden.
+    //! If setQuantizationToType is called, previous parameters set by this function are overridden.
+    //!
+    //! \see setQuantizationToType()
+    //! \see getQuantizationToType()
+    //!
+    void setQuantizationStatic(ITensor& fcDownActivationScale, DataType dataType) noexcept
+    {
+        mImpl->setQuantizationStatic(fcDownActivationScale, dataType);
+    }
+
+    //!
+    //! \brief Configure dynamic quantization (with double quantization) after the mul op.
+    //!                 ┌── fcGate ── activation ───┐             ┌──── DQ
+    //!                 │                           │             │      │
+    //! hiddenStates ───┤                           ├── mul ── {DynQ ── DQ} ── fcDown ── output
+    //!                 │                           │
+    //!                 └── fcUp ───────────────────┘
+    //! When using mul output dynamic quantization (with double quantization), the user must provide:
+    //! \param fcDownActivationDblQScale: the double quantization scale tensor.
+    //! \param dataType: the type that the activation is quantized to.
+    //! \param blockShape: the blockShape used in quantization.
+    //! \param dynQOutputScaleType: the data type of the scale tensor.
+    //! In addition, the user should also insert DynQ/DQ/DQ before the hiddenStates input of the MoE layer. The quantization method must be the same as the quantization method here.
+    //!
+    //! If setQuantizationStatic is called, then previous calls to this function are overridden.
+    //! If setQuantizationToType, setQuantizationBlockShape or setDynQOutputScaleType is called, previous parameters set by this function are overridden.
+    //!
+    //! \see setQuantizationToType()
+    //! \see getQuantizationToType()
+    //! \see setQuantizationBlockShape()
+    //! \see getQuantizationBlockShape()
+    //! \see setDynQOutputScaleType()
+    //! \see getDynQOutputScaleType()
+    //!
+    void setQuantizationDynamicDblQ(ITensor& fcDownActivationDblQScale, DataType dataType, Dims const& blockShape, DataType dynQOutputScaleType) noexcept
+    {
+        mImpl->setQuantizationDynamicDblQ(fcDownActivationDblQScale, dataType, blockShape, dynQOutputScaleType);
+    }
+
+    //!
+    //! \brief Set the data type the mul output is quantized to.
+    //!
+    //! \param type: the data type the mul output is quantized to.
+    //! The type must be one of DataType::kFP8, DataType::kFP4.
+    //!
+    //! Default: \p DataType::kFLOAT which means the MoE layer is not quantized.
+    //!
+    //! \see getQuantizationToType()
+    //!
+    void setQuantizationToType(DataType type) noexcept
+    {
+        mImpl->setQuantizationToType(type);
+    }
+
+    //!
+    //! \brief Get the data type the mul in MoE layer is quantized to.
+    //!
+    //! \see setQuantizationToType()
+    //!
+    //! \return the data type the mul in MoE layer is quantized to.
+    //!
+    DataType getQuantizationToType() const noexcept
+    {
+        return mImpl->getQuantizationToType();
+    }
+
+    //!
+    //! \brief Set the block shape for the quantization of the Mul output.
+    //!
+    //! \param blockShape: the block shape for the quantization of the Mul output.
+    //!
+    //! The shape must have rank 3 and the dimensions representing block sizes for Mul output dimensions (batchSize, seqLen, moeInterSize) respectively.
+    //! For example, a shape of [1, 1, 16] means block quantization on the last (moeInterSize) axis.
+    //! -1 means a fully blocked dimension.
+    //!
+    //! \see getQuantizationBlockShape()
+    //!
+    void setQuantizationBlockShape(Dims const& blockShape) noexcept
+    {
+        mImpl->setQuantizationBlockShape(blockShape);
+    }
+
+    //!
+    //! \brief Get the block shape for the quantization of the Mul output.
+    //!
+    //! \see setQuantizationBlockShape()
+    //!
+    //! \return the block shape for the quantization of the Mul output.
+    //!
+    Dims getQuantizationBlockShape() const noexcept
+    {
+        return mImpl->getQuantizationBlockShape();
+    }
+
+    //!
+    //! \brief Set the dynamic quantization output scale type.
+    //!
+    //! \param type: the dynamic quantization output scale type.
+    //!
+    //! \see getDynQOutputScaleType()
+    //!
+    void setDynQOutputScaleType(DataType type) noexcept
+    {
+        mImpl->setDynQOutputScaleType(type);
+    }
+
+    //!
+    //! \brief Get the dynamic quantization output scale type.
+    //!
+    //! \see setDynQOutputScaleType()
+    //!
+    //! \return the dynamic quantization output scale type.
+    //!
+    DataType getDynQOutputScaleType() const noexcept
+    {
+        return mImpl->getDynQOutputScaleType();
+    }
+
+    //!
+    //! \brief Set the SwiGLU parameters.
+    //!
+    //! \param limit the SwiGLU parameter limit.
+    //! \param alpha the SwiGLU parameter alpha.
+    //! \param beta the SwiGLU parameter beta.
+    //!
+    //! Default: +inf, 1.0, 0.0
+    //!
+    //! \see setSwigluParamLimit()
+    //! \see getSwigluParamLimit()
+    //! \see setSwigluParamAlpha()
+    //! \see getSwigluParamAlpha()
+    //! \see setSwigluParamBeta()
+    //! \see getSwigluParamBeta()
+    //!
+    void setSwigluParams(float limit, float alpha, float beta) noexcept
+    {
+        mImpl->setSwigluParams(limit, alpha, beta);
+    }
+
+    //!
+    //! \brief Set the SwiGLU parameter limit.
+    //!
+    //! \param limit the SwiGLU parameter limit.
+    //!
+    //! Default: +inf
+    //!
+    //! \see getSwigluParamLimit()
+    //!
+    void setSwigluParamLimit(float limit) noexcept
+    {
+        mImpl->setSwigluParamLimit(limit);
+    }
+
+    //!
+    //! \brief Get the SwiGLU parameter limit.
+    //!
+    //! \see setSwigluParamLimit()
+    //!
+    //! \return the SwiGLU parameter limit.
+    //!
+    float getSwigluParamLimit() const noexcept
+    {
+        return mImpl->getSwigluParamLimit();
+    }
+
+    //!
+    //! \brief Set the SwiGLU parameter alpha.
+    //!
+    //! \param alpha the SwiGLU parameter alpha.
+    //!
+    //! Default: 1.0
+    //!
+    //! \see getSwigluParamAlpha()
+    //!
+    void setSwigluParamAlpha(float alpha) noexcept
+    {
+        mImpl->setSwigluParamAlpha(alpha);
+    }
+
+    //!
+    //! \brief Get the SwiGLU parameter alpha.
+    //!
+    //! \see setSwigluParamAlpha()
+    //!
+    //! \return the SwiGLU parameter alpha.
+    //!
+    float getSwigluParamAlpha() const noexcept
+    {
+        return mImpl->getSwigluParamAlpha();
+    }
+
+    //!
+    //! \brief Set the SwiGLU parameter beta.
+    //!
+    //! \param beta the SwiGLU parameter beta.
+    //!
+    //! Default: 0.0
+    //!
+    //! \see getSwigluParamBeta()
+    //!
+    void setSwigluParamBeta(float beta) noexcept
+    {
+        mImpl->setSwigluParamBeta(beta);
+    }
+
+    //!
+    //! \brief Get the SwiGLU parameter beta.
+    //!
+    //! \see setSwigluParamBeta()
+    //!
+    //! \return the SwiGLU parameter beta.
+    //!
+    float getSwigluParamBeta() const noexcept
+    {
+        return mImpl->getSwigluParamBeta();
+    }
+
+    //!
+    //! \brief Set the input of the MoE layer.
+    //!
+    //! \param index the index of the input to modify.
+    //! \param tensor the new input tensor
+    //!
+    //! The indices are as follows:
+    //!
+    //! Input 0: hiddenStates: the input activations, with shape [batchSize, seqLen, hiddenSize]
+    //! Input 1: selectedExpertsForTokens: the selected experts for tokens, with shape [batchSize, seqLen, topK]
+    //! Input 2: scoresForSelectedExperts: the scores for selected experts, with shape [batchSize, seqLen, topK]
+    //!
+    void setInput(int32_t index, ITensor& tensor) noexcept
+    {
+        mImpl->setInput(index, tensor);
+    }
+
+    using ILayer::setInput;
+
+protected:
+    virtual ~IMoELayer() noexcept = default;
+    apiv::VMoELayer* mImpl;
+};
+
+//!
+//! \class IDistCollectiveLayer
+//!
+//! Implements a distributed collective operation.
+//!
+//! See \ref INetworkDefinition::addDistCollective for more details.
+//!
+class IDistCollectiveLayer : public ILayer
+{
+protected:
+    virtual ~IDistCollectiveLayer() noexcept = default;
+    apiv::VDistCollectiveLayer* mImpl;
+}; // class IDistCollectiveLayer
 
 //!
 //! \class INetworkDefinition
@@ -9058,6 +9621,54 @@ public:
         return mImpl->addKVCacheUpdate(cache, update, writeIndices, cacheMode);
     }
 
+    //! \brief Add a MoE (Mixture of Experts) layer to the network.
+    //!
+    //! \param hiddenStates The hidden states tensor input to the MoE layer. Shape: [batchSize, seqLen, hiddenSize].
+    //! \param selectedExpertsForTokens The tensor containing expert indices selected for each token. Shape: [batchSize, seqLen, topK].
+    //! \param scoresForSelectedExperts The tensor containing scores computed for the selected experts. Shape: [batchSize, seqLen, topK].
+    //!
+    //! \see IMoELayer
+    //!
+    //! \warning MoE is only supported on Thor. And performance is limited when seqLen > 16.
+    //!
+    //! \warning The number of selected experts per token could be inferred from the input \p selectedExpertsForTokens and should be consistent with the topK in the \p scoresForSelectedExperts.
+    //!
+    //! \return The new MoE layer, or nullptr if it could not be created.
+    //!
+    IMoELayer* addMoE(ITensor& hiddenStates, ITensor& selectedExpertsForTokens, ITensor& scoresForSelectedExperts) noexcept
+    {
+        return mImpl->addMoE(hiddenStates, selectedExpertsForTokens, scoresForSelectedExperts);
+    }
+
+    //!
+    //! \brief Add a DistCollective layer to the network.
+    //!
+    //! \param input The input tensor to the layer.
+    //! \param distCollectiveOp The collective operation to perform. See \ref CollectiveOperation for valid values.
+    //! \param reduceOp The reduction operation to perform, in case the collective operation is reduction type: kREDUCE,
+    //! kREDUCE_SCATTER or kALL_REDUCE. See \ref ReduceOperation for valid values. Use ReduceOperation::kNONE for a
+    //! CollectiveOperation which does not need a ReduceOperation
+    //! \param root The root rank of the collective operation.
+    //! Some CollectiveOperations, such as kBROADCAST and kREDUCE require specifying a root rank, with the following
+    //! semantics:
+    //! - kBROADCAST: the root rank sends, all other ranks receive data
+    //! - kREDUCE: the root rank receives reduced data, the other ranks send data
+    //! \param groups Pointer to a flat array of rank IDs in the communicator that defines a single group for this
+    //! layer. The DistCollective runner treats this array as the ordered list of participating ranks; only those ranks
+    //! take part in the collective, and the order defines the group-local rank (used to remap the root for root-based
+    //! ops).
+    //! \param groupSize The number of elements in the groups array. If groupSize is 0, all ranks participate and
+    //! groups can be nullptr.
+    //! \see IDistCollectiveLayer
+    //!
+    //! \return The new DistCollective layer, or nullptr if it could not be created.
+    //!
+    TRT_NODISCARD IDistCollectiveLayer* addDistCollective(ITensor& input, CollectiveOperation distCollectiveOp,
+        ReduceOperation reduceOp, int64_t root, int64_t* groups, int64_t groupSize) noexcept
+    {
+        return mImpl->addDistCollective(input, distCollectiveOp, reduceOp, root, groups, groupSize);
+    }
+
     //!
     //! \brief Return the builder from which this INetworkDefinition was created.
     //!
@@ -9886,7 +10497,12 @@ enum class BuilderFlag : int32_t
     //! is forced to true if EngineCapability::kSAFETY at build time if it is unset.
     //!
     //! This flag is only supported in NVIDIA Drive(R) products.
-    kSAFETY_SCOPE = 8,
+    //!
+    //! \deprecated Deprecated in TensorRT 10.16.
+    //! In EngineCapability::kSTANDARD flow, safety restrictions are no longer supported.
+    //! In EngineCapability::kSAFETY and EngineCapability::kDLA_STANDALONE flows, restrictions are enforced natively.
+    //! This flag is retained for API compatibility but is ignored.
+    kSAFETY_SCOPE TRT_DEPRECATED_ENUM = 8,
 
     //! Require that layers execute in specified precisions. Build fails otherwise.
     //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
@@ -9921,9 +10537,7 @@ enum class BuilderFlag : int32_t
     kEXCLUDE_LEAN_RUNTIME = 14,
 
     //! Enable plugins with FP8 input/output.
-    //!
     //! This flag is not supported when HardwareCompatibilityLevel::kAMPERE_PLUS is enabled.
-    //!
     //! \see HardwareCompatibilityLevel
     //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
     kFP8 TRT_DEPRECATED_ENUM = 15,
@@ -10306,7 +10920,16 @@ enum class PreviewFeature : int32_t
     //! Using this feature can reduce runtime memory requirement when the actual input tensor shapes are smaller than
     //! the maximum input tensor dimensions.
     //!
-    kRUNTIME_ACTIVATION_RESIZE_10_10 = 2
+    kRUNTIME_ACTIVATION_RESIZE_10_10 = 2,
+
+    //!
+    //! Enabling multi-device mode in TRT.
+    //! Allows building an engine that contains multi-device enabled nodes,
+    //! such as IDistCollective.
+    //!
+    //! \note: The preview flag must be set if there are any layers in the
+    //! INetworkDefinition that need multi-device capabilities. Otherwise, an engine cannot be built.
+    kMULTIDEVICE_RUNTIME_10_16 = 3
 };
 
 namespace impl
@@ -10319,7 +10942,7 @@ namespace impl
 template <>
 struct EnumMaxImpl<PreviewFeature>
 {
-    static constexpr int32_t kVALUE = 3;
+    static constexpr int32_t kVALUE = 4;
 };
 } // namespace impl
 
@@ -11787,6 +12410,10 @@ public:
     //! \return True if network is within the scope of the restrictions specified by the builder config,
     //! false otherwise.
     //!
+    //! \note A `true` return value does not guarantee that engine building will succeed, as backends may reject it for
+    //! reasons not detectable with this fast validation. To definitively check whether a network can be built with a
+    //! given config, use \p buildEngineWithConfig or \p buildSerializedNetwork (depending on the engine capability).
+    //!
     //! \note This function will synchronize the CUDA stream returned by \p config.getProfileStream() before returning.
     //!
     bool isNetworkSupported(INetworkDefinition const& network, IBuilderConfig const& config) const noexcept
@@ -11888,6 +12515,17 @@ inline IBuilder* createInferBuilder(ILogger& logger) noexcept
 //!
 extern "C" TENSORRTAPI nvinfer1::IPluginRegistry* getBuilderPluginRegistry(
     nvinfer1::EngineCapability capability) noexcept;
+
+//!
+//! \brief Set a custom directory path for loading internal TensorRT libraries when building engines.
+//!
+//! \param path The path to prepend to internal library names.
+//! \return true if the path was successfully set, updated, or reset (by passing empty string).
+//!         false if it could not be set due to null pointer or an invalid path.
+//!
+//! This API take effect globally for all engines built by the current process.
+//!
+extern "C" TENSORRTAPI bool setInternalLibraryPath(AsciiChar const* path) noexcept;
 
 namespace safe
 {

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,7 +143,7 @@ constexpr auto deprecate(RetVal (*func)(Args...), const char* useInstead) -> Dep
 template <bool isConst, typename RetVal, typename Cls, typename... Args>
 struct DeprecatedMemberFunc
 {
-    using Func = typename std::conditional_t<isConst, RetVal (Cls::*)(Args...) const, RetVal (Cls::*)(Args...)>;
+    using Func = std::conditional_t<isConst, RetVal (Cls::*)(Args...) const, RetVal (Cls::*)(Args...)>;
 
     RetVal operator()(Cls& self, Args... args) const
     {
@@ -188,7 +188,7 @@ void doNothingDel(const T& self)
 }
 
 // https://nvbugs/3479811 Create a wrapper for C++ to python throw
-void throwPyError(PyObject* type, std::string const& message = "python error");
+[[noreturn]] void throwPyError(PyObject* type, std::string const& message = "python error");
 
 } // namespace utils
 

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -66,9 +66,10 @@ for dir in $(find . -type d); do mkdir -p ${WHEEL_OUTPUT_DIR}/$dir; done
 for file in $(find . -type f); do expand_vars_cp $file ${WHEEL_OUTPUT_DIR}/${file}; done
 popd
 
+# Copy required files and directories to build the bindings.
 cp tensorrt/tensorrt.so bindings_wheel/tensorrt/tensorrt.so
+mv tensorrt_build_backend bindings_wheel/
 
 pushd ${WHEEL_OUTPUT_DIR}/bindings_wheel
-python3 setup.py -q bdist_wheel --python-tag=cp${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION} --plat-name=linux_${TARGET}
-
+python -m build --no-isolation --wheel --config-setting=wheel-type=binding --config-setting=python-tag=cp${PYTHON_MAJOR_VERSION}${PYTHON_MINOR_VERSION} --config-setting=plat-name=linux_${TARGET}
 popd

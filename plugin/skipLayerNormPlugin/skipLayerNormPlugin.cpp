@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION &
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION &
  * AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@
 #include "skipLayerNormPlugin.h"
 
 #include <cstring>
+#include <memory>
 #include <vector>
 
 using namespace nvinfer1;
@@ -96,9 +97,9 @@ IPluginV3* SkipLayerNormPluginV3::clone() noexcept
     {
         BERT_DEBUG_MSG("SkipLayerNormPluginV3 clone");
 
-        auto* p = new SkipLayerNormPluginV3(mLayerName, mType, mLd, mBeta, mGamma, mBias);
+        auto p = std::make_unique<SkipLayerNormPluginV3>(mLayerName, mType, mLd, mBeta, mGamma, mBias);
         p->setPluginNamespace(mNamespace.c_str());
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {
@@ -605,9 +606,9 @@ IPluginV3* SkipLayerNormVarSeqlenPluginV3::clone() noexcept
     try
     {
         BERT_DEBUG_MSG("SkipLayerNormVarSeqlenPluginV3 clone");
-        auto* p = new SkipLayerNormVarSeqlenPluginV3(mLayerName, mType, mBeta, mGamma, mBias);
+        auto p = std::make_unique<SkipLayerNormVarSeqlenPluginV3>(mLayerName, mType, mBeta, mGamma, mBias);
         p->setPluginNamespace(mNamespace.c_str());
-        return p;
+        return p.release();
     }
     catch (std::exception const& e)
     {

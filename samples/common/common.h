@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -211,16 +211,15 @@ using nvinfer1::utils::buildTimingCacheFromFile;
 using nvinfer1::utils::saveCacheFile;
 using nvinfer1::utils::updateTimingCacheFile;
 
-// Swaps endianness of an integral type.
-template <typename T, typename std::enable_if_t<std::is_integral<T>::value, int> = 0>
-inline T swapEndianness(const T& value)
+//! \brief Swaps endianness of an integral type.
+template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+[[nodiscard]] T swapEndianness(T value)
 {
     uint8_t bytes[sizeof(T)];
-    for (int i = 0; i < static_cast<int>(sizeof(T)); ++i)
-    {
-        bytes[sizeof(T) - 1 - i] = *(reinterpret_cast<const uint8_t*>(&value) + i);
-    }
-    return *reinterpret_cast<T*>(bytes);
+    std::memcpy(bytes, &value, sizeof(T));
+    std::reverse(std::begin(bytes), std::end(bytes));
+    std::memcpy(&value, bytes, sizeof(T));
+    return value;
 }
 
 class HostMemory
@@ -563,7 +562,7 @@ inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
 
 // Return least integer no less than exact value of m/n.
 template <typename A, typename B>
-inline auto divUp(A m, B n) -> typename std::enable_if_t<std::is_integral<A>::value && std::is_integral<B>::value, A>
+inline auto divUp(A m, B n) -> std::enable_if_t<std::is_integral<A>::value && std::is_integral<B>::value, A>
 {
     ASSERT(n > 0);
     return (m + n - 1) / n;

@@ -32,39 +32,41 @@ namespace tensorrt
 // Long lambda functions should go here rather than being inlined into the bindings (1 liners are OK).
 namespace lambdas
 {
-static const auto parse = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
+// NOLINTBEGIN(readability-identifier-naming)
+
+static auto const parse = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
 
     py::gil_scoped_release releaseGil{};
     return self.parse(info.ptr, info.size * info.itemsize, path);
 };
 
-static const auto parse_with_weight_descriptors = [](IParser& self, py::buffer const& model) {
+static auto const parse_with_weight_descriptors = [](IParser& self, py::buffer const& model) {
     py::buffer_info info = model.request();
 
     py::gil_scoped_release releaseGil{};
     return self.parseWithWeightDescriptors(info.ptr, info.size * info.itemsize);
 };
 
-static const auto parseFromFile
+static auto const parseFromFile
     = [](IParser& self, std::string const& model) { return self.parseFromFile(model.c_str(), 0); };
 
-static const auto supportsModel = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
+static auto const supportsModel = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     SubGraphCollection_t subgraphs;
     bool const supported = self.supportsModel(info.ptr, info.size * info.itemsize, subgraphs, path);
     return std::make_pair(supported, subgraphs);
 };
 
-static const auto supportsModelV2 = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
+static auto const supportsModelV2 = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     return self.supportsModelV2(info.ptr, info.size * info.itemsize, path);
 };
 
-static const auto isSubgraphSupported
+static auto const isSubgraphSupported
     = [](IParser& self, int64_t const index) { return self.isSubgraphSupported(index); };
 
-static const auto getSubgraphNodes = [](IParser& self, int64_t const index) {
+static auto const getSubgraphNodes = [](IParser& self, int64_t const index) {
     py::list py_nodes;
     int64_t nb_nodes = 0;
     int64_t* nodes = self.getSubgraphNodes(index, nb_nodes);
@@ -75,7 +77,7 @@ static const auto getSubgraphNodes = [](IParser& self, int64_t const index) {
     return py_nodes;
 };
 
-static const auto get_used_vc_plugin_libraries = [](IParser& self) {
+static auto const get_used_vc_plugin_libraries = [](IParser& self) {
     std::vector<std::string> vcPluginLibs;
     int64_t nbPluginLibs;
     auto libCArray = self.getUsedVCPluginLibraries(nbPluginLibs);
@@ -91,16 +93,16 @@ static const auto get_used_vc_plugin_libraries = [](IParser& self) {
     return vcPluginLibs;
 };
 
-static const auto pLoadModelProto = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
+static auto const pLoadModelProto = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     return self.loadModelProto(info.ptr, info.size * info.itemsize, path);
 };
 
-static const auto pLoadInitializer = [](IParser& self, std::string const& name, size_t const ptr, size_t const count) {
+static auto const pLoadInitializer = [](IParser& self, std::string const& name, size_t const ptr, size_t const count) {
     return self.loadInitializer(name.c_str(), reinterpret_cast<void*>(ptr), count);
 };
 
-static const auto get_local_function_stack = [](IParserError& self) {
+static auto const get_local_function_stack = [](IParserError& self) {
     std::vector<std::string> localFunctionStack;
     int32_t localFunctionStackSize = self.localFunctionStackSize();
     if (localFunctionStackSize > 0)
@@ -115,24 +117,26 @@ static const auto get_local_function_stack = [](IParserError& self) {
     return localFunctionStack;
 };
 
-static const auto refitFromBytes = [](IParserRefitter& self, py::buffer const& model, char const* path = nullptr) {
+static auto const refitFromBytes = [](IParserRefitter& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     py::gil_scoped_release releaseGil{};
     return self.refitFromBytes(info.ptr, info.size * info.itemsize, path);
 };
 
-static const auto refitFromFile
+static auto const refitFromFile
     = [](IParserRefitter& self, std::string const& model) { return self.refitFromFile(model.c_str()); };
 
-static const auto rLoadModelProto = [](IParserRefitter& self, py::buffer const& model, char const* path = nullptr) {
+static auto const rLoadModelProto = [](IParserRefitter& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
     return self.loadModelProto(info.ptr, info.size * info.itemsize, path);
 };
 
-static const auto rLoadInitializer = [](IParserRefitter& self, std::string const& name, size_t const ptr, size_t const count) {
-    return self.loadInitializer(name.c_str(), reinterpret_cast<void*>(ptr), count);
-};
+static auto const rLoadInitializer
+    = [](IParserRefitter& self, std::string const& name, size_t const ptr, size_t const count) {
+          return self.loadInitializer(name.c_str(), reinterpret_cast<void*>(ptr), count);
+      };
 
+// NOLINTEND(readability-identifier-naming)
 } // namespace lambdas
 
 // Copies of functions from ONNX Parser code used for the Python Bindings.
@@ -229,7 +233,8 @@ void bindOnnx(py::module& m)
         .value(
             "REPORT_CAPABILITY_DLA", OnnxParserFlag::kREPORT_CAPABILITY_DLA, OnnxParserFlagDoc::REPORT_CAPABILITY_DLA)
         .value("ENABLE_PLUGIN_OVERRIDE", OnnxParserFlag::kENABLE_PLUGIN_OVERRIDE,
-            OnnxParserFlagDoc::ENABLE_PLUGIN_OVERRIDE);
+            OnnxParserFlagDoc::ENABLE_PLUGIN_OVERRIDE)
+        .value("ADJUST_FOR_DLA", OnnxParserFlag::kADJUST_FOR_DLA, OnnxParserFlagDoc::ADJUST_FOR_DLA);
 
     py::enum_<ErrorCode>(m, "ErrorCode", ErrorCodeDoc::descr, py::module_local())
         .value("SUCCESS", ErrorCode::kSUCCESS)

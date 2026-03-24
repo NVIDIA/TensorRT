@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,70 +24,71 @@ namespace tensorrt
 namespace LayerTypeDoc
 {
 
-constexpr const char* descr = R"trtdoc(Type of Layer)trtdoc";
-constexpr const char* CONVOLUTION = R"trtdoc(Convolution layer)trtdoc";
-constexpr const char* GRID_SAMPLE = R"trtdoc(Grid sample layer)trtdoc";
-constexpr const char* NMS = R"trtdoc(NMS layer)trtdoc";
-constexpr const char* ACTIVATION = R"trtdoc(Activation layer)trtdoc";
-constexpr const char* POOLING = R"trtdoc(Pooling layer)trtdoc";
-constexpr const char* LRN = R"trtdoc(LRN layer)trtdoc";
-constexpr const char* SCALE = R"trtdoc(Scale layer)trtdoc";
-constexpr const char* SOFTMAX = R"trtdoc(Softmax layer)trtdoc";
-constexpr const char* DECONVOLUTION = R"trtdoc(Deconvolution layer)trtdoc";
-constexpr const char* CONCATENATION = R"trtdoc(Concatenation layer)trtdoc";
-constexpr const char* ELEMENTWISE = R"trtdoc(Elementwise layer)trtdoc";
-constexpr const char* PLUGIN = R"trtdoc(Plugin layer)trtdoc";
-constexpr const char* UNARY = R"trtdoc(Unary layer)trtdoc";
-constexpr const char* PADDING = R"trtdoc(Padding layer)trtdoc";
-constexpr const char* SHUFFLE = R"trtdoc(Shuffle layer)trtdoc";
-constexpr const char* REDUCE = R"trtdoc(Reduce layer)trtdoc";
-constexpr const char* TOPK = R"trtdoc(TopK layer)trtdoc";
-constexpr const char* GATHER = R"trtdoc(Gather layer)trtdoc";
-constexpr const char* MATRIX_MULTIPLY = R"trtdoc(Matrix multiply layer)trtdoc";
-constexpr const char* RAGGED_SOFTMAX = R"trtdoc(Ragged softmax layer)trtdoc";
-constexpr const char* CONSTANT = R"trtdoc(Constant layer)trtdoc";
-constexpr const char* IDENTITY = R"trtdoc(Identity layer)trtdoc";
-constexpr const char* CAST = R"trtdoc(Cast layer)trtdoc";
-constexpr const char* PLUGIN_V2 = R"trtdoc(PluginV2 layer)trtdoc";
-constexpr const char* SLICE = R"trtdoc(Slice layer)trtdoc";
-constexpr const char* SHAPE = R"trtdoc(Shape layer)trtdoc";
-constexpr const char* PARAMETRIC_RELU = R"trtdoc(Parametric ReLU layer)trtdoc";
-constexpr const char* RESIZE = R"trtdoc(Resize layer)trtdoc";
-constexpr const char* TRIP_LIMIT = R"trtdoc(Loop Trip limit layer)trtdoc";
-constexpr const char* RECURRENCE = R"trtdoc(Loop Recurrence layer)trtdoc";
-constexpr const char* ITERATOR = R"trtdoc(Loop Iterator layer)trtdoc";
-constexpr const char* LOOP_OUTPUT = R"trtdoc(Loop output layer)trtdoc";
-constexpr const char* SELECT = R"trtdoc(Select layer)trtdoc";
-constexpr const char* ASSERTION = R"trtdoc(Assertion layer)trtdoc";
-constexpr const char* FILL = R"trtdoc(Fill layer)trtdoc";
-constexpr const char* QUANTIZE = R"trtdoc(Quantize layer)trtdoc";
-constexpr const char* DEQUANTIZE = R"trtdoc(Dequantize layer)trtdoc";
-constexpr const char* SCATTER = R"trtdoc(Scatter layer)trtdoc";
-constexpr const char* CONDITION = R"trtdoc(If-conditional Condition layer)trtdoc";
-constexpr const char* CONDITIONAL_OUTPUT = R"trtdoc(If-conditional output layer)trtdoc";
-constexpr const char* CONDITIONAL_INPUT = R"trtdoc(If-conditional input layer)trtdoc";
-constexpr const char* EINSUM = R"trtdoc(Einsum layer)trtdoc";
-constexpr const char* ONE_HOT = R"trtdoc(OneHot layer)trtdoc";
+constexpr char const* descr = R"trtdoc(Type of Layer)trtdoc";
+constexpr char const* CONVOLUTION = R"trtdoc(Convolution layer)trtdoc";
+constexpr char const* GRID_SAMPLE = R"trtdoc(Grid sample layer)trtdoc";
+constexpr char const* NMS = R"trtdoc(NMS layer)trtdoc";
+constexpr char const* ACTIVATION = R"trtdoc(Activation layer)trtdoc";
+constexpr char const* POOLING = R"trtdoc(Pooling layer)trtdoc";
+constexpr char const* LRN = R"trtdoc(LRN layer)trtdoc";
+constexpr char const* SCALE = R"trtdoc(Scale layer)trtdoc";
+constexpr char const* SOFTMAX = R"trtdoc(Softmax layer)trtdoc";
+constexpr char const* DECONVOLUTION = R"trtdoc(Deconvolution layer)trtdoc";
+constexpr char const* CONCATENATION = R"trtdoc(Concatenation layer)trtdoc";
+constexpr char const* ELEMENTWISE = R"trtdoc(Elementwise layer)trtdoc";
+constexpr char const* PLUGIN = R"trtdoc(Plugin layer)trtdoc";
+constexpr char const* UNARY = R"trtdoc(Unary layer)trtdoc";
+constexpr char const* PADDING = R"trtdoc(Padding layer)trtdoc";
+constexpr char const* SHUFFLE = R"trtdoc(Shuffle layer)trtdoc";
+constexpr char const* REDUCE = R"trtdoc(Reduce layer)trtdoc";
+constexpr char const* TOPK = R"trtdoc(TopK layer)trtdoc";
+constexpr char const* GATHER = R"trtdoc(Gather layer)trtdoc";
+constexpr char const* MATRIX_MULTIPLY = R"trtdoc(Matrix multiply layer)trtdoc";
+constexpr char const* RAGGED_SOFTMAX = R"trtdoc(Ragged softmax layer)trtdoc";
+constexpr char const* CONSTANT = R"trtdoc(Constant layer)trtdoc";
+constexpr char const* IDENTITY = R"trtdoc(Identity layer)trtdoc";
+constexpr char const* CAST = R"trtdoc(Cast layer)trtdoc";
+constexpr char const* PLUGIN_V2 = R"trtdoc(PluginV2 layer)trtdoc";
+constexpr char const* SLICE = R"trtdoc(Slice layer)trtdoc";
+constexpr char const* SHAPE = R"trtdoc(Shape layer)trtdoc";
+constexpr char const* PARAMETRIC_RELU = R"trtdoc(Parametric ReLU layer)trtdoc";
+constexpr char const* RESIZE = R"trtdoc(Resize layer)trtdoc";
+constexpr char const* TRIP_LIMIT = R"trtdoc(Loop Trip limit layer)trtdoc";
+constexpr char const* RECURRENCE = R"trtdoc(Loop Recurrence layer)trtdoc";
+constexpr char const* ITERATOR = R"trtdoc(Loop Iterator layer)trtdoc";
+constexpr char const* LOOP_OUTPUT = R"trtdoc(Loop output layer)trtdoc";
+constexpr char const* SELECT = R"trtdoc(Select layer)trtdoc";
+constexpr char const* ASSERTION = R"trtdoc(Assertion layer)trtdoc";
+constexpr char const* FILL = R"trtdoc(Fill layer)trtdoc";
+constexpr char const* QUANTIZE = R"trtdoc(Quantize layer)trtdoc";
+constexpr char const* DEQUANTIZE = R"trtdoc(Dequantize layer)trtdoc";
+constexpr char const* SCATTER = R"trtdoc(Scatter layer)trtdoc";
+constexpr char const* CONDITION = R"trtdoc(If-conditional Condition layer)trtdoc";
+constexpr char const* CONDITIONAL_OUTPUT = R"trtdoc(If-conditional output layer)trtdoc";
+constexpr char const* CONDITIONAL_INPUT = R"trtdoc(If-conditional input layer)trtdoc";
+constexpr char const* EINSUM = R"trtdoc(Einsum layer)trtdoc";
+constexpr char const* ONE_HOT = R"trtdoc(OneHot layer)trtdoc";
 constexpr char const* NON_ZERO = R"trtdoc(NonZero layer)trtdoc";
 constexpr char const* REVERSE_SEQUENCE = R"trtdoc(ReverseSequence layer)trtdoc";
 constexpr char const* NORMALIZATION = R"trtdoc(Normalization layer)trtdoc";
-constexpr const char* PLUGIN_V3 = R"trtdoc(PluginV3 layer)trtdoc";
-constexpr const char* SQUEEZE = R"trtdoc(Squeeze layer)trtdoc";
-constexpr const char* UNSQUEEZE = R"trtdoc(Unsqueeze layer)trtdoc";
-constexpr const char* CUMULATIVE = R"trtdoc(Cumulative layer)trtdoc";
-constexpr const char* DYNAMIC_QUANTIZE = R"trtdoc(DynamicQuantize layer)trtdoc";
-constexpr const char* ATTENTION_INPUT = R"trtdoc(Attention input layer)trtdoc";
-constexpr const char* ATTENTION_OUTPUT = R"trtdoc(Attention output layer)trtdoc";
-constexpr const char* KV_CACHE_UPDATE = R"trtdoc(KVCacheUpdate layer)trtdoc";
-constexpr const char* SPLIT_TO_RAGGED = R"trtdoc(SplitToRagged layer)trtdoc";
-constexpr const char* CONCAT_FROM_RAGGED = R"trtdoc(ConcatFromRagged layer)trtdoc";
-constexpr const char* ROTARY_EMBEDDING = R"trtdoc(Rotary Embedding layer)trtdoc";
-constexpr const char* DIST_COLLECTIVE = R"trtdoc(DistCollective layer)trtdoc";
+constexpr char const* PLUGIN_V3 = R"trtdoc(PluginV3 layer)trtdoc";
+constexpr char const* SQUEEZE = R"trtdoc(Squeeze layer)trtdoc";
+constexpr char const* UNSQUEEZE = R"trtdoc(Unsqueeze layer)trtdoc";
+constexpr char const* CUMULATIVE = R"trtdoc(Cumulative layer)trtdoc";
+constexpr char const* DYNAMIC_QUANTIZE = R"trtdoc(DynamicQuantize layer)trtdoc";
+constexpr char const* ATTENTION_INPUT = R"trtdoc(Attention input layer)trtdoc";
+constexpr char const* ATTENTION_OUTPUT = R"trtdoc(Attention output layer)trtdoc";
+constexpr char const* KV_CACHE_UPDATE = R"trtdoc(KVCacheUpdate layer)trtdoc";
+constexpr char const* SPLIT_TO_RAGGED = R"trtdoc(SplitToRagged layer)trtdoc";
+constexpr char const* CONCAT_FROM_RAGGED = R"trtdoc(ConcatFromRagged layer)trtdoc";
+constexpr char const* ROTARY_EMBEDDING = R"trtdoc(Rotary Embedding layer)trtdoc";
+constexpr char const* MOE = R"trtdoc(MoE layer)trtdoc";
+constexpr char const* DIST_COLLECTIVE = R"trtdoc(DistCollective layer)trtdoc";
 } // namespace LayerTypeDoc
 
 namespace TensorFormatDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Format of the input/output tensors.
 
     This enum is used by both plugins and network I/O tensors.
@@ -96,13 +97,13 @@ constexpr const char* descr = R"trtdoc(
     TensorRT Developer Guide (https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html).
 )trtdoc";
 
-constexpr const char* LINEAR = R"trtdoc(
+constexpr char const* LINEAR = R"trtdoc(
     Row major linear format.
 
     For a tensor with dimensions {N, C, H, W}, the W axis always has unit stride, and the stride of every other axis is at least the product of the next dimension times the next stride. the strides are the same as for a C array with dimensions [N][C][H][W].
 )trtdoc";
 
-constexpr const char* CHW2 = R"trtdoc(
+constexpr char const* CHW2 = R"trtdoc(
     Two wide channel vectorized row major format.
 
     This format is bound to FP16 and BF16. It is only available for dimensions >= 3.
@@ -110,7 +111,7 @@ constexpr const char* CHW2 = R"trtdoc(
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+1)/2][H][W][2], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/2][h][w][c%2].
 )trtdoc";
 
-constexpr const char* HWC8 = R"trtdoc(
+constexpr char const* HWC8 = R"trtdoc(
     Eight channel format where C is padded to a multiple of 8.
 
     This format is bound to FP16 and BF16. It is only available for dimensions >= 3.
@@ -118,14 +119,14 @@ constexpr const char* HWC8 = R"trtdoc(
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to the array with dimensions [N][H][W][(C+7)/8*8], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][h][w][c].
 )trtdoc";
 
-constexpr const char* CHW4 = R"trtdoc(
+constexpr char const* CHW4 = R"trtdoc(
     Four wide channel vectorized row major format.
     This format is bound to INT8. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+3)/4][H][W][4], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/4][h][w][c%4].
 )trtdoc";
 
-constexpr const char* CHW16 = R"trtdoc(
+constexpr char const* CHW16 = R"trtdoc(
     Sixteen wide channel vectorized row major format.
 
     This format is only supported by DLA and requires FP16. It is only available for dimensions >= 3.
@@ -133,7 +134,7 @@ constexpr const char* CHW16 = R"trtdoc(
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+15)/16][H][W][16], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/16][h][w][c%16].
 )trtdoc";
 
-constexpr const char* CHW32 = R"trtdoc(
+constexpr char const* CHW32 = R"trtdoc(
     Thirty-two wide channel vectorized row major format.
 
     This format is only available for dimensions >= 3.
@@ -141,7 +142,7 @@ constexpr const char* CHW32 = R"trtdoc(
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+31)/32][H][W][32], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c/32][h][w][c%32].
 )trtdoc";
 
-constexpr const char* DHWC8 = R"trtdoc(
+constexpr char const* DHWC8 = R"trtdoc(
     Eight channel format where C is padded to a multiple of 8.
 
     This format is bound to FP16 and BF16, and it is only available for dimensions >= 4.
@@ -149,7 +150,7 @@ constexpr const char* DHWC8 = R"trtdoc(
     For a tensor with dimensions {N, C, D, H, W}, the memory layout is equivalent to an array with dimensions [N][D][H][W][(C+7)/8*8], with the tensor coordinates (n, c, d, h, w) mapping to array subscript [n][d][h][w][c].
 )trtdoc";
 
-constexpr const char* CDHW32 = R"trtdoc(
+constexpr char const* CDHW32 = R"trtdoc(
     Thirty-two wide channel vectorized row major format with 3 spatial dimensions.
 
     This format is bound to FP16 and INT8. It is only available for dimensions >= 4.
@@ -157,12 +158,12 @@ constexpr const char* CDHW32 = R"trtdoc(
     For a tensor with dimensions {N, C, D, H, W}, the memory layout is equivalent to a C array with dimensions [N][(C+31)/32][D][H][W][32], with the tensor coordinates (n, d, c, h, w) mapping to array subscript [n][c/32][d][h][w][c%32].
 )trtdoc";
 
-constexpr const char* HWC = R"trtdoc(
+constexpr char const* HWC = R"trtdoc(
     Non-vectorized channel-last format.
     This format is bound to FP32, FP16, INT8, INT64 and BF16, and is only available for dimensions >= 3.
 )trtdoc";
 
-constexpr const char* DLA_LINEAR = R"trtdoc(
+constexpr char const* DLA_LINEAR = R"trtdoc(
     DLA planar format. Row major format. The stride for stepping along the H axis is rounded up to 64 bytes.
 
     This format is bound to FP16/Int8 and is only available for dimensions >= 3.
@@ -170,7 +171,7 @@ constexpr const char* DLA_LINEAR = R"trtdoc(
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to a C array with dimensions [N][C][H][roundUp(W, 64/elementSize)] where elementSize is 2 for FP16 and 1 for Int8, with the tensor coordinates (n, c, h, w) mapping to array subscript [n][c][h][w].
 )trtdoc";
 
-constexpr const char* DLA_HWC4 = R"trtdoc(
+constexpr char const* DLA_HWC4 = R"trtdoc(
     DLA image format. channel-last format. C can only be 1, 3, 4. If C == 3 it will be rounded to 4. The stride for stepping along the H axis is rounded up to 32 bytes.
 
     This format is bound to FP16/Int8 and is only available for dimensions >= 3.
@@ -178,13 +179,13 @@ constexpr const char* DLA_HWC4 = R"trtdoc(
     For a tensor with dimensions {N, C, H, W}, with C’ is 1, 4, 4 when C is 1, 3, 4 respectively, the memory layout is equivalent to a C array with dimensions [N][H][roundUp(W, 32/C'/elementSize)][C'] where elementSize is 2 for FP16 and 1 for Int8, C' is the rounded C. The tensor coordinates (n, c, h, w) maps to array subscript [n][h][w][c].
 )trtdoc";
 
-constexpr const char* HWC16 = R"trtdoc(
+constexpr char const* HWC16 = R"trtdoc(
     Sixteen channel format where C is padded to a multiple of 16. This format is bound to FP16/INT8/FP8. It is only available for dimensions >= 3.
 
     For a tensor with dimensions {N, C, H, W}, the memory layout is equivalent to the array with dimensions [N][H][W][(C+15)/16*16], with the tensor coordinates (n, c, h, w) mapping to array subscript [n][h][w][c].
 )trtdoc";
 
-constexpr const char* DHWC = R"trtdoc(
+constexpr char const* DHWC = R"trtdoc(
     Non-vectorized channel-last format. This format is bound to FP32.  It is only available for dimensions >= 4.
 )trtdoc";
 
@@ -192,7 +193,7 @@ constexpr const char* DHWC = R"trtdoc(
 
 namespace ITensorDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A tensor in an :class:`INetworkDefinition` .
 
     :ivar name: :class:`str` The tensor name. For a network input, the name is assigned by the application. For tensors which are layer outputs, a default name is assigned consisting of the layer name followed by the index of the output in brackets. Each network input and output tensor must have a unique name.
@@ -211,7 +212,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc";
 
-constexpr const char* set_dynamic_range = R"trtdoc(
+constexpr char const* set_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     Set dynamic range for the tensor.
     NOTE: It is suggested to use ``tensor.dynamic_range = (min, max)`` instead.
@@ -221,7 +222,7 @@ constexpr const char* set_dynamic_range = R"trtdoc(
     :returns: true if succeed in setting range. Otherwise false.
 )trtdoc";
 
-constexpr const char* get_dynamic_range = R"trtdoc(
+constexpr char const* get_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     Get dynamic range for the tensor.
     NOTE: It is suggested to use ``tensor.dynamic_range`` instead, which is a tuple including both the minimum and maximum of the dynamic range.
@@ -229,12 +230,12 @@ constexpr const char* get_dynamic_range = R"trtdoc(
     :returns: The absolute maximum of the dynamic range.
 )trtdoc";
 
-constexpr const char* reset_dynamic_range = R"trtdoc(
+constexpr char const* reset_dynamic_range = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
     Undo the effect of setting the dynamic range.
 )trtdoc";
 
-constexpr const char* set_dimension_name = R"trtdoc(
+constexpr char const* set_dimension_name = R"trtdoc(
     Name a dimension of an input tensor.
 
     Associate a runtime dimension of an input tensor with a symbolic name.
@@ -250,7 +251,7 @@ constexpr const char* set_dimension_name = R"trtdoc(
     :arg name: name of the dimension.
 )trtdoc";
 
-constexpr const char* get_dimension_name = R"trtdoc(
+constexpr char const* get_dimension_name = R"trtdoc(
     Get the name of an input dimension.
 
     :arg index: index of the dimension.
@@ -261,11 +262,12 @@ constexpr const char* get_dimension_name = R"trtdoc(
 
 namespace ILayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Base class for all layer classes in an :class:`INetworkDefinition` .
 
     :ivar name: :class:`str` The name of the layer.
-    :ival metadata: :class:`str` The per-layer metadata.
+    :ivar metadata: :class:`str` The per-layer metadata.
+    :ivar num_ranks: :class:`int` The number of ranks for multi-device execution (default: 1).
     :ivar type: :class:`LayerType` The type of the layer.
     :ivar num_inputs: :class:`int` The number of inputs of the layer.
     :ivar num_outputs: :class:`int` The number of outputs of the layer.
@@ -273,14 +275,14 @@ constexpr const char* descr = R"trtdoc(
     :ivar precision_is_set: :class:`bool` Whether the precision is set or not.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Set the layer input corresponding to the given index.
 
     :arg index: The index of the input tensor.
     :arg tensor: The input tensor.
 )trtdoc";
 
-constexpr const char* get_input = R"trtdoc(
+constexpr char const* get_input = R"trtdoc(
     Get the layer input corresponding to the given index.
 
     :arg index: The index of the input tensor.
@@ -288,7 +290,7 @@ constexpr const char* get_input = R"trtdoc(
     :returns: The input tensor, or :class:`None` if the index is out of range.
 )trtdoc";
 
-constexpr const char* get_output = R"trtdoc(
+constexpr char const* get_output = R"trtdoc(
     Get the layer output corresponding to the given index.
 
     :arg index: The index of the output tensor.
@@ -296,12 +298,12 @@ constexpr const char* get_output = R"trtdoc(
     :returns: The output tensor, or :class:`None` if the index is out of range.
 )trtdoc";
 
-constexpr const char* reset_precision = R"trtdoc(
+constexpr char const* reset_precision = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Reset the computation precision of the layer.
 )trtdoc";
 
-constexpr const char* set_output_type = R"trtdoc(
+constexpr char const* set_output_type = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Constraint layer to generate output data with given type.
     Note that this method cannot be used to set the data type
@@ -312,7 +314,7 @@ constexpr const char* set_output_type = R"trtdoc(
     :arg dtype: DataType of the output.
 )trtdoc";
 
-constexpr const char* get_output_type = R"trtdoc(
+constexpr char const* get_output_type = R"trtdoc(
     Get the output type of the layer.
 
     :arg index: The index of the output tensor.
@@ -320,7 +322,7 @@ constexpr const char* get_output_type = R"trtdoc(
     :returns: The output precision. Default : DataType.FLOAT.
 )trtdoc";
 
-constexpr const char* output_type_is_set = R"trtdoc(
+constexpr char const* output_type_is_set = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Whether the output type has been set for this layer.
 
@@ -329,18 +331,29 @@ constexpr const char* output_type_is_set = R"trtdoc(
     :returns: Whether the output type has been explicitly set.
 )trtdoc";
 
-constexpr const char* reset_output_type = R"trtdoc(
+constexpr char const* reset_output_type = R"trtdoc(
     [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
     Reset output type of this layer.
 
     :arg index: The index of the output.
 )trtdoc";
 
+constexpr char const* num_ranks = R"trtdoc(
+    :class:`int` The number of ranks for multi-device execution.
+
+    Currently, setting num_ranks > 1 via ILayer is only allowed for IDistCollectiveLayer, which uses it to
+    determine output shape for kALL_GATHER and kREDUCE_SCATTER operations.
+
+    For attention layers, use IAttention.num_ranks instead.
+
+    Default value is 1.
+)trtdoc";
+
 } // namespace ILayerDoc
 
 namespace PaddingModeDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Enumerates types of padding available in convolution, deconvolution and pooling layers.
     Padding mode takes precedence if both :attr:`padding_mode` and :attr:`pre_padding` are set.
 
@@ -350,16 +363,16 @@ constexpr const char* descr = R"trtdoc(
     |  CAFFE* corresponds to symmetric padding.
 )trtdoc";
 
-constexpr const char* EXPLICIT_ROUND_DOWN = R"trtdoc(Use explicit padding, rounding the output size down)trtdoc";
-constexpr const char* EXPLICIT_ROUND_UP = R"trtdoc(Use explicit padding, rounding the output size up)trtdoc";
-constexpr const char* SAME_UPPER = R"trtdoc(Use SAME padding, with :attr:`pre_padding` <= :attr:`post_padding` )trtdoc";
-constexpr const char* SAME_LOWER = R"trtdoc(Use SAME padding, with :attr:`pre_padding` >= :attr:`post_padding` )trtdoc";
+constexpr char const* EXPLICIT_ROUND_DOWN = R"trtdoc(Use explicit padding, rounding the output size down)trtdoc";
+constexpr char const* EXPLICIT_ROUND_UP = R"trtdoc(Use explicit padding, rounding the output size up)trtdoc";
+constexpr char const* SAME_UPPER = R"trtdoc(Use SAME padding, with :attr:`pre_padding` <= :attr:`post_padding` )trtdoc";
+constexpr char const* SAME_LOWER = R"trtdoc(Use SAME padding, with :attr:`pre_padding` >= :attr:`post_padding` )trtdoc";
 
 } // namespace PaddingModeDoc
 
 namespace IConvolutionLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A convolution layer in an :class:`INetworkDefinition` .
 
     This layer performs a correlation operation between 3 or 4 dimensional filter with a 4 or 5 dimensional tensor to produce another 4 or 5 dimensional tensor.
@@ -382,31 +395,31 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ActivationTypeDoc
 {
-constexpr const char* descr = R"trtdoc(The type of activation to perform.)trtdoc";
+constexpr char const* descr = R"trtdoc(The type of activation to perform.)trtdoc";
 
-constexpr const char* RELU = R"trtdoc(Rectified Linear activation)trtdoc";
-constexpr const char* SIGMOID = R"trtdoc(Sigmoid activation)trtdoc";
-constexpr const char* TANH = R"trtdoc(Hyperbolic Tangent activation)trtdoc";
-constexpr const char* LEAKY_RELU
+constexpr char const* RELU = R"trtdoc(Rectified Linear activation)trtdoc";
+constexpr char const* SIGMOID = R"trtdoc(Sigmoid activation)trtdoc";
+constexpr char const* TANH = R"trtdoc(Hyperbolic Tangent activation)trtdoc";
+constexpr char const* LEAKY_RELU
     = R"trtdoc(Leaky Relu activation: f(x) = x if x >= 0, f(x) = alpha * x if x < 0)trtdoc";
-constexpr const char* ELU = R"trtdoc(Elu activation: f(x) = x if x >= 0, f(x) = alpha * (exp(x) - 1) if x < 0)trtdoc";
-constexpr const char* SELU
+constexpr char const* ELU = R"trtdoc(Elu activation: f(x) = x if x >= 0, f(x) = alpha * (exp(x) - 1) if x < 0)trtdoc";
+constexpr char const* SELU
     = R"trtdoc(Selu activation: f(x) = beta * x if x > 0, f(x) = beta * (alpha * exp(x) - alpha) if x <= 0)trtdoc";
-constexpr const char* SOFTSIGN = R"trtdoc(Softsign activation: f(x) = x / (1 + abs(x)))trtdoc";
-constexpr const char* SOFTPLUS = R"trtdoc(Softplus activation: f(x) = alpha * log(exp(beta * x) + 1))trtdoc";
-constexpr const char* CLIP = R"trtdoc(Clip activation: f(x) = max(alpha, min(beta, x)))trtdoc";
-constexpr const char* HARD_SIGMOID = R"trtdoc(Hard sigmoid activation: f(x) = max(0, min(1, alpha * x + beta)))trtdoc";
-constexpr const char* SCALED_TANH = R"trtdoc(Scaled Tanh activation: f(x) = alpha * tanh(beta * x))trtdoc";
-constexpr const char* THRESHOLDED_RELU
+constexpr char const* SOFTSIGN = R"trtdoc(Softsign activation: f(x) = x / (1 + abs(x)))trtdoc";
+constexpr char const* SOFTPLUS = R"trtdoc(Softplus activation: f(x) = alpha * log(exp(beta * x) + 1))trtdoc";
+constexpr char const* CLIP = R"trtdoc(Clip activation: f(x) = max(alpha, min(beta, x)))trtdoc";
+constexpr char const* HARD_SIGMOID = R"trtdoc(Hard sigmoid activation: f(x) = max(0, min(1, alpha * x + beta)))trtdoc";
+constexpr char const* SCALED_TANH = R"trtdoc(Scaled Tanh activation: f(x) = alpha * tanh(beta * x))trtdoc";
+constexpr char const* THRESHOLDED_RELU
     = R"trtdoc(Thresholded Relu activation: f(x) = x if x > alpha, f(x) = 0 if x <= alpha)trtdoc";
-constexpr const char* GELU_ERF = R"trtdoc(GELU erf activation: 0.5 * x * (1 + erf(sqrt(0.5) * x)))trtdoc";
-constexpr const char* GELU_TANH
+constexpr char const* GELU_ERF = R"trtdoc(GELU erf activation: 0.5 * x * (1 + erf(sqrt(0.5) * x)))trtdoc";
+constexpr char const* GELU_TANH
     = R"trtdoc(GELU tanh activation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (0.044715F * pow(x, 3) + x))))trtdoc";
 } // namespace ActivationTypeDoc
 
 namespace IActivationLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An Activation layer in an :class:`INetworkDefinition` . This layer applies a per-element activation function to its input. The output has the same shape as the input.
 
     :ivar type: :class:`ActivationType` The type of activation to be performed.
@@ -417,18 +430,18 @@ constexpr const char* descr = R"trtdoc(
 
 namespace PoolingTypeDoc
 {
-constexpr const char* descr = R"trtdoc(The type of pooling to perform in a pooling layer.)trtdoc";
+constexpr char const* descr = R"trtdoc(The type of pooling to perform in a pooling layer.)trtdoc";
 
-constexpr const char* MAX = R"trtdoc(Maximum over elements)trtdoc";
-constexpr const char* AVERAGE
+constexpr char const* MAX = R"trtdoc(Maximum over elements)trtdoc";
+constexpr char const* AVERAGE
     = R"trtdoc(Average over elements. If the tensor is padded, the count includes the padding)trtdoc";
-constexpr const char* MAX_AVERAGE_BLEND
+constexpr char const* MAX_AVERAGE_BLEND
     = R"trtdoc(Blending between the max pooling and average pooling: `(1-blendFactor)*maxPool + blendFactor*avgPool`)trtdoc";
 } // namespace PoolingTypeDoc
 
 namespace IPoolingLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Pooling layer in an :class:`INetworkDefinition` . The layer applies a reduction operation within a window over the input.
 
     :ivar type: :class:`PoolingType` The type of pooling to be performed.
@@ -445,7 +458,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ILRNLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A LRN layer in an :class:`INetworkDefinition` . The output size is the same as the input size.
 
     :ivar window_size: :class:`int` The LRN window size. The window size must be odd and in the range of [1, 15].
@@ -457,17 +470,17 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ScaleModeDoc
 {
-constexpr const char* descr = R"trtdoc(Controls how scale is applied in a Scale layer.)trtdoc";
+constexpr char const* descr = R"trtdoc(Controls how scale is applied in a Scale layer.)trtdoc";
 
-constexpr const char* UNIFORM = R"trtdoc(Identical coefficients across all elements of the tensor.)trtdoc";
-constexpr const char* CHANNEL
+constexpr char const* UNIFORM = R"trtdoc(Identical coefficients across all elements of the tensor.)trtdoc";
+constexpr char const* CHANNEL
     = R"trtdoc(Per-channel coefficients. The channel dimension is assumed to be the third to last dimension.)trtdoc";
-constexpr const char* ELEMENTWISE = R"trtdoc(Elementwise coefficients.)trtdoc";
+constexpr char const* ELEMENTWISE = R"trtdoc(Elementwise coefficients.)trtdoc";
 } // namespace ScaleModeDoc
 
 namespace IScaleLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Scale layer in an :class:`INetworkDefinition` .
 
     This layer applies a per-element computation to its input:
@@ -495,7 +508,7 @@ constexpr const char* descr = R"trtdoc(
 namespace ISoftMaxLayerDoc
 {
 // TODO: Figure out how to do preformatted text inside :ivar:s
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Softmax layer in an :class:`INetworkDefinition` .
 
     This layer applies a per-channel softmax to its input.
@@ -532,7 +545,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IConcatenationLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A concatenation layer in an :class:`INetworkDefinition` .
 
     The output channel size is the sum of the channel sizes of the inputs.
@@ -544,7 +557,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IDeconvolutionLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A deconvolution layer in an :class:`INetworkDefinition` .
 
     :ivar num_output_maps: :class:`int` The number of output feature maps for the deconvolution.
@@ -562,29 +575,29 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ElementWiseOperationDoc
 {
-constexpr const char* descr = R"trtdoc(The binary operations that may be performed by an ElementWise layer.)trtdoc";
+constexpr char const* descr = R"trtdoc(The binary operations that may be performed by an ElementWise layer.)trtdoc";
 
-constexpr const char* SUM = R"trtdoc(Sum of the two elements)trtdoc";
-constexpr const char* PROD = R"trtdoc(Product of the two elements)trtdoc";
-constexpr const char* MAX = R"trtdoc(Max of the two elements)trtdoc";
-constexpr const char* MIN = R"trtdoc(Min of the two elements)trtdoc";
-constexpr const char* SUB = R"trtdoc(Subtract the second element from the first)trtdoc";
-constexpr const char* DIV = R"trtdoc(Divide the first element by the second)trtdoc";
-constexpr const char* POW = R"trtdoc(The first element to the power of the second element)trtdoc";
-constexpr const char* FLOOR_DIV = R"trtdoc(Floor division of the first element by the second)trtdoc";
-constexpr const char* AND = R"trtdoc(Logical AND of two elements)trtdoc";
-constexpr const char* OR = R"trtdoc(Logical OR of two elements)trtdoc";
-constexpr const char* XOR = R"trtdoc(Logical XOR of two elements)trtdoc";
-constexpr const char* EQUAL = R"trtdoc(Check if two elements are equal)trtdoc";
-constexpr const char* GREATER
+constexpr char const* SUM = R"trtdoc(Sum of the two elements)trtdoc";
+constexpr char const* PROD = R"trtdoc(Product of the two elements)trtdoc";
+constexpr char const* MAX = R"trtdoc(Max of the two elements)trtdoc";
+constexpr char const* MIN = R"trtdoc(Min of the two elements)trtdoc";
+constexpr char const* SUB = R"trtdoc(Subtract the second element from the first)trtdoc";
+constexpr char const* DIV = R"trtdoc(Divide the first element by the second)trtdoc";
+constexpr char const* POW = R"trtdoc(The first element to the power of the second element)trtdoc";
+constexpr char const* FLOOR_DIV = R"trtdoc(Floor division of the first element by the second)trtdoc";
+constexpr char const* AND = R"trtdoc(Logical AND of two elements)trtdoc";
+constexpr char const* OR = R"trtdoc(Logical OR of two elements)trtdoc";
+constexpr char const* XOR = R"trtdoc(Logical XOR of two elements)trtdoc";
+constexpr char const* EQUAL = R"trtdoc(Check if two elements are equal)trtdoc";
+constexpr char const* GREATER
     = R"trtdoc(Check if element in first tensor is greater than corresponding element in second tensor)trtdoc";
-constexpr const char* LESS
+constexpr char const* LESS
     = R"trtdoc(Check if element in first tensor is less than corresponding element in second tensor)trtdoc";
 } // namespace ElementWiseOperationDoc
 
 namespace IElementWiseLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A elementwise layer in an :class:`INetworkDefinition` .
 
     This layer applies a per-element binary operation between corresponding elements of two tensors.
@@ -598,7 +611,7 @@ constexpr const char* descr = R"trtdoc(
 namespace IGatherLayerDoc
 {
 // TODO: Add better description here.
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A gather layer in an :class:`INetworkDefinition` .
 
     :ivar axis: :class:`int` The non-batch dimension axis to gather on. The axis must be less than the number of non-batch dimensions in the data input.
@@ -609,15 +622,15 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ScatterModeDoc
 {
-constexpr const char* descr = R"trtdoc(The scatter mode to be done by the scatter layer.)trtdoc";
+constexpr char const* descr = R"trtdoc(The scatter mode to be done by the scatter layer.)trtdoc";
 
-constexpr const char* ELEMENT = R"trtdoc(Scatter Element mode)trtdoc";
-constexpr const char* ND = R"trtdoc(Scatter ND mode)trtdoc";
+constexpr char const* ELEMENT = R"trtdoc(Scatter Element mode)trtdoc";
+constexpr char const* ND = R"trtdoc(Scatter ND mode)trtdoc";
 } // namespace ScatterModeDoc
 
 namespace IScatterLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Scatter layer as in :class:`INetworkDefinition`.
     :ivar axis: axis to scatter on when using Scatter Element mode (ignored in ND mode)
     :ivar mode: :class:`ScatterMode` The operation mode of the scatter.
@@ -626,16 +639,16 @@ constexpr const char* descr = R"trtdoc(
 
 namespace GatherModeDoc
 {
-constexpr const char* descr = R"trtdoc(Controls how IGatherLayer gathers data)trtdoc";
+constexpr char const* descr = R"trtdoc(Controls how IGatherLayer gathers data)trtdoc";
 
-constexpr const char* DEFAULT = R"trtdoc(Similar to ONNX Gather. This is the default.)trtdoc";
-constexpr const char* ELEMENT = R"trtdoc(Similar to ONNX GatherElements.)trtdoc";
-constexpr const char* ND = R"trtdoc(Similar to ONNX GatherND.)trtdoc";
+constexpr char const* DEFAULT = R"trtdoc(Similar to ONNX Gather. This is the default.)trtdoc";
+constexpr char const* ELEMENT = R"trtdoc(Similar to ONNX GatherElements.)trtdoc";
+constexpr char const* ND = R"trtdoc(Similar to ONNX GatherND.)trtdoc";
 } // namespace GatherModeDoc
 
 namespace IPluginV2LayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
         A plugin layer in an :class:`INetworkDefinition` .
 
         :ivar plugin: :class:`IPluginV2` The plugin for the layer.
@@ -644,7 +657,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IPluginV3LayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
         A plugin layer in an :class:`INetworkDefinition` .
 
         :ivar plugin: :class:`IPluginV3` The plugin for the layer.
@@ -653,41 +666,40 @@ constexpr const char* descr = R"trtdoc(
 
 namespace UnaryOperationDoc
 {
-constexpr const char* descr = R"trtdoc(The unary operations that may be performed by a Unary layer.)trtdoc";
+constexpr char const* descr = R"trtdoc(The unary operations that may be performed by a Unary layer.)trtdoc";
 
-constexpr const char* EXP = R"trtdoc(Exponentiation)trtdoc";
-constexpr const char* LOG = R"trtdoc(Log (base e))trtdoc";
-constexpr const char* SQRT = R"trtdoc(Square root)trtdoc";
-constexpr const char* RECIP = R"trtdoc(Reciprocal)trtdoc";
-constexpr const char* ABS = R"trtdoc(Absolute value)trtdoc";
-constexpr const char* NEG = R"trtdoc(Negation)trtdoc";
-constexpr const char* SIN = R"trtdoc(Sine)trtdoc";
-constexpr const char* COS = R"trtdoc(Cosine)trtdoc";
-constexpr const char* TAN = R"trtdoc(Tangent)trtdoc";
-constexpr const char* SINH = R"trtdoc(Hyperbolic sine)trtdoc";
-constexpr const char* COSH = R"trtdoc(Hyperbolic cosine)trtdoc";
-constexpr const char* ASIN = R"trtdoc(Inverse sine)trtdoc";
-constexpr const char* ACOS = R"trtdoc(Inverse cosine)trtdoc";
-constexpr const char* ATAN = R"trtdoc(Inverse tangent)trtdoc";
-constexpr const char* ASINH = R"trtdoc(Inverse hyperbolic sine)trtdoc";
-constexpr const char* ACOSH = R"trtdoc(Inverse hyperbolic cosine)trtdoc";
-constexpr const char* ATANH = R"trtdoc(Inverse hyperbolic tangent)trtdoc";
-constexpr const char* CEIL = R"trtdoc(Ceiling)trtdoc";
-constexpr const char* FLOOR = R"trtdoc(Floor)trtdoc";
-constexpr const char* ERF = R"trtdoc(Gauss error function)trtdoc";
-constexpr const char* NOT = R"trtdoc(Not)trtdoc";
-constexpr const char* SIGN
+constexpr char const* EXP = R"trtdoc(Exponentiation)trtdoc";
+constexpr char const* LOG = R"trtdoc(Log (base e))trtdoc";
+constexpr char const* SQRT = R"trtdoc(Square root)trtdoc";
+constexpr char const* RECIP = R"trtdoc(Reciprocal)trtdoc";
+constexpr char const* ABS = R"trtdoc(Absolute value)trtdoc";
+constexpr char const* NEG = R"trtdoc(Negation)trtdoc";
+constexpr char const* SIN = R"trtdoc(Sine)trtdoc";
+constexpr char const* COS = R"trtdoc(Cosine)trtdoc";
+constexpr char const* TAN = R"trtdoc(Tangent)trtdoc";
+constexpr char const* SINH = R"trtdoc(Hyperbolic sine)trtdoc";
+constexpr char const* COSH = R"trtdoc(Hyperbolic cosine)trtdoc";
+constexpr char const* ASIN = R"trtdoc(Inverse sine)trtdoc";
+constexpr char const* ACOS = R"trtdoc(Inverse cosine)trtdoc";
+constexpr char const* ATAN = R"trtdoc(Inverse tangent)trtdoc";
+constexpr char const* ASINH = R"trtdoc(Inverse hyperbolic sine)trtdoc";
+constexpr char const* ACOSH = R"trtdoc(Inverse hyperbolic cosine)trtdoc";
+constexpr char const* ATANH = R"trtdoc(Inverse hyperbolic tangent)trtdoc";
+constexpr char const* CEIL = R"trtdoc(Ceiling)trtdoc";
+constexpr char const* FLOOR = R"trtdoc(Floor)trtdoc";
+constexpr char const* ERF = R"trtdoc(Gauss error function)trtdoc";
+constexpr char const* NOT = R"trtdoc(Not)trtdoc";
+constexpr char const* SIGN
     = R"trtdoc(Sign. If input > 0, output 1; if input < 0, output -1; if input == 0, output 0.)trtdoc";
-constexpr const char* ROUND = R"trtdoc(Round to nearest even for floating-point data type.)trtdoc";
-constexpr const char* ISINF
+constexpr char const* ROUND = R"trtdoc(Round to nearest even for floating-point data type.)trtdoc";
+constexpr char const* ISINF
     = R"trtdoc(Return true if the input value equals +/- infinity for floating-point data type.)trtdoc";
-constexpr const char* ISNAN
-    = R"trtdoc(Return true if the input value equals NaN for floating-point data type.)trtdoc";
+constexpr char const* ISNAN = R"trtdoc(Return true if the input value equals NaN for floating-point data type.)trtdoc";
 } // namespace UnaryOperationDoc
 
 namespace IUnaryLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A unary layer in an :class:`INetworkDefinition` .
 
     :ivar op: :class:`UnaryOperation` The unary operation for the layer. When running this layer on DLA, only ``UnaryOperation.ABS`` is supported.
@@ -696,18 +708,19 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ReduceOperationDoc
 {
-constexpr const char* descr = R"trtdoc(The reduce operations that may be performed by a Reduce layer)trtdoc";
+constexpr char const* descr = R"trtdoc(The reduce operations that may be performed by a Reduce layer)trtdoc";
 
-constexpr const char* SUM = R"trtdoc()trtdoc";
-constexpr const char* PROD = R"trtdoc()trtdoc";
-constexpr const char* MAX = R"trtdoc()trtdoc";
-constexpr const char* MIN = R"trtdoc()trtdoc";
-constexpr const char* AVG = R"trtdoc()trtdoc";
+constexpr char const* SUM = R"trtdoc(Sum of the elements)trtdoc";
+constexpr char const* PROD = R"trtdoc(Product of the elements)trtdoc";
+constexpr char const* MAX = R"trtdoc(Maximum of the elements)trtdoc";
+constexpr char const* MIN = R"trtdoc(Minimum of the elements)trtdoc";
+constexpr char const* AVG = R"trtdoc(Average of the elements)trtdoc";
+constexpr char const* NONE = R"trtdoc(No reduction)trtdoc";
 } // namespace ReduceOperationDoc
 
 namespace IReduceLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A reduce layer in an :class:`INetworkDefinition` .
 
     :ivar op: :class:`ReduceOperation` The reduce operation for the layer.
@@ -718,7 +731,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IPaddingLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A padding layer in an :class:`INetworkDefinition` .
 
     :ivar pre_padding_nd: :class:`Dims` The padding that is applied at the start of the tensor. Negative padding results in trimming the edge by the specified amount. Only 2 dimensions currently supported.
@@ -728,7 +741,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace PermutationDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     The elements of the permutation. The permutation is applied as outputDimensionIndex = permutation[inputDimensionIndex], so to permute from CHW order to HWC order, the required permutation is [1, 2, 0], and to permute from HWC to CHW, the required permutation is [2, 0, 1].
 
     It supports iteration and indexing and is implicitly convertible to/from Python iterables (like :class:`tuple` or :class:`list` ). Therefore, you can use those classes in place of :class:`Permutation` .
@@ -737,7 +750,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IShuffleLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A shuffle layer in an :class:`INetworkDefinition` .
 
     This class shuffles data by applying in sequence: a transpose operation, a reshape operation and a second transpose operation. The dimension types of the output are those of the reshape dimension.
@@ -755,7 +768,7 @@ constexpr const char* descr = R"trtdoc(
         dimensions denotes a zero-length dimension.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor for the given index. The index must be 0 for a static shuffle layer.
     A static shuffle layer is converted to a dynamic shuffle layer by calling :func:`set_input` with an index 1.
     A dynamic shuffle layer cannot be converted back to a static shuffle layer.
@@ -781,7 +794,7 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace ISliceLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A slice layer in an :class:`INetworkDefinition` .
 
     The slice layer has two variants, static and dynamic.
@@ -840,7 +853,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar axes: :class:`Dims` The axes that starts, sizes, and strides correspond to.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor for the given index. The index must be 0 or 4 for a static slice layer.
     A static slice layer is converted to a dynamic slice layer by calling :func:`set_input` with an index between 1 and 3.
     A dynamic slice layer cannot be converted back to a static slice layer.
@@ -869,19 +882,19 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace SampleModeDoc
 {
-constexpr const char* descr
+constexpr char const* descr
     = R"trtdoc(Controls how ISliceLayer and IGridSample handles out of bounds coordinates)trtdoc";
 
-constexpr const char* STRICT_BOUNDS = R"trtdoc(Fail with error when the coordinates are out of bounds.)trtdoc";
-constexpr const char* WRAP = R"trtdoc(Coordinates wrap around periodically.)trtdoc";
-constexpr const char* CLAMP = R"trtdoc(Out of bounds indices are clamped to bounds)trtdoc";
-constexpr const char* FILL = R"trtdoc(Use fill input value when coordinates are out of bounds.)trtdoc";
-constexpr const char* REFLECT = R"trtdoc(Coordinates reflect.)trtdoc";
+constexpr char const* STRICT_BOUNDS = R"trtdoc(Fail with error when the coordinates are out of bounds.)trtdoc";
+constexpr char const* WRAP = R"trtdoc(Coordinates wrap around periodically.)trtdoc";
+constexpr char const* CLAMP = R"trtdoc(Out of bounds indices are clamped to bounds)trtdoc";
+constexpr char const* FILL = R"trtdoc(Use fill input value when coordinates are out of bounds.)trtdoc";
+constexpr char const* REFLECT = R"trtdoc(Coordinates reflect.)trtdoc";
 } // namespace SampleModeDoc
 
 namespace IShapeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A shape layer in an :class:`INetworkDefinition` . Used for getting the shape of a tensor.
     This class sets the output to a one-dimensional tensor with the dimensions of the input tensor.
 
@@ -894,15 +907,15 @@ constexpr const char* descr = R"trtdoc(
 
 namespace TopKOperationDoc
 {
-constexpr const char* descr = R"trtdoc(The operations that may be performed by a TopK layer)trtdoc";
+constexpr char const* descr = R"trtdoc(The operations that may be performed by a TopK layer)trtdoc";
 
-constexpr const char* MAX = R"trtdoc(Maximum of the elements)trtdoc";
-constexpr const char* MIN = R"trtdoc(Minimum of the elements)trtdoc";
+constexpr char const* MAX = R"trtdoc(Maximum of the elements)trtdoc";
+constexpr char const* MIN = R"trtdoc(Minimum of the elements)trtdoc";
 } // namespace TopKOperationDoc
 
 namespace ITopKLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A TopK layer in an :class:`INetworkDefinition` .
 
     :ivar op: :class:`TopKOperation` The operation for the layer.
@@ -913,7 +926,7 @@ constexpr const char* descr = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor for the given index. The index must be 0 or 1 for a TopK layer.
 
     The indices are as follows:
@@ -935,16 +948,16 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace MatrixOperationDoc
 {
-constexpr const char* descr = R"trtdoc(The matrix operations that may be performed by a Matrix layer)trtdoc";
+constexpr char const* descr = R"trtdoc(The matrix operations that may be performed by a Matrix layer)trtdoc";
 
-constexpr const char* NONE = R"trtdoc()trtdoc";
-constexpr const char* TRANSPOSE = R"trtdoc(Transpose each matrix)trtdoc";
-constexpr const char* VECTOR = R"trtdoc(Treat operand as collection of vectors)trtdoc";
+constexpr char const* NONE = R"trtdoc()trtdoc";
+constexpr char const* TRANSPOSE = R"trtdoc(Transpose each matrix)trtdoc";
+constexpr char const* VECTOR = R"trtdoc(Treat operand as collection of vectors)trtdoc";
 } // namespace MatrixOperationDoc
 
 namespace IMatrixMultiplyLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A matrix multiply layer in an :class:`INetworkDefinition` .
 
     Let A be op(getInput(0)) and B be op(getInput(1)) where
@@ -967,26 +980,26 @@ constexpr const char* descr = R"trtdoc(
 
 namespace CollectiveOperationDoc
 {
-constexpr const char* descr
+constexpr char const* descr
     = R"trtdoc(The collective operations that may be performed by a DistCollective layer)trtdoc";
 
-constexpr const char* ALL_REDUCE = R"trtdoc(All reduce collective operation)trtdoc";
-constexpr const char* ALL_GATHER = R"trtdoc(All gather collective operation)trtdoc";
-constexpr const char* BROADCAST = R"trtdoc(Broadcast collective operation)trtdoc";
-constexpr const char* REDUCE = R"trtdoc(Reduce collective operation)trtdoc";
-constexpr const char* REDUCE_SCATTER = R"trtdoc(Reduce scatter collective operation)trtdoc";
+constexpr char const* ALL_REDUCE = R"trtdoc(All reduce collective operation)trtdoc";
+constexpr char const* ALL_GATHER = R"trtdoc(All gather collective operation)trtdoc";
+constexpr char const* BROADCAST = R"trtdoc(Broadcast collective operation)trtdoc";
+constexpr char const* REDUCE = R"trtdoc(Reduce collective operation)trtdoc";
+constexpr char const* REDUCE_SCATTER = R"trtdoc(Reduce scatter collective operation)trtdoc";
 } // namespace CollectiveOperationDoc
 
 namespace IDistCollectiveLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A dist collective layer in an :class:`INetworkDefinition` .
 )trtdoc";
 } // namespace IDistCollectiveLayerDoc
 
 namespace IRaggedSoftMaxLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A ragged softmax layer in an :class:`INetworkDefinition` .
 
     This layer takes a ZxS input tensor and an additional Zx1 bounds tensor holding the lengths of the Z sequences.
@@ -999,7 +1012,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IIdentityLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A layer that represents the identity function.
 
     If tensor precision is explicitly specified, it can be used to transform from one precision to another.
@@ -1016,7 +1029,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ICastLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A layer that represents the cast function.
 
     This layer casts the element of a given input tensor to a specified data type and returns an output tensor of the same shape in the converted type.
@@ -1029,7 +1042,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IConstantLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A constant layer in an :class:`INetworkDefinition` .
 
     Note: This layer does not support boolean and uint8 types.
@@ -1041,7 +1054,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IParametricReLULayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A parametric ReLU layer in an :class:`INetworkDefinition` .
 
     This layer applies a parametric ReLU activation to an input tensor (first input), with slopes taken from a
@@ -1056,53 +1069,53 @@ constexpr const char* descr = R"trtdoc(
 
 namespace InterpolationModeDoc
 {
-constexpr const char* descr = R"trtdoc(Various modes of interpolation, used in resize and grid_sample layers.)trtdoc";
+constexpr char const* descr = R"trtdoc(Various modes of interpolation, used in resize and grid_sample layers.)trtdoc";
 
-constexpr const char* NEAREST = R"trtdoc(1D, 2D, and 3D nearest neighbor interpolation.)trtdoc";
-constexpr const char* LINEAR = R"trtdoc(Supports linear, bilinear, trilinear interpolation.)trtdoc";
-constexpr const char* CUBIC = R"trtdoc(Supports bicubic interpolation.)trtdoc";
+constexpr char const* NEAREST = R"trtdoc(1D, 2D, and 3D nearest neighbor interpolation.)trtdoc";
+constexpr char const* LINEAR = R"trtdoc(Supports linear, bilinear, trilinear interpolation.)trtdoc";
+constexpr char const* CUBIC = R"trtdoc(Supports bicubic interpolation.)trtdoc";
 } // namespace InterpolationModeDoc
 
 namespace ResizeCoordinateTransformationDoc
 {
-constexpr const char* descr
+constexpr char const* descr
     = R"trtdoc(Various modes of how to map the resized coordinate back to the original coordinate.)trtdoc";
 
-constexpr const char* ALIGN_CORNERS
+constexpr char const* ALIGN_CORNERS
     = R"trtdoc(In this mode, map the resized coordinate back to the original coordinate by the formula: x_original = x_resized * (length_original - 1) / (length_resized - 1).)trtdoc";
-constexpr const char* ASYMMETRIC
+constexpr char const* ASYMMETRIC
     = R"trtdoc(In this mode, map the resized coordinate back to the original coordinate by the formula: x_original = x_resized * (length_original / length_resized).)trtdoc";
-constexpr const char* HALF_PIXEL
+constexpr char const* HALF_PIXEL
     = R"trtdoc(In this mode, map the resized coordinate back to the original coordinate by the formula: x_original = (x_resized + 0.5) * (length_original / length_resized) - 0.5.)trtdoc";
 } // namespace ResizeCoordinateTransformationDoc
 
 namespace ResizeSelectorDoc
 {
-constexpr const char* descr
+constexpr char const* descr
     = R"trtdoc(Decides whether the original coordinate is 0 given a resize coordinate less than 2.)trtdoc";
 
-constexpr const char* FORMULA = R"trtdoc(Use the transformation formula to calculate the original coordinate.)trtdoc";
-constexpr const char* UPPER
+constexpr char const* FORMULA = R"trtdoc(Use the transformation formula to calculate the original coordinate.)trtdoc";
+constexpr char const* UPPER
     = R"trtdoc(Return the original coordinate index as 0 given a resize coordinate is less than 2.)trtdoc";
 } // namespace ResizeSelectorDoc
 
 namespace ResizeRoundModeDoc
 {
-constexpr const char* descr = R"trtdoc(Rounding modes available for the resize layer.)trtdoc";
+constexpr char const* descr = R"trtdoc(Rounding modes available for the resize layer.)trtdoc";
 
-constexpr const char* HALF_UP
+constexpr char const* HALF_UP
     = R"trtdoc(Round original floating-point coordinate to the nearest integer value, with halfway cases rounded up.)trtdoc";
-constexpr const char* HALF_DOWN
+constexpr char const* HALF_DOWN
     = R"trtdoc(Round original floating-point coordinate to the nearest integer value, with halfway cases rounded down.)trtdoc";
-constexpr const char* FLOOR
+constexpr char const* FLOOR
     = R"trtdoc(Round original floating-point coordinate to the nearest integer value less than it.)trtdoc";
-constexpr const char* CEIL
+constexpr char const* CEIL
     = R"trtdoc(Round original floating-point coordinate to the nearest integer value larger than it.)trtdoc";
 } // namespace ResizeRoundModeDoc
 
 namespace IResizeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A resize layer in an :class:`INetworkDefinition` .
 
     Resize layer can be used for resizing a N-D tensor.
@@ -1154,7 +1167,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar cubic_coeff: :class:`float` coefficient 'a' used in cubic interpolation.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor for the given index.
 
     If index == 1 and num_inputs == 1, num_inputs changes to 2.
@@ -1169,28 +1182,28 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace LoopOutputDoc
 {
-constexpr const char* descr = R"trtdoc(Describes kinds of loop outputs.)trtdoc";
+constexpr char const* descr = R"trtdoc(Describes kinds of loop outputs.)trtdoc";
 
-constexpr const char* LAST_VALUE = R"trtdoc(Output value is value of tensor for last iteration.)trtdoc";
-constexpr const char* CONCATENATE
+constexpr char const* LAST_VALUE = R"trtdoc(Output value is value of tensor for last iteration.)trtdoc";
+constexpr char const* CONCATENATE
     = R"trtdoc(Output value is concatenation of values of tensor for each iteration, in forward order.)trtdoc";
-constexpr const char* REVERSE
+constexpr char const* REVERSE
     = R"trtdoc(Output value is concatenation of values of tensor for each iteration, in reverse order.)trtdoc";
 } // namespace LoopOutputDoc
 
 namespace TripLimitDoc
 {
-constexpr const char* descr = R"trtdoc(Describes kinds of trip limits.)trtdoc";
+constexpr char const* descr = R"trtdoc(Describes kinds of trip limits.)trtdoc";
 
-constexpr const char* COUNT = R"trtdoc(Tensor is a scalar of type :class:`int32` that contains the trip count.)trtdoc";
-constexpr const char* WHILE
+constexpr char const* COUNT = R"trtdoc(Tensor is a scalar of type :class:`int32` that contains the trip count.)trtdoc";
+constexpr char const* WHILE
     = R"trtdoc(Tensor is a scalar of type :class:`bool`. Loop terminates when its value is false.)trtdoc";
 
 } // namespace TripLimitDoc
 
 namespace ILoopBoundaryLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     :ivar loop: :class:`ILoop` associated with this boundary layer.
 )trtdoc";
 
@@ -1198,8 +1211,8 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IRecurrenceLayerDoc
 {
-constexpr const char* descr = R"trtdoc()trtdoc";
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* descr = R"trtdoc()trtdoc";
+constexpr char const* set_input = R"trtdoc(
     Set the first or second input.
     If index==1 and the number of inputs is one, the input is appended.
     The first input specifies the initial output value, and must come from outside the loop.
@@ -1213,7 +1226,7 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace ILoopOutputLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An :class:`ILoopOutputLayer` is the sole way to get output from a loop.
 
     The first input tensor must be defined inside the loop; the output tensor is outside the loop.
@@ -1241,7 +1254,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar kind: The kind of loop output. See :class:`LoopOutput`
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Like :func:`ILayer.set_input`, but additionally works if index==1, :attr:`num_inputs`==1, in which case :attr:`num_inputs` changes to 2.
 )trtdoc";
 
@@ -1249,14 +1262,14 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace ITripLimitLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     :ivar kind: The kind of trip limit. See :class:`TripLimit`
 )trtdoc";
 } // namespace ITripLimitLayerDoc
 
 namespace IIteratorLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     :ivar axis: The axis to iterate over
     :ivar reverse: For reverse=false, the layer is equivalent to add_gather(tensor, I, 0) where I is a
         scalar tensor containing the loop iteration number.
@@ -1268,13 +1281,13 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ILoopDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Helper for creating a recurrent subgraph.
 
     :ivar name: The name of the loop. The name is used in error diagnostics.
 )trtdoc";
 
-constexpr const char* add_recurrence = R"trtdoc(
+constexpr char const* add_recurrence = R"trtdoc(
     Create a recurrence layer for this loop with initial_value as its first input.
 
     :param initial_value: The initial value of the recurrence layer.
@@ -1282,7 +1295,7 @@ constexpr const char* add_recurrence = R"trtdoc(
     :returns: The added :class:`IRecurrenceLayer` , or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_trip_limit = R"trtdoc(
+constexpr char const* add_trip_limit = R"trtdoc(
     Add a trip-count limiter, based on the given tensor.
 
     There may be at most one ``COUNT`` and one ``WHILE`` limiter for a loop.
@@ -1303,7 +1316,7 @@ constexpr const char* add_trip_limit = R"trtdoc(
     :returns: The added :class:`ITripLimitLayer` , or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_iterator = R"trtdoc(
+constexpr char const* add_iterator = R"trtdoc(
     Return layer that subscripts tensor by loop iteration.
 
     For reverse=false, this is equivalent to add_gather(tensor, I, 0) where I is a
@@ -1318,7 +1331,7 @@ constexpr const char* add_iterator = R"trtdoc(
     :returns: The :class:`IIteratorLayer` , or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_loop_output = R"trtdoc(
+constexpr char const* add_loop_output = R"trtdoc(
     Make an output for this loop, based on the given tensor.
 
     If ``kind`` is ``CONCATENATE`` or ``REVERSE``, a second input specifying the
@@ -1334,7 +1347,7 @@ constexpr const char* add_loop_output = R"trtdoc(
 
 namespace IOneHotLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A OneHot layer in a network definition.
 
     The OneHot layer has three input tensors: Indices, Values, and Depth, one output tensor,
@@ -1361,7 +1374,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ISelectLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A select layer in an :class:`INetworkDefinition` .
 
     This layer implements an element-wise ternary conditional operation. Wherever ``condition`` is ``True``, elements are taken from the first input, and wherever ``condition`` is ``False``, elements are taken from the second input.
@@ -1370,7 +1383,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IAssertionLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An assertion layer in an :class:`INetworkDefinition` .
 
     This layer implements assertions. The input must be a boolean shape tensor. If any element of it is ``False``, a build-time or run-time error occurs. Asserting equality of input dimensions may help the optimizer.
@@ -1381,7 +1394,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IGridSampleLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A grid sample layer in an :class:`INetworkDefinition` .
 
     This layer uses an input tensor and a grid tensor to produce an interpolated output tensor.
@@ -1396,20 +1409,20 @@ constexpr const char* descr = R"trtdoc(
 
 namespace BoundingBoxFormatDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Enumerates bounding box data formats used for the Boxes input tensor in the NMS layer.
 )trtdoc";
 
-constexpr const char* CORNER_PAIRS
+constexpr char const* CORNER_PAIRS
     = R"trtdoc((x1, y1, x2, y2) where (x1, y1) and (x2, y2) are any pair of diagonal corners)trtdoc";
-constexpr const char* CENTER_SIZES
+constexpr char const* CENTER_SIZES
     = R"trtdoc((x_center, y_center, width, height) where (x_center, y_center) is the center point of the box)trtdoc";
 
 } // namespace BoundingBoxFormatDoc
 
 namespace INMSLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A non-maximum suppression layer in an :class:`INetworkDefinition` .
 
     Boxes: The input boxes tensor to the layer.
@@ -1460,7 +1473,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar indices_type: :class:`DataType` The specified data type of the output indices tensor. Must be tensorrt.int32 or tensorrt.int64.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor for the given index.
     The indices are as follows:
 
@@ -1486,18 +1499,18 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace FillOperationDoc
 {
-constexpr const char* descr = R"trtdoc(The tensor fill operations that may performed by an Fill layer.)trtdoc";
+constexpr char const* descr = R"trtdoc(The tensor fill operations that may performed by an Fill layer.)trtdoc";
 
-constexpr const char* LINSPACE = R"trtdoc(Generate evenly spaced numbers over a specified interval)trtdoc";
-constexpr const char* RANDOM_UNIFORM
+constexpr char const* LINSPACE = R"trtdoc(Generate evenly spaced numbers over a specified interval)trtdoc";
+constexpr char const* RANDOM_UNIFORM
     = R"trtdoc(Generate a tensor with random values drawn from a uniform distribution)trtdoc";
-constexpr const char* RANDOM_NORMAL
+constexpr char const* RANDOM_NORMAL
     = R"trtdoc(Generate a tensor with random values drawn from a normal distribution)trtdoc";
 } // namespace FillOperationDoc
 
 namespace IFillLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A fill layer in an :class:`INetworkDefinition` .
 
     The data type of the output tensor can be specified by :attr:`to_type`. Supported output types for each fill operation is as follows.
@@ -1513,38 +1526,38 @@ constexpr const char* descr = R"trtdoc(
     :ivar to_type: :class:`DataType` The specified data type of the output tensor. Defaults to tensorrt.float32.
 )trtdoc";
 
-constexpr const char* set_dimensions = R"trtdoc(
+constexpr char const* set_dimensions = R"trtdoc(
     set the output tensor's dimensions.
 
     :arg dims: the output tensor's dimensions.
 )trtdoc";
 
-constexpr const char* get_dimensions = R"trtdoc(
+constexpr char const* get_dimensions = R"trtdoc(
     get the output tensor's dimensions.
 )trtdoc";
 
-constexpr const char* set_operation = R"trtdoc(
+constexpr char const* set_operation = R"trtdoc(
     set the fill operation for the layer.
 
     :arg operation: the fill operation for the layer.
 )trtdoc";
 
-constexpr const char* get_operation = R"trtdoc(
+constexpr char const* get_operation = R"trtdoc(
     get the fill operation for the layer.
 )trtdoc";
 
-constexpr const char* set_to_type = R"trtdoc(
+constexpr char const* set_to_type = R"trtdoc(
     set the output data type for the layer.
     only applied if alpha and beta are static.
 
     :arg to_type: the output data type for the layer.
 )trtdoc";
 
-constexpr const char* get_to_type = R"trtdoc(
+constexpr char const* get_to_type = R"trtdoc(
     get the user specified output data type for the layer.
 )trtdoc";
 
-constexpr const char* set_alpha = R"trtdoc(
+constexpr char const* set_alpha = R"trtdoc(
     set the alpha parameter (must be finite).
 
     ==============   ==================
@@ -1558,12 +1571,12 @@ constexpr const char* set_alpha = R"trtdoc(
     :arg alpha: has different meanings for each operators.
 )trtdoc";
 
-constexpr const char* get_alpha = R"trtdoc(
+constexpr char const* get_alpha = R"trtdoc(
     get the alpha parameter.
     see :meth:`IFillLayer.set_alpha()` for details
 )trtdoc";
 
-constexpr const char* set_beta = R"trtdoc(
+constexpr char const* set_beta = R"trtdoc(
     set the beta parameter (must be finite).
 
     ===============  ==================
@@ -1577,12 +1590,12 @@ constexpr const char* set_beta = R"trtdoc(
     :arg beta: has different meanings for each operators.
 )trtdoc";
 
-constexpr const char* get_beta = R"trtdoc(
+constexpr char const* get_beta = R"trtdoc(
     get the beta parameter.
     see :meth:`IFillLayer.set_beta()` for details
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     replace an input of this layer with a specific tensor.
 
     =====   ==========================================================================================================
@@ -1616,7 +1629,7 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace IQuantizeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Quantize layer in an :class:`INetworkDefinition` .
 
     This layer accepts a floating-point data input tensor, and uses the scale and zeroPt inputs to
@@ -1657,7 +1670,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IDequantizeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Dequantize layer in an :class:`INetworkDefinition` .
 
     This layer accepts a signed 8-bit integer input tensor, and uses the configured scale and zeroPt inputs to
@@ -1692,7 +1705,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IDynamicQuantizeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A DynamicQuantize layer in an :class:`INetworkDefinition` .
 
     This layer performs dynamic block quantization of its input tensor and outputs the quantized data and the computed block scale-factors.
@@ -1712,7 +1725,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ISplitToRaggedLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A SplitToRagged layer in an :class:`INetworkDefinition` .
 
     Split a tensor into a ragged tensor along the specified 'axis'.
@@ -1724,7 +1737,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IConcatFromRaggedLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A ConcatFromRagged layer in an :class:`INetworkDefinition` .
 
     Concatenate a ragged tensor to a regular tensor.
@@ -1735,29 +1748,29 @@ constexpr const char* descr = R"trtdoc(
 
 namespace IIfConditionalBoundaryLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     :ivar conditional: :class:`IIfConditional` associated with this boundary layer.
 )trtdoc";
 } // namespace IIfConditionalBoundaryLayerDoc
 
 namespace IConditionLayerDoc
 {
-constexpr const char* descr = R"trtdoc(Describes the boolean condition of an if-conditional.)trtdoc";
+constexpr char const* descr = R"trtdoc(Describes the boolean condition of an if-conditional.)trtdoc";
 } // namespace IConditionLayerDoc
 
 namespace IIfConditionalInputLayerDoc
 {
-constexpr const char* descr = R"trtdoc(Describes kinds of if-conditional inputs.)trtdoc";
+constexpr char const* descr = R"trtdoc(Describes kinds of if-conditional inputs.)trtdoc";
 } // namespace IIfConditionalInputLayerDoc
 
 namespace IIfConditionalOutputLayerDoc
 {
-constexpr const char* descr = R"trtdoc(Describes kinds of if-conditional outputs.)trtdoc";
+constexpr char const* descr = R"trtdoc(Describes kinds of if-conditional outputs.)trtdoc";
 } // namespace IIfConditionalOutputLayerDoc
 
 namespace IIfConditionalDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Helper for constructing conditionally-executed subgraphs.
 
     An If-conditional conditionally executes (lazy evaluation) part of the network according
@@ -1782,7 +1795,7 @@ constexpr const char* descr = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* set_condition = R"trtdoc(
+constexpr char const* set_condition = R"trtdoc(
     Set the condition tensor for this If-Conditional construct.
 
     The ``condition`` tensor must be a 0D data tensor (scalar) with type :class:`bool`.
@@ -1792,7 +1805,7 @@ constexpr const char* set_condition = R"trtdoc(
     :returns: The :class:`IConditionLayer` , or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_output = R"trtdoc(
+constexpr char const* add_output = R"trtdoc(
     Make an output for this if-conditional, based on the given tensors.
 
     Each output layer of the if-conditional represents a single output of either the true-subgraph or the
@@ -1804,7 +1817,7 @@ constexpr const char* add_output = R"trtdoc(
     :returns: The :class:`IIfConditionalOutputLayer` , or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_input = R"trtdoc(
+constexpr char const* add_input = R"trtdoc(
     Make an input for this if-conditional, based on the given tensor.
 
     :param input: An input to the conditional that can be used by either or both of the conditional’s subgraphs.
@@ -1814,7 +1827,7 @@ constexpr const char* add_input = R"trtdoc(
 
 namespace IEinsumLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An Einsum layer in an :class:`INetworkDefinition` .
 
     This layer implements a summation over the elements of the inputs along dimensions specified by the equation parameter, based on the Einstein summation convention.
@@ -1865,7 +1878,7 @@ constexpr char const* descr = R"trtdoc(
 
 namespace IReverseSequenceLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A ReverseSequence layer in an :class:`INetworkDefinition` .
 
     This layer performs batch-wise reversal, which slices the input tensor along the axis ``batch_axis``. For the
@@ -1880,7 +1893,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace INormalizationLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Normalization layer in an :class:`INetworkDefinition` .
 
     The normalization layer performs the following operation:
@@ -1903,7 +1916,7 @@ constexpr const char* descr = R"trtdoc(
 
 namespace ISqueezeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A Squeeze layer in an :class:`INetworkDefinition` .
 
     This layer represents a squeeze operation, removing unit dimensions of the input tensor on a set of axes.
@@ -1914,7 +1927,7 @@ constexpr const char* descr = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor for the given index. The index must be 0 or 1 for a Squeeze layer.
 
     The indices are as follows:
@@ -1934,7 +1947,7 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace IUnsqueezeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An Unsqueeze layer in an :class:`INetworkDefinition` .
 
     This layer represents an unsqueeze operation, which reshapes the input tensor by inserting unit-length dimensions at specified axes of the output.
@@ -1946,7 +1959,7 @@ constexpr const char* descr = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor for the given index. The index must be 0 or 1 for an Unsqueeze layer.
 
     The indices are as follows:
@@ -1966,13 +1979,13 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace CumulativeOperationDoc
 {
-constexpr const char* descr = R"trtdoc(The cumulative operations that may be performed by a Cumulative layer)trtdoc";
-constexpr const char* SUM = R"trtdoc()trtdoc";
+constexpr char const* descr = R"trtdoc(The cumulative operations that may be performed by a Cumulative layer)trtdoc";
+constexpr char const* SUM = R"trtdoc()trtdoc";
 } // namespace CumulativeOperationDoc
 
 namespace ICumulativeLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A cumulative layer in an :class:`INetworkDefinition` .
 
     This layer represents a cumulative operation across a tensor.
@@ -2004,38 +2017,37 @@ constexpr const char* descr = R"trtdoc(
 )trtdoc";
 } // namespace ICumulativeLayerDoc
 
-
 namespace AttentionNormalizationOpDoc
 {
-constexpr const char* descr = R"trtdoc(The normalization operations that may be performed by an Attention layer)trtdoc";
-constexpr const char* NONE = R"trtdoc()trtdoc";
-constexpr const char* SOFTMAX = R"trtdoc()trtdoc";
+constexpr char const* descr = R"trtdoc(The normalization operations that may be performed by an Attention layer)trtdoc";
+constexpr char const* NONE = R"trtdoc()trtdoc";
+constexpr char const* SOFTMAX = R"trtdoc()trtdoc";
 } // namespace AttentionNormalizationOpDoc
 
 namespace IAttentionBoundaryLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     :ivar attention: :class:`IAttention` associated with this boundary layer.
 )trtdoc";
 } // namespace IAttentionBoundaryLayerDoc
 
 namespace IAttentionInputLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Marks input boundary to an :class:`IAttention` scope
 )trtdoc";
 } // namespace IAttentionInputLayerDoc
 
 namespace IAttentionOutputLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Marks output boundary to an :class:`IAttention` scope
 )trtdoc";
 } // namespace IAttentionOutputLayerDoc
 
 namespace IAttentionDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     An attention in a :class:`INetworkDefinition` .
 
     :ivar mask: :class:`ITensor` The mask tensor for attention. Cannot be set together with causal attention.
@@ -2048,6 +2060,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar normalization_quantize_to_type: :class:`DataType` The datatype the attention normalization is quantized to.
     :ivar num_inputs: :class:`int` The number of inputs of the attention.
     :ivar num_outputs: :class:`int` The number of outputs of the attention.
+    :ivar num_ranks: :class:`int` The number of ranks for multi-device attention execution (default: 1).
 )trtdoc";
 
 constexpr char const* init = R"trtdoc(
@@ -2058,7 +2071,7 @@ constexpr char const* init = R"trtdoc(
     :arg casual: The boolean specifies whether the attention will run a causal inference.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Set the input tensor specified by the given index.
 
     The indices are as follows:
@@ -2075,7 +2088,7 @@ constexpr const char* set_input = R"trtdoc(
     :arg tensor: The input tensor.
 )trtdoc";
 
-constexpr const char* get_input = R"trtdoc(
+constexpr char const* get_input = R"trtdoc(
     Get the input tensor specified by the given index.
 
     :arg index: The index of the input tensor.
@@ -2083,7 +2096,7 @@ constexpr const char* get_input = R"trtdoc(
     :returns: The tensor, or :class:`None` if it is out of range.
 )trtdoc";
 
-constexpr const char* get_output = R"trtdoc(
+constexpr char const* get_output = R"trtdoc(
     Get the output tensor specified by the given index.
 
     :arg index: The index of the output tensor.
@@ -2091,18 +2104,25 @@ constexpr const char* get_output = R"trtdoc(
     :returns: The tensor, or :class:`None` if it is out of range.
 )trtdoc";
 
+constexpr char const* num_ranks = R"trtdoc(
+    :class:`int` The number of ranks for multi-device attention execution.
+
+    When num_ranks > 1, this hints attention to perform multi-device attention.
+
+    Default value is 1.
+)trtdoc";
 } // namespace IAttentionDoc
 
 namespace IRotaryEmbeddingLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A RotaryEmbedding layer in :class:`INetworkDefinition`.
 
     :ivar interleaved: :class:`bool` Specifies whether the input tensor is in interleaved format, i.e., whether the 2-d vectors rotated are taken from adjacent 2 elements in the hidden dimension.
     :ivar rotary_embedding_dim: :class:`int` Specifies the hidden dimension that participates in RoPE.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Set the input tensor specified by the given index.
 
     :arg index: The index of the input tensor.
@@ -2119,13 +2139,13 @@ constexpr const char* set_input = R"trtdoc(
 
 namespace KVCacheModeDoc
 {
-constexpr const char* descr = R"trtdoc(The cache modes supported by a KVCacheUpdate layer)trtdoc";
-constexpr const char* LINEAR = R"trtdoc()trtdoc";
+constexpr char const* descr = R"trtdoc(The cache modes supported by a KVCacheUpdate layer)trtdoc";
+constexpr char const* LINEAR = R"trtdoc()trtdoc";
 } // namespace KVCacheModeDoc
 
 namespace IKVCacheUpdateLayerDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     A KVCacheUpdate layer in a :class:`INetworkDefinition` .
 
     This layer caches Key (K) or Value (V) tensors for reuse in subsequent attention computations.
@@ -2136,7 +2156,7 @@ constexpr const char* descr = R"trtdoc(
     :ivar cache_mode: :class:`KVCacheMode` The mode of the KVCacheUpdate layer.
 )trtdoc";
 
-constexpr const char* set_input = R"trtdoc(
+constexpr char const* set_input = R"trtdoc(
     Sets the input tensor specified by the given index.
 
     The indices are as follows:
@@ -2155,22 +2175,92 @@ constexpr const char* set_input = R"trtdoc(
 
 } // namespace IKVCacheUpdateLayerDoc
 
+namespace MoEActTypeDoc
+{
+constexpr char const* descr = R"trtdoc(The activation type that may be performed by an MoE layer)trtdoc";
+constexpr char const* NONE = R"trtdoc()trtdoc";
+constexpr char const* SILU = R"trtdoc()trtdoc";
+} // namespace MoEActTypeDoc
+
+namespace IMoELayerDoc
+{
+constexpr char const* descr = R"trtdoc(
+    A MoE layer in :class:`INetworkDefinition`.
+
+    :ivar activation_type: :class:`MoEActType` Specifies the activation type for the MoE layer.
+    :ivar quantization_to_type: :class:`DataType` Specifies the quantization type for the MoE layer.
+    :ivar quantization_block_shape: :class:`Dims` Specifies the quantization block shape for the MoE layer.
+    :ivar dyn_q_output_scale_type: :class:`DataType` Specifies the dynamic quantization output scale type for the MoE layer.
+    :ivar swiglu_param_limit: :class:`float` Specifies the swiglu parameter limit for the MoE layer.
+    :ivar swiglu_param_alpha: :class:`float` Specifies the swiglu parameter alpha for the MoE layer.
+    :ivar swiglu_param_beta: :class:`float` Specifies the swiglu parameter beta for the MoE layer.
+)trtdoc";
+
+constexpr char const* set_gated_weights = R"trtdoc(
+    Set the gated weights for the MoE layer.
+    :arg fc_gate_weights: The weights for the gate-projection layer of all experts in MoE.
+    :arg fc_up_weights: The weights for the up-projection layer of all experts in MoE.
+    :arg fc_down_weights: The weights for the down-projection layer of all experts in MoE.
+    :arg activation_type: The activation type for the MoE layer.
+)trtdoc";
+
+constexpr char const* set_gated_biases = R"trtdoc(
+    Set the gated biases for the MoE layer.
+    :arg fc_gate_biases: The biases for the gate-projection layer of all experts in MoE.
+    :arg fc_up_biases: The biases for the up-projection layer of all experts in MoE.
+    :arg fc_down_biases: The biases for the down-projection layer of all experts in MoE.
+)trtdoc";
+
+constexpr char const* set_quantization_static = R"trtdoc(
+    Set the quantization static for the MoE layer.
+    :arg fc_down_activation_scale: The down activation scale tensor.
+    :arg data_type: The data type for the quantization.
+)trtdoc";
+
+constexpr char const* set_quantization_dynamic_dbl_q = R"trtdoc(
+    Set the quantization dynamic double quantization for the MoE layer.
+    :arg fc_down_activation_dbl_q_scale: The down activation double quantization scale tensor.
+    :arg data_type: The data type for the quantization.
+    :arg block_shape: The block shape for the quantization.
+    :arg dyn_q_output_scale_type: The dynamic quantization output scale type.
+)trtdoc";
+
+constexpr char const* set_swiglu_params = R"trtdoc(
+    Set the swiglu parameters for the MoE layer.
+    :arg limit: The limit for the swiglu parameters.
+    :arg alpha: The alpha for the swiglu parameters.
+    :arg beta: The beta for the swiglu parameters.
+)trtdoc";
+
+constexpr char const* set_input = R"trtdoc(
+    Set the input tensor specified by the given index.
+
+    :arg index: The index of the input tensor.
+    :arg tensor: The input tensor.
+
+    The indices are as follows:
+
+    Input 0: hidden_states: the hidden states tensor.
+    Input 1: selected_experts_for_tokens: the selected experts for tokens tensor.
+    Input 2: scores_for_selected_experts: the scores for selected experts tensor.
+)trtdoc";
+} // namespace IMoELayerDoc
+
 namespace INetworkDefinitionDoc
 {
-constexpr const char* descr = R"trtdoc(
+constexpr char const* descr = R"trtdoc(
     Represents a TensorRT Network from which the Builder can build an Engine
 
     :ivar num_layers: :class:`int` The number of layers in the network.
     :ivar num_inputs: :class:`int` The number of inputs of the network.
     :ivar num_outputs: :class:`int` The number of outputs of the network.
-    :ivar num_ranks: :class:`int` The number of ranks to use for multi-device execution.
     :ivar name: :class:`str` The name of the network. This is used so that it can be associated with a built engine. The name must be at most 128 characters in length. TensorRT makes no use of this string except storing it as part of the engine so that it may be retrieved at runtime. A name unique to the builder will be generated by default.
     :ivar has_implicit_batch_dimension: :class:`bool` [DEPRECATED] Deprecated in TensorRT 10.0. Always flase since the implicit batch dimensions support has been removed.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :flags: :int: A bitset of the ``NetworkDefinitionCreationFlag`` s set for this network.
 )trtdoc";
 
-constexpr const char* get_flag = R"trtdoc(
+constexpr char const* get_flag = R"trtdoc(
     Returns true if the specified ``NetworkDefinitionCreationFlag`` is set.
 
     :arg flag: The ``NetworkDefinitionCreationFlag`` .
@@ -2178,7 +2268,7 @@ constexpr const char* get_flag = R"trtdoc(
     :returns: Whether the flag is set.
 )trtdoc";
 
-constexpr const char* add_input = R"trtdoc(
+constexpr char const* add_input = R"trtdoc(
     Adds an input to the network.
 
     :arg name: The name of the tensor. Each input and output tensor must have a unique name.
@@ -2188,25 +2278,25 @@ constexpr const char* add_input = R"trtdoc(
     :returns: The newly added Tensor.
 )trtdoc";
 
-constexpr const char* mark_output = R"trtdoc(
+constexpr char const* mark_output = R"trtdoc(
     Mark a tensor as an output.
 
     :arg tensor: The tensor to mark.
 )trtdoc";
 
-constexpr const char* mark_weights_refittable = R"trtdoc(
+constexpr char const* mark_weights_refittable = R"trtdoc(
     Mark a weight as refittable.
 
     :arg name: The weight to mark.
 )trtdoc";
 
-constexpr const char* are_weights_marked_refittable = R"trtdoc(
+constexpr char const* are_weights_marked_refittable = R"trtdoc(
     Whether the weight has been marked as refittable.
 
     :arg name: The name of the weights to check.
 )trtdoc";
 
-constexpr const char* mark_debug = R"trtdoc(
+constexpr char const* mark_debug = R"trtdoc(
     Mark a tensor as a debug tensor in the network.
 
     :arg tensor: The tensor to be marked as debug tensor.
@@ -2214,13 +2304,13 @@ constexpr const char* mark_debug = R"trtdoc(
     :returns: True on success, False otherwise.
 )trtdoc";
 
-constexpr const char* unmark_weights_refittable = R"trtdoc(
+constexpr char const* unmark_weights_refittable = R"trtdoc(
     Unmark a weight as refittable.
 
     :arg name: The weight to unmark.
 )trtdoc";
 
-constexpr const char* unmark_debug = R"trtdoc(
+constexpr char const* unmark_debug = R"trtdoc(
     Unmark a tensor as a debug tensor in the network.
 
     :arg tensor: The tensor to be unmarked as debug tensor.
@@ -2228,13 +2318,13 @@ constexpr const char* unmark_debug = R"trtdoc(
     :returns: True on success, False otherwise.
 )trtdoc";
 
-constexpr const char* is_debug_tensor = R"trtdoc(
+constexpr char const* is_debug_tensor = R"trtdoc(
     Check if a tensor is marked as debug.
 
     :arg tensor: The tensor to be checked.
 )trtdoc";
 
-constexpr const char* mark_unfused_tensors_as_debug_tensors = R"trtdoc(
+constexpr char const* mark_unfused_tensors_as_debug_tensors = R"trtdoc(
     Mark unfused tensors as debug tensors.
 
     Debug tensors can be optionally emitted at runtime.
@@ -2250,7 +2340,7 @@ constexpr const char* mark_unfused_tensors_as_debug_tensors = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* unmark_unfused_tensors_as_debug_tensors = R"trtdoc(
+constexpr char const* unmark_unfused_tensors_as_debug_tensors = R"trtdoc(
     Undo the marking of unfused tensor as debug tensors.
 
     This has no effect on tensors marked by mark_debug().
@@ -2258,7 +2348,7 @@ constexpr const char* unmark_unfused_tensors_as_debug_tensors = R"trtdoc(
     :returns: True if tensor successfully unmarked (or was already unmarked), false otherwise.
 )trtdoc";
 
-constexpr const char* add_convolution_nd = R"trtdoc(
+constexpr char const* add_convolution_nd = R"trtdoc(
     Add a multi-dimension convolution layer to the network.
     See :class:`IConvolutionLayer` for more information.
 
@@ -2271,7 +2361,7 @@ constexpr const char* add_convolution_nd = R"trtdoc(
     :returns: The new convolution layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_activation = R"trtdoc(
+constexpr char const* add_activation = R"trtdoc(
     Add an activation layer to the network.
     See :class:`IActivationLayer` for more information.
 
@@ -2281,7 +2371,7 @@ constexpr const char* add_activation = R"trtdoc(
     :returns: The new activation layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_pooling_nd = R"trtdoc(
+constexpr char const* add_pooling_nd = R"trtdoc(
     Add a multi-dimension pooling layer to the network.
     See :class:`IPoolingLayer` for more information.
 
@@ -2292,7 +2382,7 @@ constexpr const char* add_pooling_nd = R"trtdoc(
     :returns: The new pooling layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_lrn = R"trtdoc(
+constexpr char const* add_lrn = R"trtdoc(
     Add a LRN layer to the network.
     See :class:`ILRNLayer` for more information.
 
@@ -2305,7 +2395,7 @@ constexpr const char* add_lrn = R"trtdoc(
     :returns: The new LRN layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_scale = R"trtdoc(
+constexpr char const* add_scale = R"trtdoc(
     Add a scale layer to the network.
     See :class:`IScaleLayer` for more information.
 
@@ -2323,7 +2413,7 @@ constexpr const char* add_scale = R"trtdoc(
     :returns: The new scale layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_scale_nd = R"trtdoc(
+constexpr char const* add_scale_nd = R"trtdoc(
     Add a multi-dimension scale layer to the network.
     See :class:`IScaleLayer` for more information.
 
@@ -2342,7 +2432,7 @@ constexpr const char* add_scale_nd = R"trtdoc(
     :returns: The new scale layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_softmax = R"trtdoc(
+constexpr char const* add_softmax = R"trtdoc(
     Add a softmax layer to the network.
     See :class:`ISoftMaxLayer` for more information.
 
@@ -2351,7 +2441,7 @@ constexpr const char* add_softmax = R"trtdoc(
     :returns: The new softmax layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_concatenation = R"trtdoc(
+constexpr char const* add_concatenation = R"trtdoc(
     Add a concatenation layer to the network. Note that all tensors must have the same dimension except for the Channel dimension.
     See :class:`IConcatenationLayer` for more information.
 
@@ -2360,7 +2450,7 @@ constexpr const char* add_concatenation = R"trtdoc(
     :returns: The new concatenation layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_deconvolution_nd = R"trtdoc(
+constexpr char const* add_deconvolution_nd = R"trtdoc(
     Add a multi-dimension deconvolution layer to the network.
     See :class:`IDeconvolutionLayer` for more information.
 
@@ -2373,7 +2463,7 @@ constexpr const char* add_deconvolution_nd = R"trtdoc(
     :returns: The new deconvolution layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_elementwise = R"trtdoc(
+constexpr char const* add_elementwise = R"trtdoc(
     Add an elementwise layer to the network.
     See :class:`IElementWiseLayer` for more information.
 
@@ -2392,7 +2482,7 @@ constexpr const char* add_elementwise = R"trtdoc(
     :returns: The new element-wise layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_unary = R"trtdoc(
+constexpr char const* add_unary = R"trtdoc(
     Add a unary layer to the network.
     See :class:`IUnaryLayer` for more information.
 
@@ -2402,7 +2492,7 @@ constexpr const char* add_unary = R"trtdoc(
     :returns: The new unary layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_padding_nd = R"trtdoc(
+constexpr char const* add_padding_nd = R"trtdoc(
     Add a multi-dimensional padding layer to the network.
     See :class:`IPaddingLayer` for more information.
 
@@ -2413,7 +2503,7 @@ constexpr const char* add_padding_nd = R"trtdoc(
     :returns: The new padding layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_shuffle = R"trtdoc(
+constexpr char const* add_shuffle = R"trtdoc(
     Add a shuffle layer to the network.
     See :class:`IShuffleLayer` for more information.
 
@@ -2422,7 +2512,7 @@ constexpr const char* add_shuffle = R"trtdoc(
     :returns: The new shuffle layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_slice = R"trtdoc(
+constexpr char const* add_slice = R"trtdoc(
     Add a slice layer to the network.
     See :class:`ISliceLayer` for more information.
 
@@ -2434,7 +2524,7 @@ constexpr const char* add_slice = R"trtdoc(
     :returns: The new slice layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_reduce = R"trtdoc(
+constexpr char const* add_reduce = R"trtdoc(
     Add a reduce layer to the network.
     See :class:`IReduceLayer` for more information.
 
@@ -2449,7 +2539,7 @@ constexpr const char* add_reduce = R"trtdoc(
     :returns: The new reduce layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_topk = R"trtdoc(
+constexpr char const* add_topk = R"trtdoc(
     Add a TopK layer to the network.
     See :class:`ITopKLayer` for more information.
 
@@ -2472,7 +2562,7 @@ constexpr const char* add_topk = R"trtdoc(
     :returns: The new TopK layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_gather = R"trtdoc(
+constexpr char const* add_gather = R"trtdoc(
     Add a gather layer to the network.
     See :class:`IGatherLayer` for more information.
 
@@ -2483,7 +2573,7 @@ constexpr const char* add_gather = R"trtdoc(
     :returns: The new gather layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_gather_v2 = R"trtdoc(
+constexpr char const* add_gather_v2 = R"trtdoc(
     Add a gather layer to the network.
     See :class:`IGatherLayer` for more information.
 
@@ -2494,7 +2584,7 @@ constexpr const char* add_gather_v2 = R"trtdoc(
     :returns: The new gather layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_scatter = R"trtdoc(
+constexpr char const* add_scatter = R"trtdoc(
     Add a scatter layer to the network.
     See :class:`IScatterLayer` for more information.
 
@@ -2506,7 +2596,7 @@ constexpr const char* add_scatter = R"trtdoc(
     :returns: The new Scatter layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_ragged_softmax = R"trtdoc(
+constexpr char const* add_ragged_softmax = R"trtdoc(
     Add a ragged softmax layer to the network.
     See :class:`IRaggedSoftMaxLayer` for more information.
 
@@ -2516,7 +2606,7 @@ constexpr const char* add_ragged_softmax = R"trtdoc(
     :returns: The new ragged softmax layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_matrix_multiply = R"trtdoc(
+constexpr char const* add_matrix_multiply = R"trtdoc(
     Add a matrix multiply layer to the network.
     See :class:`IMatrixMultiplyLayer` for more information.
 
@@ -2528,7 +2618,7 @@ constexpr const char* add_matrix_multiply = R"trtdoc(
     :returns: The new matrix multiply layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_matrix_multiply_deprecated = R"trtdoc(
+constexpr char const* add_matrix_multiply_deprecated = R"trtdoc(
     Add a matrix multiply layer to the network.
     See :class:`IMatrixMultiplyLayer` for more information.
 
@@ -2540,7 +2630,7 @@ constexpr const char* add_matrix_multiply_deprecated = R"trtdoc(
     :returns: The new matrix multiply layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_constant = R"trtdoc(
+constexpr char const* add_constant = R"trtdoc(
     Add a constant layer to the network.
     See :class:`IConstantLayer` for more information.
 
@@ -2550,7 +2640,7 @@ constexpr const char* add_constant = R"trtdoc(
     :returns: The new constant layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_identity = R"trtdoc(
+constexpr char const* add_identity = R"trtdoc(
     Add an identity layer.
     See :class:`IIdentityLayer` for more information.
 
@@ -2559,7 +2649,7 @@ constexpr const char* add_identity = R"trtdoc(
     :returns: The new identity layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_cast = R"trtdoc(
+constexpr char const* add_cast = R"trtdoc(
     Add a cast layer.
     See :class:`ICastLayer` for more information.
 
@@ -2569,7 +2659,7 @@ constexpr const char* add_cast = R"trtdoc(
     :returns: The new cast layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_parametric_relu = R"trtdoc(
+constexpr char const* add_parametric_relu = R"trtdoc(
         Add a parametric ReLU layer.
         See :class:`IParametricReLULayer` for more information.
 
@@ -2579,7 +2669,7 @@ constexpr const char* add_parametric_relu = R"trtdoc(
         :returns: The new parametric ReLU layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_resize = R"trtdoc(
+constexpr char const* add_resize = R"trtdoc(
     Add a resize layer.
     See :class:`IResizeLayer` for more information.
 
@@ -2588,14 +2678,14 @@ constexpr const char* add_resize = R"trtdoc(
     :returns: The new resize layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_loop = R"trtdoc(
+constexpr char const* add_loop = R"trtdoc(
     Adds a loop to the network, which provides a way to specify a recurrent subgraph.
     See :class:`ILoop` for more information.
 
     :returns: The new loop layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_shape = R"trtdoc(
+constexpr char const* add_shape = R"trtdoc(
     Add a shape layer to the network.
     See :class:`IShapeLayer` for more information.
 
@@ -2604,7 +2694,7 @@ constexpr const char* add_shape = R"trtdoc(
     :returns: The new shape layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_select = R"trtdoc(
+constexpr char const* add_select = R"trtdoc(
     Add a select layer.
     See :class:`ISelectLayer` for more information.
 
@@ -2615,7 +2705,7 @@ constexpr const char* add_select = R"trtdoc(
     :returns: The new select layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_assertion = R"trtdoc(
+constexpr char const* add_assertion = R"trtdoc(
     Add a assertion layer.
     See :class:`IAssertionLayer` for more information.
 
@@ -2625,7 +2715,7 @@ constexpr const char* add_assertion = R"trtdoc(
     :returns: The new assertion layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_grid_sample = R"trtdoc(
+constexpr char const* add_grid_sample = R"trtdoc(
     Creates a GridSample layer with a trt.InterpolationMode.LINEAR, unaligned corners, and trt.SampleMode.FILL for 4d-shape input tensors.
     See :class:`IGridSampleLayer` for more information.
 
@@ -2638,7 +2728,7 @@ constexpr const char* add_grid_sample = R"trtdoc(
     :returns: The new grid sample layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_nms = R"trtdoc(
+constexpr char const* add_nms = R"trtdoc(
     Add a non-maximum suppression layer to the network.
     See :class:`INMSLayer` for more information.
 
@@ -2652,7 +2742,7 @@ constexpr const char* add_nms = R"trtdoc(
     :returns: The new NMS layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_fill = R"trtdoc(
+constexpr char const* add_fill = R"trtdoc(
     Add a fill layer.
     See :class:`IFillLayer` for more information.
 
@@ -2663,7 +2753,7 @@ constexpr const char* add_fill = R"trtdoc(
     :returns: The new fill layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_one_hot = R"trtdoc(
+constexpr char const* add_one_hot = R"trtdoc(
     Add a OneHot layer to the network.
     See :class:`IOneHotLayer` for more information.
 
@@ -2675,7 +2765,7 @@ constexpr const char* add_one_hot = R"trtdoc(
     :returns: The new OneHot layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* set_weights_name = R"trtdoc(
+constexpr char const* set_weights_name = R"trtdoc(
     Associate a name with all current uses of the given weights.
 
     The name must be set after the Weights are used in the network.
@@ -2693,7 +2783,7 @@ constexpr const char* set_weights_name = R"trtdoc(
     :returns: true on success.
 )trtdoc";
 
-constexpr const char* remove_tensor = R"trtdoc(
+constexpr char const* remove_tensor = R"trtdoc(
         Remove a tensor from the network.
 
         :arg tensor: The tensor to remove
@@ -2703,13 +2793,13 @@ constexpr const char* remove_tensor = R"trtdoc(
         and the call will be ignored.
 )trtdoc";
 
-constexpr const char* unmark_output = R"trtdoc(
+constexpr char const* unmark_output = R"trtdoc(
         Unmark a tensor as a network output.
 
         :arg tensor: The tensor to unmark as an output tensor.
 )trtdoc";
 
-constexpr const char* mark_output_for_shapes = R"trtdoc(
+constexpr char const* mark_output_for_shapes = R"trtdoc(
     Enable tensor's value to be computed by :func:`IExecutionContext.get_shape_binding`.
 
     :arg tensor: The tensor to unmark as an output tensor. The tensor must be of type :class:`int32` and have no more than one dimension.
@@ -2717,7 +2807,7 @@ constexpr const char* mark_output_for_shapes = R"trtdoc(
     :returns: :class:`True` if successful, :class:`False` if tensor is already marked as an output.
 )trtdoc";
 
-constexpr const char* unmark_output_for_shapes = R"trtdoc(
+constexpr char const* unmark_output_for_shapes = R"trtdoc(
     Undo :func:`mark_output_for_shapes` .
 
     :arg tensor: The tensor to unmark as an output tensor.
@@ -2726,7 +2816,7 @@ constexpr const char* unmark_output_for_shapes = R"trtdoc(
 
 )trtdoc";
 
-constexpr const char* add_plugin_v2 = R"trtdoc(
+constexpr char const* add_plugin_v2 = R"trtdoc(
     Add a plugin layer to the network using an :class:`IPluginV2` interface.
     See :class:`IPluginV2` for more information.
 
@@ -2736,7 +2826,7 @@ constexpr const char* add_plugin_v2 = R"trtdoc(
     :returns: The new plugin layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_plugin = R"trtdoc(
+constexpr char const* add_plugin = R"trtdoc(
     Add a plugin layer to the network with a tuple of (inputs, shape_inputs, plugin). :func:`add_plugin_v3` can be thought of as an "unpacked tuple" version of this function.
 
     Primarily intended to be used when using the `tensorrt.plugin` module to implement the plugin.
@@ -2746,7 +2836,7 @@ constexpr const char* add_plugin = R"trtdoc(
     :returns: The new plugin layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_plugin_v3 = R"trtdoc(
+constexpr char const* add_plugin_v3 = R"trtdoc(
     Add a plugin layer to the network using an :class:`IPluginV3` interface.
     See :class:`IPluginV3` for more information.
 
@@ -2757,7 +2847,7 @@ constexpr const char* add_plugin_v3 = R"trtdoc(
     :returns: The new plugin layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* get_layer = R"trtdoc(
+constexpr char const* get_layer = R"trtdoc(
     Get the layer specified by the given index.
 
     :arg index: The index of the layer.
@@ -2765,7 +2855,7 @@ constexpr const char* get_layer = R"trtdoc(
     :returns: The layer, or :class:`None` if it is out of range.
 )trtdoc";
 
-constexpr const char* get_input = R"trtdoc(
+constexpr char const* get_input = R"trtdoc(
     Get the input tensor specified by the given index.
 
     :arg index: The index of the input tensor.
@@ -2773,7 +2863,7 @@ constexpr const char* get_input = R"trtdoc(
     :returns: The tensor, or :class:`None` if it is out of range.
 )trtdoc";
 
-constexpr const char* get_output = R"trtdoc(
+constexpr char const* get_output = R"trtdoc(
     Get the output tensor specified by the given index.
 
     :arg index: The index of the output tensor.
@@ -2781,19 +2871,19 @@ constexpr const char* get_output = R"trtdoc(
     :returns: The tensor, or :class:`None` if it is out of range.
 )trtdoc";
 
-constexpr const char* builder = R"trtdoc(
+constexpr char const* builder = R"trtdoc(
     The builder from which this INetworkDefinition was created.
 
     See :class:`IBuilder` for more information.
 )trtdoc";
 
-constexpr const char* serialize = R"trtdoc(
+constexpr char const* serialize = R"trtdoc(
     Serialize the network to a stream.
 
     :returns: An :class:`IHostMemory` object containing the serialized :class:`INetworkDefinition` .
 )trtdoc";
 
-constexpr const char* add_quantize = R"trtdoc(
+constexpr char const* add_quantize = R"trtdoc(
     Add a quantization layer to the network.
     See :class:`IQuantizeLayer` for more information.
 
@@ -2804,7 +2894,7 @@ constexpr const char* add_quantize = R"trtdoc(
     :returns: The new quantization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_dequantize = R"trtdoc(
+constexpr char const* add_dequantize = R"trtdoc(
     Add a dequantization layer to the network.
     See :class:`IDequantizeLayer` for more information.
 
@@ -2815,7 +2905,7 @@ constexpr const char* add_dequantize = R"trtdoc(
     :returns: The new dequantization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_dynamic_quantize = R"trtdoc(
+constexpr char const* add_dynamic_quantize = R"trtdoc(
     Add a dynamic quantization layer to the network.
     See :class:`IDynamicQuantizeLayer` for more information.
 
@@ -2828,7 +2918,7 @@ constexpr const char* add_dynamic_quantize = R"trtdoc(
     :returns: The new DynamicQuantization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_dynamic_quantize_v2 = R"trtdoc(
+constexpr char const* add_dynamic_quantize_v2 = R"trtdoc(
     Add a dynamic quantization layer to the network.
     See :class:`IDynamicQuantizeLayer` for more information.
 
@@ -2840,7 +2930,7 @@ constexpr const char* add_dynamic_quantize_v2 = R"trtdoc(
     :returns: The new DynamicQuantization layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_split_to_ragged = R"trtdoc(
+constexpr char const* add_split_to_ragged = R"trtdoc(
     Add a dynamic quantization layer to the network.
     See :class:`IDynamicQuantizeLayer` for more information.
 
@@ -2849,7 +2939,7 @@ constexpr const char* add_split_to_ragged = R"trtdoc(
 
     :returns: The new SplitToRagged layer, or :class:`None` if it could not be created.
 )trtdoc";
-constexpr const char* add_concat_from_ragged = R"trtdoc(
+constexpr char const* add_concat_from_ragged = R"trtdoc(
     Add a dynamic quantization layer to the network.
     See :class:`IDynamicQuantizeLayer` for more information.
 
@@ -2859,14 +2949,14 @@ constexpr const char* add_concat_from_ragged = R"trtdoc(
     :returns: The new ConcatFromRagged layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_if_conditional = R"trtdoc(
+constexpr char const* add_if_conditional = R"trtdoc(
     Adds an if-conditional to the network, which provides a way to specify subgraphs that will be conditionally executed using lazy evaluation.
     See :class:`IIfConditional` for more information.
 
     :returns: The new if-condtional, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_einsum = R"trtdoc(
+constexpr char const* add_einsum = R"trtdoc(
     Adds an Einsum layer to the network.
     See :class:`IEinsumLayer` for more information.
 
@@ -2965,8 +3055,24 @@ constexpr char const* add_unsqueeze = R"trtdoc(
     :returns: the new Unsqueeze layer, or :class:`None` if it could not be created.
 )trtdoc";
 
+constexpr char const* add_dist_collective = R"trtdoc(
+    Add a dist collective layer to the network.
+    See :class:`IDistCollectiveLayer` for more information.
 
-constexpr const char* add_cumulative = R"trtdoc(
+    :arg input: The input tensor to the layer.
+    :arg dist_collective_op: The collective operation to perform.
+    :arg reduce_op: The reduction operation to perform when ``dist_collective_op`` is
+        :data:`CollectiveOperation.ALL_REDUCE`, or
+        :data:`CollectiveOperation.REDUCE`, or
+        :data:`CollectiveOperation.REDUCE_SCATTER`.
+    :arg root: The root rank of the collective operation.
+    :arg group_size: The size of the groups array.
+    :arg groups: The groups to perform the collective operation on.
+
+    :returns: The new dist collective layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_cumulative = R"trtdoc(
     Add a cumulative layer to the network.
     See :class:`ICumulativeLayer` for more information.
 
@@ -2979,7 +3085,7 @@ constexpr const char* add_cumulative = R"trtdoc(
     :returns: The new cumulative layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_attention = R"trtdoc(
+constexpr char const* add_attention = R"trtdoc(
     Add an attention to the network.
     See :class:`IAttention` for more information.
 
@@ -2992,7 +3098,7 @@ constexpr const char* add_attention = R"trtdoc(
     :returns: The new Attention, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_rotary_embedding = R"trtdoc(
+constexpr char const* add_rotary_embedding = R"trtdoc(
     Add a RotaryEmbedding layer to the network.
     See :class:`IRotaryEmbeddingLayer` for more information.
 
@@ -3007,7 +3113,7 @@ constexpr const char* add_rotary_embedding = R"trtdoc(
     :returns: The new RotaryEmbedding layer, or :class:`None` if it could not be created.
 )trtdoc";
 
-constexpr const char* add_kv_cache_update = R"trtdoc(
+constexpr char const* add_kv_cache_update = R"trtdoc(
     Add a KVCacheUpdate layer to the network.
     See :class:`IKVCacheUpdateLayer` for more information.
 
@@ -3017,6 +3123,17 @@ constexpr const char* add_kv_cache_update = R"trtdoc(
     :arg cache_mode: The mode of the KVCacheUpdate layer. For TensorRT 10.15, only `LINEAR` mode is supported.
 
     :returns: The new KVCacheUpdate layer, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_moe = R"trtdoc(
+    Add a MoE layer to the network.
+    See :class:`IMoELayer` for more information.
+
+    :arg hidden_states: The hidden states tensor input to the MoE layer.
+    :arg selected_experts_for_tokens: The tensor containing expert indices selected for each token.
+    :arg scores_for_selected_experts: The tensor containing scores computed for the selected experts.
+
+    :returns: The new MoE layer, or :class:`None` if it could not be created.
 )trtdoc";
 
 } // namespace INetworkDefinitionDoc

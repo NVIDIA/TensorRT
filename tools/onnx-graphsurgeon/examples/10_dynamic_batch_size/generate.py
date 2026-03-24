@@ -61,7 +61,7 @@ def matmul(self, lhs, rhs):
 
 # Set input
 X = gs.Variable(name="input_1", dtype=np.float32, shape=(1, 3, 28, 28))
-graph = gs.Graph(inputs=[X])
+graph = gs.Graph(inputs=[X], ir_version=10)
 
 # Connect intermediate tensors
 conv_out = graph.conv(
