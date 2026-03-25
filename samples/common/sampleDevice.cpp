@@ -101,8 +101,8 @@ void setCudaDevice(int32_t device, std::ostream& os)
     int32_t memoryClockRate = 0;
     CHECK(cudaDeviceGetAttribute(&clockRate, cudaDevAttrClockRate, device));
     CHECK(cudaDeviceGetAttribute(&memoryClockRate, cudaDevAttrMemoryClockRate, device));
-    os << "Application Compute Clock Rate: "   << clockRate / 1000000.0F << " GHz"       << std::endl;
-    os << "Application Memory Clock Rate: "    << memoryClockRate / 1000000.0F << " GHz" << std::endl;
+    os << "Application Compute Clock Rate: "   << static_cast<float>(clockRate) / 1000000.0F << " GHz"       << std::endl;
+    os << "Application Memory Clock Rate: "    << static_cast<float>(memoryClockRate) / 1000000.0F << " GHz" << std::endl;
     os << std::endl;
     os << "Note: The application clock rates do not reflect the actual clock rates that the GPU is "
                                                                          << "currently running at." << std::endl;

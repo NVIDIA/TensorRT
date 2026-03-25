@@ -31,7 +31,7 @@ PillarScatterPlugin::PillarScatterPlugin(size_t h, size_t w)
 {
 }
 
-PillarScatterPlugin::PillarScatterPlugin(void const* data, size_t length)
+PillarScatterPlugin::PillarScatterPlugin(void const* data, size_t /*length*/)
 {
     auto const* d = toPointer<char const>(data);
     feature_y_size_ = readFromBuffer<size_t>(d);
@@ -54,7 +54,7 @@ nvinfer1::IPluginV2DynamicExt* PillarScatterPlugin::clone() const noexcept
 }
 
 nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs,
-    int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+    int32_t /*nbInputs*/, nvinfer1::IExprBuilder& exprBuilder) noexcept
 {
     PLUGIN_ASSERT(outputIndex == 0);
     nvinfer1::DimsExprs output;
@@ -62,8 +62,8 @@ nvinfer1::DimsExprs PillarScatterPlugin::getOutputDimensions(int32_t outputIndex
     output.nbDims = 4;
     output.d[0] = batch_size;
     output.d[1] = inputs[0].d[2];
-    output.d[2] = exprBuilder.constant(feature_y_size_);
-    output.d[3] = exprBuilder.constant(feature_x_size_);
+    output.d[2] = exprBuilder.constant(static_cast<int32_t>(feature_y_size_));
+    output.d[3] = exprBuilder.constant(static_cast<int32_t>(feature_x_size_));
     return output;
 }
 
@@ -93,14 +93,14 @@ bool PillarScatterPlugin::supportsFormatCombination(
     return false;
 }
 
-void PillarScatterPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+void PillarScatterPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* /*in*/, int32_t /*nbInputs*/,
+    nvinfer1::DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     return;
 }
 
-size_t PillarScatterPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t PillarScatterPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -112,17 +112,17 @@ int32_t PillarScatterPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t batchSize = inputDesc[0].dims.d[0];
-        int32_t maxPillarNum = inputDesc[0].dims.d[1];
-        int32_t numFeatures = inputDesc[0].dims.d[2];
+        int32_t batchSize = static_cast<int32_t>(inputDesc[0].dims.d[0]);
+        int32_t maxPillarNum = static_cast<int32_t>(inputDesc[0].dims.d[1]);
+        int32_t numFeatures = static_cast<int32_t>(inputDesc[0].dims.d[2]);
 
         nvinfer1::DataType inputType = inputDesc[0].type;
 
         auto coords_data = static_cast<uint32_t const*>(inputs[1]);
         auto params_data = static_cast<uint32_t const*>(inputs[2]);
 
-        uint32_t featureY = feature_y_size_;
-        uint32_t featureX = feature_x_size_;
+        uint32_t featureY = static_cast<uint32_t>(feature_y_size_);
+        uint32_t featureX = static_cast<uint32_t>(feature_x_size_);
 
         int32_t status = -1;
 
@@ -155,7 +155,7 @@ int32_t PillarScatterPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc
 }
 
 nvinfer1::DataType PillarScatterPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     return inputTypes[0];
 }
@@ -213,7 +213,7 @@ PillarScatterPluginCreator::PillarScatterPluginCreator()
 {
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("dense_shape", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -232,7 +232,7 @@ PluginFieldCollection const* PillarScatterPluginCreator::getFieldNames() noexcep
     return &mFC;
 }
 
-IPluginV2* PillarScatterPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2* PillarScatterPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -262,7 +262,7 @@ IPluginV2* PillarScatterPluginCreator::createPlugin(char const* name, PluginFiel
 }
 
 IPluginV2* PillarScatterPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

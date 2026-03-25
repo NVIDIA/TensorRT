@@ -107,7 +107,7 @@ const char* EfficientNMSImplicitTFTRTPlugin::getPluginNamespace() const noexcept
 }
 
 Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(
-    int32_t outputIndex, const Dims* inputs, int32_t nbInputs) noexcept
+    int32_t outputIndex, const Dims* inputs, int32_t /*nbInputs*/) noexcept
 {
     try
     {
@@ -118,7 +118,7 @@ Dims EfficientNMSImplicitTFTRTPlugin::getOutputDimensions(
         PLUGIN_ASSERT(inputs[1].nbDims == 2);
         if (mParam.padOutputBoxesPerClass && mParam.numOutputBoxesPerClass > 0)
         {
-            const int32_t numClasses = inputs[1].d[1];
+            const int32_t numClasses = static_cast<int32_t>(inputs[1].d[1]);
             if (mParam.numOutputBoxesPerClass * numClasses < mParam.numOutputBoxes)
             {
                 mParam.numOutputBoxes = mParam.numOutputBoxesPerClass * numClasses;
@@ -189,13 +189,13 @@ int32_t EfficientNMSImplicitTFTRTPlugin::enqueue(int32_t batchSize, void const* 
     return -1;
 }
 
-bool EfficientNMSImplicitTFTRTPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool EfficientNMSImplicitTFTRTPlugin::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 DataType EfficientNMSImplicitTFTRTPlugin::getOutputDataType(
-    int32_t index, const DataType* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, const DataType* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     // num_detections and detection_classes use integer outputs
     if (index == 0 || index == 3)
@@ -222,7 +222,7 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPlugin::clone() const noexcept
 }
 
 bool EfficientNMSImplicitTFTRTPlugin::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
@@ -255,7 +255,7 @@ bool EfficientNMSImplicitTFTRTPlugin::supportsFormatCombination(
 }
 
 void EfficientNMSImplicitTFTRTPlugin::configurePlugin(
-    const PluginTensorDesc* in, int32_t nbInputs, const PluginTensorDesc* out, int32_t nbOutputs) noexcept
+    const PluginTensorDesc* in, int32_t nbInputs, const PluginTensorDesc* /*out*/, int32_t nbOutputs) noexcept
 {
     try
     {
@@ -268,8 +268,8 @@ void EfficientNMSImplicitTFTRTPlugin::configurePlugin(
         // [batch_size, num_boxes, num_classes] or [batch_size, num_boxes,
         // num_classes, 1]
         PLUGIN_ASSERT(in[1].dims.nbDims == 2 || (in[1].dims.nbDims == 3 && in[1].dims.d[2] == 1));
-        mParam.numScoreElements = in[1].dims.d[0] * in[1].dims.d[1];
-        mParam.numClasses = in[1].dims.d[1];
+        mParam.numScoreElements = static_cast<int32_t>(in[1].dims.d[0] * in[1].dims.d[1]);
+        mParam.numClasses = static_cast<int32_t>(in[1].dims.d[1]);
 
         // Shape of boxes input should be
         // [batch_size, num_boxes, 4] or [batch_size, num_boxes, 1, 4] or [batch_size,
@@ -279,16 +279,16 @@ void EfficientNMSImplicitTFTRTPlugin::configurePlugin(
         {
             PLUGIN_ASSERT(in[0].dims.d[1] == 4);
             mParam.shareLocation = true;
-            mParam.numBoxElements = in[0].dims.d[0] * in[0].dims.d[1];
+            mParam.numBoxElements = static_cast<int32_t>(in[0].dims.d[0] * in[0].dims.d[1]);
         }
         else
         {
             mParam.shareLocation = (in[0].dims.d[1] == 1);
             PLUGIN_ASSERT(in[0].dims.d[1] == mParam.numClasses || mParam.shareLocation);
             PLUGIN_ASSERT(in[0].dims.d[2] == 4);
-            mParam.numBoxElements = in[0].dims.d[0] * in[0].dims.d[1] * in[0].dims.d[2];
+            mParam.numBoxElements = static_cast<int32_t>(in[0].dims.d[0] * in[0].dims.d[1] * in[0].dims.d[2]);
         }
-        mParam.numAnchors = in[0].dims.d[0];
+        mParam.numAnchors = static_cast<int32_t>(in[0].dims.d[0]);
 
         if (nbInputs == 2)
         {
@@ -311,7 +311,7 @@ EfficientNMSImplicitTFTRTPluginCreator::EfficientNMSImplicitTFTRTPluginCreator()
     mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("pad_per_class", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("clip_boxes", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -331,7 +331,7 @@ const PluginFieldCollection* EfficientNMSImplicitTFTRTPluginCreator::getFieldNam
 }
 
 IPluginV2IOExt* EfficientNMSImplicitTFTRTPluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+    const char* /*name*/, const PluginFieldCollection* fc) noexcept
 {
     try
     {
@@ -383,7 +383,7 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPluginCreator::createPlugin(
 }
 
 IPluginV2IOExt* EfficientNMSImplicitTFTRTPluginCreator::deserializePlugin(
-    const char* name, const void* serialData, size_t serialLength) noexcept
+    const char* /*name*/, const void* serialData, size_t serialLength) noexcept
 {
     try
     {

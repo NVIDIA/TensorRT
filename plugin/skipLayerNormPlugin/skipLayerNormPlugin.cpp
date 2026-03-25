@@ -107,8 +107,9 @@ IPluginV3* SkipLayerNormPluginV3::clone() noexcept
     return nullptr;
 }
 
-int32_t SkipLayerNormPluginV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
-    int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept
+int32_t SkipLayerNormPluginV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t /*nbOutputs*/,
+    IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -168,20 +169,20 @@ bool SkipLayerNormPluginV3::supportsFormatCombination(
     return false;
 }
 
-int32_t SkipLayerNormPluginV3::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+int32_t SkipLayerNormPluginV3::configurePlugin(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) noexcept
 {
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
-size_t SkipLayerNormPluginV3::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t SkipLayerNormPluginV3::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
 
 int32_t SkipLayerNormPluginV3::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
+    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* /*workspace*/,
     cudaStream_t stream) noexcept
 {
     int32_t status = -1;
@@ -189,7 +190,7 @@ int32_t SkipLayerNormPluginV3::enqueue(nvinfer1::PluginTensorDesc const* inputDe
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const inputVolume = volume(inputDesc[0].dims);
+        int32_t const inputVolume = static_cast<int32_t>(volume(inputDesc[0].dims));
         DataType iType = inputDesc->type;
 
         // Our plugin outputs only one tensor
@@ -259,7 +260,7 @@ int32_t SkipLayerNormPluginV3::enqueue(nvinfer1::PluginTensorDesc const* inputDe
         {
             PLUGIN_ERROR(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
                 + std::to_string(static_cast<int32_t>(iType)))
-                             .c_str());
+                    .c_str());
         }
     }
     catch (std::exception const& e)
@@ -335,7 +336,7 @@ PluginFieldCollection const* SkipLayerNormPluginV3::getFieldsToSerialize() noexc
         }
     }
 
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
 
     return &mFCToSerialize;
@@ -391,7 +392,7 @@ int32_t SkipLayerNormPluginV3::onShapeChange(
         PLUGIN_VALIDATE(std::equal(inDims0.d, inDims0.d + inDims0.nbDims, inDims1.d));
 
         PLUGIN_VALIDATE(inDims0.nbDims == 5);
-        mLd = inDims0.d[HDIM]; // hiddensize
+        mLd = static_cast<int32_t>(inDims0.d[HDIM]); // hiddensize
         PLUGIN_VALIDATE(mLd != 0);
         PLUGIN_VALIDATE(inDims0.d[3] == 1);
         PLUGIN_VALIDATE(inDims0.d[4] == 1);
@@ -408,7 +409,7 @@ int32_t SkipLayerNormPluginV3::onShapeChange(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-IPluginV3* SkipLayerNormPluginV3::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* SkipLayerNormPluginV3::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     return clone();
 }
@@ -447,7 +448,7 @@ SkipLayerNormPluginV3Creator::SkipLayerNormPluginV3Creator()
     mPluginAttributes.emplace_back(PluginField("beta"));
     mPluginAttributes.emplace_back(PluginField("gamma"));
     mPluginAttributes.emplace_back(PluginField("bias"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -467,7 +468,7 @@ PluginFieldCollection const* SkipLayerNormPluginV3Creator::getFieldNames() noexc
 }
 
 IPluginV3* SkipLayerNormPluginV3Creator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {
@@ -555,7 +556,7 @@ SkipLayerNormVarSeqlenPluginV3::SkipLayerNormVarSeqlenPluginV3(
     : mLayerName(name)
     , mGammaDev(nullptr)
     , mBetaDev(nullptr)
-    , mLd(beta.count)
+    , mLd(static_cast<int32_t>(beta.count))
     , mType(type)
     , mBiasDev(nullptr)
 {
@@ -617,8 +618,8 @@ IPluginV3* SkipLayerNormVarSeqlenPluginV3::clone() noexcept
 }
 
 int32_t SkipLayerNormVarSeqlenPluginV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
-    IExprBuilder& exprBuilder) noexcept
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -682,20 +683,20 @@ bool SkipLayerNormVarSeqlenPluginV3::supportsFormatCombination(
     return false;
 }
 
-int32_t SkipLayerNormVarSeqlenPluginV3::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+int32_t SkipLayerNormVarSeqlenPluginV3::configurePlugin(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) noexcept
 {
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
-size_t SkipLayerNormVarSeqlenPluginV3::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t SkipLayerNormVarSeqlenPluginV3::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
 
 int32_t SkipLayerNormVarSeqlenPluginV3::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
+    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* /*workspace*/,
     cudaStream_t stream) noexcept
 {
     int32_t status = -1;
@@ -703,7 +704,7 @@ int32_t SkipLayerNormVarSeqlenPluginV3::enqueue(nvinfer1::PluginTensorDesc const
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const inputVolume = volume(inputDesc[0].dims);
+        int32_t const inputVolume = static_cast<int32_t>(volume(inputDesc[0].dims));
         PLUGIN_VALIDATE(inputVolume % mLd == 0 && "inconsistent dimensions");
         DataType iType = inputDesc->type;
 
@@ -774,7 +775,7 @@ int32_t SkipLayerNormVarSeqlenPluginV3::enqueue(nvinfer1::PluginTensorDesc const
         {
             PLUGIN_VALIDATE(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
                 + std::to_string(static_cast<int32_t>(iType)))
-                                .c_str());
+                    .c_str());
         }
     }
     catch (std::exception const& e)
@@ -849,7 +850,7 @@ PluginFieldCollection const* SkipLayerNormVarSeqlenPluginV3::getFieldsToSerializ
         }
     }
 
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
 
     return &mFCToSerialize;
@@ -910,7 +911,7 @@ int32_t SkipLayerNormVarSeqlenPluginV3::onShapeChange(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-IPluginV3* SkipLayerNormVarSeqlenPluginV3::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* SkipLayerNormVarSeqlenPluginV3::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     return clone();
 }
@@ -948,7 +949,7 @@ SkipLayerNormVarSeqlenPluginV3Creator::SkipLayerNormVarSeqlenPluginV3Creator()
     mPluginAttributes.emplace_back(PluginField("beta"));
     mPluginAttributes.emplace_back(PluginField("gamma"));
     mPluginAttributes.emplace_back(PluginField("bias"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -968,7 +969,7 @@ PluginFieldCollection const* SkipLayerNormVarSeqlenPluginV3Creator::getFieldName
 }
 
 IPluginV3* SkipLayerNormVarSeqlenPluginV3Creator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {

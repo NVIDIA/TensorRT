@@ -39,7 +39,8 @@ PriorBox::PriorBox(PriorBoxParameters param, int32_t H, int32_t W)
     , mW(W)
 {
     // Each object should manage its copy of param.
-    auto copyParamData = [](float*& dstPtr, std::vector<float>& dstVec, float const* src, int32_t size) {
+    auto copyParamData = [](float*& dstPtr, std::vector<float>& dstVec, float const* src, int32_t size)
+    {
         PLUGIN_VALIDATE(size >= 0);
         PLUGIN_VALIDATE(src != nullptr);
 
@@ -56,7 +57,8 @@ PriorBox::PriorBox(PriorBoxParameters param, int32_t H, int32_t W)
 
 void PriorBox::setupDeviceMemory() noexcept
 {
-    auto copyToDevice = [](void const* hostData, int32_t count) -> Weights {
+    auto copyToDevice = [](void const* hostData, int32_t count) -> Weights
+    {
         PLUGIN_VALIDATE(count >= 0);
         void* deviceData = nullptr;
         PLUGIN_CUASSERT(cudaMalloc(&deviceData, count * sizeof(float)));
@@ -84,7 +86,7 @@ void PriorBox::setupDeviceMemory() noexcept
         // Prevent duplicated aspect ratios from input
         for (size_t j = 0; j < tmpAR.size(); ++j)
         {
-            if (std::fabs(aspectRatio - tmpAR[j]) < 1e-6)
+            if (std::fabs(aspectRatio - tmpAR[j]) < 1e-6F)
             {
                 alreadyExist = true;
                 break;
@@ -105,11 +107,11 @@ void PriorBox::setupDeviceMemory() noexcept
     // https://docs.nvidia.com/deeplearning/sdk/tensorrt-api/c_api/classnvinfer1_1_1_weights.html
     // mAspectRatiosGPU.count is different to mParam.numAspectRatios.
     //
-    mAspectRatiosGPU = copyToDevice(&tmpAR[0], tmpAR.size());
+    mAspectRatiosGPU = copyToDevice(&tmpAR[0], static_cast<int32_t>(tmpAR.size()));
 
     // Number of prior boxes per grid cell on the feature map
     // tmpAR already included an aspect ratio of 1.0
-    mNumPriors = tmpAR.size() * mParam.numMinSize;
+    mNumPriors = static_cast<int32_t>(tmpAR.size()) * mParam.numMinSize;
 
     //
     // If we have maxSizes, as long as all the maxSizes meets assertion requirement, we add one bounding box per maxSize
@@ -144,7 +146,8 @@ void PriorBox::deserialize(uint8_t const* data, size_t length)
     auto const* d{data};
     mParam = read<PriorBoxParameters>(d);
 
-    auto readArray = [&d](int32_t size, std::vector<float>& dstVec, float*& dstPtr) {
+    auto readArray = [&d](int32_t size, std::vector<float>& dstVec, float*& dstPtr)
+    {
         PLUGIN_VALIDATE(size >= 0);
         dstVec.resize(size);
         for (int32_t i = 0; i < size; i++)
@@ -179,8 +182,8 @@ Dims PriorBox::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nb
     // Only one output from the plugin layer
     PLUGIN_VALIDATE(index == 0);
     // Particularity of the PriorBox layer: no batchSize dimension needed
-    mH = inputs[0].d[1];
-    mW = inputs[0].d[2];
+    mH = static_cast<int32_t>(inputs[0].d[1]);
+    mW = static_cast<int32_t>(inputs[0].d[2]);
     // workaround for TRT
     // The first channel is for prior box coordinates.
     // The second channel is for prior box scaling factors, which is simply a copy of the variance provided.
@@ -201,8 +204,9 @@ int32_t PriorBox::enqueue(int32_t /*batchSize*/, void const* const* /*inputs*/, 
     void* /*workspace*/, cudaStream_t stream) noexcept
 {
     void* outputData = outputs[0];
-    pluginStatus_t status = priorBoxInference(stream, mParam, mH, mW, mNumPriors, mAspectRatiosGPU.count,
-        mMinSizeGPU.values, mMaxSizeGPU.values, mAspectRatiosGPU.values, outputData);
+    pluginStatus_t status
+        = priorBoxInference(stream, mParam, mH, mW, mNumPriors, static_cast<int32_t>(mAspectRatiosGPU.count),
+            mMinSizeGPU.values, mMaxSizeGPU.values, mAspectRatiosGPU.values, outputData);
 
     return status;
 }
@@ -221,7 +225,8 @@ void PriorBox::serialize(void* buffer) const noexcept
     uint8_t* a = d;
     write(d, mParam);
 
-    auto writeArray = [&d](int32_t const size, float const* srcPtr, std::vector<float> const& srcVec) {
+    auto writeArray = [&d](int32_t const size, float const* srcPtr, std::vector<float> const& srcVec)
+    {
         // srcVec is only used here to check that the size and srcPtr are correct.
         PLUGIN_VALIDATE(srcVec.data() == srcPtr);
         PLUGIN_VALIDATE(srcVec.size() == static_cast<size_t>(size));
@@ -331,18 +336,18 @@ void PriorBox::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims con
     PLUGIN_VALIDATE(inputDims[0].nbDims == 3);
     PLUGIN_VALIDATE(inputDims[1].nbDims == 3);
     PLUGIN_VALIDATE(outputDims[0].nbDims == 3);
-    mH = inputDims[0].d[1];
-    mW = inputDims[0].d[2];
+    mH = static_cast<int32_t>(inputDims[0].d[1]);
+    mW = static_cast<int32_t>(inputDims[0].d[2]);
     // Prepare for the inference function.
     if (mParam.imgH == 0 || mParam.imgW == 0)
     {
-        mParam.imgH = inputDims[1].d[1];
-        mParam.imgW = inputDims[1].d[2];
+        mParam.imgH = static_cast<int32_t>(inputDims[1].d[1]);
+        mParam.imgW = static_cast<int32_t>(inputDims[1].d[2]);
     }
     if (mParam.stepH == 0 || mParam.stepW == 0)
     {
-        mParam.stepH = static_cast<float>(mParam.imgH) / mH;
-        mParam.stepW = static_cast<float>(mParam.imgW) / mW;
+        mParam.stepH = static_cast<float>(mParam.imgH) / static_cast<float>(mH);
+        mParam.stepW = static_cast<float>(mParam.imgW) / static_cast<float>(mW);
     }
 }
 
@@ -370,7 +375,7 @@ PriorBoxPluginCreator::PriorBoxPluginCreator()
     mPluginAttributes.emplace_back(PluginField("stepW", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("offset", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

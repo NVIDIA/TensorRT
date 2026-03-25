@@ -88,7 +88,8 @@ int32_t ClipPlugin::enqueue(
     {
         void* output = outputs[0];
         int32_t status = pluginStatus_t::STATUS_FAILURE;
-        status = clipInference(stream, mInputVolume * batchSize, mClipMin, mClipMax, inputs[0], output, mDataType);
+        status = clipInference(
+            stream, static_cast<int32_t>(mInputVolume * batchSize), mClipMin, mClipMax, inputs[0], output, mDataType);
 
         if (status != pluginStatus_t::STATUS_SUCCESS)
         {
@@ -127,8 +128,8 @@ void ClipPlugin::serialize(void* buffer) const noexcept
     PLUGIN_ASSERT(d == a + getSerializationSize());
 }
 
-void ClipPlugin::configureWithFormat(Dims const* inputs, int32_t nbInputs, Dims const* outputs, int32_t nbOutputs,
-    DataType type, PluginFormat format, int32_t) noexcept
+void ClipPlugin::configureWithFormat(Dims const* inputs, int32_t /*nbInputs*/, Dims const* /*outputs*/,
+    int32_t nbOutputs, DataType type, PluginFormat format, int32_t) noexcept
 {
     PLUGIN_ASSERT(nbOutputs == 1);
     PLUGIN_API_CHECK_ENUM_RANGE(DataType, type);
@@ -138,7 +139,7 @@ void ClipPlugin::configureWithFormat(Dims const* inputs, int32_t nbInputs, Dims 
     size_t volume = 1;
     for (int32_t i = 0; i < inputs->nbDims; i++)
     {
-        volume *= inputs->d[i];
+        volume *= static_cast<size_t>(inputs->d[i]);
     }
     mInputVolume = volume;
 }
@@ -191,7 +192,7 @@ ClipPluginCreator::ClipPluginCreator()
     mPluginAttributes.emplace_back(PluginField("clipMin", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("clipMax", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -217,7 +218,7 @@ IPluginV2* ClipPluginCreator::createPlugin(char const* name, PluginFieldCollecti
         gLogWarning << "ClipPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addActivation() to add an "
                        "IActivationLayer with ActivationType::kCLIP."
                     << std::endl;
-        float clipMin = 0.0, clipMax = 0.0;
+        float clipMin = 0.0f, clipMax = 0.0f;
         PluginField const* fields = fc->fields;
 
         plugin::validateRequiredAttributesExist({"clipMin", "clipMax"}, fc);

@@ -48,8 +48,8 @@ const std::string gSampleName = "TensorRT.sample_onnx_mnist_coord_conv_ac";
 // Normalization constants from Pytorch transform.Normalize().
 // They are needed to preprocess the data:
 // https://discuss.pytorch.org/t/understanding-transform-normalize/21730
-const float PYTORCH_NORMALIZE_MEAN = 0.1307;
-const float PYTORCH_NORMALIZE_STD = 0.3081;
+const float PYTORCH_NORMALIZE_MEAN = 0.1307f;
+const float PYTORCH_NORMALIZE_STD = 0.3081f;
 
 //! \brief  The SampleOnnxMnistCoordConvAC class implements the ONNX MNIST sample
 //!
@@ -210,7 +210,7 @@ bool SampleOnnxMnistCoordConvAC::build()
 //! \param builder Pointer to the engine builder
 //!
 bool SampleOnnxMnistCoordConvAC::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
-    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& /*network*/, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
     std::unique_ptr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
@@ -281,8 +281,8 @@ bool SampleOnnxMnistCoordConvAC::infer()
 //!
 bool SampleOnnxMnistCoordConvAC::processInput(const samplesCommon::BufferManager& buffers)
 {
-    const int inputH = mInputDims.d[2];
-    const int inputW = mInputDims.d[3];
+    const int inputH = static_cast<int>(mInputDims.d[2]);
+    const int inputW = static_cast<int>(mInputDims.d[3]);
 
     // Read a random digit file
     srand(unsigned(time(nullptr)));
@@ -301,7 +301,7 @@ bool SampleOnnxMnistCoordConvAC::processInput(const samplesCommon::BufferManager
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     for (int i = 0; i < inputH * inputW; i++)
     {
-        hostDataBuffer[i] = ((1.0 - float(fileData[i] / 255.0)) - PYTORCH_NORMALIZE_MEAN) / PYTORCH_NORMALIZE_STD;
+        hostDataBuffer[i] = ((1.0f - static_cast<float>(fileData[i]) / 255.0f) - PYTORCH_NORMALIZE_MEAN) / PYTORCH_NORMALIZE_STD;
     }
 
     return true;
@@ -314,7 +314,7 @@ bool SampleOnnxMnistCoordConvAC::processInput(const samplesCommon::BufferManager
 //!
 bool SampleOnnxMnistCoordConvAC::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
-    const int outputSize = mOutputDims.d[1];
+    const int outputSize = static_cast<int>(mOutputDims.d[1]);
     float* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
     float val{0.0F};
     int idx{0};
@@ -323,7 +323,7 @@ bool SampleOnnxMnistCoordConvAC::verifyOutput(const samplesCommon::BufferManager
     float sum{0.0F};
     for (int i = 0; i < outputSize; i++)
     {
-        output[i] = exp(output[i]);
+        output[i] = static_cast<float>(exp(output[i]));
         sum += output[i];
     }
 

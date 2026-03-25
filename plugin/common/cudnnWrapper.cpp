@@ -44,7 +44,8 @@ namespace nvinfer1::pluginInternal
 CudnnWrapper::CudnnWrapper(bool initHandle, char const* callerPluginName)
     : mLibrary(tryLoadingCudnn(callerPluginName))
 {
-    auto load_sym = [](void* handle, char const* name) {
+    auto load_sym = [](void* handle, char const* name)
+    {
         void* ret = dllGetSym(handle, name);
         std::string loadError = "Fail to load symbol " + std::string(name) + " from the cudnn library.";
         PLUGIN_VALIDATE(ret != nullptr, loadError.c_str());
@@ -87,6 +88,7 @@ CudnnWrapper::~CudnnWrapper()
 
 void* CudnnWrapper::tryLoadingCudnn(char const* callerPluginName)
 {
+    (void) callerPluginName;
 #if CUDART_VERSION >= 12070 && CUDNN_MAJOR == 8
     static constexpr int32_t kSM_BLACKWELL_100 = 100;
 

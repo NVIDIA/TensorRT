@@ -34,12 +34,17 @@ namespace plugin
 class VoxelGeneratorPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     VoxelGeneratorPlugin() = delete;
-    VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin, float xMax, float yMin,
-        float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ);
-    VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin, float xMax, float yMin,
-        float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ, int32_t pointFeatures,
-        int32_t gridX, int32_t gridY, int32_t gridZ);
+    VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin, float xMax,
+        float yMin, float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ);
+    VoxelGeneratorPlugin(int32_t maxVoxels, int32_t maxPoints, int32_t voxelFeatures, float xMin, float xMax,
+        float yMin, float yMax, float zMin, float zMax, float pillarX, float pillarY, float pillarZ,
+        int32_t pointFeatures, int32_t gridX, int32_t gridY, int32_t gridZ);
     VoxelGeneratorPlugin(void const* data, size_t length);
     // IPluginV2DynamicExt Methods
     nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;

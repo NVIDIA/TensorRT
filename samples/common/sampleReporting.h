@@ -210,9 +210,8 @@ public:
 private:
     float getTotalTime() const noexcept
     {
-        auto const plusLayerTime = [](float accumulator, LayerProfile const& lp) {
-            return accumulator + std::accumulate(lp.timeMs.begin(), lp.timeMs.end(), 0.F, std::plus<float>());
-        };
+        auto const plusLayerTime = [](float accumulator, LayerProfile const& lp)
+        { return accumulator + std::accumulate(lp.timeMs.begin(), lp.timeMs.end(), 0.F, std::plus<float>()); };
         return std::accumulate(mLayers.begin(), mLayers.end(), 0.0F, plusLayerTime);
     }
 
@@ -261,7 +260,7 @@ private:
 
     float getAvgTime(LayerProfile const& p) const noexcept
     {
-        return getTotalTime(p) / p.timeMs.size();
+        return getTotalTime(p) / static_cast<float>(p.timeMs.size());
     }
 
     std::vector<LayerProfile> mLayers;

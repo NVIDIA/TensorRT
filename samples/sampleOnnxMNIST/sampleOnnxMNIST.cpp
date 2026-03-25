@@ -192,7 +192,7 @@ bool SampleOnnxMNIST::build()
 //! \param builder Pointer to the engine builder
 //!
 bool SampleOnnxMNIST::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
-    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& /*network*/, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
     std::unique_ptr<nvonnxparser::IParser>& parser, std::unique_ptr<nvinfer1::ITimingCache>& timingCache)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
@@ -269,8 +269,8 @@ bool SampleOnnxMNIST::infer()
 //!
 bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 {
-    const int inputH = mInputDims.d[2];
-    const int inputW = mInputDims.d[3];
+    const int inputH = static_cast<int>(mInputDims.d[2]);
+    const int inputW = static_cast<int>(mInputDims.d[3]);
 
     // Read a random digit file
     srand(unsigned(time(nullptr)));
@@ -290,7 +290,7 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
     float* hostDataBuffer = static_cast<float*>(buffers.getHostBuffer(mParams.inputTensorNames[0]));
     for (int i = 0; i < inputH * inputW; i++)
     {
-        hostDataBuffer[i] = 1.0 - float(fileData[i] / 255.0);
+        hostDataBuffer[i] = 1.0f - static_cast<float>(fileData[i]) / 255.0f;
     }
 
     return true;
@@ -303,7 +303,7 @@ bool SampleOnnxMNIST::processInput(const samplesCommon::BufferManager& buffers)
 //!
 bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
 {
-    const int outputSize = mOutputDims.d[1];
+    const int outputSize = static_cast<int>(mOutputDims.d[1]);
     float* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
     float val{0.0F};
     int idx{0};
@@ -312,7 +312,7 @@ bool SampleOnnxMNIST::verifyOutput(const samplesCommon::BufferManager& buffers)
     float sum{0.0F};
     for (int i = 0; i < outputSize; i++)
     {
-        output[i] = exp(output[i]);
+        output[i] = static_cast<float>(exp(output[i]));
         sum += output[i];
     }
 

@@ -39,7 +39,7 @@ static char const* DMHA_NAME{"MultiscaleDeformableAttnPlugin_TRT"};
 
 MultiscaleDeformableAttnPluginLegacy::MultiscaleDeformableAttnPluginLegacy() {}
 
-MultiscaleDeformableAttnPluginLegacy::MultiscaleDeformableAttnPluginLegacy(void const* data, size_t length) {}
+MultiscaleDeformableAttnPluginLegacy::MultiscaleDeformableAttnPluginLegacy(void const* /*data*/, size_t /*length*/) {}
 
 nvinfer1::IPluginV2DynamicExt* MultiscaleDeformableAttnPluginLegacy::clone() const noexcept
 {
@@ -56,8 +56,8 @@ nvinfer1::IPluginV2DynamicExt* MultiscaleDeformableAttnPluginLegacy::clone() con
     return nullptr;
 }
 
-nvinfer1::DimsExprs MultiscaleDeformableAttnPluginLegacy::getOutputDimensions(int32_t outputIndex,
-    nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs MultiscaleDeformableAttnPluginLegacy::getOutputDimensions(int32_t /*outputIndex*/,
+    nvinfer1::DimsExprs const* inputs, int32_t /*nbInputs*/, nvinfer1::IExprBuilder& /*exprBuilder*/) noexcept
 {
     nvinfer1::DimsExprs ret;
     ret.nbDims = 4;
@@ -88,7 +88,7 @@ bool MultiscaleDeformableAttnPluginLegacy::supportsFormatCombination(
 }
 
 void MultiscaleDeformableAttnPluginLegacy::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* inputs,
-    int32_t nbInputs, nvinfer1::DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+    int32_t /*nbInputs*/, nvinfer1::DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) noexcept
 {
     // Check for valid input dimensions
     PLUGIN_ASSERT(inputs[0].desc.dims.nbDims == 4);
@@ -113,8 +113,8 @@ void MultiscaleDeformableAttnPluginLegacy::configurePlugin(nvinfer1::DynamicPlug
     PLUGIN_ASSERT(inputs[3].desc.dims.d[1] == inputs[4].desc.dims.d[1]);
 }
 
-size_t MultiscaleDeformableAttnPluginLegacy::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs,
-    int32_t nbInputs, nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t MultiscaleDeformableAttnPluginLegacy::getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/,
+    int32_t /*nbInputs*/, nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -125,13 +125,13 @@ int32_t MultiscaleDeformableAttnPluginLegacy::enqueue(nvinfer1::PluginTensorDesc
 {
     PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-    int32_t const batch = inputDesc[0].dims.d[0];
-    int32_t spatial_size = inputDesc[0].dims.d[1];
-    int32_t num_heads = inputDesc[0].dims.d[2];
-    int32_t channels = inputDesc[0].dims.d[3];
-    int32_t num_levels = inputDesc[1].dims.d[0];
-    int32_t num_query = inputDesc[3].dims.d[1];
-    int32_t num_point = inputDesc[3].dims.d[4];
+    int32_t const batch = static_cast<int32_t>(inputDesc[0].dims.d[0]);
+    int32_t spatial_size = static_cast<int32_t>(inputDesc[0].dims.d[1]);
+    int32_t num_heads = static_cast<int32_t>(inputDesc[0].dims.d[2]);
+    int32_t channels = static_cast<int32_t>(inputDesc[0].dims.d[3]);
+    int32_t num_levels = static_cast<int32_t>(inputDesc[1].dims.d[0]);
+    int32_t num_query = static_cast<int32_t>(inputDesc[3].dims.d[1]);
+    int32_t num_point = static_cast<int32_t>(inputDesc[3].dims.d[4]);
     int32_t rc = 0;
     if (inputDesc[0].type == nvinfer1::DataType::kFLOAT)
     {
@@ -161,8 +161,8 @@ int32_t MultiscaleDeformableAttnPluginLegacy::enqueue(nvinfer1::PluginTensorDesc
     return rc;
 }
 
-void MultiscaleDeformableAttnPluginLegacy::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, nvinfer1::IGpuAllocator* gpuAllocator) noexcept
+void MultiscaleDeformableAttnPluginLegacy::attachToContext(cudnnContext* /*cudnnContext*/,
+    cublasContext* /*cublasContext*/, nvinfer1::IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 
@@ -170,7 +170,7 @@ void MultiscaleDeformableAttnPluginLegacy::detachFromContext() noexcept {}
 
 // IPluginV2Ext Methods
 nvinfer1::DataType MultiscaleDeformableAttnPluginLegacy::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     return inputTypes[0];
 }
@@ -203,7 +203,7 @@ size_t MultiscaleDeformableAttnPluginLegacy::getSerializationSize() const noexce
     return 0;
 }
 
-void MultiscaleDeformableAttnPluginLegacy::serialize(void* buffer) const noexcept {}
+void MultiscaleDeformableAttnPluginLegacy::serialize(void* /*buffer*/) const noexcept {}
 
 void MultiscaleDeformableAttnPluginLegacy::destroy() noexcept
 {
@@ -224,7 +224,7 @@ char const* MultiscaleDeformableAttnPluginLegacy::getPluginNamespace() const noe
 MultiscaleDeformableAttnPluginCreatorLegacy::MultiscaleDeformableAttnPluginCreatorLegacy()
 {
     mPluginAttributes.clear();
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -244,7 +244,7 @@ nvinfer1::PluginFieldCollection const* MultiscaleDeformableAttnPluginCreatorLega
 }
 
 IPluginV2* MultiscaleDeformableAttnPluginCreatorLegacy::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
+    char const* /*name*/, PluginFieldCollection const* /*fc*/) noexcept
 {
     try
     {
@@ -259,7 +259,7 @@ IPluginV2* MultiscaleDeformableAttnPluginCreatorLegacy::createPlugin(
 }
 
 IPluginV2* MultiscaleDeformableAttnPluginCreatorLegacy::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

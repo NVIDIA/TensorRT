@@ -72,8 +72,8 @@ char const* DisentangledAttentionPluginLegacy::getPluginVersion() const noexcept
 }
 
 // IPluginV2DynamicExt Methods
-nvinfer1::DimsExprs DisentangledAttentionPluginLegacy::getOutputDimensions(
-    int32_t index, nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+nvinfer1::DimsExprs DisentangledAttentionPluginLegacy::getOutputDimensions(int32_t index,
+    nvinfer1::DimsExprs const* inputs, int32_t /*nbInputs*/, nvinfer1::IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -90,15 +90,18 @@ nvinfer1::DimsExprs DisentangledAttentionPluginLegacy::getOutputDimensions(
 
 template <typename TDataType>
 void DisentangledAttentionPluginLegacy::enqueueType(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, cudaStream_t stream,
-    TDataType factor)
+    nvinfer1::PluginTensorDesc const* /*outputDesc*/, void const* const* inputs, void* const* outputs,
+    cudaStream_t stream, TDataType factor)
 {
     nvinfer1::Dims dims0 = inputDesc[0].dims;
     nvinfer1::Dims dims1 = inputDesc[1].dims;
     nvinfer1::Dims dims2 = inputDesc[2].dims;
-    dim3 dimData0(dims0.d[0], dims0.d[1], dims0.d[2]);
-    dim3 dimData1(dims1.d[0], dims1.d[1], dims1.d[2]);
-    dim3 dimData2(dims2.d[0], dims2.d[1], dims2.d[2]);
+    dim3 dimData0(static_cast<unsigned int>(dims0.d[0]), static_cast<unsigned int>(dims0.d[1]),
+        static_cast<unsigned int>(dims0.d[2]));
+    dim3 dimData1(static_cast<unsigned int>(dims1.d[0]), static_cast<unsigned int>(dims1.d[1]),
+        static_cast<unsigned int>(dims1.d[2]));
+    dim3 dimData2(static_cast<unsigned int>(dims2.d[0]), static_cast<unsigned int>(dims2.d[1]),
+        static_cast<unsigned int>(dims2.d[2]));
     dim3 dimResult(dimData0);
 
     dim3 blockOptimized(kDISENTANGLED_TILESIZE, kDISENTANGLED_BLOCKDIMY);
@@ -247,8 +250,8 @@ nvinfer1::DataType DisentangledAttentionPluginLegacy::getOutputDataType(
     return nvinfer1::DataType{};
 }
 
-size_t DisentangledAttentionPluginLegacy::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t DisentangledAttentionPluginLegacy::getWorkspaceSize(nvinfer1::PluginTensorDesc const* /*inputs*/,
+    int32_t /*nbInputs*/, nvinfer1::PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -279,7 +282,7 @@ DisentangledAttentionPluginCreatorLegacy::DisentangledAttentionPluginCreatorLega
     mPluginAttributes.emplace_back(PluginField("span", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("factor", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

@@ -113,7 +113,8 @@ bool initNvinferSafe()
 {
 #if !TRT_STATIC
     static LibraryPtr libnvinfersafePtr{};
-    auto fetchPtrs = [](samplesCommon::DynamicLibrary* l) {
+    auto fetchPtrs = [](samplesCommon::DynamicLibrary* l)
+    {
         if (gUseRuntime == RuntimeMode::kSAFE)
         {
             pcreateTRTGraphInternal = l->symbolAddress<nvinfer2::safe::ErrorCode(nvinfer2::safe::ITRTGraph*&,
@@ -288,9 +289,9 @@ private:
         }
     }
 
-    bool fillAllBindings(int32_t batch, int32_t endBindingIndex)
+    bool fillAllBindings(int32_t batch_, int32_t endBindingIndex_)
     {
-        if (!validateTensorNames(inputs, mEngine, endBindingIndex))
+        if (!validateTensorNames(inputs, mEngine, endBindingIndex_))
         {
             sample::gLogError << "Invalid tensor names found in --loadInputs flag." << std::endl;
             return false;
@@ -298,14 +299,14 @@ private:
 
         // Process inputs first to ensure aliased outputs can reference them
         std::vector<TensorInfo> outputTensors;
-        outputTensors.reserve(endBindingIndex);
+        outputTensors.reserve(endBindingIndex_);
 
-        for (int32_t b = 0; b < endBindingIndex; b++)
+        for (int32_t b = 0; b < endBindingIndex_; b++)
         {
             TensorInfo tensorInfo;
             tensorInfo.bindingIndex = b;
             getTensorInfo(tensorInfo);
-            tensorInfo.updateVolume(batch);
+            tensorInfo.updateVolume(batch_);
             if (tensorInfo.isInput)
             {
                 fillOneBinding(tensorInfo);
@@ -375,9 +376,8 @@ bool allocateContextMemory(InferenceEnvironmentStd& iEnv, InferenceOptions const
         auto const& ec = iEnv.contexts.at(i);
         if (inference.memoryAllocationStrategy == MemoryAllocationStrategy::kSTATIC)
         {
-            sample::gLogInfo << "Created execution context with device memory size: " <<
-                (engine->getDeviceMemorySize() / 1.0_MiB)
-                             << " MiB" << std::endl;
+            sample::gLogInfo << "Created execution context with device memory size: "
+                             << static_cast<double>(engine->getDeviceMemorySize() / 1.0_MiB) << " MiB" << std::endl;
         }
         else
         {
@@ -402,9 +402,9 @@ bool allocateContextMemory(InferenceEnvironmentStd& iEnv, InferenceOptions const
             iEnv.deviceMemory.at(i) = TrtDeviceBuffer(sizeToAlloc);
             ec->setDeviceMemoryV2(iEnv.deviceMemory.at(i).get(), iEnv.deviceMemory.at(i).getSize());
             sample::gLogInfo << "Maximum device memory size across all profiles: "
-                             << (engine->getDeviceMemorySizeV2() / 1.0_MiB) << " MiB" << std::endl;
+                             << static_cast<double>(engine->getDeviceMemorySizeV2() / 1.0_MiB) << " MiB" << std::endl;
             sample::gLogInfo << "Only allocated device memory enough for " << allocReason << ": "
-                             << (sizeToAlloc / 1.0_MiB) << " MiB" << std::endl;
+                             << static_cast<double>(sizeToAlloc / 1.0_MiB) << " MiB" << std::endl;
         }
     }
     return true;
@@ -429,7 +429,6 @@ void contractInt64ToInt32(std::vector<int64_t>& shapeData)
 }
 
 } // namespace
-
 
 bool setUpInference(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
@@ -550,7 +549,8 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
 }
 #endif
 
-bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& inference, SystemOptions const& system)
+bool setUpStdInference(
+    InferenceEnvironmentStd& iEnv, InferenceOptions const& inference, SystemOptions const& /*system*/)
 {
     int32_t device{};
     CHECK(cudaGetDevice(&device));
@@ -570,7 +570,6 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
     // Release serialized blob to save memory space.
     iEnv.engine.releaseBlob();
 
-
     // Setup weight streaming if enabled
     if (engine->getStreamableWeightsSize() > 0)
     {
@@ -581,7 +580,8 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
             double const percent = budget.percent;
             ASSERT(percent < 100.0);
             auto const max = engine->getStreamableWeightsSize();
-            wsBudget = (max >= 0) ? (percent / 100) * (max) : WeightStreamingBudget::kDISABLE;
+            wsBudget = (max >= 0) ? static_cast<int64_t>((percent / 100.0) * static_cast<double>(max))
+                                  : WeightStreamingBudget::kDISABLE;
         }
 
         if (wsBudget == WeightStreamingBudget::kDISABLE)
@@ -642,8 +642,9 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
         IExecutionContext* ec{nullptr};
 
         //! \return the `ExecutionContextAllocationStrategy` to use for the given allocation strategy, \p s.
-        auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy s) {
-            return s == MemoryAllocationStrategy::kSTATIC
+        auto getExecutionContextAllocationStrategy = [](MemoryAllocationStrategy strategy)
+        {
+            return strategy == MemoryAllocationStrategy::kSTATIC
                 // Let TRT pre-allocate and manage the memory.
                 ? ExecutionContextAllocationStrategy::kSTATIC
                 // Allocate based on the current profile or runtime shapes.
@@ -658,8 +659,8 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
         }
         ec->setNvtxVerbosity(inference.nvtxVerbosity);
 
-        int32_t const persistentCacheLimit
-            = samplesCommon::getMaxPersistentCacheSize() * inference.persistentCacheRatio;
+        int32_t const persistentCacheLimit = static_cast<int32_t>(
+            static_cast<float>(samplesCommon::getMaxPersistentCacheSize()) * inference.persistentCacheRatio);
         sample::gLogInfo << "Setting persistentCacheLimit to " << persistentCacheLimit << " bytes." << std::endl;
         ec->setPersistentCacheLimit(persistentCacheLimit);
 
@@ -831,7 +832,6 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
     auto const* context = iEnv.contexts.front().get();
     bool fillBindingsSuccess = FillStdBindings(
         engine, context, inference.inputs, iEnv.bindings, 1, endBindingIndex, inference.optProfileIndex)();
-
 
     return fillBindingsSuccess;
 }
@@ -1426,7 +1426,7 @@ bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePo
         }
         if (durationMs < warmupMs) // Warming up
         {
-            if (durationMs) // Skip complete iterations
+            if (durationMs != 0.0F) // Skip complete iterations
             {
                 ++skip;
             }
@@ -1463,7 +1463,8 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
         if (iEnv.safe)
         {
             //! Function to make one iteration:
-            auto makeIteration = [&](int32_t s) -> std::unique_ptr<IterationSafe> {
+            auto makeIteration = [&](int32_t s) -> std::unique_ptr<IterationSafe>
+            {
                 int32_t const streamId{threadIdx * streamsPerThread + s};
                 auto iteration = std::make_unique<IterationSafe>(streamId, inference,
                     *static_cast<InferenceEnvironmentSafe&>(iEnv).mClonedGraphs[streamId],
@@ -1506,7 +1507,8 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
 #endif
 
         //! Function to make one iteration:
-        auto makeIteration = [&](int32_t s) -> std::unique_ptr<IterationStd> {
+        auto makeIteration = [&](int32_t s) -> std::unique_ptr<IterationStd>
+        {
             int32_t const streamId{threadIdx * streamsPerThread + s};
             auto iteration = std::make_unique<IterationStd>(streamId, inference,
                 *static_cast<InferenceEnvironmentStd&>(iEnv).getContext(streamId),
@@ -1601,7 +1603,6 @@ bool runInference(InferenceOptions const& inference, InferenceEnvironmentBase& i
     auto cmpTrace = [](InferenceTrace const& a, InferenceTrace const& b) { return a.h2dStart < b.h2dStart; };
     std::sort(trace.begin(), trace.end(), cmpTrace);
 
-
     return !iEnv.error;
 }
 
@@ -1620,9 +1621,8 @@ bool runMultiTasksInference(std::vector<std::unique_ptr<TaskInferenceEnvironment
     for (size_t i = 0; i < tEnvList.size(); ++i)
     {
         auto& tEnv = tEnvList[i];
-        threads.emplace_back(makeThread(
-            tEnv->iOptions, *(tEnv->iEnv), sync, /*threadIdx*/ 0, /*streamsPerThread*/ 1, tEnv->device, tEnv->trace,
-            tEnv->rOptions));
+        threads.emplace_back(makeThread(tEnv->iOptions, *(tEnv->iEnv), sync, /*threadIdx*/ 0, /*streamsPerThread*/ 1,
+            tEnv->device, tEnv->trace, tEnv->rOptions));
     }
     for (auto& th : threads)
     {
@@ -1650,11 +1650,12 @@ size_t reportGpuMemory()
     size_t total{0};
     size_t newlyAllocated{0};
     CHECK(cudaMemGetInfo(&free, &total));
-    sample::gLogInfo << "Free GPU memory = " << free / 1024.0_MiB << " GiB";
+    sample::gLogInfo << "Free GPU memory = " << static_cast<double>(free / 1024.0_MiB) << " GiB";
     if (prevFree != 0)
     {
         newlyAllocated = (prevFree - free);
-        sample::gLogInfo << ", newly allocated GPU memory = " << newlyAllocated / 1024.0_MiB << " GiB";
+        sample::gLogInfo << ", newly allocated GPU memory = " << static_cast<double>(newlyAllocated / 1024.0_MiB)
+                         << " GiB";
     }
     sample::gLogInfo << ", total GPU memory = " << total / 1024.0_MiB << " GiB" << std::endl;
     prevFree = free;
@@ -1671,7 +1672,8 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys)
 
     SMP_RETVAL_IF_FALSE(!iEnv.safe, "Safe inference is not supported!", false, sample::gLogError);
 
-    auto timeDeserializeFn = [&]() -> float {
+    auto timeDeserializeFn = [&]() -> float
+    {
         bool deserializeOK{false};
         engine.reset(nullptr);
         auto startClock = std::chrono::high_resolution_clock::now();
@@ -1736,7 +1738,9 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys)
     sample::gLogInfo << "Total deserialization time = " << totalTime << " milliseconds in " << kNB_ITERS
                      << " iterations, average time = " << averageTime << " milliseconds, first time = " << first
                      << " milliseconds." << std::endl;
-    sample::gLogInfo << "Deserialization Bandwidth = " << 1E-6 * totalEngineSizeGpu / totalTime << " GB/s" << std::endl;
+    sample::gLogInfo << "Deserialization Bandwidth = "
+                     << 1E-6 * static_cast<double>(totalEngineSizeGpu) / static_cast<double>(totalTime) << " GB/s"
+                     << std::endl;
 
     // If the first deserialization is more than tolerance slower than
     // the average deserialization, return true, which means an error occurred.
@@ -1937,7 +1941,8 @@ void BindingsBase::addBinding(
     }
 
     //! Make a UnifiedMirroredBuffer if useManaged or Discrete othereise:
-    auto makeBuffer = [](bool useManaged) -> std::shared_ptr<IMirroredBuffer> {
+    auto makeBuffer = [](bool useManaged) -> std::shared_ptr<IMirroredBuffer>
+    {
         if (useManaged)
         {
             return std::make_shared<UnifiedMirroredBuffer>();
@@ -2021,7 +2026,7 @@ void BindingsBase::transferOutputToHost(TrtCudaStream& stream)
 }
 
 void BindingsStd::dumpBindingValues(nvinfer1::IExecutionContext const& context, int32_t binding, std::ostream& os,
-    std::string const& separator /*= " "*/, int32_t batch /*= 1*/) const
+    std::string const& separator /*= " "*/, int32_t /*batch*/ /*= 1*/) const
 {
     auto const tensorName = context.getEngine().getIOTensorName(binding);
     Dims dims = context.getTensorShape(tensorName);

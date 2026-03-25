@@ -93,8 +93,8 @@ char const* ScatterElementsPluginV3::getPluginVersion() const noexcept
 }
 
 int32_t ScatterElementsPluginV3::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
-    IExprBuilder& exprBuilder) noexcept
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -112,7 +112,7 @@ int32_t ScatterElementsPluginV3::getOutputShapes(DimsExprs const* inputs, int32_
 }
 
 int32_t ScatterElementsPluginV3::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    void const* const* inputs, void* const* outputs, void* /*workspace*/, cudaStream_t stream) noexcept
 {
     try
     {
@@ -153,10 +153,10 @@ PluginFieldCollection const* ScatterElementsPluginV3::getFieldsToSerialize() noe
     mDataToSerialize.clear();
     // "reduction" field is serialized as string
     mDataToSerialize.emplace_back("reduction", kREDUCE_ENUM_TO_STR.at(mReduction).c_str(), PluginFieldType::kCHAR,
-        kREDUCE_ENUM_TO_STR.at(mReduction).size());
+        static_cast<int32_t>(kREDUCE_ENUM_TO_STR.at(mReduction).size()));
     mDataToSerialize.emplace_back("axis", &mAxis, PluginFieldType::kINT32, 1);
 
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
     return &mFCToSerialize;
 }
@@ -205,14 +205,14 @@ ScatterElementsPluginV3* ScatterElementsPluginV3::clone() noexcept
     return nullptr;
 }
 
-IPluginV3* ScatterElementsPluginV3::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* ScatterElementsPluginV3::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     ScatterElementsPluginV3* obj = clone();
     return obj;
 }
 
-int32_t ScatterElementsPluginV3::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+int32_t ScatterElementsPluginV3::configurePlugin(DynamicPluginTensorDesc const* /*in*/, int32_t nbInputs,
+    DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     try
     {
@@ -244,8 +244,8 @@ int32_t ScatterElementsPluginV3::getOutputDataTypes(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-size_t ScatterElementsPluginV3::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t ScatterElementsPluginV3::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -284,7 +284,7 @@ ScatterElementsPluginV3Creator::ScatterElementsPluginV3Creator()
     gPluginAttributes.clear();
     gPluginAttributes.emplace_back(PluginField("reduction"));
     gPluginAttributes.emplace_back(PluginField("axis"));
-    gFC.nbFields = gPluginAttributes.size();
+    gFC.nbFields = static_cast<int32_t>(gPluginAttributes.size());
     gFC.fields = gPluginAttributes.data();
 }
 
@@ -315,7 +315,7 @@ void ScatterElementsPluginV3Creator::setPluginNamespace(char const* libNamespace
 }
 
 IPluginV3* ScatterElementsPluginV3Creator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     std::string reductionArg;
     int32_t axisArg = 0;

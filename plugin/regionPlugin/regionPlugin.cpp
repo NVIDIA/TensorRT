@@ -70,22 +70,22 @@ struct SoftmaxTreeDeleter
 
 } // namespace
 
-Region::Region(RegionParameters params)
-    : num(params.num)
-    , coords(params.coords)
-    , classes(params.classes)
-    , smTree(params.smTree, SoftmaxTreeDeleter())
+Region::Region(RegionParameters params_)
+    : num(params_.num)
+    , coords(params_.coords)
+    , classes(params_.classes)
+    , smTree(params_.smTree, SoftmaxTreeDeleter())
 {
 }
 
-Region::Region(RegionParameters params, int32_t C, int32_t H, int32_t W)
-    : num(params.num)
-    , coords(params.coords)
-    , classes(params.classes)
-    , smTree(params.smTree, SoftmaxTreeDeleter())
-    , C(C)
-    , H(H)
-    , W(W)
+Region::Region(RegionParameters params_, int32_t C_, int32_t H_, int32_t W_)
+    : num(params_.num)
+    , coords(params_.coords)
+    , classes(params_.classes)
+    , smTree(params_.smTree, SoftmaxTreeDeleter())
+    , C(C_)
+    , H(H_)
+    , W(W_)
 {
 }
 
@@ -237,8 +237,8 @@ Dims Region::getOutputDimensions(int32_t index, Dims const* inputs, int32_t nbIn
     return inputs[0];
 }
 
-int32_t Region::enqueue(
-    int32_t batchSize, void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+int32_t Region::enqueue(int32_t batchSize, void const* const* inputs, void* const* outputs, void* /*workspace*/,
+    cudaStream_t stream) noexcept
 {
     void const* inputData = inputs[0];
     void* outputData = outputs[0];
@@ -384,7 +384,7 @@ char const* Region::getPluginVersion() const noexcept
     return kREGION_PLUGIN_VERSION;
 }
 
-size_t Region::getWorkspaceSize(int32_t maxBatchSize) const noexcept
+size_t Region::getWorkspaceSize(int32_t /*maxBatchSize*/) const noexcept
 {
     return 0;
 }
@@ -398,8 +398,8 @@ IPluginV2Ext* Region::clone() const noexcept
 {
     try
     {
-        RegionParameters params{num, coords, classes, nullptr};
-        Region* plugin = new Region(params, C, H, W);
+        RegionParameters params_{num, coords, classes, nullptr};
+        Region* plugin = new Region(params_, C, H, W);
         plugin->setPluginNamespace(mPluginNamespace.c_str());
         plugin->setSoftmaxTree(smTree);
 
@@ -424,7 +424,8 @@ char const* Region::getPluginNamespace() const noexcept
 }
 
 // Return the DataType of the plugin output at the requested index
-DataType Region::getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+DataType Region::getOutputDataType(
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     PLUGIN_ASSERT(index == 0);
     return DataType::kFLOAT;
@@ -432,28 +433,28 @@ DataType Region::getOutputDataType(int32_t index, nvinfer1::DataType const* inpu
 
 // Return true if output tensor is broadcast across a batch.
 bool Region::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool Region::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool Region::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void Region::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void Region::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/, int32_t nbOutputs,
+    DataType const* inputTypes, DataType const* /*outputTypes*/, bool const* /*inputIsBroadcast*/,
+    bool const* /*outputIsBroadcast*/, PluginFormat floatFormat, int32_t /*maxBatchSize*/) noexcept
 {
     PLUGIN_ASSERT(*inputTypes == DataType::kFLOAT && floatFormat == PluginFormat::kLINEAR);
     PLUGIN_ASSERT(nbInputs == 1);
     PLUGIN_ASSERT(nbOutputs == 1);
-    C = inputDims[0].d[0];
-    H = inputDims[0].d[1];
-    W = inputDims[0].d[2];
+    C = static_cast<int32_t>(inputDims[0].d[0]);
+    H = static_cast<int32_t>(inputDims[0].d[1]);
+    W = static_cast<int32_t>(inputDims[0].d[2]);
     /*
      * In the below assertion, 1 stands for the objectness of the bounding box
      * We should also
@@ -464,7 +465,7 @@ void Region::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void Region::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 
@@ -479,7 +480,7 @@ RegionPluginCreator::RegionPluginCreator()
     mPluginAttributes.emplace_back(PluginField("classes", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("smTree", nullptr, PluginFieldType::kINT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -498,7 +499,7 @@ PluginFieldCollection const* RegionPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2Ext* RegionPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* RegionPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -541,7 +542,7 @@ IPluginV2Ext* RegionPluginCreator::createPlugin(char const* name, PluginFieldCol
 }
 
 IPluginV2Ext* RegionPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

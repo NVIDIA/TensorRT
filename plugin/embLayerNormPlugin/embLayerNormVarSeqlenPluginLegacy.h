@@ -46,6 +46,11 @@ int32_t embSkipLayerNormMTron(cudaStream_t stream, int32_t ld, int32_t B, int32_
 class EmbLayerNormVarSeqlenPluginLegacyBase : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     EmbLayerNormVarSeqlenPluginLegacyBase(std::string const& name, DataType type, Weights const& beta,
         Weights const& gamma, Weights const& word_emb, Weights const& pos_emb, Weights const& tok_emb,
         DataType maskType);
@@ -100,6 +105,11 @@ protected:
 class EmbLayerNormVarSeqlenPluginLegacyHFace : public EmbLayerNormVarSeqlenPluginLegacyBase
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     EmbLayerNormVarSeqlenPluginLegacyHFace(std::string const& name, nvinfer1::DataType const type,
         nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
         nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb);
@@ -129,6 +139,11 @@ public:
 class EmbLayerNormVarSeqlenPluginLegacyMTron : public EmbLayerNormVarSeqlenPluginLegacyBase
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     EmbLayerNormVarSeqlenPluginLegacyMTron(std::string const& name, nvinfer1::DataType const type,
         nvinfer1::Weights const& beta, nvinfer1::Weights const& gamma, nvinfer1::Weights const& word_emb,
         nvinfer1::Weights const& pos_emb, nvinfer1::Weights const& tok_emb);

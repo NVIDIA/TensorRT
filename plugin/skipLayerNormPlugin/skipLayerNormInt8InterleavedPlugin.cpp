@@ -223,7 +223,7 @@ PluginFieldCollection const* SkipLayerNormInterleavedPluginBase::getFieldsToSeri
     mDataToSerialize.emplace_back(
         "gamma", static_cast<half const*>(mGamma.values), PluginFieldType::kFLOAT16, mGamma.count);
     PLUGIN_ASSERT(mGamma.type == kPARAM_TYPE);
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
     return &mFCToSerialize;
 }
@@ -265,7 +265,7 @@ int32_t SkipLayerNormInterleavedPluginBase::onShapeChange(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-IPluginV3* SkipLayerNormInterleavedPluginBase::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* SkipLayerNormInterleavedPluginBase::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     return clone();
 }
@@ -284,8 +284,8 @@ int32_t SkipLayerNormInterleavedPluginHFace::enqueue(PluginTensorDesc const* inp
         auto const oDesc = outputDesc[0];
         checkDescs(iDesc, sDesc, oDesc);
 
-        const int32_t ld = iDesc.dims.d[1];
-        const int32_t total = iDesc.dims.d[2];
+        const int32_t ld = static_cast<int32_t>(iDesc.dims.d[1]);
+        const int32_t total = static_cast<int32_t>(iDesc.dims.d[2]);
         float const dqScaleIn = iDesc.scale;
         float const dqScaleSkip = sDesc.scale;
         float const qScale = 1.F / oDesc.scale;
@@ -326,8 +326,8 @@ int32_t SkipLayerNormInterleavedPluginMTron::enqueue(PluginTensorDesc const* inp
         checkDescs(iDesc, sDesc, oDesc);
         PLUGIN_VALIDATE(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, pDesc.dims.d));
 
-        const int32_t ld = iDesc.dims.d[1];
-        const int32_t total = iDesc.dims.d[2];
+        const int32_t ld = static_cast<int32_t>(iDesc.dims.d[1]);
+        const int32_t total = static_cast<int32_t>(iDesc.dims.d[2]);
         float const dqScaleIn = iDesc.scale;
         float const dqScaleSkip = sDesc.scale;
         float const qScale = 1.F / oDesc.scale;
@@ -395,8 +395,8 @@ bool SkipLayerNormInterleavedPluginBase::supportsFormatCombination(
 }
 
 int32_t SkipLayerNormInterleavedPluginBase::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
-    IExprBuilder& exprBuilder) noexcept
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
+    IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -438,14 +438,14 @@ int32_t SkipLayerNormInterleavedPluginBase::getOutputDataTypes(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-int32_t SkipLayerNormInterleavedPluginBase::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+int32_t SkipLayerNormInterleavedPluginBase::configurePlugin(DynamicPluginTensorDesc const* /*inputs*/,
+    int32_t /*nbInputs*/, DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) noexcept
 {
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
-size_t SkipLayerNormInterleavedPluginBase::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t SkipLayerNormInterleavedPluginBase::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/,
+    int32_t /*nbInputs*/, DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -493,7 +493,7 @@ SkipLayerNormInterleavedPluginBaseCreator::SkipLayerNormInterleavedPluginBaseCre
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("beta"));
     mPluginAttributes.emplace_back(PluginField("gamma"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -528,7 +528,7 @@ PluginFieldCollection const* SkipLayerNormInterleavedPluginBaseCreator::getField
 }
 
 IPluginV3* SkipLayerNormInterleavedPluginHFaceCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {
@@ -548,7 +548,7 @@ IPluginV3* SkipLayerNormInterleavedPluginHFaceCreator::createPlugin(
 }
 
 IPluginV3* SkipLayerNormInterleavedPluginMTronCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {

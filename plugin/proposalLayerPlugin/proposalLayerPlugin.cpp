@@ -41,7 +41,7 @@ ProposalLayerPluginCreator::ProposalLayerPluginCreator()
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -60,7 +60,7 @@ PluginFieldCollection const* ProposalLayerPluginCreator::getFieldNames() noexcep
     return &mFC;
 }
 
-IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -101,7 +101,8 @@ IPluginV2Ext* ProposalLayerPluginCreator::createPlugin(char const* name, PluginF
     return nullptr;
 }
 
-IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(char const* name, void const* data, size_t length) noexcept
+IPluginV2Ext* ProposalLayerPluginCreator::deserializePlugin(
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -132,7 +133,7 @@ ProposalLayer::ProposalLayer(
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
     mParam.keepTopK = mKeepTopK;
-    mParam.scoreThreshold = 0.0;
+    mParam.scoreThreshold = 0.0F;
     mParam.iouThreshold = mIOUThreshold;
 
     mType = DataType::kFLOAT;
@@ -157,7 +158,7 @@ int32_t ProposalLayer::initialize() noexcept
 
     // Init the anchors for batch size:
     mAnchorBoxesDevice = std::make_shared<CudaBind<float>>(mAnchorsCnt * 4 * mMaxBatchSize);
-    int32_t batch_offset = sizeof(float) * mAnchorsCnt * 4;
+    int32_t batch_offset = static_cast<int32_t>(sizeof(float)) * mAnchorsCnt * 4;
     uint8_t* device_ptr = static_cast<uint8_t*>(mAnchorBoxesDevice->mPtr);
     for (int32_t i = 0; i < mMaxBatchSize; i++)
     {
@@ -256,7 +257,7 @@ void ProposalLayer::deserialize(int8_t const* data, size_t length)
     mParam.backgroundLabelId = -1;
     mParam.numClasses = 1;
     mParam.keepTopK = mKeepTopK;
-    mParam.scoreThreshold = 0.0;
+    mParam.scoreThreshold = 0.0F;
     mParam.iouThreshold = mIOUThreshold;
 
     mType = DataType::kFLOAT;
@@ -301,8 +302,8 @@ void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)
     auto const& strides = MaskRCNNConfig::BACKBONE_STRIDES;
     auto anchor_stride = MaskRCNNConfig::RPN_ANCHOR_STRIDE;
 
-    float const cy = imageDims.d[1] - 1;
-    float const cx = imageDims.d[2] - 1;
+    float const cy = static_cast<float>(imageDims.d[1] - 1);
+    float const cx = static_cast<float>(imageDims.d[2] - 1);
 
     auto& anchors = mAnchorBoxesHost;
     PLUGIN_VALIDATE(anchors.empty());
@@ -311,18 +312,19 @@ void ProposalLayer::generate_pyramid_anchors(nvinfer1::Dims const& imageDims)
     for (size_t s = 0; s < scales.size(); ++s)
     {
         float scale = scales[s];
-        int32_t stride = strides[s];
+        int32_t stride = static_cast<int32_t>(strides[s]);
 
         for (int32_t y = 0; y < imageDims.d[1]; y += anchor_stride * stride)
             for (int32_t x = 0; x < imageDims.d[2]; x += anchor_stride * stride)
                 for (float r : ratios)
                 {
-                    float sqrt_r = sqrt(r);
+                    float sqrt_r = sqrtf(r);
                     float h = scale / sqrt_r;
                     float w = scale * sqrt_r;
 
                     anchors.insert(anchors.end(),
-                        {(y - h / 2) / cy, (x - w / 2) / cx, (y + h / 2 - 1) / cy, (x + w / 2 - 1) / cx});
+                        {(static_cast<float>(y) - h / 2) / cy, (static_cast<float>(x) - w / 2) / cx,
+                            (static_cast<float>(y) + h / 2 - 1) / cy, (static_cast<float>(x) + w / 2 - 1) / cx});
                 }
     }
 
@@ -352,7 +354,7 @@ int32_t ProposalLayer::enqueue(
 
 // Return the DataType of the plugin output at the requested index
 DataType ProposalLayer::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
@@ -360,33 +362,34 @@ DataType ProposalLayer::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool ProposalLayer::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool ProposalLayer::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool ProposalLayer::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void ProposalLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
-    DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void ProposalLayer::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t /*nbOutputs*/, DataType const* /*inputTypes*/, DataType const* /*outputTypes*/,
+    bool const* /*inputIsBroadcast*/, bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
+    int32_t maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
     PLUGIN_ASSERT(inputDims[0].d[0] == inputDims[1].d[0]);
 
-    mAnchorsCnt = inputDims[0].d[0];
-    PLUGIN_ASSERT(mAnchorsCnt == (int32_t) (mAnchorBoxesHost.size() / 4));
+    mAnchorsCnt = static_cast<int32_t>(inputDims[0].d[0]);
+    PLUGIN_ASSERT(mAnchorsCnt == static_cast<int32_t>(mAnchorBoxesHost.size() / 4));
     mMaxBatchSize = maxBatchSize;
 }
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void ProposalLayer::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

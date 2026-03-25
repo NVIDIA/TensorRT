@@ -58,7 +58,7 @@ void checkConfigurationInputs(
     PLUGIN_ASSERT(inputs[2].type == DataType::kINT32);
 }
 
-bool initializeFields(char const* name, PluginFieldCollection const* fc, Weights& beta, Weights& gamma,
+bool initializeFields(char const* /*name*/, PluginFieldCollection const* fc, Weights& beta, Weights& gamma,
     Weights& word_emb, Weights& pos_emb, Weights& tok_emb)
 {
     bool output_fp16 = false;
@@ -132,19 +132,19 @@ EmbLayerNormVarSeqlenPluginBase::EmbLayerNormVarSeqlenPluginBase(std::string con
     Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb,
     DataType maskType)
     : mLayerName(name)
-    , mLd(beta.count)
+    , mLd(static_cast<size_t>(beta.count))
     , mType(type)
     , mMaskType(maskType)
 {
     // Assuming Weights.count is the number of elements and not bytes
     PLUGIN_VALIDATE(beta.count == gamma.count);
     PLUGIN_VALIDATE(mLd > 0U);
-    PLUGIN_VALIDATE(wordEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(posEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(tokEmb.count % mLd == 0);
-    mWordVocabSize = wordEmb.count / mLd;
-    mPosVocabSize = posEmb.count / mLd;
-    mTokVocabSize = tokEmb.count / mLd;
+    PLUGIN_VALIDATE(static_cast<size_t>(wordEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(posEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(tokEmb.count) % mLd == 0);
+    mWordVocabSize = static_cast<size_t>(wordEmb.count) / mLd;
+    mPosVocabSize = static_cast<size_t>(posEmb.count) / mLd;
+    mTokVocabSize = static_cast<size_t>(tokEmb.count) / mLd;
 
     mBeta.convertAndCopy(beta, nvinfer1::DataType::kFLOAT);
     mGamma.convertAndCopy(gamma, nvinfer1::DataType::kFLOAT);
@@ -302,7 +302,7 @@ PluginFieldCollection const* EmbLayerNormVarSeqlenPluginBase::getFieldsToSeriali
         mDataToSerialize.emplace_back("bert_embeddings_position_embeddings", static_cast<float const*>(mPosEmb.values),
             PluginFieldType::kFLOAT32, mPosEmb.count);
     }
-    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
     mFCToSerialize.fields = mDataToSerialize.data();
     return &mFCToSerialize;
 }
@@ -357,7 +357,7 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::onShapeChange(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-IPluginV3* EmbLayerNormVarSeqlenPluginBase::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* EmbLayerNormVarSeqlenPluginBase::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     return clone();
 }
@@ -370,9 +370,9 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
+        int32_t const batchSize = static_cast<int32_t>(inputDesc[2].dims.d[0]) - 1;
         // read out the maximum sequence length from the dummy input
-        int32_t const maxSeqlen = inputDesc[3].dims.d[0];
+        int32_t const maxSeqlen = static_cast<int32_t>(inputDesc[3].dims.d[0]);
 
         // There are four versions of the kernel which are optimized for sequence lengths 384, 256, 192 and 128.
         // Find the closest sequence length bigger than the max seq length in this batch.
@@ -405,7 +405,8 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
             auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
         }
         if (mType == DataType::kHALF)
         {
@@ -415,7 +416,8 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::enqueue(PluginTensorDesc const* inputD
             auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
         }
         else
         {
@@ -442,9 +444,9 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
+        int32_t const batchSize = static_cast<int32_t>(inputDesc[2].dims.d[0]) - 1;
         // read out the maximum sequence length from the dummy input
-        int32_t const maxSeqlen = inputDesc[3].dims.d[0];
+        int32_t const maxSeqlen = static_cast<int32_t>(inputDesc[3].dims.d[0]);
 
         // There are four versions of the kernel which are optimized for sequence lengths 384, 256, 192 and 128.
         // Find the closest sequence length bigger than the max seq length in this batch.
@@ -478,7 +480,8 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
             auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output, skip);
         }
         if (mType == DataType::kHALF)
         {
@@ -489,7 +492,8 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::enqueue(PluginTensorDesc const* inputD
             auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output, skip);
         }
         else
         {
@@ -566,7 +570,7 @@ bool EmbLayerNormVarSeqlenPluginBase::supportsFormatCombination(
 }
 
 int32_t EmbLayerNormVarSeqlenPluginHFace::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
     IExprBuilder& exprBuilder) noexcept
 {
     try
@@ -587,7 +591,7 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::getOutputShapes(DimsExprs const* input
         // output 0 : embedded input
         outputs[0].nbDims = 4;
         outputs[0].d[0] = inputs[0].d[0];
-        outputs[0].d[1] = exprBuilder.constant(mLd);
+        outputs[0].d[1] = exprBuilder.constant(static_cast<int64_t>(mLd));
         outputs[0].d[2] = exprBuilder.constant(1);
         outputs[0].d[3] = exprBuilder.constant(1);
 
@@ -604,7 +608,7 @@ int32_t EmbLayerNormVarSeqlenPluginHFace::getOutputShapes(DimsExprs const* input
 }
 
 int32_t EmbLayerNormVarSeqlenPluginMTron::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
     IExprBuilder& exprBuilder) noexcept
 {
     try
@@ -623,14 +627,14 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::getOutputShapes(DimsExprs const* input
         // Output 0 : embedded input
         outputs[0].nbDims = 4;
         outputs[0].d[0] = inputs[0].d[0];
-        outputs[0].d[1] = exprBuilder.constant(mLd);
+        outputs[0].d[1] = exprBuilder.constant(static_cast<int64_t>(mLd));
         outputs[0].d[2] = exprBuilder.constant(1);
         outputs[0].d[3] = exprBuilder.constant(1);
 
         // Output 1 : maskIdx
         outputs[1].nbDims = 4;
         outputs[1].d[0] = inputs[0].d[0];
-        outputs[1].d[1] = exprBuilder.constant(mLd);
+        outputs[1].d[1] = exprBuilder.constant(static_cast<int64_t>(mLd));
         outputs[1].d[2] = exprBuilder.constant(1);
         outputs[1].d[3] = exprBuilder.constant(1);
 
@@ -644,7 +648,7 @@ int32_t EmbLayerNormVarSeqlenPluginMTron::getOutputShapes(DimsExprs const* input
 }
 
 int32_t EmbLayerNormVarSeqlenPluginBase::getOutputDataTypes(
-    DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept
+    DataType* outputTypes, int32_t /*nbOutputs*/, DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     try
     {
@@ -660,14 +664,14 @@ int32_t EmbLayerNormVarSeqlenPluginBase::getOutputDataTypes(
     return pluginStatus_t::STATUS_FAILURE;
 }
 
-int32_t EmbLayerNormVarSeqlenPluginBase::configurePlugin(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+int32_t EmbLayerNormVarSeqlenPluginBase::configurePlugin(DynamicPluginTensorDesc const* /*inputs*/,
+    int32_t /*nbInputs*/, DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) noexcept
 {
     return pluginStatus_t::STATUS_SUCCESS;
 }
 
-size_t EmbLayerNormVarSeqlenPluginBase::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t EmbLayerNormVarSeqlenPluginBase::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/,
+    int32_t /*nbInputs*/, DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -716,14 +720,19 @@ EmbLayerNormVarSeqlenPluginBaseCreator::EmbLayerNormVarSeqlenPluginBaseCreator()
     mPluginAttributes.emplace_back(PluginField("output_fp16", nullptr, PluginFieldType::kINT32, 1));
     // the length of beta, gamma, word_emb, pos_emb, and tok_emb will only be known at the time of plugin creation
     // so we set it to 0 here
-    mPluginAttributes.emplace_back(PluginField("bert_embeddings_layernorm_beta", nullptr, PluginFieldType::kFLOAT32, 0));
-    mPluginAttributes.emplace_back(PluginField("bert_embeddings_layernorm_gamma", nullptr, PluginFieldType::kFLOAT32, 0));
+    mPluginAttributes.emplace_back(
+        PluginField("bert_embeddings_layernorm_beta", nullptr, PluginFieldType::kFLOAT32, 0));
+    mPluginAttributes.emplace_back(
+        PluginField("bert_embeddings_layernorm_gamma", nullptr, PluginFieldType::kFLOAT32, 0));
     // the embeddings datatype is determined by the output_fp16 attribute known at runtime
     // so we set it to kUNKNOWN here
-    mPluginAttributes.emplace_back(PluginField("bert_embeddings_word_embeddings", nullptr, PluginFieldType::kUNKNOWN, 0));
-    mPluginAttributes.emplace_back(PluginField("bert_embeddings_token_type_embeddings", nullptr, PluginFieldType::kUNKNOWN, 0));
-    mPluginAttributes.emplace_back(PluginField("bert_embeddings_position_embeddings", nullptr, PluginFieldType::kUNKNOWN, 0));
-    mFC.nbFields = mPluginAttributes.size();
+    mPluginAttributes.emplace_back(
+        PluginField("bert_embeddings_word_embeddings", nullptr, PluginFieldType::kUNKNOWN, 0));
+    mPluginAttributes.emplace_back(
+        PluginField("bert_embeddings_token_type_embeddings", nullptr, PluginFieldType::kUNKNOWN, 0));
+    mPluginAttributes.emplace_back(
+        PluginField("bert_embeddings_position_embeddings", nullptr, PluginFieldType::kUNKNOWN, 0));
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -748,7 +757,7 @@ PluginFieldCollection const* EmbLayerNormVarSeqlenPluginBaseCreator::getFieldNam
 }
 
 IPluginV3* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {
@@ -779,7 +788,7 @@ IPluginV3* EmbLayerNormVarSeqlenPluginHFaceCreator::createPlugin(
 }
 
 IPluginV3* EmbLayerNormVarSeqlenPluginMTronCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {

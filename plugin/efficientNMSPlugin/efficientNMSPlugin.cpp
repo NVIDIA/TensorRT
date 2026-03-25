@@ -131,7 +131,7 @@ char const* EfficientNMSPlugin::getPluginNamespace() const noexcept
 }
 
 nvinfer1::DataType EfficientNMSPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     if (mParam.outputONNXIndices)
     {
@@ -164,7 +164,7 @@ IPluginV2DynamicExt* EfficientNMSPlugin::clone() const noexcept
 }
 
 DimsExprs EfficientNMSPlugin::getOutputDimensions(
-    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t /*nbInputs*/, IExprBuilder& exprBuilder) noexcept
 {
     try
     {
@@ -280,8 +280,8 @@ bool EfficientNMSPlugin::supportsFormatCombination(
         && (inOut[0].type == inOut[pos].type);
 }
 
-void EfficientNMSPlugin::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+void EfficientNMSPlugin::configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+    DynamicPluginTensorDesc const* /*out*/, int32_t nbOutputs) noexcept
 {
     try
     {
@@ -305,8 +305,8 @@ void EfficientNMSPlugin::configurePlugin(
         // Shape of scores input should be
         // [batch_size, num_boxes, num_classes] or [batch_size, num_boxes, num_classes, 1]
         PLUGIN_ASSERT(in[1].desc.dims.nbDims == 3 || (in[1].desc.dims.nbDims == 4 && in[1].desc.dims.d[3] == 1));
-        mParam.numScoreElements = in[1].desc.dims.d[1] * in[1].desc.dims.d[2];
-        mParam.numClasses = in[1].desc.dims.d[2];
+        mParam.numScoreElements = static_cast<int32_t>(in[1].desc.dims.d[1] * in[1].desc.dims.d[2]);
+        mParam.numClasses = static_cast<int32_t>(in[1].desc.dims.d[2]);
 
         // When pad per class is set, the total output boxes size may need to be reduced.
         // This operation is also done in getOutputDimension(), but for dynamic shapes, the
@@ -326,16 +326,17 @@ void EfficientNMSPlugin::configurePlugin(
         {
             PLUGIN_ASSERT(in[0].desc.dims.d[2] == 4);
             mParam.shareLocation = true;
-            mParam.numBoxElements = in[0].desc.dims.d[1] * in[0].desc.dims.d[2];
+            mParam.numBoxElements = static_cast<int32_t>(in[0].desc.dims.d[1] * in[0].desc.dims.d[2]);
         }
         else
         {
             mParam.shareLocation = (in[0].desc.dims.d[2] == 1);
             PLUGIN_ASSERT(in[0].desc.dims.d[2] == mParam.numClasses || mParam.shareLocation);
             PLUGIN_ASSERT(in[0].desc.dims.d[3] == 4);
-            mParam.numBoxElements = in[0].desc.dims.d[1] * in[0].desc.dims.d[2] * in[0].desc.dims.d[3];
+            mParam.numBoxElements
+                = static_cast<int32_t>(in[0].desc.dims.d[1] * in[0].desc.dims.d[2] * in[0].desc.dims.d[3]);
         }
-        mParam.numAnchors = in[0].desc.dims.d[1];
+        mParam.numAnchors = static_cast<int32_t>(in[0].desc.dims.d[1]);
 
         if (nbInputs == 2)
         {
@@ -358,12 +359,12 @@ void EfficientNMSPlugin::configurePlugin(
     }
 }
 
-size_t EfficientNMSPlugin::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t EfficientNMSPlugin::getWorkspaceSize(PluginTensorDesc const* inputs, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
-    int32_t batchSize = inputs[1].dims.d[0];
-    int32_t numScoreElements = inputs[1].dims.d[1] * inputs[1].dims.d[2];
-    int32_t numClasses = inputs[1].dims.d[2];
+    int32_t batchSize = static_cast<int32_t>(inputs[1].dims.d[0]);
+    int32_t numScoreElements = static_cast<int32_t>(inputs[1].dims.d[1] * inputs[1].dims.d[2]);
+    int32_t numClasses = static_cast<int32_t>(inputs[1].dims.d[2]);
     return EfficientNMSWorkspaceSize(batchSize, numScoreElements, numClasses, mParam.datatype);
 }
 
@@ -374,7 +375,7 @@ int32_t EfficientNMSPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTen
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr && workspace != nullptr);
 
-        mParam.batchSize = inputDesc[0].dims.d[0];
+        mParam.batchSize = static_cast<int32_t>(inputDesc[0].dims.d[0]);
 
         if (mParam.outputONNXIndices)
         {
@@ -421,7 +422,7 @@ EfficientNMSPluginCreator::EfficientNMSPluginCreator()
     mPluginAttributes.emplace_back(PluginField("score_activation", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("class_agnostic", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("box_coding", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -440,7 +441,8 @@ PluginFieldCollection const* EfficientNMSPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -512,7 +514,7 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(char const* name, P
 }
 
 IPluginV2DynamicExt* EfficientNMSPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {
@@ -539,7 +541,7 @@ EfficientNMSONNXPluginCreator::EfficientNMSONNXPluginCreator()
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("max_output_boxes_per_class", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("center_point_box", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -559,7 +561,7 @@ PluginFieldCollection const* EfficientNMSONNXPluginCreator::getFieldNames() noex
 }
 
 IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -608,7 +610,7 @@ IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
 }
 
 IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

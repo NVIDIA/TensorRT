@@ -45,7 +45,7 @@ MultilevelProposeROIPluginCreator::MultilevelProposeROIPluginCreator() noexcept
     mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("image_size", nullptr, PluginFieldType::kINT32, 3));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -65,7 +65,7 @@ PluginFieldCollection const* MultilevelProposeROIPluginCreator::getFieldNames() 
 }
 
 IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -112,7 +112,7 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
 }
 
 IPluginV2Ext* MultilevelProposeROIPluginCreator::deserializePlugin(
-    char const* name, void const* data, size_t length) noexcept
+    char const* /*name*/, void const* data, size_t length) noexcept
 {
     try
     {
@@ -174,7 +174,7 @@ int32_t MultilevelProposeROI::initialize() noexcept
     mValidCnt = std::make_shared<CudaBind<int32_t>>(mMaxBatchSize);
 
     PLUGIN_CUASSERT(cudaMemcpy(mValidCnt->mPtr, static_cast<void*>(tempValidCnt.data()),
-        sizeof(int32_t) * mMaxBatchSize, cudaMemcpyHostToDevice));
+        sizeof(int32_t) * static_cast<size_t>(mMaxBatchSize), cudaMemcpyHostToDevice));
 
     // Init the anchors for batch size:
     for (int32_t i = 0; i < mFeatureCnt; i++)
@@ -182,11 +182,11 @@ int32_t MultilevelProposeROI::initialize() noexcept
         int32_t i_anchors_cnt = mAnchorsCnt[i];
         auto i_anchors_host = mAnchorBoxesHost[i].data();
         auto i_anchors_device = std::make_shared<CudaBind<float>>(i_anchors_cnt * 4 * mMaxBatchSize);
-        int32_t batch_offset = sizeof(float) * i_anchors_cnt * 4;
+        size_t batch_offset = sizeof(float) * static_cast<size_t>(i_anchors_cnt) * 4;
         uint8_t* device_ptr = static_cast<uint8_t*>(i_anchors_device->mPtr);
-        for (int32_t i = 0; i < mMaxBatchSize; i++)
+        for (int32_t b = 0; b < mMaxBatchSize; b++)
         {
-            PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + i * batch_offset),
+            PLUGIN_CUASSERT(cudaMemcpy(static_cast<void*>(device_ptr + b * batch_offset),
                 static_cast<void*>(i_anchors_host), batch_offset, cudaMemcpyHostToDevice));
         }
         mAnchorBoxesDevice.push_back(i_anchors_device);
@@ -218,11 +218,13 @@ int32_t MultilevelProposeROI::initialize() noexcept
     }
 
     // Init the temp storage for pointer arrays of score and box:
-    PLUGIN_CUASSERT(cudaMalloc(&mDeviceScores, sizeof(void*) * mFeatureCnt));
-    PLUGIN_CUASSERT(cudaMalloc(&mDeviceBboxes, sizeof(void*) * mFeatureCnt));
+    PLUGIN_CUASSERT(cudaMalloc(&mDeviceScores, sizeof(void*) * static_cast<size_t>(mFeatureCnt)));
+    PLUGIN_CUASSERT(cudaMalloc(&mDeviceBboxes, sizeof(void*) * static_cast<size_t>(mFeatureCnt)));
 
-    PLUGIN_CUASSERT(cudaMemcpy(mDeviceScores, score_tp.data(), sizeof(void*) * mFeatureCnt, cudaMemcpyHostToDevice));
-    PLUGIN_CUASSERT(cudaMemcpy(mDeviceBboxes, box_tp.data(), sizeof(void*) * mFeatureCnt, cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMemcpy(
+        mDeviceScores, score_tp.data(), sizeof(void*) * static_cast<size_t>(mFeatureCnt), cudaMemcpyHostToDevice));
+    PLUGIN_CUASSERT(cudaMemcpy(
+        mDeviceBboxes, box_tp.data(), sizeof(void*) * static_cast<size_t>(mFeatureCnt), cudaMemcpyHostToDevice));
 
     return 0;
 }
@@ -274,8 +276,8 @@ char const* MultilevelProposeROI::getPluginNamespace() const noexcept
 
 size_t MultilevelProposeROI::getSerializationSize() const noexcept
 {
-    return sizeof(int32_t) * 2 + sizeof(float) * 2 + sizeof(int32_t) * (mFeatureCnt + 1) + sizeof(nvinfer1::Dims)
-        + sizeof(DataType);
+    return sizeof(int32_t) * 2 + sizeof(float) * 2 + sizeof(int32_t) * static_cast<size_t>(mFeatureCnt + 1)
+        + sizeof(nvinfer1::Dims) + sizeof(DataType);
 }
 
 void MultilevelProposeROI::serialize(void* buffer) const noexcept
@@ -388,9 +390,9 @@ void MultilevelProposeROI::generate_pyramid_anchors(nvinfer1::Dims const& imageS
     std::vector<int32_t> anchor_strides;
     for (int32_t i = min_level; i < max_level + 1; i++)
     {
-        int32_t stride = static_cast<int32_t>(pow(2.0, i));
+        int32_t stride = static_cast<int32_t>(std::pow(2.0, i));
         anchor_strides.push_back(stride);
-        anchor_scales.push_back(stride * anchor_scale);
+        anchor_scales.push_back(static_cast<float>(stride) * anchor_scale);
     }
 
     auto& anchors = mAnchorBoxesHost;
@@ -411,7 +413,9 @@ void MultilevelProposeROI::generate_pyramid_anchors(nvinfer1::Dims const& imageS
                     float w = scale * r.first;
 
                     // Using y+h/2 instead of y+h/2-1 for alignment with TLT implementation
-                    s_anchors.insert(s_anchors.end(), {(y - h / 2), (x - w / 2), (y + h / 2), (x + w / 2)});
+                    s_anchors.insert(s_anchors.end(),
+                        {(static_cast<float>(y) - h / 2), (static_cast<float>(x) - w / 2),
+                            (static_cast<float>(y) + h / 2), (static_cast<float>(x) + w / 2)});
                 }
 
         anchors.push_back(s_anchors);
@@ -470,12 +474,12 @@ int32_t MultilevelProposeROI::enqueue(
         reinterpret_cast<void**>(mDeviceBboxes), final_proposals);
 
     PLUGIN_ASSERT(status == cudaSuccess);
-    return status;
+    return static_cast<int32_t>(status);
 }
 
 // Return the DataType of the plugin output at the requested index
 DataType MultilevelProposeROI::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t /*index*/, nvinfer1::DataType const* inputTypes, int32_t /*nbInputs*/) const noexcept
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     if ((inputTypes[0] == DataType::kFLOAT) || (inputTypes[0] == DataType::kHALF))
@@ -485,29 +489,30 @@ DataType MultilevelProposeROI::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool MultilevelProposeROI::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool MultilevelProposeROI::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool MultilevelProposeROI::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
 
 // Configure the layer with input and output data types.
-void MultilevelProposeROI::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
-    int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
-    bool const* outputIsBroadcast, PluginFormat floatFormat, int32_t maxBatchSize) noexcept
+void MultilevelProposeROI::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* /*outputDims*/,
+    int32_t /*nbOutputs*/, DataType const* inputTypes, DataType const* /*outputTypes*/,
+    bool const* /*inputIsBroadcast*/, bool const* /*outputIsBroadcast*/, PluginFormat /*floatFormat*/,
+    int32_t maxBatchSize) noexcept
 {
     check_valid_inputs(inputDims, nbInputs);
 
     mAnchorsCnt.clear();
     for (int32_t i = 0; i < mFeatureCnt; i++)
     {
-        mAnchorsCnt.push_back(inputDims[2 * i].d[0]);
-        PLUGIN_ASSERT(mAnchorsCnt[i] == (int32_t) (mAnchorBoxesHost[i].size() / 4));
+        mAnchorsCnt.push_back(static_cast<int32_t>(inputDims[2 * i].d[0]));
+        PLUGIN_ASSERT(mAnchorsCnt[i] == static_cast<int32_t>(mAnchorBoxesHost[i].size() / 4));
     }
 
     mMaxBatchSize = maxBatchSize;
@@ -517,7 +522,7 @@ void MultilevelProposeROI::configurePlugin(Dims const* inputDims, int32_t nbInpu
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void MultilevelProposeROI::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 

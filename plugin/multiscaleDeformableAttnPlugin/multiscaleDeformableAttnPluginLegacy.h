@@ -42,6 +42,11 @@ namespace plugin
 class MultiscaleDeformableAttnPluginLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     // Constructors/destructors
     MultiscaleDeformableAttnPluginLegacy();
     MultiscaleDeformableAttnPluginLegacy(void const* data, size_t length);
@@ -80,16 +85,6 @@ public:
 
 private:
     std::string mNamespace;
-
-#if NV_TENSORRT_MAJOR < 8
-    using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
-    using nvinfer1::IPluginV2DynamicExt::enqueue;
-    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
-    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
-    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
-    using nvinfer1::IPluginV2DynamicExt::supportsFormat;
-#endif
 };
 
 // Legacy creator class

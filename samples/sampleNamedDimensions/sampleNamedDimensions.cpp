@@ -36,6 +36,7 @@
 #include <cuda_runtime_api.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -223,8 +224,8 @@ bool SampleNamedDimensions::build()
 //!
 //! \brief Uses ONNX parser to create the ONNX Network and marks the output layers
 //!
-bool SampleNamedDimensions::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& builder,
-    std::unique_ptr<nvinfer1::INetworkDefinition>& network, std::unique_ptr<nvinfer1::IBuilderConfig>& config,
+bool SampleNamedDimensions::constructNetwork(std::unique_ptr<nvinfer1::IBuilder>& /*builder*/,
+    std::unique_ptr<nvinfer1::INetworkDefinition>& /*network*/, std::unique_ptr<nvinfer1::IBuilderConfig>& /*config*/,
     std::unique_ptr<nvonnxparser::IParser>& parser)
 {
     auto parsed = parser->parseFromFile(samplesCommon::locateFile(mParams.onnxFileName, mParams.dataDirs).c_str(),
@@ -314,15 +315,15 @@ bool SampleNamedDimensions::infer()
 bool SampleNamedDimensions::processInput(samplesCommon::BufferManager const& buffers)
 {
     int32_t const input0H = mNamedDimension;
-    int32_t const input0W = mInputDims[0].d[1];
+    int32_t const input0W = static_cast<int32_t>(mInputDims[0].d[1]);
     int32_t const input1H = mNamedDimension;
-    int32_t const input1W = mInputDims[1].d[1];
+    int32_t const input1W = static_cast<int32_t>(mInputDims[1].d[1]);
 
     // Generate random input
     mInput0.resize(input0H * input0W);
     mInput1.resize(input1H * input1W);
     std::default_random_engine generator(static_cast<uint32_t>(time(nullptr)));
-    std::uniform_real_distribution<float> unif_real_distr(-10., 10.);
+    std::uniform_real_distribution<float> unif_real_distr(-10.0f, 10.0f);
 
     sample::gLogInfo << "Input0:\n";
     for (int32_t i = 0; i < input0H * input0W; i++)
@@ -357,7 +358,7 @@ bool SampleNamedDimensions::processInput(samplesCommon::BufferManager const& buf
 bool SampleNamedDimensions::verifyOutput(samplesCommon::BufferManager const& buffers)
 {
     int32_t const outputH = 2 * mNamedDimension;
-    int32_t const outputW = mOutputDims[0].d[1];
+    int32_t const outputW = static_cast<int32_t>(mOutputDims[0].d[1]);
     int32_t const outputSize = outputH * outputW;
 
     auto* output = static_cast<float*>(buffers.getHostBuffer(mParams.outputTensorNames[0]));
@@ -374,7 +375,7 @@ bool SampleNamedDimensions::verifyOutput(samplesCommon::BufferManager const& buf
     for (int32_t i = 0; i < outputH * outputW; i++)
     {
         auto const reference_value = i > outputSize / 2 ? mInput1[i - outputSize / 2] : mInput0[i];
-        if (fabs(output[i] - reference_value) > std::numeric_limits<float>::epsilon())
+        if (std::abs(output[i] - reference_value) > std::numeric_limits<float>::epsilon())
         {
             return false;
         }

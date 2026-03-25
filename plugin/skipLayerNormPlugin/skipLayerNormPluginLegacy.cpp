@@ -113,7 +113,7 @@ IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const noexcept
     {
         BERT_DEBUG_MSG("SkipLayerNormPluginDynamic clone");
 
-        auto* p = new SkipLayerNormPluginDynamic(mLayerName, mType, mLd, mBeta, mGamma, mBias);
+        auto* p = new SkipLayerNormPluginDynamic(mLayerName, mType, static_cast<int32_t>(mLd), mBeta, mGamma, mBias);
         p->initialize();
         p->setPluginNamespace(mNamespace.c_str());
         return p;
@@ -126,7 +126,7 @@ IPluginV2DynamicExt* SkipLayerNormPluginDynamic::clone() const noexcept
 }
 
 DimsExprs SkipLayerNormPluginDynamic::getOutputDimensions(
-    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -231,8 +231,8 @@ void SkipLayerNormPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* 
     }
 }
 
-size_t SkipLayerNormPluginDynamic::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t SkipLayerNormPluginDynamic::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -245,7 +245,7 @@ int32_t SkipLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, P
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const inputVolume = volume(inputDesc[0].dims);
+        int32_t const inputVolume = static_cast<int32_t>(volume(inputDesc[0].dims));
         DataType iType = inputDesc->type;
 
         // Our plugin outputs only one tensor
@@ -315,7 +315,7 @@ int32_t SkipLayerNormPluginDynamic::enqueue(PluginTensorDesc const* inputDesc, P
         {
             PLUGIN_ERROR(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
                 + std::to_string(static_cast<int32_t>(iType)))
-                             .c_str());
+                    .c_str());
         }
     }
     catch (std::exception const& e)
@@ -442,7 +442,7 @@ SkipLayerNormPluginDynamicCreator::SkipLayerNormPluginDynamicCreator()
     mPluginAttributes.emplace_back(PluginField("beta"));
     mPluginAttributes.emplace_back(PluginField("gamma"));
     mPluginAttributes.emplace_back(PluginField("bias"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -657,7 +657,7 @@ IPluginV2DynamicExt* SkipLayerNormVarSeqlenPlugin::clone() const noexcept
 }
 
 DimsExprs SkipLayerNormVarSeqlenPlugin::getOutputDimensions(
-    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -758,8 +758,8 @@ void SkipLayerNormVarSeqlenPlugin::configurePlugin(DynamicPluginTensorDesc const
     }
 }
 
-size_t SkipLayerNormVarSeqlenPlugin::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t SkipLayerNormVarSeqlenPlugin::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -772,7 +772,7 @@ int32_t SkipLayerNormVarSeqlenPlugin::enqueue(PluginTensorDesc const* inputDesc,
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && outputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const inputVolume = volume(inputDesc[0].dims);
+        int32_t const inputVolume = static_cast<int32_t>(volume(inputDesc[0].dims));
         PLUGIN_VALIDATE(inputVolume % mLd == 0 && "inconsistent dimensions");
         DataType iType = inputDesc->type;
 
@@ -843,7 +843,7 @@ int32_t SkipLayerNormVarSeqlenPlugin::enqueue(PluginTensorDesc const* inputDesc,
         {
             PLUGIN_VALIDATE(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
                 + std::to_string(static_cast<int32_t>(iType)))
-                                .c_str());
+                    .c_str());
         }
     }
     catch (std::exception const& e)
@@ -954,7 +954,7 @@ SkipLayerNormVarSeqlenPluginCreator::SkipLayerNormVarSeqlenPluginCreator()
     mPluginAttributes.emplace_back(PluginField("beta"));
     mPluginAttributes.emplace_back(PluginField("gamma"));
     mPluginAttributes.emplace_back(PluginField("bias"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

@@ -31,6 +31,11 @@ namespace plugin
 class DecodeBbox3DPlugin : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     DecodeBbox3DPlugin() = delete;
     DecodeBbox3DPlugin(float xMin, float xMax, float yMin, float yMax, float zMin, float zMax, int32_t numDirBins,
         float dirOffset, float dirLimitOffset, std::vector<float> const& anchorBottomHeight,

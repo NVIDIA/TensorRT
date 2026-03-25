@@ -43,6 +43,11 @@ static constexpr int32_t kSM_BLACKWELL_120 = 120;
 class QKVToContextInterleavedPluginLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     QKVToContextInterleavedPluginLegacy(std::string const& name, int32_t hiddenSize, int32_t numHeads, float dqProbs,
         bool useInt8ScaleMax, bool useExplicitInt8, float qkvScale, float ctxScale);
 

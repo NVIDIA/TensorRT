@@ -46,6 +46,11 @@ namespace plugin
 class ModulatedDeformableConvPluginDynamicLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     ModulatedDeformableConvPluginDynamicLegacy(std::string const& name, nvinfer1::Dims const stride,
         nvinfer1::Dims const padding, nvinfer1::Dims const dilation, int32_t const deformableGroup,
         int32_t const group);

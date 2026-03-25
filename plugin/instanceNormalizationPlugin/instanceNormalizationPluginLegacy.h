@@ -54,7 +54,7 @@ public:
     int32_t getNbOutputs() const noexcept override;
 
     // DynamicExt plugins returns DimsExprs class instead of Dims
-    using nvinfer1::IPluginV2::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
     DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
 
@@ -62,11 +62,11 @@ public:
 
     void terminate() noexcept override;
 
-    using nvinfer1::IPluginV2::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
     size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
         nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
 
-    using nvinfer1::IPluginV2::enqueue;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
@@ -98,7 +98,7 @@ public:
 
     void detachFromContext() noexcept override;
 
-    using nvinfer1::IPluginV2Ext::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
     void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
         nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
 

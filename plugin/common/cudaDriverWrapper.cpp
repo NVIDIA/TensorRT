@@ -44,8 +44,9 @@ CUDADriverWrapper::CUDADriverWrapper()
     handle = dllOpen(CUDA_LIB_NAME);
     PLUGIN_ASSERT(handle != nullptr);
 
-    auto load_sym = [](void* handle, char const* name) {
-        void* ret = dllGetSym(handle, name);
+    auto load_sym = [](void* libHandle, char const* name)
+    {
+        void* ret = dllGetSym(libHandle, name);
         PLUGIN_ASSERT(ret != nullptr);
         return ret;
     };

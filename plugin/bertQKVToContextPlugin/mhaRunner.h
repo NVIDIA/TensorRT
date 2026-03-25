@@ -68,7 +68,7 @@ public:
         mB = B;
         mS = S;
         mHeadSize = headSize;
-        mRsqrtHeadSize = 1.F / std::sqrt(headSize);
+        mRsqrtHeadSize = 1.0f / std::sqrt(static_cast<float>(headSize));
 
         mLdQKV = 3 * B * mNumHeads * mHeadSize;
         mStrideQKV = 3 * mHeadSize;

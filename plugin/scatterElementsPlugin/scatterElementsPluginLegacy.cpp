@@ -80,7 +80,7 @@ char const* ScatterElementsPluginV2::getPluginVersion() const noexcept
 }
 
 DimsExprs ScatterElementsPluginV2::getOutputDimensions(
-    int32_t index, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t index, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -99,7 +99,7 @@ DimsExprs ScatterElementsPluginV2::getOutputDimensions(
 }
 
 int32_t ScatterElementsPluginV2::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+    void const* const* inputs, void* const* outputs, void* /*workspace*/, cudaStream_t stream) noexcept
 {
     try
     {
@@ -173,8 +173,8 @@ IPluginV2DynamicExt* ScatterElementsPluginV2::clone() const noexcept
     return plugin;
 }
 
-void ScatterElementsPluginV2::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+void ScatterElementsPluginV2::configurePlugin(DynamicPluginTensorDesc const* /*in*/, int32_t nbInputs,
+    DynamicPluginTensorDesc const* /*out*/, int32_t /*nbOutputs*/) noexcept
 {
     try
     {
@@ -200,8 +200,8 @@ DataType ScatterElementsPluginV2::getOutputDataType(
     return inputTypes[kDATA_TENSOR_IDX];
 }
 
-size_t ScatterElementsPluginV2::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t ScatterElementsPluginV2::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -225,7 +225,7 @@ ScatterElementsPluginV2Creator::ScatterElementsPluginV2Creator()
     gPluginAttributes.clear();
     gPluginAttributes.emplace_back(PluginField("reduction"));
     gPluginAttributes.emplace_back(PluginField("axis"));
-    gFC.nbFields = gPluginAttributes.size();
+    gFC.nbFields = static_cast<int32_t>(gPluginAttributes.size());
     gFC.fields = gPluginAttributes.data();
 }
 
@@ -255,7 +255,7 @@ void ScatterElementsPluginV2Creator::setPluginNamespace(char const* libNamespace
 }
 
 IPluginV2DynamicExt* ScatterElementsPluginV2Creator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     std::string reductionArg;
     int32_t axisArg = 0;
@@ -299,7 +299,7 @@ IPluginV2DynamicExt* ScatterElementsPluginV2Creator::createPlugin(
 }
 
 IPluginV2DynamicExt* ScatterElementsPluginV2Creator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     ScatterElementsPluginV2* plugin = new ScatterElementsPluginV2(serialData, serialLength);
     plugin->setPluginNamespace(mNamespace.c_str());

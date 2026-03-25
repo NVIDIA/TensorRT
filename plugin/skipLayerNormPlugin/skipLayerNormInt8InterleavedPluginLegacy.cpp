@@ -187,7 +187,7 @@ IPluginV2DynamicExt* SkipLayerNormInterleavedPluginMTronLegacy::clone() const no
 }
 
 DimsExprs SkipLayerNormInterleavedPluginBaseLegacy::getOutputDimensions(
-    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& /*exprBuilder*/) noexcept
 {
     try
     {
@@ -259,8 +259,8 @@ void SkipLayerNormInterleavedPluginBaseLegacy::configurePlugin(DynamicPluginTens
     }
 }
 
-size_t SkipLayerNormInterleavedPluginBaseLegacy::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t SkipLayerNormInterleavedPluginBaseLegacy::getWorkspaceSize(PluginTensorDesc const* /*inputs*/,
+    int32_t /*nbInputs*/, PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -279,8 +279,8 @@ int32_t SkipLayerNormInterleavedPluginHFaceLegacy::enqueue(PluginTensorDesc cons
         auto const oDesc = outputDesc[0];
         checkDescs(iDesc, sDesc, oDesc);
 
-        int32_t const ld = iDesc.dims.d[1];
-        int32_t const total = iDesc.dims.d[2];
+        int32_t const ld = static_cast<int32_t>(iDesc.dims.d[1]);
+        int32_t const total = static_cast<int32_t>(iDesc.dims.d[2]);
         float const dqScaleIn = iDesc.scale;
         float const dqScaleSkip = sDesc.scale;
         float const qScale = 1.F / oDesc.scale;
@@ -321,8 +321,8 @@ int32_t SkipLayerNormInterleavedPluginMTronLegacy::enqueue(PluginTensorDesc cons
         checkDescs(iDesc, sDesc, oDesc);
         PLUGIN_VALIDATE(std::equal(iDesc.dims.d, iDesc.dims.d + iDesc.dims.nbDims, pDesc.dims.d));
 
-        int32_t const ld = iDesc.dims.d[1];
-        int32_t const total = iDesc.dims.d[2];
+        int32_t const ld = static_cast<int32_t>(iDesc.dims.d[1]);
+        int32_t const total = static_cast<int32_t>(iDesc.dims.d[2]);
         float const dqScaleIn = iDesc.scale;
         float const dqScaleSkip = sDesc.scale;
         float const qScale = 1.F / oDesc.scale;
@@ -481,7 +481,7 @@ SkipLayerNormInterleavedPluginBaseLegacyCreator::SkipLayerNormInterleavedPluginB
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("beta"));
     mPluginAttributes.emplace_back(PluginField("gamma"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 

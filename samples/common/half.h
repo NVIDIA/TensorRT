@@ -40,6 +40,11 @@
 #ifndef HALF_HALF_HPP
 #define HALF_HALF_HPP
 
+// Third-party header - suppress compiler warnings
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC system_header
+#endif
+
 /// Combined gcc version number.
 #define HALF_GNUC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)
 
@@ -860,7 +865,7 @@ template <std::float_round_style R, typename T>
 uint16 float2half(T value)
 {
     return float2half_impl<R>(
-        value, bool_type < std::numeric_limits<T>::is_iec559 && sizeof(typename bits<T>::type) == sizeof(T) > ());
+        value, bool_type<std::numeric_limits<T>::is_iec559 && sizeof(typename bits<T>::type) == sizeof(T)>());
 }
 
 /// Convert integer to half-precision floating point.
@@ -1237,7 +1242,7 @@ template <typename T>
 T half2float(uint16 value)
 {
     return half2float_impl(
-        value, T(), bool_type < std::numeric_limits<T>::is_iec559 && sizeof(typename bits<T>::type) == sizeof(T) > ());
+        value, T(), bool_type<std::numeric_limits<T>::is_iec559 && sizeof(typename bits<T>::type) == sizeof(T)>());
 }
 
 /// Convert half-precision floating point to integer.
@@ -1553,7 +1558,7 @@ public:
 
 private:
     /// Rounding mode to use
-    static const std::float_round_style round_style = (std::float_round_style)(HALF_ROUND_STYLE);
+    static const std::float_round_style round_style = (std::float_round_style) (HALF_ROUND_STYLE);
 
     /// Constructor.
     /// \param bits binary representation to set half to
@@ -2609,7 +2614,7 @@ struct binary_specialized<half, half>
 /// \tparam T destination type
 /// \tparam U source type
 /// \tparam R rounding mode to use
-template <typename T, typename U, std::float_round_style R = (std::float_round_style)(HALF_ROUND_STYLE)>
+template <typename T, typename U, std::float_round_style R = (std::float_round_style) (HALF_ROUND_STYLE)>
 struct half_caster
 {
 };

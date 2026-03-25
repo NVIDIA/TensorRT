@@ -82,7 +82,8 @@ public:
 
     char const* getPluginNamespace() const noexcept override;
 
-    DataType getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     bool isOutputBroadcastAcrossBatch(
         int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
@@ -119,13 +120,19 @@ private:
 class ProposalDynamicPlugin : public IPluginV2DynamicExt
 {
 public:
-    ProposalDynamicPlugin(int32_t inputHeight, int32_t inputWidth, int32_t rpnHeight, int32_t rpnWidth, float rpnStdScaling,
-        int32_t rpnStride, float bboxMinSize, float nmsIouThreshold, int32_t preNmsTopN, int32_t maxBoxNum,
-        float const* anchorSizes, int32_t ancSizeNum, float const* anchorRatios, int32_t ancRatioNum);
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
 
-    ProposalDynamicPlugin(int32_t inputHeight, int32_t inputWidth, float rpnStdScaling, int32_t rpnStride, float bboxMinSize,
-        float nmsIouThreshold, int32_t preNmsTopN, int32_t maxBoxNum, float const* anchorSizes, int32_t ancSizeNum,
-        float const* anchorRatios, int32_t ancRatioNum);
+    ProposalDynamicPlugin(int32_t inputHeight, int32_t inputWidth, int32_t rpnHeight, int32_t rpnWidth,
+        float rpnStdScaling, int32_t rpnStride, float bboxMinSize, float nmsIouThreshold, int32_t preNmsTopN,
+        int32_t maxBoxNum, float const* anchorSizes, int32_t ancSizeNum, float const* anchorRatios,
+        int32_t ancRatioNum);
+
+    ProposalDynamicPlugin(int32_t inputHeight, int32_t inputWidth, float rpnStdScaling, int32_t rpnStride,
+        float bboxMinSize, float nmsIouThreshold, int32_t preNmsTopN, int32_t maxBoxNum, float const* anchorSizes,
+        int32_t ancSizeNum, float const* anchorRatios, int32_t ancRatioNum);
 
     ProposalDynamicPlugin(void const* serialBuf, size_t serialSize);
 
@@ -148,7 +155,8 @@ public:
     char const* getPluginNamespace() const noexcept override;
 
     // IPluginV2Ext methods
-    DataType getOutputDataType(int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
+    DataType getOutputDataType(
+        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
     // IPluginV2DynamicExt methods
     IPluginV2DynamicExt* clone() const noexcept override;

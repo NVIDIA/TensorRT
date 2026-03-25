@@ -29,6 +29,8 @@ namespace plugin
 class RPROIPlugin : public IPluginV2IOExt
 {
 public:
+    using IPluginV2IOExt::configurePlugin;
+
     RPROIPlugin(RPROIParams params, float const* anchorsRatios, float const* anchorsScales);
 
     RPROIPlugin(RPROIParams params, float const* anchorsRatios, float const* anchorsScales, int32_t A, int32_t C,

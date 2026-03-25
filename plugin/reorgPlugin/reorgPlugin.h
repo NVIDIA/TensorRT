@@ -92,6 +92,11 @@ protected:
 class ReorgDynamic : public Reorg<IPluginV2DynamicExt>
 {
 public:
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
+
     ReorgDynamic(int32_t stride);
     ReorgDynamic(void const* buffer, size_t length);
 

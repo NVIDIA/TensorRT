@@ -372,12 +372,12 @@ struct WeightsWithOwnership : public nvinfer1::Weights
     WeightsWithOwnership(WeightsWithOwnership const&&) = delete;
     WeightsWithOwnership operator=(WeightsWithOwnership const&&) = delete;
 
-    void convertAndCopy(nvinfer1::Weights const& src, nvinfer1::DataType type)
+    void convertAndCopy(nvinfer1::Weights const& src, nvinfer1::DataType type_)
     {
-        this->type = type;
+        this->type = type_;
         this->count = src.count;
 
-        if (type == nvinfer1::DataType::kFLOAT)
+        if (type_ == nvinfer1::DataType::kFLOAT)
         {
             auto destBuf = new float[src.count];
             this->values = destBuf;
@@ -401,7 +401,7 @@ struct WeightsWithOwnership : public nvinfer1::Weights
                 }
             }
         }
-        else if (type == nvinfer1::DataType::kHALF)
+        else if (type_ == nvinfer1::DataType::kHALF)
         {
             auto destBuf = new half[src.count];
             this->values = destBuf;
@@ -431,11 +431,11 @@ struct WeightsWithOwnership : public nvinfer1::Weights
         }
     }
 
-    void convertAndCopy(char const*& srcBuf, size_t count, nvinfer1::DataType type) noexcept
+    void convertAndCopy(char const*& srcBuf, size_t count_, nvinfer1::DataType type_) noexcept
     {
-        this->type = type;
-        this->count = count;
-        auto const nbBytes = getWeightsSize(*this, type);
+        this->type = type_;
+        this->count = count_;
+        auto const nbBytes = getWeightsSize(*this, type_);
         auto destBuf = new char[nbBytes];
         this->values = destBuf;
 

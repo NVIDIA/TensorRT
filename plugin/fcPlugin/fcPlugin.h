@@ -60,7 +60,7 @@ public:
         {
             free();
         }
-        catch (std::exception const& e)
+        catch (std::exception const& /*e*/)
         {
             return -1;
         }
@@ -74,7 +74,7 @@ public:
         {
             cloned = std::make_unique<SharedStream>(/* init */ true);
         }
-        catch (std::exception const& e)
+        catch (std::exception const& /*e*/)
         {
             return nullptr;
         }
@@ -323,7 +323,7 @@ struct LtContext
     }
 
     template <typename T>
-    void create(Gemm<T>& g, size_t workspaceSize)
+    void create(Gemm<T>& g, size_t /*workspaceSize*/)
     {
         typeA = Gemm<T>::Types::cudaTypeI;
         typeB = Gemm<T>::Types::cudaTypeI;
@@ -522,6 +522,11 @@ nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
 class FCPluginDynamic : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     FCPluginDynamic(
         std::string const name, nvinfer1::DataType const type, int32_t const outDim, nvinfer1::Weights const& W);
 

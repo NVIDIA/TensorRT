@@ -44,6 +44,11 @@ namespace plugin
 class DisentangledAttentionPluginLegacy : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     DisentangledAttentionPluginLegacy();
 
     DisentangledAttentionPluginLegacy(int32_t span, float factor);
@@ -103,11 +108,6 @@ private:
     // attributes
     int32_t mSpan;
     float mFactor;
-
-    using IPluginV2::getOutputDimensions;
-    using IPluginV2::getWorkspaceSize;
-    using IPluginV2::enqueue;
-    using IPluginV2Ext::configurePlugin;
 };
 
 class DisentangledAttentionPluginCreatorLegacy : public nvinfer1::IPluginCreator

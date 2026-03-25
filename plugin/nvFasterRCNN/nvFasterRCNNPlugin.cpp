@@ -27,8 +27,8 @@ char const* const kRPROI_PLUGIN_VERSION{"1"};
 char const* const kRPROI_PLUGIN_NAME{"RPROI_TRT"};
 } // namespace
 
-RPROIPlugin::RPROIPlugin(RPROIParams params, float const* anchorsRatios, float const* anchorsScales)
-    : params(params)
+RPROIPlugin::RPROIPlugin(RPROIParams params_, float const* anchorsRatios, float const* anchorsScales)
+    : params(params_)
 {
     /*
      * It only supports the scenario where params.featureStride == params.minBoxSize
@@ -48,18 +48,18 @@ RPROIPlugin::RPROIPlugin(RPROIParams params, float const* anchorsRatios, float c
 }
 
 // Constructor for cloning one plugin instance to another
-RPROIPlugin::RPROIPlugin(RPROIParams params, float const* anchorsRatios, float const* anchorsScales, int32_t A,
-    int32_t C, int32_t H, int32_t W, float const* _anchorsDev, size_t deviceSmemSize, DataType inFeatureType,
-    DataType outFeatureType, DLayout_t inFeatureLayout)
-    : deviceSmemSize(deviceSmemSize)
-    , params(params)
-    , A(A)
-    , C(C)
-    , H(H)
-    , W(W)
-    , inFeatureType(inFeatureType)
-    , outFeatureType(outFeatureType)
-    , inFeatureLayout(inFeatureLayout)
+RPROIPlugin::RPROIPlugin(RPROIParams params_, float const* anchorsRatios, float const* anchorsScales, int32_t A_,
+    int32_t C_, int32_t H_, int32_t W_, float const* _anchorsDev, size_t deviceSmemSize_, DataType inFeatureType_,
+    DataType outFeatureType_, DLayout_t inFeatureLayout_)
+    : deviceSmemSize(deviceSmemSize_)
+    , params(params_)
+    , A(A_)
+    , C(C_)
+    , H(H_)
+    , W(W_)
+    , inFeatureType(inFeatureType_)
+    , outFeatureType(outFeatureType_)
+    , inFeatureLayout(inFeatureLayout_)
 {
     PLUGIN_VALIDATE(params.anchorsRatioCount > 0 && params.anchorsScaleCount > 0);
     anchorsRatiosHost = copyToHost(anchorsRatios, params.anchorsRatioCount);
@@ -235,7 +235,7 @@ float* RPROIPlugin::copyToHost(void const* srcHostData, int32_t count) noexcept
 int32_t RPROIPlugin::copyFromHost(char* dstHostBuffer, void const* source, int32_t count) const noexcept
 {
     PLUGIN_CHECK(cudaMemcpy(dstHostBuffer, source, count * sizeof(float), cudaMemcpyHostToHost));
-    return count * sizeof(float);
+    return static_cast<int32_t>(count * sizeof(float));
 }
 
 bool RPROIPlugin::supportsFormatCombination(
@@ -313,7 +313,7 @@ char const* RPROIPlugin::getPluginNamespace() const noexcept
 
 // Return the DataType of the plugin output at the requested index.
 DataType RPROIPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, nvinfer1::DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     // Two outputs
     PLUGIN_ASSERT(index == 0 || index == 1);
@@ -322,13 +322,13 @@ DataType RPROIPlugin::getOutputDataType(
 
 // Return true if output tensor is broadcast across a batch.
 bool RPROIPlugin::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
+    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
 {
     return false;
 }
 
 // Return true if plugin can use input that is broadcast across batch without replication.
-bool RPROIPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
+bool RPROIPlugin::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
 {
     return false;
 }
@@ -353,9 +353,9 @@ void RPROIPlugin::configurePlugin(
     PLUGIN_ASSERT(nbOutput == PluginNbOutputs);
 
     A = params.anchorsRatioCount * params.anchorsScaleCount;
-    C = in[2].dims.d[0];
-    H = in[2].dims.d[1];
-    W = in[2].dims.d[2];
+    C = static_cast<int32_t>(in[2].dims.d[0]);
+    H = static_cast<int32_t>(in[2].dims.d[1]);
+    W = static_cast<int32_t>(in[2].dims.d[2]);
     inFeatureType = in[2].type;
     outFeatureType = out[1].type;
     inFeatureLayout = convertTensorFormat(in[2].format);
@@ -372,7 +372,7 @@ void RPROIPlugin::configurePlugin(
 
 // Attach the plugin object to an execution context and grant the plugin the access to some context resource.
 void RPROIPlugin::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+    cudnnContext* /*cudnnContext*/, cublasContext* /*cublasContext*/, IGpuAllocator* /*gpuAllocator*/) noexcept
 {
 }
 
@@ -398,7 +398,7 @@ RPROIPluginCreator::RPROIPluginCreator()
     mPluginAttributes.emplace_back(PluginField("anchorsRatios", nullptr, PluginFieldType::kFLOAT32, 1));
     mPluginAttributes.emplace_back(PluginField("anchorsScales", nullptr, PluginFieldType::kFLOAT32, 1));
 
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -422,7 +422,7 @@ PluginFieldCollection const* RPROIPluginCreator::getFieldNames() noexcept
     return &mFC;
 }
 
-IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
     try
     {
@@ -520,7 +520,7 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldColl
 }
 
 IPluginV2Ext* RPROIPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
+    char const* /*name*/, void const* serialData, size_t serialLength) noexcept
 {
     try
     {

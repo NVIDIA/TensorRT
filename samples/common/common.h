@@ -105,15 +105,15 @@ using namespace nvinfer1;
 #undef CHECK
 #define CHECK(status) CHECK_WITH_STREAM(status, std::cerr)
 
-constexpr long double operator"" _GiB(long double val)
+constexpr long double operator""_GiB(long double val)
 {
     return val * (1 << 30);
 }
-constexpr long double operator"" _MiB(long double val)
+constexpr long double operator""_MiB(long double val)
 {
     return val * (1 << 20);
 }
-constexpr long double operator"" _KiB(long double val)
+constexpr long double operator""_KiB(long double val)
 {
     return val * (1 << 10);
 }
@@ -162,11 +162,11 @@ struct SimpleProfiler : public nvinfer1::IProfiler
         out << "========== " << value.mName << " profile ==========" << std::endl;
         float totalTime = 0;
         std::string layerNameStr = "TensorRT layer name";
-        int maxLayerNameLength = std::max(static_cast<int>(layerNameStr.size()), 70);
+        int32_t maxLayerNameLength = std::max(static_cast<int32_t>(layerNameStr.size()), 70);
         for (const auto& elem : value.mProfile)
         {
             totalTime += elem.second.time;
-            maxLayerNameLength = std::max(maxLayerNameLength, static_cast<int>(elem.first.size()));
+            maxLayerNameLength = std::max(maxLayerNameLength, static_cast<int32_t>(elem.first.size()));
         }
 
         auto old_settings = out.flags();
@@ -264,7 +264,7 @@ public:
     };
     ~TypedHostMemory() noexcept override
     {
-        delete[](ElemType*) mData;
+        delete[] (ElemType*) mData;
     }
     ElemType* raw() noexcept
     {
@@ -293,7 +293,8 @@ inline bool isDebug()
     return std::getenv("TENSORRT_DEBUG") != nullptr;
 }
 
-static auto StreamDeleter = [](cudaStream_t* pStream) {
+static auto StreamDeleter = [](cudaStream_t* pStream)
+{
     if (pStream)
     {
         static_cast<void>(cudaStreamDestroy(*pStream));
@@ -535,28 +536,28 @@ inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
 {
     switch (t)
     {
-    case nvinfer1::DataType::kINT64: return 8 * vol;
+    case nvinfer1::DataType::kINT64: return static_cast<size_t>(8 * vol);
     case nvinfer1::DataType::kINT32:
-    case nvinfer1::DataType::kFLOAT: return 4 * vol;
+    case nvinfer1::DataType::kFLOAT: return static_cast<size_t>(4 * vol);
     case nvinfer1::DataType::kBF16:
-    case nvinfer1::DataType::kHALF: return 2 * vol;
+    case nvinfer1::DataType::kHALF: return static_cast<size_t>(2 * vol);
     case nvinfer1::DataType::kBOOL:
     case nvinfer1::DataType::kUINT8:
-    case nvinfer1::DataType::kINT8: return vol;
+    case nvinfer1::DataType::kINT8: return static_cast<size_t>(vol);
     case nvinfer1::DataType::kFP8:
 #if CUDA_VERSION < 11060
         ASSERT(false && "FP8 is not supported");
 #else
-        return vol;
+        return static_cast<size_t>(vol);
 #endif
     case nvinfer1::DataType::kE8M0:
 #if CUDA_VERSION < 12080
         ASSERT(false && "E8M0 is not supported");
 #else
-        return vol;
+        return static_cast<size_t>(vol);
 #endif // CUDA_VERSION < 12080
     case nvinfer1::DataType::kINT4:
-    case nvinfer1::DataType::kFP4: return (vol + 1) / 2;
+    case nvinfer1::DataType::kFP4: return static_cast<size_t>((vol + 1) / 2);
     }
     ASSERT(false && "Unknown element type");
 }
@@ -758,25 +759,25 @@ inline void writePPMFileWithBBox(const std::string& filename, vPPM ppm, std::vec
         for (int x = int(bbox.x1); x < int(bbox.x2); ++x)
         {
             // bbox top border
-            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3] = 255;
-            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3 + 1] = 0;
-            ppm.buffer[(round(bbox.y1) * ppm.w + x) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y1) * ppm.w + x) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((round(bbox.y1) * ppm.w + x) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y1) * ppm.w + x) * 3 + 2)] = 0;
             // bbox bottom border
-            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3] = 255;
-            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3 + 1] = 0;
-            ppm.buffer[(round(bbox.y2) * ppm.w + x) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y2) * ppm.w + x) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((round(bbox.y2) * ppm.w + x) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((round(bbox.y2) * ppm.w + x) * 3 + 2)] = 0;
         }
 
         for (int y = int(bbox.y1); y < int(bbox.y2); ++y)
         {
             // bbox left border
-            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3] = 255;
-            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3 + 1] = 0;
-            ppm.buffer[(y * ppm.w + round(bbox.x1)) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x1)) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x1)) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x1)) * 3 + 2)] = 0;
             // bbox right border
-            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3] = 255;
-            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3 + 1] = 0;
-            ppm.buffer[(y * ppm.w + round(bbox.x2)) * 3 + 2] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x2)) * 3)] = 255;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x2)) * 3 + 1)] = 0;
+            ppm.buffer[static_cast<size_t>((y * ppm.w + round(bbox.x2)) * 3 + 2)] = 0;
         }
     }
 
@@ -786,6 +787,7 @@ inline void writePPMFileWithBBox(const std::string& filename, vPPM ppm, std::vec
 class TimerBase
 {
 public:
+    virtual ~TimerBase() = default;
     virtual void start() {}
     virtual void stop() {}
     float microseconds() const noexcept
@@ -879,17 +881,17 @@ inline std::vector<std::string> splitString(std::string str, char delimiter = ',
 
 inline int getC(nvinfer1::Dims const& d)
 {
-    return d.nbDims >= 3 ? d.d[d.nbDims - 3] : 1;
+    return d.nbDims >= 3 ? static_cast<int>(d.d[d.nbDims - 3]) : 1;
 }
 
 inline int getH(const nvinfer1::Dims& d)
 {
-    return d.nbDims >= 2 ? d.d[d.nbDims - 2] : 1;
+    return d.nbDims >= 2 ? static_cast<int>(d.d[d.nbDims - 2]) : 1;
 }
 
 inline int getW(const nvinfer1::Dims& d)
 {
-    return d.nbDims >= 1 ? d.d[d.nbDims - 1] : 1;
+    return d.nbDims >= 1 ? static_cast<int>(d.d[d.nbDims - 1]) : 1;
 }
 
 //! Platform-agnostic wrapper around dynamic libraries.
@@ -1052,9 +1054,8 @@ inline std::ostream& operator<<(std::ostream& os, const nvinfer1::Dims& dims)
     constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
     constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
 
-    auto processChar = [&kALLOWED](char c) {
-        return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_';
-    };
+    auto processChar = [&kALLOWED](char c)
+    { return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_'; };
 
     std::string res;
     if (s.length() <= kMAX_FILENAME_LENGTH)

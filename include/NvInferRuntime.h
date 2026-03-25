@@ -360,7 +360,8 @@ public:
 //!
 struct DynamicPluginTensorDesc
 {
-    //! Information required to interpret a pointer to tensor data, except that desc.dims has -1 in place of any runtime dimension.
+    //! Information required to interpret a pointer to tensor data, except that desc.dims has -1 in place of any runtime
+    //! dimension.
     PluginTensorDesc desc;
 
     //! Lower bounds on tensor’s dimensions
@@ -433,7 +434,8 @@ public:
     //!     return output;
     //!
     virtual DimsExprs getOutputDimensions(
-        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept = 0;
+        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+        = 0;
 
     //!
     //! \brief Limit on number of format combinations accepted.
@@ -473,7 +475,8 @@ public:
     //! Warning: TensorRT will stop asking for formats once it finds kFORMAT_COMBINATION_LIMIT on combinations.
     //!
     virtual bool supportsFormatCombination(
-        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept = 0;
+        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+        = 0;
 
     //!
     //! \brief Configure the plugin.
@@ -513,7 +516,8 @@ public:
     //! \param nbOutputs Number of output tensors.
     //!
     virtual void configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+        = 0;
 
     //!
     //! \brief Find the workspace size required by the layer.
@@ -525,7 +529,8 @@ public:
     //! \return The workspace size.
     //!
     virtual size_t getWorkspaceSize(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
-        int32_t nbOutputs) const noexcept = 0;
+        int32_t nbOutputs) const noexcept
+        = 0;
 
     //!
     //! \brief Execute the layer.
@@ -540,7 +545,8 @@ public:
     //! \return 0 for success, else non-zero (which will cause engine termination).
     //!
     virtual int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept = 0;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+        = 0;
 
 protected:
     //!
@@ -557,8 +563,11 @@ protected:
 
     virtual ~IPluginV2DynamicExt() noexcept {}
 
-private:
+protected:
     // Following are obsolete base class methods, and must not be implemented or used.
+    // Kept as protected (not private) so derived classes can use `using` declarations
+    // to suppress -Woverloaded-virtual warnings when defining new methods with the
+    // same names but different signatures.
 
     //!
     //! \brief Set plugin configuration
@@ -916,7 +925,8 @@ public:
     //! \return 0 for success, else non-zero (which will cause engine termination, if invoked by TensorRT).
     //!
     virtual int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+        = 0;
 
     //!
     //! \brief Provide the data types of the plugin outputs if the input tensors have the data types provided.
@@ -935,7 +945,8 @@ public:
     //! \warning DataType:kBOOL and DataType::kUINT8 are not supported.
     //!
     virtual int32_t getOutputDataTypes(
-        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept = 0;
+        DataType* outputTypes, int32_t nbOutputs, const DataType* inputTypes, int32_t nbInputs) const noexcept
+        = 0;
 
     //!
     //! \brief Provide expressions for computing dimensions of the output tensors from dimensions of the input tensors.
@@ -959,7 +970,8 @@ public:
     //! through the error recorder.
     //!
     virtual int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
-        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept = 0;
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept
+        = 0;
 
     //!
     //! \brief Return true if plugin supports the format and datatype for the input/output indexed by pos.
@@ -996,7 +1008,8 @@ public:
     //! \see getFormatCombinationLimit
     //!
     virtual bool supportsFormatCombination(
-        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept = 0;
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+        = 0;
 
     //!
     //! \brief Get the number of outputs from the plugin.
@@ -1014,8 +1027,8 @@ public:
     //!
     //! \return The workspace size.
     //!
-    virtual size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+    virtual size_t getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+        DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
     {
         return 0;
     }
@@ -1051,7 +1064,7 @@ public:
     //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
     //! through the error recorder.
     //!
-    virtual int32_t getValidTactics(int32_t* tactics, int32_t nbTactics) noexcept
+    virtual int32_t getValidTactics(int32_t* /*tactics*/, int32_t /*nbTactics*/) noexcept
     {
         return 0;
     }
@@ -1118,7 +1131,7 @@ public:
     //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
     //! through the error recorder.
     //!
-    virtual int32_t setTactic(int32_t tactic) noexcept
+    virtual int32_t setTactic(int32_t /*tactic*/) noexcept
     {
         return 0;
     }
@@ -1142,7 +1155,8 @@ public:
     //! \param nbOutputs Number of output tensors.
     //!
     virtual int32_t onShapeChange(
-        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept = 0;
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept
+        = 0;
 
     //!
     //! \brief Execute the layer.
@@ -1158,7 +1172,8 @@ public:
     //! through the error recorder.
     //!
     virtual int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
-        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept = 0;
+        void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+        = 0;
 
     //!
     //! \brief Clone the plugin, attach the cloned plugin object to a execution context and grant the cloned plugin
@@ -1234,7 +1249,7 @@ public:
     //!     +->|Copy +--> t** --->|Plugin1 +--> t2
     //!        +-----+            +--------+
     //!
-    virtual int32_t getAliasedInput(int32_t outputIndex) noexcept
+    virtual int32_t getAliasedInput(int32_t /*outputIndex*/) noexcept
     {
         return -1;
     }
@@ -1680,7 +1695,8 @@ public:
     //! \deprecated Deprecated in TensorRT 10.0. Superseded by allocateAsync
     //!
     TRT_DEPRECATED virtual void* allocate(
-        uint64_t const size, uint64_t const alignment, AllocatorFlags const flags) noexcept = 0;
+        uint64_t const size, uint64_t const alignment, AllocatorFlags const flags) noexcept
+        = 0;
 
     ~IGpuAllocator() override = default;
     IGpuAllocator() = default;
@@ -1853,7 +1869,6 @@ protected:
 //! \see IGpuAsyncAllocator.
 //!
 using IGpuAllocator = v_1_0::IGpuAllocator;
-
 
 //!
 //! \class IRuntime
@@ -2178,7 +2193,6 @@ public:
     {
         return mImpl->getEngineHostCodeAllowed();
     }
-
 
 protected:
     apiv::VRuntime* mImpl;
@@ -2629,7 +2643,8 @@ protected:
 //!        The minimum and maximum specify the permitted range that is supported at runtime, while the optimum value
 //!        is used for the kernel selection. This should be the "typical" value that is expected to occur at runtime.
 //!
-//! \see IOptimizationProfile::setDimensions(), IOptimizationProfile::setShapeValuesV2(), IOptimizationProfile::setShapeValues()
+//! \see IOptimizationProfile::setDimensions(), IOptimizationProfile::setShapeValuesV2(),
+//! IOptimizationProfile::setShapeValues()
 //!
 enum class OptProfileSelector : int32_t
 {
@@ -3121,7 +3136,6 @@ constexpr inline int32_t EnumMax<ExecutionContextAllocationStrategy>() noexcept
     return 3;
 }
 
-
 //! \class IRuntimeConfig
 //!
 //! \brief A class for runtime configuration. This class is used during execution context creation.
@@ -3152,7 +3166,6 @@ public:
     {
         return mImpl->getExecutionContextAllocationStrategy();
     }
-
 
 protected:
     apiv::VRuntimeConfig* mImpl;
@@ -4209,7 +4222,7 @@ public:
     //! \deprecated Deprecated in TensorRT 10.0. Superseded by reallocateOutputAsync with cudaStream_t argument
     //!
     TRT_DEPRECATED virtual void* reallocateOutput(
-        char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept
+        char const* /*tensorName*/, void* /*currentMemory*/, uint64_t /*size*/, uint64_t /*alignment*/) noexcept
     {
         return nullptr;
     }
@@ -5534,7 +5547,8 @@ public:
     //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads.
     //!
     void* allocateAsync(uint64_t const size, uint64_t const alignment, AllocatorFlags const flags,
-        cudaStream_t /*stream*/) noexcept override = 0;
+        cudaStream_t /*stream*/) noexcept override
+        = 0;
 
     //!
     //! \brief A thread-safe callback implemented by the application to handle stream-ordered asynchronous
@@ -5652,7 +5666,8 @@ public:
     //! engine deserialization), TensorRT will delete any objects it creates.
     //!
     virtual IPluginV3* createPlugin(
-        AsciiChar const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept = 0;
+        AsciiChar const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+        = 0;
 
     //!
     //! \brief Return a list of fields that need to be passed to createPlugin() when creating a plugin for use in the

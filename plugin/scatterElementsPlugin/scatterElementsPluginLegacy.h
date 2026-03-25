@@ -29,6 +29,11 @@ namespace plugin
 class ScatterElementsPluginV2 final : public nvinfer1::IPluginV2DynamicExt
 {
 public:
+    using nvinfer1::IPluginV2DynamicExt::configurePlugin;
+    using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
+    using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
+    using nvinfer1::IPluginV2DynamicExt::enqueue;
+
     ScatterElementsPluginV2() = delete;
     ScatterElementsPluginV2(ScatterElementsPluginV2 const&) = delete;
     ScatterElementsPluginV2(std::string const&, int32_t);

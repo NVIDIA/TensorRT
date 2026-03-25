@@ -134,6 +134,11 @@ private:
 class TRT_DEPRECATED CropAndResizeDynamicPluginLegacy : public IPluginV2DynamicExt
 {
 public:
+    using IPluginV2DynamicExt::configurePlugin;
+    using IPluginV2DynamicExt::getOutputDimensions;
+    using IPluginV2DynamicExt::getWorkspaceSize;
+    using IPluginV2DynamicExt::enqueue;
+
     //!
     //! \brief Constructs CropAndResizeDynamicPluginLegacy with specified crop dimensions.
     //!

@@ -66,7 +66,7 @@ int32_t CropAndResizeDynamicPlugin::getNbOutputs() const noexcept
 }
 
 int32_t CropAndResizeDynamicPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
-    DimsExprs const* shapeInputs, int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs,
+    DimsExprs const* /*shapeInputs*/, int32_t /*nbShapeInputs*/, DimsExprs* outputs, int32_t nbOutputs,
     IExprBuilder& exprBuilder) noexcept
 {
     try
@@ -104,7 +104,7 @@ int32_t CropAndResizeDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, P
         // Our plugin outputs only one tensor
         void* output = outputs[0];
 
-        int32_t batchSize = inputDesc[0].dims.d[0];
+        int32_t batchSize = static_cast<int32_t>(inputDesc[0].dims.d[0]);
         int32_t status = cropAndResizeInference(stream, mDepth * mInputHeight * mInputWidth * batchSize, inputs[0],
             inputs[1], batchSize, mInputHeight, mInputWidth, mNumBoxes, mCropHeight, mCropWidth, mDepth, output);
         return status;
@@ -116,8 +116,8 @@ int32_t CropAndResizeDynamicPlugin::enqueue(PluginTensorDesc const* inputDesc, P
     return STATUS_FAILURE;
 }
 
-size_t CropAndResizeDynamicPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t CropAndResizeDynamicPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    DynamicPluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -168,7 +168,7 @@ PluginFieldCollection const* CropAndResizeDynamicPlugin::getFieldsToSerialize() 
         mDataToSerialize.emplace_back(PluginField("crop_width", &mCropWidth, PluginFieldType::kINT32, 1));
         mDataToSerialize.emplace_back(PluginField("crop_height", &mCropHeight, PluginFieldType::kINT32, 1));
 
-        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.nbFields = static_cast<int32_t>(mDataToSerialize.size());
         mFCToSerialize.fields = mDataToSerialize.data();
         return &mFCToSerialize;
     }
@@ -200,7 +200,7 @@ int32_t CropAndResizeDynamicPlugin::getOutputDataTypes(
 }
 
 int32_t CropAndResizeDynamicPlugin::onShapeChange(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) noexcept
+    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* /*outputs*/, int32_t nbOutputs) noexcept
 {
     try
     {
@@ -210,10 +210,10 @@ int32_t CropAndResizeDynamicPlugin::onShapeChange(
 
         // Re-validate dimensions and update internal state if needed
         // Here we can update mDepth, mInputHeight, mInputWidth, mNumBoxes if they change
-        mDepth = inputs[0].dims.d[1];
-        mInputHeight = inputs[0].dims.d[2];
-        mInputWidth = inputs[0].dims.d[3];
-        mNumBoxes = inputs[1].dims.d[1];
+        mDepth = static_cast<int32_t>(inputs[0].dims.d[1]);
+        mInputHeight = static_cast<int32_t>(inputs[0].dims.d[2]);
+        mInputWidth = static_cast<int32_t>(inputs[0].dims.d[3]);
+        mNumBoxes = static_cast<int32_t>(inputs[1].dims.d[1]);
 
         return STATUS_SUCCESS;
     }
@@ -224,7 +224,7 @@ int32_t CropAndResizeDynamicPlugin::onShapeChange(
     return STATUS_FAILURE;
 }
 
-IPluginV3* CropAndResizeDynamicPlugin::attachToContext(IPluginResourceContext* context) noexcept
+IPluginV3* CropAndResizeDynamicPlugin::attachToContext(IPluginResourceContext* /*context*/) noexcept
 {
     try
     {
@@ -238,7 +238,7 @@ IPluginV3* CropAndResizeDynamicPlugin::attachToContext(IPluginResourceContext* c
 }
 
 bool CropAndResizeDynamicPlugin::supportsFormatCombination(
-    int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+    int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t /*nbOutputs*/) noexcept
 {
     try
     {
@@ -281,18 +281,18 @@ void CropAndResizeDynamicPlugin::setPluginNamespace(char const* libNamespace) no
     }
 }
 
-int32_t CropAndResizeDynamicPlugin::configurePlugin(
-    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
+int32_t CropAndResizeDynamicPlugin::configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+    DynamicPluginTensorDesc const* /*out*/, int32_t nbOutputs) noexcept
 {
     try
     {
         // Validate input/output counts and update internal state based on input dimensions
         PLUGIN_VALIDATE(nbInputs == 2);
         PLUGIN_VALIDATE(nbOutputs == 1);
-        mDepth = in[0].desc.dims.d[1];
-        mInputHeight = in[0].desc.dims.d[2];
-        mInputWidth = in[0].desc.dims.d[3];
-        mNumBoxes = in[1].desc.dims.d[1];
+        mDepth = static_cast<int32_t>(in[0].desc.dims.d[1]);
+        mInputHeight = static_cast<int32_t>(in[0].desc.dims.d[2]);
+        mInputWidth = static_cast<int32_t>(in[0].desc.dims.d[3]);
+        mNumBoxes = static_cast<int32_t>(in[1].desc.dims.d[1]);
     }
     catch (std::exception const& e)
     {
@@ -312,7 +312,7 @@ CropAndResizeDynamicPluginCreator::CropAndResizeDynamicPluginCreator()
     mPluginAttributes.clear();
     mPluginAttributes.emplace_back(PluginField("crop_width", nullptr, PluginFieldType::kINT32, 1));
     mPluginAttributes.emplace_back(PluginField("crop_height", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -332,7 +332,7 @@ PluginFieldCollection const* CropAndResizeDynamicPluginCreator::getFieldNames() 
 }
 
 IPluginV3* CropAndResizeDynamicPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
+    char const* /*name*/, PluginFieldCollection const* fc, TensorRTPhase /*phase*/) noexcept
 {
     try
     {

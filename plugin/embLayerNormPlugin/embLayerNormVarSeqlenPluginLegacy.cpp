@@ -42,19 +42,19 @@ EmbLayerNormVarSeqlenPluginLegacyBase::EmbLayerNormVarSeqlenPluginLegacyBase(std
     Weights const& beta, Weights const& gamma, Weights const& wordEmb, Weights const& posEmb, Weights const& tokEmb,
     DataType maskType)
     : mLayerName(name)
-    , mLd(beta.count)
+    , mLd(static_cast<size_t>(beta.count))
     , mType(type)
     , mMaskType(maskType)
 {
     // Assuming Weights.count is the number of elements and not bytes
     PLUGIN_VALIDATE(beta.count == gamma.count);
     PLUGIN_VALIDATE(mLd > 0U);
-    PLUGIN_VALIDATE(wordEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(posEmb.count % mLd == 0);
-    PLUGIN_VALIDATE(tokEmb.count % mLd == 0);
-    mWordVocabSize = wordEmb.count / mLd;
-    mPosVocabSize = posEmb.count / mLd;
-    mTokVocabSize = tokEmb.count / mLd;
+    PLUGIN_VALIDATE(static_cast<size_t>(wordEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(posEmb.count) % mLd == 0);
+    PLUGIN_VALIDATE(static_cast<size_t>(tokEmb.count) % mLd == 0);
+    mWordVocabSize = static_cast<size_t>(wordEmb.count) / mLd;
+    mPosVocabSize = static_cast<size_t>(posEmb.count) / mLd;
+    mTokVocabSize = static_cast<size_t>(tokEmb.count) / mLd;
 
     mBeta.convertAndCopy(beta, nvinfer1::DataType::kFLOAT);
     mGamma.convertAndCopy(gamma, nvinfer1::DataType::kFLOAT);
@@ -190,7 +190,7 @@ DimsExprs EmbLayerNormVarSeqlenPluginLegacyHFace::getOutputDimensions(
         DimsExprs ret;
         ret.nbDims = 4;
         ret.d[0] = inputs[0].d[0];
-        ret.d[1] = exprBuilder.constant(mLd);
+        ret.d[1] = exprBuilder.constant(static_cast<int64_t>(mLd));
         ret.d[2] = exprBuilder.constant(1);
         ret.d[3] = exprBuilder.constant(1);
         return ret;
@@ -219,7 +219,7 @@ DimsExprs EmbLayerNormVarSeqlenPluginLegacyMTron::getOutputDimensions(
     DimsExprs ret;
     ret.nbDims = 4;
     ret.d[0] = inputs[0].d[0];
-    ret.d[1] = exprBuilder.constant(mLd);
+    ret.d[1] = exprBuilder.constant(static_cast<int64_t>(mLd));
     ret.d[2] = exprBuilder.constant(1);
     ret.d[3] = exprBuilder.constant(1);
     return ret;
@@ -319,8 +319,8 @@ void EmbLayerNormVarSeqlenPluginLegacyMTron::configurePlugin(DynamicPluginTensor
     PLUGIN_ASSERT(outputs[1].desc.type == mMaskType);
 }
 
-size_t EmbLayerNormVarSeqlenPluginLegacyBase::getWorkspaceSize(
-    PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+size_t EmbLayerNormVarSeqlenPluginLegacyBase::getWorkspaceSize(PluginTensorDesc const* /*inputs*/, int32_t /*nbInputs*/,
+    PluginTensorDesc const* /*outputs*/, int32_t /*nbOutputs*/) const noexcept
 {
     return 0;
 }
@@ -333,9 +333,9 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyHFace::enqueue(PluginTensorDesc const* 
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
+        int32_t const batchSize = static_cast<int32_t>(inputDesc[2].dims.d[0]) - 1;
         // read out the maximum sequence length from the dummy input
-        int32_t const maxSeqlen = inputDesc[3].dims.d[0];
+        int32_t const maxSeqlen = static_cast<int32_t>(inputDesc[3].dims.d[0]);
 
         // There are four versions of the kernel which are optimized for sequence lengths 384, 256, 192 and 128.
         // Find the closest sequence length bigger than the max seq length in this batch.
@@ -368,7 +368,8 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyHFace::enqueue(PluginTensorDesc const* 
             auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
         }
         if (mType == DataType::kHALF)
         {
@@ -378,7 +379,8 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyHFace::enqueue(PluginTensorDesc const* 
             auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
 
             return embSkipLayerNormHFace<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output);
         }
         else
         {
@@ -405,9 +407,9 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyMTron::enqueue(PluginTensorDesc const* 
     {
         PLUGIN_VALIDATE(inputDesc != nullptr && inputs != nullptr && outputs != nullptr);
 
-        int32_t const batchSize = inputDesc[2].dims.d[0] - 1;
+        int32_t const batchSize = static_cast<int32_t>(inputDesc[2].dims.d[0]) - 1;
         // read out the maximum sequence length from the dummy input
-        int32_t const maxSeqlen = inputDesc[3].dims.d[0];
+        int32_t const maxSeqlen = static_cast<int32_t>(inputDesc[3].dims.d[0]);
 
         // There are four versions of the kernel which are optimized for sequence lengths 384, 256, 192 and 128.
         // Find the closest sequence length bigger than the max seq length in this batch.
@@ -441,7 +443,8 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyMTron::enqueue(PluginTensorDesc const* 
             auto const posEmb = static_cast<float const*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<float>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output, skip);
         }
         if (mType == DataType::kHALF)
         {
@@ -452,7 +455,8 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyMTron::enqueue(PluginTensorDesc const* 
             auto const posEmb = static_cast<half const*>(mPosEmbDev.get());
 
             return embSkipLayerNormMTron<half>(stream, static_cast<int32_t>(mLd), batchSize, S, inputIds, segmentIds,
-                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, mWordVocabSize, mTokVocabSize, output, skip);
+                cuSeqlens, beta, gamma, wordEmb, posEmb, tokEmb, static_cast<int32_t>(mWordVocabSize),
+                static_cast<int32_t>(mTokVocabSize), output, skip);
         }
         else
         {
@@ -473,7 +477,7 @@ int32_t EmbLayerNormVarSeqlenPluginLegacyMTron::enqueue(PluginTensorDesc const* 
 
 // IPluginV2Ext Methods
 DataType EmbLayerNormVarSeqlenPluginLegacyBase::getOutputDataType(
-    int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, DataType const* /*inputTypes*/, int32_t /*nbInputs*/) const noexcept
 {
     PLUGIN_ASSERT(index == 0 || index == 1);
     PLUGIN_ASSERT(mType == DataType::kHALF || mType == DataType::kFLOAT);
@@ -609,7 +613,7 @@ EmbLayerNormVarSeqlenPluginLegacyBaseCreator::EmbLayerNormVarSeqlenPluginLegacyB
     mPluginAttributes.emplace_back(PluginField("bert_embeddings_token_type_embeddings"));
     mPluginAttributes.emplace_back(PluginField("bert_embeddings_position_embeddings"));
     mPluginAttributes.emplace_back(PluginField("output_fp16"));
-    mFC.nbFields = mPluginAttributes.size();
+    mFC.nbFields = static_cast<int32_t>(mPluginAttributes.size());
     mFC.fields = mPluginAttributes.data();
 }
 
@@ -633,7 +637,7 @@ PluginFieldCollection const* EmbLayerNormVarSeqlenPluginLegacyBaseCreator::getFi
     return &mFC;
 }
 
-bool initializeFields(char const* name, PluginFieldCollection const* fc, Weights& beta, Weights& gamma,
+bool initializeFields(char const* /*name*/, PluginFieldCollection const* fc, Weights& beta, Weights& gamma,
     Weights& word_emb, Weights& pos_emb, Weights& tok_emb)
 {
     bool output_fp16 = false;
