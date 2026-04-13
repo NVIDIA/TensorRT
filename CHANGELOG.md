@@ -1,4 +1,8 @@
 # TensorRT OSS Release Changelog
+## 10.16.1 GA - 2026-4-13
+
+- This is a bugfix release with no major new features. See the [release notes](https://docs.nvidia.com/deeplearning/tensorrt/latest/getting-started/release-notes-10/10.16.1.html) for more details.
+
 ## 10.16 GA - 2026-3-24
 
 - General
