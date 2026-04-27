@@ -19,8 +19,70 @@
 
 #include <iomanip>
 
+#if !defined(_WIN32)
+#include <dlfcn.h>
+#endif
+
 namespace sample
 {
+
+namespace
+{
+// Subset of NVML types/constants needed to query Confidential Compute state.
+// Declared locally so we do not introduce a build-time dependency on nvml.h
+// or libnvidia-ml; functions are resolved via dlopen at runtime.
+using NvmlReturnT = int32_t;
+constexpr NvmlReturnT kNVML_SUCCESS = 0;
+constexpr uint32_t kNVML_CC_FEATURE_ENABLED = 1;
+
+struct NvmlConfComputeSystemState
+{
+    uint32_t environment;
+    uint32_t ccFeature;
+    uint32_t devToolsMode;
+};
+
+using NvmlInitFn = NvmlReturnT (*)();
+using NvmlShutdownFn = NvmlReturnT (*)();
+using NvmlGetCcStateFn = NvmlReturnT (*)(NvmlConfComputeSystemState*);
+
+bool queryConfidentialCompute()
+{
+#if defined(_WIN32)
+    return false;
+#else
+    void* handle = dlopen("libnvidia-ml.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (handle == nullptr)
+    {
+        return false;
+    }
+
+    auto init = reinterpret_cast<NvmlInitFn>(dlsym(handle, "nvmlInit_v2"));
+    auto shutdown = reinterpret_cast<NvmlShutdownFn>(dlsym(handle, "nvmlShutdown"));
+    auto getState = reinterpret_cast<NvmlGetCcStateFn>(dlsym(handle, "nvmlSystemGetConfComputeState"));
+
+    bool enabled = false;
+    if (init != nullptr && shutdown != nullptr && getState != nullptr && init() == kNVML_SUCCESS)
+    {
+        NvmlConfComputeSystemState state{};
+        if (getState(&state) == kNVML_SUCCESS && state.ccFeature == kNVML_CC_FEATURE_ENABLED)
+        {
+            enabled = true;
+        }
+        shutdown();
+    }
+
+    dlclose(handle);
+    return enabled;
+#endif
+}
+} // namespace
+
+bool isConfidentialComputeEnabled()
+{
+    static bool const kCC_ENABLED = queryConfidentialCompute();
+    return kCC_ENABLED;
+}
 
 // Construct GPU UUID string in the same format as nvidia-smi does.
 std::string getUuidString(cudaUUID_t uuid)

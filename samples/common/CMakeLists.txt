@@ -29,6 +29,8 @@ add_library(trt_samples_common STATIC
     getOptions.cpp
     getOptions.h
     getoptWin.h
+    globalTimerKernel.cu
+    globalTimerKernel.h
     half.h
     logger.cpp
     logger.h
