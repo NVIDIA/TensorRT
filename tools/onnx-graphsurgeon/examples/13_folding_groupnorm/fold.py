@@ -27,42 +27,50 @@ def to_1d(arr):
     return np.asarray(arr).reshape(-1)
 
 
+def make_legacy_groupnorm_pattern():
+    pat = gs.GraphPattern()
+
+    x = pat.variable()
+    target_shape = pat.variable()
+    inst_scale = pat.variable()
+    inst_bias = pat.variable()
+    gamma = pat.variable()
+    beta = pat.variable()
+
+    reshape_in = pat.add("pre", "Reshape", inputs=[x, target_shape])
+    inst_out = pat.add("inst", "InstanceNormalization", inputs=[reshape_in, inst_scale, inst_bias])
+    shape_out = pat.add("shape", "Shape", inputs=[x])
+    reshape_back = pat.add("post", "Reshape", inputs=[inst_out, shape_out])
+    mul_out = pat.add("mul", "Mul", inputs=[reshape_back, gamma])
+    add_out = pat.add("add", "Add", inputs=[mul_out, beta])
+
+    pat.set_output_tensors([add_out])
+    return pat
+
+
 def fold_groupnorm(graph):
+    pattern = make_legacy_groupnorm_pattern()
+    matches = pattern.match_all(graph)
+
     folded = 0
+    for match in matches:
+        pre = match.get("pre")
+        inst = match.get("inst")
+        mul = match.get("mul")
+        addn = match.get("add")
 
-    for inst in [n for n in graph.nodes if n.op == "InstanceNormalization"]:
-        pre_input = inst.inputs[0]
-        if not pre_input.inputs or pre_input.inputs[0].op != "Reshape":
+        target = pre.inputs[1]
+        if not isinstance(target, gs.Constant):
             continue
-        pre = pre_input.inputs[0]
-
-        post_consumers = inst.outputs[0].outputs
-        if len(post_consumers) != 1 or post_consumers[0].op != "Reshape":
-            continue
-        post = post_consumers[0]
-
-        if not isinstance(pre.inputs[1], gs.Constant):
-            continue
-        target_shape = pre.inputs[1].values.tolist()
+        target_shape = target.values.tolist()
         if len(target_shape) < 2 or int(target_shape[1]) <= 0:
             continue
         num_groups = int(target_shape[1])
 
-        mul_consumers = post.outputs[0].outputs
-        if len(mul_consumers) != 1 or mul_consumers[0].op != "Mul":
-            continue
-        mul = mul_consumers[0]
-
-        add_consumers = mul.outputs[0].outputs
-        if len(add_consumers) != 1 or add_consumers[0].op != "Add":
-            continue
-        addn = add_consumers[0]
-
-        gamma_t = mul.inputs[0] if mul.inputs[1] is post.outputs[0] else mul.inputs[1]
-        beta_t = addn.inputs[0] if addn.inputs[1] is mul.outputs[0] else addn.inputs[1]
+        gamma_t = mul.inputs[1]
+        beta_t = addn.inputs[1]
         if not isinstance(gamma_t, gs.Constant) or not isinstance(beta_t, gs.Constant):
             continue
-
         gamma = to_1d(gamma_t.values).astype(np.float32)
         beta = to_1d(beta_t.values).astype(np.float32)
         if gamma.shape != beta.shape:
@@ -70,20 +78,23 @@ def fold_groupnorm(graph):
 
         epsilon = inst.attrs.get("epsilon", 1e-5)
 
-        gn_scale = gs.Constant(name=inst.name + "_gn_scale", values=gamma)
-        gn_bias = gs.Constant(name=inst.name + "_gn_bias", values=beta)
         x_tensor = pre.inputs[0]
         gn_out = addn.outputs[0]
-
         gn_out.inputs.clear()
-        gn_node = gs.Node(
-            op="GroupNormalization",
-            name=inst.name + "_folded",
-            attrs={"num_groups": num_groups, "epsilon": float(epsilon)},
-            inputs=[x_tensor, gn_scale, gn_bias],
-            outputs=[gn_out],
+
+        graph.nodes.append(
+            gs.Node(
+                op="GroupNormalization",
+                name=inst.name + "_folded",
+                attrs={"num_groups": num_groups, "epsilon": float(epsilon)},
+                inputs=[
+                    x_tensor,
+                    gs.Constant(name=inst.name + "_gn_scale", values=gamma),
+                    gs.Constant(name=inst.name + "_gn_bias", values=beta),
+                ],
+                outputs=[gn_out],
+            )
         )
-        graph.nodes.append(gn_node)
         folded += 1
 
     if folded:
