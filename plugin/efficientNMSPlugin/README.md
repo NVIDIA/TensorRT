@@ -1,5 +1,7 @@
 # Efficient NMS Plugin [DEPRECATED]
 
+**This plugin is deprecated since TensorRT 10.12 and will be removed in a future release. This includes the TF-TRT variants (EfficientNMS_Explicit_TF_TRT and EfficientNMS_Implicit_TF_TRT). No alternatives are planned to be provided.**
+
 #### Table of Contents
 - [Description](#description)
 - [Structure](#structure)
@@ -16,7 +18,7 @@
 
 ## Description
 
-> NOTE: `EfficientNMSONNXPlugin` is deprecated since TensorRT 9.0. Its functionality has been superseded by the `INMSLayer`. `EfficientNMS_TRT` is deprecated since TensorRT 10.12; `INMSLayer` can be used as appropriate to replace its functionality.
+> NOTE: `EfficientNMSONNXPlugin` (`EfficientNMS_ONNX_TRT`) was removed in TensorRT 10.16. Its functionality has been superseded by the `INMSLayer`. `EfficientNMS_TRT` is deprecated since TensorRT 10.12; `INMSLayer` can be used as appropriate to replace its functionality.
 
 This TensorRT plugin implements an efficient algorithm to perform Non Maximum Suppression for object detection networks.
 
@@ -105,12 +107,6 @@ The following four output tensors are generated:
 
 Parameters marked with a `*` have a non-negligible effect on runtime latency. See the [Performance Tuning](#performance-tuning) section below for more details on how to set them optimally.
 
-## Limitations
-
-The `EfficientNMS_ONNX_TRT` plugin's output may not always be sufficiently sized to capture all NMS-ed boxes. This is because it ignores the number of classes in the calculation of the output size (it produces an output of size `(batch_size * max_output_boxes_per_class, 3)` when in general, a tensor of size `(batch_size * max_output_boxes_per_class * num_classes, 3)`) would be required. This was a compromise made to keep the output size from growing uncontrollably since it lacks an attribute similar to `max_output_boxes` to control the number of output boxes globally.
-
-Due to this reason, please use TensorRT's inbuilt `INMSLayer` instead of the `EfficientNMS_ONNX_TRT` plugin wherever possible.
-
 ## Algorithm
 
 ### Process Description
@@ -172,6 +168,9 @@ For terms and conditions for use, reproduction, and distribution, see the [Tenso
 documentation.
 
 ## Changelog
+
+March 2026
+Remove `EfficientNMS_ONNX_TRT` plugin. Use `INMSLayer` instead.
 
 May 2025
 Add deprecation note for the `EfficientNMS_TRT` plugin.

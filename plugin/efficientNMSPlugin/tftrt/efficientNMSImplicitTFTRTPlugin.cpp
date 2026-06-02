@@ -19,6 +19,7 @@
 #include "efficientNMSPlugin/efficientNMSInference.h"
 
 #include <memory>
+#include <string_view>
 
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Implicit Batch
 // mode for legacy back-compatibilty
@@ -191,13 +192,8 @@ int32_t EfficientNMSImplicitTFTRTPlugin::enqueue(int32_t batchSize, void const* 
     return -1;
 }
 
-bool EfficientNMSImplicitTFTRTPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
-}
-
 DataType EfficientNMSImplicitTFTRTPlugin::getOutputDataType(
-    int32_t index, const DataType* inputTypes, int32_t nbInputs) const noexcept
+    int32_t index, DataType const* inputTypes, int32_t nbInputs) const noexcept
 {
     // num_detections and detection_classes use integer outputs
     if (index == 0 || index == 3)
@@ -223,14 +219,8 @@ IPluginV2IOExt* EfficientNMSImplicitTFTRTPlugin::clone() const noexcept
     return nullptr;
 }
 
-bool EfficientNMSImplicitTFTRTPlugin::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
 bool EfficientNMSImplicitTFTRTPlugin::supportsFormatCombination(
-    int32_t pos, const PluginTensorDesc* inOut, int32_t nbInputs, int32_t nbOutputs) const noexcept
+    int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) const noexcept
 {
     if (inOut[pos].format != PluginFormat::kLINEAR)
     {
@@ -333,43 +323,44 @@ const PluginFieldCollection* EfficientNMSImplicitTFTRTPluginCreator::getFieldNam
 }
 
 IPluginV2IOExt* EfficientNMSImplicitTFTRTPluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+    char const* name, PluginFieldCollection const* fc) noexcept
 {
+    using namespace std::string_view_literals;
     try
     {
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
-            if (!strcmp(attrName, "max_output_size_per_class"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "max_output_size_per_class"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.numOutputBoxesPerClass = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "max_total_size"))
+            if (attrName == "max_total_size"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxes = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.numOutputBoxes = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "iou_threshold"))
+            if (attrName == "iou_threshold"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
+                mParam.iouThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "score_threshold"))
+            if (attrName == "score_threshold"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
+                mParam.scoreThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "pad_per_class"))
+            if (attrName == "pad_per_class"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.padOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.padOutputBoxesPerClass = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "clip_boxes"))
+            if (attrName == "clip_boxes"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.clipBoxes = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.clipBoxes = *(static_cast<int32_t const*>(fields[i].data));
             }
         }
 

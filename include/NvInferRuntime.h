@@ -96,15 +96,12 @@ enum class EngineCapability : int32_t
     kDLA_STANDALONE = 2,
 };
 
-namespace impl
-{
 //! Maximum number of elements in EngineCapability enum. \see EngineCapability
 template <>
-struct EnumMaxImpl<EngineCapability>
+struct impl::EnumMaxImpl<EngineCapability>
 {
     static constexpr int32_t kVALUE = 3;
 };
-} // namespace impl
 
 //!
 //! \class Weights
@@ -141,7 +138,7 @@ public:
 class IHostMemory : public INoCopy
 {
 public:
-    virtual ~IHostMemory() noexcept = default;
+    virtual ~IHostMemory() noexcept = 0;
 
     //! A pointer to the raw data that is owned by the library.
     void* data() const noexcept
@@ -164,6 +161,8 @@ public:
 protected:
     apiv::VHostMemory* mImpl;
 };
+
+inline IHostMemory::~IHostMemory() noexcept = default;
 
 //!
 //! \enum DimensionOperation
@@ -190,10 +189,10 @@ enum class DimensionOperation : int32_t
 
 //! Maximum number of elements in DimensionOperation enum. \see DimensionOperation
 template <>
-constexpr inline int32_t EnumMax<DimensionOperation>() noexcept
+struct impl::EnumMaxImpl<DimensionOperation>
 {
-    return 9;
-}
+    static constexpr int32_t kVALUE = 9;
+};
 
 //!
 //! \enum TensorLocation
@@ -206,15 +205,12 @@ enum class TensorLocation : int32_t
     kHOST = 1,   //!< Data stored on host.
 };
 
-namespace impl
-{
 //! Maximum number of elements in TensorLocation enum. \see TensorLocation
 template <>
-struct EnumMaxImpl<TensorLocation>
+struct impl::EnumMaxImpl<TensorLocation>
 {
     static constexpr int32_t kVALUE = 2;
 };
-} // namespace impl
 
 //!
 //! \class IDimensionExpr
@@ -252,7 +248,7 @@ public:
 
 protected:
     apiv::VDimensionExpr* mImpl;
-    virtual ~IDimensionExpr() noexcept = default;
+    virtual ~IDimensionExpr() noexcept = 0;
 
 public:
     //!
@@ -265,6 +261,8 @@ public:
         return mImpl->isSizeTensor();
     }
 };
+
+inline IDimensionExpr::~IDimensionExpr() noexcept = default;
 
 //!
 //! \class IExprBuilder
@@ -308,7 +306,7 @@ public:
 
 protected:
     apiv::VExprBuilder* mImpl;
-    virtual ~IExprBuilder() noexcept = default;
+    virtual ~IExprBuilder() noexcept = 0;
 
 public:
     //!
@@ -340,6 +338,8 @@ public:
         return mImpl->declareSizeTensor(outputIndex, opt, upper);
     }
 };
+
+inline IExprBuilder::~IExprBuilder() noexcept = default;
 
 //!
 //! \class DimsExprs
@@ -499,8 +499,6 @@ public:
     //!  kOPT
     //!    field of the current profile. Wildcard dimensions will not exist during this phase.
     //!  * IExecutionContext will call this during the next subsequent instance enqueue[V2]() or execute[V2]() if:
-    //!    - The batch size is changed from previous call of execute()/enqueue() if hasImplicitBatchDimension() returns
-    //!    true.
     //!    - The optimization profile is changed via setOptimizationProfileAsync().
     //!    - An input execution binding is changed via setInputShape().
     //! \warning The execution phase is timing critical during IExecutionContext but is not part of the timing loop when
@@ -585,30 +583,6 @@ private:
     }
 
     //!
-    //! \brief Is output broadcasted across batch.
-    //!
-    //! \warning Expected to return false as implicit batch support was removed in TensorRT 10.0.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Implicit batch support is removed in TensorRT 10.0.
-    //!
-    TRT_DEPRECATED bool isOutputBroadcastAcrossBatch(int32_t, bool const*, int32_t) const noexcept final
-    {
-        return false;
-    }
-
-    //!
-    //! \brief Can output broadcasted across batch.
-    //!
-    //! \warning Expected to return false as implicit batch support was removed in TensorRT 10.0.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Implicit batch support is removed in TensorRT 10.0.
-    //!
-    TRT_DEPRECATED bool canBroadcastInputAcrossBatch(int32_t) const noexcept final
-    {
-        return true;
-    }
-
-    //!
     //! \brief Get required workspace size in bytes.
     //!
     size_t getWorkspaceSize(int32_t) const noexcept final
@@ -627,7 +601,10 @@ private:
 
 namespace v_1_0
 {
-class IStreamReader : public IVersionedInterface
+//!
+//! \deprecated Deprecated in TensorRT 11.0. Superseded by IStreamReaderV2.
+//!
+class TRT_DEPRECATED IStreamReader : public IVersionedInterface
 {
 public:
     //!
@@ -675,7 +652,7 @@ public:
     //!
     //! \brief Return version information associated with this interface. Applications must not override this method.
     //!
-    InterfaceInfo getInterfaceInfo() const noexcept final
+    InterfaceInfo getInterfaceInfo() const noexcept override
     {
         return InterfaceInfo{"IStreamWriter", 1, 0};
     }
@@ -706,6 +683,8 @@ protected:
 //!
 //! \note To ensure compatibility of source code with future versions of TensorRT, use IStreamReader, not
 //!       v_1_0::IStreamReader
+//!
+//! \deprecated Deprecated in TensorRT 11.0. Superseded by IStreamReaderV2.
 //!
 using IStreamReader = v_1_0::IStreamReader;
 
@@ -823,7 +802,7 @@ public:
     //! \see IPluginV3OneRuntime::attachToContext()
     //!
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
-    virtual ~IPluginResourceContext() noexcept = default;
+    virtual ~IPluginResourceContext() noexcept = 0;
 
 protected:
     IPluginResourceContext() = default;
@@ -832,6 +811,8 @@ protected:
     IPluginResourceContext& operator=(IPluginResourceContext const&) & = default;
     IPluginResourceContext& operator=(IPluginResourceContext&&) & = default;
 };
+
+inline IPluginResourceContext::~IPluginResourceContext() noexcept = default;
 
 namespace v_1_0
 {
@@ -1014,8 +995,8 @@ public:
     //!
     //! \return The workspace size.
     //!
-    virtual size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
-        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+    virtual size_t getWorkspaceSize(DynamicPluginTensorDesc const* /* inputs */, int32_t /* nbInputs */,
+        DynamicPluginTensorDesc const* /* outputs */, int32_t /* nbOutputs */) const noexcept
     {
         return 0;
     }
@@ -1031,15 +1012,15 @@ public:
     //! plugin will be timed \f$N = \sum_{i=0}^{i<getFormatCombinationLimit()} (T(f[i]))\f$ times. If \f$N = 1\f$, the
     //! plugin may not be timed. In pseudocode, the timing protocol appears as the following:
     //!
-    //! counter = 0
-    //! for each supported format combination
-    //!     ++counter
-    //!     if counter > getFormatCombinationLimit()
-    //!         goto done
-    //!     configurePlugin(...)
-    //!     for each tactic in getValidTactics(...)
-    //!         time tactic
-    //! done:
+    //!     counter = 0
+    //!     for each supported format combination
+    //!         ++counter
+    //!         if counter > getFormatCombinationLimit()
+    //!             goto done
+    //!         configurePlugin(...)
+    //!         for each tactic in getValidTactics(...)
+    //!             time tactic
+    //!     done:
     //!
     //!
     //! \param tactics Pre-allocated buffer to which the tactic values should be written
@@ -1051,7 +1032,7 @@ public:
     //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
     //! through the error recorder.
     //!
-    virtual int32_t getValidTactics(int32_t* tactics, int32_t nbTactics) noexcept
+    virtual int32_t getValidTactics(int32_t* /* tactics */, int32_t /* nbTactics */) noexcept
     {
         return 0;
     }
@@ -1118,7 +1099,7 @@ public:
     //! \return 0 for success, else non-zero (which will cause engine termination). The returned code will be reported
     //! through the error recorder.
     //!
-    virtual int32_t setTactic(int32_t tactic) noexcept
+    virtual int32_t setTactic(int32_t /* tactic */) noexcept
     {
         return 0;
     }
@@ -1234,7 +1215,7 @@ public:
     //!     +->|Copy +--> t** --->|Plugin1 +--> t2
     //!        +-----+            +--------+
     //!
-    virtual int32_t getAliasedInput(int32_t outputIndex) noexcept
+    virtual int32_t getAliasedInput(int32_t /* outputIndex */) noexcept
     {
         return -1;
     }
@@ -1286,11 +1267,21 @@ using IPluginV3OneRuntime = v_1_0::IPluginV3OneRuntime;
 //!
 using IPluginV3OneBuildV2 = v_2_0::IPluginV3OneBuild;
 
+//! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
+//! The name v_1_0 may change in future versions of TensorRT.
 namespace v_1_0
 {
-class IProfiler
+class IProfiler : public IVersionedInterface
 {
 public:
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return {"IProfiler", 1, 0};
+    }
+
     //!
     //! \brief Layer time reporting callback.
     //!
@@ -1300,7 +1291,7 @@ public:
     //!
     virtual void reportLayerTime(char const* layerName, float ms) noexcept = 0;
 
-    virtual ~IProfiler() noexcept {}
+    ~IProfiler() override = default;
 };
 } // namespace v_1_0
 
@@ -1336,10 +1327,10 @@ enum class WeightsRole : int32_t
 
 //! Maximum number of elements in WeightsRole enum. \see WeightsRole
 template <>
-constexpr inline int32_t EnumMax<WeightsRole>() noexcept
+struct impl::EnumMaxImpl<WeightsRole>
 {
-    return 6;
-}
+    static constexpr int32_t kVALUE = 6;
+};
 
 //!
 //! \enum DeviceType
@@ -1354,10 +1345,10 @@ enum class DeviceType : int32_t
 
 //! Maximum number of elements in DeviceType enum. \see DeviceType
 template <>
-constexpr inline int32_t EnumMax<DeviceType>() noexcept
+struct impl::EnumMaxImpl<DeviceType>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \enum TempfileControlFlag
@@ -1382,10 +1373,10 @@ enum class TempfileControlFlag : int32_t
 
 //! Maximum number of elements in TempfileControlFlag enum. \see TempfileControlFlag
 template <>
-constexpr inline int32_t EnumMax<TempfileControlFlag>() noexcept
+struct impl::EnumMaxImpl<TempfileControlFlag>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \brief Represents a collection of one or more TempfileControlFlag values combined using bitwise-OR operations.
@@ -1534,16 +1525,13 @@ enum class TensorFormat : int32_t
     kDHWC = 12
 };
 
-namespace impl
-{
 //! Maximum number of elements in TensorFormat enum. \see TensorFormat
 template <>
-struct EnumMaxImpl<TensorFormat>
+struct impl::EnumMaxImpl<TensorFormat>
 {
     //! Declaration of kVALUE that represents the maximum number of elements in the TensorFormat enum.
     static constexpr int32_t kVALUE = 13;
 };
-} // namespace impl
 
 //!
 //! \enum AllocatorFlag
@@ -1556,21 +1544,20 @@ enum class AllocatorFlag : int32_t
     kRESIZABLE = 0,
 };
 
-namespace impl
-{
 //! Maximum number of elements in AllocatorFlag enum. \see AllocatorFlag
 template <>
-struct EnumMaxImpl<AllocatorFlag>
+struct impl::EnumMaxImpl<AllocatorFlag>
 {
     //! Declaration of kVALUE that represents the maximum number of elements in the AllocatorFlag enum.
     static constexpr int32_t kVALUE = 1;
 };
-} // namespace impl
 
 using AllocatorFlags = uint32_t;
 
 //! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
 //! The name v_1_0 may change in future versions of TensorRT.
+namespace v_1_0
+{
 
 //!
 //! \class ILogger
@@ -1584,9 +1571,17 @@ using AllocatorFlags = uint32_t;
 //! interface implementation and TensorRT does not hold any synchronization primitives when calling the interface
 //! functions.
 //!
-class ILogger
+class ILogger : public IVersionedInterface
 {
 public:
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return {"ILogger", 1, 0};
+    }
+
     //!
     //! \enum Severity
     //!
@@ -1627,7 +1622,7 @@ public:
     virtual void log(Severity severity, AsciiChar const* msg) noexcept = 0;
 
     ILogger() = default;
-    virtual ~ILogger() = default;
+    ~ILogger() override = default;
 
 protected:
     // @cond SuppressDoxyWarnings
@@ -1638,16 +1633,17 @@ protected:
     // @endcond
 };
 
-namespace impl
-{
+} // namespace v_1_0
+
+using ILogger = v_1_0::ILogger;
+
 //! Maximum number of elements in ILogger::Severity enum. \see ILogger::Severity
 template <>
-struct EnumMaxImpl<ILogger::Severity>
+struct impl::EnumMaxImpl<ILogger::Severity>
 {
     //! Declaration of kVALUE that represents the maximum number of elements in the ILogger::Severity enum.
     static constexpr int32_t kVALUE = 5;
 };
-} // namespace impl
 
 namespace v_1_0
 {
@@ -1865,7 +1861,7 @@ using IGpuAllocator = v_1_0::IGpuAllocator;
 class IRuntime : public INoCopy
 {
 public:
-    virtual ~IRuntime() noexcept = default;
+    virtual ~IRuntime() noexcept = 0;
 
     //!
     //! \brief Sets the DLA core used by the network. Defaults to -1.
@@ -1967,30 +1963,6 @@ public:
     ICudaEngine* deserializeCudaEngine(void const* blob, std::size_t size) noexcept
     {
         return mImpl->deserializeCudaEngine(blob, size);
-    }
-
-    //!
-    //! \brief Deserialize an engine from a stream.
-    //!
-    //! If an error recorder has been set for the runtime, it will also be passed to the
-    //! engine.
-    //!
-    //! This deserialization path will reduce host memory usage when weight streaming is enabled.
-    //!
-    //! \warning Destroying the IRuntime before destroying all associated ICudaEngine instances results in undefined
-    //! behavior.
-    //!
-    //! \param streamReader a read-only stream from which TensorRT will deserialize a
-    //!        previously serialized engine.
-    //!
-    //! \return The engine, or nullptr if it could not be deserialized.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.7. Superseded by deserializeCudaEngine that takes an IStreamReaderV2
-    //! instead of IStreamReader.
-    //!
-    TRT_DEPRECATED ICudaEngine* deserializeCudaEngine(IStreamReader& streamReader)
-    {
-        return mImpl->deserializeCudaEngine(streamReader);
     }
 
     //!
@@ -2181,8 +2153,10 @@ public:
 
 
 protected:
-    apiv::VRuntime* mImpl;
+    apiv::VRuntime* mImpl{};
 };
+
+inline IRuntime::~IRuntime() noexcept = default;
 
 //!
 //! \class IRefitter
@@ -2194,7 +2168,7 @@ protected:
 class IRefitter : public INoCopy
 {
 public:
-    virtual ~IRefitter() noexcept = default;
+    virtual ~IRefitter() noexcept = 0;
 
     //!
     //! \brief Specify new weights for a layer of given name.
@@ -2269,78 +2243,6 @@ public:
     int32_t getAll(int32_t size, char const** layerNames, WeightsRole* roles) noexcept
     {
         return mImpl->getAll(size, layerNames, roles);
-    }
-
-    //!
-    //! Update dynamic range for a tensor.
-    //!
-    //! \param tensorName The name of an ITensor in the network.
-    //! \param min The minimum of the dynamic range for the tensor.
-    //! \param max The maximum of the dynamic range for the tensor.
-    //!
-    //! \return True if successful; false otherwise.
-    //!
-    //! Returns false if there is no Int8 engine tensor derived from
-    //! a network tensor of that name.  If successful, then getMissing
-    //! may report that some weights need to be supplied.
-    //!
-    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED bool setDynamicRange(char const* tensorName, float min, float max) noexcept
-    {
-        return mImpl->setDynamicRange(tensorName, min, max);
-    }
-
-    //!
-    //! \brief Get minimum of dynamic range.
-    //!
-    //! \return Minimum of dynamic range.
-    //!
-    //! If the dynamic range was never set, returns the minimum computed during calibration.
-    //!
-    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED float getDynamicRangeMin(char const* tensorName) const noexcept
-    {
-        return mImpl->getDynamicRangeMin(tensorName);
-    }
-
-    //!
-    //! \brief Get maximum of dynamic range.
-    //!
-    //! \return Maximum of dynamic range.
-    //!
-    //! If the dynamic range was never set, returns the maximum computed during calibration.
-    //!
-    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED float getDynamicRangeMax(char const* tensorName) const noexcept
-    {
-        return mImpl->getDynamicRangeMax(tensorName);
-    }
-
-    //!
-    //! \brief Get names of all tensors that have refittable dynamic ranges.
-    //!
-    //! \param size The number of items that can be safely written to a non-null tensorNames.
-    //! \param tensorNames Where to write the layer names.
-    //!
-    //! \return The number of Weights that could be refit.
-    //!
-    //! If tensorNames!=nullptr, each written pointer points to a string owned by
-    //! the engine being refit, and becomes invalid when the engine is destroyed.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED int32_t getTensorsWithDynamicRange(int32_t size, char const** tensorNames) const noexcept
-    {
-        return mImpl->getTensorsWithDynamicRange(size, tensorNames);
     }
 
     //!
@@ -2621,6 +2523,8 @@ protected:
     apiv::VRefitter* mImpl;
 };
 
+inline IRefitter::~IRefitter() noexcept = default;
+
 //!
 //! \enum OptProfileSelector
 //!
@@ -2629,7 +2533,7 @@ protected:
 //!        The minimum and maximum specify the permitted range that is supported at runtime, while the optimum value
 //!        is used for the kernel selection. This should be the "typical" value that is expected to occur at runtime.
 //!
-//! \see IOptimizationProfile::setDimensions(), IOptimizationProfile::setShapeValuesV2(), IOptimizationProfile::setShapeValues()
+//! \see IOptimizationProfile::setDimensions(), IOptimizationProfile::setShapeValuesV2()
 //!
 enum class OptProfileSelector : int32_t
 {
@@ -2638,16 +2542,12 @@ enum class OptProfileSelector : int32_t
     kMAX = 2  //!< This is used to set or get the maximum permitted value for dynamic dimensions etc.
 };
 
-//!
-//! \brief Number of different values of OptProfileSelector enum.
-//!
-//! \see OptProfileSelector
-//!
+//! Number of different values of OptProfileSelector enum. \see OptProfileSelector
 template <>
-constexpr inline int32_t EnumMax<OptProfileSelector>() noexcept
+struct impl::EnumMaxImpl<OptProfileSelector>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \class IOptimizationProfile
@@ -2719,62 +2619,9 @@ public:
     }
 
     //!
-    //! \brief Set the minimum / optimum / maximum values for an input shape tensor.
-    //!
-    //! This function must be called three times for every input tensor t that is a shape tensor (t.isShape() == true).
-    //! This implies that the dimensions of t are fixed at network definition time and the volume does not exceed 64.
-    //! This function must not be called for any input tensor that is not a shape tensor.
-    //!
-    //! Each time this function is called for the same input tensor, the same nbValues must be supplied (either 1
-    //! if the tensor rank is 0, or dims.d[0] if the rank is 1). Furthermore, if minVals, optVals, maxVals are the
-    //! minimum, optimum, and maximum values, it must be true that minVals[i] <= optVals[i] <= maxVals[i] for
-    //! i = 0, ..., nbValues - 1. Execution of the network must be valid for the optVals.
-    //!
-    //! Shape tensors are tensors that contribute to shape calculations in some way. While input shape tensors can be
-    //! type kINT32 or kINT64, the values used to set the minimum, optimum, and maximum values must fit in int32_t.
-    //!
-    //! Examples:
-    //!
-    //! * A shape tensor used as the second input to IShuffleLayer can contain a -1 wildcard.
-    //!   The corresponding minVal[i] should be -1.
-    //!
-    //! * A shape tensor used as the stride input to ISliceLayer can contain any valid strides.
-    //!   The values could be positive, negative, or zero.
-    //!
-    //! * A shape tensor subtracted from zero to compute the size input of an ISliceLayer can
-    //!   contain any non-positive values that yield a valid slice operation.
-    //!
-    //! Tightening the minVals and maxVals bounds to cover only values that are necessary may help optimization.
-    //!
-    //! \param inputName The input tensor name
-    //! \param select Whether to set the minimum, optimum, or maximum input values.
-    //! \param values An array of length nbValues containing the minimum, optimum, or maximum shape tensor elements.
-    //!               For multidimensional tensors, the array is in row-major order.
-    //! \param nbValues The length of the value array, which must equal the number of shape tensor elements (>= 1)
-    //!
-    //! \return false if an inconsistency was detected (e.g. nbValues does not match a previous call for the same
-    //!         tensor), else true. As for setDimensions(), a full validation can only be performed at engine build
-    //!         time.
-    //!
-    //! \warning If run on DLA, minimum, optimum, and maximum shape values must to be the same.
-    //!
-    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
-    //!
-    //! \warning When setShapeValuesV2 is called after setShapeValues, a following call to getShapeValues will
-    //! return nullptr. Vice versa, a call to setShapeValues undoes the effects of setShapeValuesV2.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.11. Superseded by setShapeValuesV2().
-    //!
-    TRT_DEPRECATED bool setShapeValues(
-        char const* inputName, OptProfileSelector select, int32_t const* values, int32_t nbValues) noexcept
-    {
-        return mImpl->setShapeValues(inputName, select, values, nbValues);
-    }
-
-    //!
     //! \brief Get the number of values for an input shape tensor.
     //!
-    //! This will return the number of shape values if setShapeValues() has been called before for this input tensor.
+    //! This will return the number of shape values if setShapeValuesV2() has been called before for this input tensor.
     //! Otherwise, return -1.
     //!
     //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
@@ -2782,20 +2629,6 @@ public:
     int32_t getNbShapeValues(char const* inputName) const noexcept
     {
         return mImpl->getNbShapeValues(inputName);
-    }
-
-    //!
-    //! \brief Get the minimum / optimum / maximum values for an input shape tensor.
-    //!
-    //! If the shape values have not been set previously with setShapeValues(), this returns nullptr.
-    //!
-    //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.11. Superseded by getShapeValuesV2().
-    //!
-    TRT_DEPRECATED int32_t const* getShapeValues(char const* inputName, OptProfileSelector select) const noexcept
-    {
-        return mImpl->getShapeValues(inputName, select);
     }
 
     //!
@@ -2887,9 +2720,6 @@ public:
     //!
     //! \warning The string inputName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    //! \warning When setShapeValues is called after setShapeValuesV2, input shape would be overwritten as 32 bit
-    //! and getShapeValuesV2 would return nullptr.
-    //!
     bool setShapeValuesV2(
         char const* inputName, OptProfileSelector select, int64_t const* values, int32_t nbValues) noexcept
     {
@@ -2910,8 +2740,10 @@ public:
 
 protected:
     apiv::VOptimizationProfile* mImpl;
-    virtual ~IOptimizationProfile() noexcept = default;
+    virtual ~IOptimizationProfile() noexcept = 0;
 };
+
+inline IOptimizationProfile::~IOptimizationProfile() noexcept = default;
 
 //!
 //! \enum TacticSource
@@ -2922,35 +2754,22 @@ protected:
 //!
 enum class TacticSource : int32_t
 {
-    //! cuBLAS tactics. Disabled by default.
-    //! \note Disabling kCUBLAS will cause the cuBLAS handle passed to plugins in attachToContext to be null.
-    //! \deprecated Deprecated in TensorRT 10.0.
-    kCUBLAS TRT_DEPRECATED_ENUM = 0,
-
-    //! cuBLAS LT tactics. Disabled by default.
-    //! \deprecated Deprecated in TensorRT 9.0.
-    kCUBLAS_LT TRT_DEPRECATED_ENUM = 1,
-
-    //! cuDNN tactics. Disabled by default.
-    //! \note Disabling kCUDNN will cause the cuDNN handle passed to plugins in attachToContext to be null.
-    //! \deprecated Deprecated in TensorRT 10.0.
-    kCUDNN TRT_DEPRECATED_ENUM = 2,
-
     //! Enables convolution tactics implemented with edge mask tables. These tactics tradeoff memory for performance by
     //! consuming additional memory space proportional to the input size.
     //! Enabled by default.
-    kEDGE_MASK_CONVOLUTIONS = 3,
+    kEDGE_MASK_CONVOLUTIONS = 0,
 
     //! Enables convolution tactics implemented with source-code JIT fusion. The engine building time may increase
     //! when this is enabled. Enabled by default.
-    kJIT_CONVOLUTIONS = 4,
+    kJIT_CONVOLUTIONS = 1,
 };
 
+//! Maximum number of tactic sources in TacticSource enum. \see TacticSource
 template <>
-constexpr inline int32_t EnumMax<TacticSource>() noexcept
+struct impl::EnumMaxImpl<TacticSource>
 {
-    return 5;
-} //!< Maximum number of tactic sources in TacticSource enum. \see TacticSource
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \brief Represents a collection of one or more TacticSource values
@@ -2978,10 +2797,10 @@ enum class ProfilingVerbosity : int32_t
 
 //! Maximum number of profile verbosity levels in ProfilingVerbosity enum. \see ProfilingVerbosity
 template <>
-constexpr inline int32_t EnumMax<ProfilingVerbosity>() noexcept
+struct impl::EnumMaxImpl<ProfilingVerbosity>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \brief Represents one or more SerializationFlag values using binary OR
@@ -3007,10 +2826,10 @@ enum class SerializationFlag : int32_t
 
 //! Maximum number of serialization flags in SerializationFlag enum. \see SerializationFlag
 template <>
-constexpr inline int32_t EnumMax<SerializationFlag>() noexcept
+struct impl::EnumMaxImpl<SerializationFlag>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \class ISerializationConfig
@@ -3022,7 +2841,7 @@ constexpr inline int32_t EnumMax<SerializationFlag>() noexcept
 class ISerializationConfig : public INoCopy
 {
 public:
-    virtual ~ISerializationConfig() noexcept = default;
+    virtual ~ISerializationConfig() noexcept = 0;
 
     //!
     //! \brief Set the serialization flags to turn on for this config.
@@ -3092,6 +2911,8 @@ protected:
     apiv::VSerializationConfig* mImpl;
 };
 
+inline ISerializationConfig::~ISerializationConfig() noexcept = default;
+
 //!
 //! \enum ExecutionContextAllocationStrategy
 //!
@@ -3110,16 +2931,13 @@ enum class ExecutionContextAllocationStrategy : int32_t
     kUSER_MANAGED = 2,      //!< The user supplies custom allocation to the execution context.
 };
 
-//!
-//! \brief Maximum number of memory allocation strategies in ExecutionContextAllocationStrategy enum.
-//!
-//! \see ExecutionContextAllocationStrategy
-//!
+//! Maximum number of memory allocation strategies in ExecutionContextAllocationStrategy enum. \see
+//! ExecutionContextAllocationStrategy
 template <>
-constexpr inline int32_t EnumMax<ExecutionContextAllocationStrategy>() noexcept
+struct impl::EnumMaxImpl<ExecutionContextAllocationStrategy>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 
 //! \class IRuntimeConfig
@@ -3131,7 +2949,7 @@ constexpr inline int32_t EnumMax<ExecutionContextAllocationStrategy>() noexcept
 class IRuntimeConfig : public INoCopy
 {
 public:
-    virtual ~IRuntimeConfig() noexcept = default;
+    virtual ~IRuntimeConfig() noexcept = 0;
 
     //!
     //! \brief Set the execution context allocation strategy. Default value is kSTATIC.
@@ -3158,6 +2976,8 @@ protected:
     apiv::VRuntimeConfig* mImpl;
 }; // class IRuntimeConfig
 
+inline IRuntimeConfig::~IRuntimeConfig() noexcept = default;
+
 //!
 //! \enum EngineStat
 //!
@@ -3175,16 +2995,12 @@ enum class EngineStat : int32_t
     kSTRIPPED_WEIGHTS_SIZE = 1,
 };
 
-//!
-//! \brief Maximum number of engine statistic kinds in EngineStat enum.
-//!
-//! \see EngineStat
-//!
+//! Maximum number of engine statistic kinds in EngineStat enum. \see EngineStat
 template <>
-constexpr inline int32_t EnumMax<EngineStat>() noexcept
+struct impl::EnumMaxImpl<EngineStat>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \class ICudaEngine
@@ -3196,7 +3012,7 @@ constexpr inline int32_t EnumMax<EngineStat>() noexcept
 class ICudaEngine : public INoCopy
 {
 public:
-    virtual ~ICudaEngine() noexcept = default;
+    virtual ~ICudaEngine() noexcept = 0;
 
     //!
     //! \brief Get shape of an input or output tensor.
@@ -3345,18 +3161,6 @@ public:
     }
 
     //!
-    //! \brief create an execution context without any device memory allocated
-    //!
-    //! The memory for execution of this device context must be supplied by the application.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Superseded by createExecutionContext() with parameter.
-    //!
-    TRT_DEPRECATED IExecutionContext* createExecutionContextWithoutDeviceMemory() noexcept
-    {
-        return mImpl->createExecutionContextWithoutDeviceMemory();
-    }
-
-    //!
     //! \brief Create an execution context with TensorRT JIT runtime config.
     //!
     //! \param runtimeConfig The runtime config for TensorRT JIT.
@@ -3384,36 +3188,10 @@ public:
     //!
     //! \brief Return the maximum device memory required by the context over all profiles.
     //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by getDeviceMemorySizeV2().
-    //!
-    //! \see IExecutionContext::setDeviceMemory()
-    //!
-    TRT_DEPRECATED size_t getDeviceMemorySize() const noexcept
-    {
-        return mImpl->getDeviceMemorySize();
-    }
-
-    //!
-    //! \brief Return the maximum device memory required by the context for a profile.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by getDeviceMemorySizeForProfileV2(int32_t).
-    //!
-    //! \see IExecutionContext::setDeviceMemoryV2()
-    //!
-    TRT_DEPRECATED size_t getDeviceMemorySizeForProfile(int32_t profileIndex) const noexcept
-    {
-        return mImpl->getDeviceMemorySizeForProfile(profileIndex);
-    }
-
-    //!
-    //! \brief Return the maximum device memory required by the context over all profiles.
-    //!
     //! This API is stateful, so its call returns different values based on the following calls:
-    //! * setWeightStreamingBudget()
     //! * setWeightStreamingBudgetV2()
     //!
     //! \see IExecutionContext::setDeviceMemoryV2()
-    //! \see setWeightStreamingBudget()
     //! \see setWeightStreamingBudgetV2()
     //!
     int64_t getDeviceMemorySizeV2() const noexcept
@@ -3425,11 +3203,9 @@ public:
     //! \brief Return the maximum device memory required by the context for a profile.
     //!
     //! This API is stateful, so its call returns different values based on the following calls:
-    //! * setWeightStreamingBudget()
     //! * setWeightStreamingBudgetV2()
     //!
     //! \see IExecutionContext::setDeviceMemoryV2()
-    //! \see setWeightStreamingBudget()
     //! \see setWeightStreamingBudgetV2()
     //!
     int64_t getDeviceMemorySizeForProfileV2(int32_t profileIndex) const noexcept
@@ -3681,32 +3457,6 @@ public:
     }
 
     //!
-    //! \brief Get the minimum / optimum / maximum values (not dimensions) for an input tensor given
-    //! its name under an optimization profile. These correspond to the values set using
-    //! IOptimizationProfile::setShapeValues when the engine was built.
-    //!
-    //! \param tensorName The name of an input tensor.
-    //!
-    //! \param profileIndex The profile index, which must be between 0 and getNbOptimizationProfiles()-1.
-    //!
-    //! \param select Whether to query the minimum, optimum, or maximum values for this input tensor.
-    //!
-    //! \return The minimum / optimum / maximum values for an input tensor in this profile. If the profileIndex is
-    //! invalid or the provided name does not map to an input tensor, or the tensor is not a shape binding, return
-    //! nullptr.
-    //!
-    //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.11. Superseded by getProfileTensorValuesV2().
-    //! \warning If input shapes are set with setShapeValuesV2, getProfileTensorValues will return nullptr
-    //!
-    TRT_DEPRECATED int32_t const* getProfileTensorValues(
-        char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept
-    {
-        return mImpl->getProfileTensorValues(tensorName, profileIndex, select);
-    }
-
-    //!
     //! \brief Determine what execution capability this engine has.
     //!
     //! If the engine has EngineCapability::kSTANDARD, then all engine functionality is valid.
@@ -3753,20 +3503,6 @@ public:
     IErrorRecorder* getErrorRecorder() const noexcept
     {
         return mImpl->getErrorRecorder();
-    }
-
-    //!
-    //! \brief Query whether the engine was built with an implicit batch dimension.
-    //!
-    //! \return Always false since TensorRT 10.0 does not support an implicit batch dimension.
-    //!
-    //! \see createNetworkV2
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Implicit batch is no supported since TensorRT 10.0.
-    //!
-    TRT_DEPRECATED bool hasImplicitBatchDimension() const noexcept
-    {
-        return mImpl->hasImplicitBatchDimension();
     }
 
     //!
@@ -3889,94 +3625,6 @@ public:
     }
 
     //!
-    //! \brief Limit the maximum amount of GPU memory usable for network weights
-    //! in bytes.
-    //!
-    //! \param gpuMemoryBudget  This parameter may take on 3 types of values:
-    //!  -1: Allows TensorRT to choose the budget according to the streamable weights size.
-    //!      Free CUDA memory will be queried at createExecutionContext() and accordingly:
-    //!       * If streamable weights all fit: weight streaming is not required and disabled.
-    //!       * Otherwise: Budget is set to getMinimumWeightStreamingBudget
-    //!   0: (default) Disables weight streaming. The execution may fail if the network is too large for GPU memory.
-    //!  >0: The maximum bytes of GPU memory that weights can occupy. It must be bounded by
-    //!      [getMinimumWeightStreamingBudget, free GPU memory)].
-    //!
-    //! By setting a weight limit, users can expect a GPU memory usage reduction
-    //! of (total bytes for network weights) - gpuMemoryBudget bytes. Maximum memory savings occur
-    //! when gpuMemoryBudget is set to getMinimumWeightStreamingBudget(). Creating additional
-    //! IExecutionContexts will increase memory usage by O(getMinimumStreamingBudget()).
-    //!
-    //! Streaming larger amounts of memory will likely result in lower performance
-    //! except in some boundary cases where streaming weights allows the user to
-    //! run larger batch sizes. The higher throughput offsets the increased
-    //! latency in these cases. Tuning the value of the memory limit is
-    //! recommended for best performance.
-    //!
-    //! \warning GPU memory for the weights is allocated in this call and will be deallocated by enabling weight
-    //!          streaming or destroying the ICudaEngine.
-    //!
-    //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
-    //!
-    //! \warning The weights streaming budget cannot be modified while there are active IExecutionContexts.
-    //!
-    //! \return true if the memory limit is valid and the call was successful, false otherwise.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by setWeightStreamingBudgetV2().
-    //!
-    //! \see BuilderFlag::kWEIGHT_STREAMING
-    //! \see getWeightStreamingBudget()
-    //! \see getMinimumWeightStreamingBudget()
-    //! \see getStreamableWeightsSize()
-    //!
-    TRT_DEPRECATED bool setWeightStreamingBudget(int64_t gpuMemoryBudget) noexcept
-    {
-        return mImpl->setWeightStreamingBudget(gpuMemoryBudget);
-    }
-
-    //!
-    //! \brief Returns the current weight streaming device memory budget in bytes.
-    //!
-    //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
-    //!
-    //! \returns The weight streaming budget in bytes. Please see setWeightStreamingBudget() for the possible
-    //!          values.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by getWeightStreamingBudgetV2().
-    //!
-    //! \see BuilderFlag::kWEIGHT_STREAMING,
-    //! \see setWeightStreamingBudget()
-    //! \see getMinimumWeightStreamingBudget()
-    //! \see getStreamableWeightsSize()
-    //!
-    TRT_DEPRECATED int64_t getWeightStreamingBudget() const noexcept
-    {
-        return mImpl->getWeightStreamingBudget();
-    }
-
-    //!
-    //! \brief The minimum number of bytes of GPU memory required by network
-    //! weights for successful weight streaming.
-    //!
-    //! This is a positive integer for engines with streamable weights because a
-    //! staging buffer on the GPU is required to temporarily hold the streamed
-    //! weights. The size of the staging buffer is determined by TensorRT and must
-    //! be at least as large as the size of the largest streamable weight in the
-    //! network.
-    //!
-    //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
-    //!
-    //! \returns The minimum number of bytes of GPU memory required for streaming.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. The minimum budget is 0 in the V2 APIs.
-    //!
-    //! \see setWeightStreamingBudget()
-    //!
-    TRT_DEPRECATED int64_t getMinimumWeightStreamingBudget() const noexcept
-    {
-        return mImpl->getMinimumWeightStreamingBudget();
-    }
-
-    //!
     //! \brief Get the total size in bytes of all streamable weights.
     //!
     //! The set of streamable weights is a subset of all network weights. The
@@ -3985,7 +3633,7 @@ public:
     //! \returns The total size in bytes of all streamable weights.
     //!          Returns 0 if BuilderFlag::kWEIGHT_STREAMING is unset during engine building.
     //!
-    //! \see setWeightStreamingBudget()
+    //! \see setWeightStreamingBudgetV2()
     //!
     int64_t getStreamableWeightsSize() const noexcept
     {
@@ -4018,9 +3666,6 @@ public:
     //!
     //! \warning The weights streaming budget cannot be modified while there are active IExecutionContexts.
     //!
-    //! \warning Using the V2 weight streaming APIs with V1 APIs (setWeightStreamingBudget(),
-    //!          getWeightStreamingBudget(), getWeightStreamingMinimumBudget()) leads to undefined behavior.
-    //!
     //! \return true if the memory limit is valid and the call was successful, false otherwise.
     //!
     //! \see BuilderFlag::kWEIGHT_STREAMING
@@ -4043,8 +3688,6 @@ public:
     //!          return values. Returns getStreamableWeightsSize() if weight streaming is disabled.
     //!
     //! \see BuilderFlag::kWEIGHT_STREAMING
-    //! \see setWeightStreamingBudget()
-    //! \see getMinimumWeightStreamingBudget()
     //! \see getStreamableWeightsSize()
     //!
     int64_t getWeightStreamingBudgetV2() const noexcept
@@ -4064,8 +3707,6 @@ public:
     //!
     //! \warning The return value may change between TensorRT minor versions.
     //!
-    //! \warning Setting the returned budget with V1 APIs (setWeightStreamingBudget()) will lead to undefined behavior.
-    //! Please use V2 APIs.
     //!
     //! \returns The weight streaming budget in bytes. Please set with setWeightStreamingBudgetV2().
     //!
@@ -4085,9 +3726,7 @@ public:
     //! will then allocate this additional memory or the user can provide the additional memory through
     //! getDeviceMemorySizeV2() and IExecutionContext::setDeviceMemoryV2().
     //!
-    //! The return value of this call depends on
-    //!    1. setWeightStreamingBudget()
-    //!    2. setWeightStreamingBudgetV2()
+    //! The return value of this call depends on setWeightStreamingBudgetV2().
     //!
     //! \warning BuilderFlag::kWEIGHT_STREAMING must be set during engine building.
     //!
@@ -4136,8 +3775,6 @@ public:
     //!
     //! \warning The string tensorName must be null-terminated, and be at most 4096 bytes including the terminator.
     //!
-    //! \warning If input shapes are set with setShapeValues, getProfileTensorValuesV2 will return nullptr
-    //!
     int64_t const* getProfileTensorValuesV2(
         char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept
     {
@@ -4164,7 +3801,6 @@ public:
     //!
     //! \see EngineStat
     //! \see BuilderFlag::kWEIGHT_STREAMING
-    //! \see setWeightStreamingBudget()
     //! \see getStreamableWeightsSize()
     //!
     int64_t getEngineStat(EngineStat stat) const noexcept
@@ -4175,6 +3811,8 @@ public:
 protected:
     apiv::VCudaEngine* mImpl;
 };
+
+inline ICudaEngine::~ICudaEngine() noexcept = default;
 
 namespace v_1_0
 {
@@ -4209,7 +3847,7 @@ public:
     //! \deprecated Deprecated in TensorRT 10.0. Superseded by reallocateOutputAsync with cudaStream_t argument
     //!
     TRT_DEPRECATED virtual void* reallocateOutput(
-        char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment) noexcept
+        char const* /* tensorName */, void* /* currentMemory */, uint64_t /* size */, uint64_t /* alignment */) noexcept
     {
         return nullptr;
     }
@@ -4237,7 +3875,8 @@ public:
     //! reallocateOutputAsync() and NOT override method reallocateOutput().
     //!
     virtual void* reallocateOutputAsync(
-        char const* tensorName, void* currentMemory, uint64_t size, uint64_t alignment, cudaStream_t /*stream*/)
+        [[maybe_unused]] char const* tensorName, [[maybe_unused]] void* currentMemory, [[maybe_unused]] uint64_t size,
+        [[maybe_unused]] uint64_t alignment, cudaStream_t /* stream */)
     {
         return reallocateOutput(tensorName, currentMemory, size, alignment);
     }
@@ -4317,7 +3956,7 @@ using IDebugListener = v_1_0::IDebugListener;
 class IExecutionContext : public INoCopy
 {
 public:
-    virtual ~IExecutionContext() noexcept = default;
+    virtual ~IExecutionContext() noexcept = 0;
 
     //!
     //! \brief Set the debug sync flag.
@@ -4400,9 +4039,9 @@ public:
     //! \brief Set the device memory for use by this execution context.
     //!
     //! The memory must be aligned with CUDA memory alignment property (using cudaGetDeviceProperties()), and its size
-    //! must be large enough for performing inference with the given network inputs. getDeviceMemorySize() and
-    //! getDeviceMemorySizeForProfile() report upper bounds of the size. Setting memory to nullptr is acceptable if the
-    //! reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
+    //! must be large enough for performing inference with the given network inputs. getDeviceMemorySizeV2() and
+    //! getDeviceMemorySizeForProfileV2() report upper bounds of the size. Setting memory to nullptr is acceptable if
+    //! the reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
     //! enqueueV3() until network execution is complete. If using executeV2(), it is in use until executeV2() returns.
     //! Releasing or otherwise using the memory for other purposes, including using it in another execution context
     //! running in parallel, during this time will result in undefined behavior.
@@ -4412,11 +4051,10 @@ public:
     //! \warning Weight streaming related scratch memory will be allocated by TensorRT if the memory is set by this API.
     //!          Please use setDeviceMemoryV2() instead.
     //!
-    //! \see ICudaEngine::getDeviceMemorySize()
-    //! \see ICudaEngine::getDeviceMemorySizeForProfile()
+    //! \see ICudaEngine::getDeviceMemorySizeV2()
+    //! \see ICudaEngine::getDeviceMemorySizeForProfileV2()
     //! \see ExecutionContextAllocationStrategy
     //! \see ICudaEngine::createExecutionContext()
-    //! \see ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
     void setDeviceMemory(void* memory) noexcept
     {
@@ -4427,9 +4065,9 @@ public:
     //! \brief Set the device memory and its corresponding size for use by this execution context.
     //!
     //! The memory must be aligned with CUDA memory alignment property (using cudaGetDeviceProperties()), and its size
-    //! must be large enough for performing inference with the given network inputs. getDeviceMemorySize() and
-    //! getDeviceMemorySizeForProfile() report upper bounds of the size. Setting memory to nullptr is acceptable if the
-    //! reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
+    //! must be large enough for performing inference with the given network inputs. getDeviceMemorySizeV2() and
+    //! getDeviceMemorySizeForProfileV2() report upper bounds of the size. Setting memory to nullptr is acceptable if
+    //! the reported size is 0. If using enqueueV3() to run the network, the memory is in use from the invocation of
     //! enqueueV3() until network execution is complete. If using executeV2(), it is in use until executeV2() returns.
     //! Releasing or otherwise using the memory for other purposes, including using it in another execution context
     //! running in parallel, during this time will result in undefined behavior.
@@ -4438,7 +4076,6 @@ public:
     //! \see ICudaEngine::getDeviceMemorySizeForProfileV2()
     //! \see ExecutionContextAllocationStrategy
     //! \see ICudaEngine::createExecutionContext()
-    //! \see ICudaEngine::createExecutionContextWithoutDeviceMemory()
     //!
     void setDeviceMemoryV2(void* memory, int64_t size) noexcept
     {
@@ -4550,23 +4187,6 @@ public:
     bool allInputDimensionsSpecified() const noexcept
     {
         return mImpl->allInputDimensionsSpecified();
-    }
-
-    //!
-    //! \brief Whether all input shape bindings have been specified
-    //!
-    //! \return True if all input shape bindings have been specified by setInputShapeBinding().
-    //!
-    //! Trivially true if network has no input shape bindings.
-    //!
-    //! Does not work with name-base interfaces eg. IExecutionContext::setInputShape(). Use
-    //! IExecutionContext::inferShapes() instead.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. setInputShapeBinding() is removed since TensorRT 10.0.
-    //!
-    TRT_DEPRECATED bool allInputShapesSpecified() const noexcept
-    {
-        return mImpl->allInputShapesSpecified();
     }
 
     //!
@@ -5245,6 +4865,8 @@ protected:
     apiv::VExecutionContext* mImpl;
 }; // class IExecutionContext
 
+inline IExecutionContext::~IExecutionContext() noexcept = default;
+
 //!
 //! \enum LayerInformationFormat
 //!
@@ -5258,13 +4880,12 @@ enum class LayerInformationFormat : int32_t
     kJSON = 1,    //!< Print layer information in JSON format.
 };
 
-//! Maximum number of layer information formats in LayerInformationFormat enum.
-//! \see LayerInformationFormat
+//! Maximum number of layer information formats in LayerInformationFormat enum. \see LayerInformationFormat
 template <>
-constexpr inline int32_t EnumMax<LayerInformationFormat>() noexcept
+struct impl::EnumMaxImpl<LayerInformationFormat>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \class IEngineInspector
@@ -5284,7 +4905,7 @@ constexpr inline int32_t EnumMax<LayerInformationFormat>() noexcept
 class IEngineInspector : public INoCopy
 {
 public:
-    virtual ~IEngineInspector() noexcept = default;
+    virtual ~IEngineInspector() noexcept = 0;
 
     //!
     //! \brief Set an execution context as the inspection source.
@@ -5401,6 +5022,8 @@ protected:
     apiv::VEngineInspector* mImpl;
 }; // class IEngineInspector
 
+inline IEngineInspector::~IEngineInspector() noexcept = default;
+
 } // namespace nvinfer1
 
 //!
@@ -5487,6 +5110,10 @@ private:
 
 namespace nvinfer1
 {
+//! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
+//! The name v_1_0 may change in future versions of TensorRT.
+namespace v_1_0
+{
 //!
 //! \class ILoggerFinder
 //!
@@ -5495,9 +5122,17 @@ namespace nvinfer1
 //! A pointer to an instance of this class is passed to a plugin shared library on initialization when that plugin
 //! is serialized as part of a version-compatible plan. See the plugin chapter in the developer guide for details.
 //!
-class ILoggerFinder
+class ILoggerFinder : public IVersionedInterface
 {
 public:
+    //!
+    //! \brief Return version information associated with this interface. Applications must not override this method.
+    //!
+    InterfaceInfo getInterfaceInfo() const noexcept override
+    {
+        return {"ILoggerFinder", 1, 0};
+    }
+
     //!
     //! \brief Get the logger used by the engine or execution context which called the plugin method.
     //!
@@ -5508,8 +5143,13 @@ public:
     virtual ILogger* findLogger() = 0;
 
 protected:
-    virtual ~ILoggerFinder() = default;
+    //! Protected: TRT owns ILoggerFinder instances and passes non-owning pointers to plugins.
+    ~ILoggerFinder() override = default;
 };
+
+} // namespace v_1_0
+
+using ILoggerFinder = v_1_0::ILoggerFinder;
 
 //! DO NOT REFER TO namespace v_1_0 IN CODE. ALWAYS USE nvinfer1 INSTEAD.
 //! The name v_1_0 may change in future versions of TensorRT.

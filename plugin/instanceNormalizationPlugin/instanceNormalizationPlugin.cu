@@ -21,6 +21,7 @@
 #include <cuda_fp16.h>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
@@ -139,8 +140,8 @@ int32_t InstanceNormalizationV3Plugin::initializeContext()
         PLUGIN_ASSERT(mDeviceScale != nullptr);
         PLUGIN_CUASSERT(cudaMalloc(&mDeviceBias, mNchan * sizeof(float)));
         PLUGIN_ASSERT(mDeviceBias != nullptr);
-        PLUGIN_CUASSERT(cudaMemcpy(mDeviceScale, &mHostScale[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
-        PLUGIN_CUASSERT(cudaMemcpy(mDeviceBias, &mHostBias[0], mNchan * sizeof(float), cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(mDeviceScale, mHostScale.data(), mNchan * sizeof(float), cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(mDeviceBias, mHostBias.data(), mNchan * sizeof(float), cudaMemcpyHostToDevice));
 
         PLUGIN_CUASSERT(cudaDriverGetVersion(&mCudaDriverVersion));
     }
@@ -627,6 +628,7 @@ IPluginV3* InstanceNormalizationV3PluginCreator::createPlugin(
 {
     try
     {
+        using namespace std::string_view_literals;
         std::vector<float> scaleValues;
         std::vector<float> biasValues;
         float epsilon{};
@@ -635,13 +637,13 @@ IPluginV3* InstanceNormalizationV3PluginCreator::createPlugin(
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "epsilon"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "epsilon"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 epsilon = *(static_cast<float const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "scales"))
+            else if (attrName == "scales"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t size = fields[i].length;
@@ -653,7 +655,7 @@ IPluginV3* InstanceNormalizationV3PluginCreator::createPlugin(
                     w++;
                 }
             }
-            else if (!strcmp(attrName, "bias"))
+            else if (attrName == "bias"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t size = fields[i].length;
@@ -665,12 +667,12 @@ IPluginV3* InstanceNormalizationV3PluginCreator::createPlugin(
                     w++;
                 }
             }
-            else if (!strcmp(attrName, "relu"))
+            else if (attrName == "relu"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 relu = *(static_cast<int32_t const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "alpha"))
+            else if (attrName == "alpha"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 alpha = *(static_cast<float const*>(fields[i].data));
@@ -680,9 +682,9 @@ IPluginV3* InstanceNormalizationV3PluginCreator::createPlugin(
         Weights scaleWeights{DataType::kFLOAT, scaleValues.data(), (int64_t) scaleValues.size()};
         Weights biasWeights{DataType::kFLOAT, biasValues.data(), (int64_t) biasValues.size()};
 
-        auto* obj = new InstanceNormalizationV3Plugin(epsilon, scaleWeights, biasWeights, relu, alpha);
+        auto obj = std::make_unique<InstanceNormalizationV3Plugin>(epsilon, scaleWeights, biasWeights, relu, alpha);
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {

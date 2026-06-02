@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -477,7 +477,7 @@ inline void convertAndCopyToDevice(nvinfer1::Weights const& src, float* destDev)
             tmp[it] = __half2float(values[it]);
         }
 
-        PLUGIN_CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(destDev, tmp.data(), nbBytes, cudaMemcpyHostToDevice));
     }
 }
 
@@ -500,7 +500,7 @@ inline void convertAndCopyToDevice(nvinfer1::Weights const& src, half* destDev)
         {
             tmp[it] = __float2half(values[it]);
         }
-        PLUGIN_CUASSERT(cudaMemcpy(destDev, &tmp[0], nbBytes, cudaMemcpyHostToDevice));
+        PLUGIN_CUASSERT(cudaMemcpy(destDev, tmp.data(), nbBytes, cudaMemcpyHostToDevice));
     }
 }
 

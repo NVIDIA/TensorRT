@@ -27,7 +27,9 @@ from polygraphy.backend.onnx.loader import fold_constants
 
 from demo_diffusion.model import load
 from demo_diffusion.utils_modelopt import (
+    cast_convtranspose_io,
     cast_fp8_mha_io,
+    cast_layernorm_io,
     cast_resize_io,
     convert_fp16_io,
     convert_zp_fp8,
@@ -182,6 +184,18 @@ class Optimizer:
                 removed += 1
         print(f"Removed {removed} QDQ nodes")
         return removed  # expected 72 for L2.5
+
+    def modify_int8_graph(self):
+        # Cast LayerNorm scale/bias from FP16 to FP32 to match INT8 DQ activations.
+        cast_layernorm_io(self.graph)
+        # Fuse QKV QDQ nodes for INT8 SmoothQuant.
+        self.fuse_mha_qkv_int8_sq()
+
+    def cast_convtranspose_io(self):
+        cast_convtranspose_io(self.graph)
+
+    def cast_resize_io(self, output_dtype):
+        cast_resize_io(self.graph, output_dtype=output_dtype)
 
     def modify_fp8_graph(self, is_fp16_io=True):
         onnx_graph = gs.export_onnx(self.graph)

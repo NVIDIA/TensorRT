@@ -26,54 +26,6 @@
 namespace samplesCommon
 {
 
-//! Implements the TensorRT IStreamReader to allow deserializing an engine directly from the plan file.
-class FileStreamReader final : public nvinfer1::IStreamReader
-{
-public:
-    bool open(std::string filepath)
-    {
-        mFile.open(filepath, std::ios::binary);
-        return mFile.is_open();
-    }
-
-    void close()
-    {
-        if (mFile.is_open())
-        {
-            mFile.close();
-        }
-    }
-
-    ~FileStreamReader() final
-    {
-        close();
-    }
-
-    int64_t read(void* dest, int64_t bytes) final
-    {
-        if (!mFile.good())
-        {
-            return -1;
-        }
-        mFile.read(static_cast<char*>(dest), bytes);
-        return mFile.gcount();
-    }
-
-    void reset()
-    {
-        ASSERT(mFile.good());
-        mFile.seekg(0);
-    }
-
-    bool isOpen() const
-    {
-        return mFile.is_open();
-    }
-
-private:
-    std::ifstream mFile;
-};
-
 //! Implements the TensorRT IStreamReaderV2 interface to allow deserializing an engine directly from the plan file.
 //! Supports seeking to a position within the file, and reading directly to device pointers.
 //! This implementation is not optimized, and will not provide performance improvements over the existing reader.

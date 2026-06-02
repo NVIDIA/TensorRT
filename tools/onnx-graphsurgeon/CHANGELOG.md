@@ -3,6 +3,12 @@
 Dates are in YYYY-MM-DD format.
 
 
+## vNext
+
+### Added
+- Added support for `FLOAT4E2M1` tensors and upgraded ONNX version to >= 1.20
+
+
 ## v0.6.1 (2026-02-17)
 
 ### Fixed

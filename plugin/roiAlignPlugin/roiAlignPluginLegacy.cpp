@@ -19,6 +19,7 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
 #include <memory>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -78,35 +79,36 @@ IPluginV2DynamicExt* ROIAlignPluginCreator::createPlugin(char const* name, Plugi
         int32_t aligned = 1;
         float spatialScale = 1.0F;
 
+        using namespace std::string_view_literals;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "output_height"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "output_height"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 outputHeight = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "output_width"))
+            else if (attrName == "output_width"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 outputWidth = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "sampling_ratio"))
+            else if (attrName == "sampling_ratio"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 samplingRatio = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "mode"))
+            else if (attrName == "mode"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mode = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "spatial_scale"))
+            else if (attrName == "spatial_scale"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 spatialScale = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "coordinate_transformation_mode"))
+            else if (attrName == "coordinate_transformation_mode"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 aligned = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[i].data)));

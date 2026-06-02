@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -519,7 +519,8 @@ nvinfer1::pluginInternal::cublasLtMatmulAlgo_t gemmSearch(
 // our custom layer requires extending IPluginV2 and IPluginCreator classes.
 // For requirements for overriden functions, check TensorRT API docs.
 
-class FCPluginDynamic : public nvinfer1::IPluginV2DynamicExt
+class TRT_DEPRECATED_BECAUSE("Superseded by IMatrixMultiplyLayer.") FCPluginDynamic
+    : public nvinfer1::IPluginV2DynamicExt
 {
 public:
     FCPluginDynamic(
@@ -532,7 +533,7 @@ public:
     FCPluginDynamic() = delete;
 
     // IPluginV2DynamicExt Methods
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
+    [[nodiscard]] nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
     nvinfer1::DimsExprs getOutputDimensions(int32_t outputIndex, nvinfer1::DimsExprs const* inputs, int32_t nbInputs,
         nvinfer1::IExprBuilder& exprBuilder) noexcept override;
     bool supportsFormatCombination(
@@ -582,7 +583,8 @@ private:
     cudaStream_t mSharedStream{nullptr};
 };
 
-class FCPluginDynamicCreator : public nvinfer1::IPluginCreator
+class TRT_DEPRECATED_BECAUSE("Superseded by IMatrixMultiplyLayer.") FCPluginDynamicCreator
+    : public nvinfer1::IPluginCreator
 {
 public:
     FCPluginDynamicCreator();

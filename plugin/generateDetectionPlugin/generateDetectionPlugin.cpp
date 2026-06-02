@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include "common/plugin.h"
 #include <algorithm>
 #include <cuda_runtime_api.h>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -65,34 +66,35 @@ IPluginV2Ext* GenerateDetectionPluginCreator::createPlugin(char const* name, Plu
 {
     try
     {
+        using namespace std::string_view_literals;
         auto image_size = TLTMaskRCNNConfig::IMAGE_SHAPE;
         PluginField const* fields = fc->fields;
         plugin::validateRequiredAttributesExist({"num_classes", "keep_topk", "score_threshold", "iou_threshold"}, fc);
 
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "num_classes"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "num_classes"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mNbClasses = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "keep_topk"))
+            if (attrName == "keep_topk"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mKeepTopK = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "score_threshold"))
+            if (attrName == "score_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mScoreThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "iou_threshold"))
+            if (attrName == "iou_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mIOUThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "image_size"))
+            if (attrName == "image_size"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 auto const dims = static_cast<int32_t const*>(fields[i].data);
@@ -323,19 +325,6 @@ DataType GenerateDetection::getOutputDataType(
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool GenerateDetection::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool GenerateDetection::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
 }
 
 // Configure the layer with input and output data types.

@@ -188,6 +188,9 @@ bool initNvonnxparser()
     case CollectiveOperation::kBROADCAST: return "BROADCAST";
     case CollectiveOperation::kREDUCE: return "REDUCE";
     case CollectiveOperation::kREDUCE_SCATTER: return "REDUCE_SCATTER";
+    case CollectiveOperation::kALL_TO_ALL: return "ALL_TO_ALL";
+    case CollectiveOperation::kGATHER: return "GATHER";
+    case CollectiveOperation::kSCATTER: return "SCATTER";
     }
     throw std::runtime_error("Unknown CollectiveOperation");
 }
@@ -226,6 +229,18 @@ bool initNvonnxparser()
     {
         return CollectiveOperation::kREDUCE_SCATTER;
     }
+    if (iequals(opStr, "all_to_all"))
+    {
+        return CollectiveOperation::kALL_TO_ALL;
+    }
+    if (iequals(opStr, "gather"))
+    {
+        return CollectiveOperation::kGATHER;
+    }
+    if (iequals(opStr, "scatter"))
+    {
+        return CollectiveOperation::kSCATTER;
+    }
     return std::nullopt;
 }
 
@@ -237,8 +252,8 @@ void printUsage(char const* programName)
     std::cout << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  --op <operation>  Specify the collective operation to test (required)." << std::endl;
-    std::cout << "                    Valid operations: all_reduce, all_gather, broadcast, reduce, reduce_scatter"
-              << std::endl;
+    std::cout << "                    Valid operations: all_reduce, all_gather, broadcast, reduce, reduce_scatter, all_to_all, gather, scatter";
+    std::cout << std::endl;
     std::cout << "  --help, -h        Show this help message." << std::endl;
     std::cout << std::endl;
     std::cout << "Environment Variables (required):" << std::endl;
@@ -569,6 +584,55 @@ CollectiveTestConfig getTestConfig(CollectiveOperation op, int32_t worldSize)
             {11.0F, 22.0F, 55.0F, 66.0F, 99.0F, 110.0F},  // rank0 expected
             {33.0F, 44.0F, 77.0F, 88.0F, 121.0F, 132.0F}, // rank1 expected
             kINPUT_SIZE / worldSize};
+
+    case CollectiveOperation::kALL_TO_ALL:
+    {
+        // ALL_TO_ALL: Input [3,4] -> transpose [4,3] -> all_to_all (count=6) -> [4,3] -> transpose [3,4]
+        // Rank 0 transposed: [0,4,8,1,5,9,2,6,10,3,7,11]; sends first 6 to self, last 6 to rank 1.
+        // Rank 1 transposed: [100,104,108,101,105,109,102,106,110,103,107,111]; sends first 6 to rank 0.
+        // Rank 0 output [4,3]: rows=[0,4,8],[1,5,9],[100,104,108],[101,105,109]; after transpose [3,4]:
+        //   [0,1,100,101, 4,5,104,105, 8,9,108,109]
+        // Rank 1 output [4,3]: rows=[2,6,10],[3,7,11],[102,106,110],[103,107,111]; after transpose [3,4]:
+        //   [2,3,102,103, 6,7,106,107, 10,11,110,111]
+        return {CollectiveOperation::kALL_TO_ALL,
+            {0.0F, 1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F},
+            {100.0F, 101.0F, 102.0F, 103.0F, 104.0F, 105.0F, 106.0F, 107.0F, 108.0F, 109.0F, 110.0F, 111.0F},
+            {0.0F, 1.0F, 100.0F, 101.0F, 4.0F, 5.0F, 104.0F, 105.0F, 8.0F, 9.0F, 108.0F, 109.0F}, // rank0
+            {2.0F, 3.0F, 102.0F, 103.0F, 6.0F, 7.0F, 106.0F, 107.0F, 10.0F, 11.0F, 110.0F, 111.0F}, // rank1
+            kINPUT_SIZE};
+    }
+
+    case CollectiveOperation::kGATHER:
+    {
+        // GATHER: All ranks send to root. Input [3,4] -> transpose [4,3] -> gather [8,3] -> transpose [3,8]
+        // Root recvbuf = [rank0_data || rank1_data] transposed to [3,8]:
+        //   [0,1,2,3,100,101,102,103, 4,5,6,7,104,105,106,107, 8,9,10,11,108,109,110,111]
+        // Non-root output buffer is allocated but NCCL does not write to it.
+        std::vector<float> const rank0Expected = {0.0F, 1.0F, 2.0F, 3.0F, 100.0F, 101.0F, 102.0F, 103.0F, 4.0F,
+            5.0F, 6.0F, 7.0F, 104.0F, 105.0F, 106.0F, 107.0F, 8.0F, 9.0F, 10.0F, 11.0F, 108.0F, 109.0F, 110.0F,
+            111.0F};
+        return {CollectiveOperation::kGATHER,
+            {0.0F, 1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F},
+            {100.0F, 101.0F, 102.0F, 103.0F, 104.0F, 105.0F, 106.0F, 107.0F, 108.0F, 109.0F, 110.0F, 111.0F},
+            rank0Expected,
+            {}, // rank1's output is undefined (non-root does not receive)
+            kINPUT_SIZE * worldSize};
+    }
+
+    case CollectiveOperation::kSCATTER:
+    {
+        // SCATTER: Root scatters data to all ranks. Input [3,4] -> transpose [4,3].
+        // Root sendBuf=[0,4,8,1,5,9,2,6,10,3,7,11]; recvCount=6 per rank.
+        // Rank 0 gets first 6 -> [2,3] -> transpose [3,2]: [0,1,4,5,8,9]
+        // Rank 1 gets next 6  -> [2,3] -> transpose [3,2]: [2,3,6,7,10,11]
+        // Rank 1 input is ignored by NCCL (non-root has no sendBuf).
+        return {CollectiveOperation::kSCATTER,
+            {0.0F, 1.0F, 2.0F, 3.0F, 4.0F, 5.0F, 6.0F, 7.0F, 8.0F, 9.0F, 10.0F, 11.0F},
+            {99.0F, 99.0F, 99.0F, 99.0F, 99.0F, 99.0F, 99.0F, 99.0F, 99.0F, 99.0F, 99.0F, 99.0F}, // ignored
+            {0.0F, 1.0F, 4.0F, 5.0F, 8.0F, 9.0F},   // rank0 expected
+            {2.0F, 3.0F, 6.0F, 7.0F, 10.0F, 11.0F}, // rank1 expected
+            kINPUT_SIZE / worldSize};
+    }
     }
     throw std::runtime_error("Unknown CollectiveOperation");
 }
@@ -604,7 +668,8 @@ void testCollectiveOperation(
         reduceOp = ReduceOperation::kSUM;
     }
     int64_t root = -1;
-    if (config.op == CollectiveOperation::kBROADCAST || config.op == CollectiveOperation::kREDUCE)
+    if (config.op == CollectiveOperation::kBROADCAST || config.op == CollectiveOperation::kREDUCE
+        || config.op == CollectiveOperation::kGATHER || config.op == CollectiveOperation::kSCATTER)
     {
         root = 0;
     }
@@ -628,7 +693,6 @@ void testCollectiveOperation(
     // Build engine
     auto builderConfig = std::unique_ptr<IBuilderConfig>(builder->createBuilderConfig());
     ASSERT(builderConfig != nullptr);
-    builderConfig->setPreviewFeature(PreviewFeature::kMULTIDEVICE_RUNTIME_10_16, true);
     auto serializedEngine = std::unique_ptr<IHostMemory>(builder->buildSerializedNetwork(*network, *builderConfig));
     ASSERT(serializedEngine != nullptr);
 

@@ -69,8 +69,8 @@ class Sample:
             low_precision_type="fp16",                              # Target precision to reduce to ('fp16' or 'bf16').
             nodes_to_exclude=fp32_nodes,                            # List of regex patterns to match node names that should remain in FP32.
             op_types_to_exclude=fp32_op_types,                      # List of operation types that should remain in FP32.
-            data_max=8.0,                                           # Maximum absolute value for node input and output values.
-            init_max=8.0,                                           # Maximum absolute value for initializers.
+            data_max=4.0,                                           # Maximum absolute value for node input and output values.
+            init_max=4.0,                                           # Maximum absolute value for initializers.
             keep_io_types=True,                                     # Whether to preserve input/output types.
             calibration_data=calibration_path,                      # Path to input data file for reference runner.
         )

@@ -572,6 +572,10 @@ class StableDiffusionPipeline:
                 print(f"[I] Saving weights map: {weights_map_path[model_name]}")
                 obj.export_weights_map(onnx_opt_path[model_name], weights_map_path[model_name])
 
+            # Release temp GPU memory during onnx export to avoid OOM.
+            gc.collect()
+            torch.cuda.empty_cache()
+
         # Build TensorRT engines
         for model_name, obj in self.models.items():
             if torch_fallback[model_name]:
@@ -579,19 +583,11 @@ class StableDiffusionPipeline:
             engine = engine_module.Engine(engine_path[model_name])
             if not os.path.exists(engine_path[model_name]):
                 update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
-                fp16amp = obj.fp16 if not use_fp8[model_name] else False
-                bf16amp = obj.bf16 if not use_fp8[model_name] else False
                 # TF32 can be enabled for all precisions (including INT8/FP8)
                 tf32amp = obj.tf32
-                strongly_typed = False if not use_fp8[model_name] else True
-                int8amp = use_int8.get('model_name', False)
-                precision_constraints = 'prefer' if int8amp else 'none'
+                precision_constraints = 'none'
                 engine.build(onnx_opt_path[model_name],
-                    strongly_typed=strongly_typed,
-                    fp16=fp16amp,
-                    bf16=bf16amp,
                     tf32=tf32amp,
-                    int8=int8amp,
                     input_profile=obj.get_input_profile(
                         opt_batch_size, opt_image_height, opt_image_width,
                         static_batch=static_batch, static_shape=static_shape
@@ -642,7 +638,7 @@ class StableDiffusionPipeline:
     def calculateMaxDeviceMemory(self):
         max_device_memory = 0
         for model_name, engine in self.engine.items():
-            max_device_memory = max(max_device_memory, engine.engine.device_memory_size)
+            max_device_memory = max(max_device_memory, engine.engine.device_memory_size_v2)
         return max_device_memory
 
     def activateEngines(self, shared_device_memory=None):

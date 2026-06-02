@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -501,57 +501,6 @@ public:
         = 0;
 
     //!
-    //! \brief Return true if the output tensor is broadcast across a batch.
-    //!
-    //! \param outputIndex The index of the output tensor, which will be in the valid range between 0 and
-    //! nbOutputs()-1.
-    //! \param inputIsBroadcasted A boolean array of length nbInputs. The i-th element will be true if and only if
-    //! the tensor for the ith input is broadcast across a batch.
-    //! \param nbInputs The number of inputs. Will be a non-negative integer.
-    //!
-    //! The values in inputIsBroadcasted refer to broadcasting at the semantic level,
-    //! i.e. are unaffected by whether method canBroadcastInputAcrossBatch requests
-    //! physical replication of the values.
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
-    //!                  when building networks on multiple devices sharing the same plugin.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Implicit batch support is removed in TensorRT 10.0.
-    //!
-    TRT_DEPRECATED virtual bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-        = 0;
-
-    //!
-    //! \brief Return true if the plugin can use an input tensor that is broadcast across batch without replication.
-    //!
-    //! \param inputIndex Index of input that could be broadcast. Will be in the valid range between 0 and
-    //! nbInputs - 1 where nbInputs is the maximum number of input tensors supported by this plugin.
-    //!
-    //! \return true if the index is in the valid range and the plugin is able to broadcast a single copy of this
-    //! input tensor across the batch. False otherwise.
-    //!
-    //! For each input whose tensor is semantically broadcast across a batch,
-    //! TensorRT calls this method before calling configurePlugin.
-    //! If canBroadcastInputAcrossBatch returns true, TensorRT will not replicate the input tensor;
-    //! i.e., there will be a single copy that the plugin must share across the batch.
-    //! If it returns false, TensorRT will replicate the input tensor
-    //! so that it appears like a non-broadcasted tensor.
-    //!
-    //! This method is called only for inputs that can be broadcast.
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes, this method is required to be thread-safe and may be called from multiple threads
-    //!                  when building networks on multiple devices sharing the same plugin.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Implicit batch support is removed in TensorRT 10.0.
-    //!
-    TRT_DEPRECATED virtual bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept = 0;
-
-    //!
     //! \brief Configure the layer with input and output data types.
     //!
     //! This function is called by the builder prior to initialize(). It provides an opportunity for the layer to make
@@ -573,10 +522,8 @@ public:
     //! The dimensions passed here do not include the outermost batch size (i.e. for 2D image networks, they will be
     //! 3-dimensional CHW dimensions). When inputIsBroadcast or outputIsBroadcast is true, the outermost batch size for
     //! that input or output must be treated as if it is one.
-    //! Index 'i' of inputIsBroadcast is true only if the input is semantically broadcast across the batch and
-    //! calling canBroadcastInputAcrossBatch with argument 'i' returns true.
-    //! Index 'i' of outputIsBroadcast is true only if calling isOutputBroadcastAcrossBatch with argument 'i'
-    //! returns true.
+    //! Index 'i' of inputIsBroadcast is true only if the input is semantically broadcast across the batch.
+    //! Index 'i' of outputIsBroadcast is true only if the output is semantically broadcast across the batch.
     //!
     //! \warning for the floatFormat field, the values PluginFormat::kCHW4, PluginFormat::kCHW16, and
     //! PluginFormat::kCHW32 will not be passed in, this is to keep backward compatibility with TensorRT 5.x series. Use
@@ -600,10 +547,8 @@ public:
     //! \brief Attach the plugin object to an execution context and grant the plugin the access to some context
     //! resources.
     //!
-    //! \param cudnn The cuDNN context handle of the execution context. Will be a valid cuDNN context handle, or
-    //!              nullptr if TacticSource::kCUDNN is disabled.
-    //! \param cublas The cuBLAS context handle of the execution context. Will be a valid cuBLAS context handle, or
-    //!               nullptr if TacticSource::kCUBLAS is disabled.
+    //! \param cudnn The cuDNN context handle of the execution context. Always nullptr.
+    //! \param cublas The cuBLAS context handle of the execution context. Always nullptr.
     //! \param allocator The allocator used by the execution context
     //!
     //! This function is called automatically for each plugin when a new execution context is created. If the context
@@ -611,9 +556,9 @@ public:
     //! new resources are assigned to the context.
     //!
     //! If the plugin needs per-context resource, it can be allocated here.
-    //! The plugin can also get context-owned cuDNN and cuBLAS context here.
     //!
-    //! \note The TacticSource::kCUDNN and TacticSource::kCUBLAS flag is disabled by default.
+    //! \note The cuDNN and cuBLAS handles are always nullptr. Plugins that need cuDNN or cuBLAS
+    //! should create their own handles.
     //! The allocator pointer is unique to each building or execution context instance having overlapping lifetimes.
     //! It can be used as a key to manage resources across plugin instances sharing the same context.
     //! Plugins attached to different contexts will have different handles as their execution will not overlap.

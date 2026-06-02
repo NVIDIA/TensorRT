@@ -32,6 +32,7 @@ Options:
     --skip-tensorrt  Skip TensorRT upgrade/installation
     --force          Force reinstallation even if already installed
     --deps-root DIR  Root directory for dependencies
+    -q, --quiet      Suppress informational output (errors are always shown)
 
 Examples:
     python setup.py                       # Install all
@@ -40,15 +41,25 @@ Examples:
     python setup.py cosmos                # Install Cosmos only
     python setup.py --skip-tensorrt       # Install all, skip TensorRT upgrade
     python setup.py flux --skip-tensorrt  # Install Flux only, skip TensorRT upgrade
+    python setup.py all --quiet           # Install all, minimal output
 """
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import List, Set
+# Global quiet flag (set by parse_args)
+_quiet = False
+
+
+def log(msg: str = ""):
+    """Print a message unless in quiet mode."""
+    if not _quiet:
+        print(msg)
 
 # Group descriptions
 GROUP_DESCRIPTIONS = {
@@ -72,11 +83,59 @@ DEFAULT_DEPS_ROOT = os.environ.get("TENSORRT_DIFFUSION_DEPS_ROOT", "/workspace/d
 INSTALL_COMPLETE_MARKER = ".install_complete"
 
 
+def _normalize_package_name(name: str) -> str:
+    """Normalize a package name per PEP 503 (e.g. 'Nvidia_ModelOpt' -> 'nvidia-modelopt')."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+# Regex to extract the package name from a PEP 508 requirement string.
+# Matches the leading identifier before any extras, version specifier, or URL marker.
+#   "nvidia-modelopt[torch,onnx]==0.40.0"  ->  "nvidia-modelopt"
+#   "flux @ git+https://..."               ->  "flux"
+_REQ_NAME_RE = re.compile(r"^([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?)")
+
+
+def get_pyproject_package_names(pyproject_path: str, group: str) -> set[str]:
+    """Return normalized names of packages explicitly listed in pyproject.toml."""
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        try:
+            import tomli as tomllib
+        except ModuleNotFoundError:
+            return set()
+
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+
+    project = data.get("project", {})
+    reqs = list(project.get("dependencies", []))
+    reqs.extend(project.get("optional-dependencies", {}).get(group, []))
+
+    names = set()
+    for req in reqs:
+        match = _REQ_NAME_RE.match(req.strip())
+        if match:
+            names.add(_normalize_package_name(match.group(1)))
+    return names
+
+
+def get_container_provided_packages() -> list[str]:
+    """Discover torch/NVIDIA packages already installed in the container."""
+    from importlib.metadata import distributions
+    prefixes = ("torch", "torchvision", "triton", "nvidia-")
+    return sorted({
+        dist.metadata["Name"].lower()
+        for dist in distributions()
+        if dist.metadata["Name"].lower().startswith(prefixes)
+    })
+
+
 def print_header():
     """Print setup header."""
-    print("=" * 60)
-    print("  TensorRT Diffusion - Dependency Setup")
-    print("=" * 60)
+    log("=" * 60)
+    log("  TensorRT Diffusion - Dependency Setup")
+    log("=" * 60)
 
 
 def check_uv_installed() -> tuple[bool, bool]:
@@ -125,12 +184,13 @@ def upgrade_tensorrt(pip_spec: str) -> bool:
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "--upgrade", "--pre", pip_spec],
             check=True,
+            capture_output=_quiet,
         )
         # Print installed version for confirmation
         try:
             import importlib
             trt = importlib.import_module("tensorrt")
-            print("   Installed TensorRT version:", getattr(trt, "__version__", "unknown"))
+            log(f"   Installed TensorRT version: {getattr(trt, '__version__', 'unknown')}")
         except Exception:
             pass
         return True
@@ -148,7 +208,7 @@ def install_libgl1() -> bool:
     print("Checking for libgl1 (system dependency)...")
     apt_get = shutil.which("apt-get")
     if not apt_get:
-        print("   Skipping: apt-get not found. Please install 'libgl1' via your OS package manager.")
+        log("   Skipping: apt-get not found. Please install 'libgl1' via your OS package manager.")
         return False
 
     sudo = shutil.which("sudo")
@@ -161,11 +221,11 @@ def install_libgl1() -> bool:
     try:
         # Update package list first
         cmd_update = ([sudo] if use_sudo else []) + [apt_get, "update"]
-        subprocess.run(cmd_update, check=True)
+        subprocess.run(cmd_update, check=True, capture_output=_quiet)
 
         cmd_install = ([sudo] if use_sudo else []) + [apt_get, "install", "-y", "libgl1"]
-        subprocess.run(cmd_install, check=True)
-        print("   libgl1 installed (or already up to date)")
+        subprocess.run(cmd_install, check=True, capture_output=_quiet)
+        log("   libgl1 installed (or already up to date)")
         return True
     except subprocess.CalledProcessError as e:
         print(f"   Warning: Failed to install libgl1: {e}")
@@ -175,7 +235,7 @@ def install_libgl1() -> bool:
 
 def install_uv():
     """Install uv package manager."""
-    print("Installing uv...")
+    log("Installing uv...")
     try:
         # Download and run uv installer
         curl_cmd = [
@@ -208,7 +268,7 @@ def install_uv():
         local_bin = os.path.expanduser("~/.local/bin")
         if local_bin not in os.environ["PATH"]:
             os.environ["PATH"] = f"{local_bin}:{os.environ['PATH']}"
-        print("uv installed successfully")
+        log("uv installed successfully")
 
     except Exception as e:
         print(f"Error installing uv: {e}")
@@ -216,7 +276,7 @@ def install_uv():
         sys.exit(1)
 
 
-def get_installed_groups(deps_root: str) -> Set[str]:
+def get_installed_groups(deps_root: str) -> set[str]:
     """
     Get set of already installed dependency groups.
 
@@ -263,7 +323,7 @@ def install_group(group: str, deps_root: str, project_root: str) -> bool:
     install_path = os.path.join(deps_root, group)
 
     print(f"Installing {description}...")
-    print(f"   Location: {install_path}")
+    log(f"   Location: {install_path}")
 
     try:
         # Determine Python version and site-packages path
@@ -273,44 +333,49 @@ def install_group(group: str, deps_root: str, project_root: str) -> bool:
         # Create site-packages directory if it doesn't exist
         site_packages.mkdir(parents=True, exist_ok=True)
 
-        # Install all dependencies (core + group-specific) to prefix
-        cmd = [
-            "uv", "pip", "install",
-            "--python-preference", "only-system",
-            "--prefix", install_path,
-            f".[{group}]"  # Install current project with specific extra
-        ]
-
-        result = subprocess.run(
-            cmd,
-            cwd=project_root,
-            text=True,
-            capture_output=False,
-            check=True
+        # Build an overrides file so uv never installs packages that are
+        # already installed in the container. Exclude packages explicitly
+        # listed in pyproject.toml so they get installed at the pinned version.
+        container_pkgs = get_container_provided_packages()
+        declared_pkgs = get_pyproject_package_names(
+            str(Path(project_root) / "pyproject.toml"), group
+        )
+        overrides_content = "\n".join(
+            f'{pkg} ; python_version < "0"'
+            for pkg in container_pkgs
+            if _normalize_package_name(pkg) not in declared_pkgs
         )
 
-        # Remove torch (use container's version instead)
-        # Container torch is optimized for NVIDIA hardware
-        print("   Removing installed torch (using container's version)...")
-        if site_packages.exists():
-            for item in site_packages.iterdir():
-                item_name = item.name.lower()
-                # Match torch, torch-*, torchvision, torchvision-*
-                if any(item_name.startswith(prefix) for prefix in ["torch", "torchvision"]):
-                    try:
-                        if item.is_dir():
-                            shutil.rmtree(item)
-                        else:
-                            item.unlink()
-                    except Exception as e:
-                        print(f"   Warning: Could not remove {item.name}: {e}")
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", prefix="uv_overrides_", delete=False
+        ) as f:
+            f.write(overrides_content)
+            overrides_path = f.name
 
+        try:
+            cmd = [
+                "uv", "pip", "install",
+                "--python-preference", "only-system",
+                "--prefix", install_path,
+                "--overrides", overrides_path,
+                f".[{group}]"
+            ]
+
+            subprocess.run(
+                cmd,
+                cwd=project_root,
+                text=True,
+                capture_output=_quiet,
+                check=True
+            )
+        finally:
+            os.unlink(overrides_path)
 
         # Create marker file to indicate successful installation
         marker_file = Path(install_path) / INSTALL_COMPLETE_MARKER
         marker_file.write_text("Installation completed successfully\n")
 
-        print(f"{description} installed successfully")
+        print(f"   {description} installed successfully")
         return True
 
     except subprocess.CalledProcessError as e:
@@ -319,7 +384,7 @@ def install_group(group: str, deps_root: str, project_root: str) -> bool:
 
         # Clean up incomplete installation
         if os.path.exists(install_path):
-            print(f"   Cleaning up incomplete installation at {install_path}")
+            log(f"   Cleaning up incomplete installation at {install_path}")
             try:
                 shutil.rmtree(install_path)
             except Exception as cleanup_error:
@@ -328,7 +393,7 @@ def install_group(group: str, deps_root: str, project_root: str) -> bool:
         return False
 
 
-def determine_groups_to_install(requested: str, already_installed: Set[str]) -> List[str]:
+def determine_groups_to_install(requested: str, already_installed: set[str]) -> list[str]:
     """
     Determine which groups need to be installed.
 
@@ -343,32 +408,31 @@ def determine_groups_to_install(requested: str, already_installed: Set[str]) -> 
         return sorted(VALID_GROUPS - already_installed)
     elif requested in VALID_GROUPS:
         return [] if requested in already_installed else [requested]
-    else:
-        return []
+    return []
 
 
-def print_summary(installed_groups: Set[str]):
+def print_summary(installed_groups: set[str]):
     """
     Print summary of installed groups.
 
     Args:
         installed_groups: Set of all installed groups
     """
-    print("=" * 60)
+    log("=" * 60)
     print("Setup complete!")
-    print("=" * 60)
+    log("=" * 60)
 
     if installed_groups:
-        print("Installed groups:")
+        log("Installed groups:")
         for group in sorted(installed_groups):
             description = GROUP_DESCRIPTIONS.get(group, group)
-            print(f"   {description}")
+            log(f"   {description}")
 
-        print("Each demo script automatically uses the correct dependencies.")
+        log("Each demo script automatically uses the correct dependencies.")
     else:
-        print("No groups installed.")
+        log("No groups installed.")
 
-    print()
+    log()
 
 
 def parse_args():
@@ -413,6 +477,8 @@ Groups:
 
     parser.add_argument("--skip-tensorrt", action="store_true", help="Skip TensorRT upgrade/installation")
 
+    parser.add_argument("-q", "--quiet", action="store_true", help="Suppress informational output (errors are always shown)")
+
     return parser.parse_args()
 
 
@@ -420,11 +486,8 @@ def main():
     """Main setup function."""
     args = parse_args()
 
-    # Validate group argument
-    if args.group not in VALID_GROUPS and args.group != "all":
-        print(f"Unknown group: {args.group}")
-        print(f"   Valid options: {', '.join(sorted(VALID_GROUPS))}, all")
-        sys.exit(1)
+    global _quiet
+    _quiet = args.quiet
 
     print_header()
 
@@ -434,9 +497,9 @@ def main():
         install_uv()
         needs_path_setup = True  # Fresh install always needs PATH setup
     else:
-        print("uv is already installed")
+        log("uv is already installed")
         if needs_path_setup:
-            print("   (temporarily added ~/.local/bin to PATH for this session)")
+            log("   (temporarily added ~/.local/bin to PATH for this session)")
 
     # Get project root (where pyproject.toml is)
     project_root = str(Path(__file__).parent.absolute())
@@ -455,10 +518,10 @@ def main():
     if not args.skip_tensorrt:
         upgrade_tensorrt("tensorrt-cu12")
     else:
-        print("Skipping TensorRT upgrade (--skip-tensorrt specified)")
+        log("Skipping TensorRT upgrade (--skip-tensorrt specified)")
 
     if installed_groups and not args.force:
-        print(f"Already installed: {', '.join(sorted(installed_groups))}")
+        log(f"Already installed: {', '.join(sorted(installed_groups))}")
 
     # Determine what to install
     if args.force and args.group == "all":
@@ -475,7 +538,7 @@ def main():
         else:
             description = GROUP_DESCRIPTIONS.get(args.group, args.group)
             print(f"{description} is already installed!")
-        print(f"   To reinstall, use --force flag or remove {args.deps_root}/{args.group}")
+        log(f"   To reinstall, use --force flag or remove {args.deps_root}/{args.group}")
         print_summary(installed_groups)
         sys.exit(0)
 

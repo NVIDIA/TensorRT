@@ -46,19 +46,7 @@ namespace tensorrt
             return Weights{dtype, nullptr, 0};
         }
 
-        static const auto get_dynamic_range = [] (ITensor const& self) -> py::object {
-            if (self.dynamicRangeIsSet()) {
-                return py::make_tuple(self.getDynamicRangeMin(), self.getDynamicRangeMax());
-            } else {
-                return py::none{};
-            }
-        };
 
-        static const auto set_dynamic_range = [] (ITensor& self, std::vector<float> const& range) {
-            PY_ASSERT_VALUE_ERROR(range.size() == 2, "Dynamic range must contain exactly 2 elements");
-            PY_ASSERT_VALUE_ERROR(self.setDynamicRange(range[0], range[1]),
-                "Error in set dynamic range");
-        };
 
         // For permutation
         static const auto permutation_vector_constructor = [] (std::vector<int32_t> const& in) {
@@ -290,11 +278,53 @@ namespace tensorrt
         PY_ASSERT_RUNTIME_ERROR(status, "Failed to set Attention's AttentionNormalizationOp");
     }
 
+    namespace
+    {
+    void attention_set_causal_kind(IAttention& self, CausalMaskKind kind)
+    {
+        bool const status = self.setCausalKind(kind);
+        PY_ASSERT_RUNTIME_ERROR(status, "Failed to set Attention's CausalMaskKind");
+    }
+    } // namespace
+
     static void kv_cache_update_layer_set_cache_mode(IKVCacheUpdateLayer& self, KVCacheMode mode)
     {
         bool const status = self.setCacheMode(mode);
         PY_ASSERT_RUNTIME_ERROR(status, "Failed to set KVCacheUpdateLayer's KVCacheMode");
     }
+
+    namespace
+    {
+    void attention_set_query_form(IAttention& self, AttentionIOForm form)
+    {
+        PY_ASSERT_RUNTIME_ERROR(self.setQueryForm(form), "Failed to set Attention's query form");
+    }
+
+    void attention_set_key_value_form(IAttention& self, AttentionIOForm form)
+    {
+        PY_ASSERT_RUNTIME_ERROR(self.setKeyValueForm(form), "Failed to set Attention's key-value form");
+    }
+
+    void attention_set_query_lengths(IAttention& self, ITensor* lengths)
+    {
+        PY_ASSERT_RUNTIME_ERROR(self.setQueryLengths(lengths), "Failed to set Attention's query lengths");
+    }
+
+    void attention_set_key_value_lengths(IAttention& self, ITensor* lengths)
+    {
+        PY_ASSERT_RUNTIME_ERROR(self.setKeyValueLengths(lengths), "Failed to set Attention's key-value lengths");
+    }
+
+    void kv_cache_update_layer_set_update_form(IKVCacheUpdateLayer& self, AttentionIOForm form)
+    {
+        PY_ASSERT_RUNTIME_ERROR(self.setUpdateForm(form), "Failed to set KVCacheUpdateLayer's update form");
+    }
+
+    void kv_cache_update_layer_set_update_lengths(IKVCacheUpdateLayer& self, ITensor* lengths)
+    {
+        PY_ASSERT_RUNTIME_ERROR(self.setUpdateLengths(lengths), "Failed to set KVCacheUpdateLayer's update lengths");
+    }
+    } // namespace
 
     void bindGraph(py::module& m)
     {
@@ -379,7 +409,7 @@ namespace tensorrt
         py::class_<ITensor, std::unique_ptr<ITensor, py::nodelete>>(m, "ITensor", ITensorDoc::descr, py::module_local())
             .def_property("name", &ITensor::getName, &ITensor::setName)
             .def_property("shape", &ITensor::getDimensions, &ITensor::setDimensions)
-            .def_property("dtype", &ITensor::getType, utils::deprecateMember(&ITensor::setType, "Deprecated in TensorRT 10.12. Superseded by strong typing."))
+            .def_property_readonly("dtype", &ITensor::getType)
             .def_property("broadcast_across_batch", utils::deprecateMember(&ITensor::getBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"), utils::deprecateMember(&ITensor::setBroadcastAcrossBatch, "Implicit batch dimensions support has been removed"))
             .def_property("location", &ITensor::getLocation, &ITensor::setLocation)
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
@@ -387,11 +417,7 @@ namespace tensorrt
             .def_property_readonly("is_network_output", &ITensor::isNetworkOutput)
             .def_property_readonly("is_shape_tensor", &ITensor::isShapeTensor)
             .def_property_readonly("is_execution_tensor", &ITensor::isExecutionTensor)
-            // Using a plus sign converts the lambda function into a function pointer.
             .def_property("allowed_formats", &ITensor::getAllowedFormats, &ITensor::setAllowedFormats)
-            .def_property("dynamic_range", utils::deprecate(+lambdas::get_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), utils::deprecate(+lambdas::set_dynamic_range, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."))
-            .def("set_dynamic_range", utils::deprecateMember(&ITensor::setDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), "min"_a, "max"_a, ITensorDoc::set_dynamic_range)
-            .def("reset_dynamic_range", utils::deprecateMember(&ITensor::resetDynamicRange, "Deprecated in TensorRT 10.1. Superseded by explicit quantization."), ITensorDoc::reset_dynamic_range)
             .def("set_dimension_name", &ITensor::setDimensionName, "index"_a, "name"_a, ITensorDoc::set_dimension_name)
             .def("get_dimension_name", &ITensor::getDimensionName, "index"_a, ITensorDoc::get_dimension_name)
         ;
@@ -406,16 +432,10 @@ namespace tensorrt
             .def_property_readonly("type", &ILayer::getType)
             .def_property_readonly("num_inputs", &ILayer::getNbInputs)
             .def_property_readonly("num_outputs", &ILayer::getNbOutputs)
-            .def_property("precision", &ILayer::getPrecision, utils::deprecateMember(&ILayer::setPrecision, "Deprecated in TensorRT 10.12. Superseded by strong typing."))
-            .def_property_readonly("precision_is_set", utils::deprecateMember(&ILayer::precisionIsSet, "Deprecated in TensorRT 10.12. Superseded by strong typing."))
             .def("set_input", &ILayer::setInput, "index"_a, "tensor"_a, ILayerDoc::set_input)
             .def("get_input", &ILayer::getInput, "index"_a, ILayerDoc::get_input)
             .def("get_output", &ILayer::getOutput, "index"_a, ILayerDoc::get_output)
-            .def("reset_precision", utils::deprecateMember(&ILayer::resetPrecision, "Deprecated in TensorRT 10.12. Superseded by strong typing."), ILayerDoc::reset_precision)
-            .def("set_output_type", utils::deprecateMember(&ILayer::setOutputType, "Deprecated in TensorRT 10.12. Superseded by strong typing."), "index"_a, "dtype"_a, ILayerDoc::set_output_type)
             .def("get_output_type", &ILayer::getOutputType, "index"_a, ILayerDoc::get_output_type)
-            .def("output_type_is_set", utils::deprecateMember(&ILayer::outputTypeIsSet, "Deprecated in TensorRT 10.12. Superseded by strong typing."), "index"_a, ILayerDoc::output_type_is_set)
-            .def("reset_output_type", utils::deprecateMember(&ILayer::resetOutputType, "Deprecated in TensorRT 10.12. Superseded by strong typing."), "index"_a, ILayerDoc::reset_output_type)
         ;
 
         py::enum_<PaddingMode>(m, "PaddingMode", PaddingModeDoc::descr, py::module_local())
@@ -729,6 +749,9 @@ namespace tensorrt
         .value("BROADCAST", CollectiveOperation::kBROADCAST, CollectiveOperationDoc::BROADCAST)
         .value("REDUCE", CollectiveOperation::kREDUCE, CollectiveOperationDoc::REDUCE)
         .value("REDUCE_SCATTER", CollectiveOperation::kREDUCE_SCATTER, CollectiveOperationDoc::REDUCE_SCATTER)
+        .value("ALL_TO_ALL", CollectiveOperation::kALL_TO_ALL, CollectiveOperationDoc::ALL_TO_ALL)
+        .value("GATHER", CollectiveOperation::kGATHER, CollectiveOperationDoc::GATHER)
+        .value("SCATTER", CollectiveOperation::kSCATTER, CollectiveOperationDoc::SCATTER)
         ;
 
         py::class_<IRaggedSoftMaxLayer, ILayer, std::unique_ptr<IRaggedSoftMaxLayer, py::nodelete>>(m, "IRaggedSoftMaxLayer", IRaggedSoftMaxLayerDoc::descr, py::module_local());
@@ -901,7 +924,6 @@ namespace tensorrt
             .def_property("epsilon", &INormalizationLayer::getEpsilon, &INormalizationLayer::setEpsilon)
             .def_property("axes", &INormalizationLayer::getAxes, &INormalizationLayer::setAxes)
             .def_property("num_groups", &INormalizationLayer::getNbGroups, &INormalizationLayer::setNbGroups)
-            .def_property("compute_precision", &INormalizationLayer::getComputePrecision, &INormalizationLayer::setComputePrecision)
             .def_property_readonly("is_v2", &INormalizationLayer::isV2)
         ;
         py::class_<ISqueezeLayer, ILayer, std::unique_ptr<ISqueezeLayer, py::nodelete>>(m, "ISqueezeLayer", ISqueezeLayerDoc::descr, py::module_local())
@@ -926,11 +948,23 @@ namespace tensorrt
             .value("SOFTMAX", AttentionNormalizationOp::kSOFTMAX, AttentionNormalizationOpDoc::SOFTMAX)
         ;
 
+        py::enum_<AttentionIOForm>(m, "AttentionIOForm", AttentionIOFormDoc::descr, py::module_local())
+            .value("PADDED_BHND", AttentionIOForm::kPADDED_BHND, AttentionIOFormDoc::PADDED_BHND)
+            .value("PACKED_NHD", AttentionIOForm::kPACKED_NHD, AttentionIOFormDoc::PACKED_NHD)
+        ;
+
+        py::enum_<CausalMaskKind>(m, "CausalMaskKind", CausalMaskKindDoc::descr, py::module_local())
+            .value("NONE", CausalMaskKind::kNONE, CausalMaskKindDoc::NONE)
+            .value("UPPER_LEFT", CausalMaskKind::kUPPER_LEFT, CausalMaskKindDoc::UPPER_LEFT)
+            .value("LOWER_RIGHT", CausalMaskKind::kLOWER_RIGHT, CausalMaskKindDoc::LOWER_RIGHT)
+        ;
+
         py::class_<IAttention, std::unique_ptr<IAttention, py::nodelete>>(m, "IAttention", IAttentionDoc::descr, py::module_local())
             .def_property("mask", &IAttention::getMask, &IAttention::setMask)
             .def_property("norm_op", &IAttention::getNormalizationOperation, &attention_set_operation)
             .def_property("decomposable", &IAttention::getDecomposable, &IAttention::setDecomposable)
             .def_property("causal", &IAttention::getCausal, &IAttention::setCausal)
+            .def_property("causal_kind", &IAttention::getCausalKind, &attention_set_causal_kind)
             .def_property("name", &IAttention::getName, &IAttention::setName)
             .def_property("metadata", &IAttention::getMetadata, &IAttention::setMetadata)
             .def_property("normalization_quantize_scale", &IAttention::getNormalizationQuantizeScale, &IAttention::setNormalizationQuantizeScale)
@@ -943,6 +977,12 @@ namespace tensorrt
             .def_property("num_ranks", &IAttention::getNbRanks, [](IAttention& self, int32_t nbRanks) {
                 PY_ASSERT_RUNTIME_ERROR(self.setNbRanks(nbRanks), "Failed to set num_ranks. Value must be >= 1.");
             }, IAttentionDoc::num_ranks)
+            .def_property("query_form", &IAttention::getQueryForm, &attention_set_query_form)
+            .def_property("key_value_form", &IAttention::getKeyValueForm, &attention_set_key_value_form)
+            .def_property("query_lengths", &IAttention::getQueryLengths,
+                py::cpp_function(&attention_set_query_lengths, py::arg("self"), py::arg("lengths").none(true)))
+            .def_property("key_value_lengths", &IAttention::getKeyValueLengths,
+                py::cpp_function(&attention_set_key_value_lengths, py::arg("self"), py::arg("lengths").none(true)))
 
         ;
 
@@ -968,6 +1008,9 @@ namespace tensorrt
 
         py::class_<IKVCacheUpdateLayer, ILayer, std::unique_ptr<IKVCacheUpdateLayer, py::nodelete>>(m, "IKVCacheUpdateLayer", IKVCacheUpdateLayerDoc::descr, py::module_local())
             .def_property("cache_mode", &IKVCacheUpdateLayer::getCacheMode, &kv_cache_update_layer_set_cache_mode)
+            .def_property("update_form", &IKVCacheUpdateLayer::getUpdateForm, &kv_cache_update_layer_set_update_form)
+            .def_property("update_lengths", &IKVCacheUpdateLayer::getUpdateLengths,
+                py::cpp_function(&kv_cache_update_layer_set_update_lengths, py::arg("self"), py::arg("lengths").none(true)))
             .def("set_input", &IKVCacheUpdateLayer::setInput, "index"_a, "tensor"_a, IKVCacheUpdateLayerDoc::set_input)
         ;
 
@@ -1092,15 +1135,10 @@ namespace tensorrt
                 INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
             .def("add_nms", static_cast<INMSLayer* (INetworkDefinition::*)(ITensor&, ITensor&, ITensor&, DataType)>(&INetworkDefinition::addNMS), "boxes"_a, "scores"_a, "max_output_boxes_per_class"_a, "indices_type"_a,
                 INetworkDefinitionDoc::add_nms, py::return_value_policy::reference_internal)
-            .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims const&, FillOperation, DataType)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, "output_type"_a, INetworkDefinitionDoc::add_fill)
-            .def("add_fill", static_cast<IFillLayer* (INetworkDefinition::*)(Dims const&, FillOperation)>(&INetworkDefinition::addFill), "shape"_a, "op"_a, INetworkDefinitionDoc::add_fill)
-            .def("add_quantize",  static_cast<IQuantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&)>(&INetworkDefinition::addQuantize), "input"_a, "scale"_a,
-                INetworkDefinitionDoc::add_quantize, py::return_value_policy::reference_internal)
-            .def("add_dequantize", static_cast<IDequantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&)>(&INetworkDefinition::addDequantize), "input"_a, "scale"_a,
-                INetworkDefinitionDoc::add_dequantize, py::return_value_policy::reference_internal)
+            .def("add_fill", &INetworkDefinition::addFill, "shape"_a, "op"_a, "output_type"_a = DataType::kFLOAT, INetworkDefinitionDoc::add_fill)
             .def("add_quantize",  static_cast<IQuantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&, DataType)>(&INetworkDefinition::addQuantize), "input"_a, "scale"_a, "output_type"_a,
                 INetworkDefinitionDoc::add_quantize, py::return_value_policy::reference_internal)
-            .def("add_dequantize", static_cast<IDequantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&, DataType)>(&INetworkDefinition::addDequantize), "input"_a, "scale"_a, "output_type"_a,
+            .def("add_dequantize",  static_cast<IDequantizeLayer* (INetworkDefinition::*)(ITensor&, ITensor&, DataType)>(&INetworkDefinition::addDequantize), "input"_a, "scale"_a, "output_type"_a,
                 INetworkDefinitionDoc::add_dequantize, py::return_value_policy::reference_internal)
             .def("add_dynamic_quantize",  static_cast<IDynamicQuantizeLayer* (INetworkDefinition::*)(ITensor&, int32_t, int32_t, DataType, DataType)>(&INetworkDefinition::addDynamicQuantize), "input"_a, "axis"_a, "block_size"_a, "output_type"_a, "scale_type"_a,
                 INetworkDefinitionDoc::add_dynamic_quantize, py::return_value_policy::reference_internal)
@@ -1122,7 +1160,8 @@ namespace tensorrt
                 py::return_value_policy::reference_internal)
             .def("add_cumulative", &INetworkDefinition::addCumulative, "input"_a, "axis"_a, "op"_a, "exclusive"_a, "reverse"_a,
                 INetworkDefinitionDoc::add_cumulative, py::return_value_policy::reference_internal)
-            .def("add_attention", &INetworkDefinition::addAttention, "query"_a, "key"_a, "value"_a, "norm_op"_a, "causal"_a, INetworkDefinitionDoc::add_attention, py::return_value_policy::reference_internal)
+            .def("add_attention", py::overload_cast<ITensor&, ITensor&, ITensor&, AttentionNormalizationOp, bool>(&INetworkDefinition::addAttention), "query"_a, "key"_a, "value"_a, "norm_op"_a, "causal"_a, INetworkDefinitionDoc::add_attention, py::return_value_policy::reference_internal)
+            .def("add_attention_v2", py::overload_cast<ITensor&, ITensor&, ITensor&, AttentionNormalizationOp, CausalMaskKind>(&INetworkDefinition::addAttentionV2), "query"_a, "key"_a, "value"_a, "norm_op"_a, "causal_kind"_a, INetworkDefinitionDoc::add_attention_v2, py::return_value_policy::reference_internal)
             .def("add_rotary_embedding", &INetworkDefinition::addRotaryEmbedding, "input"_a, "cos_cache"_a, "sin_cache"_a, "interleaved"_a, "rotary_embedding_dim"_a,
                 INetworkDefinitionDoc::add_rotary_embedding, py::return_value_policy::reference_internal)
             .def("add_kv_cache_update", &INetworkDefinition::addKVCacheUpdate, "cache"_a, "update"_a, "write_indices"_a, "cache_mode"_a,

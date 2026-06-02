@@ -50,6 +50,21 @@ def _resolve_deps_root(deps_root: str | None) -> str:
         return deps_root
     return os.environ.get("TENSORRT_DIFFUSION_DEPS_ROOT", "/workspace/deps")
 
+def _prepend_env_path(var: str, path: str, clean_root: str | None = None):
+    """Prepend `path` to an os.pathsep-separated env var so child processes
+    (e.g. the `polygraphy` CLI) inherit the group's dependencies. If
+    `clean_root` is given, drop existing entries under it first."""
+    def _norm(p: str) -> str:
+        return os.path.abspath(os.path.expanduser(p))
+
+    existing = [p for p in os.environ.get(var, "").split(os.pathsep) if p]
+    if clean_root is not None:
+        root_abs = _norm(clean_root).rstrip(os.sep) + os.sep
+        existing = [p for p in existing if not _norm(p).startswith(root_abs)]
+    existing = [p for p in existing if _norm(p) != _norm(path)]
+    os.environ[var] = os.pathsep.join([path, *existing])
+
+
 def _clean_diffusion_paths(deps_root: str = "/workspace/deps"):
     """Drop any existing paths under deps_root from sys.path."""
     # Filter out any paths that live under deps_root (robust to path forms)
@@ -139,6 +154,13 @@ def configure(
     if os.path.exists(deps_path) and os.path.exists(marker_file):
         # Insert at the beginning to override any system packages
         sys.path.insert(0, deps_path)
+
+        # Mirror onto the environment so child processes (e.g. the polygraphy
+        # CLI that engine builds shell out to) use these deps too. When clean,
+        # drop other groups' entries under deps_root, matching sys.path above.
+        clean_root = deps_root if clean else None
+        _prepend_env_path("PYTHONPATH", deps_path, clean_root=clean_root)
+        _prepend_env_path("PATH", os.path.join(group_dir, "bin"), clean_root=clean_root)
 
         if verbose:
             description = GROUP_DESCRIPTIONS.get(group, group)

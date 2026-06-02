@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +23,7 @@
 #include <cuda_runtime_api.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <string_view>
 
 #if EXPORT_ALL_BINDINGS
 #include "NvInferPlugin.h"
@@ -88,7 +89,7 @@ class PyIPluginV2DynamicExtImpl : public PyIPluginV2DynamicExt
 public:
     using PyIPluginV2DynamicExt::PyIPluginV2DynamicExt;
     PyIPluginV2DynamicExtImpl() = default;
-    PyIPluginV2DynamicExtImpl(const PyIPluginV2DynamicExt& a){};
+    PyIPluginV2DynamicExtImpl(PyIPluginV2DynamicExt const& a) {}
 
     int32_t getNbOutputs() const noexcept override
     {
@@ -757,7 +758,7 @@ class PyIPluginV3Impl : public IPluginV3
 public:
     using IPluginV3::IPluginV3;
     PyIPluginV3Impl() = default;
-    PyIPluginV3Impl(const IPluginV3& a){};
+    PyIPluginV3Impl(IPluginV3 const& a) {}
 
     APILanguage getAPILanguage() const noexcept final
     {
@@ -907,7 +908,7 @@ class PyIPluginResourceImpl : public IPluginResource
 public:
     using IPluginResource::IPluginResource;
     PyIPluginResourceImpl() = default;
-    PyIPluginResourceImpl(const IPluginResource& a){};
+    PyIPluginResourceImpl(IPluginResource const& a) {}
 
     APILanguage getAPILanguage() const noexcept final
     {
@@ -1403,7 +1404,9 @@ public:
     {
     }
     PyIPluginV3OneBuildImpl(IPluginV3OneBuild const& a)
-        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuild>(this){};
+        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuild>(this)
+    {
+    }
 };
 
 class PyIPluginV3OneBuildV2Impl : public PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuildV2>
@@ -1414,7 +1417,9 @@ public:
     {
     }
     PyIPluginV3OneBuildV2Impl(IPluginV3OneBuildV2 const& a)
-        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuildV2>(this){};
+        : PyIPluginV3OneBuildBaseImpl<IPluginV3OneBuildV2>(this)
+    {
+    }
 
     int32_t getAliasedInput(int32_t outputIndex) noexcept override
     {
@@ -1451,7 +1456,7 @@ class PyIPluginV3QuickCoreImpl : public IPluginV3QuickCore
 public:
     using IPluginV3QuickCore::IPluginV3QuickCore;
     PyIPluginV3QuickCoreImpl() = default;
-    PyIPluginV3QuickCoreImpl(const IPluginV3QuickCore& a){};
+    PyIPluginV3QuickCoreImpl(IPluginV3QuickCore const& a) {}
 
     APILanguage getAPILanguage() const noexcept final
     {
@@ -1567,7 +1572,6 @@ public:
 
                 py::object pyResult = pyNbTactics();
                 return pyResult.cast<int32_t>();
-                ;
             }
             PLUGIN_API_CATCH_CAST("get_num_outputs", "int32_t")
             catch (py::error_already_set& e)
@@ -1954,7 +1958,9 @@ public:
     }
 
     PyIPluginV3QuickBuildImpl(IPluginV3QuickBuild const& a)
-        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickBuild>(&a){};
+        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickBuild>(&a)
+    {
+    }
 };
 
 class PyIPluginV3QuickAOTBuildImpl : public PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickAOTBuild>
@@ -1966,10 +1972,12 @@ public:
     }
 
     PyIPluginV3QuickAOTBuildImpl(IPluginV3QuickAOTBuild const& a)
-        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickAOTBuild>(&a){};
+        : PyIPluginV3QuickBuildBaseImpl<IPluginV3QuickAOTBuild>(&a)
+    {
+    }
 
     int32_t getKernel(PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs,
-        const char** kernelName, char** compiledKernel, int32_t* compiledKernelSize) noexcept override
+        char const** kernelName, char** compiledKernel, int32_t* compiledKernelSize) noexcept override
     {
         try
         {
@@ -2090,7 +2098,7 @@ class PyIPluginV3QuickRuntimeImpl : public IPluginV3QuickRuntime
 public:
     using IPluginV3QuickRuntime::IPluginV3QuickRuntime;
     PyIPluginV3QuickRuntimeImpl() = default;
-    PyIPluginV3QuickRuntimeImpl(const IPluginV3QuickRuntime& a){};
+    PyIPluginV3QuickRuntimeImpl(IPluginV3QuickRuntime const& a) {}
 
     APILanguage getAPILanguage() const noexcept final
     {
@@ -2225,7 +2233,7 @@ class PyIPluginV3OneRuntimeImpl : public IPluginV3OneRuntime
 public:
     using IPluginV3OneRuntime::IPluginV3OneRuntime;
     PyIPluginV3OneRuntimeImpl() = default;
-    PyIPluginV3OneRuntimeImpl(const IPluginV3OneRuntime& a){};
+    PyIPluginV3OneRuntimeImpl(IPluginV3OneRuntime const& a) {}
 
     APILanguage getAPILanguage() const noexcept final
     {
@@ -2438,7 +2446,7 @@ class PyIPluginV3OneCoreImpl : public IPluginV3OneCore
 public:
     using IPluginV3OneCore::IPluginV3OneCore;
     PyIPluginV3OneCoreImpl() = default;
-    PyIPluginV3OneCoreImpl(const IPluginV3OneCore& a){};
+    PyIPluginV3OneCoreImpl(IPluginV3OneCore const& a) {}
 
     APILanguage getAPILanguage() const noexcept final
     {
@@ -2956,16 +2964,8 @@ static const auto plugin_field_constructor
       };
 
 // For PluginFieldCollection
-static const auto plugin_field_collection_constructor = [](std::vector<PluginField> const& fields) {
+static auto const plugin_field_collection_constructor = [](std::vector<PluginField> const& fields) {
     return new PluginFieldCollection{static_cast<int32_t>(fields.size()), fields.data()};
-};
-
-// For IPluginRegistry. We do an allocation here, but python takes ownership.
-static const auto get_plugin_creator_list = [](IPluginRegistry& self) {
-    int32_t numCreators{0};
-    IPluginCreator* const* ptr = self.getPluginCreatorList(&numCreators);
-    // This is NOT a memory leak - python will free when done.
-    return new std::vector<IPluginCreator*>(ptr, ptr + numCreators);
 };
 
 std::vector<py::object>* getCreatorsUtil(
@@ -3093,8 +3093,9 @@ static const auto get_capability_interface = [](IPluginV3& self, PluginCapabilit
     return py::none{};
 };
 
-static const auto get_creator = [](IPluginRegistry& self, char const* pluginType, char const* pluginVersion,
+static auto const get_creator = [](IPluginRegistry& self, char const* pluginType, char const* pluginVersion,
                                     char const* pluginNamespace) -> py::object {
+    using namespace std::string_view_literals;
     IPluginCreatorInterface* creator = self.getCreator(pluginType, pluginVersion, pluginNamespace);
     if (creator == nullptr)
     {
@@ -3102,15 +3103,16 @@ static const auto get_creator = [](IPluginRegistry& self, char const* pluginType
     }
     else
     {
-        if (std::strcmp(creator->getInterfaceInfo().kind, "PLUGIN CREATOR_V1") == 0)
+        std::string_view const kind = creator->getInterfaceInfo().kind;
+        if (kind == "PLUGIN CREATOR_V1"sv)
         {
             return py::cast(static_cast<IPluginCreator*>(creator));
         }
-        if (std::strcmp(creator->getInterfaceInfo().kind, "PLUGIN CREATOR_V3ONE") == 0)
+        if (kind == "PLUGIN CREATOR_V3ONE"sv)
         {
             return py::cast(static_cast<IPluginCreatorV3One*>(creator));
         }
-        if (std::strcmp(creator->getInterfaceInfo().kind, "PLUGIN CREATOR_V3QUICK") == 0)
+        if (kind == "PLUGIN CREATOR_V3QUICK"sv)
         {
             return py::cast(static_cast<IPluginCreatorV3Quick*>(creator));
         }
@@ -3620,7 +3622,6 @@ void bindPlugin(py::module& m)
             IPluginV2ExtDoc::attach_to_context)
         .def("detach_from_context", &IPluginV2Ext::detachFromContext, IPluginV2ExtDoc::detach_from_context)
         .def("clone", &IPluginV2Ext::clone, IPluginV2ExtDoc::clone);
-    ;
 
     py::class_<IPluginV2DynamicExt, IPluginV2, std::unique_ptr<IPluginV2DynamicExt, py::nodelete>>(
         m, "IPluginV2DynamicExtBase", py::module_local());
@@ -3834,16 +3835,15 @@ void bindPlugin(py::module& m)
 
     py::class_<IPluginRegistry, std::unique_ptr<IPluginRegistry, py::nodelete>>(
         m, "IPluginRegistry", IPluginRegistryDoc::descr, py::module_local())
-        .def_property_readonly("plugin_creator_list", lambdas::get_plugin_creator_list)
         .def_property_readonly("all_creators", lambdas::get_all_creators)
         .def_property_readonly("all_creators_recursive", lambdas::get_all_creators_recursive)
         .def("register_creator",
-            py::overload_cast<IPluginCreator&, AsciiChar const* const>(&IPluginRegistry::registerCreator), "creator"_a,
-            "plugin_namespace"_a = "", py::keep_alive<1, 2>{}, IPluginRegistryDoc::register_creator_iplugincreator)
-        .def("deregister_creator", py::overload_cast<IPluginCreator const&>(&IPluginRegistry::deregisterCreator),
-            "creator"_a, IPluginRegistryDoc::deregister_creator_iplugincreator)
-        .def("get_plugin_creator", &IPluginRegistry::getPluginCreator, "type"_a, "version"_a, "plugin_namespace"_a = "",
-            py::return_value_policy::reference_internal, IPluginRegistryDoc::get_plugin_creator)
+            py::overload_cast<IPluginCreatorInterface&, AsciiChar const* const>(&IPluginRegistry::registerCreator),
+            "creator"_a, "plugin_namespace"_a = "", py::keep_alive<1, 2>{},
+            IPluginRegistryDoc::register_creator_iplugincreator)
+        .def("deregister_creator",
+            py::overload_cast<IPluginCreatorInterface const&>(&IPluginRegistry::deregisterCreator), "creator"_a,
+            IPluginRegistryDoc::deregister_creator_iplugincreator)
         .def_property("error_recorder", &IPluginRegistry::getErrorRecorder,
             py::cpp_function(&IPluginRegistry::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property("parent_search_enabled", &IPluginRegistry::isParentSearchEnabled,

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +16,9 @@
  */
 #include "priorBoxPlugin.h"
 #include <cmath>
-#include <cstring>
 #include <iostream>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 using namespace nvinfer1;
@@ -105,7 +105,7 @@ void PriorBox::setupDeviceMemory() noexcept
     // https://docs.nvidia.com/deeplearning/sdk/tensorrt-api/c_api/classnvinfer1_1_1_weights.html
     // mAspectRatiosGPU.count is different to mParam.numAspectRatios.
     //
-    mAspectRatiosGPU = copyToDevice(&tmpAR[0], tmpAR.size());
+    mAspectRatiosGPU = copyToDevice(tmpAR.data(), tmpAR.size());
 
     // Number of prior boxes per grid cell on the feature map
     // tmpAR already included an aspect ratio of 1.0
@@ -274,9 +274,9 @@ IPluginV2Ext* PriorBox::clone() const noexcept
 {
     try
     {
-        PriorBox* obj = new PriorBox(mParam, mH, mW);
+        auto obj = std::make_unique<PriorBox>(mParam, mH, mW);
         obj->setPluginNamespace(mPluginNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {
@@ -304,19 +304,6 @@ DataType PriorBox::getOutputDataType(
     // Two outputs
     PLUGIN_VALIDATE(index == 0 || index == 1);
     return DataType::kFLOAT;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool PriorBox::isOutputBroadcastAcrossBatch(
-    int32_t /*outputIndex*/, bool const* /*inputIsBroadcasted*/, int32_t /*nbInputs*/) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool PriorBox::canBroadcastInputAcrossBatch(int32_t /*inputIndex*/) const noexcept
-{
-    return false;
 }
 
 // Configure the layer with input and output data types.
@@ -405,10 +392,11 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(char const* /*name*/, PluginFi
         std::vector<float> minSize;
         std::vector<float> maxSize;
         std::vector<float> aspectRatios;
+        using namespace std::string_view_literals;
         for (auto i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "minSize"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "minSize"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t const size = fields[i].length;
@@ -425,7 +413,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(char const* /*name*/, PluginFi
                     params.minSize = nullptr;
                 }
             }
-            else if (!strcmp(attrName, "maxSize"))
+            else if (attrName == "maxSize"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t const size = fields[i].length;
@@ -442,7 +430,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(char const* /*name*/, PluginFi
                     params.maxSize = nullptr;
                 }
             }
-            else if (!strcmp(attrName, "aspectRatios"))
+            else if (attrName == "aspectRatios"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t const size = fields[i].length;
@@ -459,7 +447,7 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(char const* /*name*/, PluginFi
                     params.aspectRatios = nullptr;
                 }
             }
-            else if (!strcmp(attrName, "variance"))
+            else if (attrName == "variance"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t const size = fields[i].length;
@@ -471,45 +459,45 @@ IPluginV2Ext* PriorBoxPluginCreator::createPlugin(char const* /*name*/, PluginFi
                     lVar++;
                 }
             }
-            else if (!strcmp(attrName, "flip"))
+            else if (attrName == "flip"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.flip = *(static_cast<int32_t const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "clip"))
+            else if (attrName == "clip"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.clip = *(static_cast<int32_t const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "imgH"))
+            else if (attrName == "imgH"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.imgH = *(static_cast<int32_t const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "imgW"))
+            else if (attrName == "imgW"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.imgW = *(static_cast<int32_t const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "stepH"))
+            else if (attrName == "stepH"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.stepH = *(static_cast<float const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "stepW"))
+            else if (attrName == "stepW"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.stepW = *(static_cast<float const*>(fields[i].data));
             }
-            else if (!strcmp(attrName, "offset"))
+            else if (attrName == "offset"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.offset = *(static_cast<float const*>(fields[i].data));
             }
         }
-        PriorBox* obj = new PriorBox(params);
+        auto obj = std::make_unique<PriorBox>(params);
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {
@@ -525,9 +513,9 @@ IPluginV2Ext* PriorBoxPluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call PriorBox::destroy()
-        PriorBox* obj = new PriorBox(serialData, serialLength);
+        auto obj = std::make_unique<PriorBox>(serialData, serialLength);
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {

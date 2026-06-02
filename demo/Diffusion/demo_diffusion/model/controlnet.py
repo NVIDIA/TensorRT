@@ -63,7 +63,6 @@ class SD3ControlNet(base_model.BaseModel):
         int8=False,
         fp8=False,
         max_batch_size=16,
-        build_strongly_typed=False,
         do_classifier_free_guidance=False,
     ):
         super(SD3ControlNet, self).__init__(
@@ -94,7 +93,6 @@ class SD3ControlNet(base_model.BaseModel):
             print(f"[I] Load SD3ControlNetModel config from: {self.controlnet_model_dir}")
             self.config = SD3ControlNetModel.load_config(self.controlnet_model_dir)
         self.xB = 2 if do_classifier_free_guidance else 1  # batch multiplier
-        self.build_strongly_typed = build_strongly_typed
 
     def get_model(self, torch_inference=""):
         model_opts = (
@@ -187,7 +185,7 @@ class SD3ControlNet(base_model.BaseModel):
             "timestep": (self.xB * batch_size,),
             "pooled_projections": (self.xB * batch_size, self.config["pooled_projection_dim"]),
             "controlnet_cond": (self.xB * batch_size, self.config["in_channels"], latent_height, latent_width),
-            "conditioning_scale": (1,),
+            "conditioning_scale": (),
             "controlnet_block_samples": (
                 self.config["num_layers"],
                 self.xB * batch_size,

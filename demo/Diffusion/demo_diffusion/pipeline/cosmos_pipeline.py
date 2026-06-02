@@ -176,7 +176,6 @@ class CosmosPipeline(DiffusionPipeline):
                 tf32=self.tf32,
                 bf16=self.bf16,
                 text_maxlen=self.max_sequence_length,
-                build_strongly_typed=True,
                 use_attention_mask=True,
             )
 
@@ -189,7 +188,6 @@ class CosmosPipeline(DiffusionPipeline):
                 fp8=fp8,
                 tf32=self.tf32,
                 text_maxlen=self.max_sequence_length,
-                build_strongly_typed=True,
                 weight_streaming=self.weight_streaming,
                 weight_streaming_budget_percentage=self.denoiser_weight_streaming_budget_percentage,
             )

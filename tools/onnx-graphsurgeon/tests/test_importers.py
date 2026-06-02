@@ -53,6 +53,7 @@ class TestOnnxImporter(object):
             (onnx.TensorProto.FLOAT8E4M3FNUZ, onnx.TensorProto.FLOAT8E4M3FNUZ),
             (onnx.TensorProto.FLOAT8E5M2, onnx.TensorProto.FLOAT8E5M2),
             (onnx.TensorProto.FLOAT8E5M2FNUZ, onnx.TensorProto.FLOAT8E5M2FNUZ),
+            (onnx.TensorProto.FLOAT4E2M1, onnx.TensorProto.FLOAT4E2M1),
         ],
     )
     def test_import_variable_tensor(self, onnx_type, expected_type):
@@ -351,3 +352,29 @@ class TestOnnxImporter(object):
             and type(sparse_tensor._values) == SparseValues
         )
         assert (tensors["w_sparse"]._values.load() == ref_value).all()
+
+    def test_import_fp4_tensor(self):
+        name = "test_fp4"
+        shape = (2, 2)
+        dtype = onnx.TensorProto.FLOAT4E2M1
+
+        # Four 4-bit values = 16 bits = 2 bytes
+        # [0x01, 0x02] should give us the values [0.5, 0, 1, 0] once unpacked
+        tensor_bytes = bytes([0x01, 0x02])
+        onnx_tensor = onnx.helper.make_tensor(name, dtype, shape, tensor_bytes , raw=True)
+        tensor = OnnxImporter.import_tensor(onnx_tensor)
+        
+        assert type(tensor) == Constant
+        assert tensor.name == name
+        assert tuple(tensor.shape) == shape
+
+        # Before accessing values we expect the tensor to have an ONNX type
+        assert tensor.dtype == dtype
+
+        # After loading LazyValues, numpy represents this as four separate 8-bit values
+        # while retaining the shape
+        assert np.array_equal(tensor.values.ravel(), [0.5, 0, 1, 0])
+
+        # Post loading the values, we should see the ml_dtypes conversion
+        import ml_dtypes
+        assert tensor.dtype == ml_dtypes.float4_e2m1fn

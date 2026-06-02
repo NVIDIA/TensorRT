@@ -20,6 +20,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <string_view>
 
 #include "common/serialize.hpp"
 #include "scatterElementsPlugin.h"
@@ -329,16 +330,17 @@ IPluginV3* ScatterElementsPluginV3Creator::createPlugin(
         std::set<std::string> requiredFields{"reduction"};
         plugin::validateRequiredAttributesExist(requiredFields, fc);
 
+        using namespace std::string_view_literals;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
             PLUGIN_VALIDATE(fields[i].name != nullptr);
             PLUGIN_VALIDATE(fields[i].data != nullptr);
-            if (strcmp(fields[i].name, "axis") == 0)
+            if (fields[i].name == "axis"sv)
             {
                 auto data = static_cast<int32_t const*>(fields[i].data);
                 axisArg = *data;
             }
-            else if (strcmp(fields[i].name, "reduction") == 0)
+            else if (fields[i].name == "reduction"sv)
             {
                 auto data = static_cast<char const*>(fields[i].data);
                 reductionArg = fields[i].length != -1 ? std::string(data, fields[i].length) : std::string(data);

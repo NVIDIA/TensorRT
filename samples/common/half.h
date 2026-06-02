@@ -16,7 +16,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +33,10 @@
  */
 
 // Version 1.12.0
+//
+// Note: this library defaults to HALF_ROUND_TIES_TO_EVEN=0 (ties away from zero), which differs
+// from IEEE 754 round-to-nearest-even. Define HALF_ROUND_TIES_TO_EVEN=1 before including this
+// header to opt into IEEE-conformant rounding. parsers/onnxOpenSource/half.h does this.
 
 /// \file
 /// Main header file for half precision functionality.
@@ -2623,7 +2627,7 @@ struct half_caster<half, U, R>
     static half cast(U arg)
     {
         return cast_impl(arg, is_float<U>());
-    };
+    }
 
 private:
     static half cast_impl(U arg, true_type)

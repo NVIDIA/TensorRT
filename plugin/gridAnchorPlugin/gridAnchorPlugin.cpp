@@ -17,10 +17,10 @@
 
 #include "gridAnchorPlugin.h"
 #include <cmath>
-#include <cstring>
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 using namespace nvinfer1;
@@ -118,8 +118,8 @@ GridAnchorGenerator::GridAnchorGenerator(GridAnchorParameters const* paramIn, in
             tmpHeights.push_back(scales[i] / sqrt_AR);
         }
 
-        mDeviceWidths[id] = copyToDevice(&tmpWidths[0], tmpWidths.size());
-        mDeviceHeights[id] = copyToDevice(&tmpHeights[0], tmpHeights.size());
+        mDeviceWidths[id] = copyToDevice(tmpWidths.data(), tmpWidths.size());
+        mDeviceHeights[id] = copyToDevice(tmpHeights.data(), tmpHeights.size());
     }
 }
 
@@ -311,19 +311,6 @@ DataType GridAnchorGenerator::getOutputDataType(
     return DataType::kFLOAT;
 }
 
-// Return true if output tensor is broadcast across a batch.
-bool GridAnchorGenerator::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool GridAnchorGenerator::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
-}
-
 // Configure the layer with input and output data types.
 void GridAnchorGenerator::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims,
     int32_t nbOutputs, DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
@@ -396,6 +383,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
 {
     try
     {
+        using namespace std::string_view_literals;
         float minScale = 0.2F, maxScale = 0.95F;
         int32_t numLayers = 6;
         std::vector<float> aspectRatios;
@@ -406,23 +394,23 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
         bool const isFMapRect = (kGRID_ANCHOR_PLUGIN_NAMES[1] == mPluginName);
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "numLayers"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "numLayers"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 numLayers = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "minSize"))
+            else if (attrName == "minSize"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 minScale = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "maxSize"))
+            else if (attrName == "maxSize"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 maxScale = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
-            else if (!strcmp(attrName, "variance"))
+            else if (attrName == "variance"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t size = fields[i].length;
@@ -434,7 +422,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
                     lVar++;
                 }
             }
-            else if (!strcmp(attrName, "aspectRatios"))
+            else if (attrName == "aspectRatios"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 int32_t size = fields[i].length;
@@ -446,7 +434,7 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
                     aR++;
                 }
             }
-            else if (!strcmp(attrName, "featureMapShapes"))
+            else if (attrName == "featureMapShapes"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 int32_t size = fields[i].length;
@@ -498,9 +486,9 @@ IPluginV2Ext* GridAnchorBasePluginCreator::createPlugin(char const* name, Plugin
             }
         }
 
-        GridAnchorGenerator* obj = new GridAnchorGenerator(boxParams.data(), numLayers, mPluginName.c_str());
+        auto obj = std::make_unique<GridAnchorGenerator>(boxParams.data(), numLayers, mPluginName.c_str());
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {
@@ -516,9 +504,9 @@ IPluginV2Ext* GridAnchorBasePluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call GridAnchor::destroy()
-        GridAnchorGenerator* obj = new GridAnchorGenerator(serialData, serialLength, mPluginName.c_str());
+        auto obj = std::make_unique<GridAnchorGenerator>(serialData, serialLength, mPluginName.c_str());
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {

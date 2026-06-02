@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +32,7 @@ namespace nvinfer1
 namespace plugin
 {
 
-class PyramidROIAlign : public IPluginV2Ext
+class TRT_DEPRECATED_BECAUSE("Outdated use case. No alternatives planned.") PyramidROIAlign : public IPluginV2Ext
 {
 public:
     PyramidROIAlign(int32_t pooledSize, int32_t transformCoords, bool absCoords, bool swapCoords, bool plusOneCoords,
@@ -76,11 +76,6 @@ public:
     DataType getOutputDataType(
         int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
-
-    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
-
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
@@ -111,12 +106,13 @@ private:
     std::string mNameSpace{};
 };
 
-class PyramidROIAlignPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED_BECAUSE("Outdated use case. No alternatives planned.") PyramidROIAlignPluginCreator
+    : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     PyramidROIAlignPluginCreator();
 
-    ~PyramidROIAlignPluginCreator() override{};
+    ~PyramidROIAlignPluginCreator() override {}
 
     char const* getPluginName() const noexcept override;
 

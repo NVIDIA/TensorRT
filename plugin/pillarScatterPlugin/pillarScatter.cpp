@@ -17,8 +17,8 @@
 
 #include "pillarScatter.h"
 #include "common/templates.h"
-#include <cstring>
 #include <memory>
+#include <string_view>
 
 namespace nvinfer1::plugin
 {
@@ -241,10 +241,11 @@ IPluginV2* PillarScatterPluginCreator::createPlugin(char const* name, PluginFiel
         int32_t nbFields = fc->nbFields;
         int32_t targetH = 0;
         int32_t targetW = 0;
+        using namespace std::string_view_literals;
         plugin::validateRequiredAttributesExist({"dense_shape"}, fc);
         for (int32_t i = 0; i < nbFields; ++i)
         {
-            if (!strcmp(fields[i].name, "dense_shape"))
+            if (fields[i].name == "dense_shape"sv)
             {
                 int32_t const* ts = static_cast<int32_t const*>(fields[i].data);
                 targetH = ts[0];

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -304,8 +304,24 @@ def enable_single_tactic_circ_pad():
 
         src = triton.compiler.ASTSource(
             fn=circ_pad_kernel,
-            signature=f"*{type_str},{','.join(['i32']*13)},*{type_str}",
-            constants={
+            signature={
+                "X": f"*{type_str}",
+                "all_pads_0": "i32",
+                "all_pads_2": "i32",
+                "all_pads_4": "i32",
+                "all_pads_6": "i32",
+                "orig_dims_0": "i32",
+                "orig_dims_1": "i32",
+                "orig_dims_2": "i32",
+                "orig_dims_3": "i32",
+                "Y_shape_1": "i32",
+                "Y_shape_2": "i32",
+                "Y_shape_3": "i32",
+                "X_len": "i32",
+                "Y_len": "i32",
+                "Y": f"*{type_str}",
+            },
+            constexprs={
                 "BLOCK_SIZE": block_size,
             },
         )

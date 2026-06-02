@@ -21,6 +21,7 @@
 
 #include <array>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -62,12 +63,6 @@ constexpr float defaultPersistentCacheRatio{0};
 constexpr int32_t defaultAvgRuns{10};
 constexpr std::array<float, 3> defaultPercentiles{90, 95, 99};
 
-enum class PrecisionConstraints
-{
-    kNONE,
-    kOBEY,
-    kPREFER
-};
 
 enum class ModelFormat
 {
@@ -147,12 +142,14 @@ inline std::ostream& operator<<(std::ostream& os, RuntimeMode const mode)
 
 using Arguments = std::unordered_multimap<std::string, std::pair<std::string, int32_t>>;
 
-using IOFormat = std::pair<nvinfer1::DataType, nvinfer1::TensorFormats>;
+//! An IO format specification.
+struct IOFormat
+{
+    nvinfer1::TensorFormats formats{};
+};
 
 using ShapeRange = std::array<std::vector<int64_t>, nvinfer1::EnumMax<nvinfer1::OptProfileSelector>()>;
 
-using LayerPrecisions = std::unordered_map<std::string, nvinfer1::DataType>;
-using LayerOutputTypes = std::unordered_map<std::string, std::vector<nvinfer1::DataType>>;
 using LayerDeviceTypes = std::unordered_map<std::string, nvinfer1::DeviceType>;
 using DecomposableAttentions = std::unordered_map<std::string, bool>;
 
@@ -223,18 +220,9 @@ public:
     // Unit in KB.
     double tacticSharedMem{-1.0};
     int32_t avgTiming{defaultAvgTiming};
-    size_t calibProfile{defaultOptProfileIndex};
     bool tf32{true};
-    bool fp16{false};
-    bool bf16{false};
-    bool int8{false};
-    bool fp8{false};
-    bool int4{false};
-    bool stronglyTyped{false};
+    bool stronglyTyped{true};
     bool directIO{false};
-    PrecisionConstraints precisionConstraints{PrecisionConstraints::kNONE};
-    LayerPrecisions layerPrecisions;
-    LayerOutputTypes layerOutputTypes;
     LayerDeviceTypes layerDeviceTypes;
     DecomposableAttentions decomposableAttentions;
     StringSet debugTensors;
@@ -245,7 +233,6 @@ public:
     bool dumpKernelText{false};
     bool buildDLAStandalone{false};
     bool allowGPUFallback{false};
-    bool restricted{false};
     bool skipInference{false};
     bool save{false};
     bool load{false};
@@ -267,10 +254,8 @@ public:
     SparsityFlag sparsity{SparsityFlag::kDISABLE};
     nvinfer1::ProfilingVerbosity profilingVerbosity{nvinfer1::ProfilingVerbosity::kLAYER_NAMES_ONLY};
     std::string engine;
-    std::string calibration;
     using ShapeProfile = std::unordered_map<std::string, ShapeRange>;
     std::vector<ShapeProfile> optProfiles;
-    ShapeProfile shapesCalib;
     std::vector<IOFormat> inputFormats;
     std::vector<IOFormat> outputFormats;
     nvinfer1::TacticSources enabledTactics{0};
@@ -334,12 +319,11 @@ public:
     float idle{defaultIdle};
     float persistentCacheRatio{defaultPersistentCacheRatio};
     bool overlap{true};
-    bool skipTransfers{false};
+    bool includeTransfers{false};
     bool useManaged{false};
-    bool spin{false};
+    bool spin{true};
     bool threads{false};
-    bool graph{false};
-    bool rerun{false};
+    bool graph{true};
     bool timeDeserialize{false};
     bool timeRefit{false};
     bool setOptProfile{false};
@@ -392,7 +376,6 @@ public:
     bool int8{false};
     bool fp8{false};
     bool int4{false};
-    std::string calibFile{};
     std::vector<std::string> plugins;
     bool consistency{false};
     bool standard{false};
@@ -428,7 +411,7 @@ public:
     int32_t device{defaultDevice};
     int32_t DLACore{-1};
     int32_t batch{batchNotProvided};
-    bool graph{false};
+    bool graph{true};
     float persistentCacheRatio{defaultPersistentCacheRatio};
     void parse(Arguments& arguments) override;
     static void help(std::ostream& out);

@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,26 +39,23 @@ def hardmax_reference_impl(arr, axis):
 
 def make_trt_network_and_engine(input_shape, axis):
     registry = trt.get_plugin_registry()
-    plugin_creator = registry.get_plugin_creator("CustomHardmax", "1")
+    plugin_creator = registry.get_creator("CustomHardmax", "1", "")
     axis_buffer = np.array([axis])
     axis_attr = trt.PluginField("axis", axis_buffer, type=trt.PluginFieldType.INT32)
     field_collection = trt.PluginFieldCollection([axis_attr])
     plugin = plugin_creator.create_plugin(
-        name="CustomHardmax", field_collection=field_collection
+        name="CustomHardmax", field_collection=field_collection, phase=trt.TensorRTPhase.BUILD
     )
 
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))
     config = builder.create_builder_config()
-    config.set_tactic_sources(
-        config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS)
-    )
     runtime = trt.Runtime(TRT_LOGGER)
 
     input_layer = network.add_input(
         name="input_layer", dtype=trt.float32, shape=input_shape
     )
-    hardmax = network.add_plugin_v2(inputs=[input_layer], plugin=plugin)
+    hardmax = network.add_plugin_v3(inputs=[input_layer], shape_inputs=[], plugin=plugin)
     network.mark_output(hardmax.get_output(0))
 
     plan = builder.build_serialized_network(network, config)

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,19 +20,25 @@
 
 #include "NvInferRuntimeBase.h"
 #include "NvInferSafeRecorder.h"
+#include "NvInferSafeRuntime.h"
 #include "cuda_runtime.h"
 #include <algorithm>
+#include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -135,7 +141,7 @@ inline void safeLogError(
         {                                                                                                              \
             ss << "SAFE API Error: [" << #api_call << "]: " << toString(ret);                                          \
             safeLogError(recorder, ss.str(), ret);                                                                     \
-            throw ret;                                                                                                 \
+            throw ErrorCode{ret};                                                                                      \
         }                                                                                                              \
         ss << "SAFE API:[" << #api_call << "]: PASSED";                                                                \
         safeLogVerbose(recorder, ss.str());                                                                            \
@@ -149,8 +155,9 @@ inline void safeLogError(
         if (error != cudaSuccess)                                                                                      \
         {                                                                                                              \
             ss << "CUDA Error: [" << #cuda_api_call << "]: " << cudaGetErrorString(error);                             \
-            safeLogError(recorder, ss.str(), ErrorCode::kFAILED_EXECUTION);                                            \
-            throw ErrorCode::kFAILED_EXECUTION;                                                                        \
+            auto ret = ErrorCode::kFAILED_EXECUTION;                                                                   \
+            safeLogError(recorder, ss.str(), ret);                                                                     \
+            throw ErrorCode{ret};                                                                                      \
         }                                                                                                              \
         ss << "CUDA:[" << #cuda_api_call << "]: PASSED";                                                               \
         safeLogVerbose(recorder, ss.str());                                                                            \
@@ -282,8 +289,9 @@ inline int32_t getSmVersion()
 
 inline bool isSmSafe()
 {
-    const int32_t smVersion = getSmVersion();
-    return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807;
+    int32_t const smVersion = getSmVersion();
+    return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807
+        || smVersion == 0x0A00 || smVersion == 0x0B00;
 }
 
 inline int32_t calculateSoftmax(float* const prob, int32_t const numDigits)
@@ -378,8 +386,7 @@ public:
 
     void beginCapture(cudaStream_t& stream)
     {
-        // cudaStreamCaptureModeGlobal is the only allowed mode in SAFE CUDA
-        CUDA_CHECK(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
+        CUDA_CHECK(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
     }
 
     bool launch(cudaStream_t& stream)
@@ -524,6 +531,131 @@ inline bool parseSafetyPluginArgument(std::string const& option, SafetyPluginLib
     }
 
     return true;
+}
+
+//! \brief Check if arg is a command-line option with a value, and get the value.
+//! If arg matches the form --OPTION=VALUE (or -C=VALUE if singleChar is provided)
+//! and OPTION matches the provided name (or C matches the provided singleChar),
+//! extract the option VALUE.
+//! \param arg The argument to attempt to parse
+//! \param name The option name to match
+//! \param singleChar Single-character option, or std::nullopt if full name is required.
+//! \return If name matched, parsed string VALUE; otherwise std::nullopt.
+inline std::optional<std::string> parseString(std::string const& arg, std::string const& name, std::optional<char> singleChar = std::nullopt)
+{
+    for (std::string const& prefix : {
+             "--" + name + "=",
+             singleChar ? std::string{'-', *singleChar, '='} : "",
+         })
+    {
+        if (!prefix.empty() && prefix == arg.substr(0, prefix.size()))
+        {
+            return arg.substr(prefix.size());
+        }
+    }
+    return std::nullopt;
+}
+
+//! \brief Check if arg is command-line option without a value.
+//! Check whether arg matches the form --OPT (or -C if singleChar is provided)
+//! and OPT matches the provided name.
+//! \param arg The argument to attempt to parse
+//! \param name The option name to match
+//! \param singleChar Single-character version of OPT, or std::nullopt if full name is required.
+//! \return true on match, false otherwise.
+inline bool parseBool(std::string const& arg, std::string const& name, std::optional<char> singleChar = std::nullopt)
+{
+    return arg == "--" + name || (singleChar && arg == std::string{'-', *singleChar});
+}
+
+inline bool hasCpuOnlyInternalOption(std::string const& internalOptions)
+{
+    std::istringstream optionStream{internalOptions};
+    for (std::string option; optionStream >> option;)
+    {
+        if (option == "--cpu_only" || option.rfind("--cpu_only=", 0) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool applyCpuOnlyMode()
+{
+#if !defined(_WIN32)
+    // The use of TRT_INTERNAL_OPTIONS is special to TensorRT 11.0 and will disappear in later releases.
+    char const* internalOptions = std::getenv("TRT_INTERNAL_OPTIONS");
+    std::string internalOptionsStr{internalOptions != nullptr ? internalOptions : ""};
+    if (hasCpuOnlyInternalOption(internalOptionsStr))
+    {
+        return true;
+    }
+
+    internalOptionsStr += " --cpu_only=1";
+    if (setenv("TRT_INTERNAL_OPTIONS", internalOptionsStr.c_str(), 1) != 0)
+    {
+        SAFE_LOG << "Failed to set TRT_INTERNAL_OPTIONS for CPU-only mode: " << std::strerror(errno) << std::endl;
+        return false;
+    }
+#endif
+    return true;
+}
+
+//! \brief Allocate \p graph's auxiliary CUDA streams and register them via setAuxStreams.
+//!
+//! The returned scope guard owns the streams; when the last reference is dropped, each
+//! stream is destroyed via cudaStreamDestroy. The pointed-to value (nullptr) is purposely
+//! opaque; only the deleter matters. The caller must keep the guard alive during the graph
+//! inference runs.
+[[nodiscard]] inline std::shared_ptr<std::nullptr_t> setUpAuxStreamsOn(
+    nvinfer2::safe::ITRTGraph& graph, nvinfer2::safe::ISafeRecorder& recorder)
+{
+    int32_t nbAuxStreams{};
+    SAFE_API_CALL(graph.getNbAuxStreams(nbAuxStreams), recorder);
+    std::vector<cudaStream_t> streams(nbAuxStreams);
+    for (auto& s : streams)
+    {
+        CUDA_CHECK(cudaStreamCreateWithFlags(&s, cudaStreamNonBlocking));
+    }
+    SAFE_API_CALL(graph.setAuxStreams(streams.data(), nbAuxStreams), recorder);
+    return {nullptr, [streams = std::move(streams)](void*) {
+                for (cudaStream_t s : streams)
+                {
+                    if (s)
+                    {
+                        (void) cudaStreamDestroy(s);
+                    }
+                }
+            }};
+}
+
+[[nodiscard]] inline std::string genFilenameSafeString(std::string_view s)
+{
+    std::string_view const kALLOWED{"._-,"};
+    constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
+    constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
+
+    auto processChar = [&kALLOWED](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_';
+    };
+
+    std::string res;
+    if (s.length() <= kMAX_FILENAME_LENGTH)
+    {
+        res.reserve(s.size());
+        std::transform(s.begin(), s.end(), std::back_inserter(res), processChar);
+        return res;
+    }
+
+    res.reserve(kMAX_FILENAME_LENGTH);
+    size_t const halfLength = (kMAX_FILENAME_LENGTH - kELLIPSIS_LENGTH) / 2;
+
+    std::transform(s.begin(), s.begin() + halfLength, std::back_inserter(res), processChar);
+    res += "...";
+    std::transform(s.end() - halfLength, s.end(), std::back_inserter(res), processChar);
+
+    return res;
 }
 
 } // namespace samplesSafeCommon

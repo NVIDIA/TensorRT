@@ -23,6 +23,7 @@
 
 #include <cstring>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 using namespace nvinfer1;
@@ -32,6 +33,7 @@ using namespace nvinfer1::plugin::bert;
 // Clip plugin specific constants
 namespace
 {
+using namespace std::string_view_literals;
 constexpr char const* kSKIP_LAYER_NORM_INTERLEAVED_VERSION_HFACE{"7"};
 constexpr char const* kSKIP_LAYER_NORM_INTERLEAVED_VERSION_MTRON{"8"};
 constexpr char const* kSKIP_LAYER_NORM_INTERLEAVED_NAME{"CustomSkipLayerNormPluginDynamic"};
@@ -60,9 +62,9 @@ void buildBetaAndGamma(PluginFieldCollection const* fc, Weights& beta, Weights& 
 
     for (int32_t i = 0; i < fc->nbFields; i++)
     {
-        std::string fieldName(fc->fields[i].name);
+        std::string_view const fieldName = fc->fields[i].name;
 
-        if (fieldName.compare("beta") == 0)
+        if (fieldName == "beta"sv)
         {
             BERT_DEBUG_MSG("Building beta...");
             beta.values = fc->fields[i].data;
@@ -70,7 +72,7 @@ void buildBetaAndGamma(PluginFieldCollection const* fc, Weights& beta, Weights& 
             beta.type = fieldTypeToDataType(fc->fields[i].type);
         }
 
-        if (fieldName.compare("gamma") == 0)
+        if (fieldName == "gamma"sv)
         {
             BERT_DEBUG_MSG("Building gamma...");
             gamma.values = fc->fields[i].data;

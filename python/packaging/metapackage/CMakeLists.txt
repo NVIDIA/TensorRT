@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,7 +47,8 @@ function(buildMetapackageWheel moduleName)
     # Add a custom command to build the sdist using PEP 517 compliant build frontend.
     add_custom_command(
         OUTPUT ${sdistOutputFile}
-        COMMAND ${Python3_EXECUTABLE} -m build --sdist --no-isolation --config-setting=--quiet --outdir ${sdistOutDir}
+        COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${TRT_PACKAGING_DEPS_DIR}"
+            ${Python3_EXECUTABLE} -m build --sdist --no-isolation --config-setting=--quiet --outdir ${sdistOutDir}
         WORKING_DIRECTORY ${generatedFileOutDir}
         DEPENDS ${filesTarget} trt_packaging_requirements_installed
         VERBATIM

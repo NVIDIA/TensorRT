@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,8 +73,10 @@ public:
     virtual int32_t getNbSymExprs() const noexcept = 0;
     virtual bool setNbSymExprs(int32_t count) noexcept = 0;
 
-    virtual ~ISymExprsImpl() noexcept = default;
+    virtual ~ISymExprsImpl() noexcept = 0;
 };
+
+inline ISymExprsImpl::~ISymExprsImpl() noexcept = default;
 
 //! \class ISymExprs
 //! \brief Allows for a sequence of symbolic expressions to be communicated to the TensorRT backend
@@ -112,8 +114,10 @@ public:
 
 protected:
     ISymExprsImpl* mImpl{nullptr};
-    virtual ~ISymExprs() noexcept = default;
+    virtual ~ISymExprs() noexcept = 0;
 };
+
+inline ISymExprs::~ISymExprs() noexcept = default;
 
 //! \enum QuickPluginCreationRequest
 //! \brief Communicates preference when a quickly deployable plugin is to be added to the network
@@ -156,8 +160,10 @@ public:
     virtual ISymExpr* getSharedMem() noexcept = 0;
     virtual bool setSharedMem(ISymExpr* sharedMem) noexcept = 0;
 
-    virtual ~IKernelLaunchParamsImpl() noexcept = default;
+    virtual ~IKernelLaunchParamsImpl() noexcept = 0;
 };
+
+inline IKernelLaunchParamsImpl::~IKernelLaunchParamsImpl() noexcept = default;
 
 //! \class IKernelLaunchParams
 //! \brief Allows for kernel launch parameters to be communicated to the TensorRT backend
@@ -258,8 +264,11 @@ public:
 
 protected:
     IKernelLaunchParamsImpl* mImpl{nullptr};
-    virtual ~IKernelLaunchParams() noexcept = default;
+    virtual ~IKernelLaunchParams() noexcept = 0;
 };
+
+inline IKernelLaunchParams::~IKernelLaunchParams() noexcept = default;
+
 
 namespace v_1_0
 {

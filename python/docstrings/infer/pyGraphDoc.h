@@ -82,8 +82,8 @@ constexpr char const* KV_CACHE_UPDATE = R"trtdoc(KVCacheUpdate layer)trtdoc";
 constexpr char const* SPLIT_TO_RAGGED = R"trtdoc(SplitToRagged layer)trtdoc";
 constexpr char const* CONCAT_FROM_RAGGED = R"trtdoc(ConcatFromRagged layer)trtdoc";
 constexpr char const* ROTARY_EMBEDDING = R"trtdoc(Rotary Embedding layer)trtdoc";
-constexpr char const* MOE = R"trtdoc(MoE layer)trtdoc";
 constexpr char const* DIST_COLLECTIVE = R"trtdoc(DistCollective layer)trtdoc";
+constexpr char const* MOE = R"trtdoc(MoE layer)trtdoc";
 } // namespace LayerTypeDoc
 
 namespace TensorFormatDoc
@@ -207,33 +207,12 @@ constexpr char const* descr = R"trtdoc(
     :ivar location: :class:`TensorLocation` The storage location of a tensor.
     :ivar is_network_input: :class:`bool` Whether the tensor is a network input.
     :ivar is_network_output: :class:`bool` Whether the tensor is a network output.
-    :ivar dynamic_range: :class:`Tuple[float, float]` [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization. A tuple containing the [minimum, maximum] of the dynamic range, or :class:`None` if the range was not set.
+)trtdoc"
+                              R"trtdoc(
     :ivar is_shape: :class:`bool` Whether the tensor is a shape tensor.
     :ivar allowed_formats: :class:`int32` The allowed set of TensorFormat candidates. This should be an integer consisting of one or more :class:`TensorFormat` s, combined via bitwise OR after bit shifting. For example, ``1 << int(TensorFormat.CHW4) | 1 << int(TensorFormat.CHW32)``.
 )trtdoc";
 
-constexpr char const* set_dynamic_range = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    Set dynamic range for the tensor.
-    NOTE: It is suggested to use ``tensor.dynamic_range = (min, max)`` instead.
-
-    :arg min: Minimum of the dynamic range.
-    :arg max: Maximum of the dyanmic range.
-    :returns: true if succeed in setting range. Otherwise false.
-)trtdoc";
-
-constexpr char const* get_dynamic_range = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    Get dynamic range for the tensor.
-    NOTE: It is suggested to use ``tensor.dynamic_range`` instead, which is a tuple including both the minimum and maximum of the dynamic range.
-
-    :returns: The absolute maximum of the dynamic range.
-)trtdoc";
-
-constexpr char const* reset_dynamic_range = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    Undo the effect of setting the dynamic range.
-)trtdoc";
 
 constexpr char const* set_dimension_name = R"trtdoc(
     Name a dimension of an input tensor.
@@ -271,8 +250,8 @@ constexpr char const* descr = R"trtdoc(
     :ivar type: :class:`LayerType` The type of the layer.
     :ivar num_inputs: :class:`int` The number of inputs of the layer.
     :ivar num_outputs: :class:`int` The number of outputs of the layer.
-    :ivar precision: :class:`DataType` The computation precision.
-    :ivar precision_is_set: :class:`bool` Whether the precision is set or not.
+)trtdoc"
+                              R"trtdoc(
 )trtdoc";
 
 constexpr char const* set_input = R"trtdoc(
@@ -298,45 +277,6 @@ constexpr char const* get_output = R"trtdoc(
     :returns: The output tensor, or :class:`None` if the index is out of range.
 )trtdoc";
 
-constexpr char const* reset_precision = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
-    Reset the computation precision of the layer.
-)trtdoc";
-
-constexpr char const* set_output_type = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
-    Constraint layer to generate output data with given type.
-    Note that this method cannot be used to set the data type
-    of the second output tensor of the topK layer. The data
-    type of the second output tensor of the topK layer is always :class:`int32` .
-
-    :arg index: The index of the output tensor to set the type.
-    :arg dtype: DataType of the output.
-)trtdoc";
-
-constexpr char const* get_output_type = R"trtdoc(
-    Get the output type of the layer.
-
-    :arg index: The index of the output tensor.
-
-    :returns: The output precision. Default : DataType.FLOAT.
-)trtdoc";
-
-constexpr char const* output_type_is_set = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
-    Whether the output type has been set for this layer.
-
-    :arg index: The index of the output.
-
-    :returns: Whether the output type has been explicitly set.
-)trtdoc";
-
-constexpr char const* reset_output_type = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.
-    Reset output type of this layer.
-
-    :arg index: The index of the output.
-)trtdoc";
 
 constexpr char const* num_ranks = R"trtdoc(
     :class:`int` The number of ranks for multi-device execution.
@@ -348,6 +288,15 @@ constexpr char const* num_ranks = R"trtdoc(
 
     Default value is 1.
 )trtdoc";
+
+constexpr char const* get_output_type = R"trtdoc(
+    Get the output type of the layer.
+
+    :arg index: The index of the output tensor.
+
+    :returns: The output precision. Default : DataType.FLOAT.
+)trtdoc";
+
 
 } // namespace ILayerDoc
 
@@ -988,6 +937,9 @@ constexpr char const* ALL_GATHER = R"trtdoc(All gather collective operation)trtd
 constexpr char const* BROADCAST = R"trtdoc(Broadcast collective operation)trtdoc";
 constexpr char const* REDUCE = R"trtdoc(Reduce collective operation)trtdoc";
 constexpr char const* REDUCE_SCATTER = R"trtdoc(Reduce scatter collective operation)trtdoc";
+constexpr char const* ALL_TO_ALL = R"trtdoc(All-to-all collective operation)trtdoc";
+constexpr char const* GATHER = R"trtdoc(Gather collective operation)trtdoc";
+constexpr char const* SCATTER = R"trtdoc(Scatter collective operation)trtdoc";
 } // namespace CollectiveOperationDoc
 
 namespace IDistCollectiveLayerDoc
@@ -1910,7 +1862,8 @@ constexpr char const* descr = R"trtdoc(
     :ivar epsilon: :class:`float` The epsilon value used for the normalization calculation. Default: 1e-5F.
     :ivar axes: :class:`int` The reduction axes for the normalization calculation.
     :ivar num_groups: :class:`int` The number of groups to split the channels into for the normalization calculation. Default: 1.
-    :ivar compute_precision: :class:`DataType` The datatype used for the compute precision of this layer. By default TensorRT will run the normalization computation in DataType.kFLOAT32 even in mixed precision mode regardless of any set builder flags to avoid overflow errors. ILayer.precision and ILayer.set_output_type can still be set to control input and output types of this layer. Only DataType.kFLOAT32 and DataType.kHALF are valid for this member. Default: Datatype.FLOAT.
+)trtdoc"
+                              R"trtdoc(
 )trtdoc";
 } // namespace INormalizationLayerDoc
 
@@ -2024,6 +1977,38 @@ constexpr char const* NONE = R"trtdoc()trtdoc";
 constexpr char const* SOFTMAX = R"trtdoc()trtdoc";
 } // namespace AttentionNormalizationOpDoc
 
+namespace AttentionIOFormDoc
+{
+constexpr char const* descr = R"trtdoc(
+    The layout of the input/output tensors in an Attention or KVCacheUpdate layer.
+
+    - PADDED_BHND: All batches padded to maximum length. Shape is [batch_size, num_heads, num_tokens, head_dim].
+    - PACKED_NHD: All batches concatenated without padding. Shape is [total_tokens, num_heads, head_dim].
+      When used, a corresponding cumulative lengths tensor (query_lengths / key_value_lengths / update_lengths) must be provided.
+)trtdoc";
+constexpr char const* PADDED_BHND
+    = R"trtdoc(All batches padded to the maximum length. Shape is [batch_size, num_heads, num_tokens, head_dim].)trtdoc";
+constexpr char const* PACKED_NHD
+    = R"trtdoc(All batches concatenated without padding. Shape is [total_tokens, num_heads, head_dim]. Requires a cumulative lengths tensor.)trtdoc";
+} // namespace AttentionIOFormDoc
+
+namespace CausalMaskKindDoc
+{
+constexpr char const* descr = R"trtdoc(
+    The causal mask alignment orientation for the attention.
+
+    When s_q == s_kv, both UPPER_LEFT and LOWER_RIGHT produce identical triangular masks.
+    When s_q != s_kv (e.g., during LLM generation where s_q=1 and s_kv grows):
+    - UPPER_LEFT: Diagonal anchored at top-left corner (j <= i). Query tokens attend only to the earliest cache positions.
+    - LOWER_RIGHT: Diagonal anchored at bottom-right corner (j <= i + (s_kv - s_q)). Query tokens attend to all preceding context, which is the correct behavior for autoregressive generation.
+)trtdoc";
+constexpr char const* NONE = R"trtdoc(No causal masking applied.)trtdoc";
+constexpr char const* UPPER_LEFT
+    = R"trtdoc(Diagonal anchored at top-left corner (legacy default when causal=true).)trtdoc";
+constexpr char const* LOWER_RIGHT
+    = R"trtdoc(Diagonal anchored at bottom-right corner (decode-aligned semantics).)trtdoc";
+} // namespace CausalMaskKindDoc
+
 namespace IAttentionBoundaryLayerDoc
 {
 constexpr char const* descr = R"trtdoc(
@@ -2053,7 +2038,8 @@ constexpr char const* descr = R"trtdoc(
     :ivar mask: :class:`ITensor` The mask tensor for attention. Cannot be set together with causal attention.
     :ivar norm_op: :class:`AttentionNormalizationOp` The normalization operation for the attention layer. Default to AttentionNormalizationOp::kSOFTMAX.
     :ivar decomposable: :class:`bool` Specifies whether decomposition into primitive ops is allowed when no attention fusion is supported. Default to False.
-    :ivar causal: :class:`bool` Specifies whether the attention will run a causal inference. Cannot be used together with mask.
+    :ivar causal: :class:`bool` (Deprecated) Specifies whether the attention will run a causal inference. Cannot be used together with mask. Superseded by causal_kind.
+    :ivar causal_kind: :class:`CausalMaskKind` The causal mask alignment orientation for the attention. Cannot be used together with mask. Default to CausalMaskKind.NONE.
     :ivar name: :class:`str` The name of the attention.
     :ivar metadata: :class:`str` The metadata of the attention.
     :ivar normalization_quantize_scale: :class:`ITensor` The quantization scale for the attention normalization output.
@@ -2061,6 +2047,10 @@ constexpr char const* descr = R"trtdoc(
     :ivar num_inputs: :class:`int` The number of inputs of the attention.
     :ivar num_outputs: :class:`int` The number of outputs of the attention.
     :ivar num_ranks: :class:`int` The number of ranks for multi-device attention execution (default: 1).
+    :ivar query_form: :class:`AttentionIOForm` The layout of the query tensor. Default is AttentionIOForm.PADDED_BHND.
+    :ivar key_value_form: :class:`AttentionIOForm` The layout of the key and value tensors. Default is AttentionIOForm.PADDED_BHND.
+    :ivar query_lengths: :class:`ITensor` Optional 1D INT32 tensor of cumulative query token counts with shape [batch_size + 1]. Must be set when query_form is PACKED_NHD. Ignored when query_form is PADDED_BHND. Set to None to clear.
+    :ivar key_value_lengths: :class:`ITensor` Optional 1D INT32 tensor specifying key-value lengths. When key_value_form is PADDED_BHND, a per-batch lengths tensor of shape [batch_size]. When key_value_form is PACKED_NHD, cumulative token counts of shape [batch_size + 1] (required). Set to None to clear.
 )trtdoc";
 
 constexpr char const* init = R"trtdoc(
@@ -2154,6 +2144,8 @@ constexpr char const* descr = R"trtdoc(
     Separate KVCacheUpdate layers should be used for K and V.
 
     :ivar cache_mode: :class:`KVCacheMode` The mode of the KVCacheUpdate layer.
+    :ivar update_form: :class:`AttentionIOForm` The layout of the update tensor. Default is AttentionIOForm.PADDED_BHND. When set to PACKED_NHD, the update tensor has shape [total_tokens, num_heads, head_dim] and update_lengths must be provided.
+    :ivar update_lengths: :class:`ITensor` Optional 1D INT32 tensor of cumulative token counts with shape [batch_size + 1]. Only valid when update_form is PACKED_NHD (required in that case; ignored when update_form is PADDED_BHND). Set to None to clear.
 )trtdoc";
 
 constexpr char const* set_input = R"trtdoc(
@@ -2167,6 +2159,7 @@ constexpr char const* set_input = R"trtdoc(
         0     cache.
         1     update.
         2     write_indices.
+        3     update_lengths (optional; use the update_lengths property instead).
     =====   ==================================================================================
 
     :arg index: The index of the input tensor.
@@ -2748,7 +2741,7 @@ constexpr char const* add_fill = R"trtdoc(
 
     :arg dimensions: The output tensor dimensions.
     :arg op: The fill operation that the layer applies.
-    :arg output_type: The datatype of the output tensor. Specifying output_type is optional (default value tensorrt.float32).
+    :arg output_type: The datatype of the output tensor. Default value tensorrt.float32.
 
     :returns: The new fill layer, or :class:`None` if it could not be created.
 )trtdoc";
@@ -2889,7 +2882,7 @@ constexpr char const* add_quantize = R"trtdoc(
 
     :arg input: A tensor to quantize.
     :arg scale: A tensor with the scale coefficients.
-    :arg output_type: The datatype of the output tensor. Specifying output_type is optional (default value tensorrt.int8).
+    :arg output_type: The datatype of the output tensor.
 
     :returns: The new quantization layer, or :class:`None` if it could not be created.
 )trtdoc";
@@ -2898,9 +2891,9 @@ constexpr char const* add_dequantize = R"trtdoc(
     Add a dequantization layer to the network.
     See :class:`IDequantizeLayer` for more information.
 
-    :arg input: A tensor to quantize.
+    :arg input: A tensor to dequantize.
     :arg scale: A tensor with the scale coefficients.
-    :arg output_type: The datatype of the output tensor. Specifying output_type is optional (default value tensorrt.float32).
+    :arg output_type: The datatype of the output tensor.
 
     :returns: The new dequantization layer, or :class:`None` if it could not be created.
 )trtdoc";
@@ -3086,6 +3079,19 @@ constexpr char const* add_cumulative = R"trtdoc(
 )trtdoc";
 
 constexpr char const* add_attention = R"trtdoc(
+    Add an attention to the network. Deprecated, use add_attention_v2 instead.
+    See :class:`IAttention` for more information.
+
+    :arg query: The 4d query input tensor to the attention.
+    :arg key: The 4d key input tensor to the attention.
+    :arg value: The 4d value input tensor to the attention.
+    :arg normOp: The normalization operation to perform.
+    :arg causal: The boolean that specifies whether an attention will run causal inference.
+
+    :returns: The new Attention, or :class:`None` if it could not be created.
+)trtdoc";
+
+constexpr char const* add_attention_v2 = R"trtdoc(
     Add an attention to the network.
     See :class:`IAttention` for more information.
 
@@ -3093,7 +3099,7 @@ constexpr char const* add_attention = R"trtdoc(
     :arg key: The 4d key input tensor to the attention.
     :arg value: The 4d value input tensor to the attention.
     :arg normOp: The normalization operation to perform.
-    :arg causal: The boolean that specifies whether an attention will run casual inference.
+    :arg causal_kind: The :class:`CausalMaskKind` that specifies the causal mask alignment orientation.
 
     :returns: The new Attention, or :class:`None` if it could not be created.
 )trtdoc";

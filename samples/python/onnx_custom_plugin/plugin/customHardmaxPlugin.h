@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,69 +23,59 @@
 #include <string>
 #include <vector>
 
-// One of the preferred ways of making TensorRT to be able to see
-// our custom layer requires extending IPluginV2 and IPluginCreator classes.
-// For requirements for overriden functions, check TensorRT API docs.
+// This sample demonstrates how to implement a TensorRT plugin using the IPluginV3 interface.
 
-class HardmaxPlugin final : public nvinfer1::IPluginV2DynamicExt
+class HardmaxPlugin final : public nvinfer1::IPluginV3,
+                            public nvinfer1::IPluginV3OneCore,
+                            public nvinfer1::IPluginV3OneBuild,
+                            public nvinfer1::IPluginV3OneRuntime
 {
 public:
     HardmaxPlugin() = delete;
     HardmaxPlugin(int32_t axis);
-    HardmaxPlugin(void const* serialData, size_t serialLength);
+    HardmaxPlugin(HardmaxPlugin const& other);
     ~HardmaxPlugin() override;
 
-    template <typename TDataType>
-    TDataType const* pointer_const_cast(void const* const p);
+    // IPluginV3 methods
+    nvinfer1::IPluginCapability* getCapabilityInterface(nvinfer1::PluginCapabilityType type) noexcept override;
+    nvinfer1::IPluginV3* clone() noexcept override;
 
-    template <typename TDataType>
-    TDataType* pointer_cast(void* p);
+    // IPluginV3OneCore methods
+    char const* getPluginName() const noexcept override;
+    char const* getPluginVersion() const noexcept override;
+    char const* getPluginNamespace() const noexcept override;
 
+    // IPluginV3OneBuild methods
     int32_t getNbOutputs() const noexcept override;
 
-    // DynamicExt plugins returns DimsExprs class instead of Dims
-    nvinfer1::DimsExprs getOutputDimensions(int32_t index, nvinfer1::DimsExprs const* inputs, int32_t nbInputDims,
-        nvinfer1::IExprBuilder& exprBuilder) noexcept override; // determine output dims based on input info
+    int32_t configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
 
-    int32_t initialize() noexcept override;
+    bool supportsFormatCombination(int32_t pos, nvinfer1::DynamicPluginTensorDesc const* inOut, int32_t nbInputs,
+        int32_t nbOutputs) noexcept override;
 
-    void terminate() noexcept override;
+    int32_t getOutputDataTypes(nvinfer1::DataType* outputTypes, int32_t nbOutputs, nvinfer1::DataType const* inputTypes,
+        int32_t nbInputs) const noexcept override;
 
-    size_t getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-        nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+    int32_t getOutputShapes(nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, nvinfer1::DimsExprs* outputs, int32_t nbOutputs,
+        nvinfer1::IExprBuilder& exprBuilder) noexcept override;
 
+    size_t getWorkspaceSize(nvinfer1::DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        nvinfer1::DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override;
+
+    // IPluginV3OneRuntime methods
     int32_t enqueue(nvinfer1::PluginTensorDesc const* inputDesc, nvinfer1::PluginTensorDesc const* outputDesc,
         void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept override;
 
-    size_t getSerializationSize() const noexcept override;
+    int32_t onShapeChange(nvinfer1::PluginTensorDesc const* in, int32_t nbInputs, nvinfer1::PluginTensorDesc const* out,
+        int32_t nbOutputs) noexcept override;
 
-    void serialize(void* buffer) const noexcept override;
+    nvinfer1::IPluginV3* attachToContext(nvinfer1::IPluginResourceContext* context) noexcept override;
 
-    bool supportsFormatCombination(
-        int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override;
+    nvinfer1::PluginFieldCollection const* getFieldsToSerialize() noexcept override;
 
-    char const* getPluginType() const noexcept override;
-
-    char const* getPluginVersion() const noexcept override;
-
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override;
-
-    void destroy() noexcept override;
-
-    nvinfer1::DataType getOutputDataType(
-        int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
-
-    void attachToContext(
-        cudnnContext* cudnn, cublasContext* cublas, nvinfer1::IGpuAllocator* allocator) noexcept override;
-
-    void detachFromContext() noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
-
-    char const* getPluginNamespace() const noexcept override;
-
-    void configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-        nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
 
 private:
     std::string mNamespace;
@@ -99,16 +89,20 @@ private:
     int32_t mDimProductOuter{1};
     int32_t mDimProductInner{1};
 
-    cublasHandle_t mCublas;
+    cublasHandle_t mCublas{nullptr};
 
     // Attributes
     // Axis along which to perform hardmax.
     // Can be negative initially, but once configurePlugin() is called it will
     // be converted to a positive axis.
     int32_t mAxis{-1};
+
+    // Serialization helpers
+    std::vector<nvinfer1::PluginField> mDataToSerialize;
+    nvinfer1::PluginFieldCollection mFCToSerialize;
 };
 
-class HardmaxPluginCreator : public nvinfer1::IPluginCreator
+class HardmaxPluginCreator : public nvinfer1::IPluginCreatorV3One
 {
 public:
     HardmaxPluginCreator();
@@ -121,13 +115,10 @@ public:
 
     nvinfer1::PluginFieldCollection const* getFieldNames() noexcept override;
 
-    nvinfer1::IPluginV2DynamicExt* createPlugin(
-        char const* name, nvinfer1::PluginFieldCollection const* fc) noexcept override;
+    nvinfer1::IPluginV3* createPlugin(
+        char const* name, nvinfer1::PluginFieldCollection const* fc, nvinfer1::TensorRTPhase phase) noexcept override;
 
-    nvinfer1::IPluginV2DynamicExt* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-    void setPluginNamespace(char const* pluginNamespace) noexcept override;
+    void setPluginNamespace(char const* pluginNamespace) noexcept;
 
     char const* getPluginNamespace() const noexcept override;
 

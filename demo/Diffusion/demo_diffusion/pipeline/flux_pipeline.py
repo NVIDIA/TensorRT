@@ -396,11 +396,12 @@ class FluxPipeline(DiffusionPipeline):
         self.fp16 = True if not self.bf16 else False
         self.tf32 = True
         if "clip" in self.stages:
+            # BF16 CLIP ONNX export fails with ComplexDouble error in newer PyTorch; use FP16.
             self.models["clip"] = CLIPModel(
                 **models_args,
-                fp16=self.fp16,
+                fp16=True,
                 tf32=self.tf32,
-                bf16=self.bf16,
+                bf16=False,
                 embedding_dim=get_clip_embedding_dim(self.version, self.pipeline_type),
                 keep_pooled_output=True,
                 subfolder="text_encoder",
@@ -415,7 +416,6 @@ class FluxPipeline(DiffusionPipeline):
                 bf16=self.bf16,
                 subfolder="text_encoder_2",
                 text_maxlen=self.max_sequence_length,
-                build_strongly_typed=True,
                 weight_streaming=self.weight_streaming,
                 weight_streaming_budget_percentage=self.text_encoder_weight_streaming_budget_percentage,
             )
@@ -456,7 +456,6 @@ class FluxPipeline(DiffusionPipeline):
                 "fp8": fp8,
                 "tf32": self.tf32,
                 "text_maxlen": self.max_sequence_length,
-                "build_strongly_typed": True,
                 "weight_streaming": self.weight_streaming,
                 "weight_streaming_budget_percentage": self.denoiser_weight_streaming_budget_percentage,
             }

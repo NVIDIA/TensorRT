@@ -287,7 +287,7 @@ class UNetModel(base_model.BaseModel):
         if self.fp8:
             return super().optimize(onnx_graph, modify_fp8_graph=True)
         if self.int8:
-            return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
+            return super().optimize(onnx_graph, modify_int8_graph=True)
         return super().optimize(onnx_graph)
 
 
@@ -428,7 +428,7 @@ class UNetXLModel(base_model.BaseModel):
         if self.fp8:
             return super().optimize(onnx_graph, modify_fp8_graph=True)
         if self.int8:
-            return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
+            return super().optimize(onnx_graph, modify_int8_graph=True)
         return super().optimize(onnx_graph)
 
 

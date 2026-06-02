@@ -153,12 +153,7 @@ class Engine:
     def build(
         self,
         onnx_path,
-        strongly_typed=False,
-        fp16=True,
-        bf16=False,
         tf32=False,
-        int8=False,
-        fp8=False,
         input_profile=None,
         enable_refit=False,
         enable_all_tactics=False,
@@ -172,32 +167,20 @@ class Engine:
     ):
         print(f"Building TensorRT engine for {onnx_path}: {self.engine_path}")
 
-        # Handle weight streaming case: https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#streaming-weights.
-        if weight_streaming:
-            strongly_typed, fp16, bf16, int8, fp8 = True, False, False, False, False
-
         # Base command
         build_command = [f"polygraphy convert {onnx_path} --convert-to trt --output {self.engine_path}"]
 
-        # Precision flags
+        # Build arguments
         build_args = [
-            "--fp16" if fp16 else "",
-            "--bf16" if bf16 else "",
+            "--strongly-typed",
             "--tf32" if tf32 else "",
-            "--fp8" if fp8 else "",
-            "--int8" if int8 else "",
-            "--strongly-typed" if strongly_typed else "",
-        ]
-
-        # Additional arguments
-        build_args.extend([
             "--weight-streaming" if weight_streaming else "",
             "--refittable" if enable_refit else "",
             "--tactic-sources" if not enable_all_tactics else "",
             "--onnx-flags native_instancenorm" if native_instancenorm else "",
             f"--builder-optimization-level {builder_optimization_level}",
             f"--precision-constraints {precision_constraints}",
-        ])
+        ]
 
         # Timing cache
         if timing_cache:
@@ -273,8 +256,10 @@ class Engine:
                 print(f"[W]: Unload an unloaded engine {self.engine_path}, skip unloading")
 
     def activate(self, device_memory=None):
-        if device_memory:
-            self.context = self.engine.create_execution_context_without_device_memory()
+        if device_memory is not None:
+            self.context = self.engine.create_execution_context(
+                trt.ExecutionContextAllocationStrategy.USER_MANAGED
+            )
             self.context.device_memory = device_memory
         else:
             self.context = self.engine.create_execution_context()

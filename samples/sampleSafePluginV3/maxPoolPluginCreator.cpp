@@ -21,89 +21,80 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <string_view>
 
 #include "NvInferSafePlugin.h"
 #include "NvInferSafeRuntime.h"
 
 #include "maxPoolPluginCreator.h"
 
-namespace nvinfer1
-{
-namespace plugin
+namespace nvinfer1::plugin
 {
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+namespace
+{
+
+using namespace std::string_view_literals;
+
+//! Like C++23's `container.append_range(std::span(data, count))`.
+template <typename Container, typename T>
+void appendRange(Container& container, T* data, int64_t count)
+{
+    container.insert(container.end(), data, data + count);
+}
+
+//! \return PoolParameters parsed from the given `PluginField`s.
+//! \param fields, nbFields: A span of fields.
+[[nodiscard]] PoolParameters parsePoolParameters(nvinfer1::PluginField const* const fields, int32_t const nbFields)
+{
+    std::vector<int32_t> kernelShape;
+    std::vector<int32_t> strides;
+    std::vector<int32_t> pads;
+    PoolingType pType{PoolingType::kMAX}; // Default to MAX pooling
+    for (int32_t i{0}; i < nbFields; ++i)
+    {
+        auto const& field = fields[i];
+        std::string_view const attrName = field.name;
+        if (attrName == "kernel_shape"sv)
+        {
+            appendRange(kernelShape, static_cast<int32_t const*>(field.data), field.length);
+        }
+        else if (attrName == "strides"sv)
+        {
+            appendRange(strides, static_cast<int32_t const*>(field.data), field.length);
+        }
+        else if (attrName == "pads"sv)
+        {
+            appendRange(pads, static_cast<int32_t const*>(field.data), field.length);
+        }
+        else if (attrName == "pType"sv && field.data != nullptr)
+        {
+            pType = *static_cast<PoolingType const*>(field.data);
+        }
+    }
+
+    PoolParameters result{};
+    result.pType = pType;
+    result.Sx = strides.at(0);
+    result.Sy = strides.at(1);
+    result.Kx = kernelShape.at(0);
+    result.Ky = kernelShape.at(1);
+    result.Px = pads.at(0);
+    result.Py = pads.at(1);
+    return result;
+}
+} // namespace
+
 IPluginV3* MaxPoolCreator::createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
     // The build phase and the deserialization phase are handled differently.
-    if (phase == TensorRTPhase::kBUILD)
+    switch (phase)
     {
-        nvinfer1::PluginField const* fields{fc->fields};
-        int32_t nbFields{fc->nbFields};
-
-        std::vector<int32_t> kernelShape{};
-        std::vector<int32_t> strides{};
-        std::vector<int32_t> pads{};
-        PoolingType pType{PoolingType::kMAX}; // Default to MAX pooling
-
-        for (int32_t i{0}; i < nbFields; ++i)
-        {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "kernel_shape"))
-            {
-                int32_t const* const kernelShapeData{static_cast<int32_t const*>(fields[i].data)};
-                for (int32_t j{0}; j < fields[i].length; ++j)
-                {
-                    kernelShape.push_back(kernelShapeData[j]);
-                }
-            }
-            if (!strcmp(attrName, "strides"))
-            {
-                int32_t const* const stridesData{static_cast<int32_t const*>(fields[i].data)};
-                for (int32_t j{0}; j < fields[i].length; ++j)
-                {
-                    strides.push_back(stridesData[j]);
-                }
-            }
-            if (!strcmp(attrName, "pads"))
-            {
-                int32_t const* const padsData{static_cast<int32_t const*>(fields[i].data)};
-                for (int32_t j{0}; j < fields[i].length; ++j)
-                {
-                    pads.push_back(padsData[j]);
-                }
-            }
-            if (!strcmp(attrName, "pType"))
-            {
-                if (fields[i].data != nullptr)
-                {
-                    pType = *static_cast<PoolingType const*>(fields[i].data);
-                }
-            }
-        }
-
-        PoolParameters params;
-        params.pType = pType;
-        params.Sx = strides[0];
-        params.Sy = strides[1];
-        params.Kx = kernelShape[0];
-        params.Ky = kernelShape[1];
-        params.Px = pads[0];
-        params.Py = pads[1];
-
-        auto plugin = std::make_unique<MaxPoolPlugin>(params);
-        return plugin.release();
-    }
-    else if (phase == TensorRTPhase::kRUNTIME)
-    {
-        nvinfer1::PluginField const* fields{fc->fields};
-
-        PoolParameters params{*static_cast<PoolParameters const*>(fields[0].data)};
-
-        auto plugin = std::make_unique<MaxPoolPlugin>(params);
-        return plugin.release();
+    case TensorRTPhase::kBUILD:
+        return std::make_unique<MaxPoolPlugin>(parsePoolParameters(fc->fields, fc->nbFields)).release();
+    case TensorRTPhase::kRUNTIME:
+        return std::make_unique<MaxPoolPlugin>(*static_cast<PoolParameters const*>(fc->fields[0].data)).release();
     }
     return nullptr;
 }
-} // namespace plugin
-} // namespace nvinfer1
+} // namespace nvinfer1::plugin

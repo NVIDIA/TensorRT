@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,6 +47,7 @@
 
 #include <array>
 #include <cstdlib>
+#include <memory>
 #include <random>
 #include <string>
 #include <utility>
@@ -161,40 +162,23 @@ public:
         }
 
         desc = BufferDesc(dims, dataWidth, format);
-
-        if (nullptr == buffer)
-        {
-            buffer = new uint8_t[getBufferSize()]();
-        }
-    }
-
-    ~SampleBuffer()
-    {
-        destroy();
+        buffer = std::make_unique<uint8_t[]>(getBufferSize());
     }
 
     SampleBuffer& operator=(SampleBuffer&& sampleBuffer) noexcept
     {
-        destroy();
-
         this->dims = sampleBuffer.dims;
         this->dataWidth = sampleBuffer.dataWidth;
         this->desc = sampleBuffer.desc;
         this->format = sampleBuffer.format;
         this->isInput = sampleBuffer.isInput;
-        this->buffer = sampleBuffer.buffer;
-        sampleBuffer.buffer = nullptr;
-
+        this->buffer = std::move(sampleBuffer.buffer);
         return *this;
     }
 
     void destroy()
     {
-        if (buffer != nullptr)
-        {
-            delete[] buffer;
-            buffer = nullptr;
-        }
+        buffer.reset();
     }
 
     nvinfer1::Dims dims;
@@ -207,7 +191,7 @@ public:
 
     BufferDesc desc;
 
-    uint8_t* buffer = nullptr;
+    std::unique_ptr<uint8_t[]> buffer;
 
     int32_t getBufferSize()
     {
@@ -270,7 +254,7 @@ public:
 //! \brief Validates engine I/O datatypes and formats against a reference.
 //!
 //! \details This function queries I/O datatype and format description from the built engine.
-//!           Validating them is sufficient to ensure that `ITensor::setType` and `ITensor::setAllowedFormats` API as
+//!           Validating them is sufficient to ensure that `ITensor::setAllowedFormats` API as
 //!           expected.
 //!
 //! \return true if type and format validation succeeds.
@@ -462,7 +446,7 @@ bool SampleIOFormats::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
     auto const devInput = mallocCudaMem<uint8_t>(inputBuf.getBufferSize());
     auto devOutput = mallocCudaMem<uint8_t>(outputBuf.getBufferSize());
 
-    CHECK(cudaMemcpy(devInput.get(), inputBuf.buffer, inputBuf.getBufferSize(), cudaMemcpyHostToDevice));
+    CHECK(cudaMemcpy(devInput.get(), inputBuf.buffer.get(), inputBuf.getBufferSize(), cudaMemcpyHostToDevice));
 
     auto context = std::unique_ptr<nvinfer1::IExecutionContext>(mEngine->createExecutionContext());
     if (!context)
@@ -499,7 +483,7 @@ bool SampleIOFormats::infer(SampleBuffer& inputBuf, SampleBuffer& outputBuf)
     // Release stream
     CHECK(cudaStreamDestroy(stream));
 
-    CHECK(cudaMemcpy(outputBuf.buffer, devOutput.get(), outputBuf.getBufferSize(), cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(outputBuf.buffer.get(), devOutput.get(), outputBuf.getBufferSize(), cudaMemcpyDeviceToHost));
 
     return true;
 }

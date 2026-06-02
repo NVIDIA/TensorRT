@@ -489,10 +489,10 @@ nvinfer1::IPluginV3* ModulatedDeformableConvPluginDynamicCreator::createPlugin(
             }
         }
 
-        auto* plugin
-            = new ModulatedDeformableConvPluginDynamic(name, stride, padding, dilation, deformableGroup, group);
+        auto plugin = std::make_unique<ModulatedDeformableConvPluginDynamic>(
+            name, stride, padding, dilation, deformableGroup, group);
         plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

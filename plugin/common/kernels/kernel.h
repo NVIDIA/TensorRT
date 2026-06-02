@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,13 +42,6 @@ pluginStatus_t allClassNMS(cudaStream_t stream, int32_t num, int32_t num_classes
     nvinfer1::DataType DT_BBOX, void* bbox_data, void* beforeNMS_scores, void* beforeNMS_index_array,
     void* afterNMS_scores, void* afterNMS_index_array, bool flipXY, float const score_shift, bool caffeSemantics);
 
-pluginStatus_t detectionInference(cudaStream_t stream, int32_t N, int32_t C1, int32_t C2, bool shareLocation,
-    bool varianceEncodedInTarget, int32_t backgroundLabelId, int32_t numPredsPerClass, int32_t numClasses, int32_t topK,
-    int32_t keepTopK, float confidenceThreshold, float nmsThreshold, nvinfer1::plugin::CodeTypeSSD codeType,
-    nvinfer1::DataType DT_BBOX, void const* locData, void const* priorData, nvinfer1::DataType DT_SCORE,
-    void const* confData, void* keepCount, void* topDetections, void* workspace, bool isNormalized = true,
-    bool confSigmoid = false, int32_t scoreBits = 16, bool const isBatchAgnostic = true);
-
 pluginStatus_t nmsInference(cudaStream_t stream, int32_t N, int32_t boxesSize, int32_t scoresSize, bool shareLocation,
     int32_t backgroundLabelId, int32_t numPredsPerClass, int32_t numClasses, int32_t topK, int32_t keepTopK,
     float scoreThreshold, float iouThreshold, nvinfer1::DataType DT_BBOX, void const* locData,
@@ -88,11 +81,6 @@ pluginStatus_t permuteData(cudaStream_t stream, int32_t nthreads, int32_t num_cl
 size_t detectionForwardPreNMSSize(int32_t N, int32_t C2);
 
 size_t detectionForwardPostNMSSize(int32_t N, int32_t numClasses, int32_t topK);
-
-pluginStatus_t decodeBBoxes(cudaStream_t stream, int32_t nthreads, nvinfer1::plugin::CodeTypeSSD code_type,
-    bool variance_encoded_in_target, int32_t num_priors, bool share_location, int32_t num_loc_classes,
-    int32_t background_label_id, bool clip_bbox, nvinfer1::DataType DT_BBOX, void const* loc_data,
-    void const* prior_data, void* bbox_data, bool const batch_agnostic);
 
 size_t normalizePluginWorkspaceSize(bool acrossSpatial, int32_t C, int32_t H, int32_t W);
 

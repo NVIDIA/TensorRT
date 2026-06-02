@@ -278,7 +278,6 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 tf32=self.tf32,
                 subfolder="text_encoder_3",
                 text_maxlen=self.max_sequence_length,
-                build_strongly_typed=True,
                 weight_streaming=self.weight_streaming,
                 weight_streaming_budget_percentage=self.text_encoder_weight_streaming_budget_percentage,
             )
@@ -293,7 +292,6 @@ class StableDiffusion35Pipeline(DiffusionPipeline):
                 int8=self.int8,
                 fp4=self.fp4,
                 text_maxlen=self.models["t5"].text_maxlen + self.models["clip_g"].text_maxlen,
-                build_strongly_typed=False,
                 weight_streaming=self.weight_streaming,
                 do_classifier_free_guidance=self.do_classifier_free_guidance,
             )

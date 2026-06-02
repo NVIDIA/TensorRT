@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +15,10 @@
 # limitations under the License.
 #
 
-# We need cmake >= 3.19 for REAL_PATH support
-cmake_minimum_required(VERSION 3.19 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.31 FATAL_ERROR)
 project(CustomHardMax LANGUAGES CXX CUDA)
+
+find_package(CUDAToolkit REQUIRED)
 
 if(NOT MSVC)
     # Enable all compile warnings
@@ -37,10 +38,7 @@ endmacro()
 if(NOT MSVC)
     set_ifndef(TRT_LIB /usr/lib/x86_64-linux-gnu)
     set_ifndef(TRT_INCLUDE /usr/include/x86_64-linux-gnu)
-    set_ifndef(CUDA_INC_DIR /usr/local/cuda/include)
 
-    set_ifndef(CUDA_LIB_DIR /usr/local/cuda)
-    set_ifndef(CUBLAS_LIB_SUFFIXES "lib;lib64")
 endif()
 
 # Find dependencies:
@@ -53,24 +51,6 @@ find_library(
     PATH_SUFFIXES lib lib64)
 set_ifndef(NVINFER_LIB ${_NVINFER_LIB})
 
-find_library(
-    _CUDART_LIB cudart
-    HINTS ${CUDA_LIB_DIR}
-    PATH_SUFFIXES lib lib64)
-set_ifndef(CUDART_LIB ${_CUDART_LIB})
-
-find_library(
-    _CUBLAS_LIB cublas
-    HINTS ${CUDA_LIB_DIR}
-    PATH_SUFFIXES ${CUBLAS_LIB_SUFFIXES})
-set_ifndef(CUBLAS_LIB ${_CUBLAS_LIB})
-
-find_library(
-    _CUDA_LIB cuda
-    HINTS ${CUDA_LIB_DIR}
-    PATH_SUFFIXES lib/stubs lib64/stubs)
-set_ifndef(CUDA_LIB ${_CUDA_LIB})
-
 # -------- BUILDING --------
 
 add_definitions(-DTENSORRT_BUILD_LIB)
@@ -81,20 +61,21 @@ file(REAL_PATH ${CMAKE_SOURCE_DIR} CMAKE_SOURCE_DIR_REALPATH)
 get_filename_component(SAMPLES_COMMON_DIR ${CMAKE_SOURCE_DIR_REALPATH}/../../common/ ABSOLUTE)
 get_filename_component(SHARED_DIR ${CMAKE_SOURCE_DIR_REALPATH}/../../../shared ABSOLUTE)
 get_filename_component(SAMPLES_DIR ${CMAKE_SOURCE_DIR_REALPATH}/../../ ABSOLUTE)
-include_directories(${CUDA_INC_DIR} ${TRT_INCLUDE} ${CMAKE_SOURCE_DIR_REALPATH}/plugin/
-                    ${SAMPLES_COMMON_DIR} ${SAMPLES_DIR} ${SHARED_DIR})
-
 # Define Hardmax plugin library target
 add_library(
     customHardmaxPlugin MODULE
     ${SAMPLES_COMMON_DIR}/logger.cpp ${SHARED_DIR}/utils/fileLock.cpp
     ${CMAKE_SOURCE_DIR_REALPATH}/plugin/customHardmaxPlugin.cpp ${CMAKE_SOURCE_DIR_REALPATH}/plugin/customHardmaxPlugin.h)
 
+target_include_directories(customHardmaxPlugin PRIVATE
+    ${CUDAToolkit_INCLUDE_DIRS} ${TRT_INCLUDE} ${CMAKE_SOURCE_DIR_REALPATH}/plugin/
+    ${SAMPLES_COMMON_DIR} ${SAMPLES_DIR} ${SHARED_DIR})
+
 # Use C++11
 target_compile_features(customHardmaxPlugin PUBLIC cxx_std_17)
 
 # Link TensorRT’s nvinfer lib
 target_link_libraries(customHardmaxPlugin PRIVATE ${NVINFER_LIB})
-target_link_libraries(customHardmaxPlugin PRIVATE ${CUDART_LIB})
-target_link_libraries(customHardmaxPlugin PRIVATE ${CUBLAS_LIB})
-target_link_libraries(customHardmaxPlugin PRIVATE ${CUDA_LIB})
+target_link_libraries(customHardmaxPlugin PRIVATE CUDA::cudart_static)
+target_link_libraries(customHardmaxPlugin PRIVATE CUDA::cublas)
+target_link_libraries(customHardmaxPlugin PRIVATE CUDA::cuda_driver)

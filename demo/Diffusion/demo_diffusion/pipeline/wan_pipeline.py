@@ -219,7 +219,6 @@ class WanPipeline(DiffusionPipeline):
                 fp16=False,
                 bf16=True,
                 text_maxlen=self.max_sequence_length,
-                build_strongly_typed=True,
                 weight_streaming=self.weight_streaming,
                 weight_streaming_budget_percentage=self.text_encoder_weight_streaming_budget_percentage,
                 use_attention_mask=True,

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,7 +46,7 @@ namespace nvonnxparser
 class IOnnxConfig
 {
 public:
-    virtual ~IOnnxConfig() noexcept = default;
+    virtual ~IOnnxConfig() noexcept = 0;
     //!
     //! \typedef Verbosity
     //!
@@ -190,6 +190,8 @@ public:
     virtual void setPrintLayerInfo(bool) noexcept = 0;
 
 }; // class IOnnxConfig
+
+inline IOnnxConfig::~IOnnxConfig() noexcept = default;
 
 TENSORRTAPI IOnnxConfig* createONNXConfig();
 

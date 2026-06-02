@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,8 @@ DEBUG_LOG = False  # Turn on to print TRT verbose logs
 if DEBUG_LOG:
     verbose = G_LOGGER.verbosity(G_LOGGER.SUPER_VERBOSE)
     verbose.__enter__()
+else:
+    verbose = None
 
 def build_network():
     builder, network = CreateNetwork()()
@@ -71,6 +73,6 @@ def build_engine():
 
 if __name__ == "__main__":
     build_engine()
-    if DEBUG_LOG:
+    if verbose is not None:
         verbose.__exit__(None, None, None)
 

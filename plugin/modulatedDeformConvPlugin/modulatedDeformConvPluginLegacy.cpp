@@ -28,6 +28,7 @@
 #include <assert.h>
 #include <chrono>
 #include <memory>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace nvinfer1::pluginInternal;
@@ -48,6 +49,7 @@ void ModulatedDeformConvForwardCUDAKernelLauncherHalf(half const* input, half co
 
 namespace
 {
+using namespace std::string_view_literals;
 static char const* PLUGIN_VERSION{"1"};
 static char const* PLUGIN_NAME{"ModulatedDeformConv2d"};
 } // namespace
@@ -346,23 +348,23 @@ nvinfer1::IPluginV2* ModulatedDeformableConvPluginDynamicLegacyCreator::createPl
             {
                 continue;
             }
-            std::string field_name(fc->fields[i].name);
+            std::string_view const field_name = fc->fields[i].name;
 
-            if (field_name.compare("deformable_group") == 0)
+            if (field_name == "deformable_group"sv)
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 deformableGroup = static_cast<int32_t const*>(fc->fields[i].data)[0];
                 PLUGIN_VALIDATE(deformableGroup > 0);
             }
 
-            if (field_name.compare("group") == 0)
+            if (field_name == "group"sv)
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 group = static_cast<int32_t const*>(fc->fields[i].data)[0];
                 PLUGIN_VALIDATE(group > 0);
             }
 
-            if (field_name.compare("stride") == 0)
+            if (field_name == "stride"sv)
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 stride.nbDims = 2;
@@ -372,7 +374,7 @@ nvinfer1::IPluginV2* ModulatedDeformableConvPluginDynamicLegacyCreator::createPl
                 PLUGIN_VALIDATE(stride.d[1] > 0);
             }
 
-            if (field_name.compare("padding") == 0)
+            if (field_name == "padding"sv)
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 padding.nbDims = 2;
@@ -382,7 +384,7 @@ nvinfer1::IPluginV2* ModulatedDeformableConvPluginDynamicLegacyCreator::createPl
                 PLUGIN_VALIDATE(padding.d[1] >= 0);
             }
 
-            if (field_name.compare("dilation") == 0)
+            if (field_name == "dilation"sv)
             {
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 dilation.nbDims = 2;
@@ -393,10 +395,10 @@ nvinfer1::IPluginV2* ModulatedDeformableConvPluginDynamicLegacyCreator::createPl
             }
         }
 
-        ModulatedDeformableConvPluginDynamicLegacy* plugin
-            = new ModulatedDeformableConvPluginDynamicLegacy(name, stride, padding, dilation, deformableGroup, group);
+        auto plugin = std::make_unique<ModulatedDeformableConvPluginDynamicLegacy>(
+            name, stride, padding, dilation, deformableGroup, group);
         plugin->setPluginNamespace(getPluginNamespace());
-        return plugin;
+        return plugin.release();
     }
     catch (std::exception const& e)
     {

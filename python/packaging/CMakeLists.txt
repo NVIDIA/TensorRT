@@ -25,7 +25,6 @@ include(FlagToInt)
 function(processWheelTemplates wheelType moduleName pyVersion)
     set(outputDir ${CMAKE_CURRENT_BINARY_DIR}/${moduleName}_${wheelType}-py${pyVersion}/$<CONFIG>)
 
-    
     foreach(filePath IN LISTS ARGN)
         # Target files that start with tensorrt/ need to be expanded into ${moduleName}/ instead of tensorrt/
         # So we need to rewrite the relative path, the source directory, *and* the output directory to match.
@@ -108,32 +107,19 @@ add_custom_target(tensorrt_python_wheels)
 set(TRT_WHEEL_OUTPUT_DIR "${CMAKE_BINARY_DIR}/$<CONFIG>/dist" CACHE PATH "")
 
 
-# Add a custom command to run pip install for the requirements.txt file.
-# We need to run this only once prior to any calls to setup.py.
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import sys; print(sys.prefix != sys.base_prefix)"
-    OUTPUT_VARIABLE python_is_venv
-)
-
-# Note: If python is running in a virtual environment, then pip will error out
-# on the use of --user for `pip install`. If we are in a virtual environment,
-# we install into that virtual environment. Otherwise, we install into the user
-# environment.
-if("${python_is_venv}" STREQUAL "True")
-    set(maybe_userflag)
-else()
-    set(maybe_userflag "--user")
-endif()
-
+# Install packaging requirements into the build dir so they survive container rebuilds.
+set(TRT_PACKAGING_DEPS_DIR ${CMAKE_CURRENT_BINARY_DIR}/packaging_deps)
 add_custom_command(
-    OUTPUT package_install_cache.txt
-    COMMAND ${Python3_EXECUTABLE} -m pip install ${maybe_userflag} -r ${TensorRT_SOURCE_DIR}/python/packaging/requirements.txt ${maybe_pypi_index}
-    COMMAND ${CMAKE_COMMAND} -E touch package_install_cache.txt
+    OUTPUT ${TRT_PACKAGING_DEPS_DIR}/.installed
+    COMMAND ${Python3_EXECUTABLE} -m pip install --upgrade
+        --target ${TRT_PACKAGING_DEPS_DIR}
+        -r ${TensorRT_SOURCE_DIR}/python/packaging/requirements.txt
+        ${maybe_pypi_index}
+    COMMAND ${CMAKE_COMMAND} -E touch ${TRT_PACKAGING_DEPS_DIR}/.installed
     DEPENDS ${TensorRT_SOURCE_DIR}/python/packaging/requirements.txt
     VERBATIM
 )
-# Custom commands that call setup.py should depend on this target so that the requirements are installed first.
-add_custom_target(trt_packaging_requirements_installed DEPENDS package_install_cache.txt)
+add_custom_target(trt_packaging_requirements_installed DEPENDS ${TRT_PACKAGING_DEPS_DIR}/.installed)
 
 # Computes the current wheel platform name and stores it the variable named by outVar.
 #
@@ -142,7 +128,7 @@ add_custom_target(trt_packaging_requirements_installed DEPENDS package_install_c
 # \returns wheelPlatform The computed wheel platform name. Standalone wheels use manylinux tags.
 function(get_wheel_platform isStandalone outVar)
     if(WIN32)
-        set(wheelPlatform win_amd64)
+        set(wheelPlatform win_${TRT_LOWERCASE_CMAKE_SYSTEM_PROCESSOR})
     elseif(isStandalone)
         if(NOT GLIBC_VERSION)
             # Determine glibc version for standalone wheels
@@ -160,9 +146,9 @@ function(get_wheel_platform isStandalone outVar)
         endif()
 
         string(REPLACE "." "_" GLIBC_VERSION_FLAT ${GLIBC_VERSION})
-        set(wheelPlatform manylinux_${GLIBC_VERSION_FLAT}_${TRT_CONFIG_ARCH})
+        set(wheelPlatform manylinux_${GLIBC_VERSION_FLAT}_${TRT_LOWERCASE_CMAKE_SYSTEM_PROCESSOR})
     else()
-        set(wheelPlatform linux_${TRT_CONFIG_ARCH})
+        set(wheelPlatform linux_${TRT_LOWERCASE_CMAKE_SYSTEM_PROCESSOR})
     endif()
 
     set(${outVar} ${wheelPlatform} PARENT_SCOPE)

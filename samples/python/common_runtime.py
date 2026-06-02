@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import contextlib
 import ctypes
 from typing import Optional, List, Union
 
@@ -185,9 +186,13 @@ class PinnedHostMem:
 
     @property
     def array(self) -> np.ndarray:
-        # Create view with proper memory ownership
-        pointer_type = ctypes.POINTER(np.ctypeslib.as_ctypes_type(self._dtype))
-        host_array = np.ctypeslib.as_array(ctypes.cast(self._host_ptr, pointer_type), (self._host_size,))
+        # Wrap the host buffer as uint8 first, then view as the real dtype.
+        # np.ctypeslib.as_ctypes_type has no mapping for dtypes without a ctypes
+        # equivalent (float16/bfloat16, FP8, INT4), and would raise NotImplementedError
+        # there; the byte-view round-trip avoids that call entirely.
+        ptr = ctypes.cast(ctypes.c_void_p(self._host_ptr), ctypes.POINTER(ctypes.c_ubyte))
+        host_u8 = np.ctypeslib.as_array(ptr, (self._nbytes,))
+        host_array = host_u8.view(self._dtype).reshape(self._host_size)
         return ArrayWithOwner(host_array, self)
 
     @array.setter
@@ -286,39 +291,97 @@ class CudaStreamContext:
 
 
 # Allocates all buffers required for an engine, i.e. host/device inputs/outputs.
-# If engine uses dynamic shapes, specify a profile to find the maximum input & output size.
-def allocate_buffers(engine: trt.ICudaEngine, profile_idx: Optional[int] = None):
+# Shape precedence: context.infer_shapes() (when context is given and yields fully
+# concrete shapes) > profile_idx max shape > engine.get_tensor_shape(). Using the
+# context branch avoids allocating profile-max-sized output buffers when the actual
+# input shapes are smaller.
+#
+# engine.get_tensor_profile_shape() is an INPUT-only API; for outputs it returns a
+# Dims sentinel with nbDims=-1, which would crash tuple()/__len__() downstream.
+# When the caller passes profile_idx without a configured context, this function
+# builds a temporary IExecutionContext, pins each input to its profile MAX, runs
+# infer_shapes() to derive output MAX shapes, allocates buffers, then discards the
+# temporary context.
+def allocate_buffers(
+    engine: trt.ICudaEngine,
+    profile_idx: Optional[int] = None,
+    context: Optional[trt.IExecutionContext] = None,
+):
     inputs = []
     outputs = []
     bindings = []
     tensor_names = [engine.get_tensor_name(i) for i in range(engine.num_io_tensors)]
-    for binding in tensor_names:
-        # get_tensor_profile_shape returns (min_shape, optimal_shape, max_shape)
-        # Pick out the max shape to allocate enough memory for the binding.
-        shape = engine.get_tensor_shape(binding) if profile_idx is None else engine.get_tensor_profile_shape(binding, profile_idx)[-1]
-        shape_valid = np.all([s >= 0 for s in shape])
-        if not shape_valid and profile_idx is None:
-            raise ValueError(f"Binding {binding} has dynamic shape, " +\
-                "but no profile was specified.")
-        size = trt.volume(shape)
-        trt_type = engine.get_tensor_dtype(binding)
 
-        # Allocate host and device buffers
+    def is_input(n):
+        return engine.get_tensor_mode(n) == trt.TensorIOMode.INPUT
+
+    # Decide a shape source. Prefer caller's context (if it yields concrete shapes);
+    # otherwise build a private one pinned to profile MAX inputs.
+    shape_ctx = None
+    owns_ctx = False
+    owns_stream = None
+
+    if context is not None:
         try:
-            dtype = np.dtype(trt.nptype(trt_type))
-            bindingMemory = HostDeviceMem(size, dtype)
-        except TypeError: # no numpy support: create a byte array instead (BF16, FP8, INT4)
-            size = int(size * trt_type.itemsize)
-            bindingMemory = HostDeviceMem(size)
+            if not context.infer_shapes():
+                shape_ctx = context
+        except Exception:
+            # Any failure to infer shapes (RuntimeError, AttributeError, TRT-specific
+            # exceptions) just means we fall back to profile/static shapes below.
+            shape_ctx = None
 
-        # Append the device buffer to device bindings.
-        bindings.append(int(bindingMemory.device_ptr))
+    try:
+        if shape_ctx is None and profile_idx is not None:
+            shape_ctx = engine.create_execution_context()
+            owns_ctx = True
+            if engine.num_optimization_profiles > 1:
+                owns_stream = cuda_call(cudart.cudaStreamCreate())
+                shape_ctx.set_optimization_profile_async(profile_idx, owns_stream)
+                cuda_call(cudart.cudaStreamSynchronize(owns_stream))
+            for name in tensor_names:
+                if is_input(name):
+                    max_shape = engine.get_tensor_profile_shape(name, profile_idx)[-1]
+                    shape_ctx.set_input_shape(name, max_shape)
+            if shape_ctx.infer_shapes():
+                raise RuntimeError(
+                    "infer_shapes failed; cannot size output buffers from profile_idx."
+                )
 
-        # Append to the appropriate list.
-        if engine.get_tensor_mode(binding) == trt.TensorIOMode.INPUT:
-            inputs.append(bindingMemory)
-        else:
-            outputs.append(bindingMemory)
+        for binding in tensor_names:
+            if shape_ctx is not None:
+                shape = tuple(shape_ctx.get_tensor_shape(binding))
+            else:
+                shape = tuple(engine.get_tensor_shape(binding))
+                if any(s < 0 for s in shape):
+                    raise ValueError(
+                        f"Binding {binding} has dynamic shape, but no profile was specified."
+                    )
+            size = trt.volume(shape)
+            trt_type = engine.get_tensor_dtype(binding)
+
+            # Allocate host and device buffers
+            try:
+                dtype = np.dtype(trt.nptype(trt_type))
+                binding_memory = HostDeviceMem(size, dtype)
+            except TypeError: # no numpy support: create a byte array instead (BF16, FP8, INT4)
+                nbytes = int(size * trt_type.itemsize)
+                binding_memory = HostDeviceMem(nbytes)
+
+            # Append the device buffer to device bindings.
+            bindings.append(int(binding_memory.device_ptr))
+
+            # Append to the appropriate list.
+            if is_input(binding):
+                inputs.append(binding_memory)
+            else:
+                outputs.append(binding_memory)
+    finally:
+        if owns_stream is not None:
+            with contextlib.suppress(Exception):
+                cuda_call(cudart.cudaStreamDestroy(owns_stream))
+        if owns_ctx:
+            del shape_ctx
+
     return inputs, outputs, bindings
 
 

@@ -22,7 +22,7 @@ This sample, `sampleDistCollective`, demonstrates how to use TensorRT for multi-
 The sample builds a TensorRT network containing a distributed collective layer, then runs inference across multiple GPUs using NCCL for GPU-to-GPU communication.
 
 Specifically:
--   `INetworkDefinition::addDistCollective` is called to add the collective layer (kALL_REDUCE, kALL_GATHER, kBROADCAST, kREDUCE, or kREDUCE_SCATTER).
+-   `INetworkDefinition::addDistCollective` is called to add the collective layer (kALL_REDUCE, kALL_GATHER, kBROADCAST, kREDUCE, kREDUCE_SCATTER, kALL_TO_ALL, kGATHER, or kSCATTER).
 -   `IDistCollectiveLayer::setNbRanks` is called to set the number of ranks for the collective operation.
 -   The NCCL unique ID is coordinated via a shared file specified by `TRT_NCCL_ID_FILE`. Rank 0 generates the ID and writes it to the file; other ranks wait and read it.
 -   `ncclCommInitRank` is called to initialize the NCCL communicator on each rank.
@@ -84,6 +84,9 @@ In this sample, the [IDistCollectiveLayer](https://docs.nvidia.com/deeplearning/
     - `broadcast` - Broadcasts data from rank 0 to all other ranks
     - `reduce` - Reduces data across all ranks and sends the result to rank 0
     - `reduce_scatter` - Reduces data across all ranks and scatters portions of the result to each rank
+    - `all_to_all` - Exchanges equally sized data chunks between all ranks
+    - `gather` - Gathers data from all ranks to rank 0
+    - `scatter` - Scatters data from rank 0 to all ranks
 
 3. Verify that the sample ran successfully. If the sample runs successfully you should see output similar to the following:
     ```

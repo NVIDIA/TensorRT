@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -407,6 +407,11 @@ class DET2GraphSurgeon:
             roi_coords_transform = 2
         elif roi_align_type == "ROIAlign":
             roi_coords_transform = 0
+        else:
+            raise ValueError(
+                f"Unsupported ROIAlign type '{roi_align_type}'. "
+                f"Expected 'ROIAlignV2' or 'ROIAlign'."
+            )
 
         # ROIAlign outputs.
         roi_align_output = gs.Variable(

@@ -41,22 +41,8 @@ static auto const parse = [](IParser& self, py::buffer const& model, char const*
     return self.parse(info.ptr, info.size * info.itemsize, path);
 };
 
-static auto const parse_with_weight_descriptors = [](IParser& self, py::buffer const& model) {
-    py::buffer_info info = model.request();
-
-    py::gil_scoped_release releaseGil{};
-    return self.parseWithWeightDescriptors(info.ptr, info.size * info.itemsize);
-};
-
 static auto const parseFromFile
     = [](IParser& self, std::string const& model) { return self.parseFromFile(model.c_str(), 0); };
-
-static auto const supportsModel = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
-    py::buffer_info info = model.request();
-    SubGraphCollection_t subgraphs;
-    bool const supported = self.supportsModel(info.ptr, info.size * info.itemsize, subgraphs, path);
-    return std::make_pair(supported, subgraphs);
-};
 
 static auto const supportsModelV2 = [](IParser& self, py::buffer const& model, char const* path = nullptr) {
     py::buffer_info info = model.request();
@@ -184,7 +170,6 @@ inline std::string const parserErrorStr(nvonnxparser::IParserError const* error)
 void bindOnnx(py::module& m)
 {
     py::bind_vector<std::vector<size_t>>(m, "NodeIndices");
-    py::bind_vector<SubGraphCollection_t>(m, "SubGraphCollection");
 
     py::class_<IParser>(m, "OnnxParser", OnnxParserDoc::descr, py::module_local())
         // Use a lambda to force correct resolution. Pybind doesn't resolve noexcept factory methods correctly as
@@ -194,12 +179,9 @@ void bindOnnx(py::module& m)
         }),
             "network"_a, "logger"_a, OnnxParserDoc::init, py::keep_alive<1, 3>{}, py::keep_alive<2, 1>{})
         .def("parse", lambdas::parse, "model"_a, "path"_a = nullptr, OnnxParserDoc::parse)
-        .def("parse_with_weight_descriptors", lambdas::parse_with_weight_descriptors, "model"_a,
-            OnnxParserDoc::parse_with_weight_descriptors)
         .def("parse_from_file", lambdas::parseFromFile, "model"_a, OnnxParserDoc::parse_from_file,
             py::call_guard<py::gil_scoped_release>{})
         .def("supports_operator", &IParser::supportsOperator, "op_name"_a, OnnxParserDoc::supports_operator)
-        .def("supports_model", lambdas::supportsModel, "model"_a, "path"_a = nullptr, OnnxParserDoc::supports_model)
         .def("supports_model_v2", lambdas::supportsModelV2, "model"_a, "path"_a = nullptr,
             OnnxParserDoc::supports_model_v2)
         .def_property_readonly("num_subgraphs", &IParser::getNbSubgraphs)

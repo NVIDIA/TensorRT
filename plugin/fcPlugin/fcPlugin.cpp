@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+// cspell:ignore accu CUBLASLT splitk
+
 // cublasLT was introduced in CUDA 10.1
 #include <cuda.h>
 #if CUDA_VERSION >= 10010
@@ -28,6 +30,7 @@
 #include <cstring>
 #include <cuda_runtime.h>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 using namespace nvinfer1;
@@ -38,6 +41,7 @@ using namespace nvinfer1::pluginInternal;
 // plugin specific constants
 namespace
 {
+using namespace std::string_view_literals;
 char const* const kFC_VERSION{"1"};
 char const* const kFC_NAME{"CustomFCPluginDynamic"};
 constexpr size_t kMAX_WORKSPACE_BYTES = 4 * 1024 * 1024; // 4MiB
@@ -202,7 +206,7 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
     for (int32_t idx = 0; (idx < nbAlgoIds) && (algoCount < kNB_ALGO_COMBINATIONS); idx++)
     {
         cublasLtMatmulAlgo_t algo;
-        size_t sizeWritten = 0;
+        size_t nbBytesWritten = 0;
         // Initialize algo structure with given Algp ID.
         status = cublasLtWrapper.cublasLtMatmulAlgoInit(
             ltHandle, computeType, scaleType, Atype, Btype, Ctype, Ctype, algoIdA[idx], &algo);
@@ -222,38 +226,33 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
 
         // Query the tiles enums supported by that algo
         PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_TILE_IDS, nullptr, 0, &sizeWritten));
-        int32_t nbTiles = int32_t(sizeWritten / sizeof(int32_t));
-        int32_t* tileA = new int32_t[nbTiles == 0 ? 1 : nbTiles];
-        if (nbTiles == 0)
+            &algo, CUBLASLT_ALGO_CAP_TILE_IDS, nullptr, 0, &nbBytesWritten));
+        auto tileA = std::vector<int32_t>(nbBytesWritten / sizeof(int32_t));
+        if (tileA.empty())
         {
-            tileA[0] = CUBLASLT_MATMUL_TILE_UNDEFINED;
-            nbTiles = 1;
+            tileA = {CUBLASLT_MATMUL_TILE_UNDEFINED};
         }
 
-        int32_t splitkSupport;
-        int32_t redMask;
-        int32_t swizzlingMax;
-        int32_t customOptionMax;
-        int32_t epilogueMask;
         // Retrieve Algo Capabilities attributes to be able to setup loop over the
         // different combinations
-        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_TILE_IDS, tileA, sizeof(int32_t) * nbTiles, &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_SPLITK_SUPPORT, &splitkSupport, sizeof(splitkSupport), &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_REDUCTION_SCHEME_MASK, &redMask, sizeof(redMask), &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_CTA_SWIZZLING_SUPPORT, &swizzlingMax, sizeof(swizzlingMax), &sizeWritten));
-        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_CUSTOM_OPTION_MAX, &customOptionMax, sizeof(customOptionMax), &sizeWritten));
+        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(&algo, CUBLASLT_ALGO_CAP_TILE_IDS,
+            static_cast<void*>(tileA.data()), sizeof(int32_t) * tileA.size(), &nbBytesWritten));
 
-        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(
-            &algo, CUBLASLT_ALGO_CAP_EPILOGUE_MASK, &epilogueMask, sizeof(epilogueMask), &sizeWritten));
+        //! Read an int32_t attribute from `cublasLtWrapper` and return the value and update nbBytesWritten.
+        auto getInt32Attr = [&](cublasLtMatmulAlgoCapAttributes attr, size_t& nbBytesWritten) -> int32_t {
+            int32_t value;
+            PLUGIN_CUBLASASSERT(
+                cublasLtWrapper.cublasLtMatmulAlgoCapGetAttribute(&algo, attr, &value, sizeof(value), &nbBytesWritten));
+            return value;
+        };
+        auto const splitkSupport = getInt32Attr(CUBLASLT_ALGO_CAP_SPLITK_SUPPORT, nbBytesWritten);
+        auto const redMask = getInt32Attr(CUBLASLT_ALGO_CAP_REDUCTION_SCHEME_MASK, nbBytesWritten);
+        auto const swizzlingMax = getInt32Attr(CUBLASLT_ALGO_CAP_CTA_SWIZZLING_SUPPORT, nbBytesWritten);
+        auto const customOptionMax = getInt32Attr(CUBLASLT_ALGO_CAP_CUSTOM_OPTION_MAX, nbBytesWritten);
+        std::ignore = getInt32Attr(CUBLASLT_ALGO_CAP_EPILOGUE_MASK, nbBytesWritten);
 
         // Loop over the different tiles
-        for (int32_t tileIdx = 0; tileIdx < nbTiles; tileIdx++)
+        for (uint32_t tileIdx = 0; tileIdx < tileA.size(); tileIdx++)
         {
             // Loop over the different custom option if any
             for (int32_t customOption = 0; customOption <= customOptionMax; customOption++)
@@ -263,54 +262,47 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
                 // Loop over the CTAs swizzling support
                 for (int32_t k = 0; k <= swizzlingMax; k++)
                 {
-                    int32_t splitkTrial = 0;
-                    if (splitkSupport)
-                    {
-                        splitkTrial += sizeof(splitKSequenceA) / sizeof(splitKSequenceA[0]);
-                    }
+                    int32_t const splitkTrial
+                        = splitkSupport ? (sizeof(splitKSequenceA) / sizeof(splitKSequenceA[0])) : 0;
                     // Loop over the splitK value over a fixed sequence splitKSequenceA in
                     // addition to the case where splitK is not enabled
                     for (int32_t l = 0; (l < (1 + splitkTrial)) && (algoCount < kNB_ALGO_COMBINATIONS); l++)
                     {
+                        //! Set an attribute of the algo to a given value.
+                        auto setAttr = [&](cublasLtMatmulAlgoConfigAttributes attr, auto value) {
+                            static_assert(std::is_same_v<decltype(value), int32_t>, "value must be an int32_t");
+                            PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
+                                &algo, attr, &value, sizeof(value)));
+                        };
                         // Setup attribute of the algo to run
-                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
-                            &algo, CUBLASLT_ALGO_CONFIG_TILE_ID, &tileA[tileIdx], sizeof(tileA[tileIdx])));
+                        setAttr(CUBLASLT_ALGO_CONFIG_TILE_ID, tileA[tileIdx]);
                         int32_t splitK_val = 0;
+                        setAttr(CUBLASLT_ALGO_CONFIG_SPLITK_NUM, splitK_val);
+                        setAttr(CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, k);
                         int32_t redScheme = CUBLASLT_REDUCTION_SCHEME_NONE;
-                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
-                            &algo, CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitK_val, sizeof(splitK_val)));
-                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
-                            &algo, CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING, &k, sizeof(k)));
-                        PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
-                            &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(int32_t)));
+                        setAttr(CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, redScheme);
 
                         if (l > 0)
                         { // Split-K case
                             splitK_val = splitKSequenceA[l - 1];
-                            PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(&algo,
-                                CUBLASLT_ALGO_CONFIG_SPLITK_NUM, &splitKSequenceA[l - 1],
-                                sizeof(splitKSequenceA[l - 1])));
+                            setAttr(CUBLASLT_ALGO_CONFIG_SPLITK_NUM, splitKSequenceA[l - 1]);
                             // Going over all the reduction scheme
                             for (redScheme = 1; redScheme < static_cast<int32_t>(CUBLASLT_REDUCTION_SCHEME_MASK)
                                  && (algoCount < kNB_ALGO_COMBINATIONS);
-                                 redScheme = redScheme << 1)
+                                 redScheme <<= 1)
                             {
                                 if (redScheme & redMask)
                                 {
-                                    PLUGIN_CUBLASASSERT(cublasLtWrapper.cublasLtMatmulAlgoConfigSetAttribute(
-                                        &algo, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, &redScheme, sizeof(redScheme)));
+                                    setAttr(CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME, redScheme);
 
                                     status = customMatmulRun(ltHandle, operationDesc, alpha, // host or device pointer
                                         A, Adesc, B, Bdesc, beta,                            // host or device pointer
                                         C, Cdesc, C, Cdesc, algo, workSpace, workSpaceSize, perfResults[algoCount],
                                         stream, startEvent, stopEvent);
                                     perfResults[algoCount].status = status;
-                                    if (status == CUBLAS_STATUS_SUCCESS)
-                                    {
-                                        algoCount++;
-                                    }
-                                } // end if
-                            }     // end for
+                                    algoCount += (status == CUBLAS_STATUS_SUCCESS);
+                                }
+                            }
                         }
                         else
                         { // Non-splitK case
@@ -322,29 +314,21 @@ void nvinfer1::plugin::bert::LtGemmSearch(cublasLtHandle_t ltHandle, cublasOpera
                                     C, Cdesc, C, Cdesc, algo, workSpace, workSpaceSize, perfResults[algoCount], stream,
                                     startEvent, stopEvent);
                                 perfResults[algoCount].status = status;
-                                if (status == CUBLAS_STATUS_SUCCESS)
-                                {
-                                    algoCount++;
-                                }
+                                algoCount += (status == CUBLAS_STATUS_SUCCESS);
                             }
                         }
                     } // end l
-                }     // end k
-            }         // end customOption
-        }             // end tileIdx
-        delete[] tileA;
+                } // end k
+            } // end customOption
+        } // end tileIdx
     } // end idx
 
     // Sort the results per run duration
     std::sort(perfResults.begin(), perfResults.end(), timeCompare);
 
     // Print timing and perf details of the fastest combinations
-    for (int32_t i = 0; i < kPRINT_ALGOS; i++)
+    for (int32_t i = 0; i < kPRINT_ALGOS && perfResults[i].time != customMatmulPerf_t::kMAX_TIME; i++)
     {
-        if (perfResults[i].time == customMatmulPerf_t::kMAX_TIME)
-        {
-            break;
-        }
         printPerfStructure(perfResults[i], m, n, k);
     }
 
@@ -401,7 +385,7 @@ IPluginV2DynamicExt* FCPluginDynamic::clone() const noexcept
         gLogVerbose << "FCPluginDynamic clone\n";
 
         auto p = std::make_unique<FCPluginDynamic>(mLayerName, mType, mOutDim, mW);
-        memcpy(p->mAlgo.data, mAlgo.data, sizeof(mAlgo.data));
+        p->mAlgo = mAlgo;
         p->setPluginNamespace(mNamespace.c_str());
 
         return p.release();
@@ -514,7 +498,7 @@ void FCPluginDynamic::configurePlugin(DynamicPluginTensorDesc const* inputs, int
         gLogVerbose << "FCPluginDynamic configurePlugin m=" << mOutDim << ", n=" << mNmax << ", k=" << mK << std::endl;
 
         size_t actualWorkspace = 0;
-        if (mAlgo.data[0] == 0 && memcmp(mAlgo.data, mAlgo.data + 1, sizeof(mAlgo.data) - sizeof(mAlgo.data[0])) == 0)
+        if (std::all_of(std::begin(mAlgo.data), std::end(mAlgo.data), [](auto v) { return v == 0; }))
         {
             gLogVerbose << "FCPluginDynamic gemmSearch\n";
             if (mSharedStream == nullptr)
@@ -758,20 +742,20 @@ IPluginV2* FCPluginDynamicCreator::createPlugin(char const* name, PluginFieldCol
 
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string fieldName(fc->fields[i].name);
-            if (fieldName.compare("out_dims") == 0)
+            std::string_view const fieldName = fc->fields[i].name;
+            if (fieldName == "out_dims"sv)
             {
                 outDims = static_cast<int32_t const*>(fc->fields[i].data)[0];
                 gLogVerbose << "Building outDims: " << outDims << std::endl;
             }
 
-            if (fieldName.compare("type_id") == 0)
+            if (fieldName == "type_id"sv)
             {
                 typeId = static_cast<int32_t const*>(fc->fields[i].data)[0];
                 gLogVerbose << "Building typeId: " << outDims << std::endl;
             }
 
-            if (fieldName.compare("W") == 0)
+            if (fieldName == "W"sv)
             {
                 gLogVerbose << "Building W...\n";
                 W.values = fc->fields[i].data;

@@ -17,6 +17,7 @@
 #include "reorgPlugin.h"
 
 #include <memory>
+#include <string_view>
 
 namespace nvinfer1::plugin
 {
@@ -288,19 +289,6 @@ IPluginV2Ext* ReorgStatic::clone() const noexcept
     return nullptr;
 }
 
-// Return true if output tensor is broadcast across a batch.
-bool ReorgStatic::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool ReorgStatic::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
-}
-
 // Configure the layer with input and output data types.
 void ReorgStatic::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
@@ -358,17 +346,18 @@ IPluginV2Ext* ReorgPluginCreator<TPluginClass>::createPlugin(char const* name, P
 {
     try
     {
+        using namespace std::string_view_literals;
         PluginField const* fields = fc->fields;
         PLUGIN_VALIDATE(fc->nbFields == 1);
         PLUGIN_VALIDATE(fields[0].type == PluginFieldType::kINT32);
-        PLUGIN_VALIDATE(!strcmp(fields[0].name, "stride"));
+        PLUGIN_VALIDATE(fields[0].name == "stride"sv);
         stride = static_cast<int32_t>(*(static_cast<int32_t const*>(fields[0].data)));
 
         PLUGIN_VALIDATE(stride > 0);
 
-        TPluginClass* obj = new TPluginClass(stride);
+        auto obj = std::make_unique<TPluginClass>(stride);
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {
@@ -385,9 +374,9 @@ IPluginV2Ext* ReorgPluginCreator<TPluginClass>::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call ReorgPlugin::destroy()
-        TPluginClass* obj = new TPluginClass(serialData, serialLength);
+        auto obj = std::make_unique<TPluginClass>(serialData, serialLength);
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {

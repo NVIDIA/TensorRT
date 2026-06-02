@@ -57,7 +57,8 @@ function(buildFrontendWheel moduleName)
     # Add a custom command to build the sdist using PEP 517 compliant build frontend.
     add_custom_command(
         OUTPUT ${sdistOutputFile}
-        COMMAND ${Python3_EXECUTABLE} -m build --sdist --no-isolation --config-setting=--quiet --outdir ${sdistOutDir}
+        COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${TRT_PACKAGING_DEPS_DIR}"
+            ${Python3_EXECUTABLE} -m build --sdist --no-isolation --config-setting=--quiet --outdir ${sdistOutDir}
         WORKING_DIRECTORY ${generatedFileOutDir}
         DEPENDS ${filesTarget} trt_packaging_requirements_installed
         VERBATIM

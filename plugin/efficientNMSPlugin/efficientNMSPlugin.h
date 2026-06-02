@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,8 @@ namespace nvinfer1
 namespace plugin
 {
 
-class EfficientNMSPlugin : public IPluginV2DynamicExt
+class TRT_DEPRECATED_BECAUSE("Deprecated since TRT 10.12. Use INMSLayer instead.") EfficientNMSPlugin
+    : public IPluginV2DynamicExt
 {
 public:
     explicit EfficientNMSPlugin(EfficientNMSParameters param);
@@ -73,33 +74,12 @@ private:
 };
 
 // Standard NMS Plugin Operation
-class EfficientNMSPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED_BECAUSE("Deprecated since TRT 10.12. Use INMSLayer instead.") EfficientNMSPluginCreator
+    : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     EfficientNMSPluginCreator();
     ~EfficientNMSPluginCreator() override = default;
-
-    char const* getPluginName() const noexcept override;
-    char const* getPluginVersion() const noexcept override;
-    PluginFieldCollection const* getFieldNames() noexcept override;
-
-    IPluginV2DynamicExt* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept override;
-    IPluginV2DynamicExt* deserializePlugin(
-        char const* name, void const* serialData, size_t serialLength) noexcept override;
-
-protected:
-    PluginFieldCollection mFC;
-    EfficientNMSParameters mParam;
-    std::vector<PluginField> mPluginAttributes;
-    std::string mPluginName;
-};
-
-// ONNX NonMaxSuppression Op Compatibility
-class EfficientNMSONNXPluginCreator : public nvinfer1::pluginInternal::BaseCreator
-{
-public:
-    EfficientNMSONNXPluginCreator();
-    ~EfficientNMSONNXPluginCreator() override = default;
 
     char const* getPluginName() const noexcept override;
     char const* getPluginVersion() const noexcept override;

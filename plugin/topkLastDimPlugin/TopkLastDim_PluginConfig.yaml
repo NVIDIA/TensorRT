@@ -1,0 +1,110 @@
+#
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+---
+name: TopkLastDim
+versions:
+  "1":
+    interface: "IPluginV3"
+    inputs:
+      - input
+    outputs:
+      - values
+      - indices
+    attributes:
+      - type_id
+      - k
+      - is_largest
+      - axis
+    attribute_types:
+      type_id: int32
+      k: int32
+      is_largest: int32
+      axis: int32
+    attribute_length:
+      type_id: 1
+      k: 1
+      is_largest: 1
+      axis: 1
+    attribute_options:
+      type_id:
+        - 0   # kFLOAT
+        - 1   # kHALF
+        - 3   # kINT32
+        - 7   # kBF16
+      k:
+        min: "1"
+        max: "=pinf"
+      is_largest:
+        - 0
+        - 1
+      axis:
+        min: "=ninf"
+        max: "=pinf"
+    attributes_required:
+      - type_id
+      - k
+      - is_largest
+    configs:
+      config_float:
+        input_types:
+          input: float32
+        attribute_options:
+          type_id:
+            value: 0
+          k:
+            value: 5
+          is_largest:
+            value: 1
+          axis:
+            value: -1
+      config_half:
+        input_types:
+          input: float16
+        attribute_options:
+          type_id:
+            value: 1
+          k:
+            value: 5
+          is_largest:
+            value: 1
+          axis:
+            value: -1
+      config_int32:
+        input_types:
+          input: int32
+        attribute_options:
+          type_id:
+            value: 3
+          k:
+            value: 5
+          is_largest:
+            value: 1
+          axis:
+            value: -1
+      config_bf16:
+        input_types:
+          input: bfloat16
+        attribute_options:
+          type_id:
+            value: 7
+          k:
+            value: 5
+          is_largest:
+            value: 1
+          axis:
+            value: -1
+...

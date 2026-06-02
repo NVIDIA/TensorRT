@@ -15,6 +15,14 @@
  * limitations under the License.
  */
 
+//! \file trtexec.cpp
+//!
+//! \brief Reusable trtexec implementation, separated from main() so that custom
+//! command-line tools can be built on top of trtexec's engine-building and
+//! inference workflow. See trtexec.h for details.
+
+#include "trtexec.h"
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -221,7 +229,7 @@ using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
 using duration = std::chrono::duration<float>;
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-int main(int argc, char** argv)
+int sample::trtexecMain(int argc, char** argv, PostConfigCallback const& postConfigHook)
 {
     std::string const sampleName = "TensorRT.trtexec";
 
@@ -333,6 +341,24 @@ int main(int argc, char** argv)
         auto safetyPluginRegistry = sample::safe::getSafePluginRegistry(*gSafeRecorder);
         ASSERT(safetyPluginRegistry != nullptr);
 
+        // getSafePluginRegistry() mutates the singleton's stored ISafeRecorder on every call. The ONNX parser calls it
+        // during plugin lookup with its own library-local static recorder; at process exit libnvonnxparser.so is
+        // unloaded before libnvinfer_safe.so, leaving the singleton with a pointer into unmapped memory that its
+        // destructor then dereferences via decRefCount(). Restore the recorder to this executable's process-lifetime
+        // gSafeRecorder on every return path. The restore runs during stack unwind while both DSOs are still mapped,
+        // relying on libnvonnxparser.so staying loaded for the duration of trtexecMain.
+        struct RestoreSafeRecorderGuard
+        {
+            nvinfer2::safe::ISafePluginRegistry* mRegistry;
+            ~RestoreSafeRecorderGuard() noexcept
+            {
+                if (mRegistry != nullptr && gSafeRecorder)
+                {
+                    mRegistry->setSafeRecorder(*gSafeRecorder);
+                }
+            }
+        } restoreSafeRecorderGuard{safetyPluginRegistry};
+
         if (!options.system.safetyPlugins.empty())
         {
             for (auto const& safetyPluginArg : options.system.safetyPlugins)
@@ -357,11 +383,7 @@ int main(int argc, char** argv)
             options.build.consistency = false;
         }
 
-        if (options.build.safe)
-        {
-            sample::gLogInfo << "StronglyTyped is enabled by default on safety mode." << std::endl;
-            options.build.stronglyTyped = true;
-        }
+
 
 // Windows does not have setenv call
 #if !defined(_WIN32)
@@ -389,17 +411,13 @@ int main(int argc, char** argv)
             options.system.DLACore, options.build.tempdir, options.build.tempfileControls, options.build.leanDLLPath,
             sampleTest.getCmdline()));
 
-        bool buildPass = getEngineBuildEnv(options.model, options.build, options.system, *bEnv, sample::gLogError);
+        bool buildPass = getEngineBuildEnv(options.model, options.build, options.system, *bEnv, sample::gLogError, postConfigHook);
 
         if (!buildPass)
         {
             sample::gLogError << "Engine set up failed" << std::endl;
             return sample::gLogger.reportFail(sampleTest);
         }
-
-#if ENABLE_UNIFIED_BUILDER
-        safetyPluginRegistry->setSafeRecorder(*gSafeRecorder);
-#endif // ENABLE_UNIFIED_BUILDER
 
         // Exit as version is already printed during getEngineBuildEnv
         if (options.build.getPlanVersionOnly)
@@ -521,19 +539,6 @@ int main(int argc, char** argv)
                               << std::endl;
             return sample::gLogger.reportFail(sampleTest);
         }
-        if (profilerEnabled && !options.inference.rerun)
-        {
-            iEnv->profiler.reset(new Profiler);
-            if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
-            {
-                options.inference.graph = false;
-                sample::gLogWarning
-                    << "Graph profiling only works with CUDA 11.1 and beyond. Ignored --useCudaGraph flag "
-                       "and disabled CUDA graph."
-                    << std::endl;
-            }
-        }
-
         if (!setUpInference(*iEnv, options.inference, options.system))
         {
             sample::gLogError << "Inference set up failed" << std::endl;
@@ -555,36 +560,17 @@ int main(int argc, char** argv)
             return sample::gLogger.reportFail(sampleTest);
         }
 
-        if (profilerEnabled && !options.inference.rerun)
-        {
-            sample::gLogInfo << "The e2e network timing is not reported since it is inaccurate due to the extra "
-                             << "synchronizations when the profiler is enabled." << std::endl;
-            sample::gLogInfo
-                << "To show e2e network timing report, add --separateProfileRun to profile layer timing in a "
-                << "separate run or remove --dumpProfile to disable the profiler." << std::endl;
-        }
-        else
-        {
-            printPerformanceReport(trace, options.reporting, options.inference, sample::gLogInfo, sample::gLogWarning,
-                sample::gLogVerbose);
-        }
+        printPerformanceReport(
+            trace, options.reporting, options.inference, sample::gLogInfo, sample::gLogWarning, sample::gLogVerbose);
 
         printOutput(options.reporting, *iEnv, options.inference.batch);
 
-        if (profilerEnabled && options.inference.rerun)
+        if (profilerEnabled)
         {
             auto* profiler = new Profiler;
             iEnv->profiler.reset(profiler);
             static_cast<InferenceEnvironmentStd*>(iEnv.get())->contexts.front()->setProfiler(profiler);
             static_cast<InferenceEnvironmentStd*>(iEnv.get())->contexts.front()->setEnqueueEmitsProfile(false);
-            if (options.inference.graph && (getCudaDriverVersion() < 11010 || getCudaRuntimeVersion() < 11000))
-            {
-                options.inference.graph = false;
-                sample::gLogWarning
-                    << "Graph profiling only works with CUDA 11.1 and beyond. Ignored --useCudaGraph flag "
-                       "and disabled CUDA graph."
-                    << std::endl;
-            }
             if (!runInference(options.inference, *iEnv, options.system.device, trace, options.reporting))
             {
                 sample::gLogError << "Error occurred during inference" << std::endl;

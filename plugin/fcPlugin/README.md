@@ -1,4 +1,4 @@
-# fcPlugin
+# fcPlugin [DEPRECATED]
 
 **Table Of Contents**
 - [Description](#description)

@@ -448,6 +448,52 @@ def insert_cast(graph, input_tensor, attrs):
             if next_input.name == input_tensor.name:
                 next_node.inputs[idx] = output_tensor
 
+def cast_layernorm_io(graph):
+    """
+    Cast LayerNormalization scale and bias inputs from FP16 to FP32.
+    In INT8 quantized graphs, DequantizeLinear outputs Float32 activations,
+    but LayerNorm scale/bias remain FP16 from the original model, causing
+    a type mismatch with --strongly-typed TensorRT builds.
+    """
+    layernorm_nodes = [node for node in graph.nodes if node.op == "LayerNormalization"]
+
+    print(f"Found {len(layernorm_nodes)} LayerNormalization nodes to fix")
+    for node in layernorm_nodes:
+        # LayerNormalization inputs: 0=X (data), 1=Scale, 2=B (bias, optional)
+        for i in range(1, len(node.inputs)):
+            input_tensor = node.inputs[i]
+            if input_tensor.name and hasattr(input_tensor, 'dtype') and input_tensor.dtype == np.float16:
+                insert_cast(graph, input_tensor=input_tensor, attrs={"to": np.float32})
+
+def cast_convtranspose_io(graph):
+    """
+    Fix ConvTranspose input/output type mismatches for strongly-typed TRT builds.
+    In mixed-precision graphs (e.g. BF16 Stable Cascade VQGAN), architectural FP16->FP32
+    casts can leave a ConvTranspose with a FP32 activation input but FP16 kernel weights.
+    We cast the activation to match the kernel dtype, then cast the output back to the
+    original activation dtype so surrounding FP32 ops (e.g. residual Add) are unaffected.
+    """
+    convtranspose_nodes = [node for node in graph.nodes if node.op == "ConvTranspose"]
+    fixed = 0
+    for node in convtranspose_nodes:
+        if len(node.inputs) < 2:
+            continue
+        act_input = node.inputs[0]
+        kernel = node.inputs[1]
+        if act_input.dtype is None or kernel.dtype is None or act_input.dtype == kernel.dtype:
+            continue
+        orig_dtype = act_input.dtype      # e.g. np.dtype('float32')
+        target_dtype = kernel.dtype.type  # e.g. np.float16
+        insert_cast(graph, input_tensor=act_input, attrs={"to": target_dtype})
+        # Update the output dtype to match and cast back, so downstream FP32 ops are unaffected.
+        for out in node.outputs:
+            if out.name and out.dtype == orig_dtype:
+                out.dtype = target_dtype
+                insert_cast(graph, input_tensor=out, attrs={"to": orig_dtype.type})
+        fixed += 1
+    print(f"Fixed {fixed} ConvTranspose input/output type mismatches")
+
+
 def convert_zp_fp8(onnx_graph):
     """
     Convert Q/DQ zero datatype from INT8 to FP8.
@@ -468,22 +514,25 @@ def convert_zp_fp8(onnx_graph):
 
     return onnx_graph
 
-def cast_resize_io(graph):
+def cast_resize_io(graph, output_dtype=np.float16):
     """
-    After all activations and weights are converted to fp16, we will
-    add cast nodes to Resize nodes I/O because Resize need to be run in fp32.
+    Add cast nodes to Resize nodes I/O because Resize needs to be run in fp32.
+    Inputs are cast to FP32, outputs are cast back to output_dtype (FP16 or BF16).
     """
     resize_nodes = [node for node in graph.nodes if node.op == "Resize"]
 
     print(f"Found {len(resize_nodes)} Resize nodes to fix")
     for resize_node in resize_nodes:
+        # Skip Resize nodes whose data input is already FP32 — no casting needed.
+        if resize_node.inputs[0].dtype == np.float32:
+            continue
         for i, input_tensor in enumerate(resize_node.inputs):
             SIZES_INPUT_INDEX = 3  # Optional input "sizes" at index 3 must be in INT64. Skip cast for this input.
             if i != SIZES_INPUT_INDEX and input_tensor.name:
                 insert_cast(graph, input_tensor=input_tensor, attrs={"to": np.float32})
         for output_tensor in resize_node.outputs:
             if output_tensor.name:
-                insert_cast(graph, input_tensor=output_tensor, attrs={"to": np.float16})
+                insert_cast(graph, input_tensor=output_tensor, attrs={"to": output_dtype})
 
 def cast_fp8_mha_io(graph):
     r"""

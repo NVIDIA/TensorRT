@@ -36,6 +36,7 @@
 #include "logger.h"
 #include "sampleDevice.h"
 #include "sampleEngines.h"
+#include "sampleEntrypoints.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 
@@ -83,30 +84,6 @@ public:
     }
 };
 
-std::map<std::string, float> readScalesFromCalibrationCache(std::string const& calibrationFile)
-{
-    std::map<std::string, float> tensorScales;
-    std::ifstream cache{calibrationFile};
-    if (!cache.is_open())
-    {
-        sample::gLogError << "[TRT] Can not open provided calibration cache file" << std::endl;
-        return tensorScales;
-    }
-    std::string line;
-    while (std::getline(cache, line))
-    {
-        auto colonPos = line.find_last_of(':');
-        if (colonPos != std::string::npos)
-        {
-            // Scales should be stored in calibration cache as 32-bit floating numbers encoded as 32-bit integers
-            int32_t scalesAsInt = std::stoi(line.substr(colonPos + 2, 8), nullptr, 16);
-            auto const tensorName = line.substr(0, colonPos);
-            tensorScales[tensorName] = *reinterpret_cast<float*>(&scalesAsInt);
-        }
-    }
-    cache.close();
-    return tensorScales;
-}
 } // namespace
 
 nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
@@ -116,7 +93,7 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
 
     if (mEngine == nullptr)
     {
-        SMP_RETVAL_IF_FALSE(getAsyncFileReader().isOpen() || getFileReader().isOpen() || !getBlob().empty(),
+        SMP_RETVAL_IF_FALSE(getAsyncFileReader().isOpen() || !getBlob().empty(),
             "Engine is empty. Nothing to deserialize!", nullptr, sample::gLogError);
         using time_point = std::chrono::time_point<std::chrono::high_resolution_clock>;
         using duration = std::chrono::duration<float>;
@@ -161,10 +138,6 @@ nvinfer1::ICudaEngine* LazilyDeserializedEngine::get()
         {
             mEngine.reset(mRuntime->deserializeCudaEngine(getAsyncFileReader()));
         }
-        else if (getFileReader().isOpen())
-        {
-            mEngine.reset(mRuntime->deserializeCudaEngine(getFileReader()));
-        }
         else
         {
             auto const& engineBlob = getBlob();
@@ -194,35 +167,6 @@ bool LazilyDeserializedEngine::checkDLASafe()
 
     return true;
 }
-
-void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::vector<IOFormat> const& inputFormats,
-    std::vector<IOFormat> const& outputFormats, std::string const& calibrationFile)
-{
-    auto const tensorScales = readScalesFromCalibrationCache(calibrationFile);
-    bool const broadcastInputFormats = broadcastIOFormats(inputFormats, network.getNbInputs());
-    for (int32_t i = 0, n = network.getNbInputs(); i < n; ++i)
-    {
-        int32_t formatIdx = broadcastInputFormats ? 0 : i;
-        if (!inputFormats.empty() && inputFormats[formatIdx].first == DataType::kINT8)
-        {
-            auto* input = network.getInput(i);
-            auto const calibScale = tensorScales.at(input->getName());
-            input->setDynamicRange(-127 * calibScale, 127 * calibScale);
-        }
-    }
-    bool const broadcastOutputFormats = broadcastIOFormats(outputFormats, network.getNbOutputs());
-    for (int32_t i = 0, n = network.getNbOutputs(); i < n; ++i)
-    {
-        int32_t formatIdx = broadcastOutputFormats ? 0 : i;
-        if (!outputFormats.empty() && outputFormats[formatIdx].first == DataType::kINT8)
-        {
-            auto* output = network.getOutput(i);
-            auto const calibScale = tensorScales.at(output->getName());
-            output->setDynamicRange(-127 * calibScale, 127 * calibScale);
-        }
-    }
-}
-
 
 //!
 //! \brief Generate a network definition for a given model
@@ -318,297 +262,6 @@ Parser modelToNetwork(ModelOptions const& model, BuildOptions const& build, nvin
 namespace
 {
 
-class RndInt8Calibrator : public nvinfer1::IInt8EntropyCalibrator2
-{
-public:
-    RndInt8Calibrator(int32_t batches, std::vector<int64_t>& elemCount, std::string const& cacheFile,
-        nvinfer1::INetworkDefinition const& network, std::ostream& err);
-
-    ~RndInt8Calibrator() override
-    {
-        for (auto& elem : mInputDeviceBuffers)
-        {
-            CHECK_WITH_STREAM(cudaFree(elem.second), mErr);
-        }
-    }
-
-    bool getBatch(void* bindings[], char const* names[], int32_t nbBindings) noexcept override;
-
-    int32_t getBatchSize() const noexcept override
-    {
-        return 1;
-    }
-
-    void const* readCalibrationCache(size_t& length) noexcept override;
-
-    void writeCalibrationCache(void const*, size_t) noexcept override {}
-
-private:
-    int32_t mBatches{};
-    int32_t mCurrentBatch{};
-    std::string mCacheFile;
-    std::map<std::string, void*> mInputDeviceBuffers;
-    std::vector<char> mCalibrationCache;
-    std::ostream& mErr;
-};
-
-RndInt8Calibrator::RndInt8Calibrator(int32_t batches, std::vector<int64_t>& elemCount, std::string const& cacheFile,
-    INetworkDefinition const& network, std::ostream& err)
-    : mBatches(batches)
-    , mCurrentBatch(0)
-    , mCacheFile(cacheFile)
-    , mErr(err)
-{
-    std::ifstream tryCache(cacheFile, std::ios::binary);
-    if (tryCache.good())
-    {
-        return;
-    }
-
-    std::default_random_engine generator;
-    std::uniform_real_distribution<float> distribution(-1.0F, 1.0F);
-    auto gen = [&generator, &distribution]() { return distribution(generator); };
-
-    for (int32_t i = 0; i < network.getNbInputs(); i++)
-    {
-        auto* input = network.getInput(i);
-        std::vector<float> rnd_data(elemCount[i]);
-        std::generate_n(rnd_data.begin(), elemCount[i], gen);
-
-        void* data;
-        CHECK_WITH_STREAM(cudaMalloc(&data, elemCount[i] * sizeof(float)), mErr);
-        CHECK_WITH_STREAM(
-            cudaMemcpy(data, rnd_data.data(), elemCount[i] * sizeof(float), cudaMemcpyHostToDevice), mErr);
-
-        mInputDeviceBuffers.insert(std::make_pair(input->getName(), data));
-    }
-}
-
-bool RndInt8Calibrator::getBatch(void* bindings[], char const* names[], int32_t nbBindings) noexcept
-{
-    if (mCurrentBatch >= mBatches)
-    {
-        return false;
-    }
-
-    for (int32_t i = 0; i < nbBindings; ++i)
-    {
-        bindings[i] = mInputDeviceBuffers[names[i]];
-    }
-
-    ++mCurrentBatch;
-
-    return true;
-}
-
-void const* RndInt8Calibrator::readCalibrationCache(size_t& length) noexcept
-{
-    mCalibrationCache.clear();
-    std::ifstream input(mCacheFile, std::ios::binary);
-    input >> std::noskipws;
-    if (input.good())
-    {
-        std::copy(
-            std::istream_iterator<char>(input), std::istream_iterator<char>(), std::back_inserter(mCalibrationCache));
-    }
-
-    length = mCalibrationCache.size();
-    return !mCalibrationCache.empty() ? mCalibrationCache.data() : nullptr;
-}
-
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-bool setTensorDynamicRange(INetworkDefinition const& network, float inRange = 2.0F, float outRange = 4.0F)
-{
-    // Ensure that all layer inputs have a dynamic range.
-    for (int32_t l = 0; l < network.getNbLayers(); l++)
-    {
-        auto* layer = network.getLayer(l);
-        for (int32_t i = 0; i < layer->getNbInputs(); i++)
-        {
-            ITensor* input{layer->getInput(i)};
-            // Optional inputs are nullptr here and are from RNN layers.
-            if (input && !input->dynamicRangeIsSet())
-            {
-                // Concat should propagate dynamic range from outputs to inputs to avoid
-                // Re-quantization during the concatenation
-                auto dynRange = (layer->getType() == LayerType::kCONCATENATION) ? outRange : inRange;
-                if (!input->setDynamicRange(-dynRange, dynRange))
-                {
-                    return false;
-                }
-            }
-        }
-        for (int32_t o = 0; o < layer->getNbOutputs(); o++)
-        {
-            ITensor* output{layer->getOutput(o)};
-            // Optional outputs are nullptr here and are from RNN layers.
-            if (output && !output->dynamicRangeIsSet())
-            {
-                // Pooling must have the same input and output dynamic range.
-                if (layer->getType() == LayerType::kPOOLING)
-                {
-                    if (!output->setDynamicRange(-inRange, inRange))
-                    {
-                        return false;
-                    }
-                }
-                else
-                {
-                    if (!output->setDynamicRange(-outRange, outRange))
-                    {
-                        return false;
-                    }
-                }
-            }
-        }
-    }
-    return true;
-}
-
-bool isNonActivationType(nvinfer1::DataType const type)
-{
-    return type == nvinfer1::DataType::kINT32 || type == nvinfer1::DataType::kINT64 || type == nvinfer1::DataType::kBOOL
-        || type == nvinfer1::DataType::kUINT8;
-}
-void setLayerPrecisions(INetworkDefinition& network, LayerPrecisions const& layerPrecisions)
-{
-    bool hasLayerPrecisionSkipped{false};
-    for (int32_t layerIdx = 0; layerIdx < network.getNbLayers(); ++layerIdx)
-    {
-        auto* layer = network.getLayer(layerIdx);
-        auto const layerName = layer->getName();
-        auto exactMatch = layerPrecisions.find(layerName);
-        auto plausibleMatch = findPlausible(layerPrecisions, layerName);
-        if (exactMatch != layerPrecisions.end())
-        {
-            sample::gLogInfo << "Set layer " << layerName << " to precision " << exactMatch->second << std::endl;
-            layer->setPrecision(exactMatch->second);
-        }
-        else if (plausibleMatch != layerPrecisions.end())
-        {
-            if (isNonActivationType(layer->getPrecision()))
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName << " because the "
-                                    << " default layer precision is of non-activation type." << std::endl;
-                continue;
-            }
-            if (layer->getType() == nvinfer1::LayerType::kCONSTANT
-                && (isNonActivationType(static_cast<IConstantLayer*>(layer)->getWeights().type)))
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName << " because this "
-                                    << "constant layer has weights of non-activation type." << std::endl;
-                continue;
-            }
-            if (layer->getNbInputs() >= 1 && layer->getInput(0)->isShapeTensor())
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName << " because this layer "
-                                    << "operates on a shape tensor." << std::endl;
-                continue;
-            }
-            if (layer->getNbInputs() >= 1 && isNonActivationType(layer->getInput(0)->getType())
-                && layer->getNbOutputs() >= 1 && isNonActivationType(layer->getOutput(0)->getType()))
-            {
-                hasLayerPrecisionSkipped = true;
-                sample::gLogVerbose << "Skipped setting precision for layer " << layerName << " because this "
-                                    << "layer has input and output of non-activation type." << std::endl;
-                continue;
-            }
-            // All heuristics passed. Set the layer precision.
-            sample::gLogInfo << "Set layer " << layerName << " to precision " << plausibleMatch->second << std::endl;
-            layer->setPrecision(plausibleMatch->second);
-        }
-    }
-
-    if (hasLayerPrecisionSkipped)
-    {
-        sample::gLogInfo << "Skipped setting precisions for some layers. Check verbose logs for more details."
-                         << std::endl;
-    }
-}
-
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
-void setLayerOutputTypes(INetworkDefinition& network, LayerOutputTypes const& layerOutputTypes)
-{
-    bool const hasGlobalOutputType{layerOutputTypes.find("*") != layerOutputTypes.end()};
-    auto const globalOutputType = hasGlobalOutputType ? layerOutputTypes.at("*").at(0) : nvinfer1::DataType::kFLOAT;
-    bool hasLayerOutputTypeSkipped{false};
-    for (int32_t layerIdx = 0; layerIdx < network.getNbLayers(); ++layerIdx)
-    {
-        auto* layer = network.getLayer(layerIdx);
-        auto const layerName = layer->getName();
-        auto const nbOutputs = layer->getNbOutputs();
-        auto exactMatch = layerOutputTypes.find(layerName);
-        auto plausibleMatch = findPlausible(layerOutputTypes, layerName);
-        if (exactMatch != layerOutputTypes.end())
-        {
-            auto const& outputTypes = exactMatch->second;
-            bool const isBroadcast = (outputTypes.size() == 1);
-            if (!isBroadcast && static_cast<int32_t>(outputTypes.size()) != nbOutputs)
-            {
-                sample::gLogError << "Layer " << layerName << " has " << nbOutputs << " outputs but "
-                                  << outputTypes.size() << " output types are given in --layerOutputTypes flag."
-                                  << std::endl;
-                throw std::invalid_argument("Invalid --layerOutputTypes flag.");
-            }
-            for (int32_t outputIdx = 0; outputIdx < nbOutputs; ++outputIdx)
-            {
-                auto const outputType = outputTypes.at(isBroadcast ? 0 : outputIdx);
-                sample::gLogInfo << "Set output " << outputIdx << " of layer " << layerName << " to type " << outputType
-                                 << std::endl;
-                layer->setOutputType(outputIdx, outputType);
-            }
-        }
-        else if (plausibleMatch != layerOutputTypes.end())
-        {
-            auto const& outputTypes = plausibleMatch->second;
-            bool const isBroadcast = (outputTypes.size() == 1);
-
-            // We should not set the layer output types if its default precision is INT32 or Bool.
-            if (layer->getPrecision() == nvinfer1::DataType::kINT32
-                || layer->getPrecision() == nvinfer1::DataType::kBOOL)
-            {
-                hasLayerOutputTypeSkipped = true;
-                sample::gLogVerbose << "Skipped setting output types for layer " << layerName << " because the "
-                                    << " default layer precision is INT32 or Bool." << std::endl;
-                continue;
-            }
-            // We should not set the constant layer output types if its weights are in INT32.
-            if (layer->getType() == nvinfer1::LayerType::kCONSTANT
-                && static_cast<IConstantLayer*>(layer)->getWeights().type == nvinfer1::DataType::kINT32)
-            {
-                hasLayerOutputTypeSkipped = true;
-                sample::gLogVerbose << "Skipped setting output types for layer " << layerName << " because this "
-                                    << "constant layer has INT32 weights." << std::endl;
-                continue;
-            }
-            for (int32_t outputIdx = 0; outputIdx < nbOutputs; ++outputIdx)
-            {
-                // We should not set the output type if the output is a shape tensor.
-                if (layer->getOutput(0)->isShapeTensor())
-                {
-                    hasLayerOutputTypeSkipped = true;
-                    sample::gLogVerbose << "Skipped setting output type for output " << outputIdx << " of layer "
-                                        << layerName << " because it is a shape tensor." << std::endl;
-                    continue;
-                }
-
-                auto const outputType = outputTypes.at(isBroadcast ? 0 : outputIdx);
-                sample::gLogInfo << "Set output " << outputIdx << " of layer " << layerName << " to type " << outputType
-                                 << std::endl;
-                layer->setOutputType(outputIdx, globalOutputType);
-            }
-        }
-    }
-
-    if (hasLayerOutputTypeSkipped)
-    {
-        sample::gLogInfo << "Skipped setting output types for some layers. Check verbose logs for more details."
-                         << std::endl;
-    }
-}
 
 void setLayerDeviceTypes(
     INetworkDefinition const& network, IBuilderConfig& config, LayerDeviceTypes const& layerDeviceTypes)
@@ -748,8 +401,8 @@ void setPreviewFeatures(IBuilderConfig& config, BuildOptions const& build)
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity, readability-function-size)
 bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
-    INetworkDefinition& network, IBuilderConfig& config, std::unique_ptr<nvinfer1::IInt8Calibrator>& calibrator,
-    std::ostream& err, std::vector<std::vector<int8_t>>& sparseWeights)
+    INetworkDefinition& network, IBuilderConfig& config, std::ostream& err,
+    std::vector<std::vector<int8_t>>& sparseWeights)
 {
     std::vector<IOptimizationProfile*> profiles{};
     profiles.resize(build.optProfiles.size());
@@ -793,22 +446,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         if (!build.inputFormats.empty())
         {
             int32_t inputFormatIndex = broadcastInputFormats ? 0 : i;
-            if (build.stronglyTyped)
-            {
-                auto const inferredType = input->getType();
-                bool const typeMatches = build.inputFormats[inputFormatIndex].first == inferredType;
-                if (!typeMatches)
-                {
-                    std::ostringstream msg;
-                    msg << "Input tensor \"" << input->getName() << "\": Requested input type "
-                        << build.inputFormats[inputFormatIndex].first
-                        << " via --inputIOFormats does not match the inferred type " << inferredType
-                        << " for a strongly typed network. Failing build.";
-                    SMP_RETVAL_IF_FALSE(typeMatches, msg.str(), false, err);
-                }
-            }
-            input->setType(build.inputFormats[inputFormatIndex].first);
-            input->setAllowedFormats(build.inputFormats[inputFormatIndex].second);
+            input->setAllowedFormats(build.inputFormats[inputFormatIndex].formats);
         }
 
         auto const dims = input->getDimensions();
@@ -944,23 +582,7 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         if (!build.outputFormats.empty())
         {
             int32_t outputFormatIndex = broadcastOutputFormats ? 0 : i;
-            // For strongly typed networks, log an error if the requested output type differs from the inferred type.
-            if (build.stronglyTyped)
-            {
-                auto const inferredType = output->getType();
-                bool const typeMatches = build.outputFormats[outputFormatIndex].first == inferredType;
-                if (!typeMatches)
-                {
-                    std::ostringstream msg;
-                    msg << "Output tensor \"" << output->getName() << "\": Requested output type "
-                        << build.outputFormats[outputFormatIndex].first
-                        << " via --outputIOFormats does not match the inferred type " << inferredType
-                        << " for a strongly typed network. Failing build.";
-                    SMP_RETVAL_IF_FALSE(typeMatches, msg.str(), false, err);
-                }
-            }
-            output->setType(build.outputFormats[outputFormatIndex].first);
-            output->setAllowedFormats(build.outputFormats[outputFormatIndex].second);
+            output->setAllowedFormats(build.outputFormats[outputFormatIndex].formats);
         }
     }
 
@@ -1049,164 +671,12 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
 
     config.setProfilingVerbosity(build.profilingVerbosity);
     config.setAvgTimingIterations(build.avgTiming);
-    if (build.fp16)
-    {
-        config.setFlag(BuilderFlag::kFP16);
-    }
-    if (build.int8)
-    {
-        config.setFlag(BuilderFlag::kINT8);
-    }
-    if (build.bf16)
-    {
-        config.setFlag(BuilderFlag::kBF16);
-    }
-
-    SMP_RETVAL_IF_FALSE(!(build.int8 && build.fp8), "FP8 and INT8 precisions have been specified", false, err);
-
-    if (build.fp8)
-    {
-        config.setFlag(BuilderFlag::kFP8);
-    }
-
-    if (build.int4)
-    {
-        config.setFlag(BuilderFlag::kINT4);
-    }
-
-    if (build.int8 && !build.fp16)
-    {
-        sample::gLogInfo
-            << "FP32 and INT8 precisions have been specified - more performance might be enabled by additionally "
-               "specifying --fp16 or --best"
-            << std::endl;
-    }
-    auto isInt8 = [](IOFormat const& format) { return format.first == DataType::kINT8; };
-    auto int8IO = std::count_if(build.inputFormats.begin(), build.inputFormats.end(), isInt8)
-        + std::count_if(build.outputFormats.begin(), build.outputFormats.end(), isInt8);
-
-    auto hasQDQLayers = [](INetworkDefinition& network) {
-        // Determine if our network has QDQ layers.
-        auto const nbLayers = network.getNbLayers();
-        for (int32_t i = 0; i < nbLayers; i++)
-        {
-            auto const& layer = network.getLayer(i);
-            if (layer->getType() == LayerType::kQUANTIZE || layer->getType() == LayerType::kDEQUANTIZE)
-            {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    if (!hasQDQLayers(network) && (build.int8 || int8IO) && build.calibration.empty())
-    {
-        // Explicitly set int8 scales if no calibrator is provided and if I/O tensors use int8,
-        // because auto calibration does not support this case.
-        SMP_RETVAL_IF_FALSE(setTensorDynamicRange(network), "Error in set tensor dynamic range.", false, err);
-    }
-    else if (build.int8)
-    {
-        if (!hasQDQLayers(network) && int8IO)
-        {
-            try
-            {
-                // Set dynamic ranges of int8 inputs / outputs to match scales loaded from calibration cache
-                // TODO http://nvbugs/3262234 Change the network validation so that this workaround can be removed
-                setTensorScalesFromCalibration(network, build.inputFormats, build.outputFormats, build.calibration);
-            }
-            catch (std::exception&)
-            {
-                sample::gLogError
-                    << "Int8IO was specified but impossible to read tensor scales from provided calibration cache file"
-                    << std::endl;
-                return false;
-            }
-        }
-
-        IOptimizationProfile* profileCalib{nullptr};
-        if (!build.shapesCalib.empty())
-        {
-            profileCalib = builder.createOptimizationProfile();
-            for (uint32_t i = 0, n = network.getNbInputs(); i < n; i++)
-            {
-                auto* input = network.getInput(i);
-                Dims profileDims{};
-                auto const tensorName = input->getName();
-                auto shape = findPlausible(build.shapesCalib, tensorName);
-
-                if (shape == build.shapesCalib.end())
-                {
-                    std::ostringstream msg;
-                    msg << "Calibration profile for tensor " << tensorName << " cannot be found!";
-                    throw std::invalid_argument(msg.str());
-                }
-
-                auto shapesCalib = shape->second;
-                profileDims = toDims(shapesCalib[static_cast<size_t>(OptProfileSelector::kOPT)]);
-                // Here we check only kMIN as all profileDims are the same.
-                SMP_RETVAL_IF_FALSE(profileCalib->setDimensions(tensorName, OptProfileSelector::kMIN, profileDims),
-                    "Error in set dimensions to calibration profile OPT", false, err);
-                profileCalib->setDimensions(tensorName, OptProfileSelector::kOPT, profileDims);
-                profileCalib->setDimensions(tensorName, OptProfileSelector::kMAX, profileDims);
-                sample::gLogInfo << "Set calibration profile for input tensor " << tensorName << " to " << profileDims
-                                 << std::endl;
-            }
-            SMP_RETVAL_IF_FALSE(profileCalib->isValid(), "Calibration profile is invalid", false, err);
-            SMP_RETVAL_IF_FALSE(
-                config.setCalibrationProfile(profileCalib), "Error in set calibration profile", false, err);
-        }
-
-        std::vector<int64_t> elemCount{};
-        for (int i = 0; i < network.getNbInputs(); i++)
-        {
-            auto* input = network.getInput(i);
-            auto const dims = input->getDimensions();
-            auto const isDynamicInput
-                = std::any_of(dims.d, dims.d + dims.nbDims, [](int32_t dim) { return dim == -1; });
-
-            if (profileCalib)
-            {
-                elemCount.push_back(volume(profileCalib->getDimensions(input->getName(), OptProfileSelector::kOPT)));
-            }
-            else if (!profiles.empty() && isDynamicInput)
-            {
-                elemCount.push_back(
-                    volume(profiles[build.calibProfile]->getDimensions(input->getName(), OptProfileSelector::kOPT)));
-            }
-            else
-            {
-                elemCount.push_back(volume(input->getDimensions()));
-            }
-        }
-
-        calibrator.reset(new RndInt8Calibrator(1, elemCount, build.calibration, network, err));
-        config.setInt8Calibrator(calibrator.get());
-    }
 
     if (build.directIO)
     {
         config.setFlag(BuilderFlag::kDIRECT_IO);
     }
 
-    switch (build.precisionConstraints)
-    {
-    case PrecisionConstraints::kNONE:
-        // It's the default for TensorRT.
-        break;
-    case PrecisionConstraints::kOBEY: config.setFlag(BuilderFlag::kOBEY_PRECISION_CONSTRAINTS); break;
-    case PrecisionConstraints::kPREFER: config.setFlag(BuilderFlag::kPREFER_PRECISION_CONSTRAINTS); break;
-    }
-
-    if (!build.layerPrecisions.empty() && build.precisionConstraints != PrecisionConstraints::kNONE)
-    {
-        setLayerPrecisions(network, build.layerPrecisions);
-    }
-
-    if (!build.layerOutputTypes.empty() && build.precisionConstraints != PrecisionConstraints::kNONE)
-    {
-        setLayerOutputTypes(network, build.layerOutputTypes);
-    }
 
     if (!build.layerDeviceTypes.empty())
     {
@@ -1233,18 +703,12 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
         config.setEngineCapability(EngineCapability::kSAFETY);
     }
 
-    if (build.restricted)
-    {
-        config.setFlag(BuilderFlag::kSAFETY_SCOPE);
-    }
-
     if (sys.DLACore != -1)
     {
         if (sys.DLACore < builder.getNbDLACores())
         {
             config.setDefaultDeviceType(DeviceType::kDLA);
             config.setDLACore(sys.DLACore);
-            config.setFlag(BuilderFlag::kPREFER_PRECISION_CONSTRAINTS);
             if (build.buildDLAStandalone)
             {
                 config.setEngineCapability(EngineCapability::kDLA_STANDALONE);
@@ -1257,10 +721,6 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
             {
                 // Reformatting runs on GPU, so avoid I/O reformatting.
                 config.setFlag(BuilderFlag::kDIRECT_IO);
-            }
-            if (!build.int8)
-            {
-                config.setFlag(BuilderFlag::kFP16);
             }
         }
         else
@@ -1308,34 +768,78 @@ bool setupNetworkAndConfig(BuildOptions const& build, SystemOptions const& sys, 
 
 } // namespace
 
+//! \brief Build a serialized engine in memory (as opposed to streaming to a file).
+bool buildSerializedEngine(BuildOptions const& build, SystemOptions const& sys, IBuilder& builder,
+    INetworkDefinition& network, IBuilderConfig& config, BuildEnvironment& env, std::ostream& err)
+{
+    IHostMemory* serializedEngine{nullptr};
+    if (build.safe && build.save && build.dumpKernelText)
+    {
+        IHostMemory* kernelText{nullptr};
+        serializedEngine = builder.buildSerializedNetwork(network, config, kernelText);
+        if (kernelText != nullptr && kernelText->size() > 0)
+        {
+            std::unique_ptr<IHostMemory> kernelTextPtr(kernelText);
+            env.kernelText.setBlob(kernelTextPtr);
+            sample::gLogInfo << "Created kernel CPP with size: " << (kernelText->size() / 1.0_MiB) << " MiB"
+                             << std::endl;
+        }
+        else
+        {
+            sample::gLogError << "Failed to create kernel CPP." << std::endl;
+        }
+    }
+    else
+    {
+        serializedEngine = builder.buildSerializedNetwork(network, config);
+    }
+    SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
+    sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
+
+    if (build.safe && build.consistency)
+    {
+        std::vector<std::string> pluginBuildLibPaths;
+#if ENABLE_UNIFIED_BUILDER
+        pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
+        std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
+            [](auto const& sp) { return sp.libraryName; });
+#endif
+        if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size(), pluginBuildLibPaths))
+        {
+            return false;
+        }
+    }
+    std::unique_ptr<IHostMemory> serializedEnginePtr(serializedEngine);
+    env.engine.setBlob(serializedEnginePtr);
+    return true;
+}
+
 //!
 //! \brief Create a serialized engine for a network definition
 //!
 //! \return Whether the engine creation succeeds or fails.
 //!
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool networkToSerializedEngine(
-    BuildOptions const& build, SystemOptions const& sys, BuildEnvironment& env, std::ostream& err)
+    BuildOptions const& build, SystemOptions const& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook)
 {
     IBuilder& builder = *env.builder;
     IBuilderConfig& config = *env.builderConfig;
     INetworkDefinition& network = *env.network;
-    std::unique_ptr<nvinfer1::IInt8Calibrator> calibrator;
     std::vector<std::vector<int8_t>> sparseWeights;
-    SMP_RETVAL_IF_FALSE(
-        setupNetworkAndConfig(build, sys, builder, network, config, calibrator, err, sparseWeights),
+    SMP_RETVAL_IF_FALSE(setupNetworkAndConfig(build, sys, builder, network, config, err, sparseWeights),
         "Network And Config setup failed", false, err);
 
-    std::unique_ptr<ITimingCache> timingCache{};
-    if (!build.cpuOnly)
+    if (postConfigHook)
     {
-        // Try to load cache from file. Create a fresh cache if the file doesn't exist
-        if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
-        {
-            timingCache
-                = samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), config, build.timingCacheFile);
-        }
+        postConfigHook(builder, config, build, sys);
     }
+
+    std::unique_ptr<ITimingCache> const timingCache
+        = (!build.cpuOnly && build.timingCacheMode == TimingCacheMode::kGLOBAL)
+        ?
+        // Try to load cache from file. Create a fresh cache if the file doesn't exist
+        samplesCommon::buildTimingCacheFromFile(gLogger.getTRTLogger(), config, build.timingCacheFile)
+        : nullptr;
 
     // CUDA stream used for profiling by the builder.
     auto profileStream = build.cpuOnly
@@ -1363,60 +867,19 @@ bool networkToSerializedEngine(
         sample::gLogInfo << "Created engine with size: " << (engineSize / 1.0_MiB) << " MiB" << std::endl;
         env.engine.setBlob(std::move(streamEngine));
     }
-    else
+    else if (!buildSerializedEngine(build, sys, builder, network, config, env, err))
     {
-        IHostMemory* serializedEngine{nullptr};
-        if (build.safe && build.save && build.dumpKernelText)
-        {
-            IHostMemory* kernelText{nullptr};
-            serializedEngine = builder.buildSerializedNetwork(network, config, kernelText);
-            if (kernelText != nullptr && kernelText->size() > 0)
-            {
-                std::unique_ptr<IHostMemory> kernelTextPtr(kernelText);
-                env.kernelText.setBlob(kernelTextPtr);
-                sample::gLogInfo << "Created kernel CPP with size: " << (kernelText->size() / 1.0_MiB) << " MiB"
-                                 << std::endl;
-            }
-            else
-            {
-                sample::gLogError << "Failed to create kernel CPP." << std::endl;
-            }
-        }
-        else
-        {
-            serializedEngine = builder.buildSerializedNetwork(network, config);
-        }
-        SMP_RETVAL_IF_FALSE(serializedEngine != nullptr, "Engine could not be created from network", false, err);
-        sample::gLogInfo << "Created engine with size: " << (serializedEngine->size() / 1.0_MiB) << " MiB" << std::endl;
-
-        if (build.safe && build.consistency)
-        {
-            std::vector<std::string> pluginBuildLibPaths;
-#if ENABLE_UNIFIED_BUILDER
-            pluginBuildLibPaths.reserve(sys.safetyPlugins.size());
-            std::transform(sys.safetyPlugins.begin(), sys.safetyPlugins.end(), std::back_inserter(pluginBuildLibPaths),
-                [](auto const& sp) { return sp.libraryName; });
-#endif
-            if (!checkSafeEngine(serializedEngine->data(), serializedEngine->size(), pluginBuildLibPaths))
-            {
-                return false;
-            }
-        }
-        std::unique_ptr<IHostMemory> serializedEnginePtr(serializedEngine);
-        env.engine.setBlob(serializedEnginePtr);
+        return false;
     }
 
     auto const tEnd = std::chrono::high_resolution_clock::now();
     float const buildTime = std::chrono::duration<float>(tEnd - tBegin).count();
     sample::gLogInfo << "Engine built in " << buildTime << " sec." << std::endl;
 
-    if (!build.cpuOnly)
+    if (!build.cpuOnly && build.timingCacheMode == TimingCacheMode::kGLOBAL)
     {
-        if (build.timingCacheMode == TimingCacheMode::kGLOBAL)
-        {
-            auto timingCache = config.getTimingCache();
-            samplesCommon::updateTimingCacheFile(gLogger.getTRTLogger(), build.timingCacheFile, timingCache, builder);
-        }
+        auto timingCache = config.getTimingCache();
+        samplesCommon::updateTimingCacheFile(gLogger.getTRTLogger(), build.timingCacheFile, timingCache, builder);
     }
     return true;
 }
@@ -1426,16 +889,15 @@ bool networkToSerializedEngine(
 //! \brief Parse a given model, create a network and an engine.
 //!
 bool modelToBuildEnv(
-    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
+    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook)
 {
     env.builder.reset(createBuilder());
     SMP_RETVAL_IF_FALSE(env.builder != nullptr, "Builder creation failed", false, err);
     env.builderConfig.reset(env.builder->createBuilderConfig());
     SMP_RETVAL_IF_FALSE(env.builderConfig != nullptr, "Builder config creation failed", false, err);
     env.builder->setErrorRecorder(&gRecorder);
-    auto networkFlags = (build.stronglyTyped)
-        ? 1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED)
-        : 0U;
+    auto networkFlags =
+        1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED);
     for (auto const& pluginPath : sys.dynamicPlugins)
     {
         env.builder->getPluginRegistry().loadLibrary(pluginPath.c_str());
@@ -1478,7 +940,7 @@ bool modelToBuildEnv(
     }
 
     SMP_RETVAL_IF_FALSE(
-        networkToSerializedEngine(build, sys, env, err), "Building engine failed", false, err);
+        networkToSerializedEngine(build, sys, env, err, postConfigHook), "Building engine failed", false, err);
     return true;
 }
 
@@ -1526,7 +988,7 @@ std::pair<std::vector<std::string>, std::vector<WeightsRole>> getMissingLayerWei
 
 bool loadStreamingEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err)
 {
-    auto& reader = env.engine.getFileReader();
+    auto& reader = env.engine.getAsyncFileReader();
     SMP_RETVAL_IF_FALSE(reader.open(filepath), "", false, err << "Error opening engine file: " << filepath);
     return true;
 }
@@ -1583,13 +1045,8 @@ bool printPlanVersion(BuildEnvironment& env, std::ostream& err)
     std::vector<uint8_t> data(kPLAN_SIZE);
     auto blob = data.data();
 
-    auto& reader = env.engine.getFileReader();
     auto& asyncReader = env.engine.getAsyncFileReader();
-    if (reader.isOpen())
-    {
-        SMP_RETVAL_IF_FALSE(reader.read(data.data(), kPLAN_SIZE) == kPLAN_SIZE, "Failed to read plan file", false, err);
-    }
-    else if (asyncReader.isOpen())
+    if (asyncReader.isOpen())
     {
         SMP_RETVAL_IF_FALSE(asyncReader.read(data.data(), kPLAN_SIZE, cudaStream_t{}) == kPLAN_SIZE,
             "Failed to read plan file", false, err);
@@ -1677,7 +1134,7 @@ bool saveEngine(ICudaEngine const& engine, std::string const& fileName, std::ost
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool getEngineBuildEnv(
-    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err)
+    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook)
 {
     bool createEngineSuccess{false};
 
@@ -1701,7 +1158,7 @@ bool getEngineBuildEnv(
     }
     else
     {
-        createEngineSuccess = modelToBuildEnv(model, build, sys, env, err);
+        createEngineSuccess = modelToBuildEnv(model, build, sys, env, err, postConfigHook);
     }
 
     SMP_RETVAL_IF_FALSE(createEngineSuccess, "Failed to create engine from model or file.", false, err);

@@ -22,6 +22,7 @@
 #include <numeric>
 #include <optional>
 #include <stdexcept>
+#include <string_view>
 
 using namespace nvinfer1;
 using nvinfer1::plugin::DisentangledAttentionPlugin;
@@ -362,6 +363,7 @@ PluginFieldCollection const* DisentangledAttentionPluginCreator::getFieldNames()
 IPluginV3* DisentangledAttentionPluginCreator::createPlugin(
     char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
+    using namespace std::string_view_literals;
     try
     {
         PLUGIN_VALIDATE(fc != nullptr);
@@ -371,13 +373,13 @@ IPluginV3* DisentangledAttentionPluginCreator::createPlugin(
 
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "span"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "span"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 span = *static_cast<int32_t const*>(fields[i].data);
             }
-            else if (!strcmp(attrName, "factor"))
+            else if (attrName == "factor"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 factor = *static_cast<float const*>(fields[i].data);

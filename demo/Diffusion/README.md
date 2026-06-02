@@ -7,7 +7,7 @@ This demo application ("demoDiffusion") showcases the acceleration of Stable Dif
 ### Clone the TensorRT OSS repository
 
 ```bash
-git clone git@github.com:NVIDIA/TensorRT.git -b release/10.16 --single-branch
+git clone git@github.com:NVIDIA/TensorRT.git -b release/11.0 --single-branch
 cd TensorRT
 ```
 
@@ -23,7 +23,7 @@ mkdir -p deps
 docker run --rm -it --gpus all \
   -v $PWD:/workspace \
   -v $PWD/deps:/workspace/deps \
-  nvcr.io/nvidia/pytorch:25.09-py3 /bin/bash
+  nvcr.io/nvidia/pytorch:26.03-py3 /bin/bash
 ```
 
 > **NOTE:** Mounting `/workspace/deps` as a volume ensures dependencies persist across container restarts. After initial installation, subsequent container launches will reuse the installed dependencies.
@@ -243,19 +243,19 @@ Note that a denosing-percentage is applied to the number of denoising-steps when
 
 ```bash
 # Depth BF16
-python3 demo_controlnet_sd35.py "a photo of a man" --controlnet-type depth --hf-token=$HF_TOKEN --denoising-steps 40 --guidance-scale 4.5 --bf16 --download-onnx-models
+python3 demo_controlnet_sd35.py "a photo of a man" --controlnet-type depth --hf-token=$HF_TOKEN --denoising-steps 40 --guidance-scale 4.5 --bf16 --download-onnx-models --low-vram
 
 # Depth FP8
-python3 demo_controlnet_sd35.py "a photo of a man" --version=3.5-large --fp8 --controlnet-type depth --download-onnx-models --denoising-steps=40 --guidance-scale 4.5 --hf-token=$HF_TOKEN
+python3 demo_controlnet_sd35.py "a photo of a man" --version=3.5-large --fp8 --controlnet-type depth --download-onnx-models --denoising-steps=40 --guidance-scale 4.5 --hf-token=$HF_TOKEN --low-vram
 
 # Canny BF16
-python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
+python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models --low-vram
 
 # Canny FP8
-python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --version=3.5-large --fp8 --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --download-onnx-models
+python3 demo_controlnet_sd35.py "A Night time photo taken by Leica M11, portrait of a Japanese woman in a kimono, looking at the camera, Cherry blossoms" --version=3.5-large --fp8 --controlnet-type canny --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --low-vram --download-onnx-models
 
 # Blur
-python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in an action shot close-up, surfing the humongous waves, inside the tube, in the style of Kelly Slater" --controlnet-type blur --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models
+python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in an action shot close-up, surfing the humongous waves, inside the tube, in the style of Kelly Slater" --controlnet-type blur --hf-token=$HF_TOKEN --denoising-steps 60 --guidance-scale 3.5 --bf16 --download-onnx-models --low-vram
 ```
 
 ### Generate a video guided by an initial image using Stable Video Diffusion
@@ -263,9 +263,8 @@ python3 demo_controlnet_sd35.py "generated ai art, a tiny, lost rubber ducky in 
 Download the pre-exported ONNX model
 
 ```bash
-git lfs install
-git clone https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt-1-1-tensorrt onnx-svd-xt-1-1
-cd onnx-svd-xt-1-1 && git lfs pull && cd ..
+pip install -U "huggingface_hub[cli]"
+hf download stabilityai/stable-video-diffusion-img2vid-xt-1-1-tensorrt --local-dir onnx-svd-xt-1-1
 ```
 
 SVD-XT-1.1 (25 frames at resolution 576x1024)

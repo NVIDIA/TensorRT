@@ -18,11 +18,11 @@
 #include "common/dimsHelpers.h"
 
 #include <algorithm>
-#include <cstring>
 #include <iostream>
 #include <memory>
 #include <numeric>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -226,19 +226,6 @@ void FlattenConcat::attachToContext(
 // Detach the plugin object from its execution context.
 void FlattenConcat::detachFromContext() noexcept {}
 
-// Return true if output tensor is broadcast across a batch.
-bool FlattenConcat::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool FlattenConcat::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
-}
-
 // Set plugin namespace
 void FlattenConcat::setPluginNamespace(char const* pluginNamespace) noexcept
 {
@@ -374,17 +361,18 @@ IPluginV2Ext* FlattenConcatPluginCreator::createPlugin(char const* name, PluginF
 {
     try
     {
+        using namespace std::string_view_literals;
         plugin::validateRequiredAttributesExist({"axis", "ignoreBatch"}, fc);
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "axis"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "axis"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mConcatAxisID = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "ignoreBatch"))
+            if (attrName == "ignoreBatch"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 auto ignoreBatch = *(static_cast<int32_t const*>(fields[i].data));

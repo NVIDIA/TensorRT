@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 #include "regionPlugin.h"
-#include <cstring>
 #include <memory>
+#include <string_view>
 
 namespace nvinfer1::plugin
 {
@@ -433,19 +433,6 @@ DataType Region::getOutputDataType(int32_t index, nvinfer1::DataType const* inpu
     return DataType::kFLOAT;
 }
 
-// Return true if output tensor is broadcast across a batch.
-bool Region::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool Region::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
-}
-
 // Configure the layer with input and output data types.
 void Region::configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
     DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,
@@ -505,26 +492,27 @@ IPluginV2Ext* RegionPluginCreator::createPlugin(char const* name, PluginFieldCol
 {
     try
     {
+        using namespace std::string_view_literals;
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "num"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "num"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.num = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "coords"))
+            if (attrName == "coords"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.coords = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "classes"))
+            if (attrName == "classes"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.classes = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "smTree"))
+            if (attrName == "smTree"sv)
             {
                 // TODO not sure if this will work
                 void* tmpData = const_cast<void*>(fields[i].data);
@@ -532,9 +520,9 @@ IPluginV2Ext* RegionPluginCreator::createPlugin(char const* name, PluginFieldCol
             }
         }
 
-        Region* obj = new Region(params);
+        auto obj = std::make_unique<Region>(params);
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {
@@ -550,9 +538,9 @@ IPluginV2Ext* RegionPluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call Region::destroy()
-        Region* obj = new Region(serialData, serialLength);
+        auto obj = std::make_unique<Region>(serialData, serialLength);
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {

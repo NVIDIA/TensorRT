@@ -6,7 +6,8 @@
 - [How does this sample work?](#how-does-this-sample-work)
 	* [TensorRT API layers and ops](#tensorrt-api-layers-and-ops)
 - [Running the sample](#running-the-sample)
-	* [Sample `--help` options](#sample---help-options)
+  * [Tool command line arguments](#tool-command-line-arguments)
+  * [When to use remoteAutoTuningConfig](#when-to-use-remoteautotuningconfig)
 - [Additional resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -61,7 +62,7 @@ The Convolution layer computes a 2D (channel, height, and width) convolution, wi
 5.  Run the sample to build a TensorRT safe engine.
     ```
 
-    ./sample_mnist_safe_build [--datadir=/path/to/data/dir/] [--remoteAutoTuningConfig=<config>]
+    ./sample_mnist_safe_build [--datadir=/path/to/data/dir/] [--remoteAutoTuningConfig=<config>] [--cpuOnly]
 
     ```
 	This sample generates `safe_mnist.engine`, which is a binary file that contains the serialized engine data.
@@ -136,31 +137,27 @@ The Convolution layer computes a 2D (channel, height, and width) convolution, wi
 
 	This output shows that the sample ran successfully; `PASSED`.
 
+### Tool command line arguments
 
-### Sample `--help` options
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
 
-To see the full list of available options and their descriptions, use the `./sample_mnist_safe_build [-h or --help]` command.
-
-**Note:** This sample supports long flags (e.g., `--help`, `--verbose`) and limited short flags (`-h`, `-v`, `-d`). Only explicitly whitelisted short flags are supported to avoid conflicts with negative numbers.
-
-```
-Usage: ./sample_mnist_safe_build [-h or --help] [--datadir=<path to data directory>]
---help          Display help information
---datadir       Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use (data/samples/mnist/, data/mnist/)
---threads       Specify the number of independent threads to drive engines. Default is 1.
---verbose       Use verbose logging.
---saveEngine    Save the serialized engine to the file, the default is to use (safe_mnist.engine).
---remoteAutoTuningConfig  Set the remote auto tuning config. Format: protocol://username[:password]@hostname[:port]?param1=value1&param2=value2
-                Example: ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib
+```bash
+sample_mnist_safe_build --help
+sample_mnist_safe_infer --help
 ```
 
-#### When to use remoteAutoTuningConfig
+### When to use remoteAutoTuningConfig
 
 The `--remoteAutoTuningConfig` parameter is designed for **cross-platform development scenarios** where you need to:
 
 **Primary Use Case - Cross-Platform Building:**
 - **Build on Host Platform**: Compile and build TensorRT engines on a development machine (e.g., Linux x86_64)
 - **Auto-tune on Target Platform**: Perform kernel auto-tuning on the actual deployment target (e.g., QNX aarch64)
+
+Use `--cpuOnly` with `--remoteAutoTuningConfig` to build the engine without a local GPU on the build host:
+```bash
+./sample_mnist_safe_build --remoteAutoTuningConfig=<config> --cpuOnly
+```
 
 **Typical Scenarios:**
 - **QNX Development**: Building engines on Linux development machines but deploying on QNX automotive platforms
@@ -215,6 +212,9 @@ This sample was updated for the TRT 10.13.1 safety release.
 
 Dec. 2025
 This sample was updated to use the CMake-based build system.
+
+Apr. 2026
+This sample was updated to add the `--cpuOnly` build option for remote auto-tuning workflows without requiring a local GPU on the build host.
 
 ## Known issues
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,10 @@ using namespace nvinfer1;
 
 namespace sample
 {
+
+using TensorToLayer = std::unordered_map<nvinfer1::ITensor*, nvinfer1::ILayer*>;
+using LayerToTensor = std::unordered_map<nvinfer1::ILayer*, nvinfer1::ITensor*>;
+using TensorToTensor = std::unordered_map<nvinfer1::ITensor*, nvinfer1::ITensor*>;
 
 int64_t volume(nvinfer1::Dims const& dims, nvinfer1::Dims const& strides, int32_t vecDim, int32_t comps, int32_t batch)
 {
@@ -159,9 +163,6 @@ bool broadcastIOFormats(std::vector<IOFormat> const& formats, size_t nbBindings,
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void sparsifyMatMulKernelWeights(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights)
 {
-    using TensorToLayer = std::unordered_map<nvinfer1::ITensor*, nvinfer1::ILayer*>;
-    using LayerToTensor = std::unordered_map<nvinfer1::ILayer*, nvinfer1::ITensor*>;
-
     // 1. Collect layers and tensors information from the network.
     TensorToLayer matmulI2L;
     TensorToLayer constO2L;
@@ -343,6 +344,123 @@ void setSparseWeights(L& l, int32_t k, int32_t trs, std::vector<int8_t>& sparseW
 template void setSparseWeights<IConvolutionLayer>(
     IConvolutionLayer& l, int32_t k, int32_t trs, std::vector<int8_t>& sparseWeights);
 
+//! \brief Sparsify conv weights fed via Q/DQ chains (companion to sparsifyMatMulKernelWeights).
+//!
+//! Strongly-typed Q/DQ networks attach the conv weight as a tensor input rather than
+//! static kernelWeights. Walks the chain forward from each FP Constant:
+//!     Constant -> Shuffle* -> Q? -> Shuffle* -> DQ -> Shuffle* -> Conv.input(1)
+//! If the chain terminates at a Conv weight input, sparsify the constant in place.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void sparsifyQDQConvKernelWeights(
+    nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights)
+{
+    TensorToLayer convWeightI2L;
+    TensorToLayer constO2L;
+    TensorToTensor dqI2O;
+    TensorToTensor qI2O;
+    TensorToTensor shuffleI2O;
+    auto collectMappingInfo = [&](ILayer& l) {
+        switch (l.getType())
+        {
+        case nvinfer1::LayerType::kCONVOLUTION:
+            // Conv with weights as a tensor input (vs. static kernelWeights).
+            if (l.getNbInputs() >= 2 && l.getInput(1) != nullptr)
+            {
+                convWeightI2L.try_emplace(l.getInput(1), &l);
+            }
+            break;
+        case nvinfer1::LayerType::kCONSTANT:
+        {
+            DataType const dtype = static_cast<nvinfer1::IConstantLayer&>(l).getWeights().type;
+            auto const floatDTypes = {nvinfer1::DataType::kFLOAT, nvinfer1::DataType::kHALF, nvinfer1::DataType::kBF16};
+            if (std::any_of(floatDTypes.begin(), floatDTypes.end(), [dtype](auto t) { return t == dtype; }))
+            {
+                constO2L.try_emplace(l.getOutput(0), &l);
+            }
+            break;
+        }
+        case nvinfer1::LayerType::kDEQUANTIZE: dqI2O.try_emplace(l.getInput(0), l.getOutput(0)); break;
+        case nvinfer1::LayerType::kQUANTIZE: qI2O.try_emplace(l.getInput(0), l.getOutput(0)); break;
+        case nvinfer1::LayerType::kSHUFFLE: shuffleI2O.try_emplace(l.getInput(0), l.getOutput(0)); break;
+        default: break;
+        }
+    };
+    int32_t const nbLayers = network.getNbLayers();
+    for (int32_t i = 0; i < nbLayers; ++i)
+    {
+        collectMappingInfo(*network.getLayer(i));
+    }
+    if (convWeightI2L.size() == 0 || constO2L.size() == 0 || dqI2O.size() == 0)
+    {
+        return;
+    }
+
+    //! Skip past any Shuffle layers consuming t and return the tensor at the chain's end.
+    //! Returns t unchanged if no Shuffle reads it.
+    auto walkShuffleChain = [&](nvinfer1::ITensor* t) -> ITensor* {
+        while (true)
+        {
+            auto const it = shuffleI2O.find(t);
+            if (it == shuffleI2O.end())
+            {
+                break;
+            }
+            t = it->second;
+        }
+        return t;
+    };
+
+    //! Follow Constant -> Shuffle* -> Q? -> Shuffle* -> DQ -> Shuffle* -> Conv.input(1) chain.
+    //! Returns the terminating IConvolutionLayer*, or nullptr if the chain breaks.
+    auto walkShuffleQDQChain = [&](nvinfer1::ITensor* t) -> IConvolutionLayer* {
+        t = walkShuffleChain(t);
+        if (auto const qI2OIt = qI2O.find(t); qI2OIt != qI2O.end())
+        {
+            t = walkShuffleChain(qI2OIt->second);
+        }
+        auto const dqI2OIt = dqI2O.find(t);
+        if (dqI2OIt == dqI2O.end())
+        {
+            return nullptr;
+        }
+        t = walkShuffleChain(dqI2OIt->second);
+        auto const convWeightI2LIt = convWeightI2L.find(t);
+        if (convWeightI2LIt == convWeightI2L.end())
+        {
+            return nullptr;
+        }
+        ASSERT(convWeightI2LIt->second->getType() == nvinfer1::LayerType::kCONVOLUTION);
+        return static_cast<nvinfer1::IConvolutionLayer*>(convWeightI2LIt->second);
+    };
+
+    for (auto& o2l : constO2L)
+    {
+        IConvolutionLayer* const conv = walkShuffleQDQChain(o2l.first);
+        if (conv == nullptr)
+        {
+            continue;
+        }
+        ASSERT(o2l.second->getType() == nvinfer1::LayerType::kCONSTANT);
+        IConstantLayer* constLayer = static_cast<nvinfer1::IConstantLayer*>(o2l.second);
+        Weights w = constLayer->getWeights();
+        if (w.count == 0)
+        {
+            continue;
+        }
+        Dims const kernelDims = conv->getKernelSizeNd();
+        int32_t const k = conv->getNbOutputMaps();
+        int64_t const trs = samplesCommon::volume(kernelDims);
+        // sparsify() reconstructs c (input channels) via c = count / (k*trs); fail loudly if
+        // the constant's element count doesn't match the KCRS layout this routine assumes.
+        ASSERT(k > 0 && 0 < trs && trs <= std::numeric_limits<int32_t>::max()
+            && w.count % (static_cast<int64_t>(k) * trs) == 0);
+        sparseWeights.emplace_back();
+        sparsify(w, k, static_cast<int32_t>(trs), sparseWeights.back());
+        w.values = sparseWeights.back().data();
+        constLayer->setWeights(w);
+    }
+}
+
 void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int8_t>>& sparseWeights)
 {
     for (int32_t l = 0; l < network.getNbLayers(); ++l)
@@ -362,6 +480,7 @@ void sparsify(nvinfer1::INetworkDefinition& network, std::vector<std::vector<int
     }
 
     sparsifyMatMulKernelWeights(network, sparseWeights);
+    sparsifyQDQConvKernelWeights(network, sparseWeights);
     sample::gLogVerbose << "--sparsity=force pruned " << sparseWeights.size() << " weights to be sparsity pattern."
                         << std::endl;
     sample::gLogVerbose << "--sparsity=force has been deprecated. Please use <polygraphy surgeon prune> to rewrite the "
@@ -640,7 +759,7 @@ bool matchStringWithOneWildcard(std::string const& pattern, std::string const& t
 //!
 //! @param config The configuration string to sanitize
 //! @return Sanitized configuration string with passwords and usernames replaced by ***
-std::string sanitizeRemoteAutoTuningConfig(const std::string& config)
+std::string sanitizeRemoteAutoTuningConfig(std::string const& config)
 {
     if (config.empty())
     {
@@ -688,56 +807,7 @@ std::string sanitizeRemoteAutoTuningConfig(const std::string& config)
     }
 }
 
-std::pair<std::string, std::string> parseFlag(const std::string& arg)
-{
-    // Handle long flags: --flag=value
-    if (startsWith(arg, "--"))
-    {
-        auto eqIdx = arg.find('=');
-        if (eqIdx != std::string::npos)
-        {
-            return std::make_pair(arg.substr(2, eqIdx - 2), arg.substr(eqIdx + 1));
-        }
-        return std::make_pair("", "");
-    }
-
-    // Handle short flags: -flag=value
-    if (startsWith(arg, "-") && arg.length() > 2)
-    {
-        auto eqIdx = arg.find('=');
-        if (eqIdx != std::string::npos)
-        {
-            return std::make_pair(arg.substr(1, eqIdx - 1), arg.substr(eqIdx + 1));
-        }
-    }
-
-    return std::make_pair("", "");
-}
-
-std::string parseBooleanFlag(const std::string& arg)
-{
-    // Handle long flags: --flag
-    if (startsWith(arg, "--") && arg.length() > 2)
-    {
-        return arg.substr(2);
-    }
-
-    // Handle short flags: only allow explicitly whitelisted single-character flags
-    // to avoid conflicts with valid inputs like negative numbers
-    if (startsWith(arg, "-") && arg.length() == 2)
-    {
-        char flag = arg[1];
-        // Whitelist of allowed short flags (removed 'd' as it requires a value)
-        if (flag == 'h' || flag == 'v')
-        {
-            return arg.substr(1);
-        }
-    }
-
-    return "";
-}
-
-bool validateNonEmpty(const std::string& value, const std::string& flagName)
+bool validateNonEmpty(std::string const& value, std::string const& flagName)
 {
     if (value.empty())
     {
@@ -747,7 +817,7 @@ bool validateNonEmpty(const std::string& value, const std::string& flagName)
     return true;
 }
 
-bool validateRemoteAutoTuningConfig(const std::string& config)
+bool validateRemoteAutoTuningConfig(std::string const& config)
 {
     if (config.find("://") == std::string::npos)
     {

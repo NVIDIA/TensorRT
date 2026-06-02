@@ -53,7 +53,7 @@ public:
     ErrorCode getErrorCode(int32_t errorIdx) const noexcept final
     {
         return invalidIndexCheck(errorIdx) ? ErrorCode::kINVALID_ARGUMENT : (*this)[errorIdx].first;
-    };
+    }
     IErrorRecorder::ErrorDesc getErrorDesc(int32_t errorIdx) const noexcept final
     {
         return invalidIndexCheck(errorIdx) ? "errorIdx out of range." : (*this)[errorIdx].second.c_str();
@@ -77,7 +77,7 @@ public:
         {
             sample::gLogFatal << "Internal Error: " << e.what() << std::endl;
         }
-    };
+    }
 
     //! Simple helper function that
     bool empty() const noexcept

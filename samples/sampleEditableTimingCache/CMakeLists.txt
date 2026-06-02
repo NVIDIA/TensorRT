@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
-
 add_executable(sample_editable_timing_cache sampleEditableTimingCache.cpp)
 target_link_libraries(sample_editable_timing_cache PRIVATE trt_samples_common TRT_SAMPLES::tensorrt)
 add_dependencies(tensorrt_samples sample_editable_timing_cache)
@@ -25,11 +23,3 @@ installLibraries(
     OPTIONAL
     COMPONENT internal
 )
-
-else()
-
-set(SAMPLE_SOURCES sampleEditableTimingCache.cpp)
-set(SAMPLE_PARSERS "onnx")
-include(../CMakeSamplesTemplate.txt)
-
-endif()

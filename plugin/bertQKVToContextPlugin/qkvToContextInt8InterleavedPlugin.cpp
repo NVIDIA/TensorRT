@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +25,7 @@
 #include <cuda.h>
 #include <iostream>
 #include <optional>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -36,6 +37,7 @@ using namespace nvinfer1::plugin::bert;
 
 namespace
 {
+using namespace std::string_view_literals;
 char const* const kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_VERSION{"6"};
 char const* const kQKV_TO_CONTEXT_INTERLEAVED_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
 } // namespace
@@ -100,11 +102,11 @@ IPluginV3* QKVToContextInterleavedPlugin::clone() noexcept
 {
     try
     {
-        QKVToContextInterleavedPlugin* ret = new QKVToContextInterleavedPlugin(
+        auto ret = std::make_unique<QKVToContextInterleavedPlugin>(
             mLayerName, mHiddenSize, mNumHeads, mDqProbs, mUseInt8ScaleMax, mUseExplicitInt8, mQkvScale, mCtxScale);
 
         ret->setPluginNamespace(mNamespace.c_str());
-        return ret;
+        return ret.release();
     }
     catch (std::exception const& e)
     {
@@ -381,49 +383,49 @@ IPluginV3* QKVToContextInterleavedPluginCreator::createPlugin(
 
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string field_name(fc->fields[i].name);
+            std::string_view const field_name = fc->fields[i].name;
 
-            if (field_name.compare("hidden_size") == 0)
+            if (field_name == "hidden_size"sv)
             {
                 hiddenSize = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
                 BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
             }
-            else if (field_name.compare("num_heads") == 0)
+            else if (field_name == "num_heads"sv)
             {
                 numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
                 BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
             }
-            else if (field_name.compare("dq_probs") == 0)
+            else if (field_name == "dq_probs"sv)
             {
                 dqProbs = *static_cast<float const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(
                     dqProbs.value() > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs.value())).c_str());
                 BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs.value());
             }
-            else if (field_name.compare("use_int8_scale_max") == 0)
+            else if (field_name == "use_int8_scale_max"sv)
             {
                 useInt8ScaleMax = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(useInt8ScaleMax.value() == 0 || useInt8ScaleMax.value() == 1,
                     ("QKV: Invalid useInt8ScaleMax " + std::to_string(useInt8ScaleMax.value())).c_str());
                 BERT_DEBUG_VALUE("Building useInt8ScaleMax: ", useInt8ScaleMax.value());
             }
-            else if (field_name.compare("use_explicit_int8") == 0)
+            else if (field_name == "use_explicit_int8"sv)
             {
                 useExplicitInt8 = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(useExplicitInt8.value() == 0 || useExplicitInt8.value() == 1,
                     ("QKV: Invalid useExplicitInt8 " + std::to_string(useExplicitInt8.value())).c_str());
                 BERT_DEBUG_VALUE("Building use_explicit_int8: ", useExplicitInt8.value());
             }
-            else if (field_name.compare("input_qkv_scale") == 0)
+            else if (field_name == "input_qkv_scale"sv)
             {
                 qkvScale = *static_cast<float const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(
                     qkvScale.value() > 0, ("QKV: Invalid input_qkv_scale" + std::to_string(qkvScale.value())).c_str());
                 BERT_DEBUG_VALUE("Building input_qkv_scale: ", qkvScale.value());
             }
-            else if (field_name.compare("output_ctx_scale") == 0)
+            else if (field_name == "output_ctx_scale"sv)
             {
                 ctxScale = *static_cast<float const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(ctxScale.value() > 0,

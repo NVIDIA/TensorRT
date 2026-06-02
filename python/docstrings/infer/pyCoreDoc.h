@@ -411,7 +411,6 @@ constexpr char const* descr = R"trtdoc(
     :ivar device_memory: :class:`capsule` The device memory for use by this execution context. The memory must be aligned with cuda memory alignment property (using :func:`cuda.cudart.cudaGetDeviceProperties()`), and its size must be large enough for performing inference with the given network inputs. :func:`engine.device_memory_size` and :func:`engine.get_device_memory_size_for_profile` report upper bounds of the size. Setting memory to nullptr is acceptable if the reported size is 0. If using :func:`execute_async_v3()` to run the network, the memory is in use from the invocation of :func:`execute_async_v3()` until network execution is complete. If using :func:`execute_v2()`, it is in use until :func:`execute_v2()` returns. Releasing or otherwise using the memory for other purposes, including using it in another execution context running in parallel, during this time will result in undefined behavior.
     :ivar active_optimization_profile: :class:`int` The active optimization profile for the context. The selected profile will be used in subsequent calls to :func:`execute_v2()`. Profile 0 is selected by default. This is a readonly property and active optimization profile can be changed with :func:`set_optimization_profile_async()`. Changing this value will invalidate all dynamic bindings for the current execution context, so that they have to be set again using :func:`set_input_shape` before calling either :func:`execute_v2()`.
     :ivar all_binding_shapes_specified: :class:`bool` Whether all dynamic dimensions of input tensors have been specified by calling :func:`set_input_shape` . Trivially true if network has no dynamically shaped input tensors. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
-    :ivar all_shape_inputs_specified: :class:`bool` Whether values for all input shape tensors have been specified by calling :func:`set_shape_input` . Trivially true if network has no input shape bindings. Does not work with name-base interfaces eg. :func:`set_input_shape()`. Use :func:`infer_shapes()` instead.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
     :ivar enqueue_emits_profile: :class:`bool` Whether enqueue emits layer timing to the profiler. The default value is :class:`True`. If set to :class:`False`, enqueue will be asynchronous if there is a profiler attached. An extra method :func:`IExecutionContext::report_to_profiler()` needs to be called to obtain the profiling data and report to the profiler attached.
     :ivar persistent_cache_limit: The maximum size of persistent L2 cache that this execution context may use for activation caching. Activation caching is not supported on all architectures - see "How TensorRT uses Memory" in the developer guide for details. The default is 0 Bytes.
@@ -752,10 +751,8 @@ constexpr char const* descr = R"trtdoc(
     The engine can be indexed with ``[]`` . When indexed in this way with an integer, it will return the corresponding binding name. When indexed with a string, it will return the corresponding binding index.
 
     :ivar num_io_tensors: :class:`int` The number of IO tensors.
-    :ivar has_implicit_batch_dimension: :class:`bool` [DEPRECATED] Deprecated in TensorRT 10.0. Always flase since the implicit batch dimensions support has been removed.
     :ivar num_layers: :class:`int` The number of layers in the network. The number of layers in the network is not necessarily the number in the original :class:`INetworkDefinition`, as layers may be combined or eliminated as the :class:`ICudaEngine` is optimized. This value can be useful when building per-layer tables, such as when aggregating profiling data over a number of executions.
     :ivar max_workspace_size: :class:`int` The amount of workspace the :class:`ICudaEngine` uses. The workspace size will be no greater than the value provided to the :class:`Builder` when the :class:`ICudaEngine` was built, and will typically be smaller. Workspace will be allocated for each :class:`IExecutionContext` .
-    :ivar device_memory_size: :class:`int` The amount of device memory required by an :class:`IExecutionContext` .
     :ivar device_memory_size_v2: :class:`int` The amount of device memory required by an :class:`IExecutionContext`. The return value depends on the weight streaming budget if enabled.
     :ivar refittable: :class:`bool` Whether the engine can be refit.
     :ivar name: :class:`str` The name of the network associated with the engine. The name is set during network creation and is retrieved after building or deserialization.
@@ -766,8 +763,6 @@ constexpr char const* descr = R"trtdoc(
     :ivar profiling_verbosity: The profiling verbosity the builder config was set to when the engine was built.
     :ivar hardware_compatibility_level: The hardware compatibility level of the engine.
     :ivar num_aux_streams: Read-only. The number of auxiliary streams used by this engine, which will be less than or equal to the maximum allowed number of auxiliary streams by setting builder_config.max_aux_streams when the engine is built.
-    :ivar weight_streaming_budget: [DEPRECATED] Deprecated in TensorRT 10.1, superceded by weight_streaming_budget_v2. Set and get the current weight streaming budget for inference. The budget may be set to -1 disabling weight streaming at runtime, 0 (default) enabling TRT to choose to weight stream or not, or a positive value in the inclusive range [minimum_weight_streaming_budget, streamable_weights_size - 1].
-    :ivar minimum_weight_streaming_budget: [DEPRECATED] Deprecated in TensorRT 10.1, superceded by weight_streaming_budget_v2. Returns the minimum weight streaming budget in bytes required to run the network successfully. The engine must have been built with kWEIGHT_STREAMING.
     :ivar streamable_weights_size: Returns the size of the streamable weights in the engine. This may not include all the weights.
     :ivar weight_streaming_budget_v2: Set and get the current weight streaming budget for inference. The budget may be set any non-negative value. A value of 0 streams the most weights. Values equal to streamable_weights_size (default) or larger will disable weight streaming.
     :ivar weight_streaming_scratch_memory_size: The amount of scratch memory required by a TensorRT ExecutionContext to perform inference. This value may change based on the current weight streaming budget. Please use the V2 memory APIs, engine.device_memory_size_v2 and ExecutionContext.set_device_memory() to provide memory which includes the current weight streaming scratch memory. Not specifying these APIs or using the V1 APIs will not include this memory, so TensorRT will resort to allocating itself.
@@ -784,13 +779,6 @@ constexpr char const* create_execution_context = R"trtdoc(
     Create an :class:`IExecutionContext` and specify the device memory allocation strategy.
 
     :returns: The newly created :class:`IExecutionContext` .
-)trtdoc";
-
-constexpr char const* create_execution_context_without_device_memory = R"trtdoc(
-    Create an :class:`IExecutionContext` without any device memory allocated
-    The memory for execution of this device context must be supplied by the application.
-
-    :returns: An :class:`IExecutionContext` without device memory allocated.
 )trtdoc";
 
 constexpr char const* create_execution_context_with_runtime_config = R"trtdoc(
@@ -922,12 +910,6 @@ constexpr char const* get_aliased_input_tensor = R"trtdoc(
     :returns: The name of the input tensor that is aliased with this output.
 )trtdoc";
 
-constexpr char const* get_device_memory_size_for_profile = R"trtdoc(
-    Return the device memory size required for a certain profile.
-
-    :arg profile_index: The index of the profile.
-)trtdoc";
-
 constexpr char const* get_device_memory_size_for_profile_v2 = R"trtdoc(
     Return the device memory size required for a certain profile.
 
@@ -1024,40 +1006,12 @@ constexpr char const* notify_shape = R"trtdoc(
 
 } // namespace OutputAllocatorDoc
 
-namespace StreamReaderDoc
-{
-constexpr char const* descr = R"trtdoc(
-Application-implemented class for reading data from a stream.
-
-To implement a custom stream reader, ensure that you explicitly instantiate the base class in :func:`__init__` :
-::
-
-    class MyStreamReader(trt.IStreamReader):
-        def __init__(self):
-            trt.IStreamReader.__init__(self)
-
-        def read(self, size: int) -> bytes:
-            ... # Your implementation here
-
-)trtdoc";
-
-constexpr char const* read = R"trtdoc(
-    A callback implemented by the application to read a particular chunk of memory.
-
-    If an allocation request cannot be satisfied, ``0`` should be returned.
-
-    :arg size: The number of bytes required.
-
-    :returns: A buffer containing the bytes read.
-)trtdoc";
-} // namespace StreamReaderDoc
-
 namespace StreamReaderV2Doc
 {
 constexpr char const* descr = R"trtdoc(
     Application-implemented class for asynchronously reading data from a stream. Implementation does not need to be
-    asynchronous or use the provided cuda stream. Python users are unlikely to see performance gains over IStreamReader
-    or deserialization from a glob.
+    asynchronous or use the provided cuda stream. Python users are unlikely to see performance gains over
+    deserialization from host memory.
 
     To implement a custom stream reader, ensure that you explicitly instantiate the base class in :func:`__init__` :
     ::
@@ -1145,15 +1099,6 @@ namespace BuilderFlagDoc
 constexpr char const* descr
     = R"trtdoc(Valid modes that the builder can enable when creating an engine from a network definition.)trtdoc";
 
-constexpr char const* FP16
-     = R"trtdoc(Enable FP16 layer selection.
-                [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
-constexpr char const* BF16
-    = R"trtdoc(Enable BF16 layer selection.
-               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
-constexpr char const* INT8
-    = R"trtdoc(Enable Int8 layer selection.
-               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* DEBUG = R"trtdoc(Enable debugging of layers via synchronizing after every layer)trtdoc";
 constexpr char const* GPU_FALLBACK
     = R"trtdoc(Enable layers marked to execute on GPU if layer cannot execute on DLA)trtdoc";
@@ -1168,31 +1113,16 @@ constexpr char const* SPARSE_WEIGHTS
 constexpr char const* SAFETY_SCOPE
     = R"trtdoc(Change the allowed parameters in the EngineCapability.STANDARD flow to match the restrictions that EngineCapability.SAFETY check against for DeviceType.GPU and EngineCapability.DLA_STANDALONE check against the DeviceType.DLA case. This flag is forced to true if EngineCapability.SAFETY at build time if it is unset.
                [DEPRECATED] Deprecated in TensorRT 10.16. In EngineCapability.STANDARD flow, safety restrictions are no longer supported. In EngineCapability.SAFETY and EngineCapability.DLA_STANDALONE flows, restrictions are enforced natively. This flag is retained for API compatibility but is ignored.)trtdoc";
-constexpr char const* OBEY_PRECISION_CONSTRAINTS
-    = R"trtdoc(Require that layers execute in specified precisions. Build fails otherwise.
-               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
-constexpr char const* PREFER_PRECISION_CONSTRAINTS
-    = R"trtdoc(Prefer that layers execute in specified precisions. Fall back (with warning) to another precision if build would otherwise fail.
-               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* DIRECT_IO
     = R"trtdoc(Require that no reformats be inserted between a layer and a network I/O tensor for which ``ITensor.allowed_formats`` was set. Build fails if a reformat is required for functional correctness.
                [DEPRECATED] Deprecated in TensorRT 10.7.))trtdoc";
-constexpr char const* REJECT_EMPTY_ALGORITHMS
-    = R"trtdoc([DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead. Fail if IAlgorithmSelector.select_algorithms returns an empty set of algorithms.)trtdoc";
 constexpr char const* VERSION_COMPATIBLE
     = R"trtdoc(Restrict to lean runtime operators to provide version forward compatibility for the plan files.)trtdoc";
 constexpr char const* EXCLUDE_LEAN_RUNTIME = R"trtdoc(Exclude lean runtime from the plan.)trtdoc";
-constexpr char const* FP8
- = R"trtdoc(Enable plugins with FP8 input/output
-    [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* ERROR_ON_TIMING_CACHE_MISS
     = R"trtdoc(Emit error when a tactic being timed is not present in the timing cache.)trtdoc";
 constexpr char const* DISABLE_COMPILATION_CACHE
     = R"trtdoc(Disable caching JIT compilation results during engine build.)trtdoc";
-constexpr char const* WEIGHTLESS
-    = R"trtdoc(Strip the perf-irrelevant weights from the plan file, update them later using refitting for better file size.
-               [DEPRECATED] Deprecated in TensorRT 10.0.
-               )trtdoc";
 constexpr char const* STRIP_PLAN = R"trtdoc(Strip the refittable weights from the engine plan file.)trtdoc";
 constexpr char const* REFIT_IDENTICAL
     = R"trtdoc(Create a refittable engine using identical weights. Different weights during refits yield unpredictable behavior.)trtdoc";
@@ -1200,14 +1130,8 @@ constexpr char const* REFIT_INDIVIDUAL
     = R"trtdoc(Create a refittable engine and allows the users to specify which weights are refittable and which are not.)trtdoc";
 constexpr char const* WEIGHT_STREAMING
     = R"trtdoc(Enable building with the ability to stream varying amounts of weights during Runtime. This decreases GPU memory of TRT at the expense of performance.)trtdoc";
-constexpr char const* INT4
-    = R"trtdoc(Enable plugins with INT4 input/output
-               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* STRICT_NANS
     = R"trtdoc(Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are not true when x is a NaN or Inf, and thus might hide propagation or generation of NaNs.)trtdoc";
-constexpr char const* FP4
-    = R"trtdoc(Enable plugins with FP4 input/output
-               [DEPRECATED] Deprecated in TensorRT 10.12. Superseded by strong typing.)trtdoc";
 constexpr char const* MONITOR_MEMORY = R"trtdoc(Enable memory monitor during build time.)trtdoc";
 constexpr char const* DISTRIBUTIVE_INDEPENDENCE = R"trtdoc(Enable distributive independence.)trtdoc";
 } // namespace BuilderFlagDoc
@@ -1218,7 +1142,6 @@ constexpr char const* descr = R"trtdoc(The type for memory pools used by TensorR
 constexpr char const* WORKSPACE = R"trtdoc(
     WORKSPACE is used by TensorRT to store intermediate buffers within an operation.
     This defaults to max device memory. Set to a smaller value to restrict tactics that use over the threshold en masse.
-    For more targeted removal of tactics use the IAlgorithmSelector interface ([DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead).
 )trtdoc";
 constexpr char const* DLA_MANAGED_SRAM = R"trtdoc(
     DLA_MANAGED_SRAM is a fast software managed RAM used by DLA to communicate within a layer.
@@ -1255,32 +1178,17 @@ constexpr char const* TACTIC_SHARED_MEMORY = R"trtdoc(
 
 } // namespace MemoryPoolTypeDoc
 
-namespace QuantizationFlagDoc
-{
-constexpr char const* descr = R"trtdoc(List of valid flags for quantizing the network to int8.)trtdoc";
-
-constexpr char const* CALIBRATE_BEFORE_FUSION
-    = R"trtdoc(Run int8 calibration pass before layer fusion. Only valid for IInt8LegacyCalibrator and IInt8EntropyCalibrator. We always run int8 calibration pass before layer fusion for IInt8MinMaxCalibrator and IInt8EntropyCalibrator2. Disabled by default.)trtdoc";
-} // namespace QuantizationFlagDoc
-
 namespace PreviewFeatureDoc
 {
 constexpr char const* descr = R"trtdoc(
     List of Preview Features that can be enabled. Preview Features have been fully tested but are not yet as stable as other features in TensorRT.
     They are provided as opt-in features for at least one release.
-    For example, to enable faster dynamic shapes, call :func:`set_preview_feature` with ``PreviewFeature.PROFILE_SHARING_0806``
-)trtdoc";
-constexpr char const* PROFILE_SHARING_0806 = R"trtdoc(
-    [DEPRECATED] Allows optimization profiles to be shared across execution contexts. The default value for this flag is on in TensorRT 10.0. Turning if off is deprecated.
 )trtdoc";
 constexpr char const* ALIASED_PLUGIN_IO_10_03 = R"trtdoc(
     Allows plugin I/O to be aliased when using IPluginV3OneBuildV2.
 )trtdoc";
 constexpr char const* RUNTIME_ACTIVATION_RESIZE_10_10 = R"trtdoc(
     Allow update_device_memory_size_for_shapes to resize runner internal activation memory by changing the allocation algorithm. Using this feature can reduce runtime memory requirement when the actual input tensor shapes are smaller than the maximum input tensor dimensions.
-)trtdoc";
-constexpr char const* MULTIDEVICE_RUNTIME_10_16 = R"trtdoc(
-    Allow using multi-device mode in the builder. This enables running inference on multiple GPUs on supported platforms. 
 )trtdoc";
 } // namespace PreviewFeatureDoc
 
@@ -1350,12 +1258,9 @@ constexpr char const* FULL = R"trtdoc(
 
 namespace NetworkDefinitionCreationFlagDoc
 {
-constexpr char const* descr
-    = R"trtdoc(List of immutable network properties expressed at network creation time. For example, to enable strongly typed mode, pass a value of ``1 << int(NetworkDefinitionCreationFlag.STRONGLY_TYPED)`` to :func:`create_network` )trtdoc";
-constexpr char const* EXPLICIT_BATCH
-    = R"trtdoc([DEPRECATED] Ignored because networks are always "explicit batch" in TensorRT 10.0.)trtdoc";
+constexpr char const* descr = R"trtdoc(List of immutable network properties expressed at network creation time.)trtdoc";
 constexpr char const* STRONGLY_TYPED
-    = R"trtdoc(Specify that every tensor in the network has a data type defined in the network following only type inference rules and the inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network output types will be inferred based on the input types and the type inference rules)trtdoc";
+    = R"trtdoc([DEPRECATED] Deprecated in TensorRT 11.0. Strongly typed mode is always enabled. This flag is retained for API compatibility but is ignored.)trtdoc";
 constexpr char const* PREFER_AOT_PYTHON_PLUGINS
     = R"trtdoc(If set, for a Python plugin with both AOT and JIT implementations, the AOT implementation will be used.)trtdoc";
 constexpr char const* PREFER_JIT_PYTHON_PLUGINS
@@ -1427,20 +1332,6 @@ namespace TacticSourceDoc
 {
 constexpr char const* descr = R"trtdoc(Tactic sources that can provide tactics for TensorRT.)trtdoc";
 
-constexpr char const* CUBLAS = R"trtdoc(
-        Enables cuBLAS tactics. Disabled by default.
-        [DEPRECATED] Deprecated in TensorRT 10.0.
-        **NOTE:** Disabling CUBLAS tactic source will cause the cuBLAS handle passed to plugins in attachToContext to be null.
-    )trtdoc";
-constexpr char const* CUBLAS_LT = R"trtdoc(
-        Enables cuBLAS LT tactics. Disabled by default.
-        [DEPRECATED] Deprecated in TensorRT 9.0.
-    )trtdoc";
-constexpr char const* CUDNN = R"trtdoc(
-        Enables cuDNN tactics. Disabled by default.
-        [DEPRECATED] Deprecated in TensorRT 10.0.
-        **NOTE:** Disabling CUDNN tactic source will cause the cuDNN handle passed to plugins in attachToContext to be null.
-    )trtdoc";
 constexpr char const* EDGE_MASK_CONVOLUTIONS = R"trtdoc(
         Enables convolution tactics implemented with edge mask tables. These tactics tradeoff memory for performance
         by consuming additional memory space proportional to the input size. Enabled by default.
@@ -1584,7 +1475,6 @@ namespace IBuilderConfigDoc
 constexpr char const* descr = R"trtdoc(
 
         :ivar avg_timing_iterations: :class:`int` The number of averaging iterations used when timing layers. When timing layers, the builder minimizes over a set of average times for layer execution. This parameter controls the number of iterations used in averaging. By default the number of averaging iterations is 1.
-        :ivar int8_calibrator: :class:`IInt8Calibrator` [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization. Int8 Calibration interface. The calibrator is to minimize the information loss during the INT8 quantization process.
         :ivar flags: :class:`int` The build mode flags to turn on builder options for this network. The flags are listed in the BuilderFlags enum. The flags set configuration options to build the network. This should be in integer consisting of one or more :class:`BuilderFlag` s, combined via binary OR. For example, ``1 << BuilderFlag.FP16 | 1 << BuilderFlag.DEBUG``.
         :ivar profile_stream: :class:`int` The handle for the CUDA stream that is used to profile this network.
         :ivar num_optimization_profiles: :class:`int` The number of optimization profiles.
@@ -1592,7 +1482,6 @@ constexpr char const* descr = R"trtdoc(
         :ivar DLA_core: :class:`int` The DLA core that the engine executes on. Must be between 0 and N-1 where N is the number of available DLA cores.
         :ivar profiling_verbosity: Profiling verbosity in NVTX annotations.
         :ivar engine_capability: The desired engine capability. See :class:`EngineCapability` for details.
-        :ivar algorithm_selector: [DEPRECATED] Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead. The :class:`IAlgorithmSelector` to use.
         :ivar builder_optimization_level: The builder optimization level which TensorRT should build the engine at. Setting a higher optimization level allows TensorRT to spend longer engine building time searching for more optimization options. The resulting engine may have better performance compared to an engine built with a lower optimization level. The default optimization level is 3. Valid values include integers from 0 to the maximum optimization level, which is currently 5. Setting it to be greater than the maximum level results in identical behavior to the maximum level.
         :ivar max_num_tactics: The maximum number of tactics to time when there is a choice of tactics. Setting a larger number allows TensorRT to spend longer engine building time searching for more optimization options. The resulting engine may have better performance compared to an engine built with a smaller number of tactics. Valid values include integers from -1 to the maximum 32-bit integer. Default value -1 indicates that TensorRT can decide the number of tactics based on its own heuristic.
         :ivar hardware_compatibility_level: Hardware compatibility allows an engine compatible with GPU architectures other than that of the GPU on which the engine was built.
@@ -1686,26 +1575,6 @@ constexpr char const* get_flag = R"trtdoc(
         :returns: A `bool` indicating whether the flag is set.
     )trtdoc";
 
-constexpr char const* clear_quantization_flag = R"trtdoc(
-        Clears the quantization flag from the enabled quantization flags.
-
-        :arg flag: The flag to clear.
-    )trtdoc";
-
-constexpr char const* set_quantization_flag = R"trtdoc(
-        Add the input quantization flag to the already enabled quantization flags.
-
-        :arg flag: The flag to set.
-    )trtdoc";
-
-constexpr char const* get_quantization_flag = R"trtdoc(
-        Check if a quantization flag is set.
-
-        :arg flag: The flag to check.
-
-        :returns: A `bool` indicating whether the flag is set.
-    )trtdoc";
-
 constexpr char const* reset = R"trtdoc(
         Resets the builder configuration to defaults. When initializing a builder config object, we can call this function.
     )trtdoc";
@@ -1719,26 +1588,6 @@ constexpr char const* add_optimization_profile = R"trtdoc(
 
     :returns: The index of the optimization profile (starting from 0) if the input is valid, or -1 if the input is
                 not valid.
-)trtdoc";
-
-constexpr char const* set_calibration_profile = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-
-    Set a calibration profile.
-
-    Calibration optimization profile must be set if int8 calibration is used to set scales for a network with runtime dimensions.
-
-    :arg profile: The new calibration profile, which must satisfy ``bool(profile) == True`` or be None. MIN and MAX values will be overwritten by OPT.
-
-    :returns: True if the calibration profile was set correctly.
-)trtdoc";
-
-constexpr char const* get_calibration_profile = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-
-    Get the current calibration profile.
-
-    :returns: The current calibration profile or None if calibrartion profile is unset.
 )trtdoc";
 
 constexpr char const* set_device_type = R"trtdoc(
@@ -1789,8 +1638,8 @@ constexpr char const* set_tactic_sources = R"trtdoc(
     This bitset controls which tactic sources TensorRT is allowed to use for tactic selection.
 
     Multiple tactic sources may be combined with a bitwise OR operation. For example,
-    to enable cublas and cublasLt as tactic sources, use a value of:
-    ``1 << int(trt.TacticSource.CUBLAS) | 1 << int(trt.TacticSource.CUBLAS_LT)``
+    to enable edge mask convolutions and JIT convolutions as tactic sources, use a value of:
+    ``1 << int(trt.TacticSource.EDGE_MASK_CONVOLUTIONS) | 1 << int(trt.TacticSource.JIT_CONVOLUTIONS)``
 
     :arg tactic_sources: The tactic sources to set
 
@@ -1876,9 +1725,6 @@ namespace BuilderDoc
 constexpr char const* descr = R"trtdoc(
     Builds an :class:`ICudaEngine` from a :class:`INetworkDefinition` .
 
-    :ivar platform_has_tf32: :class:`bool` Whether the platform has tf32 support.
-    :ivar platform_has_fast_fp16: :class:`bool` Whether the platform has fast native fp16.
-    :ivar platform_has_fast_int8: :class:`bool` Whether the platform has fast native int8.
     :ivar max_DLA_batch_size: :class:`int` The maximum batch size DLA can support. For any tensor the total volume of index dimensions combined(dimensions other than CHW) with the requested batch size should not exceed the value returned by this function.
     :ivar num_DLA_cores: :class:`int` The number of DLA engines available to this builder.
     :ivar error_recorder: :class:`IErrorRecorder` Application-implemented error reporting interface for TensorRT objects.
@@ -2010,15 +1856,6 @@ constexpr char const* deserialize_cuda_engine = R"trtdoc(
     Deserialize an :class:`ICudaEngine` from host memory.
 
     :arg serialized_engine: The :class:`buffer` that holds the serialized :class:`ICudaEngine`.
-
-    :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
-)trtdoc";
-
-constexpr char const* deserialize_cuda_engine_reader = R"trtdoc(
-    Deserialize an :class:`ICudaEngine` from a stream reader.
-
-    :arg stream_reader: The :class:`PyStreamReader` that will read the serialized :class:`ICudaEngine`. This enables
-        deserialization from a file directly.
 
     :returns: The :class:`ICudaEngine`, or None if it could not be deserialized.
 )trtdoc";
@@ -2273,37 +2110,6 @@ constexpr char const* get_all_weights = R"trtdoc(
     Get names of all weights that could be refitted.
 
     :returns: The names of refittable weights.
-)trtdoc";
-
-constexpr char const* get_dynamic_range = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-
-    Gets the dynamic range of a tensor. If the dynamic range was never set, returns the range computed during calibration.
-
-    :arg tensor_name: The name of the tensor whose dynamic range to retrieve.
-
-    :returns: :class:`Tuple[float, float]` A tuple containing the [minimum, maximum] of the dynamic range.
-)trtdoc";
-
-constexpr char const* set_dynamic_range = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-
-    Update dynamic range for a tensor.
-
-    :arg tensor_name: The name of the tensor whose dynamic range to update.
-    :arg range: The new range.
-
-    :returns: :class:`True` if successful, :class:`False` otherwise.
-
-    Returns false if there is no Int8 engine tensor derived from a network tensor of that name.  If successful, then :func:`get_missing` may report that some weights need to be supplied.
-)trtdoc";
-
-constexpr char const* get_tensors_with_dynamic_range = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-
-    Get names of all tensors that have refittable dynamic ranges.
-
-    :returns: The names of tensors with refittable dynamic ranges.
 )trtdoc";
 
 } // namespace RefitterDoc

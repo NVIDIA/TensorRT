@@ -376,9 +376,8 @@ bool allocateContextMemory(InferenceEnvironmentStd& iEnv, InferenceOptions const
         auto const& ec = iEnv.contexts.at(i);
         if (inference.memoryAllocationStrategy == MemoryAllocationStrategy::kSTATIC)
         {
-            sample::gLogInfo << "Created execution context with device memory size: " <<
-                (engine->getDeviceMemorySize() / 1.0_MiB)
-                             << " MiB" << std::endl;
+            sample::gLogInfo << "Created execution context with device memory size: "
+                             << (engine->getDeviceMemorySizeV2() / 1.0_MiB) << " MiB" << std::endl;
         }
         else
         {
@@ -387,7 +386,7 @@ bool allocateContextMemory(InferenceEnvironmentStd& iEnv, InferenceOptions const
             if (inference.memoryAllocationStrategy == MemoryAllocationStrategy::kPROFILE)
             {
                 auto const p = inference.optProfileIndex;
-                sizeToAlloc = engine->getDeviceMemorySizeForProfile(p);
+                sizeToAlloc = static_cast<size_t>(engine->getDeviceMemorySizeForProfileV2(p));
                 allocReason = "current profile";
             }
             else if (inference.memoryAllocationStrategy == MemoryAllocationStrategy::kRUNTIME)
@@ -508,7 +507,7 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
 
     // Use managed memory on integrated devices when transfers are skipped
     // and when it is explicitly requested on the commandline.
-    bool useManagedMemory{(inference.skipTransfers && isIntegrated) || inference.useManaged};
+    bool useManagedMemory{(!inference.includeTransfers && isIntegrated) || inference.useManaged};
 
     nvinfer2::safe::ITRTGraph* tempGraph = nullptr;
     if (sample::safe::createSafeTRTGraph(
@@ -529,6 +528,7 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
         safeGraph->clone(clonedGraph, *gSafeRecorder); // return errorcode
         iEnv.mClonedGraphs.emplace_back(clonedGraph);
         iEnv.bindings.emplace_back(std::make_unique<BindingsSafe>(useManagedMemory));
+        iEnv.mAuxStreamsDeleters.push_back(samplesSafeCommon::setUpAuxStreamsOn(*clonedGraph, *gSafeRecorder));
     }
 
     int64_t endBindingIndex = 0;
@@ -608,12 +608,6 @@ IExecutionContext* setupExecutionContext(
     if (!setProfile)
     {
         sample::gLogError << "Set optimization profile failed. " << std::endl;
-        if (inference.infStreams > 1)
-        {
-            sample::gLogError
-                << "Please ensure that the engine is built with preview feature profileSharing0806 enabled. "
-                << std::endl;
-        }
         return nullptr;
     }
     return ec;
@@ -631,7 +625,7 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
     int32_t const isIntegrated{properties.value().integrated};
     // Use managed memory on integrated devices when transfers are skipped
     // and when it is explicitly requested on the commandline.
-    bool useManagedMemory{(inference.skipTransfers && isIntegrated) || inference.useManaged};
+    bool useManagedMemory{(!inference.includeTransfers && isIntegrated) || inference.useManaged};
 
     using FillStdBindings = FillBindingClosure<nvinfer1::ICudaEngine>;
 
@@ -1134,14 +1128,14 @@ public:
         }
     }
 
-    bool query(bool skipTransfers)
+    bool query(bool includeTransfers)
     {
         if (mActive[mNext])
         {
             return true;
         }
 
-        if (!skipTransfers)
+        if (includeTransfers)
         {
             record(EventType::kINPUT_S, StreamType::kINPUT);
             setInputData(false);
@@ -1158,7 +1152,7 @@ public:
         recordEnqueueTime();
         record(EventType::kCOMPUTE_E, StreamType::kCOMPUTE);
 
-        if (!skipTransfers)
+        if (includeTransfers)
         {
             wait(EventType::kCOMPUTE_E, StreamType::kOUTPUT); // Wait for compute before output DMA
             record(EventType::kOUTPUT_S, StreamType::kOUTPUT);
@@ -1171,32 +1165,32 @@ public:
         return true;
     }
 
-    float sync(
-        TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, std::vector<InferenceTrace>& trace, bool skipTransfers)
+    float sync(TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, std::vector<InferenceTrace>& trace,
+        bool includeTransfers)
     {
         if (mActive[mNext])
         {
-            if (skipTransfers)
-            {
-                getEvent(EventType::kCOMPUTE_E).synchronize();
-            }
-            else
+            if (includeTransfers)
             {
                 getEvent(EventType::kOUTPUT_E).synchronize();
             }
-            trace.emplace_back(getTrace(cpuStart, gpuStart, skipTransfers));
+            else
+            {
+                getEvent(EventType::kCOMPUTE_E).synchronize();
+            }
+            trace.emplace_back(getTrace(cpuStart, gpuStart, includeTransfers));
             mActive[mNext] = false;
             return getEvent(EventType::kCOMPUTE_S) - gpuStart;
         }
         return 0;
     }
 
-    void syncAll(
-        TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, std::vector<InferenceTrace>& trace, bool skipTransfers)
+    void syncAll(TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, std::vector<InferenceTrace>& trace,
+        bool includeTransfers)
     {
         for (int32_t d = 0; d < mDepth; ++d)
         {
-            sync(cpuStart, gpuStart, trace, skipTransfers);
+            sync(cpuStart, gpuStart, trace, includeTransfers);
             moveNext();
         }
     }
@@ -1265,16 +1259,15 @@ protected:
         getStream(s).wait(getEvent(e));
     }
 
-    InferenceTrace getTrace(TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, bool skipTransfers)
+    InferenceTrace getTrace(TimePoint const& cpuStart, TrtCudaEvent const& gpuStart, bool includeTransfers)
     {
-        float is
-            = skipTransfers ? getEvent(EventType::kCOMPUTE_S) - gpuStart : getEvent(EventType::kINPUT_S) - gpuStart;
-        float ie
-            = skipTransfers ? getEvent(EventType::kCOMPUTE_S) - gpuStart : getEvent(EventType::kINPUT_E) - gpuStart;
-        float os
-            = skipTransfers ? getEvent(EventType::kCOMPUTE_E) - gpuStart : getEvent(EventType::kOUTPUT_S) - gpuStart;
-        float oe
-            = skipTransfers ? getEvent(EventType::kCOMPUTE_E) - gpuStart : getEvent(EventType::kOUTPUT_E) - gpuStart;
+        auto eventTime = [&](EventType transferEvent, EventType computeEvent) {
+            return includeTransfers ? getEvent(transferEvent) - gpuStart : getEvent(computeEvent) - gpuStart;
+        };
+        float is = eventTime(EventType::kINPUT_S, EventType::kCOMPUTE_S);
+        float ie = eventTime(EventType::kINPUT_E, EventType::kCOMPUTE_S);
+        float os = eventTime(EventType::kOUTPUT_S, EventType::kCOMPUTE_E);
+        float oe = eventTime(EventType::kOUTPUT_E, EventType::kCOMPUTE_E);
 
         return InferenceTrace(mStreamId,
             std::chrono::duration<float, std::milli>(getEnqueueTime(true) - cpuStart).count(),
@@ -1323,6 +1316,9 @@ private:
             sample::gLogInfo << "Capturing CUDA graph for the current execution context" << std::endl;
 
             TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
+            // Initialize input device buffers before the warmup enqueue and graph capture.
+            bindings.transferInputToDevice(stream);
+            stream.synchronize();
             // Avoid capturing initialization calls by executing the enqueue function at least
             // once before starting CUDA graph capture.
             auto const ret = mEnqueue(stream);
@@ -1339,7 +1335,10 @@ private:
             {
                 mGraph.endCapture(stream);
                 mEnqueue = EnqueueFunction(EnqueueGraph(context, mGraph));
-                sample::gLogInfo << "Successfully captured CUDA graph for the current execution context" << std::endl;
+                sample::gLogInfo << "Successfully captured CUDA graph for the current execution context. "
+                                    "When profiling with Nsight Systems, add \"--cuda-graph-trace=node\" to the "
+                                    "nsys command to see per-kernel execution times."
+                                 << std::endl;
             }
             else
             {
@@ -1349,8 +1348,8 @@ private:
                 sample::gLogWarning << "The built TensorRT engine contains operations that are not permitted under "
                                        "CUDA graph capture mode."
                                     << std::endl;
-                sample::gLogWarning << "The specified --useCudaGraph flag has been ignored. The inference will be "
-                                       "launched without using CUDA graph launch."
+                sample::gLogWarning << "CUDA graph capture failed. The inference will be "
+                                       "launched without using CUDA graph."
                                     << std::endl;
             }
         }
@@ -1382,6 +1381,9 @@ private:
             sample::gLogInfo << "Capturing CUDA graph for the current execution context" << std::endl;
 
             TrtCudaStream& stream = getStream(StreamType::kCOMPUTE);
+            // Initialize input device buffers before the warmup enqueue and graph capture.
+            bindings.transferInputToDevice(stream);
+            stream.synchronize();
             // Avoid capturing initialization calls by executing the enqueue function at least
             // once before starting CUDA graph capture.
             auto const ret = mEnqueue(stream);
@@ -1398,7 +1400,10 @@ private:
             {
                 mGraph.endCapture(stream);
                 mEnqueue = EnqueueFunction(EnqueueGraphSafe(graph));
-                sample::gLogInfo << "Successfully captured CUDA graph for the current execution context" << std::endl;
+                sample::gLogInfo << "Successfully captured CUDA graph for the current execution context. "
+                                    "When profiling with Nsight Systems, add \"--cuda-graph-trace=node\" to the "
+                                    "nsys command to see per-kernel execution times."
+                                 << std::endl;
             }
             else
             {
@@ -1408,8 +1413,8 @@ private:
                 sample::gLogWarning << "The built TensorRT engine contains operations that are not permitted under "
                                        "CUDA graph capture mode."
                                     << std::endl;
-                sample::gLogWarning << "The specified --useCudaGraph flag has been ignored. The inference will be "
-                                       "launched without using CUDA graph launch."
+                sample::gLogWarning << "CUDA graph capture failed. The inference will be "
+                                       "launched without using CUDA graph."
                                     << std::endl;
             }
         }
@@ -1420,7 +1425,7 @@ private:
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePoint const& cpuStart,
     TrtCudaEvent const& gpuStart, int iterations, float maxDurationMs, float warmupMs,
-    std::vector<InferenceTrace>& trace, bool skipTransfers, float idleMs)
+    std::vector<InferenceTrace>& trace, bool includeTransfers, float idleMs)
 {
     float durationMs = 0;
     int32_t skip = 0;
@@ -1431,32 +1436,26 @@ bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePo
                             << " aborted with CTRL-C (SIGINT)" << std::endl;
         while (true)
         {
-            for (auto& s : iStreams)
+            if (!std::all_of(iStreams.begin(), iStreams.end(), [&](auto& s) { return s->query(includeTransfers); }))
             {
-                if (!s->query(skipTransfers))
-                {
-                    return false;
-                }
+                return false;
             }
             for (auto& s : iStreams)
             {
-                s->sync(cpuStart, gpuStart, trace, skipTransfers);
+                s->sync(cpuStart, gpuStart, trace, includeTransfers);
             }
         }
     }
 
     for (int32_t i = 0; i < iterations + skip || durationMs < maxDurationMs; ++i)
     {
-        for (auto& s : iStreams)
+        if (!std::all_of(iStreams.begin(), iStreams.end(), [&](auto& s) { return s->query(includeTransfers); }))
         {
-            if (!s->query(skipTransfers))
-            {
-                return false;
-            }
+            return false;
         }
         for (auto& s : iStreams)
         {
-            durationMs = std::max(durationMs, s->sync(cpuStart, gpuStart, trace, skipTransfers));
+            durationMs = std::max(durationMs, s->sync(cpuStart, gpuStart, trace, includeTransfers));
         }
         if (durationMs < warmupMs) // Warming up
         {
@@ -1473,7 +1472,7 @@ bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePo
     }
     for (auto& s : iStreams)
     {
-        s->syncAll(cpuStart, gpuStart, trace, skipTransfers);
+        s->syncAll(cpuStart, gpuStart, trace, includeTransfers);
     }
     return true;
 }
@@ -1502,7 +1501,7 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
                 auto iteration = std::make_unique<IterationSafe>(streamId, inference,
                     *static_cast<InferenceEnvironmentSafe&>(iEnv).mClonedGraphs[streamId],
                     *static_cast<InferenceEnvironmentSafe&>(iEnv).bindings[streamId]);
-                if (inference.skipTransfers)
+                if (!inference.includeTransfers)
                 {
                     iteration->setInputData(true);
                 }
@@ -1521,12 +1520,12 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
             }
             std::vector<InferenceTrace> localTrace;
             if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs,
-                    localTrace, inference.skipTransfers, inference.idle))
+                    localTrace, inference.includeTransfers, inference.idle))
             {
                 std::lock_guard<std::mutex> lock{sync.mutex};
                 iEnv.error = true;
             }
-            if (inference.skipTransfers)
+            if (!inference.includeTransfers)
             {
                 for (auto& s : iStreams)
                 {
@@ -1545,7 +1544,7 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
             auto iteration = std::make_unique<IterationStd>(streamId, inference,
                 *static_cast<InferenceEnvironmentStd&>(iEnv).getContext(streamId),
                 *static_cast<InferenceEnvironmentStd&>(iEnv).bindings[streamId]);
-            if (inference.skipTransfers)
+            if (!inference.includeTransfers)
             {
                 iteration->setInputData(true);
             }
@@ -1565,14 +1564,14 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
 
         std::vector<InferenceTrace> localTrace;
         if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs,
-                localTrace, inference.skipTransfers, inference.idle))
+                localTrace, inference.includeTransfers, inference.idle))
         {
             std::lock_guard<std::mutex> lock{sync.mutex};
             iEnv.error = true;
         }
 
         auto const needOutput = reporting.output || !reporting.exportOutput.empty();
-        if (inference.skipTransfers && needOutput)
+        if (!inference.includeTransfers && needOutput)
         {
             for (auto& s : iStreams)
             {
@@ -1716,18 +1715,12 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys)
         {
             rt->getPluginRegistry().loadLibrary(pluginPath.c_str());
         }
-        auto& reader = iEnv.engine.getFileReader();
         auto& asyncReader = iEnv.engine.getAsyncFileReader();
-        ASSERT(reader.isOpen() || asyncReader.isOpen());
+        ASSERT(asyncReader.isOpen());
         if (asyncReader.isOpen())
         {
             asyncReader.reset();
             engine.reset(rt->deserializeCudaEngine(asyncReader));
-        }
-        else
-        {
-            reader.reset();
-            engine.reset(rt->deserializeCudaEngine(reader));
         }
         deserializeOK = (engine != nullptr);
         auto endClock = std::chrono::high_resolution_clock::now();
@@ -2158,6 +2151,17 @@ bool BindingsStd::setTensorAddresses(nvinfer1::IExecutionContext& context) const
             }
             else
             {
+#if ENABLE_DLA
+                // When DLA is enabled, a tensor's address must be set to nullptr to unregister
+                // the tensor with DLA before setting it to a new address. 
+                if (context.getTensorAddress(name) != nullptr)
+                {
+                    if (!context.setTensorAddress(name, nullptr))
+                    {
+                        return false;
+                    }
+                }
+#endif // ENABLE_DLA
                 if (!context.setTensorAddress(name, mDevicePointers[b.second]))
                 {
                     return false;
