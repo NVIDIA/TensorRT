@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,11 +61,6 @@ public:
     size_t getSerializationSize() const noexcept override;
 
     void serialize(void* buffer) const noexcept override;
-
-    bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
-
-    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
 
     void configurePlugin(Dims const* inputDims, int32_t nbInputs, Dims const* outputDims, int32_t nbOutputs,
         DataType const* inputTypes, DataType const* outputTypes, bool const* inputIsBroadcast,

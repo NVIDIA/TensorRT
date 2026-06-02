@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -40,6 +41,7 @@ using namespace nvinfer1::pluginInternal;
 
 namespace
 {
+using namespace std::string_view_literals;
 char const* const kQKV_TO_CONTEXT_PLUGIN_VERSION{"4"};
 char const* const kQKV_TO_CONTEXT_VAR_SEQLEN_PLUGIN_VERSION{"5"};
 char const* const kQKV_TO_CONTEXT_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
@@ -147,9 +149,8 @@ IPluginV3* QKVToContextPluginDynamic::clone() noexcept
 {
     BERT_DEBUG_MSG("QKV Clone");
 
-    QKVToContextPluginDynamic* ret = nullptr;
     mHasUnfusedDispatcher = 0;
-    char* bufferData = nullptr;
+    void const* bufferData = nullptr;
     // the workspacesize is 0 if we have not call setup the dispatcher yet.
     if (unfusedDispatcher.get() && unfusedDispatcher->getWorkspaceSize())
     {
@@ -159,11 +160,11 @@ IPluginV3* QKVToContextPluginDynamic::clone() noexcept
         bufferData = mRunnerStateBuffer.data();
     }
 
-    ret = new QKVToContextPluginDynamic(mLayerName, mType, mS, mB, mSM, mHiddenSize, mNumHeads, mDqProbs,
-        static_cast<bool>(mHasImask), mHasUnfusedDispatcher, static_cast<void const*>(bufferData));
+    auto ret = std::make_unique<QKVToContextPluginDynamic>(mLayerName, mType, mS, mB, mSM, mHiddenSize, mNumHeads,
+        mDqProbs, static_cast<bool>(mHasImask), mHasUnfusedDispatcher, bufferData);
     ret->setPluginNamespace(mNamespace.c_str());
     BERT_DEBUG_MSG("QKV Clone done");
-    return ret;
+    return ret.release();
 }
 
 int32_t QKVToContextPluginDynamic::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
@@ -623,7 +624,7 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
         int32_t sm = -1;
         bool hasUnfusedDispatcher = false;
         void const* runnerStateBuffer = nullptr;
-        float dqProbs = -1;
+        float dqProbs = -1.0F;
 
         PLUGIN_VALIDATE(fc->fields != nullptr);
         if (phase == TensorRTPhase::kBUILD)
@@ -641,27 +642,27 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
         {
             PLUGIN_VALIDATE(fc->fields[i].name != nullptr);
             PLUGIN_VALIDATE(fc->fields[i].data != nullptr);
-            std::string field_name(fc->fields[i].name);
+            std::string_view const field_name = fc->fields[i].name;
 
-            if (field_name.compare("type_id") == 0)
+            if (field_name == "type_id"sv)
             {
                 typeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(typeId >= 0 && typeId <= 2, ("QKV: Invalid TypeId " + std::to_string(typeId)).c_str());
                 BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
-            else if (field_name.compare("hidden_size") == 0)
+            else if (field_name == "hidden_size"sv)
             {
                 hiddenSize = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
                 BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
             }
-            else if (field_name.compare("num_heads") == 0)
+            else if (field_name == "num_heads"sv)
             {
                 numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
                 BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
             }
-            else if (field_name.compare("has_mask") == 0)
+            else if (field_name == "has_mask"sv)
             {
                 auto hasMaskValue = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(hasMaskValue == 0 || hasMaskValue == 1,
@@ -669,31 +670,31 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
                 hasMask = static_cast<bool>(hasMaskValue);
                 BERT_DEBUG_VALUE("Building hasMask: ", hasMask);
             }
-            else if (field_name.compare("dq_probs") == 0)
+            else if (field_name == "dq_probs"sv)
             {
                 dqProbs = *static_cast<float const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(dqProbs > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs)).c_str());
                 BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
             }
-            else if (field_name.compare("S") == 0)
+            else if (field_name == "S"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 s = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building S: ", s);
             }
-            else if (field_name.compare("B") == 0)
+            else if (field_name == "B"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 b = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building B: ", b);
             }
-            else if (field_name.compare("SM") == 0)
+            else if (field_name == "SM"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 sm = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building SM: ", sm);
             }
-            else if (field_name.compare("hasUnfusedDispatcher") == 0)
+            else if (field_name == "hasUnfusedDispatcher"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 auto hasUnfusedDispatcherValue = *static_cast<int32_t const*>(fc->fields[i].data);
@@ -702,7 +703,7 @@ IPluginV3* QKVToContextPluginDynamicCreator::createPlugin(
                 hasUnfusedDispatcher = static_cast<bool>(hasUnfusedDispatcherValue);
                 BERT_DEBUG_VALUE("Building hasUnfusedDispatcher: ", hasUnfusedDispatcher);
             }
-            else if (field_name.compare("runnerStateBuffer") == 0)
+            else if (field_name == "runnerStateBuffer"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 runnerStateBuffer = static_cast<void const*>(fc->fields[i].data);
@@ -885,29 +886,28 @@ IPluginV3* QKVToContextVarSeqlenPlugin::clone() noexcept
 {
     BERT_DEBUG_MSG("QKV Clone");
 
-    QKVToContextVarSeqlenPlugin* ret = nullptr;
+    std::unique_ptr<QKVToContextVarSeqlenPlugin> ret;
 
-    char* bufferData = nullptr;
     // the workspacesize is 0 if we have not call setup the dispatcher yet.
     if (mDispatcher.get())
     {
         mRunnerStateBuffer.resize(mDispatcher->getSerializationSize());
-        mDispatcher->serialize(mRunnerStateBuffer.data());
-        bufferData = mRunnerStateBuffer.data();
+        void* const bufferData = mRunnerStateBuffer.data();
+        mDispatcher->serialize(bufferData);
 
-        ret = new QKVToContextVarSeqlenPlugin(mLayerName, mS, mB, mType, mHiddenSize, mNumHeads, mDqProbs, mHasImask,
-            mUseVarSeqlen, mUseInt8ScaleMax, static_cast<void const*>(bufferData));
+        ret = std::make_unique<QKVToContextVarSeqlenPlugin>(mLayerName, mS, mB, mType, mHiddenSize, mNumHeads, mDqProbs,
+            mHasImask, mUseVarSeqlen, mUseInt8ScaleMax, bufferData);
     }
     else
     {
         // dispatcher not setup yet, use type 1 constructor
-        ret = new QKVToContextVarSeqlenPlugin(
+        ret = std::make_unique<QKVToContextVarSeqlenPlugin>(
             mLayerName, mType, mHiddenSize, mNumHeads, mDqProbs, mHasImask, mUseVarSeqlen, mUseInt8ScaleMax);
     }
 
     ret->setPluginNamespace(mNamespace.c_str());
     BERT_DEBUG_MSG("QKV Clone done");
-    return ret;
+    return ret.release();
 }
 
 int32_t QKVToContextVarSeqlenPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs,
@@ -1400,7 +1400,7 @@ IPluginV3* QKVToContextVarSeqlenPluginCreator::createPlugin(
         int32_t b = -1;
         void const* runnerStateBuffer = nullptr;
         int32_t varSeqlen = 0;
-        float dqProbs = -1;
+        float dqProbs = -1.0F;
         int32_t useInt8ScaleMax = -1;
 
         PLUGIN_VALIDATE(fc->fields != nullptr);
@@ -1420,27 +1420,27 @@ IPluginV3* QKVToContextVarSeqlenPluginCreator::createPlugin(
         }
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string field_name(fc->fields[i].name);
+            std::string_view const field_name = fc->fields[i].name;
 
-            if (field_name.compare("type_id") == 0)
+            if (field_name == "type_id"sv)
             {
                 typeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(typeId >= 0 && typeId <= 2, ("QKV: Invalid TypeId " + std::to_string(typeId)).c_str());
                 BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
-            else if (field_name.compare("hidden_size") == 0)
+            else if (field_name == "hidden_size"sv)
             {
                 hiddenSize = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
                 BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
             }
-            else if (field_name.compare("num_heads") == 0)
+            else if (field_name == "num_heads"sv)
             {
                 numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
                 BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
             }
-            else if (field_name.compare("has_mask") == 0)
+            else if (field_name == "has_mask"sv)
             {
                 hasMask = *static_cast<bool const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(
@@ -1448,37 +1448,37 @@ IPluginV3* QKVToContextVarSeqlenPluginCreator::createPlugin(
                 BERT_DEBUG_VALUE("Building hasMask: ", hasMask);
             }
 
-            else if (field_name.compare("dq_probs") == 0)
+            else if (field_name == "dq_probs"sv)
             {
                 dqProbs = *static_cast<float const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(dqProbs > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs)).c_str());
                 BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
             }
-            else if (field_name.compare("var_seqlen") == 0)
+            else if (field_name == "var_seqlen"sv)
             {
                 varSeqlen = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building var_seqlen: ", varSeqlen);
             }
-            else if (field_name.compare("use_int8_scale_max") == 0)
+            else if (field_name == "use_int8_scale_max"sv)
             {
                 useInt8ScaleMax = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(useInt8ScaleMax == 0 || useInt8ScaleMax == 1,
                     ("QKV: Invalid useInt8ScaleMax " + std::to_string(useInt8ScaleMax)).c_str());
                 BERT_DEBUG_VALUE("Building useInt8ScaleMax: ", useInt8ScaleMax);
             }
-            else if (field_name.compare("S") == 0)
+            else if (field_name == "S"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 s = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building S: ", s);
             }
-            else if (field_name.compare("B") == 0)
+            else if (field_name == "B"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 b = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building B: ", b);
             }
-            else if (field_name.compare("runnerStateBuffer") == 0)
+            else if (field_name == "runnerStateBuffer"sv)
             {
                 PLUGIN_ASSERT(phase == TensorRTPhase::kRUNTIME);
                 runnerStateBuffer = static_cast<void const*>(fc->fields[i].data);

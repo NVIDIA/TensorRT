@@ -158,7 +158,6 @@ class FluxTransformerModel(base_model.BaseModel):
         bf16=False,
         max_batch_size=16,
         text_maxlen=77,
-        build_strongly_typed=False,
         weight_streaming=False,
         weight_streaming_budget_percentage=None,
         kontext_resolution=None,
@@ -187,7 +186,6 @@ class FluxTransformerModel(base_model.BaseModel):
         else:
             print(f"[I] Load FluxTransformer2DModel config from: {self.transformer_model_dir}")
             self.config = FluxTransformer2DModel.load_config(self.transformer_model_dir)
-        self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
         self.out_channels = self.config.get("out_channels") or self.config["in_channels"]
@@ -235,6 +233,7 @@ class FluxTransformerModel(base_model.BaseModel):
             "pooled_projections": {0: "B"},
             "timestep": {0: "B"},
             "img_ids": {0: "latent_dim"},
+            "txt_ids": {},
         }
         if self.config["guidance_embeds"]:
             dynamic_axes["guidance"] = {0: "B"}
@@ -358,7 +357,7 @@ class FluxTransformerModel(base_model.BaseModel):
         if self.fp8:
             return super().optimize(onnx_graph)
         if self.int8:
-            return super().optimize(onnx_graph, fuse_mha_qkv_int8=True)
+            return super().optimize(onnx_graph, modify_int8_graph=True)
         return super().optimize(onnx_graph)
 
 
@@ -407,7 +406,6 @@ class SD3TransformerModel(base_model.BaseModel):
         fp4=False,
         max_batch_size=16,
         text_maxlen=256,
-        build_strongly_typed=False,
         weight_streaming=False,
         weight_streaming_budget_percentage=None,
         do_classifier_free_guidance=False,
@@ -437,7 +435,6 @@ class SD3TransformerModel(base_model.BaseModel):
         else:
             print(f"[I] Load SD3Transformer2DModel config from: {self.transformer_model_dir}")
             self.config = SD3Transformer2DModel.load_config(self.transformer_model_dir)
-        self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
         self.out_channels = self.config.get("out_channels")
@@ -631,7 +628,6 @@ class WanTransformerModel(base_model.BaseModel):
         num_frames=81,
         height=720,
         width=1280,
-        build_strongly_typed=True,
         weight_streaming=False,
         weight_streaming_budget_percentage=None,
     ):
@@ -666,7 +662,6 @@ class WanTransformerModel(base_model.BaseModel):
             print(f"[I] Load WanTransformer3DModel config from: {self.transformer_model_dir}")
             self.config = WanTransformer3DModel.load_config(self.transformer_model_dir)
         
-        self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
         self.do_constant_folding = False
@@ -709,20 +704,7 @@ class WanTransformerModel(base_model.BaseModel):
         return ["denoised_latents"]
 
     def get_dynamic_axes(self):
-        return {
-            "hidden_states": {
-                0: "batch",
-                2: "frames",
-                3: "latent_height",
-                4: "latent_width"
-            },
-            "timestep": {
-                0: "batch"
-            },
-            "encoder_hidden_states": {
-                0: "batch",
-            },
-        }
+        return {}
 
     def get_input_profile(self, batch_size, image_height, image_width, static_batch, static_shape, num_frames):
         latent_height, latent_width, latent_frames = self.check_dims(
@@ -840,7 +822,6 @@ class CosmosTransformerModel(base_model.BaseModel):
         bf16=False,
         max_batch_size=16,
         text_maxlen=77,
-        build_strongly_typed=False,
         weight_streaming=False,
         weight_streaming_budget_percentage=None,
     ):
@@ -868,7 +849,6 @@ class CosmosTransformerModel(base_model.BaseModel):
         else:
             print(f"[I] Load CosmosTransformer3DModel config from: {self.transformer_model_dir}")
             self.config = CosmosTransformer3DModel.load_config(self.transformer_model_dir)
-        self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
 

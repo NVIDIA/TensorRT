@@ -18,9 +18,9 @@
 #include "voxelGenerator.h"
 #include "common/templates.h"
 #include <cmath>
-#include <cstring>
 #include <iostream>
 #include <memory>
+#include <string_view>
 
 namespace nvinfer1::plugin
 {
@@ -445,20 +445,21 @@ IPluginV2* VoxelGeneratorPluginCreator::createPlugin(char const* name, PluginFie
         float pointCloudRange[6]{};
         int32_t voxelFeatureNum = 0;
         float voxelSize[3]{};
+        using namespace std::string_view_literals;
         for (int32_t i = 0; i < nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "max_num_points_per_voxel"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "max_num_points_per_voxel"sv)
             {
                 int32_t const* d = static_cast<int32_t const*>(fields[i].data);
                 maxPoints = d[0];
             }
-            else if (!strcmp(attrName, "max_voxels"))
+            else if (attrName == "max_voxels"sv)
             {
                 int32_t const* d = static_cast<int32_t const*>(fields[i].data);
                 maxVoxels = d[0];
             }
-            else if (!strcmp(attrName, "point_cloud_range"))
+            else if (attrName == "point_cloud_range"sv)
             {
                 float const* d = static_cast<float const*>(fields[i].data);
                 pointCloudRange[0] = d[0];
@@ -468,12 +469,12 @@ IPluginV2* VoxelGeneratorPluginCreator::createPlugin(char const* name, PluginFie
                 pointCloudRange[4] = d[4];
                 pointCloudRange[5] = d[5];
             }
-            else if (!strcmp(attrName, "voxel_feature_num"))
+            else if (attrName == "voxel_feature_num"sv)
             {
                 int32_t const* d = static_cast<int32_t const*>(fields[i].data);
                 voxelFeatureNum = d[0];
             }
-            else if (!strcmp(attrName, "voxel_size"))
+            else if (attrName == "voxel_size"sv)
             {
                 float const* d = static_cast<float const*>(fields[i].data);
                 voxelSize[0] = d[0];

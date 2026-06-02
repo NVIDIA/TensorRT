@@ -153,7 +153,7 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
         if not self.low_vram and not self.torch_inference:
             for model_name in self.models.keys():
                 if not self.torch_fallback[model_name]:
-                    self.max_shared_device_memory_size = max(self.max_shared_device_memory_size, self.engine[model_name].engine.device_memory_size)
+                    self.max_shared_device_memory_size = max(self.max_shared_device_memory_size, self.engine[model_name].engine.device_memory_size_v2)
             self.shared_device_memory = cudart.cudaMalloc(self.max_shared_device_memory_size)[1]
             # Activate TensorRT engines
             for model_name in self.models.keys():
@@ -337,7 +337,6 @@ class StableVideoDiffusionPipeline(StableDiffusionPipeline):
             if not os.path.exists(engine_path[model_name]):
                 update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
                 engine.build(onnx_opt_path[model_name],
-                    fp16=True,
                     input_profile=obj.get_input_profile(
                         opt_batch_size, opt_image_height, opt_image_width,
                         static_batch=static_batch, static_shape=static_shape

@@ -92,6 +92,10 @@ def get_itemsize(dtype):
         onnx.TensorProto.FLOAT8E5M2FNUZ,
     ]:
         return 1
+    if dtype in [
+        onnx.TensorProto.FLOAT4E2M1
+    ]:
+        return 0.5
     G_LOGGER.critical(f"Unsupported type: {dtype}")
 
 
@@ -106,6 +110,7 @@ def get_numpy_type(onnx_type):
         onnx.TensorProto.FLOAT8E4M3FNUZ,
         onnx.TensorProto.FLOAT8E5M2,
         onnx.TensorProto.FLOAT8E5M2FNUZ,
+        onnx.TensorProto.FLOAT4E2M1
     ]
 
     # TENSOR_TYPE_TO_NP_TYPE maps types unsupported by NumPy to random other types.

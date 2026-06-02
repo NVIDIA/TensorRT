@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -76,11 +76,6 @@ public:
     DataType getOutputDataType(
         int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
-
-    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
-
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
@@ -111,7 +106,7 @@ class MultilevelCropAndResizePluginCreator : public nvinfer1::pluginInternal::Ba
 public:
     MultilevelCropAndResizePluginCreator() noexcept;
 
-    ~MultilevelCropAndResizePluginCreator() noexcept override{};
+    ~MultilevelCropAndResizePluginCreator() noexcept override {}
 
     char const* getPluginName() const noexcept override;
 

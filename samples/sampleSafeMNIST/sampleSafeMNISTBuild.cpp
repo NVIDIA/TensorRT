@@ -33,6 +33,7 @@
 #include "common.h"
 #include "logger.h"
 #include "parserOnnxConfig.h"
+#include "safeCommon.h"
 #include "sampleUtils.h"
 
 #include "NvInfer.h"
@@ -48,7 +49,7 @@
 
 using namespace nvinfer1;
 
-const std::string gSampleName = "TensorRT.sample_mnist_safe_build";
+std::string const gSampleName = "TensorRT.sample_mnist_safe_build";
 
 //!
 //! \brief The SampleSafeMNISTBuildArgs struct stores the additional arguments required by the sample
@@ -58,76 +59,70 @@ struct SampleSafeMNISTBuildArgs : public samplesCommon::Args
     std::string engineFileName{"safe_mnist.engine"};
     bool verbose{false};
     std::string remoteAutoTuningConfig{};
+    int32_t maxAuxStreams{0};
+    bool cpuOnly{false};
 };
 
 //!
 //! \brief This function parses arguments specific to the sample
 //!
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool parseSampleSafeMNISTBuildArgs(SampleSafeMNISTBuildArgs& args, int32_t argc, char* argv[])
 {
+    using namespace samplesSafeCommon;
     for (int32_t i = 1; i < argc; ++i)
     {
-        std::string arg = argv[i];
-
-        // Check for help flag first
-        if (arg == "--help" || arg == "-h")
+        std::string const arg = argv[i];
+        if (parseBool(arg, "help", 'h'))
         {
             args.help = true;
         }
-        else if (arg == "--verbose")
+        else if (parseBool(arg, "verbose"))
         {
             args.verbose = true;
         }
-        // Check for flags with values (simple parsing)
-        else if (arg.find("--saveEngine=") == 0)
+        else if (parseBool(arg, "cpuOnly"))
         {
-            std::string value = arg.substr(13); // Remove "--saveEngine="
-            if (value.empty())
-            {
-                sample::gLogError << "Engine filename cannot be empty" << std::endl;
-                return false;
-            }
-            args.engineFileName = value;
+            args.cpuOnly = true;
         }
-        else if (arg.find("--remoteAutoTuningConfig=") == 0)
+        else if (auto const value = parseString(arg, "saveEngine"))
         {
-            std::string value = arg.substr(25); // Remove "--remoteAutoTuningConfig="
-            if (value.empty())
+            if (value->empty())
             {
-                sample::gLogError << "Remote auto tuning config cannot be empty" << std::endl;
+                sample::gLogError << "Engine filename cannot be empty\n";
                 return false;
             }
-            args.remoteAutoTuningConfig = value;
+            args.engineFileName = std::move(*value);
         }
-        else if (arg.find("--datadir=") == 0 || arg.find("-d=") == 0)
+        else if (auto const value = parseString(arg, "remoteAutoTuningConfig"))
         {
-            std::string value;
-            if (arg.find("--datadir=") == 0)
+            if (value->empty())
             {
-                value = arg.substr(10); // Remove "--datadir="
-            }
-            else
-            {
-                value = arg.substr(3); // Remove "-d="
-            }
-
-            if (value.empty())
-            {
-                sample::gLogError << "Data directory path cannot be empty" << std::endl;
+                sample::gLogError << "Remote auto tuning config cannot be empty\n";
                 return false;
             }
-
-            std::string dirPath = value;
-            if (!dirPath.empty() && dirPath.back() != '/')
+            args.remoteAutoTuningConfig = std::move(*value);
+        }
+        else if (auto const value = parseString(arg, "datadir", 'd'))
+        {
+            if (value->empty())
             {
-                dirPath += '/';
+                sample::gLogError << "Data directory path cannot be empty\n";
+                return false;
             }
-            args.dataDirs.push_back(dirPath);
+            args.dataDirs.push_back(sample::normalizeDirectoryPath(*value));
+        }
+        else if (auto const value = parseString(arg, "maxAuxStreams"))
+        {
+            args.maxAuxStreams = std::stoi(*value);
+            if (args.maxAuxStreams < 0)
+            {
+                sample::gLogError << "Number of auxiliary streams must be >= 0, got: " << arg << "\n";
+                return false;
+            }
         }
         else
         {
-            sample::gLogError << "Invalid Argument: " << argv[i] << std::endl;
+            sample::gLogError << "Invalid Argument: " << arg << "\n";
             return false;
         }
     }
@@ -140,14 +135,15 @@ bool parseSampleSafeMNISTBuildArgs(SampleSafeMNISTBuildArgs& args, int32_t argc,
 //!
 struct SampleSafeMNISTBuildParams : public samplesCommon::OnnxSampleParams
 {
-    std::string engineFileName{"safe_mnist.engine"};
+    std::string engineFileName{};
     std::string remoteAutoTuningConfig{};
+    int32_t maxAuxStreams{0};
 };
 
 //!
 //! \brief Initialize members of the params struct using the command line args.
 //!
-SampleSafeMNISTBuildParams initializeSampleParams(const SampleSafeMNISTBuildArgs& args)
+SampleSafeMNISTBuildParams initializeSampleParams(SampleSafeMNISTBuildArgs const& args)
 {
     SampleSafeMNISTBuildParams params;
     if (args.dataDirs.empty()) // Use default directories if user hasn't provided directory paths.
@@ -163,6 +159,7 @@ SampleSafeMNISTBuildParams initializeSampleParams(const SampleSafeMNISTBuildArgs
     params.onnxFileName = "safe_mnist.onnx";
     params.engineFileName = args.engineFileName;
     params.remoteAutoTuningConfig = args.remoteAutoTuningConfig;
+    params.maxAuxStreams = args.maxAuxStreams;
 
     return params;
 }
@@ -175,7 +172,7 @@ SampleSafeMNISTBuildParams initializeSampleParams(const SampleSafeMNISTBuildArgs
 class SampleSafeMNIST
 {
 public:
-    SampleSafeMNIST(const SampleSafeMNISTBuildParams& params)
+    SampleSafeMNIST(SampleSafeMNISTBuildParams const& params)
         : mParams(params)
     {
     }
@@ -213,8 +210,7 @@ bool SampleSafeMNIST::build()
         return false;
     }
 
-    NetworkDefinitionCreationFlags flags = (1 << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kEXPLICIT_BATCH))
-        | (1 << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED));
+    NetworkDefinitionCreationFlags flags = 1U << static_cast<uint32_t>(NetworkDefinitionCreationFlag::kSTRONGLY_TYPED);
     auto network = std::unique_ptr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(flags));
     if (!network)
     {
@@ -240,6 +236,7 @@ bool SampleSafeMNIST::build()
         return false;
     }
     config->setEngineCapability(EngineCapability::kSAFETY);
+    config->setMaxAuxStreams(mParams.maxAuxStreams);
     config->setFlag(BuilderFlag::kGPU_FALLBACK);
 
     // Set remote auto tuning config if provided
@@ -267,7 +264,7 @@ bool SampleSafeMNIST::build()
         sample::gLogError << "Failed to open file to save engine: " << engineFile << std::endl;
         return false;
     }
-    file.write(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+    file.write(reinterpret_cast<char const*>(buffer->data()), buffer->size());
     file.close();
 
     return true;
@@ -292,19 +289,28 @@ bool SampleSafeMNIST::constructNetwork(std::unique_ptr<nvonnxparser::IParser>& p
 //!
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_mnist_safe_build [-h or --help] [--datadir=<path to data directory>]\n";
-    std::cout << "--help or -h    Display help information\n";
-    std::cout << "--datadir       Specify path to a data directory, overriding the default. This option can be used "
-                 "multiple times to add multiple directories. If no data directories are given, the default is to use "
-                 "(data/samples/mnist/, data/mnist/)"
-              << std::endl;
-    std::cout << "--verbose       Use verbose logging.\n";
-    std::cout << "--saveEngine    Save the serialized engine to the file (default = safe_mnist.engine).\n";
-    std::cout << "--remoteAutoTuningConfig  Set the remote auto tuning config. Format: "
-                 "protocol://username[:password]@hostname[:port]?param1=value1&param2=value2\n";
-    std::cout
-        << "                Example: "
-           "ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib\n";
+    SampleSafeMNISTBuildArgs const defArgs{};
+    std::cout << R"(Usage: sample_mnist_safe_build [options]
+Options:
+  --help, -h            Print this message and exit.
+  --datadir=DIR, -d=DIR Search for data in DIR.  This option can be passed multiple times
+                        to add multiple search directories.  If omitted, default data dirs are:
+                        data/samples/mnist/, data/mnist/
+  --verbose             Use verbose logging.
+  --saveEngine=FILE     Save the serialized engine into FILE (default = )"
+              << defArgs.engineFileName << R"().
+  --remoteAutoTuningConfig=CONFIG
+                        Set remote auto tuning configuration in the following format:
+                        protocol://username[:password]@hostname[:port]?param1=value1&param2=value2
+  --maxAuxStreams=N     Limit the number of auxiliary streams to N (default = )"
+              << defArgs.maxAuxStreams << R"().
+  --cpuOnly             Build the engine with CPU-only mode. Requires --remoteAutoTuningConfig.
+                        No local GPU is required on the build machine.
+
+Examples:
+  sample_mnist_safe_build \
+      --remoteAutoTuningConfig=ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib
+)";
 }
 
 int main(int argc, char** argv)
@@ -334,7 +340,22 @@ int main(int argc, char** argv)
         sample::gLogInfo << "This is a safety sample and will build in remote mode automatically." << std::endl;
     }
 
-    if (!samplesCommon::isSmSafe())
+    if (args.cpuOnly)
+    {
+        if (args.remoteAutoTuningConfig.empty())
+        {
+            sample::gLogError << "--cpuOnly requires --remoteAutoTuningConfig to be specified." << std::endl;
+            printHelpInfo();
+            return EXIT_FAILURE;
+        }
+        sample::gLogInfo << "Setting CPU-only mode" << std::endl;
+        if (!samplesSafeCommon::applyCpuOnlyMode())
+        {
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (!args.cpuOnly && !samplesCommon::isSmSafe())
     {
         sample::gLogInfo << "Skip safe mode test on unsupported platforms." << std::endl;
         return EXIT_SUCCESS;

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@
 #ifndef TRT_ROIALIGN_PLUGIN_H
 #define TRT_ROIALIGN_PLUGIN_H
 
-#include "common/plugin.h"
+#include "vc/checkMacrosPlugin.h"
 #include <cuda_runtime_api.h>
 #include <stdint.h>
 #include <vector>

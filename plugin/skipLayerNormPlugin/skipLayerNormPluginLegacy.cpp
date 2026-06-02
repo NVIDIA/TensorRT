@@ -24,6 +24,7 @@
 
 #include <cstring>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 using namespace nvinfer1;
@@ -33,6 +34,7 @@ using namespace nvinfer1::plugin::bert;
 // Clip plugin specific constants
 namespace
 {
+using namespace std::string_view_literals;
 constexpr char const* kSKIP_LAYER_NORM_VERSION{"1"};
 constexpr char const* kSKIP_LAYER_NORM_NAME{"CustomSkipLayerNormPluginDynamic"};
 constexpr char const* kSKIP_LAYER_NORM_VAR_SEQLEN_VERSION{"2"};
@@ -480,20 +482,20 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(char const* name, Plu
 
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string field_name(fc->fields[i].name);
-            if (field_name.compare("ld") == 0)
+            std::string_view const field_name = fc->fields[i].name;
+            if (field_name == "ld"sv)
             {
                 ld = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building ld: ", ld);
             }
 
-            if (field_name.compare("type_id") == 0)
+            if (field_name == "type_id"sv)
             {
                 typeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
 
-            if (field_name.compare("beta") == 0)
+            if (field_name == "beta"sv)
             {
                 BERT_DEBUG_MSG("Building beta...");
                 beta.values = fc->fields[i].data;
@@ -501,7 +503,7 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(char const* name, Plu
                 beta.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("gamma") == 0)
+            if (field_name == "gamma"sv)
             {
                 BERT_DEBUG_MSG("Building gamma...");
                 gamma.values = fc->fields[i].data;
@@ -509,7 +511,7 @@ IPluginV2* SkipLayerNormPluginDynamicCreator::createPlugin(char const* name, Plu
                 gamma.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("bias") == 0)
+            if (field_name == "bias"sv)
             {
                 BERT_DEBUG_MSG("Building bias...");
                 bias.values = fc->fields[i].data;
@@ -991,15 +993,15 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(char const* name, P
 
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string field_name(fc->fields[i].name);
+            std::string_view const field_name = fc->fields[i].name;
 
-            if (field_name.compare("type_id") == 0)
+            if (field_name == "type_id"sv)
             {
                 typeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
 
-            if (field_name.compare("beta") == 0)
+            if (field_name == "beta"sv)
             {
                 BERT_DEBUG_MSG("Building beta...");
                 beta.values = fc->fields[i].data;
@@ -1007,7 +1009,7 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(char const* name, P
                 beta.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("gamma") == 0)
+            if (field_name == "gamma"sv)
             {
                 BERT_DEBUG_MSG("Building gamma...");
                 gamma.values = fc->fields[i].data;
@@ -1015,7 +1017,7 @@ IPluginV2* SkipLayerNormVarSeqlenPluginCreator::createPlugin(char const* name, P
                 gamma.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("bias") == 0)
+            if (field_name == "bias"sv)
             {
                 BERT_DEBUG_MSG("Building bias...");
                 bias.values = fc->fields[i].data;

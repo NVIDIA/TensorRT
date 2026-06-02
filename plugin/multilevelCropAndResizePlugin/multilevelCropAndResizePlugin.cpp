@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 #include "common/plugin.h"
 #include <algorithm>
 #include <cuda_runtime_api.h>
+#include <string_view>
 
 #include <fstream>
 
@@ -63,19 +64,20 @@ IPluginV2Ext* MultilevelCropAndResizePluginCreator::createPlugin(
 {
     try
     {
+        using namespace std::string_view_literals;
         plugin::validateRequiredAttributesExist({"pooled_size"}, fc);
 
         auto imageSize = TLTMaskRCNNConfig::IMAGE_SHAPE;
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "pooled_size"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "pooled_size"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mPooledSize = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "image_size"))
+            if (attrName == "image_size"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 auto const dims = static_cast<int32_t const*>(fields[i].data);
@@ -294,19 +296,6 @@ DataType MultilevelCropAndResize::getOutputDataType(
         return inputTypes[1];
 
     return DataType::kFLOAT;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool MultilevelCropAndResize::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool MultilevelCropAndResize::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
 }
 
 // Configure the layer with input and output data types.

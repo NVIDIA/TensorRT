@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.31 FATAL_ERROR)
 
 project(TRTPyBinds LANGUAGES CXX)
 
@@ -114,7 +114,8 @@ function(createBindingLibrary moduleName pyVersion)
         )
     else()
         # This allows us to use TRT libs shipped with standalone wheels.
-        target_link_options(${libName} PRIVATE "LINKER:-rpath=$ORIGIN:$ORIGIN/../${TENSORRT_MODULE}_libs)")
+        set_target_properties(${libName} PROPERTIES SKIP_BUILD_RPATH ON)
+        target_link_options(${libName} PRIVATE "LINKER:--rpath=$ORIGIN,--disable-new-dtags")
     endif()
 
     # Find the main python headers in the relevant python<ver> subfolder in the externals.
@@ -272,17 +273,13 @@ set(CPP_STANDARD
     CACHE STRING "CPP Standard Version")
 set(CMAKE_CXX_STANDARD ${CPP_STANDARD})
 
-if(NOT MSVC)
-    # This allows us to use TRT libs shipped with standalone wheels.
-    set(CMAKE_SHARED_LINKER_FLAGS -Wl,-rpath=$ORIGIN:$ORIGIN/../${TENSORRT_MODULE}_libs)
-endif()
-
 # -------- PATHS --------
+find_package(CUDAToolkit REQUIRED)
 message(STATUS "EXT_PATH: ${EXT_PATH}")
 message(STATUS "TENSORRT_BUILD: ${TENSORRT_BUILD}")
 message(STATUS "CMAKE_BINARY_DIR: ${CMAKE_BINARY_DIR}")
-message(STATUS "CUDA_ROOT: ${CUDA_ROOT}")
-message(STATUS "CUDA_INCLUDE_DIRS: ${CUDA_INCLUDE_DIRS}")
+message(STATUS "CUDAToolkit_LIBRARY_ROOT: ${CUDAToolkit_LIBRARY_ROOT}")
+message(STATUS "CUDAToolkit_INCLUDE_DIRS: ${CUDAToolkit_INCLUDE_DIRS}")
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
 set_ifndef(TENSORRT_ROOT ../)
@@ -369,7 +366,7 @@ message(STATUS "PY_CONFIG_INCLUDE: ${PY_CONFIG_INCLUDE}")
 
 # -------- GLOBAL COMPILE OPTIONS --------
 
-include_directories(${TENSORRT_ROOT}/include ${PROJECT_SOURCE_DIR}/include ${CUDA_INCLUDE_DIRS}
+include_directories(${TENSORRT_ROOT}/include ${PROJECT_SOURCE_DIR}/include ${CUDAToolkit_INCLUDE_DIRS}
                     ${PROJECT_SOURCE_DIR}/docstrings ${ONNX_INC_DIR} ${PYBIND11_DIR})
 link_directories(${TENSORRT_BUILD} ${TENSORRT_LIBPATH})
 

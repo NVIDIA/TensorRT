@@ -270,9 +270,9 @@ IPluginV2Ext* ScatterNDPluginCreator::createPlugin(char const* name, PluginField
 {
     try
     {
-        ScatterND* obj = new ScatterND();
+        auto obj = std::make_unique<ScatterND>();
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {
@@ -288,9 +288,9 @@ IPluginV2Ext* ScatterNDPluginCreator::deserializePlugin(
     {
         // This object will be deleted when the network is destroyed, which will
         // call Normalize::destroy()
-        ScatterND* obj = new ScatterND();
+        auto obj = std::make_unique<ScatterND>();
         obj->setPluginNamespace(mNamespace.c_str());
-        return obj;
+        return obj.release();
     }
     catch (std::exception const& e)
     {

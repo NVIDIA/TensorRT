@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,12 +19,7 @@
 #include "common/checkMacrosPlugin.h"
 #include "common/plugin.h"
 #include "roiAlignPlugin/roiAlignPlugin.h"
-#include "batchTilePlugin/batchTilePlugin.h"
-#include "batchedNMSPlugin/batchedNMSPlugin.h"
-#include "clipPlugin/clipPlugin.h"
-#include "coordConvACPlugin/coordConvACPlugin.h"
 #include "cropAndResizePlugin/cropAndResizePlugin.h"
-#include "cropAndResizePlugin/cropAndResizePluginLegacy.h"
 #include "decodeBbox3DPlugin/decodeBbox3D.h"
 #include "detectionLayerPlugin/detectionLayerPlugin.h"
 #include "efficientNMSPlugin/efficientNMSPlugin.h"
@@ -35,20 +30,16 @@
 #include "gridAnchorPlugin/gridAnchorPlugin.h"
 #include "instanceNormalizationPlugin/instanceNormalizationPlugin.h"
 #include "instanceNormalizationPlugin/instanceNormalizationPluginLegacy.h"
-#include "leakyReluPlugin/lReluPlugin.h"
 #include "modulatedDeformConvPlugin/modulatedDeformConvPlugin.h"
 #include "modulatedDeformConvPlugin/modulatedDeformConvPluginLegacy.h"
 #include "multilevelCropAndResizePlugin/multilevelCropAndResizePlugin.h"
 #include "multilevelProposeROI/multilevelProposeROIPlugin.h"
 #include "multiscaleDeformableAttnPlugin/multiscaleDeformableAttnPlugin.h"
 #include "multiscaleDeformableAttnPlugin/multiscaleDeformableAttnPluginLegacy.h"
-#include "nmsPlugin/nmsPlugin.h"
-#include "normalizePlugin/normalizePlugin.h"
 #include "nvFasterRCNN/nvFasterRCNNPlugin.h"
 #include "pillarScatterPlugin/pillarScatter.h"
 #include "priorBoxPlugin/priorBoxPlugin.h"
 #include "proposalLayerPlugin/proposalLayerPlugin.h"
-#include "proposalPlugin/proposalPlugin.h"
 #include "pyramidROIAlignPlugin/pyramidROIAlignPlugin.h"
 #include "regionPlugin/regionPlugin.h"
 #include "reorgPlugin/reorgPlugin.h"
@@ -58,8 +49,7 @@
 #include "scatterElementsPlugin/scatterElementsPlugin.h"
 #include "scatterElementsPlugin/scatterElementsPluginLegacy.h"
 #include "scatterPlugin/scatterPlugin.h"
-#include "specialSlicePlugin/specialSlicePlugin.h"
-#include "splitPlugin/split.h"
+#include "topkLastDimPlugin/topkLastDimPlugin.h"
 #include "voxelGeneratorPlugin/voxelGenerator.h"
 #include <algorithm>
 #include <array>
@@ -186,18 +176,10 @@ extern "C"
         initializePlugin<nvinfer1::plugin::ScatterElementsPluginV3Creator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultiscaleDeformableAttnPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ModulatedDeformableConvPluginDynamicCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::BatchedNMSDynamicPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::BatchedNMSPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::BatchTilePluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::ClipPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::CoordConvACPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::CropAndResizeDynamicPluginLegacyCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::CropAndResizePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::DecodeBbox3DPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::DetectionLayerPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::EfficientNMSExplicitTFTRTPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::EfficientNMSImplicitTFTRTPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::EfficientNMSONNXPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::EfficientNMSPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::FlattenConcatPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::GenerateDetectionPluginCreator>(logger, libNamespace);
@@ -205,19 +187,13 @@ extern "C"
         initializePlugin<nvinfer1::plugin::GridAnchorRectPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::InstanceNormalizationPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::InstanceNormalizationPluginCreatorV2>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::LReluPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ModulatedDeformableConvPluginDynamicLegacyCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultilevelCropAndResizePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultilevelProposeROIPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::MultiscaleDeformableAttnPluginCreatorLegacy>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::NMSDynamicPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::NMSPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::NormalizePluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::PillarScatterPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::PriorBoxPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::ProposalDynamicPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ProposalLayerPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::ProposalPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::PyramidROIAlignPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::RegionPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ReorgDynamicPluginCreator>(logger, libNamespace);
@@ -227,8 +203,7 @@ extern "C"
         initializePlugin<nvinfer1::plugin::RPROIPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterElementsPluginV2Creator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::ScatterNDPluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::SpecialSlicePluginCreator>(logger, libNamespace);
-        initializePlugin<nvinfer1::plugin::SplitPluginCreator>(logger, libNamespace);
+        initializePlugin<nvinfer1::plugin::TopkLastDimPluginCreator>(logger, libNamespace);
         initializePlugin<nvinfer1::plugin::VoxelGeneratorPluginCreator>(logger, libNamespace);
         return true;
     }

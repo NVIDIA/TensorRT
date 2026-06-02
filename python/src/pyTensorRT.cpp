@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,9 +52,7 @@ PYBIND11_MODULE(TENSORRT_MODULE, m)
     bindFoundationalTypes(m);
     bindPlugin(m);
 #if EXPORT_ALL_BINDINGS
-    bindInt8(m);
     bindGraph(m);
-    bindAlgorithm(m);
 #endif
     bindCore(m);
 #if EXPORT_ALL_BINDINGS

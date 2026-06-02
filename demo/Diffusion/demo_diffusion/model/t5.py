@@ -43,7 +43,6 @@ class T5Model(base_model.BaseModel):
         bf16=False,
         subfolder="text_encoder",
         text_maxlen=512,
-        build_strongly_typed=False,
         weight_streaming=False,
         weight_streaming_budget_percentage=None,
         use_attention_mask=False,
@@ -71,7 +70,6 @@ class T5Model(base_model.BaseModel):
             print(f"[I] Load T5Encoder Config from: {self.t5_model_dir}")
             self.config = AutoConfig.from_pretrained(self.t5_model_dir)
         self.is_umt5 = getattr(self.config, 'model_type', '') == 'umt5'
-        self.build_strongly_typed = build_strongly_typed
         self.weight_streaming = weight_streaming
         self.weight_streaming_budget_percentage = weight_streaming_budget_percentage
         self.use_attention_mask = use_attention_mask

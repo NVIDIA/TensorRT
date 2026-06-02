@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.31 FATAL_ERROR)
 include(cmake/modules/set_ifndef.cmake)
 include(cmake/modules/find_library_create_target.cmake)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
@@ -24,13 +24,10 @@ set_ifndef(TRT_LIB_DIR ${CMAKE_BINARY_DIR})
 set_ifndef(TRT_OUT_DIR ${CMAKE_BINARY_DIR})
 
 # Converts Windows paths
-if(CMAKE_VERSION VERSION_LESS 3.20)
-    file(TO_CMAKE_PATH "${TRT_LIB_DIR}" TRT_LIB_DIR)
-    file(TO_CMAKE_PATH "${TRT_OUT_DIR}" TRT_OUT_DIR)
-else()
-    cmake_path(SET TRT_LIB_DIR ${TRT_LIB_DIR})
-    cmake_path(SET TRT_OUT_DIR ${TRT_OUT_DIR})
-endif()
+cmake_path(SET TRT_LIB_DIR ${TRT_LIB_DIR})
+cmake_path(SET TRT_OUT_DIR ${TRT_OUT_DIR})
+
+cmake_path(SET TRT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Required to export symbols to build *.libs
 if(WIN32)
@@ -48,7 +45,7 @@ else()
     set(STATIC_LIB_EXT "a")
 endif()
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/NvInferVersion.h" VERSION_STRINGS REGEX "#define TRT_.*_ENTERPRISE")
+file(STRINGS "${TRT_INCLUDE_DIR}/NvInferVersion.h" VERSION_STRINGS REGEX "#define TRT_.*_ENTERPRISE")
 
 foreach(TYPE MAJOR MINOR PATCH BUILD)
     string(REGEX MATCH "TRT_${TYPE}_ENTERPRISE [0-9]+" TRT_TYPE_STRING ${VERSION_STRINGS})
@@ -65,45 +62,16 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif()
 
 set(CMAKE_SKIP_BUILD_RPATH True)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# CUDA targets
-set(DEFAULT_CUDA_VERSION 13.2)
-set_ifndef(CUDA_VERSION ${DEFAULT_CUDA_VERSION})
-message(STATUS "CUDA version set to ${CUDA_VERSION}")
-
-if (DEFINED GPU_ARCHS)
-  message(STATUS "GPU_ARCHS defined as ${GPU_ARCHS}. Generating CUDA code for SM ${GPU_ARCHS}")
-  separate_arguments(GPU_ARCHS)
-  foreach(SM IN LISTS GPU_ARCHS)
-    list(APPEND CMAKE_CUDA_ARCHITECTURES "${SM}")
-  endforeach()
-else()
-  list(APPEND CMAKE_CUDA_ARCHITECTURES 75 80 86 87 89 90)
-
-  if(CUDA_VERSION VERSION_GREATER_EQUAL 12.8)
-      list(APPEND CMAKE_CUDA_ARCHITECTURES 100 120)
+if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES 80 86 89 90 100 120)
+  # SM 110 (Thor) requires CUDA 13.0+.
+  if(DEFINED CUDA_VERSION AND CUDA_VERSION VERSION_GREATER_EQUAL "13.0")
+    list(APPEND CMAKE_CUDA_ARCHITECTURES 110)
   endif()
-
-  if(CUDA_VERSION VERSION_GREATER_EQUAL 13.0)
-        list(APPEND CMAKE_CUDA_ARCHITECTURES 110)
-  endif()
-  message(STATUS "GPU_ARCHS is not defined. Generating CUDA code for default SMs: ${CMAKE_CUDA_ARCHITECTURES}")
 endif()
-set(BERT_GENCODES)
-# Generate SASS for each architecture
-foreach(arch ${CMAKE_CUDA_ARCHITECTURES})
-    if (${arch} GREATER_EQUAL 75 AND NOT ${arch} EQUAL 110)
-        set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
-    endif()
-    set(GENCODES "${GENCODES} -gencode arch=compute_${arch},code=sm_${arch}")
-endforeach()
-
-# Generate PTX for the last architecture in the list.
-list(GET CMAKE_CUDA_ARCHITECTURES -1 LATEST_SM)
-set(GENCODES "${GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-if (${LATEST_SM} GREATER_EQUAL 75 AND NOT ${arch} EQUAL 110)
-    set(BERT_GENCODES "${BERT_GENCODES} -gencode arch=compute_${LATEST_SM},code=compute_${LATEST_SM}")
-endif()
+message(STATUS "Generating CUDA code for SMs: ${CMAKE_CUDA_ARCHITECTURES}")
 
 project(TensorRT
         LANGUAGES CXX CUDA
@@ -124,6 +92,7 @@ option(BUILD_PARSERS "Build TensorRT parsers" ON)
 option(BUILD_SAMPLES "Build TensorRT samples" ON)
 option(BUILD_SAFE_SAMPLES "Build TensorRT safety samples" OFF)
 option(TRT_SAFETY_INFERENCE_ONLY "Build only the safety inference components (no safety builders)" OFF)
+option(TRT_BUILD_TESTING "Build gtests for TensorRT components" OFF)
 
 ############################################################################################
 # Early dependency discovery
@@ -141,14 +110,8 @@ else()
     endif()
 endif()
 
-## find_package(CUDA) is broken for cross-compilation. Enable CUDA language instead.
-if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    find_package(CUDA ${CUDA_VERSION} REQUIRED)
-endif()
-
-include_directories(
-    ${CUDA_INCLUDE_DIRS}
-)
+find_package(CUDAToolkit REQUIRED)
+message(STATUS "CUDA version: ${CUDAToolkit_VERSION}")
 
 ############################################################################################
 # Safety runtime libraries (libnvinfer_safe) used by safety samples and
@@ -204,8 +167,6 @@ if(BUILD_SAFE_SAMPLES OR TRT_SAFETY_INFERENCE_ONLY)
         target_link_options(TRTSAFE::nvinfer_safe_shared INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
         target_link_options(TRTSAFE::nvinfer_safe_debug INTERFACE LINKER:--unresolved-symbols=ignore-in-shared-libs)
     endif()
-    # Enable unified builder safety features when building safety samples or in inference-only mode.
-    add_compile_definitions(ENABLE_UNIFIED_BUILDER=1)
 endif()
 
 # OSS safety inference-only mode: require safety samples and disable enterprise
@@ -223,8 +184,8 @@ if(TRT_SAFETY_INFERENCE_ONLY)
     set(BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 
     # Add CUDA library directory early so all samples can find it
-    if(CUDA_TOOLKIT_ROOT_DIR)
-        link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${CUDA_TOOLKIT_ROOT_DIR}/lib ${CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/lib)
+    if(CUDAToolkit_LIBRARY_DIR)
+        link_directories(${CUDAToolkit_LIBRARY_DIR})
     endif()
 
     # Interface target for safety samples in inference-only mode.
@@ -240,10 +201,10 @@ if(TRT_SAFETY_INFERENCE_ONLY)
         target_link_libraries(trt_global_definitions INTERFACE dl rt)
     endif()
     target_include_directories(trt_global_definitions INTERFACE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${TRT_INCLUDE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/samples/common
         ${CMAKE_CURRENT_SOURCE_DIR}/shared
-        ${CUDA_INCLUDE_DIRS}
+        ${CUDAToolkit_INCLUDE_DIRS}
     )
     target_compile_options(trt_global_definitions INTERFACE
         $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
@@ -290,12 +251,6 @@ message(STATUS "Protobuf version set to ${PROTOBUF_VERSION}")
 if (BUILD_PLUGINS OR BUILD_PARSERS)
     include(third_party/protobuf.cmake)
 endif()
-if(NOT CUB_ROOT_DIR)
-  if (CUDA_VERSION VERSION_LESS 11.0)
-    set(CUB_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cub CACHE STRING "directory of CUB installation")
-  endif()
-endif()
-
 if(BUILD_PARSERS)
     configure_protobuf(${PROTOBUF_VERSION})
 endif()
@@ -320,35 +275,11 @@ endif()
 
 find_library_create_target(nvinfer ${nvinfer_lib_name} SHARED "${TRT_LIB_DIR}")
 
-if (DEFINED USE_CUGFX)
-    find_library(CUDART_LIB cugfx_dll HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
-else()
-    # DriveOS platforms use cudart.so instead of cudart_static. This isn't the most sophisticated check, but it's correct.
-    if(CUDA_VERSION VERSION_GREATER_EQUAL 12.0)
-        set(CUDART_LIB_NAME cudart_static)
-        set(CMAKE_CUDA_RUNTIME_LIBRARY "static")
-    else()
-        set(CUDART_LIB_NAME cudart)
-        set(CMAKE_CUDA_RUNTIME_LIBRARY "shared")
-    endif()
-
-    # SafeCUDA (QNX-Safe) does not ship libcudadevrt. When CMAKE_CUDA_RUNTIME_LIBRARY
-    # is "shared" or "static", CMake automatically links -lcudadevrt for targets with
-    # CUDA sources, which breaks QNX-Safe cross-compilation. Setting it to "None"
-    # disables automatic CUDA runtime linking; cudart is still linked manually via
-    # trt_global_definitions.
-    if(TRT_SAFETY_INFERENCE_ONLY AND CMAKE_SYSTEM_NAME STREQUAL "QNX")
-        set(CMAKE_CUDA_RUNTIME_LIBRARY "None")
-    endif()
-
-    find_library(CUDART_LIB ${CUDART_LIB_NAME} HINTS ${CUDA_TOOLKIT_ROOT_DIR} PATH_SUFFIXES lib lib/x64 lib64)
-endif()
+set(CMAKE_CUDA_RUNTIME_LIBRARY "static" CACHE STRING "")
 
 if (NOT MSVC)
     find_library(RT_LIB rt)
 endif()
-
-set(CUDA_LIBRARIES ${CUDART_LIB})
 
 ############################################################################################
 
@@ -376,11 +307,62 @@ else()
     find_library_create_target(${nvonnxparser_lib_name} ${nvonnxparser_lib_name} SHARED "${HINT_PATHS}")
 endif()
 
-# Samples:
-# - BUILD_SAMPLES controls the regular (enterprise/OSS) samples via
-#   samples/CMakeLists.txt.
-# - BUILD_SAFE_SAMPLES controls the safety samples (builder + infer parts).
-#   Both can be enabled at the same time if desired.
+if(NOT TARGET trt_global_definitions)
+    add_library(trt_global_definitions INTERFACE)
+    target_include_directories(trt_global_definitions INTERFACE ${CUDAToolkit_INCLUDE_DIRS})
+endif()
+
+add_library(tensorrt_headers INTERFACE)
+target_include_directories(tensorrt_headers INTERFACE ${TRT_INCLUDE_DIR})
+
+# Samples
 if(BUILD_SAMPLES OR BUILD_SAFE_SAMPLES)
+    set(TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW ON)
+
+    # Map OSS option names to the internal names used by samples/CMakeLists.txt.
+    set(TRT_BUILD_SAMPLES ${BUILD_SAMPLES})
+    set(TRT_BUILD_TRTEXEC ${BUILD_SAMPLES})
+    set(TRT_BUILD_ONNX_PARSER ${BUILD_PARSERS})
+    set(TRT_BUILD_PLUGINS ${BUILD_PLUGINS})
+
+    # Set defaults for specific feature enablement for samples.
+    option(TRT_BUILD_ENABLE_DLA "Build TensorRT with DLA features enabled." OFF)
+    option(TRT_BUILD_ENABLE_UNIFIED_BUILDER "Build TensorRT with unified builder (safety) features enabled." ${BUILD_SAFE_SAMPLES})
+    option(TRT_BUILD_WINML "Build TensorRT with WinML support." OFF)
+    option(TRT_BUILD_ENABLE_MULTIDEVICE "Build TensorRT with multi-device support." OFF)
+    set(TRT_BUILD_SAMPLES_LINK_STATIC_TRT OFF CACHE INTERNAL "")
+
+    find_library(NVINFER_LIB nvinfer PATHS ${TRT_LIB_DIR} REQUIRED)
+    add_library(tensorrt INTERFACE IMPORTED)
+    target_link_libraries(tensorrt INTERFACE ${NVINFER_LIB})
+    target_include_directories(tensorrt INTERFACE ${TRT_INCLUDE_DIR})
+
+    target_include_directories(${nvonnxparser_lib_name} INTERFACE ${TRT_INCLUDE_DIR})
+
+    add_subdirectory(shared)
+
+    include(InstallUtils)
+
+    if (TRT_BUILD_TESTING)
+        find_package(GTest QUIET)
+        if (GTest_FOUND)
+            if (NOT TARGET gtest_main)
+                add_library(gtest_main ALIAS GTest::gtest_main)
+            endif()
+        else()
+            include(FetchContent)
+            FetchContent_Declare(
+                googletest
+                GIT_REPOSITORY https://github.com/google/googletest.git
+                GIT_TAG        v1.14.0
+            )
+            FetchContent_MakeAvailable(googletest)
+        endif()
+        set(TRT_GTEST_DISCOVERY_MODE PRE_TEST CACHE STRING "gtest discovery mode.")
+    endif()
+
+    # Route sample binaries to TRT_OUT_DIR.
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TRT_OUT_DIR})
+
     add_subdirectory(samples)
 endif()

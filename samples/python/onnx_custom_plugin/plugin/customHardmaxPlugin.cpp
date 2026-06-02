@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,8 @@
 #include "common.h" // volume(), ASSERT
 #include "logger.h" // sample::gLogError
 #include <cuda.h>
+#include <memory>
+#include <string_view>
 
 using namespace nvinfer1;
 
@@ -56,23 +58,6 @@ using namespace nvinfer1;
         }                                                                                                              \
     }
 
-// Helper function for serializing plugin
-template <typename T>
-void writeToBuffer(uint8_t*& buffer, T const& val)
-{
-    *reinterpret_cast<T*>(buffer) = val;
-    buffer += sizeof(T);
-}
-
-// Helper function for deserializing plugin
-template <typename T>
-T readFromBuffer(uint8_t const*& buffer)
-{
-    T val = *reinterpret_cast<const T*>(buffer);
-    buffer += sizeof(T);
-    return val;
-}
-
 REGISTER_TENSORRT_PLUGIN(HardmaxPluginCreator);
 
 namespace
@@ -82,39 +67,53 @@ constexpr char const* kHARDMAX_VERSION{"1"};
 } // namespace
 
 HardmaxPlugin::HardmaxPlugin(int32_t axis)
+    : mAxis(axis)
 {
-    mAxis = axis;
 }
 
-HardmaxPlugin::HardmaxPlugin(void const* serialData, size_t serialLength)
+HardmaxPlugin::HardmaxPlugin(HardmaxPlugin const& other)
+    : mNamespace(other.mNamespace)
+    , mAxisSize(other.mAxisSize)
+    , mDimProductOuter(other.mDimProductOuter)
+    , mDimProductInner(other.mDimProductInner)
+    , mCublas(nullptr)
+    , mAxis(other.mAxis)
 {
-    uint8_t const* d = static_cast<uint8_t const*>(serialData);
-    uint8_t const* a = d;
-
-    mAxis = readFromBuffer<int32_t>(d);
-    mAxisSize = readFromBuffer<int32_t>(d);
-    mDimProductOuter = readFromBuffer<int32_t>(d);
-    mDimProductInner = readFromBuffer<int32_t>(d);
-
-    ASSERT(d == (a + serialLength));
 }
 
 HardmaxPlugin::~HardmaxPlugin()
 {
-    terminate();
+    if (mCublas)
+    {
+        cublasDestroy(mCublas);
+    }
 }
 
-int32_t HardmaxPlugin::getNbOutputs() const noexcept
+// IPluginV3 methods
+
+IPluginCapability* HardmaxPlugin::getCapabilityInterface(PluginCapabilityType type) noexcept
 {
-    return 1;
+    if (type == PluginCapabilityType::kBUILD)
+    {
+        return static_cast<IPluginV3OneBuild*>(this);
+    }
+    if (type == PluginCapabilityType::kRUNTIME)
+    {
+        return static_cast<IPluginV3OneRuntime*>(this);
+    }
+    ASSERT(type == PluginCapabilityType::kCORE);
+    return static_cast<IPluginV3OneCore*>(this);
 }
 
-int32_t HardmaxPlugin::initialize() noexcept
+IPluginV3* HardmaxPlugin::clone() noexcept
 {
-    return 0;
+    auto plugin = std::make_unique<HardmaxPlugin>(*this);
+    return plugin.release();
 }
 
-char const* HardmaxPlugin::getPluginType() const noexcept
+// IPluginV3OneCore methods
+
+char const* HardmaxPlugin::getPluginName() const noexcept
 {
     return kHARDMAX_NAME;
 }
@@ -124,31 +123,109 @@ char const* HardmaxPlugin::getPluginVersion() const noexcept
     return kHARDMAX_VERSION;
 }
 
-nvinfer1::DimsExprs HardmaxPlugin::getOutputDimensions(
-    int32_t index, nvinfer1::DimsExprs const* inputs, int32_t nbInputs, nvinfer1::IExprBuilder& exprBuilder) noexcept
+char const* HardmaxPlugin::getPluginNamespace() const noexcept
+{
+    return mNamespace.c_str();
+}
+
+// IPluginV3OneBuild methods
+
+int32_t HardmaxPlugin::getNbOutputs() const noexcept
+{
+    return 1;
+}
+
+int32_t HardmaxPlugin::getOutputDataTypes(
+    DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept
+{
+    ASSERT(inputTypes != nullptr);
+    ASSERT(nbInputs == 1);
+    ASSERT(nbOutputs == 1);
+    outputTypes[0] = inputTypes[0];
+    return 0;
+}
+
+int32_t HardmaxPlugin::getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+    int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept
 {
     ASSERT(nbInputs == 1);
-    ASSERT(index == 0);
-
-    // Dimensions are unchanged
-    return inputs[0];
+    ASSERT(nbOutputs == 1);
+    outputs[0] = inputs[0];
+    return 0;
 }
 
-void HardmaxPlugin::attachToContext(
-    cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept
+bool HardmaxPlugin::supportsFormatCombination(
+    int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
 {
-    cublasStatus_t ret = cublasCreate(&mCublas);
-    ASSERT(ret == CUBLAS_STATUS_SUCCESS && mCublas != nullptr && "Failed to create cublasHandle_t.");
+    ASSERT(inOut && pos < (nbInputs + nbOutputs));
+
+    // Type changes are not allowed
+    if (inOut[0].desc.type != inOut[pos].desc.type)
+    {
+        return false;
+    }
+
+    return inOut[pos].desc.type == DataType::kFLOAT && inOut[pos].desc.format == PluginFormat::kLINEAR;
 }
 
-// Detach the plugin object from its execution context.
-void HardmaxPlugin::detachFromContext() noexcept {}
-
-int32_t HardmaxPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
-    nvinfer1::PluginTensorDesc const* outputDesc, void const* const* inputs, void* const* outputs, void* workspace,
-    cudaStream_t stream) noexcept
+int32_t HardmaxPlugin::configurePlugin(
+    DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
 {
-    if (inputDesc[0].type != nvinfer1::DataType::kFLOAT)
+    ASSERT(nbInputs == 1);
+    ASSERT(nbOutputs == 1);
+
+    Dims const& inDims = in[0].desc.dims;
+
+    // Normalize negative axis to positive
+    if (mAxis < 0)
+    {
+        mAxis += inDims.nbDims;
+        ASSERT(mAxis >= 0);
+    }
+    ASSERT(inDims.nbDims > mAxis);
+
+    return 0;
+}
+
+size_t HardmaxPlugin::getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+    DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
+{
+    ASSERT(mAxis >= 0);
+    // Two arrays are needed:
+    // 1. For the contents of the working axis
+    // 2. For an array of 1's
+    return 2 * inputs[0].max.d[mAxis] * sizeof(float);
+}
+
+// IPluginV3OneRuntime methods
+
+int32_t HardmaxPlugin::onShapeChange(
+    PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept
+{
+    ASSERT(nbInputs == 1);
+    ASSERT(nbOutputs == 1);
+
+    Dims const& inDims = in[0].dims;
+
+    // Axis should already be normalized by configurePlugin, but handle it regardless to be safe.
+    if (mAxis < 0)
+    {
+        mAxis += inDims.nbDims;
+        ASSERT(mAxis >= 0);
+    }
+    ASSERT(inDims.nbDims > mAxis);
+
+    mDimProductOuter = samplesCommon::volume(inDims, 0, mAxis);
+    mAxisSize = inDims.d[mAxis];
+    mDimProductInner = samplesCommon::volume(inDims, mAxis + 1, inDims.nbDims);
+
+    return 0;
+}
+
+int32_t HardmaxPlugin::enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc,
+    void const* const* inputs, void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+{
+    if (inputDesc[0].type != DataType::kFLOAT)
     {
         return -1;
     }
@@ -227,107 +304,25 @@ int32_t HardmaxPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
     return cudaPeekAtLastError();
 }
 
-size_t HardmaxPlugin::getSerializationSize() const noexcept
+IPluginV3* HardmaxPlugin::attachToContext(IPluginResourceContext* context) noexcept
 {
-    return 4 * sizeof(int32_t);
-}
-
-void HardmaxPlugin::serialize(void* buffer) const noexcept
-{
-    // Same order as in deserialize()
-    uint8_t* d = static_cast<uint8_t*>(buffer);
-    uint8_t* const a = d;
-
-    writeToBuffer(d, mAxis);
-    writeToBuffer(d, mAxisSize);
-    writeToBuffer(d, mDimProductOuter);
-    writeToBuffer(d, mDimProductInner);
-
-    ASSERT(d == a + getSerializationSize());
-}
-
-bool HardmaxPlugin::supportsFormatCombination(
-    int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
-{
-    ASSERT(inOut && pos < (nbInputs + nbOutputs));
-
-    // No change of type allowed
-    if (inOut[0].type != inOut[pos].type)
+    auto* cloned = static_cast<HardmaxPlugin*>(clone());
+    if (cloned == nullptr)
     {
-        return false;
+        return nullptr;
     }
-
-    return inOut[pos].type == nvinfer1::DataType::kFLOAT && inOut[pos].format == nvinfer1::PluginFormat::kLINEAR;
+    cublasStatus_t ret = cublasCreate(&cloned->mCublas);
+    ASSERT(ret == CUBLAS_STATUS_SUCCESS && cloned->mCublas != nullptr && "Failed to create cublasHandle_t.");
+    return cloned;
 }
 
-void HardmaxPlugin::terminate() noexcept {}
-
-void HardmaxPlugin::destroy() noexcept
+PluginFieldCollection const* HardmaxPlugin::getFieldsToSerialize() noexcept
 {
-    // This gets called when the network containing plugin is destroyed
-    delete this;
-}
-
-IPluginV2DynamicExt* HardmaxPlugin::clone() const noexcept
-{
-    auto* plugin = new HardmaxPlugin(mAxis);
-    plugin->setPluginNamespace(mNamespace.c_str());
-    plugin->mAxisSize = mAxisSize;
-    plugin->mDimProductInner = mDimProductInner;
-    plugin->mDimProductOuter = mDimProductOuter;
-    plugin->mCublas = mCublas;
-    return plugin;
-}
-
-void HardmaxPlugin::configurePlugin(nvinfer1::DynamicPluginTensorDesc const* in, int32_t nbInputs,
-    nvinfer1::DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept
-{
-    ASSERT(nbInputs == 1);
-    ASSERT(nbOutputs == 1);
-
-    nvinfer1::Dims const& inDims = in[0].desc.dims;
-    nvinfer1::Dims const& outDims = out[0].desc.dims;
-
-    // Check that inputs and outputs have the same dimensions
-    ASSERT(inDims.nbDims == outDims.nbDims);
-    for (int32_t dim = 0; dim < inDims.nbDims; dim++)
-    {
-        ASSERT(inDims.d[dim] == outDims.d[dim]);
-    }
-
-    // Check that axis is valid
-    if (mAxis < 0)
-    {
-        mAxis += inDims.nbDims;
-        ASSERT(mAxis >= 0);
-    }
-    ASSERT(inDims.nbDims > mAxis);
-
-    // samplesCommon::volume() requires that all dimensions are non-negative.
-    // Even in the case of dynamic shapes, the plugin will be configured with
-    // resolved shapes before enqueue() is called, so the below member variables
-    // will be set correctly.
-    if (std::all_of(inDims.d, inDims.d + inDims.nbDims, [](int32_t x) { return x >= 0; }))
-    {
-        mDimProductOuter = samplesCommon::volume(inDims, 0, mAxis);
-        mAxisSize = inDims.d[mAxis];
-        mDimProductInner = samplesCommon::volume(inDims, mAxis + 1, inDims.nbDims);
-    }
-}
-
-nvinfer1::DataType HardmaxPlugin::getOutputDataType(
-    int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept
-{
-    ASSERT(inputTypes && nbInputs == 1 && index == 0);
-    return inputTypes[0];
-}
-
-size_t HardmaxPlugin::getWorkspaceSize(nvinfer1::PluginTensorDesc const* inputs, int32_t nbInputs,
-    nvinfer1::PluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept
-{
-    // 1st array to store the contents of the working axis
-    // 2nd array to store an array of 1's
-    return 2 * inputs[0].dims.d[mAxis] * sizeof(float);
+    mDataToSerialize.clear();
+    mDataToSerialize.emplace_back("axis", &mAxis, PluginFieldType::kINT32, 1);
+    mFCToSerialize.nbFields = mDataToSerialize.size();
+    mFCToSerialize.fields = mDataToSerialize.data();
+    return &mFCToSerialize;
 }
 
 void HardmaxPlugin::setPluginNamespace(char const* libNamespace) noexcept
@@ -336,10 +331,7 @@ void HardmaxPlugin::setPluginNamespace(char const* libNamespace) noexcept
     mNamespace = libNamespace;
 }
 
-char const* HardmaxPlugin::getPluginNamespace() const noexcept
-{
-    return mNamespace.c_str();
-}
+// HardmaxPluginCreator methods
 
 HardmaxPluginCreator::HardmaxPluginCreator()
 {
@@ -379,31 +371,24 @@ void HardmaxPluginCreator::setPluginNamespace(char const* libNamespace) noexcept
     mNamespace = libNamespace;
 }
 
-IPluginV2DynamicExt* HardmaxPluginCreator::createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+IPluginV3* HardmaxPluginCreator::createPlugin(
+    char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept
 {
+    using namespace std::string_view_literals;
     // Set default value
     int32_t axis = -1;
 
     for (int32_t i = 0; i < fc->nbFields; i++)
     {
-        if (!strcmp(fc->fields[i].name, "axis"))
+        if (fc->fields[i].name == "axis"sv)
         {
             ASSERT(fc->fields[i].type == PluginFieldType::kINT32);
             axis = *static_cast<int32_t const*>(fc->fields[i].data);
         }
     }
 
-    HardmaxPlugin* plugin = new HardmaxPlugin(axis);
+    auto plugin = std::make_unique<HardmaxPlugin>(axis);
     plugin->setPluginNamespace(mNamespace.c_str());
 
-    return plugin;
-}
-
-IPluginV2DynamicExt* HardmaxPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
-{
-    HardmaxPlugin* plugin = new HardmaxPlugin(serialData, serialLength);
-    plugin->setPluginNamespace(mNamespace.c_str());
-
-    return plugin;
+    return plugin.release();
 }

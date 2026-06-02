@@ -5,7 +5,7 @@ git+https://github.com/facebookresearch/detectron2.git
 git+https://github.com/NVIDIA/TensorRT#subdirectory=tools/onnx-graphsurgeon
 cuda-python==12.9.0
 pywin32; platform_system == "Windows"
-pyyaml==6.0.1
+pyyaml==6.0.3
 requests==2.32.4
 tqdm==4.66.4
 numpy==1.26.4

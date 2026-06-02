@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -343,7 +343,7 @@ if __name__ == "__main__":
 
     # Create plugin object
     builder, network = create_network(strongly_typed=True)
-    plg_creator = plg_registry.get_plugin_creator("CircPadPlugin", "1", "")
+    plg_creator = plg_registry.get_creator("CircPadPlugin", "1", "")
     plugin_fields_list = [
         trt.PluginField(
             "pads", np.array(pads, dtype=np.int32), trt.PluginFieldType.INT32

@@ -121,10 +121,10 @@ enum class LayerType : int32_t
 //! \see LayerType
 //!
 template <>
-constexpr inline int32_t EnumMax<LayerType>() noexcept
+struct impl::EnumMaxImpl<LayerType>
 {
-    return 57;
-}
+    static constexpr int32_t kVALUE = 57;
+};
 
 //!
 //! \brief It is capable of representing one or more TensorFormat by binary OR
@@ -157,19 +157,16 @@ enum class ActivationType : int32_t
     kGELU_TANH = 13         //!< GELU tanh activation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (0.044715F * pow(x, 3) + x)))
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in ActivationType enum.
 //!
 //! \see ActivationType
 //!
 template <>
-struct EnumMaxImpl<ActivationType>
+struct impl::EnumMaxImpl<ActivationType>
 {
     static constexpr int32_t kVALUE = 14;
 };
-} // namespace impl
 
 //!
 //! \class ITensor
@@ -253,72 +250,19 @@ public:
         return mImpl->getDimensions();
     }
 
-    //!
-    //! \brief Set the data type of a tensor.
-    //!
-    //! \param type The data type of the tensor when the type is not inferred.
-    //!
-    //! For strongly typed networks, this method should be used only for network inputs,
-    //! since the types of all other tensors are inferred. Setting the type of a network
-    //! output is tolerated if the type equals the inferred type, otherwise an error occurs
-    //! and the type is not updated.
-    //!
-    //! For weakly typed networks, this method can be used for network outputs too, but
-    //! the type merely has to be implicitly convertible from the inferred type to the
-    //! specified type. In this case it does not matter whether the type is set first
-    //! or the tensor is marked as an output first (via `INetworkDefinition::markOutput`
-    //! or `INetworkDefinition::markOutputForShapes`).
-    //!
-    //! However, marking it first has two advantages:
-    //!
-    //!     * It avoids warnings that the tensor is not yet a network I/O tensor.
-    //!     * It causes method `getType()` to return the type that was set instead of the inferred type.
-    //!
-    //! \see getType()
-    //!
-    //! \note This function does more than just set the type, so `t.setType(t.getType())` is not necessarily a no-op,
-    //! particularly for input and output tensors!
-    //!
-    //! \note Repeated consecutive applications of `t.setType(t.getType())`
-    //! would be idempotent, provided the state of the `ITensor` isn't changed between calls.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED void setType(DataType type) noexcept
-    {
-        mImpl->setType(type);
-    }
 
     //!
     //! \brief Get the data type of a tensor.
     //!
     //! \return The data type of the tensor.
     //!
-    //! The type is the type set by `setType` if the tensor is a network input or output.
-    //! Otherwise the type is the inferred type.
+    //! The type is the inferred type.
     //!
     //! \see setType()
     //!
     DataType getType() const noexcept
     {
         return mImpl->getType();
-    }
-
-    //!
-    //! \brief Set dynamic range for the tensor
-    //!
-    //! Currently, only symmetric ranges are supported.
-    //! Therefore, the larger of the absolute values of the provided bounds is used.
-    //!
-    //! \return Whether the dynamic range was set successfully.
-    //!
-    //! Requires that min and max be finite, and min <= max.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED bool setDynamicRange(float min, float max) noexcept
-    {
-        return mImpl->setDynamicRange(min, max);
     }
 
     //!
@@ -399,45 +343,6 @@ public:
         mImpl->setLocation(location);
     }
 
-    //!
-    //! \brief Query whether dynamic range is set.
-    //!
-    //! \return True if dynamic range is set, false otherwise.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED bool dynamicRangeIsSet() const noexcept
-    {
-        return mImpl->dynamicRangeIsSet();
-    }
-
-    //!
-    //! \brief Undo effect of setDynamicRange.
-    //!
-    void resetDynamicRange() noexcept
-    {
-        mImpl->resetDynamicRange();
-    }
-
-    //!
-    //! \brief Get minimum of dynamic range.
-    //!
-    //! \return Minimum of dynamic range, or quiet NaN if range was not set.
-    //!
-    float getDynamicRangeMin() const noexcept
-    {
-        return mImpl->getDynamicRangeMin();
-    }
-
-    //!
-    //! \brief Get maximum of dynamic range.
-    //!
-    //! \return Maximum of dynamic range, or quiet NaN if range was not set.
-    //!
-    float getDynamicRangeMax() const noexcept
-    {
-        return mImpl->getDynamicRangeMax();
-    }
 
     //!
     //! \brief Set allowed formats for an input or output tensor. By default all formats are allowed.
@@ -569,8 +474,10 @@ public:
 
 protected:
     apiv::VTensor* mImpl;
-    virtual ~ITensor() noexcept = default;
+    virtual ~ITensor() noexcept = 0;
 };
+
+inline ITensor::~ITensor() noexcept = default;
 
 //!
 //! \class ILayer
@@ -672,134 +579,13 @@ public:
         return mLayer->setInput(index, tensor);
     }
 
-    //!
-    //! \brief Set the preferred or required computational precision of this layer in a weakly-typed network.
-    //!
-    //! Setting the precision directs TensorRT to choose an implementation that runs at this computational precision.
-    //! TensorRT could still choose a non-conforming fastest implementation that ignores the requested precision.
-    //! To force choosing an implementation with the requested precision, set exactly one of the following flags,
-    //! which differ in what happens if no such implementation exists:
-    //!
-    //! * BuilderFlag::kOBEY_PRECISION_CONSTRAINTS - build fails with an error message.
-    //!
-    //! * BuilderFlag::kPREFER_PRECISION_CONSTRAINTS - TensorRT falls back to an
-    //!   implementation without the requested precision.
-    //!
-    //! If precision is not set, or falling back, TensorRT will select the layer computational precision
-    //! and layer input type based on global performance considerations and the flags specified to the builder.
-    //!
-    //! For a IIdentityLayer: If it casts to/from float/half/int8/uint8, the precision must be one of those types,
-    //! otherwise it must be either the input or output type.
-    //!
-    //! Strongly-typed networks reject calls to method setPrecision. In strongly-typed networks, the computation
-    //! precision is typically controlled by casting the input tensors to the desired type.
-    //!
-    //! \param dataType the computational precision.
-    //!
-    //! \see getPrecision() precisionIsSet() resetPrecision()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED void setPrecision(DataType dataType) noexcept
-    {
-        mLayer->setPrecision(dataType);
-    }
-
-    //!
-    //! \brief get the computational precision of this layer
-    //!
-    //! \return the computational precision
-    //!
-    //! \see setPrecision() precisionIsSet() resetPrecision()
-    //!
-    DataType getPrecision() const noexcept
-    {
-        return mLayer->getPrecision();
-    }
-
-    //!
-    //! \brief whether the computational precision has been set for this layer
-    //!
-    //! \return whether the computational precision has been explicitly set
-    //!
-    //! \see setPrecision() getPrecision() resetPrecision()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED bool precisionIsSet() const noexcept
-    {
-        return mLayer->precisionIsSet();
-    }
-
-    //!
-    //! \brief reset the computational precision for this layer
-    //!
-    //! \see setPrecision() getPrecision() precisionIsSet()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED void resetPrecision() noexcept
-    {
-        mLayer->resetPrecision();
-    }
-
-    //!
-    //! \brief Set the output type of this layer in a weakly-typed network.
-    //!
-    //! Setting the output type constrains TensorRT to choose implementations which generate output data with the
-    //! given type. If it is not set, TensorRT will select output type based on layer computational precision. TensorRT
-    //! could still choose non-conforming output type based on fastest implementation. To force choosing the requested
-    //! output type, set exactly one of the following flags, which differ in what happens if no such implementation
-    //! exists:
-    //!
-    //! * BuilderFlag::kOBEY_PRECISION_CONSTRAINTS - build fails with an error message.
-    //!
-    //! * BuilderFlag::kPREFER_PRECISION_CONSTRAINTS - TensorRT falls back to an
-    //!   implementation with a non-conforming output type.
-    //!
-    //! In case layer precision is not specified, or falling back, the output type depends on the
-    //! chosen implementation, based on performance considerations and the flags specified to the builder.
-    //!
-    //! This method cannot be used to set the data type of the second output tensor of the TopK layer. The data type of
-    //! the second output tensor of the topK layer is always Int32. Also the output type of all layers that are shape
-    //! operations must be DataType::kINT32, and all attempts to set the output type to some other data type will be
-    //! ignored except for issuing an error message.
-    //!
-    //! Note that the layer output type is generally not identical to the data type of the output tensor, as TensorRT
-    //! may insert implicit reformatting operations to convert the former to the latter. Calling layer->setOutputType(i,
-    //! type) has no effect on the data type of the i-th output tensor of layer, and users need to call
-    //! layer->getOutput(i)->setType(type) to change the tensor data type. This is particularly relevant if the tensor
-    //! is marked as a network output, since only setType() [but not setOutputType()] will affect the data
-    //! representation in the corresponding output binding.
-    //!
-    //! Strongly-typed networks reject calls to method setOutputType. Instead, the output type can be set
-    //! only for layers that define method setToType(). Those layers are:
-    //!
-    //! * ICastLayer
-    //! * IDequantizeLayer
-    //! * IDynamicQuantizeLayer
-    //! * IFillLayer
-    //! * IQuantizeLayer
-    //!
-    //! \param index the index of the output to set
-    //! \param dataType the type of the output
-    //!
-    //! \see getOutputType() outputTypeIsSet() resetOutputType()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED void setOutputType(int32_t index, DataType dataType) noexcept
-    {
-        mLayer->setOutputType(index, dataType);
-    }
 
     //!
     //! \brief get the output type of this layer
     //!
     //! \param index the index of the output
     //!
-    //! \return the output precision. If no precision has been set, DataType::kFLOAT will be returned,
-    //!         unless the output type is inherently DataType::kINT32.
+    //! \return the inferred output type.
     //!
     //! \see getOutputType() outputTypeIsSet() resetOutputType()
     //!
@@ -808,35 +594,6 @@ public:
         return mLayer->getOutputType(index);
     }
 
-    //!
-    //! \brief whether the output type has been set for this layer
-    //!
-    //! \param index the index of the output
-    //!
-    //! \return whether the output type has been explicitly set
-    //!
-    //! \see setOutputType() getOutputType() resetOutputType()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED bool outputTypeIsSet(int32_t index) const noexcept
-    {
-        return mLayer->outputTypeIsSet(index);
-    }
-
-    //!
-    //! \brief reset the output type for this layer
-    //!
-    //! \param index the index of the output
-    //!
-    //! \see setOutputType() getOutputType() outputTypeIsSet()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED void resetOutputType(int32_t index) noexcept
-    {
-        return mLayer->resetOutputType(index);
-    }
 
     //!
     //! \brief Set the metadata for this layer.
@@ -903,9 +660,11 @@ public:
     }
 
 protected:
-    virtual ~ILayer() noexcept = default;
+    virtual ~ILayer() noexcept = 0;
     apiv::VLayer* mLayer;
 };
+
+inline ILayer::~ILayer() noexcept = default;
 
 //!
 //! \enum PaddingMode
@@ -1071,19 +830,16 @@ enum class PaddingMode : int32_t
     kSAME_LOWER = 3,          //!< Use SAME padding, with prePadding >= postPadding.
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in PaddingMode enum.
 //!
 //! \see PaddingMode
 //!
 template <>
-struct EnumMaxImpl<PaddingMode>
+struct impl::EnumMaxImpl<PaddingMode>
 {
     static constexpr int32_t kVALUE = 4;
 };
-} // namespace impl
 
 //!
 //! \class IConvolutionLayer
@@ -1400,9 +1156,11 @@ public:
     using ILayer::setInput;
 
 protected:
-    virtual ~IConvolutionLayer() noexcept = default;
+    virtual ~IConvolutionLayer() noexcept = 0;
     apiv::VConvolutionLayer* mImpl;
 };
+
+inline IConvolutionLayer::~IConvolutionLayer() noexcept = default;
 
 //!
 //! \class IActivationLayer
@@ -1490,9 +1248,11 @@ public:
     }
 
 protected:
-    virtual ~IActivationLayer() noexcept = default;
+    virtual ~IActivationLayer() noexcept = 0;
     apiv::VActivationLayer* mImpl;
 };
+
+inline IActivationLayer::~IActivationLayer() noexcept = default;
 
 //!
 //! \enum PoolingType
@@ -1506,19 +1266,16 @@ enum class PoolingType : int32_t
     kMAX_AVERAGE_BLEND = 2 //!< Blending between max and average pooling: (1-blendFactor)*maxPool + blendFactor*avgPool
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in PoolingType enum.
 //!
 //! \see PoolingType
 //!
 template <>
-struct EnumMaxImpl<PoolingType>
+struct impl::EnumMaxImpl<PoolingType>
 {
     static constexpr int32_t kVALUE = 3;
 };
-} // namespace impl
 
 //! \class IPoolingLayer
 //!
@@ -1769,9 +1526,11 @@ public:
     }
 
 protected:
-    virtual ~IPoolingLayer() noexcept = default;
+    virtual ~IPoolingLayer() noexcept = 0;
     apiv::VPoolingLayer* mImpl;
 };
+
+inline IPoolingLayer::~IPoolingLayer() noexcept = default;
 
 //!
 //! \class ILRNLayer
@@ -1876,9 +1635,11 @@ public:
     }
 
 protected:
-    virtual ~ILRNLayer() noexcept = default;
+    virtual ~ILRNLayer() noexcept = 0;
     apiv::VLRNLayer* mImpl;
 };
+
+inline ILRNLayer::~ILRNLayer() noexcept = default;
 
 //!
 //! \brief Controls how shift, scale and power are applied in a Scale layer.
@@ -1898,10 +1659,10 @@ enum class ScaleMode : int32_t
 //! \see ScaleMode
 //!
 template <>
-constexpr inline int32_t EnumMax<ScaleMode>() noexcept
+struct impl::EnumMaxImpl<ScaleMode>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \class IScaleLayer
@@ -2048,9 +1809,11 @@ public:
     }
 
 protected:
-    virtual ~IScaleLayer() noexcept = default;
+    virtual ~IScaleLayer() noexcept = 0;
     apiv::VScaleLayer* mImpl;
 };
+
+inline IScaleLayer::~IScaleLayer() noexcept = default;
 
 //!
 //! \class ISoftMaxLayer
@@ -2111,9 +1874,11 @@ public:
     }
 
 protected:
-    virtual ~ISoftMaxLayer() noexcept = default;
+    virtual ~ISoftMaxLayer() noexcept = 0;
     apiv::VSoftMaxLayer* mImpl;
 };
+
+inline ISoftMaxLayer::~ISoftMaxLayer() noexcept = default;
 
 //!
 //! \class IConcatenationLayer
@@ -2157,9 +1922,11 @@ public:
     }
 
 protected:
-    virtual ~IConcatenationLayer() noexcept = default;
+    virtual ~IConcatenationLayer() noexcept = 0;
     apiv::VConcatenationLayer* mImpl;
 };
+
+inline IConcatenationLayer::~IConcatenationLayer() noexcept = default;
 
 //!
 //! \class IDeconvolutionLayer
@@ -2471,9 +2238,11 @@ public:
     }
 
 protected:
-    virtual ~IDeconvolutionLayer() noexcept = default;
+    virtual ~IDeconvolutionLayer() noexcept = 0;
     apiv::VDeconvolutionLayer* mImpl;
 };
+
+inline IDeconvolutionLayer::~IDeconvolutionLayer() noexcept = default;
 
 //!
 //! \enum ElementWiseOperation
@@ -2505,19 +2274,16 @@ enum class ElementWiseOperation : int32_t
     kLESS = 13      //!< Check if element in first tensor is less than corresponding element in second tensor.
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in ElementWiseOperation enum.
 //!
 //! \see ElementWiseOperation
 //!
 template <>
-struct EnumMaxImpl<ElementWiseOperation>
+struct impl::EnumMaxImpl<ElementWiseOperation>
 {
     static constexpr int32_t kVALUE = 14;
 };
-} // namespace impl
 
 //!
 //! \class IElementWiseLayer
@@ -2569,8 +2335,10 @@ public:
 
 protected:
     apiv::VElementWiseLayer* mImpl;
-    virtual ~IElementWiseLayer() noexcept = default;
+    virtual ~IElementWiseLayer() noexcept = 0;
 };
+
+inline IElementWiseLayer::~IElementWiseLayer() noexcept = default;
 
 //!
 //! \brief Control form of IGatherLayer
@@ -2590,10 +2358,10 @@ enum class GatherMode : int32_t
 //! \see GatherMode
 //!
 template <>
-constexpr inline int32_t EnumMax<GatherMode>() noexcept
+struct impl::EnumMaxImpl<GatherMode>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \class IGatherLayer
@@ -2755,8 +2523,10 @@ public:
 
 protected:
     apiv::VGatherLayer* mImpl;
-    virtual ~IGatherLayer() noexcept = default;
+    virtual ~IGatherLayer() noexcept = 0;
 };
+
+inline IGatherLayer::~IGatherLayer() noexcept = default;
 
 //!
 //! \class IPluginV2Layer
@@ -2784,8 +2554,10 @@ public:
 
 protected:
     apiv::VPluginV2Layer* mImpl;
-    virtual ~IPluginV2Layer() noexcept = default;
+    virtual ~IPluginV2Layer() noexcept = 0;
 };
+
+inline IPluginV2Layer::~IPluginV2Layer() noexcept = default;
 
 //!
 //! \class IPluginV3Layer
@@ -2811,8 +2583,10 @@ public:
 
 protected:
     apiv::VPluginV3Layer* mImpl;
-    virtual ~IPluginV3Layer() noexcept = default;
+    virtual ~IPluginV3Layer() noexcept = 0;
 };
+
+inline IPluginV3Layer::~IPluginV3Layer() noexcept = default;
 
 //!
 //! \enum UnaryOperation
@@ -2865,10 +2639,10 @@ enum class UnaryOperation : int32_t
 //! \see UnaryOperation
 //!
 template <>
-constexpr inline int32_t EnumMax<UnaryOperation>() noexcept
+struct impl::EnumMaxImpl<UnaryOperation>
 {
-    return 25;
-}
+    static constexpr int32_t kVALUE = 25;
+};
 
 //!
 //! \class IUnaryLayer
@@ -2904,8 +2678,10 @@ public:
 
 protected:
     apiv::VUnaryLayer* mImpl;
-    virtual ~IUnaryLayer() noexcept = default;
+    virtual ~IUnaryLayer() noexcept = 0;
 };
+
+inline IUnaryLayer::~IUnaryLayer() noexcept = default;
 
 //!
 //! \enum ReduceOperation
@@ -2946,10 +2722,10 @@ enum class ReduceOperation : int32_t
 //! \see ReduceOperation
 //!
 template <>
-constexpr inline int32_t EnumMax<ReduceOperation>() noexcept
+struct impl::EnumMaxImpl<ReduceOperation>
 {
-    return 6;
-}
+    static constexpr int32_t kVALUE = 6;
+};
 
 //!
 //! \enum CollectiveOperation
@@ -2965,6 +2741,9 @@ enum class CollectiveOperation : int32_t
     kBROADCAST = 2,      //!< Broadcast.
     kREDUCE = 3,         //!< Reduce.
     kREDUCE_SCATTER = 4, //!< Reduce scatter.
+    kALL_TO_ALL = 5,     //!< All-to-all exchange.
+    kGATHER = 6,         //!< Gather to root.
+    kSCATTER = 7,        //!< Scatter from root.
 };
 
 //!
@@ -2975,7 +2754,7 @@ enum class CollectiveOperation : int32_t
 template <>
 struct impl::EnumMaxImpl<CollectiveOperation>
 {
-    static constexpr int32_t kVALUE = 5;
+    static constexpr int32_t kVALUE = 8;
 };
 
 //!
@@ -3050,8 +2829,10 @@ public:
 
 protected:
     apiv::VReduceLayer* mImpl;
-    virtual ~IReduceLayer() noexcept = default;
+    virtual ~IReduceLayer() noexcept = 0;
 };
+
+inline IReduceLayer::~IReduceLayer() noexcept = default;
 
 //!
 //! \class IPaddingLayer
@@ -3122,8 +2903,10 @@ public:
 
 protected:
     apiv::VPaddingLayer* mImpl;
-    virtual ~IPaddingLayer() noexcept = default;
+    virtual ~IPaddingLayer() noexcept = 0;
 };
+
+inline IPaddingLayer::~IPaddingLayer() noexcept = default;
 
 //!
 //! \struct Permutation
@@ -3313,8 +3096,10 @@ public:
 
 protected:
     apiv::VShuffleLayer* mImpl;
-    virtual ~IShuffleLayer() noexcept = default;
+    virtual ~IShuffleLayer() noexcept = 0;
 };
+
+inline IShuffleLayer::~IShuffleLayer() noexcept = default;
 
 //!
 //! \brief Controls how ISliceLayer and IGridSample handle out-of-bounds coordinates.
@@ -3338,10 +3123,10 @@ enum class SampleMode : int32_t
 //! \see SampleMode
 //!
 template <>
-constexpr inline int32_t EnumMax<SampleMode>() noexcept
+struct impl::EnumMaxImpl<SampleMode>
 {
-    return 5;
-}
+    static constexpr int32_t kVALUE = 5;
+};
 
 //!
 //! \brief Slices an input tensor into an output tensor based on the offset and strides.
@@ -3382,8 +3167,8 @@ constexpr inline int32_t EnumMax<SampleMode>() noexcept
 //! When the sampleMode is kCLAMP or kREFLECT, for each input dimension, if its size is 0 then the corresponding output
 //! dimension must be 0 too.
 //!
-//! When the sampleMode is kFILL, the fifth input to the slice layer is used to determine the value to fill in out-of-bound
-//! indices. It is an error to specify the fifth input in any other sampleMode.
+//! When the sampleMode is kFILL, the fifth input to the slice layer is used to determine the value to fill in
+//! out-of-bound indices. It is an error to specify the fifth input in any other sampleMode.
 //!
 //! A slice layer can produce a shape tensor if the following conditions are met:
 //!
@@ -3575,8 +3360,10 @@ public:
 
 protected:
     apiv::VSliceLayer* mImpl;
-    virtual ~ISliceLayer() noexcept = default;
+    virtual ~ISliceLayer() noexcept = 0;
 };
+
+inline ISliceLayer::~ISliceLayer() noexcept = default;
 
 //! \class IShapeLayer
 //!
@@ -3594,8 +3381,10 @@ class IShapeLayer : public ILayer
 {
 protected:
     apiv::VShapeLayer* mImpl;
-    virtual ~IShapeLayer() noexcept = default;
+    virtual ~IShapeLayer() noexcept = 0;
 };
+
+inline IShapeLayer::~IShapeLayer() noexcept = default;
 
 //!
 //! \enum TopKOperation
@@ -3614,10 +3403,10 @@ enum class TopKOperation : int32_t
 //! \see TopKOperation
 //!
 template <>
-constexpr inline int32_t EnumMax<TopKOperation>() noexcept
+struct impl::EnumMaxImpl<TopKOperation>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \class ITopKLayer
@@ -3746,8 +3535,10 @@ public:
 
 protected:
     apiv::VTopKLayer* mImpl;
-    virtual ~ITopKLayer() noexcept = default;
+    virtual ~ITopKLayer() noexcept = 0;
 };
+
+inline ITopKLayer::~ITopKLayer() noexcept = default;
 
 //!
 //! \enum MatrixOperation
@@ -3784,10 +3575,10 @@ enum class MatrixOperation : int32_t
 //! \see DataType
 //!
 template <>
-constexpr inline int32_t EnumMax<MatrixOperation>() noexcept
+struct impl::EnumMaxImpl<MatrixOperation>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \class IMatrixMultiplyLayer
@@ -3844,8 +3635,10 @@ public:
 
 protected:
     apiv::VMatrixMultiplyLayer* mImpl;
-    virtual ~IMatrixMultiplyLayer() noexcept = default;
+    virtual ~IMatrixMultiplyLayer() noexcept = 0;
 };
+
+inline IMatrixMultiplyLayer::~IMatrixMultiplyLayer() noexcept = default;
 
 //! \class INonZero
 //!
@@ -3899,9 +3692,11 @@ public:
     }
 
 protected:
-    virtual ~INonZeroLayer() noexcept = default;
+    virtual ~INonZeroLayer() noexcept = 0;
     apiv::VNonZeroLayer* mImpl;
 };
+
+inline INonZeroLayer::~INonZeroLayer() noexcept = default;
 
 //!
 //! \class IRaggedSoftMaxLayer
@@ -3921,8 +3716,10 @@ class IRaggedSoftMaxLayer : public ILayer
 {
 protected:
     apiv::VRaggedSoftMaxLayer* mImpl;
-    virtual ~IRaggedSoftMaxLayer() noexcept = default;
+    virtual ~IRaggedSoftMaxLayer() noexcept = 0;
 };
+
+inline IRaggedSoftMaxLayer::~IRaggedSoftMaxLayer() noexcept = default;
 
 //! \class IIdentityLayer
 //!
@@ -3971,8 +3768,10 @@ class IIdentityLayer : public ILayer
 {
 protected:
     apiv::VIdentityLayer* mImpl;
-    virtual ~IIdentityLayer() noexcept = default;
+    virtual ~IIdentityLayer() noexcept = 0;
 };
+
+inline IIdentityLayer::~IIdentityLayer() noexcept = default;
 
 //! \class ICastLayer
 //!
@@ -4008,8 +3807,10 @@ public:
 
 protected:
     apiv::VCastLayer* mImpl;
-    virtual ~ICastLayer() noexcept = default;
+    virtual ~ICastLayer() noexcept = 0;
 };
+
+inline ICastLayer::~ICastLayer() noexcept = default;
 
 //! \class IConstantLayer
 //!
@@ -4071,8 +3872,10 @@ public:
 
 protected:
     apiv::VConstantLayer* mImpl;
-    virtual ~IConstantLayer() noexcept = default;
+    virtual ~IConstantLayer() noexcept = 0;
 };
+
+inline IConstantLayer::~IConstantLayer() noexcept = default;
 
 //!
 //! \class IParametricReLULayer
@@ -4087,8 +3890,10 @@ class IParametricReLULayer : public ILayer
 {
 protected:
     apiv::VParametricReLULayer* mImpl;
-    virtual ~IParametricReLULayer() noexcept = default;
+    virtual ~IParametricReLULayer() noexcept = 0;
 };
+
+inline IParametricReLULayer::~IParametricReLULayer() noexcept = default;
 
 //! \enum InterpolationMode
 //!
@@ -4102,19 +3907,16 @@ enum class InterpolationMode : int32_t
     kCUBIC = 2    //!< Supports bicubic (2D) interpolation
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in InterpolationMode enum.
 //!
 //! \see InterpolationMode
 //!
 template <>
-struct EnumMaxImpl<InterpolationMode>
+struct impl::EnumMaxImpl<InterpolationMode>
 {
     static constexpr int32_t kVALUE = 3;
 };
-} // namespace impl
 
 //!
 //! \enum ResizeCoordinateTransformation
@@ -4131,6 +3933,8 @@ enum class ResizeCoordinateTransformation : int32_t
     //! the output tensor, `length_origin` as length of the input tensor in axis x, and `length_resize` as length of the
     //! output tensor in axis x.
     //!
+    //! This transformation maps coordinates as:
+    //!
     //!     |<--------------length---------->|
     //!     |    0     |    1     |    2     |    3     |
     //!     *          *          *          *
@@ -4139,6 +3943,8 @@ enum class ResizeCoordinateTransformation : int32_t
     //!
     kALIGN_CORNERS = 0,
 
+    //! This transformation maps coordinates as:
+    //!
     //!     |<--------------length--------------------->|
     //!     |    0     |    1     |    2     |    3     |
     //!     *          *          *          *
@@ -4147,6 +3953,8 @@ enum class ResizeCoordinateTransformation : int32_t
     //!
     kASYMMETRIC = 1,
 
+    //! This transformation maps coordinates as:
+    //!
     //!     |<--------------length--------------------->|
     //!     |    0     |    1     |    2     |    3     |
     //!          *          *          *          *
@@ -4156,19 +3964,16 @@ enum class ResizeCoordinateTransformation : int32_t
     kHALF_PIXEL = 2,
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in ResizeCoordinateTransformation enum.
 //!
 //! \see ResizeCoordinateTransformation
 //!
 template <>
-struct EnumMaxImpl<ResizeCoordinateTransformation>
+struct impl::EnumMaxImpl<ResizeCoordinateTransformation>
 {
     static constexpr int32_t kVALUE = 3;
 };
-} // namespace impl
 
 //!
 //! \enum ResizeSelector
@@ -4186,19 +3991,16 @@ enum class ResizeSelector : int32_t
     kUPPER = 1,
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in ResizeSelector enum.
 //!
 //! \see ResizeSelector
 //!
 template <>
-struct EnumMaxImpl<ResizeSelector>
+struct impl::EnumMaxImpl<ResizeSelector>
 {
     static constexpr int32_t kVALUE = 2;
 };
-} // namespace impl
 
 //!
 //! \enum ResizeRoundMode
@@ -4222,19 +4024,16 @@ enum class ResizeRoundMode : int32_t
     kCEIL = 3,
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in ResizeRoundMode enum.
 //!
 //! \see ResizeRoundMode
 //!
 template <>
-struct EnumMaxImpl<ResizeRoundMode>
+struct impl::EnumMaxImpl<ResizeRoundMode>
 {
     static constexpr int32_t kVALUE = 4;
 };
-} // namespace impl
 
 //! \class IResizeLayer
 //!
@@ -4529,9 +4328,11 @@ public:
     }
 
 protected:
-    virtual ~IResizeLayer() noexcept = default;
+    virtual ~IResizeLayer() noexcept = 0;
     apiv::VResizeLayer* mImpl;
 };
+
+inline IResizeLayer::~IResizeLayer() noexcept = default;
 
 //!
 //! \enum LoopOutput
@@ -4556,10 +4357,10 @@ enum class LoopOutput : int32_t
 //! \see DataType
 //!
 template <>
-constexpr inline int32_t EnumMax<LoopOutput>() noexcept
+struct impl::EnumMaxImpl<LoopOutput>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \enum TripLimit
@@ -4579,10 +4380,10 @@ enum class TripLimit : int32_t
 //! \see DataType
 //!
 template <>
-constexpr inline int32_t EnumMax<TripLimit>() noexcept
+struct impl::EnumMaxImpl<TripLimit>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 class ILoop;
 
@@ -4611,9 +4412,11 @@ public:
     }
 
 protected:
-    virtual ~ILoopBoundaryLayer() noexcept = default;
+    virtual ~ILoopBoundaryLayer() noexcept = 0;
     apiv::VLoopBoundaryLayer* mBoundary;
 };
+
+inline ILoopBoundaryLayer::~ILoopBoundaryLayer() noexcept = default;
 
 //!
 //! \class IIfConditionalBoundaryLayer
@@ -4634,9 +4437,11 @@ public:
     }
 
 protected:
-    virtual ~IIfConditionalBoundaryLayer() noexcept = default;
+    virtual ~IIfConditionalBoundaryLayer() noexcept = 0;
     apiv::VConditionalBoundaryLayer* mBoundary;
 };
+
+inline IIfConditionalBoundaryLayer::~IIfConditionalBoundaryLayer() noexcept = default;
 
 //!
 //! \class IConditionLayer
@@ -4647,9 +4452,11 @@ class IConditionLayer : public IIfConditionalBoundaryLayer
 {
 public:
 protected:
-    virtual ~IConditionLayer() noexcept = default;
+    virtual ~IConditionLayer() noexcept = 0;
     apiv::VConditionLayer* mImpl;
 };
+
+inline IConditionLayer::~IConditionLayer() noexcept = default;
 
 //!
 //! \class IIfConditionalOutputLayer
@@ -4664,9 +4471,11 @@ class IIfConditionalOutputLayer : public IIfConditionalBoundaryLayer
 {
 public:
 protected:
-    virtual ~IIfConditionalOutputLayer() noexcept = default;
+    virtual ~IIfConditionalOutputLayer() noexcept = 0;
     apiv::VConditionalOutputLayer* mImpl;
 };
+
+inline IIfConditionalOutputLayer::~IIfConditionalOutputLayer() noexcept = default;
 
 //!
 //! \class IIfConditionalInputLayer
@@ -4677,9 +4486,11 @@ class IIfConditionalInputLayer : public IIfConditionalBoundaryLayer
 {
 public:
 protected:
-    virtual ~IIfConditionalInputLayer() noexcept = default;
+    virtual ~IIfConditionalInputLayer() noexcept = 0;
     apiv::VConditionalInputLayer* mImpl;
 };
+
+inline IIfConditionalInputLayer::~IIfConditionalInputLayer() noexcept = default;
 
 //!
 //! \class IIfConditional
@@ -4778,9 +4589,11 @@ public:
     }
 
 protected:
-    virtual ~IIfConditional() noexcept = default;
+    virtual ~IIfConditional() noexcept = 0;
     apiv::VIfConditional* mImpl;
 };
+
+inline IIfConditional::~IIfConditional() noexcept = default;
 
 //!
 //! \class IRecurrenceLayer
@@ -4813,9 +4626,11 @@ public:
     using ILayer::setInput;
 
 protected:
-    virtual ~IRecurrenceLayer() noexcept = default;
+    virtual ~IRecurrenceLayer() noexcept = 0;
     apiv::VRecurrenceLayer* mImpl;
 };
+
+inline IRecurrenceLayer::~IRecurrenceLayer() noexcept = default;
 
 //!
 //! \class ILoopOutputLayer
@@ -4895,9 +4710,11 @@ public:
     using ILayer::setInput;
 
 protected:
-    virtual ~ILoopOutputLayer() noexcept = default;
+    virtual ~ILoopOutputLayer() noexcept = 0;
     apiv::VLoopOutputLayer* mImpl;
 };
+
+inline ILoopOutputLayer::~ILoopOutputLayer() noexcept = default;
 
 //!
 //! \class ITripLimitLayer
@@ -4922,9 +4739,11 @@ public:
     }
 
 protected:
-    virtual ~ITripLimitLayer() noexcept = default;
+    virtual ~ITripLimitLayer() noexcept = 0;
     apiv::VTripLimitLayer* mImpl;
 };
+
+inline ITripLimitLayer::~ITripLimitLayer() noexcept = default;
 
 //!
 //! \class IIteratorLayer
@@ -4980,9 +4799,11 @@ public:
     }
 
 protected:
-    virtual ~IIteratorLayer() noexcept = default;
+    virtual ~IIteratorLayer() noexcept = 0;
     apiv::VIteratorLayer* mImpl;
 };
+
+inline IIteratorLayer::~IIteratorLayer() noexcept = default;
 
 //!
 //! \class ILoop
@@ -5081,9 +4902,11 @@ public:
     }
 
 protected:
-    virtual ~ILoop() noexcept = default;
+    virtual ~ILoop() noexcept = 0;
     apiv::VLoop* mImpl;
 };
+
+inline ILoop::~ILoop() noexcept = default;
 
 //!
 //! \class ISelectLayer
@@ -5100,9 +4923,11 @@ protected:
 class ISelectLayer : public ILayer
 {
 protected:
-    virtual ~ISelectLayer() noexcept = default;
+    virtual ~ISelectLayer() noexcept = 0;
     apiv::VSelectLayer* mImpl;
 };
+
+inline ISelectLayer::~ISelectLayer() noexcept = default;
 
 //!
 //! \class IAssertionLayer
@@ -5146,10 +4971,12 @@ public:
     }
 
 protected:
-    virtual ~IAssertionLayer() noexcept = default;
+    virtual ~IAssertionLayer() noexcept = 0;
 
     apiv::VAssertionLayer* mImpl;
 };
+
+inline IAssertionLayer::~IAssertionLayer() noexcept = default;
 
 //!
 //! \enum FillOperation
@@ -5193,10 +5020,10 @@ enum class FillOperation : int32_t
 //! \see FillOperation
 //!
 template <>
-constexpr inline int32_t EnumMax<FillOperation>() noexcept
+struct impl::EnumMaxImpl<FillOperation>
 {
-    return 3;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \class IFillLayer
@@ -5290,10 +5117,11 @@ public:
     //!
     //! \param alpha has different meanings for each operator:
     //!
-    //! Operation          | Usage
-    //! kLINSPACE          | the start value, defaults to 0.0;
-    //! kRANDOM_UNIFORM    | the minimum value, defaults to 0.0;
-    //! kRANDOM_NORMAL     | the mean of the normal distribution, default is 0.0;
+    //! | Operation       | Usage                                                    |
+    //! | --------------- | -------------------------------------------------------- |
+    //! | kLINSPACE       | the start value, defaults to 0.0;                        |
+    //! | kRANDOM_UNIFORM | the minimum value, defaults to 0.0;                      |
+    //! | kRANDOM_NORMAL  | the mean of the normal distribution, default is 0.0;     |
     //!
     //! If input 1 exists, it is reset to null by this method.
     //!
@@ -5324,10 +5152,11 @@ public:
     //!
     //! \param beta has different meanings for each operator:
     //!
-    //! Operation          | Usage
-    //! kLINSPACE          | the delta value, defaults to 1.0;
-    //! kRANDOM_UNIFORM    | the maximal value, defaults to 1.0;
-    //! kRANDOM_NORMAL     | the standard deviation of the normal distribution, default is 1.0;
+    //! | Operation       | Usage                                                                  |
+    //! | --------------- | ---------------------------------------------------------------------- |
+    //! | kLINSPACE       | the delta value, defaults to 1.0;                                      |
+    //! | kRANDOM_UNIFORM | the maximal value, defaults to 1.0;                                    |
+    //! | kRANDOM_NORMAL  | the standard deviation of the normal distribution, default is 1.0;     |
     //!
     //! If input 2 exists, it is reset to null by this method.
     //!
@@ -5400,10 +5229,11 @@ public:
     //!
     //! \param alpha has different meanings for each operator:
     //!
-    //! Operation          | Usage
-    //! kLINSPACE          | the start value, defaults to 0;
-    //! kRANDOM_UNIFORM    | the minimum value, defaults to 0;
-    //! kRANDOM_NORMAL     | the mean of the normal distribution, default is 0;
+    //! | Operation       | Usage                                                  |
+    //! | --------------- | ------------------------------------------------------ |
+    //! | kLINSPACE       | the start value, defaults to 0;                        |
+    //! | kRANDOM_UNIFORM | the minimum value, defaults to 0;                      |
+    //! | kRANDOM_NORMAL  | the mean of the normal distribution, default is 0;     |
     //!
     //! If a third input had been used to create this layer, that input is reset to null by this method.
     //!
@@ -5434,10 +5264,11 @@ public:
     //!
     //! \param beta has different meanings for each operator:
     //!
-    //! Operation          | Usage
-    //! kLINSPACE          | the delta value, defaults to 1;
-    //! kRANDOM_UNIFORM    | the maximal value, defaults to 1;
-    //! kRANDOM_NORMAL     | the standard deviation of the normal distribution, default is 1;
+    //! | Operation       | Usage                                                                |
+    //! | --------------- | -------------------------------------------------------------------- |
+    //! | kLINSPACE       | the delta value, defaults to 1;                                      |
+    //! | kRANDOM_UNIFORM | the maximal value, defaults to 1;                                    |
+    //! | kRANDOM_NORMAL  | the standard deviation of the normal distribution, default is 1;     |
     //!
     //! If a third input had been used to create this layer, that input is reset to null by this method.
     //!
@@ -5502,9 +5333,11 @@ public:
     }
 
 protected:
-    virtual ~IFillLayer() noexcept = default;
+    virtual ~IFillLayer() noexcept = 0;
     apiv::VFillLayer* mImpl;
 };
+
+inline IFillLayer::~IFillLayer() noexcept = default;
 
 //!
 //! \class IQuantizeLayer
@@ -5549,27 +5382,30 @@ protected:
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
+//!
 //!     For each n in N:
 //!         For each c in C:
 //!             For each h in H:
 //!                 For each w in W:
-//!                     output[n,c,h,w] = clamp(round(\p input[n,c,h,w] / \p scale) + \p zeroPt)
+//!                     output[n,c,h,w] = clamp(round(input[n,c,h,w] / scale) + zeroPt)
 //!
 //! Per-channel quantization is supported only for weight inputs. Thus, Activations cannot be quantized per-channel.
 //! As an example of per-channel operation, imagine a 4D KCRS weights input and K (dimension 0) as the quantization
 //! axis. The scale is an array of coefficients, and must have the same size as the quantization axis.
+//!
 //!     For each k in K:
 //!         For each c in C:
 //!             For each r in R:
 //!                 For each s in S:
-//!                     output[k,c,r,s] = clamp(round(\p input[k,c,r,s] / \p scale[k]) + \p zeroPt[k])
+//!                     output[k,c,r,s] = clamp(round(input[k,c,r,s] / scale[k]) + zeroPt[k])
 //!
 //! Block quantization is supported for input types DataType::kFP4, DataType::kFP8 and DataType::kINT4.
 //! As an example of blocked operation, imagine a 2D RS input with R (dimension 0) as the blocking axis and B as the
 //! block size. The scale is a 2D array of coefficients, with dimensions (R//B, S).
+//!
 //!     For each r in R:
 //!         For each s in S:
-//!             output[r,s] = clamp(round(\p input[r,s] / \p scale[r//B, s]) + \p zeroPt[r//B, s])
+//!             output[r,s] = clamp(round(input[r,s] / scale[r//B, s]) + zeroPt[r//B, s])
 //!
 //! \note Only symmetric quantization is supported.
 //! \note Currently the only allowed build-time constant \p zeroPt subgraphs are:
@@ -5660,9 +5496,11 @@ public:
     }
 
 protected:
-    virtual ~IQuantizeLayer() noexcept = default;
+    virtual ~IQuantizeLayer() noexcept = 0;
     apiv::VQuantizeLayer* mImpl;
 };
+
+inline IQuantizeLayer::~IQuantizeLayer() noexcept = default;
 
 //!
 //! \class IDequantizeLayer
@@ -5700,28 +5538,31 @@ protected:
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
+//!
 //!     For each n in N:
 //!         For each c in C:
 //!             For each h in H:
 //!                 For each w in W:
-//!                     output[n,c,h,w] = (\p input[n,c,h,w] - \p zeroPt) * \p scale
+//!                     output[n,c,h,w] = (input[n,c,h,w] - zeroPt) * scale
 //!
 //! Per-channel dequantization is supported only for input that is rooted at an IConstantLayer (i.e. weights).
 //! Activations cannot be quantized per-channel. As an example of per-channel operation, imagine a 4D KCRS weights input
 //! and K (dimension 0) as the quantization axis. The scale is an array of coefficients, which is the same size as the
 //! quantization axis.
+//!
 //!     For each k in K:
 //!         For each c in C:
 //!             For each r in R:
 //!                 For each s in S:
-//!                     output[k,c,r,s] = (\p input[k,c,r,s] - \p zeroPt[k]) * \p scale[k]
+//!                     output[k,c,r,s] = (input[k,c,r,s] - zeroPt[k]) * scale[k]
 //!
 //! Block dequantization is supported for input types DataType::kFP4, DataType::kFP8 and DataType::kINT4.
 //! As an example of blocked operation, imagine a 2D RS input with R (dimension 0) as the blocking axis and B as the
 //! block size. The scale is a 2D array of coefficients, with dimensions (R//B, S).
-//! For each r in R:
-//!     For each s in S:
-//!         output[r,s] = (\p input[r,s] - \p zeroPt[r//B, s]) * \p scale[r//B, s]
+//!
+//!     For each r in R:
+//!         For each s in S:
+//!             output[r,s] = (input[r,s] - zeroPt[r//B, s]) * scale[r//B, s]
 //!
 //! \note Only symmetric quantization is supported.
 //! \note Currently the only allowed build-time constant \p zeroPt subgraphs are:
@@ -5816,9 +5657,11 @@ public:
     }
 
 protected:
-    virtual ~IDequantizeLayer() noexcept = default;
+    virtual ~IDequantizeLayer() noexcept = 0;
     apiv::VDequantizeLayer* mImpl;
 };
+
+inline IDequantizeLayer::~IDequantizeLayer() noexcept = default;
 
 //!
 //! \class IDynamicQuantizeLayer
@@ -5981,9 +5824,11 @@ public:
     }
 
 protected:
-    virtual ~IDynamicQuantizeLayer() noexcept = default;
+    virtual ~IDynamicQuantizeLayer() noexcept = 0;
     apiv::VDynamicQuantizeLayer* mImpl;
 };
+
+inline IDynamicQuantizeLayer::~IDynamicQuantizeLayer() noexcept = default;
 
 //!
 //! \class IEinsumLayer
@@ -6047,9 +5892,11 @@ public:
     }
 
 protected:
-    virtual ~IEinsumLayer() noexcept = default;
+    virtual ~IEinsumLayer() noexcept = 0;
     apiv::VEinsumLayer* mImpl;
 };
+
+inline IEinsumLayer::~IEinsumLayer() noexcept = default;
 
 //!
 //! \enum ScatterMode
@@ -6070,10 +5917,10 @@ enum class ScatterMode : int32_t
 //! \see ScatterMode
 //!
 template <>
-constexpr inline int32_t EnumMax<ScatterMode>() noexcept
+struct impl::EnumMaxImpl<ScatterMode>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \class IScatterLayer
@@ -6175,8 +6022,10 @@ public:
 
 protected:
     apiv::VScatterLayer* mImpl;
-    virtual ~IScatterLayer() noexcept = default;
+    virtual ~IScatterLayer() noexcept = 0;
 }; // class IScatterLayer
+
+inline IScatterLayer::~IScatterLayer() noexcept = default;
 
 //!
 //! \class IOneHotLayer
@@ -6187,7 +6036,8 @@ protected:
 //! Output, and an axis attribute.
 //! * Indices is an Int32 tensor that determines which locations in Output to set as on_value.
 //! * Values is a two-element (rank=1) tensor that consists of [off_value, on_value]
-//! * Depth is an 0D tensor of type Int32 or Int64, which contains the depth (number of classes) of the one-hot encoding.
+//! * Depth is an 0D tensor of type Int32 or Int64, which contains the depth (number of classes) of the one-hot
+//! encoding.
 //!   The depth tensor must be a positive build-time constant.
 //! * Output is a tensor with rank = rank(indices)+1, where the added dimension contains the one-hot encoding.
 //!   The data types of Output is equal to the Values data type.
@@ -6227,8 +6077,10 @@ public:
 
 protected:
     apiv::VOneHotLayer* mImpl;
-    virtual ~IOneHotLayer() noexcept = default;
+    virtual ~IOneHotLayer() noexcept = 0;
 };
+
+inline IOneHotLayer::~IOneHotLayer() noexcept = default;
 
 //!
 //! \class IGridSampleLayer
@@ -6314,8 +6166,10 @@ public:
 
 protected:
     apiv::VGridSampleLayer* mImpl;
-    virtual ~IGridSampleLayer() noexcept = default;
+    virtual ~IGridSampleLayer() noexcept = 0;
 }; // class IGridSampleLayer
+
+inline IGridSampleLayer::~IGridSampleLayer() noexcept = default;
 
 //!
 //! \enum BoundingBoxFormat
@@ -6338,10 +6192,10 @@ enum class BoundingBoxFormat : int32_t
 //! \see BoundingBoxFormat
 //!
 template <>
-constexpr inline int32_t EnumMax<BoundingBoxFormat>() noexcept
+struct impl::EnumMaxImpl<BoundingBoxFormat>
 {
-    return 2;
-}
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \class INMSLayer
@@ -6495,8 +6349,10 @@ public:
 
 protected:
     apiv::VNMSLayer* mImpl;
-    virtual ~INMSLayer() noexcept = default;
+    virtual ~INMSLayer() noexcept = 0;
 }; // class INMSLayer
+
+inline INMSLayer::~INMSLayer() noexcept = default;
 
 //!
 //! \class IReverseSequenceLayer
@@ -6561,8 +6417,10 @@ public:
 
 protected:
     apiv::VReverseSequenceLayer* mImpl;
-    virtual ~IReverseSequenceLayer() noexcept = default;
+    virtual ~IReverseSequenceLayer() noexcept = 0;
 }; // class IReverseSequenceLayer
+
+inline IReverseSequenceLayer::~IReverseSequenceLayer() noexcept = default;
 
 //!
 //! \class INormalizationLayer
@@ -6658,45 +6516,6 @@ public:
         return mImpl->getNbGroups();
     }
 
-    //!
-    //! \brief Set the compute precision of this layer.
-    //!
-    //! \param type The datatype used for the compute precision of this layer.
-    //!
-    //! The method is used to avoid overflow errors by controlling the normalization computation in
-    //! mixed precision mode. The compute precision defaults to DataType::kFLOAT32.
-    //! To override this default, use this method to set the desired compute precision.
-    //!
-    //! For a weakly typed network:
-    //!
-    //! * Method setOutputType() can still be called to control the output data type.
-    //!
-    //! * Method setPrecision() can still be called. The input data is cast to that precision before
-    //!   being cast to the compute precision.
-    //!
-    //! Strongly typed network rejects calls to this method since the compute precision is typically
-    //! controlled by casting the input tensors to the desired type.
-    //!
-    //! Only DataType::kFLOAT32 and DataType::kHALF are valid types for \p type.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.16. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED void setComputePrecision(DataType type) noexcept
-    {
-        return mImpl->setComputePrecision(type);
-    }
-
-    //!
-    //! \brief Get the compute precision of this layer.
-    //!
-    //! \return The datatype used for the compute precision of this layer.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.16. Superseded by strong typing.
-    //!
-    TRT_DEPRECATED DataType getComputePrecision() const noexcept
-    {
-        return mImpl->getComputePrecision();
-    }
 
     //!
     //! \brief Returns true if this layer was created through addNormalizationV2().
@@ -6710,8 +6529,10 @@ public:
 
 protected:
     apiv::VNormalizationLayer* mImpl;
-    virtual ~INormalizationLayer() noexcept = default;
+    virtual ~INormalizationLayer() noexcept = 0;
 };
+
+inline INormalizationLayer::~INormalizationLayer() noexcept = default;
 
 
 //!
@@ -6741,8 +6562,10 @@ public:
 
 protected:
     apiv::VSqueezeLayer* mImpl;
-    virtual ~ISqueezeLayer() noexcept = default;
+    virtual ~ISqueezeLayer() noexcept = 0;
 };
+
+inline ISqueezeLayer::~ISqueezeLayer() noexcept = default;
 
 //!
 //! \class IUnsqueezeLayer
@@ -6772,8 +6595,10 @@ public:
 
 protected:
     apiv::VUnsqueezeLayer* mImpl;
-    virtual ~IUnsqueezeLayer() noexcept = default;
+    virtual ~IUnsqueezeLayer() noexcept = 0;
 };
+
+inline IUnsqueezeLayer::~IUnsqueezeLayer() noexcept = default;
 
 //!
 //! \enum CumulativeOperation
@@ -6791,21 +6616,16 @@ enum class CumulativeOperation : int32_t
     kSUM = 0, //!< Calculate cumulative sum.
 };
 
-namespace impl
-{
-
 //!
 //! \brief Maximum number of elements in CumulativeOperation enum.
 //!
 //! \see CumulativeOperation
 //!
 template <>
-struct EnumMaxImpl<CumulativeOperation>
+struct impl::EnumMaxImpl<CumulativeOperation>
 {
     static constexpr int32_t kVALUE = 1;
 };
-
-} // namespace impl
 
 //!
 //! \class ICumulativeLayer
@@ -6823,10 +6643,10 @@ struct EnumMaxImpl<CumulativeOperation>
 //! For example, let the input be a vector x of length n and the output be vector y.
 //! Then y[j] = sum(x[...]) where ... denotes a sequence of indices from this table:
 //!
-//!           | forward   | reverse
-//! ----------|-----------| ---------
-//! inclusive | 0..j      |   j..n-1
-//! exclusive | 0..j-1    | j+1..n-1
+//! |           | forward | reverse  |
+//! | --------- | ------- | -------- |
+//! | inclusive | 0..j    | j..n-1   |
+//! | exclusive | 0..j-1  | j+1..n-1 |
 //!
 //! For multidimensional tensors, the reductions apply across a specified axis. For
 //! example, given a 2D input, a forward inclusive cumulative operation across axis 0 generates
@@ -6913,8 +6733,10 @@ public:
 
 protected:
     apiv::VCumulativeLayer* mImpl;
-    virtual ~ICumulativeLayer() noexcept = default;
+    virtual ~ICumulativeLayer() noexcept = 0;
 };
+
+inline ICumulativeLayer::~ICumulativeLayer() noexcept = default;
 
 //!
 //! \enum AttentionNormalizationOp
@@ -6928,20 +6750,79 @@ enum class AttentionNormalizationOp : int32_t
     kSOFTMAX = 1, //!< Apply softmax normalization on the attention scores on the `s_kv` dimension.
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in AttentionNormalizationOp enum.
 //!
 //! \see AttentionNormalizationOp
 //!
 template <>
-struct EnumMaxImpl<AttentionNormalizationOp>
+struct impl::EnumMaxImpl<AttentionNormalizationOp>
 {
     static constexpr int32_t kVALUE = 2;
 };
 
-} // namespace impl
+//!
+//! \enum CausalMaskKind
+//!
+//! \brief Enumerates the causal mask alignment orientation for the attention.
+//!
+//! When s_q == s_kv, both kUPPER_LEFT and kLOWER_RIGHT produce identical triangular masks.
+//! When s_q != s_kv (e.g., during LLM generation where s_q=1 and s_kv grows):
+//! - kUPPER_LEFT: Diagonal anchored at top-left corner (j <= i). Query tokens attend only to the earliest cache
+//! positions.
+//! - kLOWER_RIGHT: Diagonal anchored at bottom-right corner (j <= i + (s_kv - s_q)). Query tokens attend to all
+//! preceding context, which is the correct behavior for autoregressive generation.
+//!
+//! \see IAttention::setCausalKind(), IAttention::getCausalKind()
+//!
+enum class CausalMaskKind : int32_t
+{
+    //! No causal masking applied.
+    kNONE = 0,
+
+    //! Diagonal anchored at top-left corner (legacy default when causal=true).
+    kUPPER_LEFT = 1,
+
+    //! Diagonal anchored at bottom-right corner (decode-aligned semantics).
+    kLOWER_RIGHT = 2,
+};
+
+//!
+//! Maximum number of elements in CausalMaskKind enum.
+//!
+//! \see CausalMaskKind
+//!
+template <>
+struct impl::EnumMaxImpl<CausalMaskKind>
+{
+    static constexpr int32_t kVALUE = 3;
+};
+
+//!
+//! \enum AttentionIOForm
+//!
+//! \brief Enumerates the layout of the input/output tensors in an Attention layer.
+//!
+enum class AttentionIOForm : int32_t
+{
+    //! All batches padded to maximum length.
+    //! Shape: [batch_size, num_heads, num_tokens, head_dim]
+    kPADDED_BHND = 0,
+    //! All batches concatenated without padding.
+    //! Shape: [total_tokens, num_heads, head_dim]
+    kPACKED_NHD = 1,
+};
+
+//!
+//! Maximum number of elements in AttentionIOForm enum.
+//!
+//! \see AttentionIOForm
+//!
+template <>
+struct impl::EnumMaxImpl<AttentionIOForm>
+{
+    static constexpr int32_t kVALUE = 2;
+};
 
 //!
 //! \class IAttentionBoundaryLayer
@@ -6964,9 +6845,11 @@ public:
     }
 
 protected:
-    virtual ~IAttentionBoundaryLayer() noexcept = default;
+    virtual ~IAttentionBoundaryLayer() noexcept = 0;
     apiv::VAttentionBoundaryLayer* mBoundary;
 };
+
+inline IAttentionBoundaryLayer::~IAttentionBoundaryLayer() noexcept = default;
 
 //!
 //! \class IAttentionInputLayer
@@ -6995,13 +6878,17 @@ public:
     //! Input 3 is the optional mask tensor. setMask should be used instead of setInput
     //! Input 4 is the optional normalizationQuantizeScale tensor. setNormalizationQuantizeScale should be used instead
     //! of setInput
+    //! Input 5 is the optional queryLengths tensor. setQueryLengths should be used instead of setInput
+    //! Input 6 is the optional keyValueLengths tensor. setKeyValueLengths should be used instead of setInput
     //!
     using ILayer::setInput;
 
 protected:
-    virtual ~IAttentionInputLayer() noexcept = default;
+    virtual ~IAttentionInputLayer() noexcept = 0;
     apiv::VAttentionInputLayer* mImpl;
 };
+
+inline IAttentionInputLayer::~IAttentionInputLayer() noexcept = default;
 
 //!
 //! \class IAttentionOutputLayer
@@ -7017,9 +6904,11 @@ class IAttentionOutputLayer : public IAttentionBoundaryLayer
 {
 public:
 protected:
-    virtual ~IAttentionOutputLayer() noexcept = default;
+    virtual ~IAttentionOutputLayer() noexcept = 0;
     apiv::VAttentionOutputLayer* mImpl;
 };
+
+inline IAttentionOutputLayer::~IAttentionOutputLayer() noexcept = default;
 
 //!
 //! \class IAttention
@@ -7032,41 +6921,52 @@ protected:
 //! efficient than if the subgraph is expressed without IAttention. Setting the IAttention to decomposable=True can
 //! allow IAttention to be decomposed to use multiple kernels if no fused kernel support found.
 //!
-//!  Query       Key       Value      Mask (optional)      NormalizationQuantizeScale (optional)
-//!    |          |          |          |                    |
-//!    |       Transpose     |          |                    |
-//!    |          |          |          |                    |
-//!    ----BMM1----          |          |                    |
-//!          |               |          |                    |
-//!          *---------------------------                    |
-//!          |               |                               |
-//!    Normalization         |                               |
-//!          |               |                               |
-//!          *------------------------------------------------
-//!          |               |
-//!          -------BMM2------
-//!                  |
-//!                Output
+//!     Query       Key       Value      Mask (optional)      NormalizationQuantizeScale (optional)
+//!       |          |          |          |                    |
+//!       |       Transpose     |          |                    |
+//!       |          |          |          |                    |
+//!       ----BMM1----          |          |                    |
+//!             |               |          |                    |
+//!             *---------------------------                    |
+//!             |               |                               |
+//!       Normalization         |                               |
+//!             |               |                               |
+//!             *------------------------------------------------
+//!             |               |
+//!             -------BMM2------
+//!                     |
+//!                   Output
 //!
 //! The attention has the following inputs, in order of input index:
 //!
-//! * Query contains the input query. It is a tensor of type kFLOAT, kHALF or kBF16 with
-//!   shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead]
-//! * Key contains the input key. It is a tensor of type kFLOAT, kHALF or kBF16 with
-//!   shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead]
-//! * Value contains the input value. It is a tensor of type kFLOAT, kHALF or kBF16 with
-//!   shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead]
-//! * Mask (optional) contains the mask value. It is a tensor of type kBOOL or the same data type of
-//!   BMM1 output with shape [batchSize, numHeadsQuery, sequenceLengthQuery, sequenceLengthKeyValue]
-//!   with batchSize and numHeadsQuery broadcastable. For a kBOOL mask, a True value indicates that the corresponding
-//!   position is allowed to attend. For other data types, the mask values will be added to the BMM1 output, known
-//!   as an add mask.
+//! * Query contains the input query. It is a tensor of type kFLOAT, kHALF or kBF16, its shape depends on the query
+//! form.
+//!   - For query form kPADDED_BHND, shape is [batchSize, numHeadsQuery, numTokens, dimHead]
+//!   - For query form kPACKED_NHD, shape is [totalTokens, numHeadsQuery, dimHead]
+//! * Key contains the input key. It is a tensor of type kFLOAT, kHALF or kBF16, its shape depends on the key value
+//! form.
+//!   - For key value form kPADDED_BHND, shape is [batchSize, numHeadsKeyValue, numTokens, dimHead]
+//!   - For key value form kPACKED_NHD, shape is [totalTokens, numHeadsKeyValue, dimHead]
+//! * Value contains the input value. It is a tensor of type kFLOAT, kHALF or kBF16, its shape depends on the key value
+//! form.
+//!   - For key value form kPADDED_BHND, shape is [batchSize, numHeadsKeyValue, numTokens, dimHead]
+//!   - For key value form kPACKED_NHD, shape is [totalTokens, numHeadsKeyValue, dimHead]
+//! * Mask (optional) contains the mask value. It is a tensor of type kBOOL or the same data type of BMM1 output.
+//!   Shape is [batchSize, numHeadsQuery, numTokensQuery, numTokensKeyValue] with batchSize
+//!   and numHeadsQuery broadcastable. TensorRT uses stride-based indexing to load the mask data.
+//!   - For a kBOOL mask, a True value indicates that the corresponding position is allowed to attend.
+//!   - For other data types, the mask values will be added to the BMM1 output, known as an add mask.
 //! * NormalizationQuantizeScale (optional) contains the quantization scale for the attention normalization output.
 //!   It is a tensor of type kFLOAT, kHALF or kBF16 with dimension 0 or 1.
 //!
+//! The attention has one output:
+//! * Output has the same shape, form, and data type as the query input.
+//!   - For query form kPADDED_BHND, output shape is [batchSize, numHeadsQuery, numTokens, dimHead]
+//!   - For query form kPACKED_NHD, output shape is [totalTokens, numHeadsQuery, dimHead]
+//!
 //! \see
-//! https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-with-transformers.html#multi-head-attention-fusion
-//! for the complete matrix of fused kernel support.
+//! https://docs.nvidia.com/deeplearning/tensorrt/latest/performance/best-practices.html#multi-head-attention-fusion for
+//! the complete matrix of fused kernel support.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -7130,11 +7030,16 @@ public:
     //! \brief Set whether the attention will run a causal inference.
     //! Cannot be used together with setMask().
     //!
-    //! \see getCausal
+    //! \param isCausal True to enable causal masking with kUPPER_LEFT alignment,
+    //!                 false to disable causal masking.
+    //!
+    //! \see getCausal(), setCausalKind()
+    //!
+    //! \deprecated Deprecated in TensorRT 10.16. Superseded by setCausalKind.
     //!
     //! \return True if the causal inference is set successfully, false otherwise.
     //!
-    bool setCausal(bool isCausal) noexcept
+    TRT_DEPRECATED bool setCausal(bool isCausal) noexcept
     {
         return mImpl->setCausal(isCausal);
     }
@@ -7142,13 +7047,47 @@ public:
     //!
     //! \brief Get whether the attention will run a causal inference.
     //!
-    //! \see setCausal
+    //! \see setCausal(), getCausalKind()
+    //!
+    //! \deprecated Deprecated in TensorRT 10.16. Superseded by getCausalKind.
     //!
     //! \return True if the attention will run a causal inference, false otherwise. Default is false.
     //!
-    bool getCausal() const noexcept
+    TRT_DEPRECATED bool getCausal() const noexcept
     {
         return mImpl->getCausal();
+    }
+
+    //!
+    //! \brief Set the causal mask alignment orientation for the attention.
+    //!
+    //! When set to kUPPER_LEFT or kLOWER_RIGHT, an implicit causal mask is applied.
+    //! When set to kNONE, no causal masking is applied.
+    //!
+    //! Cannot be used together with setMask(). Building with both a mask tensor and
+    //! a causal orientation other than kNONE will fail validation.
+    //!
+    //! \param kind The causal mask alignment to apply.
+    //!
+    //! \see getCausalKind(), CausalMaskKind
+    //!
+    //! \return True if the causal mask kind is set successfully, false otherwise.
+    //!
+    bool setCausalKind(CausalMaskKind kind) noexcept
+    {
+        return mImpl->setCausalKind(kind);
+    }
+
+    //!
+    //! \brief Get the causal mask alignment orientation for the attention.
+    //!
+    //! \see setCausalKind(), CausalMaskKind
+    //!
+    //! \return The causal mask alignment orientation. Default is kNONE.
+    //!
+    CausalMaskKind getCausalKind() const noexcept
+    {
+        return mImpl->getCausalKind();
     }
 
     //!
@@ -7378,10 +7317,147 @@ public:
         return mImpl->getNbRanks();
     }
 
+    //!
+    //! \brief Set the query form.
+    //!
+    //! Default is kPADDED_BHND.
+    //!
+    //! \param form The query form.
+    //!
+    //! \return True if the query form is set successfully, false otherwise.
+    //!
+    //! \see getQueryForm()
+    //! \see AttentionIOForm
+    //!
+    TRT_NODISCARD bool setQueryForm(AttentionIOForm form) noexcept
+    {
+        return mImpl->setQueryForm(form);
+    }
+
+    //!
+    //! \brief Get the query form.
+    //!
+    //! \return The query form. Default is kPADDED_BHND.
+    //!
+    //! \see setQueryForm()
+    //! \see AttentionIOForm
+    //!
+    TRT_NODISCARD AttentionIOForm getQueryForm() const noexcept
+    {
+        return mImpl->getQueryForm();
+    }
+
+    //!
+    //! \brief Set the key-value form.
+    //!
+    //! Default is kPADDED_BHND.
+    //!
+    //! \param form The key-value form.
+    //!
+    //! \return True if the key-value form is set successfully, false otherwise.
+    //!
+    //! \see getKeyValueForm()
+    //! \see AttentionIOForm
+    //!
+    TRT_NODISCARD bool setKeyValueForm(AttentionIOForm form) noexcept
+    {
+        return mImpl->setKeyValueForm(form);
+    }
+
+    //!
+    //! \brief Get the key-value form.
+    //!
+    //! \return The key-value form. Default is kPADDED_BHND.
+    //!
+    //! \see setKeyValueForm()
+    //! \see AttentionIOForm
+    //!
+    TRT_NODISCARD AttentionIOForm getKeyValueForm() const noexcept
+    {
+        return mImpl->getKeyValueForm();
+    }
+
+    //!
+    //! \brief Set the query lengths tensor.
+    //!
+    //! An optional tensor to specify the cumulative number of tokens per batch element.
+    //! Must be set when query form is kPACKED_NHD. Ignored when query form is kPADDED_BHND.
+    //! When set, contains cumulative token counts with shape [batchSize + 1].
+    //! The first element should be 0 and the last element equals totalTokens.
+    //! The number of tokens for batch i is lengths[i + 1] - lengths[i].
+    //! The total_tokens dimension of the query tensor must be >= the last element of this tensor.
+    //!
+    //! \warning Providing a first element that is not 0 results in undefined behavior.
+    //!
+    //! \param lengths A 1D tensor of type kINT32 with shape [batchSize + 1].
+    //!        If nullptr, clears a previously set query lengths tensor.
+    //!
+    //! \return True if the query lengths tensor is set or cleared successfully, false otherwise.
+    //!
+    //! \see getQueryLengths()
+    //!
+    TRT_NODISCARD bool setQueryLengths(ITensor* lengths) noexcept
+    {
+        return mImpl->setQueryLengths(lengths);
+    }
+
+    //!
+    //! \brief Get the query lengths tensor.
+    //!
+    //! \return The query lengths tensor, or nullptr if not set.
+    //!
+    //! \see setQueryLengths()
+    //!
+    TRT_NODISCARD ITensor* getQueryLengths() const noexcept
+    {
+        return mImpl->getQueryLengths();
+    }
+
+    //!
+    //! \brief Set the key-value lengths tensor.
+    //!
+    //! An optional tensor to specify per-batch key-value lengths. The semantics depend on the key-value form:
+    //! - When key-value form is kPADDED_BHND: contains per-batch lengths with shape [batchSize].
+    //!   Each element must be <= the sequence length dimension of the KV tensor.
+    //!   If not set, the sequence length dimension of the KV tensor is used for all batches.
+    //! - When key-value form is kPACKED_NHD: contains cumulative token counts with shape [batchSize + 1].
+    //!   The first element should be 0 and the last element equals totalTokens.
+    //!   The total_tokens dimension of the KV tensor must be >= the last element of this tensor.
+    //!   Must be set when key-value form is kPACKED_NHD.
+    //!
+    //! \warning When key-value form is kPACKED_NHD, providing a first element that is not 0
+    //!          results in undefined behavior.
+    //!
+    //! \param lengths A 1D tensor of type kINT32.
+    //!        If nullptr, clears a previously set key-value lengths tensor.
+    //!
+    //! \return True if the key-value lengths tensor is set or cleared successfully, false otherwise.
+    //!
+    //! \see getKeyValueLengths()
+    //!
+    TRT_NODISCARD bool setKeyValueLengths(ITensor* lengths) noexcept
+    {
+        return mImpl->setKeyValueLengths(lengths);
+    }
+
+    //!
+    //! \brief Get the key-value lengths tensor.
+    //!
+    //! \return The key-value lengths tensor, or nullptr if not set.
+    //!
+    //! \see setKeyValueLengths()
+    //!
+    TRT_NODISCARD ITensor* getKeyValueLengths() const noexcept
+    {
+        return mImpl->getKeyValueLengths();
+    }
+
 protected:
     apiv::VAttention* mImpl;
-    virtual ~IAttention() noexcept = default;
+    virtual ~IAttention() noexcept = 0;
 };
+
+inline IAttention::~IAttention() noexcept = default;
 
 //! \class IRotaryEmbeddingLayer
 //!
@@ -7451,11 +7527,12 @@ public:
     //!
     using ILayer::setInput;
 
-
 protected:
     apiv::VRotaryEmbeddingLayer* mImpl;
-    virtual ~IRotaryEmbeddingLayer() noexcept = default;
+    virtual ~IRotaryEmbeddingLayer() noexcept = 0;
 };
+
+inline IRotaryEmbeddingLayer::~IRotaryEmbeddingLayer() noexcept = default;
 
 //!
 //! \enum KVCacheMode
@@ -7467,20 +7544,16 @@ enum class KVCacheMode : int32_t
     kLINEAR = 0, //!< Linear mode.
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in KVCacheMode enum.
 //!
 //! \see KVCacheMode
 //!
 template <>
-struct EnumMaxImpl<KVCacheMode>
+struct impl::EnumMaxImpl<KVCacheMode>
 {
     static constexpr int32_t kVALUE = 1;
 };
-
-} // namespace impl
 
 //! \class IKVCacheUpdateLayer
 //!
@@ -7515,6 +7588,8 @@ public:
     //! Input 0 is the input cache tensor.
     //! Input 1 is the input update tensor.
     //! Input 2 is the input writeIndices tensor.
+    //! Input 3 is the optional updateLengths tensor. setUpdateLengths should be used instead of setInput
+    //!   to set this tensor.
     //!
     using ILayer::setInput;
 
@@ -7540,10 +7615,77 @@ public:
         return mImpl->getCacheMode();
     }
 
+    //!
+    //! \brief Set the update form.
+    //!
+    //! Default is kPADDED_BHND. When set to kPACKED_NHD, the update tensor shape is [totalTokens, numHeads, dimHead]
+    //! instead of [batchSize, numHeads, numTokens, dimHead], and the updateLengths tensor must be provided.
+    //!
+    //! \param form The update form.
+    //!
+    //! \return True if the update form is set successfully, false otherwise.
+    //!
+    //! \see getUpdateForm()
+    //! \see AttentionIOForm
+    //!
+    TRT_NODISCARD bool setUpdateForm(AttentionIOForm form) noexcept
+    {
+        return mImpl->setUpdateForm(form);
+    }
+
+    //!
+    //! \brief Get the update form.
+    //!
+    //! \return The update form.
+    //!
+    //! \see setUpdateForm()
+    //! \see AttentionIOForm
+    //!
+    TRT_NODISCARD AttentionIOForm getUpdateForm() const noexcept
+    {
+        return mImpl->getUpdateForm();
+    }
+
+    //!
+    //! \brief Set the update lengths tensor.
+    //!
+    //! Only valid when the update form is kPACKED_NHD. Provides a cumulative token counts tensor
+    //! with shape [batchSize + 1]. The first element should be 0 and the last element equals totalTokens.
+    //! The number of tokens for batch i is lengths[i + 1] - lengths[i].
+    //! Must be set when update form is kPACKED_NHD.
+    //!
+    //! \warning Providing a first element that is not 0 results in undefined behavior.
+    //!
+    //! \param lengths A 1D tensor of type kINT32 with shape [batchSize + 1],
+    //!   or nullptr to clear a previously set update lengths tensor.
+    //!
+    //! \return True if the update lengths tensor is set successfully, false otherwise.
+    //!
+    //! \see getUpdateLengths()
+    //!
+    TRT_NODISCARD bool setUpdateLengths(ITensor* lengths) noexcept
+    {
+        return mImpl->setUpdateLengths(lengths);
+    }
+
+    //!
+    //! \brief Get the update lengths tensor.
+    //!
+    //! \return The update lengths tensor, or nullptr if not set.
+    //!
+    //! \see setUpdateLengths()
+    //!
+    TRT_NODISCARD ITensor* getUpdateLengths() const noexcept
+    {
+        return mImpl->getUpdateLengths();
+    }
+
 protected:
     apiv::VKVCacheUpdateLayer* mImpl;
-    virtual ~IKVCacheUpdateLayer() noexcept = default;
+    virtual ~IKVCacheUpdateLayer() noexcept = 0;
 };
+
+inline IKVCacheUpdateLayer::~IKVCacheUpdateLayer() noexcept = default;
 
 //!
 //! \enum MoEActType
@@ -7556,22 +7698,19 @@ enum class MoEActType : int32_t
     kSILU = 1,
 };
 
-namespace impl
-{
-
 //!
 //! Maximum number of elements in MoEActType enum.
 //!
 //! \see MoEActType
 //!
 template <>
-struct EnumMaxImpl<MoEActType>
+struct impl::EnumMaxImpl<MoEActType>
 {
     static constexpr int32_t kVALUE = 2;
 };
 
-} // namespace impl
 
+//! <pre>
 //!          ┌──────────────┐┌────────────────────────┐┌────────────────────────┐
 //!          │ hiddenStates ││selectedExpertsForTokens││scoresForSelectedExperts│
 //!          └──────────────┘└────────────────────────┘└────────────────────────┘
@@ -7617,11 +7756,13 @@ struct EnumMaxImpl<MoEActType>
 //!                               ┌───────────────┐
 //!                               │   moeOutput   │
 //!                               └───────────────┘
+//! </pre>
 //! \class IMoELayer
 //!
 //! \brief A MoE layer in a network definition.
-//! Mixture of Experts (MoE) is a collection of experts with each expert specializing in processing different subsets of input data.
-//! The key innovation lies in using a Router that selectively activates only the specific experts needed for a given input, rather than engaging the entire neural network for every task.
+//! Mixture of Experts (MoE) is a collection of experts with each expert specializing in processing different subsets of
+//! input data. The key innovation lies in using a Router that selectively activates only the specific experts needed
+//! for a given input, rather than engaging the entire neural network for every task.
 //!
 //!  Definition in the MoE layer:
 //! \p fcDown, \p fcGate, \p fcUp are three linear layers.
@@ -7679,7 +7820,8 @@ struct EnumMaxImpl<MoEActType>
 //!    - Final output for the token: moeOutput = Σ(score_i * output_i)
 //! The output of MoE has the same shape as the input \p hiddenStates.
 //!
-//! \warning MoE is only supported on Thor. And performance is limited when seqLen > 16.
+//! \warning MoE requires Blackwell or Thor GPU architecture (SM 10.x or SM 11.x). SM 12.x is not currently
+//! supported. And performance is limited when seqLen > 16.
 //!
 //! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
 //!
@@ -7740,15 +7882,18 @@ public:
 
     //!
     //! \brief Configure static quantization after the mul op.
+    //! <pre>
     //!                 ┌── fcGate ── activation ───┐
     //!                 │                           │
     //! hiddenStates ───┤                           ├── mul ── {Q ── DQ} ── fcDown ── output
     //!                 │                           │
     //!                 └── fcUp ───────────────────┘
+    //! </pre>
     //! When using mul output static quantization, the user must provide:
     //! \param fcDownActivationScale: the scale tensor.
     //! \param dataType: the type that the activation is quantized to.
-    //! In addition, the user should also insert Q/DQ before the hiddenStates input of the MoE layer. The quantization method must be the same as the quantization method here.
+    //! In addition, the user should also insert Q/DQ before the hiddenStates input of the MoE layer. The quantization
+    //! method must be the same as the quantization method here.
     //!
     //! If setQuantizationDynamicDblQ is called, then previous calls to this function are overridden.
     //! If setQuantizationToType is called, previous parameters set by this function are overridden.
@@ -7763,20 +7908,24 @@ public:
 
     //!
     //! \brief Configure dynamic quantization (with double quantization) after the mul op.
+    //! <pre>
     //!                 ┌── fcGate ── activation ───┐             ┌──── DQ
     //!                 │                           │             │      │
     //! hiddenStates ───┤                           ├── mul ── {DynQ ── DQ} ── fcDown ── output
     //!                 │                           │
     //!                 └── fcUp ───────────────────┘
+    //! </pre>
     //! When using mul output dynamic quantization (with double quantization), the user must provide:
     //! \param fcDownActivationDblQScale: the double quantization scale tensor.
     //! \param dataType: the type that the activation is quantized to.
     //! \param blockShape: the blockShape used in quantization.
     //! \param dynQOutputScaleType: the data type of the scale tensor.
-    //! In addition, the user should also insert DynQ/DQ/DQ before the hiddenStates input of the MoE layer. The quantization method must be the same as the quantization method here.
+    //! In addition, the user should also insert DynQ/DQ/DQ before the hiddenStates input of the MoE layer. The
+    //! quantization method must be the same as the quantization method here.
     //!
     //! If setQuantizationStatic is called, then previous calls to this function are overridden.
-    //! If setQuantizationToType, setQuantizationBlockShape or setDynQOutputScaleType is called, previous parameters set by this function are overridden.
+    //! If setQuantizationToType, setQuantizationBlockShape or setDynQOutputScaleType is called, previous parameters set
+    //! by this function are overridden.
     //!
     //! \see setQuantizationToType()
     //! \see getQuantizationToType()
@@ -7822,8 +7971,8 @@ public:
     //!
     //! \param blockShape: the block shape for the quantization of the Mul output.
     //!
-    //! The shape must have rank 3 and the dimensions representing block sizes for Mul output dimensions (batchSize, seqLen, moeInterSize) respectively.
-    //! For example, a shape of [1, 1, 16] means block quantization on the last (moeInterSize) axis.
+    //! The shape must have rank 4 and the dimensions representing block sizes for Mul output dimensions (batchSize, seqLen, topK, moeInterSize) respectively.
+    //! For example, a shape of [1, 1, 1, 16] means block quantization on the last (moeInterSize) axis.
     //! -1 means a fully blocked dimension.
     //!
     //! \see getQuantizationBlockShape()
@@ -7988,9 +8137,11 @@ public:
     using ILayer::setInput;
 
 protected:
-    virtual ~IMoELayer() noexcept = default;
+    virtual ~IMoELayer() noexcept = 0;
     apiv::VMoELayer* mImpl;
 };
+
+inline IMoELayer::~IMoELayer() noexcept = default;
 
 //!
 //! \class IDistCollectiveLayer
@@ -8002,9 +8153,11 @@ protected:
 class IDistCollectiveLayer : public ILayer
 {
 protected:
-    virtual ~IDistCollectiveLayer() noexcept = default;
+    virtual ~IDistCollectiveLayer() noexcept = 0;
     apiv::VDistCollectiveLayer* mImpl;
 }; // class IDistCollectiveLayer
+
+inline IDistCollectiveLayer::~IDistCollectiveLayer() noexcept = default;
 
 //!
 //! \class INetworkDefinition
@@ -8026,7 +8179,7 @@ protected:
 class INetworkDefinition : public INoCopy
 {
 public:
-    virtual ~INetworkDefinition() noexcept = default;
+    virtual ~INetworkDefinition() noexcept = 0;
 
     //!
     //! \brief Add an input tensor to the network.
@@ -9107,31 +9260,6 @@ public:
     //!
     //! \param dimensions The output tensor dimensions if input 0 is missing.
     //! \param op The fill operation that the layer applies.
-    //!
-    //! \warning For FillOperation::kLINSPACE, dimensions.nbDims must be 1 for static start/delta. If delta is provided
-    //! as a 1D tensor, the length of delta must match dimensions.nbDims.
-    //!
-    //! This layer is non-deterministic across subsequent calls as the same inputs will produce different
-    //! output tensors if \p op is either FillOperation::kRANDOM_UNIFORM or FillOperation::kRANDOM_NORMAL
-    //! due to random state being shared across calls. The output tensors generated are determinstic when
-    //! starting from the same initial state.
-    //!
-    //! \see IFillLayer
-    //!
-    //! \return The new fill layer, or nullptr if it could not be created.
-    //!
-    //! \deprecated Deprecated in TensorRT 9.0. Superseded by three-argument addFill.
-    //!
-    TRT_DEPRECATED IFillLayer* addFill(Dims const& dimensions, FillOperation op) noexcept
-    {
-        return mImpl->addFill(dimensions, op);
-    }
-
-    //!
-    //! \brief Add a fill layer to the network.
-    //!
-    //! \param dimensions The output tensor dimensions if input 0 is missing.
-    //! \param op The fill operation that the layer applies.
     //! \param outputType Optional output tensor data type, must be DataType::kFLOAT, DataType::kHALF, DataType::kINT32,
     //! or DataType::kINT64. This parameter is only used for static alpha/beta. Future calls to set output type using
     //! setToType or setOutputType must be consistent.
@@ -9230,27 +9358,6 @@ public:
     //!
     //! \brief Add a dequantization layer to the network.
     //!
-    //! \param input The input tensor to be quantized.
-    //! \param scale A tensor with the scale value.
-    //!
-    //! \see IDequantizeLayer
-    //!
-    //! \p input tensor data type must be DataType::kINT8 or DataType::kFP8.
-    //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
-    //! be a build-time constant.
-    //!
-    //! \return The new quantization layer, or nullptr if it could not be created.
-    //!
-    //! \deprecated Deprecated in TensorRT 9.0. Superseded by three-argument addDequantize.
-    //!
-    TRT_DEPRECATED IDequantizeLayer* addDequantize(ITensor& input, ITensor& scale) noexcept
-    {
-        return mImpl->addDequantize(input, scale);
-    }
-
-    //!
-    //! \brief Add a dequantization layer to the network.
-    //!
     //! \param input The input tensor to be dequantized.
     //! \param scale A tensor with the scale value.
     //! \param outputType Output tensor data type.
@@ -9289,27 +9396,6 @@ public:
     IScatterLayer* addScatter(ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode) noexcept
     {
         return mImpl->addScatter(data, indices, updates, mode);
-    }
-
-    //!
-    //! \brief Add a quantization layer to the network.
-    //!
-    //! \param input The input tensor to be quantized.
-    //! \param scale A tensor with the scale value.
-    //!
-    //! \see IQuantizeLayer
-    //!
-    //! \p input tensor data type must be DataType::kFLOAT or DataType::kHALF.
-    //! \p scale tensor data type must be DataType::kFLOAT. The subgraph which terminates with the \p scale tensor must
-    //! be a build-time constant.
-    //!
-    //! \return The new quantization layer, or nullptr if it could not be created.
-    //!
-    //! \deprecated Deprecated in TensorRT 9.0. Superseded by three-argument addQuantize.
-    //!
-    TRT_DEPRECATED IQuantizeLayer* addQuantize(ITensor& input, ITensor& scale) noexcept
-    {
-        return mImpl->addQuantize(input, scale);
     }
 
     //!
@@ -9537,15 +9623,16 @@ public:
     //!
     //! \brief Add an attention to the network.
     //!
-    //! \param query A 4d input query tensor to the layer.
-    //! \param key A 4d input key tensor to the layer.
-    //! \param value A 4d input value tensor to the layer.
+    //! \param query A 3D or 4D input query tensor to the layer.
+    //! \param key A 3D or 4D input key tensor to the layer.
+    //! \param value A 3D or 4D input value tensor to the layer.
     //! \param normOp The normalization operation to perform.
-    //! \param causal Use causual inference or not.
+    //! \param causal Use causal inference or not. When true, uses kUPPER_LEFT causal masking.
     //!
-    //! query must have shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead].
-    //! key and value must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
-    //! pastKey and pastValue must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
+    //! For padded (BHND) form, query must have shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead].
+    //! For packed (NHD) form, query must have shape [totalTokens, numHeadsQuery, dimHead].
+    //! key and value follow the same convention based on their form.
+    //! Use IAttention::setQueryForm() and IAttention::setKeyValueForm() to configure the tensor layout.
     //! normOp defaults to kSOFTMAX isCausal defaults to false.
     //!
     //! By default, IAttention is not decomposable and TensorRT will try to use a single fused kernel, which may be more
@@ -9554,12 +9641,44 @@ public:
     //!
     //! \see IAttention
     //!
+    //! \deprecated Deprecated in TensorRT 10.16. Superseded by addAttentionV2 with CausalMaskKind parameter.
+    //!
     //! \return The new attention, or nullptr if it could not be created.
     //!
-    IAttention* addAttention(
+    TRT_DEPRECATED IAttention* addAttention(
         ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp, bool causal) noexcept
     {
         return mImpl->addAttention(query, key, value, normOp, causal);
+    }
+
+    //!
+    //! \brief Add an attention to the network with explicit causal mask kind.
+    //!
+    //! \param query A 4d input query tensor to the layer.
+    //! \param key A 4d input key tensor to the layer.
+    //! \param value A 4d input value tensor to the layer.
+    //! \param normOp The normalization operation to perform.
+    //! \param causalKind The causal mask alignment orientation. Use kNONE for no causal masking,
+    //!        kUPPER_LEFT for diagonal anchored at upper-left corner (legacy default),
+    //!        or kLOWER_RIGHT for diagonal anchored at lower-right corner (for LLM generation with s_q != s_kv).
+    //!
+    //! query must have shape [batchSize, numHeadsQuery, sequenceLengthQuery, dimHead].
+    //! key and value must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
+    //! pastKey and pastValue must have shape [batchSize, numHeadsKeyValue, sequenceLengthKeyValue, dimHead].
+    //! normOp defaults to kSOFTMAX, causalKind defaults to kNONE.
+    //!
+    //! By default, IAttention is not decomposable and TensorRT will try to use a single fused kernel, which may be more
+    //! efficient than if the subgraph is expressed without IAttention. Setting the IAttention to decomposable=True can
+    //! allow IAttention to be to use multiple kernels if no fused kernel support found.
+    //!
+    //! \see IAttention, CausalMaskKind
+    //!
+    //! \return The new attention, or nullptr if it could not be created.
+    //!
+    IAttention* addAttentionV2(ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp,
+        CausalMaskKind causalKind) noexcept
+    {
+        return mImpl->addAttentionV2(query, key, value, normOp, causalKind);
     }
 
     //! \brief Add a Rotary Position Embedding (RoPE) layer to the network.
@@ -9629,9 +9748,11 @@ public:
     //!
     //! \see IMoELayer
     //!
-    //! \warning MoE is only supported on Thor. And performance is limited when seqLen > 16.
+    //! \warning MoE requires Blackwell or Thor GPU architecture (SM 10.x or SM 11.x). SM 12.x is not currently
+    //! supported. And performance is limited when seqLen > 16.
     //!
-    //! \warning The number of selected experts per token could be inferred from the input \p selectedExpertsForTokens and should be consistent with the topK in the \p scoresForSelectedExperts.
+    //! \warning The number of selected experts per token could be inferred from the input \p selectedExpertsForTokens
+    //! and should be consistent with the topK in the \p scoresForSelectedExperts.
     //!
     //! \return The new MoE layer, or nullptr if it could not be created.
     //!
@@ -9649,10 +9770,14 @@ public:
     //! kREDUCE_SCATTER or kALL_REDUCE. See \ref ReduceOperation for valid values. Use ReduceOperation::kNONE for a
     //! CollectiveOperation which does not need a ReduceOperation
     //! \param root The root rank of the collective operation.
-    //! Some CollectiveOperations, such as kBROADCAST and kREDUCE require specifying a root rank, with the following
-    //! semantics:
+    //! Some CollectiveOperations require specifying a root rank, with the following semantics:
     //! - kBROADCAST: the root rank sends, all other ranks receive data
     //! - kREDUCE: the root rank receives reduced data, the other ranks send data
+    //! - kGATHER: the root rank receives data gathered from all ranks
+    //! - kSCATTER: the root rank distributes data to all ranks
+    //! For operations that do not use a root rank (kALL_REDUCE, kALL_GATHER, kREDUCE_SCATTER, kALL_TO_ALL),
+    //! the `root` parameter is ignored. Use `root = -1` as the recommended sentinel value when constructing
+    //! the layer to make this explicit.
     //! \param groups Pointer to a flat array of rank IDs in the communicator that defines a single group for this
     //! layer. The DistCollective runner treats this array as the ordered list of participating ranks; only those ranks
     //! take part in the collective, and the order defines the group-local rank (used to remap the root for root-based
@@ -9788,620 +9913,8 @@ protected:
     apiv::VNetworkDefinition* mImpl;
 };
 
-#if !STRIP_TRT_RTX_INTERNAL_API
-//!
-//! \enum CalibrationAlgoType
-//!
-//! \brief Version of calibration algorithm to use.
-//!
-//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-//!
-enum class CalibrationAlgoType : int32_t
-{
-    kLEGACY_CALIBRATION TRT_DEPRECATED_ENUM = 0,    //!< Legacy calibration
-    kENTROPY_CALIBRATION TRT_DEPRECATED_ENUM = 1,   //!< Legacy entropy calibration
-    kENTROPY_CALIBRATION_2 TRT_DEPRECATED_ENUM = 2, //!< Entropy calibration
-    kMINMAX_CALIBRATION TRT_DEPRECATED_ENUM = 3,    //!< Minmax calibration
-};
+inline INetworkDefinition::~INetworkDefinition() noexcept = default;
 
-//!
-//! Maximum number of elements in CalibrationAlgoType enum.
-//!
-//! \see DataType
-//!
-template <>
-constexpr inline int32_t EnumMax<CalibrationAlgoType>() noexcept
-{
-    return 4;
-}
-
-//!
-//! \class IInt8Calibrator
-//!
-//! \brief Application-implemented interface for calibration.
-//!
-//! Calibration is a step performed by the builder when deciding suitable scale factors for 8-bit inference.
-//!
-//! It must also provide a method for retrieving representative images which the calibration process can use to examine
-//! the distribution of activations. It may optionally implement a method for caching the calibration result for reuse
-//! on subsequent runs.
-//!
-//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-//!
-class TRT_DEPRECATED IInt8Calibrator : public IVersionedInterface
-{
-public:
-    //!
-    //! \brief Get the batch size used for calibration batches.
-    //!
-    //! \return The batch size.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Implicit batch support is removed in TensorRT 10.0.
-    //!
-    TRT_DEPRECATED virtual int32_t getBatchSize() const noexcept = 0;
-
-    //!
-    //! \brief Get a batch of input for calibration.
-    //!
-    //! The batch size of the input must match the batch size returned by getBatchSize().
-    //!
-    //! \param bindings An array of pointers to device memory that must be updated to point to device memory
-    //! containing each network input data.
-    //! \param names The names of the network input for each pointer in the binding array.
-    //! \param nbBindings The number of pointers in the bindings array.
-    //!
-    //! \return False if there are no more batches for calibration.
-    //!
-    //! \see getBatchSize()
-    //!
-    virtual bool getBatch(void* bindings[], char const* names[], int32_t nbBindings) noexcept = 0;
-
-    //!
-    //! \brief Load a calibration cache.
-    //!
-    //! Calibration is potentially expensive, so it can be useful to generate the calibration data once, then use it on
-    //! subsequent builds of the network. The cache includes the regression cutoff and quantile values used to generate
-    //! it, and will not be used if these do not batch the settings of the current calibrator. However, the network
-    //! should also be recalibrated if its structure changes, or the input data set changes, and it is the
-    //! responsibility of the application to ensure this.
-    //!
-    //! \param length The length of the cached data, that should be set by the called function. If there is no data,
-    //! this should be zero.
-    //!
-    //! \return A pointer to the cache, or nullptr if there is no data.
-    //!
-    virtual void const* readCalibrationCache(std::size_t& length) noexcept = 0;
-
-    //!
-    //! \brief Save a calibration cache.
-    //!
-    //! \param ptr A pointer to the data to cache.
-    //! \param length The length in bytes of the data to cache.
-    //!
-    //! \see readCalibrationCache()
-    //!
-    virtual void writeCalibrationCache(void const* ptr, std::size_t length) noexcept = 0;
-
-    //!
-    //! \brief Get the algorithm used by this calibrator.
-    //!
-    //! \return The algorithm used by the calibrator.
-    //!
-    virtual CalibrationAlgoType getAlgorithm() noexcept = 0;
-
-    ~IInt8Calibrator() noexcept override = default;
-};
-
-namespace v_1_0
-{
-class TRT_DEPRECATED IInt8EntropyCalibrator : public IInt8Calibrator
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"IInt8EntropyCalibrator", 1, 0};
-    }
-
-    //!
-    //! Signal that this is the entropy calibrator.
-    //!
-    CalibrationAlgoType getAlgorithm() noexcept override
-    {
-        return CalibrationAlgoType::kENTROPY_CALIBRATION;
-    }
-
-    ~IInt8EntropyCalibrator() noexcept override = default;
-};
-} // namespace v_1_0
-
-//!
-//! \class IInt8EntropyCalibrator
-//!
-//! \brief Entropy calibrator.
-//!
-//! This is the Legacy Entropy calibrator. It is less complicated than the legacy calibrator and
-//! produces better results.
-//!
-//! \note To ensure compatibility of source code with future versions of TensorRT, use IEntropyCalibrator, not
-//!       v_1_0::IEntropyCalibrator
-//!
-//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-//!
-using IInt8EntropyCalibrator = v_1_0::IInt8EntropyCalibrator;
-
-namespace v_1_0
-{
-class TRT_DEPRECATED IInt8EntropyCalibrator2 : public IInt8Calibrator
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"IInt8EntropyCalibrator2", 1, 0};
-    }
-
-    //!
-    //! Signal that this is the entropy calibrator 2.
-    //!
-    CalibrationAlgoType getAlgorithm() noexcept override
-    {
-        return CalibrationAlgoType::kENTROPY_CALIBRATION_2;
-    }
-
-    ~IInt8EntropyCalibrator2() noexcept override = default;
-};
-} // namespace v_1_0
-
-//!
-//! \class IInt8EntropyCalibrator2
-//!
-//! \brief Entropy calibrator 2.
-//!
-//! This is the preferred calibrator. This is the required calibrator for DLA, as it supports per
-//! activation tensor scaling.
-//!
-//! \note To ensure compatibility of source code with future versions of TensorRT, use IEntropyCalibrator2, not
-//!        v_1_0::IEntropyCalibrator2
-//!
-//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-//!
-using IInt8EntropyCalibrator2 = v_1_0::IInt8EntropyCalibrator2;
-
-namespace v_1_0
-{
-class TRT_DEPRECATED IInt8MinMaxCalibrator : public IInt8Calibrator
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"IInt8MinMaxCalibrator", 1, 0};
-    }
-
-    //!
-    //! Signal that this is the MinMax Calibrator.
-    //!
-    CalibrationAlgoType getAlgorithm() noexcept override
-    {
-        return CalibrationAlgoType::kMINMAX_CALIBRATION;
-    }
-
-    ~IInt8MinMaxCalibrator() noexcept override = default;
-};
-} // namespace v_1_0
-
-//!
-//! \class IInt8MinMaxCalibrator
-//!
-//! \brief MinMax Calibrator.
-//!
-//! It supports per activation tensor scaling.
-//!
-//! \note To ensure compatibility of source code with future versions of TensorRT, use IMinMaxCalibrator>, not
-//!       v_1_0::IMinMaxCalibrator
-//!
-//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-//!
-using IInt8MinMaxCalibrator = v_1_0::IInt8MinMaxCalibrator;
-
-namespace v_1_0
-{
-class TRT_DEPRECATED IInt8LegacyCalibrator : public IInt8Calibrator
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"IInt8Calibrator", 1, 0};
-    }
-
-    //!
-    //! Signal that this is the legacy calibrator.
-    //!
-    CalibrationAlgoType getAlgorithm() noexcept override
-    {
-        return CalibrationAlgoType::kLEGACY_CALIBRATION;
-    }
-
-    //!
-    //! \brief The quantile (between 0 and 1) that will be used to select the region maximum when the quantile method
-    //! is in use.
-    //!
-    //! See the user guide for more details on how the quantile is used.
-    //!
-    virtual double getQuantile() const noexcept = 0;
-
-    //!
-    //! \brief The fraction (between 0 and 1) of the maximum used to define the regression cutoff when using regression
-    //! to determine the region maximum.
-    //!
-    //! See the user guide for more details on how the regression cutoff is used
-    //!
-    virtual double getRegressionCutoff() const noexcept = 0;
-
-    //!
-    //! \brief Load a histogram.
-    //!
-    //! Histogram generation is potentially expensive, so it can be useful to generate the histograms once, then use
-    //! them when exploring the space of calibrations. The histograms should be regenerated if the network structure
-    //! changes, or the input data set changes, and it is the responsibility of the application to ensure this.
-    //!
-    //! \param length The length of the cached data, that should be set by the called function. If there is no data,
-    //! this should be zero.
-    //!
-    //! \return A pointer to the cache, or nullptr if there is no data.
-    //!
-    virtual void const* readHistogramCache(std::size_t& length) noexcept = 0;
-
-    //!
-    //! \brief Save a histogram cache.
-    //!
-    //! \param ptr A pointer to the data to cache.
-    //! \param length The length in bytes of the data to cache.
-    //!
-    //! \see readHistogramCache()
-    //!
-    virtual void writeHistogramCache(void const* ptr, std::size_t length) noexcept = 0;
-
-    ~IInt8LegacyCalibrator() noexcept override = default;
-};
-} // namespace v_1_0
-
-//!
-//! \class IInt8LegacyCalibrator
-//!
-//! \brief Legacy calibrator.
-//!
-//! This calibrator requires user parameterization,
-//! and is provided as a fallback option if the other calibrators yield poor results.
-//!
-//! \note To ensure compatibility of source code with future versions of TensorRT, use ILegacyCalibrator, not
-//!       v_1_0::ILegacyCalibrator
-//!
-//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-//!
-using IInt8LegacyCalibrator = v_1_0::IInt8LegacyCalibrator;
-
-//!
-//! \class IAlgorithmIOInfo
-//!
-//! \brief Carries information about input or output of the algorithm.
-//!        IAlgorithmIOInfo for all the input and output along with IAlgorithmVariant denotes the variation of algorithm
-//!        and can be used to select or reproduce an algorithm using IAlgorithmSelector::selectAlgorithms().
-//! \see IAlgorithmVariant, IAlgorithm, IAlgorithmSelector::selectAlgorithms()
-//!
-//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
-//!
-//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
-//!
-class TRT_DEPRECATED IAlgorithmIOInfo : public INoCopy
-{
-public:
-    //!
-    //! \brief Return DataType of the input/output of algorithm.
-    //!
-    //! \return the data type.
-    //!
-    DataType getDataType() const noexcept
-    {
-        return mImpl->getDataType();
-    }
-
-    //!
-    //! \brief Return strides of the input/output tensor of algorithm.
-    //! For vectorized formats, strides are given in units of vectors.
-    //!
-    //! \return the strides of the tensor.
-    //!
-    Dims getStrides() const noexcept
-    {
-        return mImpl->getStrides();
-    }
-
-    //!
-    //! \brief Return the index of the vectorized dimension or -1 for non-vectorized formats.
-    //!
-    //! \return the index of the vectorized dimension.
-    //!
-    int64_t getVectorizedDim() const noexcept
-    {
-        return mImpl->getVectorizedDim();
-    }
-
-    //!
-    //! \brief Return the number of components per element.
-    //! This is always 1 for non-vectorized formats.
-    //!
-    //! \return the number of components per element.
-    //!
-    int64_t getComponentsPerElement() const noexcept
-    {
-        return mImpl->getComponentsPerElement();
-    }
-
-protected:
-    virtual ~IAlgorithmIOInfo() noexcept = default;
-    apiv::VAlgorithmIOInfo* mImpl;
-};
-
-//!
-//! \class IAlgorithmVariant
-//!
-//! \brief provides a unique 128-bit identifier, which along with the input and output information
-//!        denotes the variation of algorithm and can be used to select or reproduce an algorithm,
-//!        using IAlgorithmSelector::selectAlgorithms()
-//! \see IAlgorithmIOInfo, IAlgorithm, IAlgorithmSelector::selectAlgorithms()
-//! \note A single implementation can have multiple tactics.
-//!
-//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
-//!
-//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
-//!
-class TRT_DEPRECATED IAlgorithmVariant : public INoCopy
-{
-public:
-    //!
-    //! \brief Return implementation of the algorithm.
-    //!
-    int64_t getImplementation() const noexcept
-    {
-        return mImpl->getImplementation();
-    }
-
-    //!
-    //! \brief Return tactic of the algorithm.
-    //!
-    int64_t getTactic() const noexcept
-    {
-        return mImpl->getTactic();
-    }
-
-protected:
-    virtual ~IAlgorithmVariant() noexcept = default;
-    apiv::VAlgorithmVariant* mImpl;
-};
-
-//!
-//! \class IAlgorithmContext
-//!
-//! \brief Describes the context and requirements, that could be fulfilled by one or more instances of IAlgorithm.
-//! \see IAlgorithm
-//!
-//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
-//!
-//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
-//!
-class TRT_DEPRECATED IAlgorithmContext : public INoCopy
-{
-public:
-    //!
-    //! \brief Return name of the algorithm node.
-    //!
-    //! This is a unique identifier for the IAlgorithmContext.
-    //!
-    char const* getName() const noexcept
-    {
-        return mImpl->getName();
-    }
-
-    //!
-    //! \brief Get the minimum / optimum / maximum dimensions for input or output tensor.
-    //!
-    //! \param index Index of the input or output of the algorithm. Incremental numbers assigned to indices of inputs
-    //!              and the outputs.
-    //! \param select Which of the minimum, optimum, or maximum dimensions to be queried.
-    //!
-    Dims getDimensions(int32_t index, OptProfileSelector select) const noexcept
-    {
-        return mImpl->getDimensions(index, select);
-    }
-
-    //!
-    //! \brief Return number of inputs of the algorithm.
-    //!
-    int32_t getNbInputs() const noexcept
-    {
-        return mImpl->getNbInputs();
-    }
-
-    //!
-    //! \brief Return number of outputs of the algorithm.
-    //!
-    int32_t getNbOutputs() const noexcept
-    {
-        return mImpl->getNbOutputs();
-    }
-
-protected:
-    virtual ~IAlgorithmContext() noexcept = default;
-    apiv::VAlgorithmContext* mImpl;
-};
-
-//!
-//! \class IAlgorithm
-//!
-//! \brief Describes a variation of execution of a layer.
-//!        An algorithm is represented by IAlgorithmVariant and the IAlgorithmIOInfo for each of its inputs and outputs.
-//!        An algorithm can be selected or reproduced using AlgorithmSelector::selectAlgorithms().
-//!
-//! \see IAlgorithmIOInfo, IAlgorithmVariant, IAlgorithmSelector::selectAlgorithms()
-//!
-//! \warning Do not inherit from this class, as doing so will break forward-compatibility of the API and ABI.
-//!
-//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
-//!
-class TRT_DEPRECATED IAlgorithm : public INoCopy
-{
-public:
-    //!
-    //! \brief Returns the algorithm variant.
-    //!
-    IAlgorithmVariant const& getAlgorithmVariant() const noexcept
-    {
-        return mImpl->getAlgorithmVariant();
-    }
-
-    //!
-    //! \brief The time in milliseconds to execute the algorithm.
-    //!
-    float getTimingMSec() const noexcept
-    {
-        return mImpl->getTimingMSec();
-    }
-
-    //!
-    //! \brief The size of the GPU temporary memory in bytes which the algorithm uses at execution time.
-    //!
-    std::size_t getWorkspaceSize() const noexcept
-    {
-        return mImpl->getWorkspaceSize();
-    }
-
-    //!
-    //! \brief Returns the format of an Algorithm input or output. Algorithm inputs are incrementally numbered first,
-    //!        followed by algorithm outputs.
-    //!
-    //! \param index Index of the input or output of the algorithm. Incremental numbers assigned to indices of inputs
-    //!              and the outputs.
-    //!
-    //! \return a pointer to a IAlgorithmIOInfo interface or nullptr if index is out of range.
-    //!
-    IAlgorithmIOInfo const* getAlgorithmIOInfoByIndex(int32_t index) const noexcept
-    {
-        return mImpl->getAlgorithmIOInfoByIndex(index);
-    }
-
-protected:
-    virtual ~IAlgorithm() noexcept = default;
-    apiv::VAlgorithm* mImpl;
-}; // IAlgorithm
-
-namespace v_1_0
-{
-class TRT_DEPRECATED IAlgorithmSelector : public IVersionedInterface
-{
-public:
-    //!
-    //! \brief Return version information associated with this interface. Applications must not override this method.
-    //!
-    InterfaceInfo getInterfaceInfo() const noexcept override
-    {
-        return InterfaceInfo{"IAlgorithmSelector", 1, 0};
-    }
-    //!
-    //! \brief Select Algorithms for a layer from the given list of algorithm choices.
-    //!
-    //! \return The number of choices selected from [0, nbChoices-1].
-    //! \param context The context for which the algorithm choices are valid.
-    //! \param choices The list of algorithm choices to select for implementation of this layer.
-    //! \param nbChoices Number of algorithm choices.
-    //! \param selection The user writes indices of selected choices in to selection buffer which is of size nbChoices.
-    //!
-    //! \note TensorRT uses its default algorithm selection to choose from the list provided.
-    //!       If return value is 0, TensorRT's default algorithm selection is used unless
-    //!       BuilderFlag::kREJECT_EMPTY_ALGORITHMS is set.
-    //!       The list of choices is valid only for this specific algorithm context.
-    //!
-    virtual int32_t selectAlgorithms(IAlgorithmContext const& context, IAlgorithm const* const* choices,
-        int32_t nbChoices, int32_t* selection) noexcept = 0;
-
-    //!
-    //! \brief Called by TensorRT to report choices it made.
-    //!
-    //! \note For a given optimization profile, this call comes after all calls to selectAlgorithms.
-    //! algoChoices[i] is the choice that TensorRT made for algoContexts[i], for i in [0, nbAlgorithms-1]
-    //!
-    //! \param algoContexts The list of all algorithm contexts.
-    //! \param algoChoices The list of algorithm choices made by TensorRT
-    //! \param nbAlgorithms The size of algoContexts as well as algoChoices.
-    //!
-    virtual void reportAlgorithms(IAlgorithmContext const* const* algoContexts, IAlgorithm const* const* algoChoices,
-        int32_t nbAlgorithms) noexcept = 0;
-
-    virtual ~IAlgorithmSelector() noexcept = default;
-};
-} // namespace v_1_0
-
-//!
-//! \class IAlgorithmSelector
-//!
-//! \brief Interface implemented by application for selecting and reporting algorithms of a layer provided by the
-//!        builder.
-//! \note A layer in context of algorithm selection may be different from ILayer in INetworkDefinition.
-//!       For example, an algorithm might be implementing a conglomeration of multiple ILayers in INetworkDefinition.
-//! \note To ensure compatibility of source code with future versions of TensorRT, use IAlgorithmSelector, not
-//!       v_1_0::IAlgorithmSelector
-//!
-//! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
-//!
-using IAlgorithmSelector = v_1_0::IAlgorithmSelector;
-
-//!
-//! \brief Represents one or more QuantizationFlag values using binary OR
-//! operations.
-//!
-//! \see IBuilderConfig::getQuantizationFlags(), IBuilderConfig::setQuantizationFlags()
-//!
-using QuantizationFlags = uint32_t;
-
-//!
-//! \enum QuantizationFlag
-//!
-//! \brief List of valid flags for quantizing the network to int8
-//!
-//! \see IBuilderConfig::setQuantizationFlag(), IBuilderConfig::getQuantizationFlag()
-//!
-//! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-//!
-enum class QuantizationFlag : int32_t
-{
-    //! Run int8 calibration pass before layer fusion. Only valid for IInt8LegacyCalibrator and
-    //! IInt8EntropyCalibrator. The builder always runs the int8 calibration pass before layer fusion for
-    //! IInt8MinMaxCalibrator and IInt8EntropyCalibrator2. Disabled by default.
-    kCALIBRATE_BEFORE_FUSION TRT_DEPRECATED_ENUM = 0
-};
-
-//!
-//! Maximum number of quantization flags in QuantizationFlag enum.
-//!
-//! \see QuantizationFlag
-//!
-template <>
-constexpr inline int32_t EnumMax<QuantizationFlag>() noexcept
-{
-    return 1;
-}
-
-#endif  // !STRIP_TRT_RTX_INTERNAL_API
 //!
 //! \enum RuntimePlatform
 //!
@@ -10432,23 +9945,20 @@ enum class RuntimePlatform : int32_t
 
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in RuntimePlatform enum.
 //!
 //! \see RuntimePlatform
 //!
 template <>
-struct EnumMaxImpl<RuntimePlatform>
+struct impl::EnumMaxImpl<RuntimePlatform>
 {
     static constexpr int32_t kVALUE = 2;
 };
-} // namespace impl
 
 //!
 //! \brief Represents one or more BuilderFlag values using binary OR
-//! operations, e.g., 1U << BuilderFlag::kFP16 | 1U << BuilderFlag::kDEBUG.
+//! operations, e.g., 1U << BuilderFlag::kDEBUG.
 //!
 //! \see IBuilderConfig::setFlags(), IBuilderConfig::getFlags()
 //!
@@ -10463,13 +9973,6 @@ using BuilderFlags = uint32_t;
 //!
 enum class BuilderFlag : int32_t
 {
-    //! Enable FP16 layer selection, with FP32 fallback.
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kFP16 TRT_DEPRECATED_ENUM = 0,
-
-    //! Enable Int8 layer selection, with FP32 fallback with FP16 fallback if kFP16 also specified.
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kINT8 TRT_DEPRECATED_ENUM = 1,
 
     //! Enable debugging of layers via synchronizing after every layer.
     kDEBUG = 2,
@@ -10504,14 +10007,6 @@ enum class BuilderFlag : int32_t
     //! This flag is retained for API compatibility but is ignored.
     kSAFETY_SCOPE TRT_DEPRECATED_ENUM = 8,
 
-    //! Require that layers execute in specified precisions. Build fails otherwise.
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kOBEY_PRECISION_CONSTRAINTS TRT_DEPRECATED_ENUM = 9,
-
-    //! Prefer that layers execute in specified precisions.
-    //! Fall back (with warning) to another precision if build would otherwise fail.
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kPREFER_PRECISION_CONSTRAINTS TRT_DEPRECATED_ENUM = 10,
 
     //! Require that no reformats be inserted between a layer and a network I/O tensor
     //! for which ITensor::setAllowedFormats was called.
@@ -10519,49 +10014,33 @@ enum class BuilderFlag : int32_t
     //! \deprecated Deprecated in TensorRT 10.7. Unneeded API.
     kDIRECT_IO TRT_DEPRECATED_ENUM = 11,
 
-    //! Fail if IAlgorithmSelector::selectAlgorithms returns an empty set of algorithms.
-    //! \deprecated Deprecated in TensorRT 10.10. Unneeded API due to IAlgorithmSelector deprecation.
-    kREJECT_EMPTY_ALGORITHMS TRT_DEPRECATED_ENUM = 12,
-
     //! Restrict to lean runtime operators to provide version forward compatibility
     //! for the plan.
     //!
     //! This flag is only supported by NVIDIA Volta and later GPUs.
     //! This flag is not supported in NVIDIA Drive(R) products.
-    kVERSION_COMPATIBLE = 13,
+    kVERSION_COMPATIBLE = 12,
 
     //! Exclude lean runtime from the plan when version forward compatability is enabled.
     //! By default, this flag is unset, so the lean runtime will be included in the plan.
     //!
     //! If BuilderFlag::kVERSION_COMPATIBLE is not set then the value of this flag will be ignored.
-    kEXCLUDE_LEAN_RUNTIME = 14,
+    kEXCLUDE_LEAN_RUNTIME = 13,
 
-    //! Enable plugins with FP8 input/output.
-    //! This flag is not supported when HardwareCompatibilityLevel::kAMPERE_PLUS is enabled.
-    //! \see HardwareCompatibilityLevel
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kFP8 TRT_DEPRECATED_ENUM = 15,
 
     //! Emit error when a tactic being timed is not present in the timing cache.
     //! This flag has an effect only when IBuilderConfig has an associated ITimingCache.
-    kERROR_ON_TIMING_CACHE_MISS = 16,
+    kERROR_ON_TIMING_CACHE_MISS = 15,
 
-    //! Enable DataType::kBF16 layer selection, with FP32 fallback.
-    //! This flag is only supported by NVIDIA Ampere and later GPUs.
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kBF16 TRT_DEPRECATED_ENUM = 17,
 
     //! Disable caching of JIT-compilation results during engine build.
     //! By default, JIT-compiled code will be serialized as part of the timing cache, which may significantly increase
     //! the cache size. Setting this flag prevents the code from being serialized. This flag has an effect only when
     //! BuilderFlag::DISABLE_TIMING_CACHE is not set.
-    kDISABLE_COMPILATION_CACHE = 18,
+    kDISABLE_COMPILATION_CACHE = 17,
 
     //! Strip the refittable weights from the engine plan file.
-    kSTRIP_PLAN = 19,
-
-    //! \deprecated Deprecated in TensorRT 10.0. Superseded by kSTRIP_PLAN.
-    kWEIGHTLESS TRT_DEPRECATED_ENUM = kSTRIP_PLAN,
+    kSTRIP_PLAN = 18,
 
     //! Create a refittable engine under the assumption that the refit weights will be identical to those provided at
     //! build time. The resulting engine will have the same performance as a non-refittable one. All refittable weights
@@ -10569,7 +10048,7 @@ enum class BuilderFlag : int32_t
     //! behavior is undefined. When used alongside 'kSTRIP_PLAN', this flag will result in a small plan file for which
     //! weights are later supplied via refitting. This enables use of a single set of weights with different inference
     //! backends, or with TensorRT plans for multiple GPU architectures.
-    kREFIT_IDENTICAL = 20,
+    kREFIT_IDENTICAL = 19,
 
     //!
     //! \brief Enable weight streaming for the current engine.
@@ -10596,17 +10075,14 @@ enum class BuilderFlag : int32_t
     //!      ICudaEngine::getMinimumWeightStreamingBudget,
     //!      ICudaEngine::setWeightStreamingBudget
     //!
-    kWEIGHT_STREAMING = 21,
+    kWEIGHT_STREAMING = 20,
 
-    //! Enable plugins with INT4 input/output.
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kINT4 TRT_DEPRECATED_ENUM = 22,
 
     //! Enable building a refittable engine and provide fine-grained control. This allows
     //! control over which weights are refittable or not using INetworkDefinition::markWeightsRefittable and
     //! INetworkDefinition::unmarkWeightsRefittable. By default, all weights are non-refittable when this flag is
     //! enabled. This flag cannot be used together with kREFIT or kREFIT_IDENTICAL.
-    kREFIT_INDIVIDUAL = 23,
+    kREFIT_INDIVIDUAL = 22,
 
     //!  Disable floating-point optimizations: 0*x => 0, x-x => 0, or x/x => 1. These identities are
     //!  not true when x is a NaN or Inf, and thus might hide propagation or generation of NaNs. This flag is typically
@@ -10616,17 +10092,14 @@ enum class BuilderFlag : int32_t
     //!  2. Enable sparsity only where it does not affect propagation/generation of NaNs. Both kSPARSE_WEIGHTS and
     //!  kSTRICT_NANS are set
     //!  3. Enable all sparsity. kSPARSE_WEIGHTS is set and kSTRICT_NANS is unset
-    kSTRICT_NANS = 24,
+    kSTRICT_NANS = 23,
 
     //! Enable memory monitor during build time.
-    kMONITOR_MEMORY = 25,
+    kMONITOR_MEMORY = 24,
 
-    //! Enable plugins with FP4 input/output.
-    //! \deprecated Deprecated in TensorRT 10.12. Superseded by strong typing.
-    kFP4 TRT_DEPRECATED_ENUM = 26,
 
     //! Enable editable timing cache.
-    kEDITABLE_TIMING_CACHE = 27,
+    kEDITABLE_TIMING_CACHE = 26,
 
     //! Enable distributive independence.
     //! When BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE is set and a layer documents axis i of an output as a distributive
@@ -10638,7 +10111,7 @@ enum class BuilderFlag : int32_t
     //! All non-reduction axes are distributive axes.
     //! For layers that perform einsum:
     //! Let n be the leftmost reduction axis. The axes to the left of n are distributive axes.
-    kDISTRIBUTIVE_INDEPENDENCE = 28,
+    kDISTRIBUTIVE_INDEPENDENCE = 27,
 
 
 };
@@ -10649,10 +10122,10 @@ enum class BuilderFlag : int32_t
 //! \see BuilderFlag
 //!
 template <>
-constexpr inline int32_t EnumMax<BuilderFlag>() noexcept
+struct impl::EnumMaxImpl<BuilderFlag>
 {
-    return 29;
-}
+    static constexpr int32_t kVALUE = 28;
+};
 
 namespace v_1_0
 {
@@ -10707,7 +10180,7 @@ struct TimingCacheValue
 class ITimingCache : public INoCopy
 {
 public:
-    virtual ~ITimingCache() noexcept = default;
+    virtual ~ITimingCache() noexcept = 0;
 
     //!
     //! \brief Serialize a timing cache to IHostMemory object.
@@ -10819,6 +10292,8 @@ protected:
     apiv::VTimingCache* mImpl;
 };
 
+inline ITimingCache::~ITimingCache() noexcept = default;
+
 //!
 //! \enum MemoryPoolType
 //!
@@ -10830,9 +10305,8 @@ enum class MemoryPoolType : int32_t
 {
     //!
     //! kWORKSPACE is used by TensorRT to store intermediate buffers within an operation.
-    //! This defaults to max device memory. Set to a smaller value to restrict tactics that use over the
-    //! threshold en masse. For more targeted removal of tactics use the IAlgorithmSelector
-    //! interface.
+    //! This defaults to max device memory. Set to a smaller value to restrict tactics whose workspace usage
+    //! exceeds the threshold en masse.
     //!
     kWORKSPACE = 0,
 
@@ -10888,10 +10362,10 @@ enum class MemoryPoolType : int32_t
 //! \see MemoryPoolType
 //!
 template <>
-constexpr inline int32_t EnumMax<MemoryPoolType>() noexcept
+struct impl::EnumMaxImpl<MemoryPoolType>
 {
-    return 6;
-}
+    static constexpr int32_t kVALUE = 6;
+};
 
 //!
 //! \enum PreviewFeature
@@ -10904,47 +10378,28 @@ constexpr inline int32_t EnumMax<MemoryPoolType>() noexcept
 enum class PreviewFeature : int32_t
 {
     //!
-    //! Allows optimization profiles to be shared across execution contexts.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. The default value for this flag is on and can not be changed.
-    //!
-    kPROFILE_SHARING_0806 TRT_DEPRECATED_ENUM = 0,
-
-    //!
     //! Allows plugin I/O to be aliased when using IPluginV3OneBuildV2
     //!
-    kALIASED_PLUGIN_IO_10_03 = 1,
+    kALIASED_PLUGIN_IO_10_03 = 0,
 
     //!
     //! Allows IExecutionContext::updateDeviceMemorySizeForShapes to resize runner internal activation memory.
     //! Using this feature can reduce runtime memory requirement when the actual input tensor shapes are smaller than
     //! the maximum input tensor dimensions.
     //!
-    kRUNTIME_ACTIVATION_RESIZE_10_10 = 2,
-
-    //!
-    //! Enabling multi-device mode in TRT.
-    //! Allows building an engine that contains multi-device enabled nodes,
-    //! such as IDistCollective.
-    //!
-    //! \note: The preview flag must be set if there are any layers in the
-    //! INetworkDefinition that need multi-device capabilities. Otherwise, an engine cannot be built.
-    kMULTIDEVICE_RUNTIME_10_16 = 3
+    kRUNTIME_ACTIVATION_RESIZE_10_10 = 1,
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in PreviewFeature enum.
 //!
 //! \see PreviewFeature
 //!
 template <>
-struct EnumMaxImpl<PreviewFeature>
+struct impl::EnumMaxImpl<PreviewFeature>
 {
-    static constexpr int32_t kVALUE = 4;
+    static constexpr int32_t kVALUE = 2;
 };
-} // namespace impl
 
 //!
 //! \enum HardwareCompatibilityLevel
@@ -10984,19 +10439,16 @@ enum class HardwareCompatibilityLevel : int32_t
     kSAME_COMPUTE_CAPABILITY = 2,
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in HardwareCompatibilityLevel enum.
 //!
 //! \see HardwareCompatibilityLevel
 //!
 template <>
-struct EnumMaxImpl<HardwareCompatibilityLevel>
+struct impl::EnumMaxImpl<HardwareCompatibilityLevel>
 {
     static constexpr int32_t kVALUE = 3;
 };
-} // namespace impl
 
 
 //!
@@ -11024,19 +10476,16 @@ enum class TilingOptimizationLevel : int32_t
 
 };
 
-namespace impl
-{
 //!
 //! Maximum number of elements in TilingOptimizationLevel enum.
 //!
 //! \see TilingOptimizationLevel
 //!
 template <>
-struct EnumMaxImpl<TilingOptimizationLevel>
+struct impl::EnumMaxImpl<TilingOptimizationLevel>
 {
     static constexpr int32_t kVALUE = 4;
 };
-} // namespace impl
 
 namespace v_1_0
 {
@@ -11136,7 +10585,7 @@ using IProgressMonitor = v_1_0::IProgressMonitor;
 class IBuilderConfig : public INoCopy
 {
 public:
-    virtual ~IBuilderConfig() noexcept = default;
+    virtual ~IBuilderConfig() noexcept = 0;
 
     //!
     //! \brief Set the number of averaging iterations used when timing layers.
@@ -11186,28 +10635,6 @@ public:
     EngineCapability getEngineCapability() const noexcept
     {
         return mImpl->getEngineCapability();
-    }
-
-    //!
-    //! \brief Set Int8 Calibration interface.
-    //!
-    //! The calibrator is to minimize the information loss during the INT8 quantization process.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED void setInt8Calibrator(IInt8Calibrator* calibrator) noexcept
-    {
-        mImpl->setInt8Calibrator(calibrator);
-    }
-
-    //!
-    //! \brief Get Int8 Calibration interface.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED IInt8Calibrator* getInt8Calibrator() const noexcept
-    {
-        return mImpl->getInt8Calibrator();
     }
 
     //!
@@ -11471,143 +10898,16 @@ public:
     }
 
     //!
-    //! \brief Set Algorithm Selector.
-    //!
-    //! \param selector The algorithm selector to be set in the build config.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
-    //!
-    TRT_DEPRECATED void setAlgorithmSelector(IAlgorithmSelector* selector) noexcept
-    {
-        mImpl->setAlgorithmSelector(selector);
-    }
-
-    //!
-    //! \brief Get Algorithm Selector.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead.
-    //!
-    TRT_DEPRECATED IAlgorithmSelector* getAlgorithmSelector() const noexcept
-    {
-        return mImpl->getAlgorithmSelector();
-    }
-
-    //!
-    //! \brief Add a calibration profile.
-    //!
-    //! Calibration optimization profile must be set if int8 calibration is used to set scales for a network with
-    //! runtime dimensions.
-    //!
-    //! \param profile The new calibration profile, which must satisfy profile->isValid() == true or be nullptr.
-    //! MIN and MAX values will be overwritten by kOPT.
-    //!
-    //! \return True if the calibration profile was set correctly.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED bool setCalibrationProfile(IOptimizationProfile const* profile) noexcept
-    {
-        return mImpl->setCalibrationProfile(profile);
-    }
-
-    //!
-    //! \brief Get the current calibration profile.
-    //!
-    //! \return A pointer to the current calibration profile or nullptr if calibration profile is unset.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.1. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED IOptimizationProfile const* getCalibrationProfile() noexcept
-    {
-        return mImpl->getCalibrationProfile();
-    }
-
-    //!
-    //! \brief Set the quantization flags.
-    //!
-    //! The flags are listed in the QuantizationFlag enum.
-    //! The flags set configuration options to quantize the network in int8.
-    //!
-    //! \param flags The quantization flags.
-    //!
-    //! \note This function will override the previous set flags, rather than bitwise ORing the new flag.
-    //!
-    //! \see getQuantizationFlags()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED void setQuantizationFlags(QuantizationFlags flags) noexcept
-    {
-        mImpl->setQuantizationFlags(flags);
-    }
-
-    //!
-    //! \brief Get the quantization flags.
-    //!
-    //! \return The quantization flags as a bitmask.
-    //!
-    //! \see setQuantizationFlag()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED QuantizationFlags getQuantizationFlags() const noexcept
-    {
-        return mImpl->getQuantizationFlags();
-    }
-
-    //!
-    //! \brief clear a quantization flag.
-    //!
-    //! Clears the quantization flag from the enabled quantization flags.
-    //!
-    //! \see setQuantizationFlags()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED void clearQuantizationFlag(QuantizationFlag flag) noexcept
-    {
-        mImpl->clearQuantizationFlag(flag);
-    }
-
-    //!
-    //! \brief Set a single quantization flag.
-    //!
-    //! Add the input quantization flag to the already enabled quantization flags.
-    //!
-    //! \see setQuantizationFlags()
-    //!
-    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED void setQuantizationFlag(QuantizationFlag flag) noexcept
-    {
-        mImpl->setQuantizationFlag(flag);
-    }
-
-    //!
-    //! \brief Returns true if the quantization flag is set.
-    //!
-    //! \see getQuantizationFlags()
-    //!
-    //! \return True if quantization flag is set, false if unset.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.10. Superseded by explicit quantization.
-    //!
-    TRT_DEPRECATED bool getQuantizationFlag(QuantizationFlag flag) const noexcept
-    {
-        return mImpl->getQuantizationFlag(flag);
-    }
-
-    //!
     //! \brief Set tactic sources.
     //!
     //! This bitset controls which tactic sources TensorRT is allowed to use for tactic
     //! selection.
     //!
     //! Multiple tactic sources may be combined with a bitwise OR operation. For example,
-    //! to enable cublas and cublasLt as tactic sources, use a value of:
+    //! to enable edge mask convolutions and JIT convolutions as tactic sources, use a value of:
     //!
-    //! 1U << static_cast<uint32_t>(TacticSource::kCUBLAS) | 1U <<
-    //! static_cast<uint32_t>(TacticSource::kCUBLAS_LT)
+    //! 1U << static_cast<uint32_t>(TacticSource::kEDGE_MASK_CONVOLUTIONS) | 1U <<
+    //! static_cast<uint32_t>(TacticSource::kJIT_CONVOLUTIONS)
     //!
     //! \see getTacticSources
     //!
@@ -11901,13 +11201,15 @@ public:
     //! \note Using more auxiliary leads to more memory usage at runtime since some activation memory blocks will not
     //! be able to be reused.
     //!
-    //! \param nbStreams The maximum number of auxiliary streams that TRT is allowed to use.
+    //! \param nbStreams The maximum number of auxiliary streams that TRT is allowed to use. Must be non-negative.
+    //!
+    //! \return true if the value was set successfully, false if nbStreams is negative.
     //!
     //! \see getMaxAuxStreams(), ICudaEngine::getNbAuxStreams(), IExecutionContext::setAuxStreams()
     //!
-    void setMaxAuxStreams(int32_t nbStreams) noexcept
+    bool setMaxAuxStreams(int32_t nbStreams) noexcept
     {
-        mImpl->setMaxAuxStreams(nbStreams);
+        return mImpl->setMaxAuxStreams(nbStreams);
     }
 
     //!
@@ -12082,10 +11384,12 @@ protected:
     apiv::VBuilderConfig* mImpl;
 };
 
+inline IBuilderConfig::~IBuilderConfig() noexcept = default;
+
 //!
 //! \brief Represents one or more NetworkDefinitionCreationFlag flags
 //! using binary OR operations.
-//!  e.g., 1U << NetworkDefinitionCreationFlag::kSTRONGLY_TYPED
+//! e.g., 1U << NetworkDefinitionCreationFlag::kPREFER_JIT_PYTHON_PLUGINS
 //!
 //! \see IBuilder::createNetworkV2
 //!
@@ -12101,25 +11405,23 @@ using NetworkDefinitionCreationFlags = uint32_t;
 //!
 enum class NetworkDefinitionCreationFlag : int32_t
 {
-    //! Ignored because networks are always "explicit batch" in TensorRT 10.0.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0.
-    kEXPLICIT_BATCH TRT_DEPRECATED_ENUM = 0,
-
     //! Mark the network to be strongly typed.
     //! Every tensor in the network has a data type defined in the network following only type inference rules and the
     //! inputs/operator annotations. Setting layer precision and layer output types is not allowed, and the network
     //! output types will be inferred based on the input types and the type inference rules.
-    kSTRONGLY_TYPED = 1,
+    //!
+    //! \deprecated Deprecated in TensorRT 11.0. Strongly typed mode is always enabled.
+    //! This flag is retained for API compatibility but is ignored.
+    kSTRONGLY_TYPED TRT_DEPRECATED_ENUM = 0,
     //! If set, for a Python plugin with both AOT and JIT implementations, the JIT implementation will be used.
     //! Any plugin-specific JIT/AOT specification may override this.
     //! Cannot be used in conjunction with NetworkDefinitionCreationFlag::kPREFER_AOT_PYTHON_PLUGINS.
-    kPREFER_JIT_PYTHON_PLUGINS = 2,
+    kPREFER_JIT_PYTHON_PLUGINS = 1,
 
     //! If set, for a Python plugin with both AOT and JIT implementations, the AOT implementation will be used.
     //! Any plugin-specific JIT/AOT specification may override this.
     //! Cannot be used in conjunction with NetworkDefinitionCreationFlag::kPREFER_JIT_PYTHON_PLUGINS.
-    kPREFER_AOT_PYTHON_PLUGINS = 3,
+    kPREFER_AOT_PYTHON_PLUGINS = 2,
 };
 
 //!
@@ -12128,10 +11430,10 @@ enum class NetworkDefinitionCreationFlag : int32_t
 //! \see NetworkDefinitionCreationFlag
 //!
 template <>
-constexpr inline int32_t EnumMax<NetworkDefinitionCreationFlag>() noexcept
+struct impl::EnumMaxImpl<NetworkDefinitionCreationFlag>
 {
-    return 4;
-}
+    static constexpr int32_t kVALUE = 3;
+};
 
 //!
 //! \class IBuilder
@@ -12143,27 +11445,7 @@ constexpr inline int32_t EnumMax<NetworkDefinitionCreationFlag>() noexcept
 class IBuilder : public INoCopy
 {
 public:
-    virtual ~IBuilder() noexcept = default;
-
-    //!
-    //! \brief Determine whether the platform has fast native fp16.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.5. Please query data type support from CUDA directly.
-    //!
-    TRT_DEPRECATED bool platformHasFastFp16() const noexcept
-    {
-        return mImpl->platformHasFastFp16();
-    }
-
-    //!
-    //! \brief Determine whether the platform has fast native int8.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.5. Please query data type support from CUDA directly.
-    //!
-    TRT_DEPRECATED bool platformHasFastInt8() const noexcept
-    {
-        return mImpl->platformHasFastInt8();
-    }
+    virtual ~IBuilder() noexcept = 0;
 
     //!
     //! \brief Get the maximum batch size DLA can support.
@@ -12226,15 +11508,15 @@ public:
     //!
     //! CreateNetworkV2 supports dynamic shapes and explicit batch dimensions by default.
     //!
-    //! createNetworkV2 with NetworkDefinitionCreationFlag::kSTRONGLY_TYPED flag supports creating a strongly typed plan
-    //! where tensor data types are inferred from network input types and operator type specification.
+    //! The network is always strongly typed: tensor data types are inferred from network input types and
+    //! operator type specification. The kSTRONGLY_TYPED flag is deprecated and ignored.
     //!
     //! The caller owns the new INetworkDefinition, which must be destroyed with operator delete
     //! before this IBuilder is destroyed. Destroying this IBuilder before destroying the
     //! INetworkDefinition causes undefined behavior.
     //!
     //! \param flags Bitset of NetworkDefinitionCreationFlags specifying network properties combined with bitwise OR,
-    //!              e.g., 1U << NetworkDefinitionCreationFlag::kSTRONGLY_TYPED.
+    //!              e.g., 1U << NetworkDefinitionCreationFlag::kPREFER_JIT_PYTHON_PLUGINS.
     //!
     //! \see INetworkDefinition, NetworkDefinitionCreationFlags
     //!
@@ -12247,9 +11529,9 @@ public:
     //! \brief Create a new optimization profile.
     //!
     //! If the network has any dynamic input tensors, the appropriate calls to setDimensions() must be made.
-    //! Likewise, if there are any shape input tensors, the appropriate calls to setShapeValues() are required.
-    //! The builder retains ownership of the created optimization profile and returns a raw pointer, i.e. the users
-    //! must not attempt to delete the returned pointer.
+    //! Likewise, if there are any shape input tensors, the appropriate calls to \ref
+    //! IOptimizationProfile::setShapeValuesV2() are required. The builder retains ownership of the created optimization
+    //! profile and returns a raw pointer, i.e. the users must not attempt to delete the returned pointer.
     //!
     //! \see IOptimizationProfile
     //!
@@ -12298,16 +11580,6 @@ public:
     void reset() noexcept
     {
         mImpl->reset();
-    }
-
-    //!
-    //! \brief Determine whether the platform has TF32 support.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.5. Please query data type support from CUDA directly.
-    //!
-    TRT_DEPRECATED bool platformHasTf32() const noexcept
-    {
-        return mImpl->platformHasTf32();
     }
 
     //!
@@ -12474,6 +11746,8 @@ public:
 protected:
     apiv::VBuilder* mImpl;
 };
+
+inline IBuilder::~IBuilder() noexcept = default;
 
 } // namespace nvinfer1
 

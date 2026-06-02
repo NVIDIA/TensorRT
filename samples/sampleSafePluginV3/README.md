@@ -8,8 +8,8 @@
   * [Register safe plugin creator](#register-safe-plugin-creator)
 - [Prerequisites](#prerequisites)
 - [Running the sample](#running-the-sample)
-  * [Sample `--help` options](#sample---help-options)
-    * [When to use remoteAutoTuningConfig](#when-to-use-remoteautotuningconfig)
+  * [Tool command line arguments](#tool-command-line-arguments)
+  * [When to use remoteAutoTuningConfig](#when-to-use-remoteautotuningconfig)
 - [Shared plugin library and trtexec](#shared-plugin-library-and-trtexec)
   * [Creation of safety plugin library](#creation-of-safety-plugin-library)
   * [Using the plugin library with trtexec and trtexec\_safe](#using-the-plugin-library-with-trtexec-and-trtexec_safe)
@@ -76,7 +76,7 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
 
 4.  Run the sample to build a TensorRT safe engine.
 	```
-	./sample_plugin_safe_build [--datadir=/path/to/data/dir/] [--remoteAutoTuningConfig=<config>]
+	./sample_plugin_safe_build [--datadir=/path/to/data/dir/] [--remoteAutoTuningConfig=<config>] [--cpuOnly]
 	```
 
 	This sample generates `safe_plugin.engine`, which is a binary file that contains the serialized engine data.
@@ -175,36 +175,16 @@ See [Preparing sample data](../README.md#preparing-sample-data) in the main samp
     ```
 	This output shows that the sample ran successfully: `PASSED`.
 
+### Tool command line arguments
 
-### Sample `--help` options
+To see the full list of available options and their descriptions, use the `-h` or `--help` command line option.
 
-For builder, to see the full list of available options and their descriptions, use the `./sample_plugin_safe_build [-h or --help]` command.
+```bash
+sample_plugin_safe_build --help
+sample_plugin_safe_infer --help
+```
 
-**Note:** This sample supports long flags (e.g., `--help`, `--verbose`) and limited short flags (`-h`, `-v`, `-d`). Only explicitly whitelisted short flags are supported to avoid conflicts with negative numbers.
-
-    Usage: ./sample_plugin_safe_build [-h or --help] [-d or --datadir=<path to data directory>]
-    --help or -h    Display help information
-    --datadir or -d Specify path to a data directory, overriding the default. This option can be used multiple times to add multiple directories. If no data directories are given, the default is to use (data/samples/safe_plugin/, data/safe_plugin/)
-    --saveEngine    Save the serialized engine to the file, the default is to use safe_plugin.engine.
-    --remoteAutoTuningConfig  Set the remote auto tuning config. Format: protocol://username[:password]@hostname[:port]?param1=value1&param2=value2
-                    Example: ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib
-
-Rather than passing in their actual password on the command line, a user may instead use the password
-string "PROMPT" (without quotes) and they will be interactivly prompted for their password.
-This avoids having the password visible or stored in the shell history. This functionality is only
-supported on Linux x86 -- the remote autotuning flow runs autotuning on an x86 Linux host
-which communicates over SSH to the aarch64 QNX machine.
-
-NOTE: The current implementation only supports username/password authentication. However, adding SSH 
-key support would be feasible given that the code is built around SSH.
-
-For inference, to see the full list of available options and their descriptions, use the `./sample_plugin_safe_infer [-h or --help]` command.
-
-    Usage: ./sample_plugin_safe_infer [-h or --help] [-d or --datadir=<path to data directory>]
-    --help          Display help information
-    --loadEngine    Load the serialized engine to the file, the default is to use safe_plugin.engine.
-
-#### When to use remoteAutoTuningConfig
+### When to use remoteAutoTuningConfig
 
 The `--remoteAutoTuningConfig` parameter is designed for **cross-platform development scenarios** where you need to:
 
@@ -212,11 +192,22 @@ The `--remoteAutoTuningConfig` parameter is designed for **cross-platform develo
 - **Build on Host Platform**: Compile and build TensorRT engines on a development machine (e.g., Linux x86_64)
 - **Auto-tune on Target Platform**: Perform kernel auto-tuning on the actual deployment target (e.g., QNX aarch64)
 
+Use `--cpuOnly` with `--remoteAutoTuningConfig` to build the engine without a local GPU on the build host:
+```bash
+./sample_plugin_safe_build --remoteAutoTuningConfig=<config> --cpuOnly
+```
+
 **Typical Scenarios:**
 - **QNX Development**: Building engines on Linux development machines but deploying on QNX automotive platforms
 
 **Important Technical Limitation:**
 - **QNX Safety Devices**: QNX safety platforms do **NOT** support engine building operations. All engine construction must be performed on development platforms (Linux/QNX standard), making remote auto-tuning essential for safety deployments.
+
+**Security Consideration:**
+- Use `PROMPT` as password on the command line in order to be interactively prompted for the password.
+  This avoids leaking the password into the shell history. This functionality is only supported on
+  Linux x86 -- the remote autotuning flow runs autotuning on an x86 Linux host which communicates
+  over SSH to the aarch64 QNX machine.
 
 ## Shared plugin library and trtexec
 
@@ -270,6 +261,9 @@ This sample was updated for the TRT 10.13.1 safety release.
 
 Dec. 2025
 This sample was updated to use the CMake-based build system.
+
+Apr. 2026
+This sample was updated to add the `--cpuOnly` build option for remote auto-tuning workflows without requiring a local GPU on the build host.
 
 ## Known issues
 

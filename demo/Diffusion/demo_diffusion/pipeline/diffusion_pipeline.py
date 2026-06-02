@@ -595,6 +595,39 @@ class DiffusionPipeline(ABC):
         # Native export is supported by default
         return True
 
+    @staticmethod
+    def _fix_bf16_resize_nodes(onnx_opt_path):
+        """Cast Resize node I/O for strongly-typed TRT engine builds.
+        TRT does not support BF16 for the Resize operator, so inputs are
+        cast to FP32 and outputs are cast back to BF16."""
+        import onnx
+        import onnx_graphsurgeon as gs
+        from demo_diffusion.model import load
+        from demo_diffusion.utils_modelopt import cast_resize_io
+
+        onnx_graph = onnx.load(onnx_opt_path, load_external_data=True)
+        graph = gs.import_onnx(onnx_graph)
+
+        resize_nodes = [n for n in graph.nodes if n.op == "Resize"]
+        if not resize_nodes:
+            return
+
+        print(f"[I] Fixing {len(resize_nodes)} BF16 Resize node(s) in downloaded model: {onnx_opt_path}")
+        cast_resize_io(graph, output_dtype=onnx.TensorProto.BFLOAT16)
+        graph.cleanup().toposort()
+        onnx_graph = gs.export_onnx(graph)
+
+        if load.onnx_graph_needs_external_data(onnx_graph):
+            onnx.save_model(
+                onnx_graph,
+                onnx_opt_path,
+                save_as_external_data=True,
+                all_tensors_to_one_file=True,
+                convert_attribute=False,
+            )
+        else:
+            onnx.save(onnx_graph, onnx_opt_path)
+
     def _export_onnx(
         self,
         obj,
@@ -620,11 +653,15 @@ class DiffusionPipeline(ABC):
         if do_export_onnx:
             if download_onnx_models:
                 self.download_onnx_models(model_name, model_config)
+                # Fix Resize nodes for strongly-typed TRT builds.
+                # Downloaded models bypass optimize(), so apply the fix here.
+                if obj.bf16:
+                    self._fix_bf16_resize_nodes(model_config['onnx_opt_path'])
                 do_export_onnx = False
             else:
                 self.is_native_export_supported(model_config)
 
-        dynamo = True if (self.pipeline_type.is_video2world() and model_name == "transformer") or (self.pipeline_type.is_txt2vid() and (model_name in ["transformer", "transformer_2"])) else False
+        dynamo = True if (self.pipeline_type.is_video2world() and model_name == "transformer") or (self.pipeline_type.is_txt2vid() and (model_name in ["transformer", "transformer_2"])) or (self.version.startswith("flux.1") and model_name == "transformer" and obj.fp16) else False
         
         export_kwargs = {
             "static_shape": static_shape,
@@ -675,13 +712,9 @@ class DiffusionPipeline(ABC):
 
     def _build_engine(self, obj, engine, model_config, opt_batch_size, opt_image_height, opt_image_width, optimization_level, static_batch, static_shape, enable_all_tactics, timing_cache):
         update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
-        fp16amp = False if (model_config['use_fp8'] or getattr(obj, 'build_strongly_typed', False)) else obj.fp16
         tf32amp = obj.tf32
-        bf16amp = False if (model_config['use_fp8'] or getattr(obj, 'build_strongly_typed', False)) else obj.bf16
-        strongly_typed = True if (model_config['use_fp8'] or getattr(obj, 'build_strongly_typed', False)) else False
         weight_streaming = getattr(obj, 'weight_streaming', False)
-        int8amp = model_config.get('use_int8', False)
-        precision_constraints = 'prefer' if int8amp else 'none'
+        precision_constraints = 'none'
         input_profile = obj.get_input_profile(
             opt_batch_size, opt_image_height, opt_image_width, 
             static_batch=static_batch, static_shape=static_shape,
@@ -690,11 +723,7 @@ class DiffusionPipeline(ABC):
         
         engine.build(
             model_config["onnx_opt_path"],
-            strongly_typed=strongly_typed,
-            fp16=fp16amp,
             tf32=tf32amp,
-            bf16=bf16amp,
-            int8=int8amp,
             input_profile=input_profile,
             enable_refit=model_config["do_engine_refit"],
             enable_all_tactics=enable_all_tactics,
@@ -884,7 +913,7 @@ class DiffusionPipeline(ABC):
         for model_name, engine in self.engine.items():
             if self.low_vram:
                 engine.load()
-            max_device_memory = max(max_device_memory, engine.engine.device_memory_size)
+            max_device_memory = max(max_device_memory, engine.engine.device_memory_size_v2)
             if self.low_vram:
                 engine.unload()
         return max_device_memory
@@ -893,7 +922,7 @@ class DiffusionPipeline(ABC):
         device_memory_sizes = {}
         for model_name, engine in self.engine.items():
             engine.load()
-            device_memory_sizes[model_name] = engine.engine.device_memory_size
+            device_memory_sizes[model_name] = engine.engine.device_memory_size_v2
             engine.unload()
         return device_memory_sizes
 

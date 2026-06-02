@@ -20,8 +20,6 @@
 
 #include "NvInfer.h"
 #include <stddef.h>
-#include <string>
-#include <vector>
 
 //!
 //! \file NvOnnxParser.h
@@ -35,22 +33,6 @@
 
 static constexpr int32_t NV_ONNX_PARSER_VERSION
     = ((NV_ONNX_PARSER_MAJOR * 10000) + (NV_ONNX_PARSER_MINOR * 100) + NV_ONNX_PARSER_PATCH);
-
-//!
-//! \typedef SubGraph_t
-//!
-//! \brief The data structure containing the parsing capability of
-//! a set of nodes in an ONNX graph.
-//!
-typedef std::pair<std::vector<size_t>, bool> SubGraph_t;
-
-//!
-//! \typedef SubGraphCollection_t
-//!
-//! \brief The data structure containing all SubGraph_t partitioned
-//! out of an ONNX graph.
-//!
-typedef std::vector<SubGraph_t> SubGraphCollection_t;
 
 //!
 //! \namespace nvonnxparser
@@ -134,7 +116,7 @@ enum class OnnxParserFlag : int32_t
 template <>
 constexpr int32_t EnumMax<OnnxParserFlag>() noexcept
 {
-    return 5;
+    return 4;
 }
 
 //!
@@ -235,39 +217,7 @@ public:
     //! \return true if the model was parsed successfully
     //!
     //!
-    virtual bool parseFromFile(const char* onnxModelFile, int verbosity) noexcept = 0;
-
-    //!
-    //! [DEPRECATED] Deprecated in TensorRT 10.1. See supportsModelV2.
-    //!
-    //! \brief Check whether TensorRT supports a particular ONNX model.
-    //!        If the function returns True, one can proceed to engine building
-    //!        without having to call \p parse or \p parseFromFile.
-    //!
-    //! \param serialized_onnx_model Pointer to the serialized ONNX model. Can be freed after this function returns.
-    //! \param serialized_onnx_model_size Size of the serialized ONNX model
-    //!        in bytes
-    //! \param sub_graph_collection Container to hold supported subgraphs
-    //! \param model_path Absolute path to the model file for loading external weights if required
-    //! \return true if the model is supported
-    //!
-    TRT_DEPRECATED virtual bool supportsModel(void const* serialized_onnx_model, size_t serialized_onnx_model_size,
-        SubGraphCollection_t& sub_graph_collection, const char* model_path = nullptr) noexcept = 0;
-
-    //!
-    //! [DEPRECATED] Deprecated in TensorRT 10.13. See loadInitializer().
-    //!
-    //!\brief Parse a serialized ONNX model into the TensorRT network
-    //! with consideration of user provided weights
-    //!
-    //! \param serialized_onnx_model Pointer to the serialized ONNX model. Can be freed after this function returns.
-    //! \param serialized_onnx_model_size Size of the serialized ONNX model
-    //!        in bytes
-    //! \return true if the model was parsed successfully
-    //! \see getNbErrors() getError()
-    //!
-    TRT_DEPRECATED virtual bool parseWithWeightDescriptors(
-        void const* serialized_onnx_model, size_t serialized_onnx_model_size) noexcept = 0;
+    virtual bool parseFromFile(char const* onnxModelFile, int verbosity) noexcept = 0;
 
     //!
     //!\brief Returns whether the specified operator may be supported by the
@@ -318,7 +268,7 @@ public:
     //! \param[out] nbPluginLibs Returns the number of plugin libraries in the array, or -1 if there was an error.
     //! \return Array of `nbPluginLibs` C-strings describing plugin library paths on the filesystem if nbPluginLibs > 0,
     //! or nullptr otherwise.  This array is owned by the IParser, and the pointers in the array are only valid until
-    //! the next call to parse(), supportsModel(), parseFromFile(), or parseWithWeightDescriptors().
+    //! the next call to parse() or parseFromFile().
     //!
     virtual char const* const* getUsedVCPluginLibraries(int64_t& nbPluginLibs) const noexcept = 0;
 
@@ -432,8 +382,8 @@ public:
     virtual int64_t* getSubgraphNodes(int64_t const index, int64_t& subgraphLength) noexcept = 0;
 
     //!
-    //! \brief Load a serialized ONNX model into the parser. Unlike the parse(), parseFromFile(), or
-    //! parseWithWeightDescriptors() functions, this function does not immediately convert the model into a TensorRT
+    //! \brief Load a serialized ONNX model into the parser. Unlike the parse() or parseFromFile()
+    //! functions, this function does not immediately convert the model into a TensorRT
     //! INetworkDefinition. Using this function allows users to provide their own initializers for the ONNX model
     //! through the loadInitializer() function.
     //!

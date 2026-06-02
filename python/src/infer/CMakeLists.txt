@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,8 +25,6 @@ cmake_language(CALL ${ADD_SOURCES_FUNCTION}
 # These sources are omitted from the lean/dispatch runtime bindings.
 if(${TRT_PYTHON_IS_FULL_BINDINGS})
     cmake_language(CALL ${ADD_SOURCES_FUNCTION}
-        pyAlgorithmSelector.cpp
         pyGraph.cpp
-        pyInt8.cpp
     )
 endif()

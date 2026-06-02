@@ -25,6 +25,7 @@
 #include <memory>
 #include <numeric>
 #include <stdexcept>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace nvinfer1::plugin;
@@ -33,6 +34,7 @@ REGISTER_TENSORRT_PLUGIN(DisentangledAttentionPluginCreatorLegacy);
 
 namespace
 {
+using namespace std::string_view_literals;
 constexpr char const* kDEBERTA_PLUGIN_NAME{"DisentangledAttention_TRT"};
 constexpr char const* kDEBERTA_PLUGIN_VERSION{"1"};
 } // namespace
@@ -329,12 +331,12 @@ IPluginV2DynamicExt* DisentangledAttentionPluginCreatorLegacy::createPlugin(
         float factor = 0.F;
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string fieldName = fc->fields[i].name;
-            if (fieldName.compare("span") == 0)
+            std::string_view const fieldName = fc->fields[i].name;
+            if (fieldName == "span"sv)
             {
                 span = *static_cast<int32_t const*>(fc->fields[i].data);
             }
-            if (fieldName.compare("factor") == 0)
+            if (fieldName == "factor"sv)
             {
                 factor = *static_cast<float const*>(fc->fields[i].data);
             }

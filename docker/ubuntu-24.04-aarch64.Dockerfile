@@ -20,7 +20,7 @@ ARG CUDA_VERSION=13.2.0
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
-ENV TRT_VERSION 10.16.1.11
+ENV TRT_VERSION 11.0.0.114
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account and edit default account
@@ -64,7 +64,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libnccl2 \
     libnccl-dev \
     openmpi-bin \
-    libopenmpi-dev
+    libopenmpi-dev \
+    zstd \
+    ccache
 
 # Install python3
 RUN apt-get install -y --no-install-recommends \
@@ -83,15 +85,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.1/tars/TensorRT-10.16.1.11.Linux.aarch64-gnu.cuda-13.2.tar.gz \
-    && tar -xf TensorRT-10.16.1.11.Linux.aarch64-gnu.cuda-13.2.tar.gz \
-    && cp -a TensorRT-10.16.1.11/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-10.16.1.11/python/tensorrt-10.16.1.11-cp312-none-linux_aarch64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/tars/TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-13.2-Release-external.tar.zst \
+    && tar -xf TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-13.2-Release-external.tar.zst \
+    && cp -a TensorRT-11.0.0.114/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-11.0.0.114/python/tensorrt-11.0.0.114-cp312-none-linux_aarch64.whl ;\
     elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.1/tars/TensorRT-10.16.1.11.Linux.aarch64-gnu.cuda-12.9.tar.gz \
-    && tar -xf TensorRT-10.16.1.11.Linux.aarch64-gnu.cuda-12.9.tar.gz \
-    && cp -a TensorRT-10.16.1.11/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-10.16.1.11/python/tensorrt-10.16.1.11-cp312-none-linux_aarch64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/tars/TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
+    && tar -xf TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
+    && cp -a TensorRT-11.0.0.114/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-11.0.0.114/python/tensorrt-11.0.0.114-cp312-none-linux_aarch64.whl ;\
     else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \
@@ -99,10 +101,20 @@ RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
 
 # Install Cmake
 RUN cd /tmp && \
-    wget https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-linux-aarch64.sh && \
-    chmod +x cmake-3.27.9-linux-aarch64.sh && \
-    ./cmake-3.27.9-linux-aarch64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
-    rm ./cmake-3.27.9-linux-aarch64.sh
+    wget https://github.com/Kitware/CMake/releases/download/v3.31.11/cmake-3.31.11-linux-aarch64.sh && \
+    chmod +x cmake-3.31.11-linux-aarch64.sh && \
+    ./cmake-3.31.11-linux-aarch64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
+    rm ./cmake-3.31.11-linux-aarch64.sh
+
+# Install gtest
+RUN cd /tmp && \
+    git clone https://github.com/google/googletest.git -b v1.14.0 && \
+    cd googletest && \
+    mkdir build && cd build && \
+    cmake .. && \
+    make -j4 && \
+    make install && \
+    rm -rf /tmp/googletest
 
 # Install PyPI packages
 RUN pip3 install --upgrade pip

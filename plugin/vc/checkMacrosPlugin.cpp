@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,27 +23,28 @@
 namespace nvinfer1::plugin
 {
 
-// This will be populated by the logger supplied by the user to initLibNvInferPlugins()
+// Populated by the logger supplied to initLibNvInferPlugins(). TRT-RTX statically links plugin
+// code and may not call initLibNvInferPlugins, so LogStream::sync() falls back
+// to the runtime's ILogger* (via the global ::getLogger()) when this is null.
 ILogger* gLogger{};
 
 template <ILogger::Severity tSeverity>
 int32_t LogStream<tSeverity>::Buf::sync()
 {
-    std::string s = str();
-    while (!s.empty() && s.back() == '\n')
+    ILogger* logger = gLogger;
+    if (logger != nullptr)
     {
-        s.pop_back();
-    }
-    if (gLogger != nullptr)
-    {
-        gLogger->log(tSeverity, s.c_str());
+        std::string s = std::move(*this).str();
+        while (!s.empty() && s.back() == '\n')
+        {
+            s.pop_back();
+        }
+        logger->log(tSeverity, s.c_str());
     }
     str("");
     return 0;
 }
 
-// These use gLogger, and therefore require initLibNvInferPlugins() to be called with a logger
-// (otherwise, it will not log)
 LogStream<ILogger::Severity::kERROR> gLogError;
 LogStream<ILogger::Severity::kWARNING> gLogWarning;
 LogStream<ILogger::Severity::kINFO> gLogInfo;

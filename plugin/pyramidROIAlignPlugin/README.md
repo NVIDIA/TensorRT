@@ -1,4 +1,6 @@
-# PyramidROIAlign
+# PyramidROIAlign [DEPRECATED]
+
+**This plugin is deprecated since TensorRT 11.0 and will be removed in a future release. No alternatives are planned to be provided.**
 
 **Table Of Contents**
 - [Changelog](#changelog)
@@ -11,6 +13,9 @@
 - [Known issues](#known-issues)
 
 ## Changelog
+
+Mar 2026
+Deprecated this plugin. No alternatives are planned to be provided.
 
 February 2022
 Major refactoring of the plugin to add new features and compatibility modes.
@@ -28,7 +33,7 @@ The `PyramidROIAlign` plugin performs the ROIAlign operations on the output feat
 
 This plugin works in NCHW format. It takes five input tensors:
 
-`rois` is the proposal ROI coordinates, these usually come from a Proposals layer or an NMS operation, such as the [EfficientNMS](https://github.com/NVIDIA/TensorRT/tree/main/plugin/efficientNMSPlugin) plugin. Its shape is `[N, R, 4]` where `N` is the batch_size, `R` is the number of ROI candidates and `4` is the number of coordinates.
+`rois` is the proposal ROI coordinates, these usually come from a Proposals layer or an NMS operation. Its shape is `[N, R, 4]` where `N` is the batch_size, `R` is the number of ROI candidates and `4` is the number of coordinates.
 
 `feature_map_[0-3]` are the four feature map outputs of an FPN. It is expected these to form a multi-scale pyramid, with the 0th feature map being the highest resolution map. For example:
 - `feature_map_0` with shape `[N, C, 256, 256]`, usually corresponds to `P2`.

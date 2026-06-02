@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include <cstring>
+#include <string_view>
 
 #include "NvInferSafePlugin.h"
 #include "NvInferSafeRuntime.h"
@@ -26,7 +26,8 @@
 extern "C" __attribute__((visibility("default"))) IPluginCreatorInterface* getSafetyPluginCreator(
     char const* pluginNamespace, char const* pluginName)
 {
-    if (strcmp(pluginName, "MaxPoolPlugin") == 0 && strcmp(pluginNamespace, "") == 0)
+    using namespace std::string_view_literals;
+    if (pluginName == "MaxPoolPlugin"sv && pluginNamespace == ""sv)
     {
         auto creator = std::make_unique<nvinfer1::plugin::MaxPoolRuntimeCreator>();
         return creator.release();

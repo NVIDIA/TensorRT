@@ -14,9 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
-
-add_executable(trtexec trtexec.cpp)
+add_executable(trtexec trtexec_main.cpp trtexec.cpp)
 target_link_libraries(trtexec PRIVATE trt_samples_common)
 if (TRT_BUILD_SAMPLES)
     add_dependencies(tensorrt_samples trtexec)
@@ -58,7 +56,7 @@ set_target_properties(trtexec
 
 # In this mode, we build an additional binary trtexec_static that always links tensorrt_static.
 if(${TRT_BUILD_TRTEXEC_STATIC})
-    add_executable(trtexec_static trtexec.cpp)
+    add_executable(trtexec_static trtexec_main.cpp trtexec.cpp)
     target_link_libraries(trtexec_static PRIVATE trt_samples_common)
     if (TRT_BUILD_SAMPLES)
         add_dependencies(tensorrt_samples trtexec_static)
@@ -82,22 +80,3 @@ if(${TRT_BUILD_TRTEXEC_STATIC})
     endif()
 endif()
 
-
-else() # TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW - old flow below.
-
-set(SAMPLE_SOURCES
-    ../common/sampleDevice.cpp
-    ../common/sampleEngines.cpp
-    ../common/sampleInference.cpp
-    ../common/sampleOptions.cpp
-    ../common/sampleReporting.cpp
-    ../common/sampleUtils.cpp
-    ../common/bfloat16.cpp
-    ../common/debugTensorWriter.cpp
-    trtexec.cpp)
-
-set(SAMPLE_PARSERS "onnx")
-
-include(../CMakeSamplesTemplate.txt)
-
-endif()

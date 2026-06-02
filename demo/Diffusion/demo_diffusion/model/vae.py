@@ -64,6 +64,7 @@ class VAEModel(base_model.BaseModel):
             bf16=bf16,
             max_batch_size=max_batch_size,
         )
+        self.do_constant_folding = False
         self.subfolder = "vae"
         self.vae_decoder_model_dir = load.get_checkpoint_dir(
             self.framework_model_dir, self.version, self.pipeline, self.subfolder

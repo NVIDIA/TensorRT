@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,13 +41,9 @@ private:
     std::string mImageFilename;
     std::string mReferenceFilename;
     std::string mOutputFilename;
-    std::string mCalibrationFilename;
     std::string mTimingCacheFilename;
     int64_t mLabel{-1};
     int64_t mMaxBatchSize{32};
-    int64_t mCalibBatchSize{0};
-    int64_t mMaxNCalibBatch{0};
-    int64_t mFirstCalibBatch{0};
     int64_t mUseDLACore{-1};
     nvinfer1::DataType mModelDtype{nvinfer1::DataType::kFLOAT};
     bool mTF32{true};
@@ -180,33 +176,6 @@ public:
         return mMaxBatchSize;
     } //!<  get the Max Batch Size
 
-    void setCalibBatchSize(int64_t CalibBatchSize) noexcept
-    {
-        mCalibBatchSize = CalibBatchSize;
-    } //!<  set the calibration batch size
-    int64_t getCalibBatchSize() const noexcept
-    {
-        return mCalibBatchSize;
-    } //!<  get calibration batch size
-
-    void setMaxNCalibBatch(int64_t MaxNCalibBatch) noexcept
-    {
-        mMaxNCalibBatch = MaxNCalibBatch;
-    } //!<  set Max Number of Calibration Batches
-    int64_t getMaxNCalibBatch() const noexcept
-    {
-        return mMaxNCalibBatch;
-    } //!<  get the Max Number of Calibration Batches
-
-    void setFirstCalibBatch(int64_t FirstCalibBatch) noexcept
-    {
-        mFirstCalibBatch = FirstCalibBatch;
-    } //!<  set the first calibration batch
-    int64_t getFirstCalibBatch() const noexcept
-    {
-        return mFirstCalibBatch;
-    } //!<  get the first calibration batch
-
     void setUseDLACore(int64_t UseDLACore) noexcept
     {
         mUseDLACore = UseDLACore;
@@ -258,15 +227,6 @@ public:
     void setOutputFileName(const char* outputFilename) noexcept //!<  get the output file name
     {
         mOutputFilename = std::string(outputFilename);
-    }
-
-    const char* getCalibrationFileName() const noexcept
-    {
-        return mCalibrationFilename.c_str();
-    } //!<  specifies the file containing the list of image files for int8 calibration
-    void setCalibrationFileName(const char* calibrationFilename) noexcept //!<  get the int 8 calibration list file name
-    {
-        mCalibrationFilename = std::string(calibrationFilename);
     }
 
     uint64_t getTopK() const noexcept

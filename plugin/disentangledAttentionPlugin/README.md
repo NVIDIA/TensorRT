@@ -11,6 +11,9 @@
   - [Changelog](#changelog)
 
 ## Description
+
+> NOTE: Version 1 of this plugin (using IPluginV2DynamicExt interface) is deprecated since TensorRT 10.11. Version 2 (using IPluginV3 interface) is the recommended replacement.
+
 This TensorRT plugin implements an efficient algorithm to perform the calculation of disentangled attention matrices for DeBERTa-variant types of Transformers.
 
 Unlike [BERT](https://arxiv.org/abs/1810.04805) where each word is represented by one vector that sums the content embedding and position embedding, [DeBERTa](https://arxiv.org/abs/2006.03654) design first proposed the concept of disentangled attention, which uses two vectors to encode content and position respectively and forms attention weights by summing disentangled matrices. Performance gap has been identified between the new attention scheme and the original self-attention, mainly due to extra indexing and gather operations. Major optimizations implemented in this plugin includes: (i) fusion of gather and pointwise operations (ii) utilizing the pattern of relative position matrix and shortcuting out-of-boundary index calculation (iii) parallel index calculation (iv) log tables for relative position index calculation (used for DeBERTa-V2, enabling capture of long-range dependencies without significantly increasing the number of position embeddings).

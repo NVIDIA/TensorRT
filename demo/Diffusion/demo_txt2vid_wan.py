@@ -49,6 +49,13 @@ def parseArgs():
         ),
         help="Negative prompt (Wan team default, English translation)"
     )
+    parser.add_argument(
+        "--onnx-opset",
+        type=int,
+        default=23,
+        choices=range(7, 24),
+        help="Select ONNX opset version to target for exported models",
+    )
     return parser.parse_args()
 
 

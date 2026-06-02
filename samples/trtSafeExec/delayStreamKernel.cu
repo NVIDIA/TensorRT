@@ -17,23 +17,33 @@
 
 #include "delayStreamKernel.h"
 
+#include <tuple>
+
+#ifndef TRT_SAFETY_INFERENCE_ONLY
 namespace
 {
 __global__ void delayKernel(long long nanoSeconds)
 {
     // It is supported with compute capability 7.0 or higher.
     __nanosleep(nanoSeconds);
-} // anonymous namespace
-
+}
 } // namespace
+#endif // TRT_SAFETY_INFERENCE_ONLY
 
 namespace nvinfer1
 {
-cudaError_t delayStream(
-    cudaStream_t stream, float timeInMsec) noexcept
+cudaError_t delayStream(cudaStream_t stream, float timeInMsec) noexcept
 {
+#ifndef TRT_SAFETY_INFERENCE_ONLY
     auto nanoSeconds = static_cast<long long>(1000000 * timeInMsec);
     delayKernel<<<1, 1, 0, stream>>>(nanoSeconds);
     return cudaGetLastError();
+#else
+    // QNX SafeCUDA does not support PTX JIT or __cudaLaunchKernel; the delay is
+    // optional timing-measurement padding and has no effect on inference correctness.
+    std::ignore = stream;
+    std::ignore = timeInMsec;
+    return cudaSuccess;
+#endif // TRT_SAFETY_INFERENCE_ONLY
 }
-}
+} // namespace nvinfer1

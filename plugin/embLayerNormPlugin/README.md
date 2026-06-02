@@ -12,6 +12,8 @@
 
 ## Description
 
+> NOTE: Versions 1-3 of this plugin (using IPluginV2DynamicExt interface) are deprecated and will be removed in a future release. Versions 4-6 (using IPluginV3 interface) are the recommended replacements.
+
 The plugin performs the following two tasks:
 1. Embeds an input sequence consisting of token ids and segment ids. This consists of token embedding lookup, segment embedding lookup, adding positional embeddings and finally, layer normalization.
 

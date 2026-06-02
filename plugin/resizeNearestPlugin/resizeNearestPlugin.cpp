@@ -20,6 +20,7 @@
 #include <cuda_runtime_api.h>
 #include <iostream>
 #include <memory>
+#include <string_view>
 
 #define DEBUG 0
 
@@ -62,12 +63,13 @@ IPluginV2Ext* ResizeNearestPluginCreator::createPlugin(char const* name, PluginF
 {
     try
     {
+        using namespace std::string_view_literals;
         plugin::validateRequiredAttributesExist({"scale"}, fc);
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "scale"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "scale"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mScale = *(static_cast<float const*>(fields[i].data));
@@ -252,19 +254,6 @@ DataType ResizeNearest::getOutputDataType(
 
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool ResizeNearest::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool ResizeNearest::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
 }
 
 // Configure the layer with input and output data types.

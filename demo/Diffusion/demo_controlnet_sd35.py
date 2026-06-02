@@ -109,7 +109,7 @@ def process_demo_args(args):
         raise ValueError(f"`--controlnet-scale` must be of type `float`, but is {type(args.controlnet_scale)}")
 
     # Convert controlnet scales to tensor
-    controlnet_scale = torch.FloatTensor([args.controlnet_scale])
+    controlnet_scale = torch.tensor(args.controlnet_scale)
 
     # Check images
     input_images = []

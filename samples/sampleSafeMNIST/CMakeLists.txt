@@ -45,17 +45,14 @@ endif()
 add_executable(sample_mnist_safe_infer sampleSafeMNISTInfer.cpp)
 
 if(TRT_SAFETY_INFERENCE_ONLY)
-    target_link_libraries(sample_mnist_safe_infer PRIVATE trt_global_definitions)
+    target_link_libraries(sample_mnist_safe_infer PRIVATE trt_global_definitions tensorrt_headers)
     target_include_directories(sample_mnist_safe_infer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../common
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     )
     # Explicitly link CTK libraries
-    if(CUDA_TOOLKIT_ROOT_DIR)
+    if(CUDAToolkit_LIBRARY_DIR)
         target_link_directories(sample_mnist_safe_infer PRIVATE
-            ${CUDA_TOOLKIT_ROOT_DIR}/lib64
-            ${CUDA_TOOLKIT_ROOT_DIR}/lib
-            ${CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/lib
+            ${CUDAToolkit_LIBRARY_DIR}
         )
     endif()
 else()

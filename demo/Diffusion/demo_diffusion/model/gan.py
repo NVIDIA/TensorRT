@@ -106,6 +106,12 @@ class VQGANModel(base_model.BaseModel):
         dtype = torch.float16 if self.fp16 else torch.bfloat16 if self.bf16 else torch.float32
         return torch.randn(batch_size, 4, latent_height, latent_width, dtype=dtype, device=self.device)
 
+    def optimize(self, onnx_graph, return_onnx=True, **kwargs):
+        onnx_opt_graph = super().optimize(onnx_graph, return_onnx=True, **kwargs)
+        opt = optimizer.Optimizer(onnx_opt_graph, verbose=self.verbose, version=self.version)
+        opt.cast_convtranspose_io()
+        return opt.cleanup(return_onnx=return_onnx)
+
     def check_dims(self, batch_size, image_height, image_width):
         latent_height, latent_width = super().check_dims(batch_size, image_height, image_width)
         latent_height = int(latent_height * self.latent_dim_scale)

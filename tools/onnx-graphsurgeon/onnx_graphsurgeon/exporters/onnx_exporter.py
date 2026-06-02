@@ -55,6 +55,7 @@ def dtype_to_onnx(dtype: Union[np.dtype, "onnx.TensorProto.DataType"]) -> int:
             np.dtype(ml_dtypes.float8_e5m2fnuz): "FLOAT8E5M2FNUZ",
             np.dtype(ml_dtypes.uint4): "UINT4",
             np.dtype(ml_dtypes.int4): "INT4",
+            np.dtype(ml_dtypes.float4_e2m1fn) : "FLOAT4E2M1"
         }
         onnx_name = ml_dtype_to_onnx_name.get(dtype)
         if onnx_name:
@@ -166,6 +167,11 @@ def constant_to_onnx_tensor(tensor: Constant) -> onnx.TensorProto:
         )
         arr = _NUMPY_ARRAY_CONVERTERS[target_dtype](tensor.values)
         tensor_raw_bytes = arr.tobytes()
+
+    # Fp4 gets doubled in size upon importing into numpy, we need to run it through
+    # ONNX's packer to half the byte size again
+    elif source_dtype == target_dtype and source_dtype == onnx.TensorProto.FLOAT4E2M1:
+        tensor_raw_bytes = onnx.numpy_helper.tobytes_little_endian(onnx.numpy_helper._pack_4bitx2(tensor.values))
     else:
         tensor_raw_bytes = tensor.values.tobytes()
 

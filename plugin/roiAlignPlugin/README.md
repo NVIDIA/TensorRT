@@ -11,6 +11,8 @@
 
 ## Description
 
+> NOTE: Version 1 of this plugin (using IPluginV2DynamicExt interface) is deprecated since TensorRT 10.12. Version 2 (using IPluginV3 interface) is the recommended replacement.
+
 The ROIAlign plugin implements the Region of Interest (RoI) align operation described in the [Mask R-CNN paper](https://arxiv.org/abs/1703.06870), in compliance with the [ONNX specification for the same](https://github.com/onnx/onnx/blob/main/docs/Operators.md#RoiAlign) (insofar as TRT limitations allow).  
 
 ### Structure

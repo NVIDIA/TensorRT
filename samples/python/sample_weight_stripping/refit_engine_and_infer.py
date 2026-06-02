@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -117,6 +117,7 @@ def main(args):
     # probability that the image corresponds to that label
     
     # Use context manager for proper stream lifecycle management - Normal engine
+    trt_outputs = []
     with common.CudaStreamContext() as stream:
         start_time = time.time()
         for i in range(100): # count time for 100 times of inference
@@ -125,6 +126,7 @@ def main(args):
         print("Normal engine inference time on 100 cases: {:.4f} seconds".format(total_time))
 
     # Use context manager for proper stream lifecycle management - Refitted engine
+    trt_outputs_refitted = []
     with common.CudaStreamContext() as stream_1:
         start_time = time.time()
         for i in range(100):

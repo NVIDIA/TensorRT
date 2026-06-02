@@ -23,18 +23,19 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <string_view>
 #include <type_traits>
 
 using namespace nvinfer1;
 using namespace samplesSafeCommon;
-const std::string gSampleName = "TensorRT.sample_safe_plugin_infer";
+std::string const gSampleName = "TensorRT.sample_safe_plugin_infer";
 
 static sample::SampleSafeRecorder g_recorder{nvinfer2::safe::Severity::kINFO};
 
 //!
 //! \brief The SampleSafeMNISTInferArgs struct stores the additional arguments required by the sample
 //!
-class SampleSafeMNISTInferArgs
+class SampleSafePluginInferArgs
 {
 public:
     std::string engineFileName{"safe_plugin.engine"};
@@ -44,21 +45,22 @@ public:
 //!
 //! \brief This function parses arguments specific to the sample
 //!
-bool parseSampleSafePluginInferArgs(SampleSafeMNISTInferArgs& args, int32_t const argc, char const* const argv[])
+bool parseSampleSafePluginInferArgs(SampleSafePluginInferArgs& args, int32_t const argc, char const* const argv[])
 {
     for (int32_t i = 1; i < argc; ++i)
     {
-        if (strncmp(argv[i], "--loadEngine=", 13) == 0)
+        std::string const arg = argv[i];
+        if (auto value = parseString(arg, "loadEngine"))
         {
-            args.engineFileName = (argv[i] + 13);
+            args.engineFileName = std::move(*value);
         }
-        else if (strncmp(argv[i], "--help", 6) == 0 || strncmp(argv[i], "-h", 2) == 0)
+        else if (parseBool(arg, "help", 'h'))
         {
             args.help = true;
         }
         else
         {
-            SAFE_LOG << "Invalid Argument: " << argv[i] << std::endl;
+            SAFE_LOG << "Invalid Argument: " << arg << "\n";
             return false;
         }
     }
@@ -224,7 +226,7 @@ void setTensorBuffer(nvinfer2::safe::ITRTGraph* graph, nvinfer2::safe::ISafeReco
 //! \details This function is the main execution function of the sample. It allocates
 //!          the buffer, sets inputs, executes the engine, and verifies the output.
 //!
-bool doInference(SampleSafeMNISTInferArgs const& args)
+bool doInference(SampleSafePluginInferArgs const& args)
 {
     // Create the engine by loading from a local saved plan
     int32_t engineFileSize = 0;
@@ -238,6 +240,9 @@ bool doInference(SampleSafeMNISTInferArgs const& args)
     getSafePluginRegistry(g_recorder)->registerCreator(creator, "", g_recorder);
     createTRTGraph(graph, engineFile.data(), engineFileSize, g_recorder, true, nullptr);
     SAFE_ASSERT(graph != nullptr);
+
+    // Setup as many auxiliary streams as the graph requires - destroyed at scope end.
+    auto auxStreamsDeleter = samplesSafeCommon::setUpAuxStreamsOn(*graph, g_recorder);
 
     bool outputCorrect = true;
     int64_t nbIOProfile = 0;
@@ -356,15 +361,19 @@ bool doInference(SampleSafeMNISTInferArgs const& args)
 //!
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_safe_plugin_infer [-h or --help] [--loadEngine=<path to engine file>]\n";
-    std::cout << "--help or -h    Display help information\n";
-    std::cout << "--loadEngine    Load the serialized engine from the file (default = safe_plugin.engine).\n";
+    SampleSafePluginInferArgs const defArgs{};
+    std::cout << R"(Usage: sample_safe_plugin_infer [options]
+Options:
+  --help, -h            Print this message and exit.
+  --loadEngine=FILE     Load serialized engine from FILE (default = )"
+              << defArgs.engineFileName << R"().
+)";
 }
 
 int main(int32_t argc, char** argv)
 {
     safetyCompliance::setPromgrAbility();
-    SampleSafeMNISTInferArgs args;
+    SampleSafePluginInferArgs args;
     bool const argsOK = parseSampleSafePluginInferArgs(args, argc, argv);
     if (!argsOK)
     {

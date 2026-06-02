@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@ namespace nvinfer1
 {
 namespace plugin
 {
-class GridAnchorGenerator : public IPluginV2Ext
+class TRT_DEPRECATED_BECAUSE("Anchor-based detection models are obsolete.") GridAnchorGenerator : public IPluginV2Ext
 {
 public:
     GridAnchorGenerator(GridAnchorParameters const* param, int32_t numLayers, char const* version);
@@ -69,11 +69,6 @@ public:
     DataType getOutputDataType(
         int32_t index, nvinfer1::DataType const* inputTypes, int32_t nbInputs) const noexcept override;
 
-    bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
-
-    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
-
     void attachToContext(
         cudnnContext* cudnnContext, cublasContext* cublasContext, IGpuAllocator* gpuAllocator) noexcept override;
 
@@ -100,7 +95,8 @@ private:
     std::string mPluginNamespace;
 };
 
-class GridAnchorBasePluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED_BECAUSE("Anchor-based detection models are obsolete.") GridAnchorBasePluginCreator
+    : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     GridAnchorBasePluginCreator();
@@ -125,14 +121,16 @@ private:
     std::vector<PluginField> mPluginAttributes;
 };
 
-class GridAnchorPluginCreator : public GridAnchorBasePluginCreator
+class TRT_DEPRECATED_BECAUSE("Anchor-based detection models are obsolete.") GridAnchorPluginCreator
+    : public GridAnchorBasePluginCreator
 {
 public:
     GridAnchorPluginCreator();
     ~GridAnchorPluginCreator() override = default;
 };
 
-class GridAnchorRectPluginCreator : public GridAnchorBasePluginCreator
+class TRT_DEPRECATED_BECAUSE("Anchor-based detection models are obsolete.") GridAnchorRectPluginCreator
+    : public GridAnchorBasePluginCreator
 {
 public:
     GridAnchorRectPluginCreator();

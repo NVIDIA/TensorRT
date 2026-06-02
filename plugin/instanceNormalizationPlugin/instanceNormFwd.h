@@ -105,7 +105,9 @@ struct InstanceNormFwdContext
     InstanceNormFwdContext()
         : sm_count(0)
         , sm_shared_size(0)
-        , sm_version(0){};
+        , sm_version(0)
+    {
+    }
     int32_t sm_count;
     int32_t sm_shared_size;
     int32_t sm_version;

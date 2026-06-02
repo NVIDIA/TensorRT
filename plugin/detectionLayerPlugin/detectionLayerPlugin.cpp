@@ -18,6 +18,7 @@
 #include "common/plugin.h"
 
 #include <memory>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -59,6 +60,7 @@ PluginFieldCollection const* DetectionLayerPluginCreator::getFieldNames() noexce
 
 IPluginV2Ext* DetectionLayerPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
+    using namespace std::string_view_literals;
     try
     {
         PLUGIN_VALIDATE(fc != nullptr);
@@ -66,23 +68,23 @@ IPluginV2Ext* DetectionLayerPluginCreator::createPlugin(char const* /*name*/, Pl
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "num_classes"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "num_classes"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mNbClasses = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "keep_topk"))
+            if (attrName == "keep_topk"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mKeepTopK = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "score_threshold"))
+            if (attrName == "score_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mScoreThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "iou_threshold"))
+            if (attrName == "iou_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mIOUThreshold = *(static_cast<float const*>(fields[i].data));
@@ -322,19 +324,6 @@ DataType DetectionLayer::getOutputDataType(
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer.
     return DataType::kFLOAT;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool DetectionLayer::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool DetectionLayer::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
 }
 
 // Configure the layer with input and output data types.

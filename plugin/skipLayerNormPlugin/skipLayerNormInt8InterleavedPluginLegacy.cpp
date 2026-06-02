@@ -20,8 +20,8 @@
 #include "common/serialize.hpp"
 #include <cuda.h>
 
-#include <cstring>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 using namespace nvinfer1;
@@ -31,6 +31,7 @@ using namespace nvinfer1::plugin::bert;
 // Clip plugin specific constants
 namespace
 {
+using namespace std::string_view_literals;
 constexpr char const* kSKIP_LAYER_NORM_INTERLEAVED_VERSION_HFACE_LEGACY{"3"};
 constexpr char const* kSKIP_LAYER_NORM_INTERLEAVED_VERSION_MTRON_LEGACY{"4"};
 constexpr char const* kSKIP_LAYER_NORM_INTERLEAVED_NAME{"CustomSkipLayerNormPluginDynamic"};
@@ -41,9 +42,9 @@ void buildBetaAndGamma(PluginFieldCollection const* fc, Weights& beta, Weights& 
 
     for (int32_t i = 0; i < fc->nbFields; i++)
     {
-        std::string field_name(fc->fields[i].name);
+        std::string_view const field_name = fc->fields[i].name;
 
-        if (field_name.compare("beta") == 0)
+        if (field_name == "beta"sv)
         {
             BERT_DEBUG_MSG("Building beta...");
             beta.values = fc->fields[i].data;
@@ -51,7 +52,7 @@ void buildBetaAndGamma(PluginFieldCollection const* fc, Weights& beta, Weights& 
             beta.type = fieldTypeToDataType(fc->fields[i].type);
         }
 
-        if (field_name.compare("gamma") == 0)
+        if (field_name == "gamma"sv)
         {
             BERT_DEBUG_MSG("Building gamma...");
             gamma.values = fc->fields[i].data;

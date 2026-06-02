@@ -50,7 +50,7 @@ public:
     DisentangledAttentionPlugin(void const* serialData, size_t serialLength);
 
     // Destructor
-    virtual ~DisentangledAttentionPlugin(){};
+    virtual ~DisentangledAttentionPlugin() {}
 
     // IPluginV3OneCore methods
     int32_t getNbOutputs() const noexcept override;

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -278,23 +278,25 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
         osWarning
             << "* Throughput may be bound by Enqueue Time rather than GPU Compute and the GPU may be under-utilized."
             << std::endl;
-        osWarning << "  If not already in use, --useCudaGraph (utilize CUDA graphs where possible) may increase the "
-                     "throughput."
-                  << std::endl;
+        osWarning << "  If you are using --noCudaGraph, removing it may increase throughput." << std::endl;
     }
     if (h2dResult.median >= gpuComputeResult.median)
     {
         osWarning << "* Throughput may be bound by host-to-device transfers for the inputs rather than GPU Compute and "
                      "the GPU may be under-utilized."
                   << std::endl;
-        osWarning << "  Add --noDataTransfers flag to disable data transfers." << std::endl;
+        osWarning << "  Consider removing --includeDataTransfers to disable data transfers and potentially increase "
+                     "throughput."
+                  << std::endl;
     }
     if (d2hResult.median >= gpuComputeResult.median)
     {
         osWarning << "* Throughput may be bound by device-to-host transfers for the outputs rather than GPU Compute "
                      "and the GPU may be under-utilized."
                   << std::endl;
-        osWarning << "  Add --noDataTransfers flag to disable data transfers." << std::endl;
+        osWarning << "  Consider removing --includeDataTransfers to disable data transfers and potentially increase "
+                     "throughput."
+                  << std::endl;
     }
 
     // Report warnings if the GPU Compute Time is unstable.
@@ -303,8 +305,7 @@ void printEpilog(std::vector<InferenceTime> const& timings, float walltimeMs, st
     {
         osWarning << "* GPU compute time is unstable, with coefficient of variance = " << gpuComputeResult.coeffVar
                   << "%." << std::endl;
-        osWarning << "  If not already in use, locking GPU clock frequency or adding --useSpinWait may improve the "
-                  << "stability." << std::endl;
+        osWarning << "  If not already in use, locking GPU clock frequency may improve the stability." << std::endl;
     }
 
     // Report warnings if multiple inference streams are used.

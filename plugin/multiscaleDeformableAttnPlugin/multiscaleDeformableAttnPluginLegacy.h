@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -82,12 +82,10 @@ private:
     std::string mNamespace;
 
 #if NV_TENSORRT_MAJOR < 8
-    using nvinfer1::IPluginV2DynamicExt::canBroadcastInputAcrossBatch;
     using nvinfer1::IPluginV2DynamicExt::configurePlugin;
     using nvinfer1::IPluginV2DynamicExt::enqueue;
     using nvinfer1::IPluginV2DynamicExt::getOutputDimensions;
     using nvinfer1::IPluginV2DynamicExt::getWorkspaceSize;
-    using nvinfer1::IPluginV2DynamicExt::isOutputBroadcastAcrossBatch;
     using nvinfer1::IPluginV2DynamicExt::supportsFormat;
 #endif
 };

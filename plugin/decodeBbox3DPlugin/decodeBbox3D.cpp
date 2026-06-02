@@ -22,6 +22,7 @@
 #include "common/templates.h"
 
 #include <memory>
+#include <string_view>
 
 namespace nvinfer1::plugin
 {
@@ -252,9 +253,9 @@ int32_t DecodeBbox3DPlugin::enqueue(nvinfer1::PluginTensorDesc const* inputDesc,
         auto* anchorBottomHeight
             = reinterpret_cast<float*>(nextWorkspacePtr(reinterpret_cast<int8_t*>(anchors), anchorsSize));
         size_t anchorBottomHeightSize = mNumClasses * sizeof(float);
-        PLUGIN_CUASSERT(cudaMemcpyAsync(anchors, &mAnchors[0], anchorsSize, cudaMemcpyHostToDevice, stream));
+        PLUGIN_CUASSERT(cudaMemcpyAsync(anchors, mAnchors.data(), anchorsSize, cudaMemcpyHostToDevice, stream));
         PLUGIN_CUASSERT(cudaMemcpyAsync(
-            anchorBottomHeight, &mAnchorBottomHeight[0], anchorBottomHeightSize, cudaMemcpyHostToDevice, stream));
+            anchorBottomHeight, mAnchorBottomHeight.data(), anchorBottomHeightSize, cudaMemcpyHostToDevice, stream));
         // Initialize boxNum to 0
         PLUGIN_CUASSERT(cudaMemsetAsync(boxNum, 0, batchSize * sizeof(int32_t), stream));
 
@@ -402,6 +403,7 @@ PluginFieldCollection const* DecodeBbox3DPluginCreator::getFieldNames() noexcept
 
 IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* /*name*/, PluginFieldCollection const* fc) noexcept
 {
+    using namespace std::string_view_literals;
     try
     {
         PLUGIN_VALIDATE(fc != nullptr);
@@ -418,8 +420,8 @@ IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* /*name*/, PluginF
 
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attr_name = fields[i].name;
-            if (!strcmp(attr_name, "point_cloud_range"))
+            std::string_view const attr_name = fields[i].name;
+            if (attr_name == "point_cloud_range"sv)
             {
                 auto const* d = static_cast<float const*>(fields[i].data);
                 for (int32_t pointCloudIdx = 0; pointCloudIdx < 6; pointCloudIdx++)
@@ -427,7 +429,7 @@ IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* /*name*/, PluginF
                     pointCloudRange[pointCloudIdx] = d[pointCloudIdx];
                 }
             }
-            else if (!strcmp(attr_name, "anchors"))
+            else if (attr_name == "anchors"sv)
             {
                 auto const* d = static_cast<float const*>(fields[i].data);
                 for (int32_t j = 0; j < fields[i].length; ++j)
@@ -435,7 +437,7 @@ IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* /*name*/, PluginF
                     anchors.push_back(d[j]);
                 }
             }
-            else if (!strcmp(attr_name, "anchor_bottom_height"))
+            else if (attr_name == "anchor_bottom_height"sv)
             {
                 auto const* d = static_cast<float const*>(fields[i].data);
                 for (int32_t j = 0; j < fields[i].length; ++j)
@@ -443,22 +445,22 @@ IPluginV2* DecodeBbox3DPluginCreator::createPlugin(char const* /*name*/, PluginF
                     anchorBottomHeight.push_back(d[j]);
                 }
             }
-            else if (!strcmp(attr_name, "dir_offset"))
+            else if (attr_name == "dir_offset"sv)
             {
                 auto const* d = static_cast<float const*>(fields[i].data);
                 dirOffset = d[0];
             }
-            else if (!strcmp(attr_name, "dir_limit_offset"))
+            else if (attr_name == "dir_limit_offset"sv)
             {
                 auto const* d = static_cast<float const*>(fields[i].data);
                 dirLimitOffset = d[0];
             }
-            else if (!strcmp(attr_name, "num_dir_bins"))
+            else if (attr_name == "num_dir_bins"sv)
             {
                 auto const* d = static_cast<int32_t const*>(fields[i].data);
                 numDirBins = d[0];
             }
-            else if (!strcmp(attr_name, "score_thresh"))
+            else if (attr_name == "score_thresh"sv)
             {
                 auto const* d = static_cast<float const*>(fields[i].data);
                 scoreThreshold = d[0];

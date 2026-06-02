@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,6 +34,7 @@
 
 #include "common.h"
 #include "logger.h"
+#include "sampleOptions.h"
 
 #define SMP_RETVAL_IF_FALSE(condition, msg, retval, err)                                                               \
     {                                                                                                                  \
@@ -125,35 +126,14 @@ typename std::unordered_map<std::string, T>::const_iterator findPlausible(
 
 // ==== Common argument parsing utilities ====
 
-//! Simple implementation of startsWith for strings
-inline bool startsWith(const std::string& str, const std::string& prefix)
-{
-    return str.size() >= prefix.size() && str.substr(0, prefix.size()) == prefix;
-}
-
-//! Holds a flag and value, so `--foo=bar` becomes `FlagValue{"foo", "bar"}`.
-struct FlagValue
-{
-    std::string flag;
-    std::string value;
-};
-
-//! Parse a command line argument into flag and value components
-//! Returns pair with flag and value, empty flag if parsing failed
-std::pair<std::string, std::string> parseFlag(const std::string& arg);
-
-//! Check if argument is a boolean flag (--flag format or whitelisted short flags: -h, -v, -d)
-//! Returns flag name if valid, empty string otherwise
-std::string parseBooleanFlag(const std::string& arg);
-
 //! Validate that a value is not empty, log error if it is
-bool validateNonEmpty(const std::string& value, const std::string& flagName);
+bool validateNonEmpty(std::string const& value, std::string const& flagName);
 
 //! Validate remote auto tuning config format
-bool validateRemoteAutoTuningConfig(const std::string& config);
+bool validateRemoteAutoTuningConfig(std::string const& config);
 
 //! Ensure directory path ends with '/'
-inline std::string normalizeDirectoryPath(const std::string& dirPath)
+inline std::string normalizeDirectoryPath(std::string const& dirPath)
 {
     std::string result = dirPath;
     if (!result.empty() && result.back() != '/')
@@ -166,7 +146,7 @@ inline std::string normalizeDirectoryPath(const std::string& dirPath)
 //! Sanitizes the remote auto tuning config string by removing sensitive credentials
 //! Removes usernames and passwords from URL-style config strings for security.
 //! Example: "ssh://user:pass@host:22" becomes "ssh://***:***@host:22"
-std::string sanitizeRemoteAutoTuningConfig(const std::string& config);
+std::string sanitizeRemoteAutoTuningConfig(std::string const& config);
 
 //! Sanitizes command line arguments for logging, removing sensitive credentials
 //! Processes argv array and sanitizes sensitive arguments like remoteAutoTuningConfig

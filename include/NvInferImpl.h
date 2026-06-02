@@ -26,21 +26,13 @@
 namespace nvinfer1
 {
 
-class ILogger;
-
 namespace v_1_0
 {
+class ILogger;
 class IProgressMonitor;
 } // namespace v_1_0
+using ILogger = v_1_0::ILogger;
 using IProgressMonitor = v_1_0::IProgressMonitor;
-
-#if !STRIP_TRT_RTX_INTERNAL_API
-namespace v_1_0
-{
-class IAlgorithmSelector;
-} // namespace v_1_0
-using IAlgorithmSelector = v_1_0::IAlgorithmSelector;
-#endif // !STRIP_TRT_RTX_INTERNAL_API
 
 namespace v_1_0
 {
@@ -61,12 +53,6 @@ class IDebugListener;
 using IDebugListener = v_1_0::IDebugListener;
 
 class IActivationLayer;
-#if !STRIP_TRT_RTX_INTERNAL_API
-class IAlgorithm;
-class IAlgorithmContext;
-class IAlgorithmIOInfo;
-class IAlgorithmVariant;
-#endif // !STRIP_TRT_RTX_INTERNAL_API
 class IAssertionLayer;
 class IAttention;
 class IBuilder;
@@ -94,9 +80,6 @@ class ICastLayer;
 class IIfConditional;
 class IIfConditionalInputLayer;
 class IIfConditionalOutputLayer;
-#if !STRIP_TRT_RTX_INTERNAL_API
-class IInt8Calibrator;
-#endif // !STRIP_TRT_RTX_INTERNAL_API
 class IIteratorLayer;
 class IKVCacheUpdateLayer;
 class ILayer;
@@ -180,12 +163,11 @@ struct Permutation;
 class Weights;
 
 enum class ActivationType : int32_t;
+enum class AttentionIOForm : int32_t;
 enum class AttentionNormalizationOp : int32_t;
 enum class BoundingBoxFormat : int32_t;
+enum class CausalMaskKind : int32_t;
 enum class BuilderFlag : int32_t;
-#if !STRIP_TRT_RTX_INTERNAL_API
-enum class CalibrationAlgoType : int32_t;
-#endif // !STRIP_TRT_RTX_INTERNAL_API
 enum class CumulativeOperation : int32_t;
 enum class DeviceType : int32_t;
 enum class DimensionOperation : int32_t;
@@ -205,7 +187,6 @@ enum class OptProfileSelector : int32_t;
 enum class PaddingMode : int32_t;
 enum class PoolingType : int32_t;
 enum class ProfilingVerbosity : int32_t;
-enum class QuantizationFlag : int32_t;
 enum class ReduceOperation : int32_t;
 enum class CollectiveOperation : int32_t;
 enum class ResizeCoordinateTransformation : int32_t;
@@ -234,7 +215,6 @@ using TacticSources = uint32_t;
 using TensorFormats = uint32_t;
 using BuilderFlags = uint32_t;
 using NetworkDefinitionCreationFlags = uint32_t;
-using QuantizationFlags = uint32_t;
 using TempfileControlFlags = uint32_t;
 using SerializationFlags = uint32_t;
 
@@ -288,7 +268,6 @@ class VRuntime : public VRoot
 public:
     virtual IRuntime* getPImpl() noexcept = 0;
     virtual nvinfer1::ICudaEngine* deserializeCudaEngine(void const* blob, std::size_t size) noexcept = 0;
-    virtual nvinfer1::ICudaEngine* deserializeCudaEngine(IStreamReader& streamReader) noexcept = 0;
     virtual void setDLACore(int32_t dlaCore) noexcept = 0;
     virtual int32_t getDLACore() const noexcept = 0;
     virtual int32_t getNbDLACores() const noexcept = 0;
@@ -319,10 +298,6 @@ public:
     virtual bool refitCudaEngine() noexcept = 0;
     virtual int32_t getMissing(int32_t size, char const** layerNames, WeightsRole* roles) noexcept = 0;
     virtual int32_t getAll(int32_t size, char const** layerNames, WeightsRole* roles) noexcept = 0;
-    virtual bool setDynamicRange(char const* tensorName, float min, float max) noexcept = 0;
-    virtual float getDynamicRangeMin(char const* tensorName) const noexcept = 0;
-    virtual float getDynamicRangeMax(char const* tensorName) const noexcept = 0;
-    virtual int32_t getTensorsWithDynamicRange(int32_t size, char const** tensorNames) const noexcept = 0;
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
     virtual bool setNamedWeights(char const* name, Weights weights) noexcept = 0;
@@ -346,10 +321,7 @@ class VOptimizationProfile : public VRoot
 public:
     virtual bool setDimensions(char const* inputName, OptProfileSelector select, Dims const& dims) noexcept = 0;
     virtual Dims getDimensions(char const* inputName, OptProfileSelector select) const noexcept = 0;
-    virtual bool setShapeValues(
-        char const* inputName, OptProfileSelector select, int32_t const* values, int32_t nbValues) noexcept = 0;
     virtual int32_t getNbShapeValues(char const* inputName) const noexcept = 0;
-    virtual int32_t const* getShapeValues(char const* inputName, OptProfileSelector select) const noexcept = 0;
     virtual bool setExtraMemoryTarget(float target) noexcept = 0;
     virtual float getExtraMemoryTarget() const noexcept = 0;
     virtual bool isValid() const noexcept = 0;
@@ -367,17 +339,12 @@ public:
     virtual int32_t getNbLayers() const noexcept = 0;
     virtual IHostMemory* serialize() const noexcept = 0;
     virtual IExecutionContext* createExecutionContext(ExecutionContextAllocationStrategy strategy) noexcept = 0;
-    virtual IExecutionContext* createExecutionContextWithoutDeviceMemory() noexcept = 0;
-    virtual size_t getDeviceMemorySize() const noexcept = 0;
     virtual bool isRefittable() const noexcept = 0;
     virtual char const* getName() const noexcept = 0;
     virtual int32_t getNbOptimizationProfiles() const noexcept = 0;
-    virtual int32_t const* getProfileTensorValues(
-        char const* tensorName, int32_t profileIndex, OptProfileSelector select) const noexcept = 0;
     virtual EngineCapability getEngineCapability() const noexcept = 0;
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
-    virtual bool hasImplicitBatchDimension() const noexcept = 0;
     virtual TacticSources getTacticSources() const noexcept = 0;
     virtual ProfilingVerbosity getProfilingVerbosity() const noexcept = 0;
     virtual IEngineInspector* createEngineInspector() const noexcept = 0;
@@ -407,12 +374,8 @@ public:
     virtual ISerializationConfig* createSerializationConfig() noexcept = 0;
     virtual IHostMemory* serializeWithConfig(ISerializationConfig& config) const noexcept = 0;
 
-    virtual size_t getDeviceMemorySizeForProfile(int32_t profileIndex) const noexcept = 0;
     virtual IRefitter* createRefitter(ILogger& logger) noexcept = 0;
 
-    virtual bool setWeightStreamingBudget(int64_t gpuMemoryBudget) noexcept = 0;
-    virtual int64_t getWeightStreamingBudget() const noexcept = 0;
-    virtual int64_t getMinimumWeightStreamingBudget() const noexcept = 0;
     virtual int64_t getStreamableWeightsSize() const noexcept = 0;
 
     virtual bool isDebugTensor(char const* name) const noexcept = 0;
@@ -449,7 +412,6 @@ public:
     virtual void setDeviceMemory(void* memory) noexcept = 0;
     virtual int32_t getOptimizationProfile() const noexcept = 0;
     virtual bool allInputDimensionsSpecified() const noexcept = 0;
-    virtual bool allInputShapesSpecified() const noexcept = 0;
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
     virtual bool executeV2(void* const* bindings) noexcept = 0;
@@ -511,19 +473,13 @@ public:
     virtual char const* getName() const noexcept = 0;
     virtual void setDimensions(Dims const& dimensions) noexcept = 0;
     virtual Dims getDimensions() const noexcept = 0;
-    virtual void setType(DataType type) noexcept = 0;
     virtual DataType getType() const noexcept = 0;
-    virtual bool setDynamicRange(float min, float max) noexcept = 0;
     virtual bool isNetworkInput() const noexcept = 0;
     virtual bool isNetworkOutput() const noexcept = 0;
     virtual void setBroadcastAcrossBatch(bool broadcastAcrossBatch) noexcept = 0;
     virtual bool getBroadcastAcrossBatch() const noexcept = 0;
     virtual TensorLocation getLocation() const noexcept = 0;
     virtual void setLocation(TensorLocation location) noexcept = 0;
-    virtual bool dynamicRangeIsSet() const noexcept = 0;
-    virtual void resetDynamicRange() noexcept = 0;
-    virtual float getDynamicRangeMin() const noexcept = 0;
-    virtual float getDynamicRangeMax() const noexcept = 0;
     virtual void setAllowedFormats(TensorFormats formats) noexcept = 0;
     virtual TensorFormats getAllowedFormats() const noexcept = 0;
     virtual bool isShapeTensor() const noexcept = 0;
@@ -543,14 +499,7 @@ public:
     virtual int32_t getNbOutputs() const noexcept = 0;
     virtual ITensor* getOutput(int32_t index) const noexcept = 0;
     virtual void setInput(int32_t index, ITensor& tensor) noexcept = 0;
-    virtual void setPrecision(DataType dataType) noexcept = 0;
-    virtual DataType getPrecision() const noexcept = 0;
-    virtual bool precisionIsSet() const noexcept = 0;
-    virtual void resetPrecision() noexcept = 0;
-    virtual void setOutputType(int32_t index, DataType dataType) noexcept = 0;
     virtual DataType getOutputType(int32_t index) const noexcept = 0;
-    virtual bool outputTypeIsSet(int32_t index) const noexcept = 0;
-    virtual void resetOutputType(int32_t index) noexcept = 0;
     virtual void setMetadata(char const* docString) noexcept = 0;
     virtual char const* getMetadata() const noexcept = 0;
     virtual bool setNbRanks(int32_t nbRanks) noexcept = 0;
@@ -965,8 +914,8 @@ public:
     TRT_NODISCARD virtual char const* getName() const noexcept = 0;
     TRT_NODISCARD virtual bool setNormalizationOperation(AttentionNormalizationOp op) noexcept = 0;
     TRT_NODISCARD virtual AttentionNormalizationOp getNormalizationOperation() const noexcept = 0;
-    TRT_NODISCARD virtual bool setCausal(bool isCausal) noexcept = 0;
-    TRT_NODISCARD virtual bool getCausal() const noexcept = 0;
+    TRT_DEPRECATED virtual bool setCausal(bool isCausal) noexcept = 0;
+    TRT_DEPRECATED virtual bool getCausal() const noexcept = 0;
     TRT_NODISCARD virtual bool setMask(ITensor& mask) noexcept = 0;
     TRT_NODISCARD virtual ITensor* getMask() const noexcept = 0;
     TRT_NODISCARD virtual bool setDecomposable(bool decomposable) noexcept = 0;
@@ -979,6 +928,16 @@ public:
     TRT_NODISCARD virtual char const* getMetadata() const noexcept = 0;
     TRT_NODISCARD virtual bool setNbRanks(int32_t nbRanks) noexcept = 0;
     TRT_NODISCARD virtual int32_t getNbRanks() const noexcept = 0;
+    TRT_NODISCARD virtual bool setCausalKind(CausalMaskKind kind) noexcept = 0;
+    TRT_NODISCARD virtual CausalMaskKind getCausalKind() const noexcept = 0;
+    TRT_NODISCARD virtual bool setQueryForm(AttentionIOForm form) noexcept = 0;
+    TRT_NODISCARD virtual AttentionIOForm getQueryForm() const noexcept = 0;
+    TRT_NODISCARD virtual bool setKeyValueForm(AttentionIOForm form) noexcept = 0;
+    TRT_NODISCARD virtual AttentionIOForm getKeyValueForm() const noexcept = 0;
+    TRT_NODISCARD virtual bool setQueryLengths(ITensor* lengths) noexcept = 0;
+    TRT_NODISCARD virtual ITensor* getQueryLengths() const noexcept = 0;
+    TRT_NODISCARD virtual bool setKeyValueLengths(ITensor* lengths) noexcept = 0;
+    TRT_NODISCARD virtual ITensor* getKeyValueLengths() const noexcept = 0;
 }; // class VAttention
 
 class VSelectLayer : public VRoot
@@ -1113,8 +1072,6 @@ public:
     virtual uint32_t getAxes() const noexcept = 0;
     virtual void setNbGroups(int64_t nbGroups) noexcept = 0;
     virtual int64_t getNbGroups() const noexcept = 0;
-    virtual void setComputePrecision(DataType type) noexcept = 0;
-    virtual DataType getComputePrecision() const noexcept = 0;
     virtual bool isV2() const noexcept = 0;
 }; // class VNormalizationLayer
 
@@ -1152,6 +1109,10 @@ class VKVCacheUpdateLayer : public VRoot
 public:
     TRT_NODISCARD virtual bool setCacheMode(KVCacheMode cacheMode) noexcept = 0;
     TRT_NODISCARD virtual KVCacheMode getCacheMode() const noexcept = 0;
+    TRT_NODISCARD virtual bool setUpdateForm(AttentionIOForm form) noexcept = 0;
+    TRT_NODISCARD virtual AttentionIOForm getUpdateForm() const noexcept = 0;
+    TRT_NODISCARD virtual bool setUpdateLengths(ITensor* lengths) noexcept = 0;
+    TRT_NODISCARD virtual ITensor* getUpdateLengths() const noexcept = 0;
 }; // class VKVCacheUpdateLayer
 
 class VMoELayer : public VRoot
@@ -1235,13 +1196,10 @@ public:
     virtual IResizeLayer* addResize(ITensor& input) noexcept = 0;
     virtual ILoop* addLoop() noexcept = 0;
     virtual ISelectLayer* addSelect(ITensor& condition, ITensor& thenInput, ITensor& elseInput) noexcept = 0;
-    virtual IFillLayer* addFill(Dims const& dimensions, FillOperation op) noexcept = 0;
     virtual IPaddingLayer* addPaddingNd(ITensor& input, Dims const& prePadding, Dims const& postPadding) noexcept = 0;
     virtual bool setWeightsName(Weights weights, char const* name) noexcept = 0;
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
-    virtual IDequantizeLayer* addDequantize(ITensor& input, ITensor& scale) noexcept = 0;
-    virtual IQuantizeLayer* addQuantize(ITensor& input, ITensor& scale) noexcept = 0;
     virtual IGatherLayer* addGatherV2(ITensor& data, ITensor& indices, GatherMode mode) noexcept = 0;
     virtual IIfConditional* addIfConditional() noexcept = 0;
     virtual IScatterLayer* addScatter(ITensor& data, ITensor& indices, ITensor& updates, ScatterMode mode) noexcept = 0;
@@ -1280,7 +1238,7 @@ public:
     virtual INonZeroLayer* addNonZeroV2(ITensor& input, DataType indicesType) noexcept = 0;
     virtual INMSLayer* addNMSV2(
         ITensor& boxes, ITensor& scores, ITensor& maxOutputBoxesPerClass, DataType indicesType) noexcept = 0;
-    virtual IAttention* addAttention(
+    TRT_DEPRECATED virtual IAttention* addAttention(
         ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp, bool isCausal) noexcept = 0;
     virtual IRotaryEmbeddingLayer* addRotaryEmbedding(ITensor& input, ITensor& cosCache, ITensor& sinCache,
         bool interleaved, int32_t rotaryEmbeddingDim) noexcept = 0;
@@ -1294,44 +1252,9 @@ public:
         ITensor& hiddenStates, ITensor& selectedExpertsForTokens, ITensor& scoresForSelectedExperts) noexcept = 0;
     virtual IDistCollectiveLayer* addDistCollective(ITensor& input, CollectiveOperation distCollectiveOp,
         ReduceOperation reduceOp, int64_t root, int64_t* groups, int64_t groupSize) noexcept = 0;
+    virtual IAttention* addAttentionV2(ITensor& query, ITensor& key, ITensor& value, AttentionNormalizationOp normOp,
+        CausalMaskKind causalKind) noexcept = 0;
 };
-
-#if !STRIP_TRT_RTX_INTERNAL_API
-class VAlgorithmIOInfo : public VRoot
-{
-public:
-    virtual DataType getDataType() const noexcept = 0;
-    virtual Dims getStrides() const noexcept = 0;
-    virtual int64_t getVectorizedDim() const noexcept = 0;
-    virtual int64_t getComponentsPerElement() const noexcept = 0;
-};
-
-class VAlgorithmVariant : public VRoot
-{
-public:
-    virtual int64_t getImplementation() const noexcept = 0;
-    virtual int64_t getTactic() const noexcept = 0;
-};
-
-class VAlgorithmContext : public VRoot
-{
-public:
-    virtual char const* getName() const noexcept = 0;
-    virtual Dims getDimensions(int32_t index, OptProfileSelector select) const noexcept = 0;
-    virtual int32_t getNbInputs() const noexcept = 0;
-    virtual int32_t getNbOutputs() const noexcept = 0;
-};
-
-class VAlgorithm : public VRoot
-{
-public:
-    virtual IAlgorithmVariant const& getAlgorithmVariant() const noexcept = 0;
-    virtual float getTimingMSec() const noexcept = 0;
-    virtual std::size_t getWorkspaceSize() const noexcept = 0;
-    virtual IAlgorithmIOInfo const* getAlgorithmIOInfoByIndex(int32_t index) const noexcept = 0;
-};
-
-#endif // !STRIP_TRT_RTX_INTERNAL_API
 
 class VTimingCache : public VRoot
 {
@@ -1351,8 +1274,6 @@ public:
     virtual int32_t getAvgTimingIterations() const noexcept = 0;
     virtual void setEngineCapability(EngineCapability capability) noexcept = 0;
     virtual EngineCapability getEngineCapability() const noexcept = 0;
-    virtual void setInt8Calibrator(IInt8Calibrator* calibrator) noexcept = 0;
-    virtual IInt8Calibrator* getInt8Calibrator() const noexcept = 0;
     virtual void setFlags(BuilderFlags builderFlags) noexcept = 0;
     virtual BuilderFlags getFlags() const noexcept = 0;
     virtual void clearFlag(BuilderFlag builderFlag) noexcept = 0;
@@ -1374,15 +1295,6 @@ public:
     virtual int32_t getNbOptimizationProfiles() const noexcept = 0;
     virtual void setProfilingVerbosity(ProfilingVerbosity verbosity) noexcept = 0;
     virtual ProfilingVerbosity getProfilingVerbosity() const noexcept = 0;
-    virtual void setAlgorithmSelector(IAlgorithmSelector* selector) noexcept = 0;
-    virtual IAlgorithmSelector* getAlgorithmSelector() const noexcept = 0;
-    virtual bool setCalibrationProfile(IOptimizationProfile const* profile) noexcept = 0;
-    virtual IOptimizationProfile const* getCalibrationProfile() noexcept = 0;
-    virtual void setQuantizationFlags(QuantizationFlags flags) noexcept = 0;
-    virtual QuantizationFlags getQuantizationFlags() const noexcept = 0;
-    virtual void clearQuantizationFlag(QuantizationFlag flag) noexcept = 0;
-    virtual void setQuantizationFlag(QuantizationFlag flag) noexcept = 0;
-    virtual bool getQuantizationFlag(QuantizationFlag flag) const noexcept = 0;
     virtual bool setTacticSources(TacticSources tacticSources) noexcept = 0;
     virtual TacticSources getTacticSources() const noexcept = 0;
     virtual nvinfer1::ITimingCache* createTimingCache(void const* blob, std::size_t size) const noexcept = 0;
@@ -1399,7 +1311,7 @@ public:
     virtual void setPluginsToSerialize(char const* const* paths, int32_t nbPaths) noexcept = 0;
     virtual char const* getPluginToSerialize(int32_t index) const noexcept = 0;
     virtual int32_t getNbPluginsToSerialize() const noexcept = 0;
-    virtual void setMaxAuxStreams(int32_t nbStreams) noexcept = 0;
+    virtual bool setMaxAuxStreams(int32_t nbStreams) noexcept = 0;
     virtual int32_t getMaxAuxStreams() const noexcept = 0;
     virtual void setProgressMonitor(IProgressMonitor* monitor) noexcept = 0;
     virtual IProgressMonitor* getProgressMonitor() const noexcept = 0;
@@ -1428,8 +1340,6 @@ public:
 class VBuilder : public VRoot
 {
 public:
-    virtual bool platformHasFastFp16() const noexcept = 0;
-    virtual bool platformHasFastInt8() const noexcept = 0;
     virtual int32_t getMaxDLABatchSize() const noexcept = 0;
     virtual int32_t getNbDLACores() const noexcept = 0;
     virtual void setGpuAllocator(IGpuAllocator* allocator) noexcept = 0;
@@ -1439,7 +1349,6 @@ public:
     virtual void setErrorRecorder(IErrorRecorder* recorder) noexcept = 0;
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
     virtual void reset() noexcept = 0;
-    virtual bool platformHasTf32() const noexcept = 0;
     virtual nvinfer1::IHostMemory* buildSerializedNetwork(
         INetworkDefinition& network, IBuilderConfig& config) noexcept = 0;
     virtual bool isNetworkSupported(INetworkDefinition const& network, IBuilderConfig const& config) const noexcept = 0;

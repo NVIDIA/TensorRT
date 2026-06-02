@@ -481,3 +481,17 @@ class TestOnnxExporter(object):
         # ONNX exports the initializers in this model differently after importing - ONNX GS can't do much about this.
         if model.path != lstm_model().path:
             assert onnx_graph == exported_onnx_graph
+
+    def test_export_fp4_tensor(self) -> None:
+        """Test a tensor can be exported when using fp4."""
+        name = "fp4_tensor"
+        shape = (2, 2)
+        values = np.array([0.5, 0, 1, 0]).astype(ml_dtypes.float4_e2m1fn).reshape(shape)
+
+        tensor = Constant(name=name, values=values)
+        onnx_tensor = OnnxExporter.export_tensor_proto(tensor)
+
+        assert onnx_tensor.name == name
+        assert onnx_tensor.data_type == onnx.TensorProto.FLOAT4E2M1
+        assert onnx_tensor.raw_data == bytes([0x01, 0x02])
+        assert tuple(onnx_tensor.dims) == shape

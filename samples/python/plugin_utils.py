@@ -78,7 +78,7 @@ class KernelHelper:
             opts = [
                 b"--fmad=true",
                 arch_arg,
-                '--include-path={}'.format(include_dirs).encode("UTF-8"),
+                ('-I' + include_dirs).encode("UTF-8"),
                 b"--std=c++11",
                 b"-default-device",
             ]

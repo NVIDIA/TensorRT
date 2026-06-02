@@ -29,6 +29,7 @@
 #include "logger.h"
 #include "maxPoolPluginCreator.h"
 #include "parserOnnxConfig.h"
+#include "safeCommon.h"
 #include "safeErrorRecorder.h"
 #include "sampleUtils.h"
 #include <fstream>
@@ -37,7 +38,6 @@
 #include <memory>
 
 std::string const gSampleName = "TensorRT.sample_safe_plugin_build";
-std::string const gOnnxFileName = "mnist_safe_plugin_ds.onnx";
 
 using namespace nvinfer1;
 
@@ -51,84 +51,72 @@ namespace
 //!
 struct SampleSafePluginBuildArgs : public samplesCommon::Args
 {
-    std::string onnx{""};
+    std::string onnx{"mnist_safe_plugin_ds.onnx"};
     std::string engineFileName{"safe_plugin.engine"};
     std::string remoteAutoTuningConfig{};
+    int32_t maxAuxStreams{0};
+    bool cpuOnly{false};
 };
 
 //!
 //! \brief This function parses arguments specific to the sample
 //!
-// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool parseSampleSafePluginBuildArgs(SampleSafePluginBuildArgs& args, int32_t argc, char* argv[])
 {
+    using namespace samplesSafeCommon;
     for (int32_t i = 1; i < argc; ++i)
     {
-        std::string arg{argv[i]};
-
-        // Handle flags with values
-        auto const flagValue = sample::parseFlag(arg);
-        if (!flagValue.first.empty())
+        std::string const arg = argv[i];
+        if (auto value = parseString(arg, "saveEngine"))
         {
-            if (flagValue.first == "saveEngine")
+            if (!sample::validateNonEmpty(*value, "Engine filename"))
             {
-                if (!sample::validateNonEmpty(flagValue.second, "Engine filename"))
-                {
-                    return false;
-                }
-                args.engineFileName = flagValue.second;
+                return false;
             }
-            else if (flagValue.first == "remoteAutoTuningConfig")
+            args.engineFileName = std::move(*value);
+        }
+        else if (auto value = parseString(arg, "remoteAutoTuningConfig"))
+        {
+            if (!sample::validateNonEmpty(*value, "Remote auto tuning config")
+                || !sample::validateRemoteAutoTuningConfig(*value))
             {
-                if (!sample::validateNonEmpty(flagValue.second, "Remote auto tuning config"))
-                {
-                    return false;
-                }
-                if (!sample::validateRemoteAutoTuningConfig(flagValue.second))
-                {
-                    return false;
-                }
-                args.remoteAutoTuningConfig = flagValue.second;
+                return false;
             }
-            else if (flagValue.first == "datadir" || flagValue.first == "d")
+            args.remoteAutoTuningConfig = std::move(*value);
+        }
+        else if (auto const value = parseString(arg, "datadir", 'd'))
+        {
+            if (!sample::validateNonEmpty(*value, "Data directory path"))
             {
-                if (!sample::validateNonEmpty(flagValue.second, "Data directory path"))
-                {
-                    return false;
-                }
-                args.dataDirs.push_back(sample::normalizeDirectoryPath(flagValue.second));
+                return false;
             }
-            else if (flagValue.first == "onnx")
+            args.dataDirs.push_back(sample::normalizeDirectoryPath(*value));
+        }
+        else if (auto value = parseString(arg, "onnx"))
+        {
+            args.onnx = std::move(*value);
+        }
+        else if (auto const value = parseString(arg, "maxAuxStreams"))
+        {
+            args.maxAuxStreams = std::stoi(*value);
+            if (args.maxAuxStreams < 0)
             {
-                args.onnx = flagValue.second;
-            }
-            else
-            {
-                sample::gLogError << "Unknown flag: " << flagValue.first << std::endl;
+                sample::gLogError << "Number of auxiliary streams must be >= 0, got: " << arg << "\n";
                 return false;
             }
         }
-        // Handle boolean flags
+        else if (parseBool(arg, "help", 'h'))
+        {
+            args.help = true;
+        }
+        else if (parseBool(arg, "cpuOnly"))
+        {
+            args.cpuOnly = true;
+        }
         else
         {
-            auto const boolFlag = sample::parseBooleanFlag(arg);
-            if (!boolFlag.empty())
-            {
-                if (boolFlag == "help" || boolFlag == "h")
-                {
-                    args.help = true;
-                }
-                else
-                {
-                    sample::gLogError << "Unknown flag: " << boolFlag << std::endl;
-                    return false;
-                }
-            }
-            else
-            {
-                sample::gLogError << "Invalid Argument: " << argv[i] << std::endl;
-                return false;
-            }
+            sample::gLogError << "Invalid Argument: " << arg << "\n";
+            return false;
         }
     }
 
@@ -140,9 +128,10 @@ bool parseSampleSafePluginBuildArgs(SampleSafePluginBuildArgs& args, int32_t arg
 //!
 struct SampleSafePluginBuildParams : public samplesCommon::OnnxSampleParams
 {
-    std::string engineFileName{"safe_plugin.engine"};
+    std::string engineFileName{};
     std::string remoteAutoTuningConfig{};
     bool std{false};
+    int32_t maxAuxStreams{0};
 };
 
 //!
@@ -162,10 +151,11 @@ SampleSafePluginBuildParams initializeSampleParams(SampleSafePluginBuildArgs con
         params.dataDirs = args.dataDirs;
     }
 
-    params.onnxFileName = args.onnx == "" ? gOnnxFileName : args.onnx;
+    params.onnxFileName = args.onnx;
     params.batchSize = 1;
     params.engineFileName = args.engineFileName;
     params.remoteAutoTuningConfig = args.remoteAutoTuningConfig;
+    params.maxAuxStreams = args.maxAuxStreams;
     return params;
 }
 
@@ -269,6 +259,7 @@ bool SampleSafePlugin::build()
     profile1->setDimensions(network->getInput(0)->getName(), OptProfileSelector::kMAX, Dims4{kBATCH_SIZE1, 1, 28, 28});
     config->addOptimizationProfile(profile1);
     config->setEngineCapability(nvinfer1::EngineCapability::kSAFETY);
+    config->setMaxAuxStreams(mParams.maxAuxStreams);
 
     // Set remote auto tuning config if provided
     if (!mParams.remoteAutoTuningConfig.empty())
@@ -287,7 +278,7 @@ bool SampleSafePlugin::build()
     ASSERT(mInputDims.nbDims == 4);
 
     // Save the engine
-    const std::string engineFile = mParams.engineFileName;
+    std::string const engineFile = mParams.engineFileName;
     std::ofstream file(engineFile, std::ios::binary);
     if (!file)
     {
@@ -318,20 +309,30 @@ bool SampleSafePlugin::constructNetwork(nvonnxparser::IParser* parser)
 //!
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_plugin_safe_build [-h or --help] [-d or --datadir=<path to data directory>]\n";
-    std::cout << "--help or -h    Display help information\n";
-    std::cout << "--datadir or -d Specify path to a data directory, overriding the default. This option can be used "
-                 "multiple times to add multiple directories. If no data directories are given, the default is to use "
-                 "(data/samples/safe_plugin/, data/safe_plugin/)"
-              << std::endl;
-    std::cout << "--saveEngine    Save the serialized engine to the file (default = safe_plugin.engine).\n";
-    std::cout << "--onnx          Specify the path to the ONNX file to use. If not specified, the default is to use "
-                 "what is specified by --datadir/mnist_safe_plugin_ds.onnx.\n";
-    std::cout << "--remoteAutoTuningConfig  Set the remote auto tuning config. Format: "
-                 "protocol://username[:password]@hostname[:port]?param1=value1&param2=value2\n";
-    std::cout
-        << "                Example: "
-           "ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib\n";
+    SampleSafePluginBuildArgs const defArgs{};
+    std::cout << R"(Usage: sample_plugin_safe_build [options]
+Options:
+  --help, -h            Print this message and exit.
+  --datadir=DIR, -d=DIR Search for data in DIR.  This option can be passed multiple times
+                        to add multiple search directories.  If omitted, default data dirs are:
+                        data/samples/mnist/, data/mnist/
+  --verbose             Use verbose logging.
+  --saveEngine=FILE     Save the serialized engine into FILE (default = )"
+              << defArgs.engineFileName << R"().
+  --onnx=FILE           Load ONNX from FILE. (default = )"
+              << defArgs.onnx << R"().
+  --remoteAutoTuningConfig=CONFIG
+                        Set remote auto tuning configuration in the following format:
+                        protocol://username[:password]@hostname[:port]?param1=value1&param2=value2
+  --maxAuxStreams=N     Limit the number of auxiliary streams to N (default = )"
+              << defArgs.maxAuxStreams << R"().
+  --cpuOnly             Build the engine with CPU-only mode. Requires --remoteAutoTuningConfig.
+                        No local GPU is required on the build machine.
+
+Examples:
+  sample_plugin_safe_build \
+      --remoteAutoTuningConfig=ssh://user:pass@192.0.2.100:22?remote_exec_path=/opt/tensorrt/bin&remote_lib_path=/opt/tensorrt/lib
+)";
 }
 
 int main(int argc, char** argv)
@@ -357,7 +358,22 @@ int main(int argc, char** argv)
         sample::gLogInfo << "This is a safety sample and will build in remote mode automatically." << std::endl;
     }
 
-    if (!samplesCommon::isSmSafe())
+    if (args.cpuOnly)
+    {
+        if (args.remoteAutoTuningConfig.empty())
+        {
+            sample::gLogError << "--cpuOnly requires --remoteAutoTuningConfig to be specified." << std::endl;
+            printHelpInfo();
+            return EXIT_FAILURE;
+        }
+        sample::gLogInfo << "Setting CPU-only mode" << std::endl;
+        if (!samplesSafeCommon::applyCpuOnlyMode())
+        {
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (!args.cpuOnly && !samplesCommon::isSmSafe())
     {
         sample::gLogInfo << "Skip safe mode test on unsupported platforms." << std::endl;
         return EXIT_SUCCESS;

@@ -57,10 +57,9 @@ add_executable(sample_plugin_safe_infer
 )
 
 if(TRT_SAFETY_INFERENCE_ONLY)
-    target_link_libraries(sample_plugin_safe_infer PRIVATE trt_global_definitions)
+    target_link_libraries(sample_plugin_safe_infer PRIVATE trt_global_definitions tensorrt_headers)
     target_include_directories(sample_plugin_safe_infer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../common
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     )
 else()
     target_link_libraries(sample_plugin_safe_infer PRIVATE
@@ -107,6 +106,7 @@ if(NOT TRT_SAFETY_INFERENCE_ONLY)
         trt_samples_common
         TRT_SAMPLES::tensorrt
         TRTSAFE::nvinfer_safe_shared
+        tensorrt_headers
     )
 
     # Link ONNX parser if available
@@ -116,7 +116,6 @@ if(NOT TRT_SAFETY_INFERENCE_ONLY)
 
     target_include_directories(sample_safe_plugin_build_lib PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../common
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     )
 
     if(TRT_OUT_DIR)
@@ -127,7 +126,6 @@ if(NOT TRT_SAFETY_INFERENCE_ONLY)
     else()
         set_target_properties(sample_safe_plugin_build_lib PROPERTIES
             OUTPUT_NAME "sample_safe_plugin_v3"
-            LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
         )
     endif()
 
@@ -153,10 +151,9 @@ target_compile_definitions(sample_safe_plugin_runtime_lib PRIVATE
 )
 
 if(TRT_SAFETY_INFERENCE_ONLY)
-    target_link_libraries(sample_safe_plugin_runtime_lib PRIVATE trt_global_definitions)
+    target_link_libraries(sample_safe_plugin_runtime_lib PRIVATE trt_global_definitions tensorrt_headers)
     target_include_directories(sample_safe_plugin_runtime_lib PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../common
-        ${CMAKE_CURRENT_SOURCE_DIR}/../../include
     )
 else()
     target_link_libraries(sample_safe_plugin_runtime_lib PRIVATE
@@ -173,7 +170,6 @@ if(TRT_OUT_DIR)
 else()
     set_target_properties(sample_safe_plugin_runtime_lib PROPERTIES
         OUTPUT_NAME "sample_safe_plugin_v3_safe"
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
     )
 endif()
 

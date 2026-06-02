@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -221,8 +221,8 @@ struct InferenceEnvironmentSafe : public InferenceEnvironmentBase
     }
 
     std::vector<std::unique_ptr<BindingsSafe>> bindings;
-    inline void* getClonedGraph(int32_t streamIdx);
-
+    //! deleters for aux. streams, per cloned graph
+    std::vector<std::shared_ptr<std::nullptr_t>> mAuxStreamsDeleters;
     std::vector<std::unique_ptr<nvinfer2::safe::ITRTGraph>> mClonedGraphs;
 };
 #endif

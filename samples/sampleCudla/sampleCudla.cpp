@@ -293,15 +293,13 @@ void constructNetwork(nvinfer1::INetworkDefinition& network)
 //!
 //! \brief Explicitly set network I/O formats.
 //!
-void setNetworkIOFormats(nvinfer1::INetworkDefinition& network, bool isInt8)
+void setNetworkIOFormats(nvinfer1::INetworkDefinition& network)
 {
-    nvinfer1::TensorFormat const formats = isInt8 ? nvinfer1::TensorFormat::kCHW32 : nvinfer1::TensorFormat::kCHW16;
-    nvinfer1::DataType const dataType = isInt8 ? nvinfer1::DataType::kINT8 : nvinfer1::DataType::kHALF;
+    nvinfer1::TensorFormat const formats = nvinfer1::TensorFormat::kCHW16;
     uint32_t const numInputs = network.getNbInputs();
     for (uint32_t i = 0; i < numInputs; i++)
     {
         auto input = network.getInput(i);
-        input->setType(dataType);
         input->setAllowedFormats(static_cast<nvinfer1::TensorFormats>(1U << static_cast<int32_t>(formats)));
     }
 
@@ -309,7 +307,6 @@ void setNetworkIOFormats(nvinfer1::INetworkDefinition& network, bool isInt8)
     for (uint32_t i = 0; i < numOutputs; i++)
     {
         auto output = network.getOutput(i);
-        output->setType(dataType);
         output->setAllowedFormats(static_cast<nvinfer1::TensorFormats>(1U << static_cast<int32_t>(formats)));
     }
 }
@@ -358,9 +355,7 @@ bool build(std::unique_ptr<nvinfer1::IHostMemory>& mLoadable, nvinfer1::Dims& mI
     CHECK_RETURN(config.get(), false);
 
     constructNetwork(*network);
-    setNetworkIOFormats(*network, false);
-
-    config->setFlag(nvinfer1::BuilderFlag::kFP16);
+    setNetworkIOFormats(*network);
 
     samplesCommon::enableDLA(builder.get(), config.get(), 0);
 

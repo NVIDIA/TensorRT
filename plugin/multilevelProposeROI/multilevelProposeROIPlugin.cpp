@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@
 #include <cuda_runtime_api.h>
 #include <iostream>
 #include <math.h>
+#include <string_view>
 
 #include <fstream>
 
@@ -69,33 +70,34 @@ IPluginV2Ext* MultilevelProposeROIPluginCreator::createPlugin(
 {
     try
     {
+        using namespace std::string_view_literals;
         plugin::validateRequiredAttributesExist({"prenms_topk", "keep_topk", "fg_threshold", "iou_threshold"}, fc);
         auto imageSize = TLTMaskRCNNConfig::IMAGE_SHAPE;
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "prenms_topk"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "prenms_topk"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mPreNMSTopK = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "keep_topk"))
+            if (attrName == "keep_topk"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mKeepTopK = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "fg_threshold"))
+            if (attrName == "fg_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mFGThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "iou_threshold"))
+            if (attrName == "iou_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 mIOUThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "image_size"))
+            if (attrName == "image_size"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 auto const dims = static_cast<int32_t const*>(fields[i].data);
@@ -481,19 +483,6 @@ DataType MultilevelProposeROI::getOutputDataType(
     if ((inputTypes[0] == DataType::kFLOAT) || (inputTypes[0] == DataType::kHALF))
         return inputTypes[0];
     return DataType::kFLOAT;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool MultilevelProposeROI::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool MultilevelProposeROI::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
 }
 
 // Configure the layer with input and output data types.

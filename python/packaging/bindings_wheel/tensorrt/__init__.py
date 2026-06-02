@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,9 +40,9 @@ if not _libs_wheel_imported and sys.platform.startswith("win"):
     def find_lib(name):
         paths = os.environ["PATH"].split(os.path.pathsep)
 
-        # Add ../##TENSORRT_MODULE##.libs to the search path.  This allows repackaging non-standalone TensorRT wheels as standalone
+        # Add ../##TENSORRT_MODULE##_libs to the search path.  This allows repackaging non-standalone TensorRT wheels as standalone
         # using delvewheel (with the --no-mangle-all flag set) to work properly.
-        paths.append(os.path.join(os.path.dirname(__file__), os.pardir, "##TENSORRT_MODULE##.libs"))
+        paths.append(os.path.join(os.path.dirname(__file__), os.pardir, "##TENSORRT_MODULE##_libs"))
 
         for path in paths:
             libpath = os.path.join(path, name)

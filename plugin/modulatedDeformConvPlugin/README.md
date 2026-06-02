@@ -11,6 +11,8 @@
 
 ## Description
 
+> NOTE: Version 1 of this plugin (using IPluginV2DynamicExt interface) is deprecated since TensorRT 10.11. Version 2 (using IPluginV3 interface) is the recommended replacement.
+
 The `modulatedDeformConvPlugin` performs the modulated deformable convolution operations. The modulated Deformable Convolution is similar to regular Convolution but its receptive field is deformed because of additional spatial offsets and modulating scalars. This plugin is used in OCDNet in TAO Toolkit.
 
 ## Structure

@@ -49,7 +49,9 @@ public:
         return mLogStreamMutex;
     }
     LogStream()
-        : std::ostream(&buffer){};
+        : std::ostream(&buffer)
+    {
+    }
 };
 
 // Use mutex to protect multi-stream write to buffer

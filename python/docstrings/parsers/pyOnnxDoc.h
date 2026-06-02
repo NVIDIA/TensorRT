@@ -42,35 +42,12 @@ constexpr char const* parse = R"trtdoc(
     :returns: true if the model was parsed successfully
 )trtdoc";
 
-constexpr char const* parse_with_weight_descriptors = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.13. See load_initializers.
-
-    Parse a serialized ONNX model into the TensorRT network with consideration of user provided weights.
-
-    :arg model: The serialized ONNX model.
-
-    :returns: true if the model was parsed successfully
-)trtdoc";
-
 constexpr char const* parse_from_file = R"trtdoc(
     Parse an ONNX model from file into a TensorRT network.
 
     :arg model: The path to an ONNX model.
 
     :returns: true if the model was parsed successfully
-)trtdoc";
-
-constexpr char const* supports_model = R"trtdoc(
-    [DEPRECATED] Deprecated in TensorRT 10.1. See supports_model_v2.
-
-    Check whether TensorRT supports a particular ONNX model.
-
-    :arg model: The serialized ONNX model.
-    :arg path: The path to the model file. Only required if the model has externally stored weights.
-
-    :returns: Tuple[bool, List[Tuple[NodeIndices, bool]]]
-        The first element of the tuple indicates whether the model is supported.
-        The second indicates subgraphs (by node index) in the model and whether they are supported.
 )trtdoc";
 
 constexpr char const* supports_model_v2 = R"trtdoc(
@@ -171,7 +148,7 @@ constexpr char const* get_used_vc_plugin_libraries = R"trtdoc(
 )trtdoc";
 
 constexpr char const* load_model_proto = R"trtdoc(
-    Load a serialized ONNX model into the parser. Unlike the parse(), parse_from_file(), or parse_with_weight_descriptors()
+    Load a serialized ONNX model into the parser. Unlike the parse() or parse_from_file()
     functions, this function does not immediately convert the model into a TensorRT INetworkDefinition. Using this function
     allows users to provide their own initializers for the ONNX model through the load_initializer() function.
 

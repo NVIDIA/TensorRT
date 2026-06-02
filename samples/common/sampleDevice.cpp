@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,7 @@ void setCudaDevice(int32_t device, std::ostream& os)
 
     // Print out the GPU name and PCIe bus ID of each GPU.
     os << "Available Devices: " << std::endl;
-    cudaDeviceProp properties;
+    cudaDeviceProp properties{};
     for (int32_t deviceIdx = 0; deviceIdx < nbDevices; ++deviceIdx)
     {
         cudaDeviceProp tempProperties;

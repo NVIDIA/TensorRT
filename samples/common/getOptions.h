@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,9 +22,7 @@
 #include <utility>
 #include <vector>
 
-namespace nvinfer1
-{
-namespace utility
+namespace nvinfer1::utility
 {
 
 //! TRTOption defines a command line option. At least 1 of shortName and longName
@@ -34,31 +32,41 @@ namespace utility
 //! helpText is optional.
 struct TRTOption
 {
-    char shortName;       //!< Option name in short (single hyphen) form (i.e. -a, -b)
-    std::string longName; //!< Option name in long (double hyphen) form (i.e. --foo, --bar)
-    bool valueRequired;   //!< True if a value is needed for an option (i.e. -N 4, --foo bar)
+    char shortName{};     //!< Option name in short (single hyphen) form (e.g., -a, -b); '\0' for no short name.
+    std::string longName; //!< Option name in long (double hyphen) form (e.g., --foo, --bar); empty for no long name.
+    bool valueRequired{}; //!< True if a value is needed for an option (e.g., -N 4, --foo bar); false for not required.
     std::string helpText; //!< Text to show when printing out the command usage
 };
 
 //! TRTParsedArgs is returned by getOptions after it has parsed a command line
 //! argument list (argv).
-//!
-//! errMsg is a string containing an error message if any errors occurred. If it
-//! is empty, no errors occurred.
-//!
-//! values stores a vector of pairs for each option (ordered by order in the
-//! input). Each pair contains an int (the number of occurrences) and a vector
-//! of strings (a list of values). The user should know which of these to use,
-//! and which options required values. For non-value options, only occurrences is
-//! populated. For value-required options, occurrences == # of values. Values do
-//! not need to be unique.
-//!
-//! positionalArgs stores additional arguments that are passed in without an
-//! option (these must not start with a hyphen).
 struct TRTParsedArgs
 {
+    //! An error message if any errors occurred. Empty if no errors occurred.
     std::string errMsg;
-    std::vector<std::pair<int, std::vector<std::string>>> values;
+
+    //! A value for an option.
+    struct Value
+    {
+        //! The number of occurrences of the option (for value-required options, this equals `values.size()`).
+        int32_t occurrences{};
+        //! The values for the option. For non-value args, will be empty.
+        std::vector<std::string> values;
+        //! Increment the number of occurrences (for a non-value arg).
+        void addOccurrence()
+        {
+            ++occurrences;
+        }
+        //! Append \p value and set \p occurrences to the number of values.
+        void addOccurrence(std::string value)
+        {
+            values.push_back(std::move(value));
+            occurrences = values.size();
+        }
+    };
+    //! A list of values for each option.
+    std::vector<Value> values;
+    //! Positional arguments that are passed in without an option (these must not start with a hyphen).
     std::vector<std::string> positionalArgs;
 };
 
@@ -121,8 +129,7 @@ struct TRTParsedArgs
 //! @param[in] options List of TRTOptions to parse
 //! @return TRTParsedArgs. See TRTParsedArgs documentation for descriptions of
 //!         the fields.
-TRTParsedArgs getOptions(int argc, const char* const* argv, const std::vector<TRTOption>& options);
-} // namespace utility
-} // namespace nvinfer1
+[[nodiscard]] TRTParsedArgs getOptions(int argc, char const* const* argv, std::vector<TRTOption> const& options);
+} // namespace nvinfer1::utility
 
 #endif // TRT_GET_OPTIONS_H

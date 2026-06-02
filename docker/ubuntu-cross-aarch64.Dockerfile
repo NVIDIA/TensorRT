@@ -21,7 +21,7 @@ ARG OS_VERSION=24.04
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION}
 LABEL maintainer="NVIDIA CORPORATION"
 
-ENV TRT_VERSION 10.16.1.11
+ENV TRT_VERSION 11.0.0.114
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Setup user account and edit default account
@@ -54,7 +54,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libnccl2 \
     libnccl-dev \
     openmpi-bin \
-    libopenmpi-dev
+    libopenmpi-dev \
+    zstd \
+    ccache
 
 # Install python3
 RUN apt-get install -y --no-install-recommends \
@@ -73,10 +75,20 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Cmake
 RUN cd /tmp && \
-    wget https://github.com/Kitware/CMake/releases/download/v3.27.9/cmake-3.27.9-Linux-x86_64.sh && \
-    chmod +x cmake-3.27.9-Linux-x86_64.sh && \
-    ./cmake-3.27.9-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
-    rm ./cmake-3.27.9-Linux-x86_64.sh
+    wget https://github.com/Kitware/CMake/releases/download/v3.31.11/cmake-3.31.11-Linux-x86_64.sh && \
+    chmod +x cmake-3.31.11-Linux-x86_64.sh && \
+    ./cmake-3.31.11-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir --skip-license && \
+    rm ./cmake-3.31.11-Linux-x86_64.sh
+
+# Install gtest
+RUN cd /tmp && \
+    git clone https://github.com/google/googletest.git -b v1.14.0 && \
+    cd googletest && \
+    mkdir build && cd build && \
+    cmake .. && \
+    make -j4 && \
+    make install && \
+    rm -rf /tmp/googletest
 
 # Install CUDA cross compile toolchain
 RUN wget https://developer.download.nvidia.com/compute/cuda/13.2.0/local_installers/cuda-repo-cross-sbsa-ubuntu2404-13-2-local_13.2.0-1_all.deb && \
@@ -87,9 +99,9 @@ RUN wget https://developer.download.nvidia.com/compute/cuda/13.2.0/local_install
 
 # Unpack libnvinfer.
 
-RUN wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.1/tars/TensorRT-10.16.1.11.Linux.aarch64-gnu.cuda-13.2.tar.gz && \
-    tar -xf TensorRT-10.16.1.11.Linux.aarch64-gnu.cuda-13.2.tar.gz && \
-    cp -a TensorRT-10.16.1.11/lib/*.so* /usr/lib/aarch64-linux-gnu
+RUN wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/tars/TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-13.2-Release-external.tar.zst && \
+    tar -xf TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-13.2-Release-external.tar.zst && \
+    cp -a TensorRT-11.0.0.114/lib/*.so* /usr/lib/aarch64-linux-gnu
 
 # Link required library
 RUN cd /usr/aarch64-linux-gnu/lib && ln -sf librt.so.1 librt.so

@@ -11,6 +11,8 @@
 
 ## Description
 
+> NOTE: Version 1 of this plugin (using IPluginV2DynamicExt interface) is deprecated since TensorRT 10.11. Version 2 (using IPluginV3 interface) is the recommended replacement.
+
 The `multiscaleDeformableAttnPlugin` is used to perform attention computation over a small set of key sampling points around a reference point rather than looking over all possible spatial locations. It makes use of multiscale feature maps to effectively represent objects at different scales. It helps to achieve faster convergence and better performance on small objects.
 
 ### Structure

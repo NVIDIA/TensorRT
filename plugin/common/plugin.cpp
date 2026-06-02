@@ -92,7 +92,7 @@ public:
         }
 
         return result;
-    };
+    }
 
 private:
     std::function<std::unique_ptr<T>(char const*)> mCreator;

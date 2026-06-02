@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -60,58 +60,6 @@ public:
     //!
     using PluginLibraryHandle = void*;
 
-    //!
-    //! \brief Register a plugin creator implementing IPluginCreator. Returns false if any plugin creator with the same
-    //! name, version or namespace is already registered.
-    //!
-    //! \warning The string pluginNamespace must be 1024 bytes or less including the NULL terminator and must be NULL
-    //! terminated.
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes; calls to this method will be synchronized by a mutex.
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Superseded by
-    //! IPluginRegistry::registerCreator(IPluginCreatorInterface&, AsciiChar const* const).
-    //!
-    TRT_DEPRECATED virtual bool registerCreator(
-        IPluginCreator& creator, AsciiChar const* const pluginNamespace) noexcept = 0;
-
-    //!
-    //! \brief Return all the registered plugin creators and the number of
-    //! registered plugin creators. Returns nullptr if none found.
-    //!
-    //! \warning If any plugin creators are registered or deregistered after calling this function, the returned pointer
-    //! is not guaranteed to be valid thereafter.
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: No
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Superseded by IPluginRegistry::getAllCreators(int32_t* const).
-    //!
-    TRT_DEPRECATED virtual IPluginCreator* const* getPluginCreatorList(int32_t* const numCreators) const noexcept = 0;
-
-    //!
-    //! \brief Return plugin creator based on plugin name, version, and
-    //! namespace associated with plugin during network creation.
-    //!
-    //! \warning The strings pluginName, pluginVersion, and pluginNamespace must be 1024 bytes or less including the
-    //! NULL terminator and must be NULL terminated.
-    //!
-    //! \warning Returns nullptr if a plugin creator with matching name, version, and namespace is found, but is not a
-    //! descendent of IPluginCreator
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Superseded by IPluginRegistry::getCreator(AsciiChar const* const,
-    //! AsciiChar const* const, AsciiChar const* const).
-    //!
-    TRT_DEPRECATED virtual IPluginCreator* getPluginCreator(AsciiChar const* const pluginName,
-        AsciiChar const* const pluginVersion, AsciiChar const* const pluginNamespace = "") noexcept = 0;
-
     // @cond SuppressDoxyWarnings
     IPluginRegistry() = default;
     IPluginRegistry(IPluginRegistry const&) = delete;
@@ -121,7 +69,7 @@ public:
     // @endcond
 
 protected:
-    virtual ~IPluginRegistry() noexcept = default;
+    virtual ~IPluginRegistry() noexcept = 0;
 
 public:
     //!
@@ -158,25 +106,6 @@ public:
     //!   - Thread-safe: Yes
     //!
     virtual IErrorRecorder* getErrorRecorder() const noexcept = 0;
-
-    //!
-    //! \brief Deregister a previously registered plugin creator implementing IPluginCreator.
-    //!
-    //! Since there may be a desire to limit the number of plugins,
-    //! this function provides a mechanism for removing plugin creators registered in TensorRT.
-    //! The plugin creator that is specified by \p creator is removed from TensorRT and no longer tracked.
-    //!
-    //! \return True if the plugin creator was deregistered, false if it was not found in the registry or otherwise
-    //! could not be deregistered.
-    //!
-    //! \usage
-    //! - Allowed context for the API call
-    //!   - Thread-safe: Yes
-    //!
-    //! \deprecated Deprecated in TensorRT 10.0. Superseded by
-    //! IPluginRegistry::deregisterCreator(IPluginCreatorInterface const&).
-    //!
-    TRT_DEPRECATED virtual bool deregisterCreator(IPluginCreator const& creator) noexcept = 0;
 
     //!
     //! \brief Return whether the parent registry will be searched if a plugin is not found in this registry
@@ -316,6 +245,8 @@ public:
     //!
     virtual IPluginCreatorInterface* const* getAllCreatorsRecursive(int32_t* const numCreators) noexcept = 0;
 };
+
+inline IPluginRegistry::~IPluginRegistry() noexcept = default;
 
 } // namespace nvinfer1
 

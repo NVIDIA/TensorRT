@@ -34,10 +34,6 @@ function(add_vc_plugin_source)
 endfunction()
 
 set(TRT_PLUGIN_NAMES
-    batchedNMSPlugin
-    batchTilePlugin
-    clipPlugin
-    coordConvACPlugin
     cropAndResizePlugin
     decodeBbox3DPlugin
     detectionLayerPlugin
@@ -48,18 +44,14 @@ set(TRT_PLUGIN_NAMES
     gridAnchorPlugin
     groupNormalizationPlugin
     instanceNormalizationPlugin
-    leakyReluPlugin
     modulatedDeformConvPlugin
     multilevelCropAndResizePlugin
     multilevelProposeROI
     multiscaleDeformableAttnPlugin
-    nmsPlugin
-    normalizePlugin
     nvFasterRCNN
     pillarScatterPlugin
     priorBoxPlugin
     proposalLayerPlugin
-    proposalPlugin
     pyramidROIAlignPlugin
     regionPlugin
     reorgPlugin
@@ -67,18 +59,15 @@ set(TRT_PLUGIN_NAMES
     roiAlignPlugin
     scatterElementsPlugin
     scatterPlugin
-    specialSlicePlugin
-    splitPlugin
+    topkLastDimPlugin
     voxelGeneratorPlugin
 )
-
 
 if(${TRT_BUILD_INCLUDE_BERT_QKV_PLUGIN})
     list(APPEND TRT_PLUGIN_NAMES
         bertQKVToContextPlugin
         embLayerNormPlugin
         fcPlugin
-        geluPlugin
         skipLayerNormPlugin
     )
 endif()
@@ -317,7 +306,37 @@ installLibraries(
     EXPORT TensorRT_Internal
 )
 
-else() # TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW
+elseif(${TRT_BUILD_WINML})
+# TRT-RTX does not ship a separate plugin library. A small subset of in-tree plugins is
+# baked directly into tensorrt_rtx via the trt_rtx_embedded_plugins object library, which
+# is linked into trt_runtime_lean. This currently provides ROIAlign V3 (the V3 creator
+# self-registers via REGISTER_TENSORRT_PLUGIN) plus the plugin error/logging infra it
+# needs.
+add_library(trt_rtx_embedded_plugins OBJECT
+    roiAlignPlugin/roiAlignPlugin.cpp
+    roiAlignPlugin/roiAlignPlugin.h
+    roiAlignPlugin/roiAlignKernel.cu
+    roiAlignPlugin/roiAlignKernel.h
+    vc/checkMacrosPlugin.cpp
+    vc/checkMacrosPlugin.h
+)
+
+target_include_directories(trt_rtx_embedded_plugins PRIVATE
+    $<BUILD_LOCAL_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+)
+
+# Match the trt_plugins compile environment.
+target_link_libraries(trt_rtx_embedded_plugins PRIVATE $<COMPILE_ONLY:tensorrt>)
+target_link_libraries(trt_rtx_embedded_plugins PRIVATE trt_global_definitions TRT::cudart)
+
+foreach(SM IN LISTS CMAKE_CUDA_ARCHITECTURES)
+    get_numeric_sm(${SM} "SM")
+    target_compile_definitions(trt_rtx_embedded_plugins PRIVATE "ENABLE_SM${SM}")
+endforeach()
+
+target_compile_options(trt_rtx_embedded_plugins PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>)
+
+else() # neither TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW nor TRT_BUILD_WINML
 add_custom_target(plugin)
 
 set(TARGET_NAME ${nvinfer_plugin_lib_name})
@@ -372,10 +391,6 @@ macro(add_vc_plugin_source)
 endmacro()
 
 set(PLUGIN_LISTS
-    batchTilePlugin
-    batchedNMSPlugin
-    clipPlugin
-    coordConvACPlugin
     cropAndResizePlugin
     decodeBbox3DPlugin
     detectionLayerPlugin
@@ -386,18 +401,14 @@ set(PLUGIN_LISTS
     gridAnchorPlugin
     groupNormalizationPlugin
     instanceNormalizationPlugin
-    leakyReluPlugin
     modulatedDeformConvPlugin
     multilevelCropAndResizePlugin
     multilevelProposeROI
     multiscaleDeformableAttnPlugin
-    nmsPlugin
-    normalizePlugin
     nvFasterRCNN
     pillarScatterPlugin
     priorBoxPlugin
     proposalLayerPlugin
-    proposalPlugin
     pyramidROIAlignPlugin
     regionPlugin
     reorgPlugin
@@ -405,16 +416,15 @@ set(PLUGIN_LISTS
     roiAlignPlugin
     scatterElementsPlugin
     scatterPlugin
-    specialSlicePlugin
-    splitPlugin
+    topkLastDimPlugin
     voxelGeneratorPlugin)
 
 # Add BERT sources if ${BERT_GENCODES} was populated
 if(BERT_GENCODES)
     set(BERT_CU_SOURCES)
-    set(PLUGIN_LISTS ${PLUGIN_LISTS} bertQKVToContextPlugin embLayerNormPlugin fcPlugin geluPlugin skipLayerNormPlugin)
-    include_directories(bertQKVToContextPlugin/fused_multihead_attention
-                       /include bertQKVToContextPlugin/fused_multihead_attention_v2/include)
+    set(PLUGIN_LISTS ${PLUGIN_LISTS} bertQKVToContextPlugin embLayerNormPlugin fcPlugin skipLayerNormPlugin)
+    include_directories(bertQKVToContextPlugin/fused_multihead_attention/include
+                        bertQKVToContextPlugin/fused_multihead_attention_v2/include)
 endif()
 
 include_directories(common common/kernels ${CMAKE_SOURCE_DIR}/third_party)
@@ -428,13 +438,9 @@ endforeach(PLUGIN_ITER)
 add_subdirectory(common)
 add_subdirectory(vc)
 
-# Set gencodes
-set_source_files_properties(${PLUGIN_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${GENCODES} ${ENABLED_SMS}")
+# Set per-file compile flags for CUDA sources
+set_source_files_properties(${PLUGIN_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${ENABLED_SMS}")
 list(APPEND PLUGIN_SOURCES "${PLUGIN_CU_SOURCES}")
-if(BERT_CU_SOURCES)
-    set_source_files_properties(${BERT_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${BERT_GENCODES} ${ENABLED_SMS}")
-    list(APPEND PLUGIN_SOURCES "${BERT_CU_SOURCES}")
-endif()
 
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/api/inferPlugin.cpp")
 list(APPEND PLUGIN_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../samples/common/logger.cpp")
@@ -447,12 +453,10 @@ target_include_directories(
     ${SHARED_TARGET}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
     PRIVATE ${PROJECT_SOURCE_DIR}/common
-    PUBLIC ${CUDA_INSTALL_DIR}/include
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bertQKVToContextPlugin/fused_multihead_attention/include
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bertQKVToContextPlugin/fused_multihead_attention_v2/include
+    PUBLIC ${CUDAToolkit_INCLUDE_DIRS}
     PRIVATE ${TARGET_DIR})
-
-if(CUDA_VERSION VERSION_LESS 11.0)
-    target_include_directories(${SHARED_TARGET} PUBLIC ${CUB_ROOT_DIR})
-endif()
 
 set_target_properties(
     ${SHARED_TARGET}
@@ -478,14 +482,9 @@ set_target_properties(${SHARED_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOVERSI
 
 set_property(TARGET ${SHARED_TARGET} PROPERTY CUDA_STANDARD 17)
 
-target_link_directories(${SHARED_TARGET} PUBLIC ${CUDA_ROOT}/lib)
+target_link_directories(${SHARED_TARGET} PUBLIC ${CUDAToolkit_LIBRARY_DIR})
 
-target_link_libraries(${SHARED_TARGET} ${CUDART_LIB} ${${nvinfer_lib_name}_LIB_PATH} ${CMAKE_DL_LIBS})
-
-# Needed when static linking CUDART
-if(NOT MSVC)
-    target_link_libraries(${SHARED_TARGET} Threads::Threads ${RT_LIB})
-endif()
+target_link_libraries(${SHARED_TARGET} PRIVATE CUDA::cudart_static ${${nvinfer_lib_name}_LIB_PATH} ${CMAKE_DL_LIBS})
 
 ################################## STATIC LIBRARY #######################################
 
@@ -494,9 +493,10 @@ add_library(${STATIC_TARGET} STATIC ${PLUGIN_SOURCES})
 target_include_directories(
     ${STATIC_TARGET}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
-    PUBLIC ${CUB_ROOT_DIR}
     PRIVATE ${PROJECT_SOURCE_DIR}/common
-    PUBLIC ${CUDA_INSTALL_DIR}/include
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bertQKVToContextPlugin/fused_multihead_attention/include
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bertQKVToContextPlugin/fused_multihead_attention_v2/include
+    PUBLIC ${CUDAToolkit_INCLUDE_DIRS}
     PRIVATE ${TARGET_DIR})
 
 set_target_properties(
@@ -518,7 +518,7 @@ set_property(TARGET ${STATIC_TARGET} PROPERTY CUDA_STANDARD 17)
 
 ################################## VFC SHARED LIBRARY #######################################
 
-set_source_files_properties(${VFC_PLUGIN_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${GENCODES} ${ENABLED_SMS}")
+set_source_files_properties(${VFC_PLUGIN_CU_SOURCES} PROPERTIES COMPILE_FLAGS "${ENABLED_SMS}")
 list(APPEND VFC_PLUGIN_SOURCES "${VFC_PLUGIN_CU_SOURCES}")
 
 add_library(${VFC_SHARED_TARGET} SHARED ${VFC_PLUGIN_SOURCES})
@@ -527,7 +527,7 @@ target_include_directories(
     ${VFC_SHARED_TARGET}
     PUBLIC ${PROJECT_SOURCE_DIR}/include
     PRIVATE ${PROJECT_SOURCE_DIR}/common
-    PUBLIC ${CUDA_INSTALL_DIR}/include
+    PUBLIC ${CUDAToolkit_INCLUDE_DIRS}
     PRIVATE ${TARGET_DIR})
 
 set_target_properties(
@@ -555,14 +555,9 @@ set_target_properties(${VFC_SHARED_TARGET} PROPERTIES VERSION ${TRT_VERSION} SOV
 
 set_property(TARGET ${VFC_SHARED_TARGET} PROPERTY CUDA_STANDARD 17)
 
-target_link_directories(${VFC_SHARED_TARGET} PUBLIC ${CUDA_ROOT}/lib)
+target_link_directories(${VFC_SHARED_TARGET} PUBLIC ${CUDAToolkit_LIBRARY_DIR})
 
-target_link_libraries(${VFC_SHARED_TARGET} ${CUDART_LIB} ${${nvinfer_lib_name}_LIB_PATH} ${CMAKE_DL_LIBS})
-
-# Needed when static linking CUDART
-if(NOT MSVC)
-    target_link_libraries(${VFC_SHARED_TARGET} Threads::Threads ${RT_LIB})
-endif()
+target_link_libraries(${VFC_SHARED_TARGET} PRIVATE CUDA::cudart_static ${${nvinfer_lib_name}_LIB_PATH} ${CMAKE_DL_LIBS})
 
 #########################################################################################
 

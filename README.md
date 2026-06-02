@@ -1,20 +1,22 @@
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Documentation](https://img.shields.io/badge/TensorRT-documentation-brightgreen.svg)](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html) [![Roadmap](https://img.shields.io/badge/Roadmap-Q1_2026-brightgreen.svg)](documents/tensorrt_roadmap_2026q1.pdf)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Documentation](https://img.shields.io/badge/TensorRT-documentation-brightgreen.svg)](https://docs.nvidia.com/deeplearning/sdk/tensorrt-developer-guide/index.html) [![Roadmap](https://img.shields.io/badge/Roadmap-Q3_2026-brightgreen.svg)](documents/tensorrt_roadmap_2026q3.pdf)
 
 # :mega::mega: Announcement :mega::mega:
 
-TensorRT 11.0 is coming soon in 2026 Q2 with powerful new capabilities designed to accelerate your AI inference workflows. With this major version bump, TensorRT's API will be streamlined and a few legacy features will be removed.
+TensorRT 11.0 is now released with powerful new capabilities designed to accelerate your AI inference workflows. With this major version bump, TensorRT's API has been streamlined and a few legacy features have been removed.
 
-We recommend migrating early for the following features:
-- Weakly-typed networks and related APIs will be removed, replaced by [Strongly Typed Networks](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/advanced.html#strongly-typed-networks).
-- Implicit quantization and related APIs will be removed, replaced by [Explicit Quantization](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-quantized-types.html#explicit-quantization)
-- IPluginV2 and related APIs will be removed, replaced by [IPluginV3](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/extending-custom-layers.html#migrating-v2-plugins-to-ipluginv3)
-- TREX tool will be removed, replaced by [Nsight Deep Learning Designer](https://docs.nvidia.com/nsight-dl-designer/UserGuide/index.html#visualizing-a-tensorrt-engine)
-- Python bindings for Python 3.9 and older versions will be removed starting TensorRT 10.16. RPM packages for RHEL/Rocky Linux 8 and RHEL/Rocky Linux 9 now depend on Python 3.12.
+Below provides migration guides for the following features:
+- Weakly-typed networks and related APIs have been removed, replaced by [Strongly Typed Networks](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/advanced.html#strongly-typed-networks).
+- Implicit quantization and related APIs have been removed, replaced by [Explicit Quantization](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/work-quantized-types.html#explicit-quantization)
+- IPluginV2 and related APIs have been removed, replaced by [IPluginV3](https://docs.nvidia.com/deeplearning/tensorrt/latest/inference-library/extending-custom-layers.html#migrating-v2-plugins-to-ipluginv3)
+- TREX tool has been removed, replaced by [Nsight Deep Learning Designer](https://docs.nvidia.com/nsight-dl-designer/UserGuide/index.html#visualizing-a-tensorrt-engine)
+- Python bindings for Python 3.9 and older versions have been removed. RPM packages for RHEL/Rocky Linux 8 and RHEL/Rocky Linux 9 now depend on Python 3.12.
 
 # TensorRT Open Source Software
 
 This repository contains the Open Source Software (OSS) components of NVIDIA TensorRT. It includes the sources for TensorRT plugins and ONNX parser, as well as sample applications demonstrating usage and capabilities of the TensorRT platform. These open source software components are a subset of the TensorRT General Availability (GA) release with some extensions and bug-fixes.
 
+- For step-by-step walkthroughs of the TensorRT import paths (ONNX, Torch-TensorRT, HuggingFace/Optimum, Network Definition API) with examples and tooling tips, see the [Import Workflows Guide](documents/import_workflows.md).
+- For the per-model support matrix across import paths (LLM, encoder-NLP, vision, audio, diffusion, multimodal), see [Supported Models](documents/supported_models.md).
 - For code contributions to TensorRT-OSS, please see our [Contribution Guide](CONTRIBUTING.md) and [Coding Guidelines](CODING-GUIDELINES.md).
 - For a summary of new additions and updates shipped with TensorRT-OSS releases, please refer to the [Changelog](CHANGELOG.md).
 - For business inquiries, please contact [researchinquiries@nvidia.com](mailto:researchinquiries@nvidia.com)
@@ -43,7 +45,7 @@ To build the TensorRT-OSS components, you will first need the following software
 
 **TensorRT GA build**
 
-- TensorRT v10.16.1.11
+- TensorRT v11.0.0.114
   - Available from direct download links listed below
 
 **System Packages**
@@ -98,24 +100,24 @@ To build the TensorRT-OSS components, you will first need the following software
 
    Else download and extract the TensorRT GA build from [NVIDIA Developer Zone](https://developer.nvidia.com) with the direct links below:
 
-   - [TensorRT 10.16.1.11 for CUDA 13.2, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.1/tars/TensorRT-10.16.1.11.Linux.x86_64-gnu.cuda-13.2.tar.gz)
-   - [TensorRT 10.16.1.11 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.1/tars/TensorRT-10.16.1.11.Linux.x86_64-gnu.cuda-12.9.tar.gz)
-   - [TensorRT 10.16.1.11 for CUDA 13.2, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.1/zip/TensorRT-10.16.1.11.Windows.amd64.cuda-13.2.zip)
-   - [TensorRT 10.16.1.11 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/10.16.1/zip/TensorRT-10.16.1.11.Windows.amd64.cuda-12.9.zip)
+   - [TensorRT 11.0.0.114 for CUDA 13.2, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/tars/TensorRT-Enterprise-11.0.0.114-Linux-x86_64-cuda-13.2-Release-external.tar.zst)
+   - [TensorRT 11.0.0.114 for CUDA 12.9, Linux x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/tars/TensorRT-Enterprise-11.0.0.114-Linux-x86_64-cuda-12.9-Release-external.tar.zst)
+   - [TensorRT 11.0.0.114 for CUDA 13.2, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/zip/TensorRT-Enterprise-11.0.0.114-Windows-amd64-cuda-13.2-Release-external.zip)
+   - [TensorRT 11.0.0.114 for CUDA 12.9, Windows x86_64](https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/zip/TensorRT-Enterprise-11.0.0.114-Windows-amd64-cuda-12.9-Release-external.zip)
 
    **Example: Ubuntu 22.04 on x86-64 with cuda-13.2**
 
    ```bash
    cd ~/Downloads
-   tar -xvzf TensorRT-10.16.1.11.Linux.x86_64-gnu.cuda-13.2.tar.gz
-   export TRT_LIBPATH=`pwd`/TensorRT-10.16.1.11/lib
+   tar --zstd -xvf TensorRT-Enterprise-11.0.0.114-Linux-x86_64-cuda-13.2-Release-external.tar.zst
+   export TRT_LIBPATH=`pwd`/TensorRT-11.0.0.114/lib
    ```
 
    **Example: Windows on x86-64 with cuda-12.9**
 
    ```powershell
-   Expand-Archive -Path TensorRT-10.16.1.11.Windows.amd64.cuda-12.9.zip
-   $env:TRT_LIBPATH="$pwd\TensorRT-10.16.1.11\lib"
+   Expand-Archive -Path TensorRT-Enterprise-11.0.0.114-Windows-amd64-cuda-12.9-Release-external.zip
+   $env:TRT_LIBPATH="$pwd\TensorRT-11.0.0.114\lib"
    ```
 
 ## Setting Up The Build Environment
@@ -237,9 +239,9 @@ For Linux platforms, we recommend that you generate a docker container for build
   - `BUILD_SAMPLES`: Specify if the samples should be built, for example [`ON`] | `OFF`.
   - `BUILD_SAFE_SAMPLES`: Specify if safety samples should be built, for example [`ON`] | `OFF`.
   - `TRT_SAFETY_INFERENCE_ONLY`: Specify if only build the safety inference components, for example [`ON`] | `OFF`. If turned ON, all other components will be turned OFF except `BUILD_SAFE_SAMPLES`.
-  - `GPU_ARCHS`: GPU (SM) architectures to target. By default we generate CUDA code for all major SMs. Specific SM versions can be specified here as a quoted space-separated list to reduce compilation time and binary size. Table of compute capabilities of NVIDIA GPUs can be found [here](https://developer.nvidia.com/cuda-gpus). Examples: - NVidia A100: `-DGPU_ARCHS="80"` - RTX 50 series: `-DGPU_ARCHS="120"` - Multiple SMs: `-DGPU_ARCHS="80 120"`
   - `TRT_PLATFORM_ID`: Bare-metal build (unlike containerized cross-compilation). Currently supported options: `x86_64` (default).
   - `TRT_BUILD_ENABLE_MULTIDEVICE`: Enable the multi-device sample (`sampleDistCollective`). Use `-DTRT_BUILD_ENABLE_MULTIDEVICE=ON` to build it; requires [NCCL](https://developer.nvidia.com/nccl/nccl-download) >= v2.19, < v3.0.
+  - `TRT_BUILD_TESTING` : Build gTests for samples. Requires [gtest](https://github.com/google/googletest) if available; otherwise fetches googletest at configure time.
 
 ## Building TensorRT DriveOS Samples
 
@@ -259,7 +261,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   ```bash
   cd $TRT_OSSPATH
   mkdir -p build && cd build
-  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_dos_cross.toolchain -DCUDA_VERSION=11.4 -DGPU_ARCHS=87
+  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_aarch64_dos_cross.toolchain -DCUDA_VERSION=11.4 -DCMAKE_CUDA_ARCHITECTURES=87
   make -j$(nproc)
   ```
 
@@ -284,7 +286,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   export QNX_HOST=$QNX_BASE/host/linux/x86_64/
   export QNX_TARGET=$QNX_BASE/target/qnx7/
   export PATH=$PATH:$QNX_HOST/usr/bin
-  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=$CUDA_VERSION -DGPU_ARCHS=87
+  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=$CUDA_VERSION -DCMAKE_CUDA_ARCHITECTURES=87
   make -j$(nproc)
   ```
 
@@ -303,7 +305,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   export PATH=$PATH:$QNX_HOST/usr/bin
   export CUDA=cuda-$CUDA_VERSION
   export CUDA_ROOT=/usr/local/cuda-safe-$CUDA_VERSION
-  cmake .. -DBUILD_SAMPLES=OFF -DBUILD_SAFE_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DTRT_SAFETY_INFERENCE_ONLY=ON -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx_safe.toolchain -DCUDA_VERSION=$CUDA_VERSION -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DGPU_ARCHS=87
+  cmake .. -DBUILD_SAMPLES=OFF -DBUILD_SAFE_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DTRT_SAFETY_INFERENCE_ONLY=ON -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx_safe.toolchain -DCUDA_VERSION=$CUDA_VERSION -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DCMAKE_CUDA_ARCHITECTURES=87
   make -j$(nproc)
   ```
 
@@ -322,7 +324,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   export QNX_HOST=$QNX_BASE/host/linux/x86_64/
   export QNX_TARGET=$QNX_BASE/target/qnx/
   export PATH=$PATH:$QNX_HOST/usr/bin
-  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=$CUDA_VERSION -DGPU_ARCHS=110
+  cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=$CUDA_VERSION -DCMAKE_CUDA_ARCHITECTURES=110
   make -j$(nproc)
   ```
 

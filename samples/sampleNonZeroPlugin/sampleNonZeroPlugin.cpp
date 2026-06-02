@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,6 +40,7 @@
 #include <iostream>
 #include <random>
 #include <sstream>
+#include <string_view>
 using namespace nvinfer1;
 
 std::string const kSAMPLE_NAME = "TensorRT.sample_non_zero_plugin";
@@ -306,11 +307,12 @@ public:
     {
         try
         {
+            using namespace std::string_view_literals;
             bool rowOrder{true};
             for (int32_t i = 0; i < fc->nbFields; ++i)
             {
-                auto const fieldName(fc->fields[i].name);
-                if (std::strcmp(fieldName, "rowOrder") == 0)
+                std::string_view const fieldName(fc->fields[i].name);
+                if (fieldName == "rowOrder"sv)
                 {
                     rowOrder = *static_cast<bool const*>(fc->fields[i].data);
                 }

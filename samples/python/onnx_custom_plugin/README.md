@@ -153,6 +153,9 @@ The following resources provide a deeper understanding about getting started wit
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+March 2026
+  - Migrate HardmaxPlugin from IPluginV2DynamicExt to IPluginV3.
+
 October 2025
   - Migrate to strongly typed APIs.
 
@@ -160,7 +163,7 @@ August 2025:
   - Removed support for Python versions < 3.10.
 
 January 2024:
-  - Create cublas handle with cublasCreate instead of using the cublasContext argument from attachToContext. The cublasContext is still valid if TacticSource::kCUBLAS is enabled. TacticSource::kCUBLAS is deprecated.
+  - Create cublas handle with cublasCreate instead of using the cublasContext argument from attachToContext.
   - Added the Cublas library as a prerequisite.
 
 August 2023:

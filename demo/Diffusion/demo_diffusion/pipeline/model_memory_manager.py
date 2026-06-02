@@ -37,6 +37,7 @@ class ModelMemoryManager:
         self.parent = parent
         self.model_names = model_names
         self.low_vram = low_vram
+        self.device_memories = {}
 
     def __enter__(self):
         if not self.low_vram:
@@ -47,9 +48,9 @@ class ModelMemoryManager:
                 self.parent.engine[model_name].load()
                 # allocate device memory
                 _, shared_device_memory = cudart.cudaMalloc(self.parent.device_memory_sizes[model_name])
-                self.parent.shared_device_memory = shared_device_memory
+                self.device_memories[model_name] = shared_device_memory
                 # creating context
-                self.parent.engine[model_name].activate(device_memory=self.parent.shared_device_memory)
+                self.parent.engine[model_name].activate(device_memory=shared_device_memory)
                 # creating input and output buffer
                 self.parent.engine[model_name].allocate_buffers(
                     shape_dict=self.parent.shape_dicts[model_name], device=self.parent.device
@@ -66,7 +67,7 @@ class ModelMemoryManager:
                 self.parent.engine[model_name].deallocate_buffers()
                 self.parent.engine[model_name].deactivate()
                 self.parent.engine[model_name].unload()
-                cudart.cudaFree(self.parent.shared_device_memory)
+                cudart.cudaFree(self.device_memories.pop(model_name))
             else:
                 print(f"[I] Offloading torch model {model_name} to cpu.")
                 self.parent.torch_models[model_name] = self.parent.torch_models[model_name].to("cpu")

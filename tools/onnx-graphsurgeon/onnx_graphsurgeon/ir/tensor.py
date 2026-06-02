@@ -238,7 +238,7 @@ class LazyValues(object):
         self.tensor = tensor
         self.shape = get_onnx_tensor_shape(self.tensor)
         self.dtype = get_onnx_tensor_dtype(self.tensor)
-        self.nbytes = misc.volume(self.shape) * get_itemsize(self.dtype)
+        self.nbytes = int(np.ceil(misc.volume(self.shape) * get_itemsize(self.dtype)))
 
     def load(self):
         """

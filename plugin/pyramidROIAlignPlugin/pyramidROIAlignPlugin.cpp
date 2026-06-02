@@ -19,6 +19,7 @@
 #include <cuda_runtime_api.h>
 #include <math.h>
 #include <memory>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace plugin;
@@ -79,23 +80,24 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
         xy_t imageSize = {dimToInt32(MaskRCNNConfig::IMAGE_SHAPE.d[1]), dimToInt32(MaskRCNNConfig::IMAGE_SHAPE.d[2])};
         int32_t fpnScale = 224;
 
+        using namespace std::string_view_literals;
         PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "fpn_scale"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "fpn_scale"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 fpnScale = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(fpnScale >= 1);
             }
-            if (!strcmp(attrName, "pooled_size"))
+            if (attrName == "pooled_size"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 pooledSize = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(pooledSize >= 1);
             }
-            if (!strcmp(attrName, "image_size"))
+            if (attrName == "image_size"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 PLUGIN_VALIDATE(fields[i].length == 2);
@@ -105,33 +107,33 @@ IPluginV2Ext* PyramidROIAlignPluginCreator::createPlugin(char const* name, Plugi
                 PLUGIN_VALIDATE(imageSize.y >= 1);
                 PLUGIN_VALIDATE(imageSize.x >= 1);
             }
-            if (!strcmp(attrName, "roi_coords_absolute"))
+            if (attrName == "roi_coords_absolute"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 absCoords = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "roi_coords_swap"))
+            if (attrName == "roi_coords_swap"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 swapCoords = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "roi_coords_plusone"))
+            if (attrName == "roi_coords_plusone"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 plusOneCoords = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "roi_coords_transform"))
+            if (attrName == "roi_coords_transform"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 transformCoords = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "sampling_ratio"))
+            if (attrName == "sampling_ratio"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 samplingRatio = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(samplingRatio >= 0);
             }
-            if (!strcmp(attrName, "legacy"))
+            if (attrName == "legacy"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
                 legacy = *(static_cast<int32_t const*>(fields[i].data));
@@ -400,19 +402,6 @@ DataType PyramidROIAlign::getOutputDataType(
 {
     // Only DataType::kFLOAT is acceptable by the plugin layer
     return DataType::kFLOAT;
-}
-
-// Return true if output tensor is broadcast across a batch.
-bool PyramidROIAlign::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool PyramidROIAlign::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
 }
 
 // Configure the layer with input and output data types.

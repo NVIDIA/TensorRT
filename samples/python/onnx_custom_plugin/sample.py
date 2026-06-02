@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,9 +58,6 @@ def build_engine(model_path):
     builder = trt.Builder(TRT_LOGGER)
     network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.STRONGLY_TYPED))
     config = builder.create_builder_config()
-    config.set_tactic_sources(
-        config.get_tactic_sources() | 1 << int(trt.TacticSource.CUBLAS)
-    )
     parser = trt.OnnxParser(network, TRT_LOGGER)
     runtime = trt.Runtime(TRT_LOGGER)
 

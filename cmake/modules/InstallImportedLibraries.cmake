@@ -19,6 +19,66 @@
 # This is particularly useful for system libraries that use versioned symlinks
 # (e.g., libfoo.so -> libfoo.so.1 -> libfoo.so.1.2.3).
 
+# Copies imported shared library files (including versioned symlinks) into the
+# build library output directory so tests using LD_LIBRARY_PATH find them without
+# a cmake --install step.  Runs at configure time via file(COPY).
+#
+# \param targets     One or more CMake imported shared-library targets to copy.
+# \param destination Destination directory (default: resolved CMAKE_LIBRARY_OUTPUT_DIRECTORY)
+function(copyImportedLibrariesToBuildTree)
+    set(oneValueArgs DESTINATION)
+    set(multiValueArgs TARGETS)
+    cmake_parse_arguments(ARG "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if(NOT ARG_TARGETS)
+        message(FATAL_ERROR "copyImportedLibrariesToBuildTree requires at least one target.")
+    endif()
+
+    # Resolve any $<CONFIG> generator expression in CMAKE_LIBRARY_OUTPUT_DIRECTORY.
+    # TRT uses single-config generators (Ninja/Makefiles), so CMAKE_BUILD_TYPE is always set.
+    if(ARG_DESTINATION)
+        set(_dest "${ARG_DESTINATION}")
+    elseif(CMAKE_BUILD_TYPE)
+        string(REPLACE "$<CONFIG>" "${CMAKE_BUILD_TYPE}" _dest "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+    else()
+        string(REPLACE "$<CONFIG>/" "" _dest "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+    endif()
+
+    foreach(target_name IN LISTS ARG_TARGETS)
+        if(NOT TARGET ${target_name})
+            message(FATAL_ERROR "Target ${target_name} does not exist.")
+        endif()
+
+        get_target_property(target_type ${target_name} TYPE)
+        if(NOT target_type MATCHES "SHARED_LIBRARY|UNKNOWN_LIBRARY")
+            message(FATAL_ERROR "Target ${target_name} is not a shared library (type: ${target_type})")
+        endif()
+
+        # IMPORTED_LOCATION may be unset for config-specific imported targets; fall back to
+        # IMPORTED_LOCATION_<CONFIG>.
+        get_target_property(target_loc ${target_name} IMPORTED_LOCATION)
+        if(NOT target_loc)
+            string(TOUPPER "${CMAKE_BUILD_TYPE}" _config_upper)
+            get_target_property(target_loc ${target_name} "IMPORTED_LOCATION_${_config_upper}")
+        endif()
+        if(NOT target_loc)
+            message(FATAL_ERROR "Target ${target_name} has no IMPORTED_LOCATION or IMPORTED_LOCATION_<CONFIG>.")
+        endif()
+
+        get_filename_component(target_dir "${target_loc}" DIRECTORY)
+        get_filename_component(target_base "${target_loc}" NAME_WE)
+
+        file(GLOB target_libs "${target_dir}/${target_base}${CMAKE_SHARED_LIBRARY_SUFFIX}*")
+        if(target_libs)
+            file(MAKE_DIRECTORY "${_dest}")
+            file(COPY ${target_libs} DESTINATION "${_dest}")
+            message(STATUS "Copied ${target_name} to build tree: ${_dest}")
+        else()
+            message(WARNING "copyImportedLibrariesToBuildTree: no libraries found for ${target_name} in ${target_dir}")
+        endif()
+    endforeach()
+endfunction()
+
 # Installs an imported library target with all its symlinks.
 #
 # \param targets     One or more CMake targets to install. Targets must be a shared library (or an unknown library pointing to a shared library).

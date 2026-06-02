@@ -38,9 +38,11 @@
 #include <memory>
 #include <new>
 #include <numeric>
+#include <optional>
 #include <ratio>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -260,10 +262,10 @@ public:
         : HostMemory(size, dataType)
     {
         mData = new ElemType[size];
-    };
+    }
     ~TypedHostMemory() noexcept override
     {
-        delete[](ElemType*) mData;
+        delete[] (ElemType*) mData;
     }
     ElemType* raw() noexcept
     {
@@ -422,75 +424,6 @@ inline float getMaxValue(const float* buffer, int64_t size)
     return *std::max_element(buffer, buffer + size);
 }
 
-// Ensures that every tensor used by a network has a dynamic range set.
-//
-// All tensors in a network must have a dynamic range specified if a calibrator is not used.
-// This function is just a utility to globally fill in missing scales and zero-points for the entire network.
-//
-// If a tensor does not have a dynamic range set, it is assigned inRange or outRange as follows:
-//
-// * If the tensor is the input to a layer or output of a pooling node, its dynamic range is derived from inRange.
-// * Otherwise its dynamic range is derived from outRange.
-//
-// The default parameter values are intended to demonstrate, for final layers in the network,
-// cases where dynamic ranges are asymmetric.
-//
-// The default parameter values choosen arbitrarily. Range values should be choosen such that
-// we avoid underflow or overflow. Also range value should be non zero to avoid uniform zero scale tensor.
-inline void setAllDynamicRanges(nvinfer1::INetworkDefinition* network, float inRange = 2.0F, float outRange = 4.0F)
-{
-    // Ensure that all layer inputs have a scale.
-    for (int i = 0; i < network->getNbLayers(); i++)
-    {
-        auto layer = network->getLayer(i);
-        for (int j = 0; j < layer->getNbInputs(); j++)
-        {
-            nvinfer1::ITensor* input{layer->getInput(j)};
-            // Optional inputs are nullptr here and are from RNN layers.
-            if (input != nullptr && !input->dynamicRangeIsSet())
-            {
-                ASSERT(input->setDynamicRange(-inRange, inRange));
-            }
-        }
-    }
-
-    // Ensure that all layer outputs have a scale.
-    // Tensors that are also inputs to layers are ignored here
-    // since the previous loop nest assigned scales to them.
-    for (int i = 0; i < network->getNbLayers(); i++)
-    {
-        auto layer = network->getLayer(i);
-        for (int j = 0; j < layer->getNbOutputs(); j++)
-        {
-            nvinfer1::ITensor* output{layer->getOutput(j)};
-            // Optional outputs are nullptr here and are from RNN layers.
-            if (output != nullptr && !output->dynamicRangeIsSet())
-            {
-                // Pooling must have the same input and output scales.
-                if (layer->getType() == nvinfer1::LayerType::kPOOLING)
-                {
-                    ASSERT(output->setDynamicRange(-inRange, inRange));
-                }
-                else
-                {
-                    ASSERT(output->setDynamicRange(-outRange, outRange));
-                }
-            }
-        }
-    }
-}
-
-inline void setDummyInt8DynamicRanges(const nvinfer1::IBuilderConfig* c, nvinfer1::INetworkDefinition* n)
-{
-    // Set dummy per-tensor dynamic range if Int8 mode is requested.
-    if (c->getFlag(nvinfer1::BuilderFlag::kINT8))
-    {
-        sample::gLogWarning << "Int8 calibrator not provided. Generating dummy per-tensor dynamic range. Int8 accuracy "
-                               "is not guaranteed."
-                            << std::endl;
-        setAllDynamicRanges(n);
-    }
-}
 
 inline void enableDLA(
     nvinfer1::IBuilder* builder, nvinfer1::IBuilderConfig* config, int useDLACore, bool allowGPUFallback = true)
@@ -507,28 +440,34 @@ inline void enableDLA(
         {
             config->setFlag(nvinfer1::BuilderFlag::kGPU_FALLBACK);
         }
-        if (!config->getFlag(nvinfer1::BuilderFlag::kINT8))
-        {
-            // User has not requested INT8 Mode.
-            // By default run in FP16 mode. FP32 mode is not permitted.
-            config->setFlag(nvinfer1::BuilderFlag::kFP16);
-        }
         config->setDefaultDeviceType(nvinfer1::DeviceType::kDLA);
         config->setDLACore(useDLACore);
     }
 }
 
-inline int32_t parseDLA(int32_t argc, char** argv)
+//! Simple implementation of startsWith for strings (C++20: `std::string_view::starts_with`)
+[[nodiscard]] constexpr bool startsWith(std::string_view str, std::string_view prefix)
 {
-    for (int32_t i = 1; i < argc; i++)
-    {
-        if (strncmp(argv[i], "--useDLACore=", 13) == 0)
-        {
-            return std::stoi(argv[i] + 13);
-        }
-    }
-    return -1;
+    return str.size() >= prefix.size() && str.substr(0, prefix.size()) == prefix;
 }
+
+//! \brief Matches a flag prefix in an argument, ignoring leading spaces.
+//! \param arg The command-line argument to check.
+//! \param flag The flag prefix to match (e.g., "--loadEngine=").
+//! \return A string_view of the remainder after \p flag, or nullopt if \p flag isn't found.
+[[nodiscard]] std::optional<std::string_view> matchFlag(std::string_view arg, std::string_view flag);
+
+//! \overload std::optional<std::string_view> matchFlag(std::string_view arg, std::string_view flag) to prevent
+//! accidental use of `std::string&&` arguments which would produce a dangling view, but allow e.g., `char const*`.
+template <typename StringViewable>
+[[nodiscard]] std::optional<std::string_view> matchFlag(StringViewable&& arg, std::string_view flag)
+{
+    static_assert(!std::is_rvalue_reference_v<decltype(arg)>,
+        "You don't want the above matchFlag with `std::string&&` arguments which would produce a dangling view.");
+    return matchFlag(std::string_view{arg}, flag);
+}
+
+int32_t parseDLA(int32_t argc, char** argv);
 
 inline size_t getNbBytes(nvinfer1::DataType t, int64_t vol) noexcept
 {
@@ -926,31 +865,31 @@ public:
     DynamicLibrary(DynamicLibrary const&) = delete;
     DynamicLibrary(DynamicLibrary const&&) = delete;
 
+    //! \return a pointer to a symbol from the DynamicLibrary with the given function signature.
     //!
-    //! Retrieve a function symbol from the loaded library.
-    //!
-    //! \return the loaded symbol on success
     //! \throw std::invalid_argument if loading the symbol failed.
     //!
+    //! \note Type checking is not possible, so if `Signature` is incorrect, the behavior is undefined.
+
     template <typename Signature>
-    std::function<Signature> symbolAddress(char const* name)
+    [[nodiscard]] Signature& symbolAddress(char const* name) const
     {
+        static_assert(std::is_function_v<Signature>, "Signature must be a function type.");
         if (mHandle == nullptr)
         {
             throw std::runtime_error("Handle to library is nullptr.");
         }
-        void* ret;
+        void* const ret =
 #if defined(_MSC_VER)
-        ret = static_cast<void*>(GetProcAddress(static_cast<HMODULE>(mHandle), name));
+            static_cast<void*>(GetProcAddress(static_cast<HMODULE>(mHandle), name));
 #else
-        ret = dlsym(mHandle, name);
+            dlsym(mHandle, name);
 #endif
         if (ret == nullptr)
         {
-            std::string const kERROR_MSG(mLibName + ": error loading symbol: " + std::string(name));
-            throw std::invalid_argument(kERROR_MSG);
+            throw std::invalid_argument(mLibName + ": error loading symbol: " + std::string(name));
         }
-        return reinterpret_cast<Signature*>(ret);
+        return *reinterpret_cast<Signature*>(ret);
     }
 
     ~DynamicLibrary()
@@ -1016,8 +955,9 @@ inline int32_t getSmVersion()
 
 inline bool isSmSafe()
 {
-    const int32_t smVersion = getSmVersion();
-    return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807;
+    int32_t const smVersion = getSmVersion();
+    return smVersion == 0x0705 || smVersion == 0x0800 || smVersion == 0x0806 || smVersion == 0x0807
+        || smVersion == 0x0A00 || smVersion == 0x0B00;
 }
 
 inline int32_t getMaxPersistentCacheSize()

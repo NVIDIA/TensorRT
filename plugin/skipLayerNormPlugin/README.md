@@ -12,6 +12,8 @@
 
 ## Description
 
+> NOTE: Versions 1-4 of this plugin (using IPluginV2DynamicExt interface) are deprecated since TensorRT 10.4. Versions 5-8 (using IPluginV3 interface) are the recommended replacements.
+
 Adds a residual tensor, applies layer normalization, i.e., transforms the mean and standard deviation to beta and gamma respectively.
 Optionally, adds a bias vector before layer-normalization.
 

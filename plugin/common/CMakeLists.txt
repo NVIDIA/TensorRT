@@ -34,7 +34,6 @@ set(PLUGIN_COMMON_SOURCES
     half.h
     mrcnn_config.h
     nmsHelper.cpp
-    nmsUtils.h
     plugin.cpp
     plugin.h
     reducedMathPlugin.cpp

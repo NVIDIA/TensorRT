@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +37,8 @@ using EfficientNMSImplicitTFTRTOutputsDataType = void**;
 #endif
 
 // TF-TRT CombinedNMS Op Compatibility, for Legacy Implicit Batch Mode
-class EfficientNMSImplicitTFTRTPlugin : public nvinfer1::IPluginV2IOExt
+class TRT_DEPRECATED_BECAUSE("TF-TRT integration is obsolete. No alternatives planned.") EfficientNMSImplicitTFTRTPlugin
+    : public nvinfer1::IPluginV2IOExt
 {
 public:
     explicit EfficientNMSImplicitTFTRTPlugin(EfficientNMSParameters param);
@@ -63,15 +64,12 @@ public:
         void* workspace, cudaStream_t stream) noexcept override;
 
     // IPluginV2Ext methods
-    bool canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept override;
     nvinfer1::DataType getOutputDataType(
-        int32_t index, const nvinfer1::DataType* inputType, int32_t nbInputs) const noexcept override;
+        int32_t index, nvinfer1::DataType const* inputType, int32_t nbInputs) const noexcept override;
     nvinfer1::IPluginV2IOExt* clone() const noexcept override;
-    bool isOutputBroadcastAcrossBatch(
-        int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept override;
 
     // IPluginV2IOExt methods
-    bool supportsFormatCombination(int32_t pos, const nvinfer1::PluginTensorDesc* inOut, int32_t nbInputs,
+    bool supportsFormatCombination(int32_t pos, nvinfer1::PluginTensorDesc const* inOut, int32_t nbInputs,
         int32_t nbOutputs) const noexcept override;
     void configurePlugin(const nvinfer1::PluginTensorDesc* in, int32_t nbInputs, const nvinfer1::PluginTensorDesc* out,
         int32_t nbOutputs) noexcept override;
@@ -83,7 +81,9 @@ protected:
     std::string mNamespace;
 };
 
-class EfficientNMSImplicitTFTRTPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED_BECAUSE(
+    "TF-TRT integration is obsolete. No alternatives planned.") EfficientNMSImplicitTFTRTPluginCreator
+    : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     EfficientNMSImplicitTFTRTPluginCreator();

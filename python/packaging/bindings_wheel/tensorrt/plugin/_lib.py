@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -575,8 +575,12 @@ def aot_impl(plugin_id: str) -> Callable:
 
             src = triton.compiler.ASTSource(
                 fn=add_kernel,
-                signature=f"*{type_str},i32,*{type_str}",
-                constants={
+                signature={
+                    "x_ptr": f"*{type_str}",
+                    "n_elements": "i32",
+                    "y_ptr": f"*{type_str}",
+                },
+                constexprs={
                     "BLOCK_SIZE": block_size,
                 },
             )

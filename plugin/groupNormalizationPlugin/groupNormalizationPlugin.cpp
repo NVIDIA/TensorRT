@@ -22,6 +22,7 @@
 #include <memory>
 #include <numeric>
 #include <stdexcept>
+#include <string_view>
 
 using namespace nvinfer1;
 using namespace nvinfer1::pluginInternal;
@@ -30,6 +31,7 @@ using nvinfer1::plugin::GroupNormalizationPluginCreator;
 
 namespace
 {
+using namespace std::string_view_literals;
 constexpr char const* kGROUP_NORM_VERSION{"1"};
 constexpr char const* kGROUP_NORM_NAME{"GroupNormalizationPlugin"};
 } // namespace
@@ -402,12 +404,12 @@ IPluginV2DynamicExt* GroupNormalizationPluginCreator::createPlugin(
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
             PLUGIN_VALIDATE(fc->fields[i].name != nullptr);
-            std::string fieldName(fc->fields[i].name);
-            if (fieldName.compare("eps") == 0)
+            std::string_view const fieldName = fc->fields[i].name;
+            if (fieldName == "eps"sv)
             {
                 epsilon = *static_cast<float const*>(fc->fields[i].data);
             }
-            if (fieldName.compare("num_groups") == 0)
+            if (fieldName == "num_groups"sv)
             {
                 nbGroups = *static_cast<int32_t const*>(fc->fields[i].data);
             }

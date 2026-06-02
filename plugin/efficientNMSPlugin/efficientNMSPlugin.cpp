@@ -19,19 +19,17 @@
 #include "efficientNMSInference.h"
 
 #include <memory>
+#include <string_view>
 
 using namespace nvinfer1;
 using nvinfer1::plugin::EfficientNMSPlugin;
 using nvinfer1::plugin::EfficientNMSParameters;
 using nvinfer1::plugin::EfficientNMSPluginCreator;
-using nvinfer1::plugin::EfficientNMSONNXPluginCreator;
-
 namespace
 {
+using namespace std::string_view_literals;
 char const* const kEFFICIENT_NMS_PLUGIN_VERSION{"1"};
 char const* const kEFFICIENT_NMS_PLUGIN_NAME{"EfficientNMS_TRT"};
-char const* const kEFFICIENT_NMS_ONNX_PLUGIN_VERSION{"1"};
-char const* const kEFFICIENT_NMS_ONNX_PLUGIN_NAME{"EfficientNMS_ONNX_TRT"};
 } // namespace
 
 EfficientNMSPlugin::EfficientNMSPlugin(EfficientNMSParameters param)
@@ -454,46 +452,46 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::createPlugin(char const* name, P
             fc);
         for (int32_t i{0}; i < fc->nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "score_threshold"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "score_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 auto const scoreThreshold = *(static_cast<float const*>(fields[i].data));
                 PLUGIN_VALIDATE(scoreThreshold >= 0.0F);
                 mParam.scoreThreshold = scoreThreshold;
             }
-            if (!strcmp(attrName, "iou_threshold"))
+            if (attrName == "iou_threshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 auto const iouThreshold = *(static_cast<float const*>(fields[i].data));
                 PLUGIN_VALIDATE(iouThreshold > 0.0F);
                 mParam.iouThreshold = iouThreshold;
             }
-            if (!strcmp(attrName, "max_output_boxes"))
+            if (attrName == "max_output_boxes"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 auto const numOutputBoxes = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(numOutputBoxes > 0);
                 mParam.numOutputBoxes = numOutputBoxes;
             }
-            if (!strcmp(attrName, "background_class"))
+            if (attrName == "background_class"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 mParam.backgroundClass = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "score_activation"))
+            if (attrName == "score_activation"sv)
             {
                 auto const scoreSigmoid = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(scoreSigmoid == 0 || scoreSigmoid == 1);
                 mParam.scoreSigmoid = static_cast<bool>(scoreSigmoid);
             }
-            if (!strcmp(attrName, "class_agnostic"))
+            if (attrName == "class_agnostic"sv)
             {
                 auto const classAgnostic = *(static_cast<int32_t const*>(fields[i].data));
                 PLUGIN_VALIDATE(classAgnostic == 0 || classAgnostic == 1);
                 mParam.classAgnostic = static_cast<bool>(classAgnostic);
             }
-            if (!strcmp(attrName, "box_coding"))
+            if (attrName == "box_coding"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 auto const boxCoding = *(static_cast<int32_t const*>(fields[i].data));
@@ -518,105 +516,6 @@ IPluginV2DynamicExt* EfficientNMSPluginCreator::deserializePlugin(
 {
     try
     {
-        // This object will be deleted when the network is destroyed, which will
-        // call EfficientNMSPlugin::destroy()
-        auto plugin = std::make_unique<EfficientNMSPlugin>(serialData, serialLength);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin.release();
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-// ONNX NonMaxSuppression Op Compatibility
-
-EfficientNMSONNXPluginCreator::EfficientNMSONNXPluginCreator()
-    : mParam{}
-{
-    mPluginAttributes.clear();
-    mPluginAttributes.emplace_back(PluginField("score_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
-    mPluginAttributes.emplace_back(PluginField("iou_threshold", nullptr, PluginFieldType::kFLOAT32, 1));
-    mPluginAttributes.emplace_back(PluginField("max_output_boxes_per_class", nullptr, PluginFieldType::kINT32, 1));
-    mPluginAttributes.emplace_back(PluginField("center_point_box", nullptr, PluginFieldType::kINT32, 1));
-    mFC.nbFields = mPluginAttributes.size();
-    mFC.fields = mPluginAttributes.data();
-}
-
-char const* EfficientNMSONNXPluginCreator::getPluginName() const noexcept
-{
-    return kEFFICIENT_NMS_ONNX_PLUGIN_NAME;
-}
-
-char const* EfficientNMSONNXPluginCreator::getPluginVersion() const noexcept
-{
-    return kEFFICIENT_NMS_ONNX_PLUGIN_VERSION;
-}
-
-PluginFieldCollection const* EfficientNMSONNXPluginCreator::getFieldNames() noexcept
-{
-    return &mFC;
-}
-
-IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::createPlugin(
-    char const* name, PluginFieldCollection const* fc) noexcept
-{
-    try
-    {
-        gLogWarning << "EfficientNMSONNXPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to "
-                       "add an INMSLayer."
-                    << std::endl;
-        PluginField const* fields = fc->fields;
-        for (int32_t i = 0; i < fc->nbFields; ++i)
-        {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "score_threshold"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.scoreThreshold = *(static_cast<float const*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "iou_threshold"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.iouThreshold = *(static_cast<float const*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "max_output_boxes_per_class"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<int32_t const*>(fields[i].data));
-            }
-            if (!strcmp(attrName, "center_point_box"))
-            {
-                PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
-                mParam.boxCoding = *(static_cast<int32_t const*>(fields[i].data));
-            }
-        }
-
-        // This enables ONNX compatibility mode
-        mParam.outputONNXIndices = true;
-        mParam.numOutputBoxes = mParam.numOutputBoxesPerClass;
-
-        auto plugin = std::make_unique<EfficientNMSPlugin>(mParam);
-        plugin->setPluginNamespace(mNamespace.c_str());
-        return plugin.release();
-    }
-    catch (std::exception const& e)
-    {
-        caughtError(e);
-    }
-    return nullptr;
-}
-
-IPluginV2DynamicExt* EfficientNMSONNXPluginCreator::deserializePlugin(
-    char const* name, void const* serialData, size_t serialLength) noexcept
-{
-    try
-    {
-        gLogWarning << "EfficientNMSONNXPlugin is deprecated since TensorRT 9.0. Use INetworkDefinition::addNMS() to "
-                       "add an INMSLayer."
-                    << std::endl;
         // This object will be deleted when the network is destroyed, which will
         // call EfficientNMSPlugin::destroy()
         auto plugin = std::make_unique<EfficientNMSPlugin>(serialData, serialLength);

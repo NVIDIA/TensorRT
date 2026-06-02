@@ -18,13 +18,12 @@
 #include <cuda.h>
 #if CUDA_VERSION >= 10010
 
-#include <cstring>
 #include <memory>
 #include <set>
+#include <string_view>
 #include <vector>
 
 #include "NvInfer.h"
-#include "common/serialize.hpp"
 #include "embLayerNormPlugin.h"
 
 using namespace nvinfer1;
@@ -33,6 +32,7 @@ using namespace nvinfer1::plugin::bert;
 
 namespace
 {
+using namespace std::string_view_literals;
 char const* gEmbLayerNormVersion{"6"};
 char const* gEmbLayerNormName{"CustomEmbLayerNormPluginDynamic"};
 } // namespace
@@ -594,8 +594,8 @@ IPluginV3* EmbLayerNormPluginDynamicCreator::createPlugin(
 
         for (int32_t i = 0; i < fc->nbFields; i++)
         {
-            std::string field_name(fc->fields[i].name);
-            if (field_name.compare("bert_embeddings_layernorm_beta") == 0)
+            std::string_view const field_name = fc->fields[i].name;
+            if (field_name == "bert_embeddings_layernorm_beta"sv)
             {
                 BERT_DEBUG_MSG("Building bert_embeddings_layernorm_beta...");
                 beta.values = fc->fields[i].data;
@@ -603,7 +603,7 @@ IPluginV3* EmbLayerNormPluginDynamicCreator::createPlugin(
                 beta.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("bert_embeddings_layernorm_gamma") == 0)
+            if (field_name == "bert_embeddings_layernorm_gamma"sv)
             {
                 BERT_DEBUG_MSG("Building bert_embeddings_layernorm_gamma...");
                 gamma.values = fc->fields[i].data;
@@ -611,7 +611,7 @@ IPluginV3* EmbLayerNormPluginDynamicCreator::createPlugin(
                 gamma.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("bert_embeddings_word_embeddings") == 0)
+            if (field_name == "bert_embeddings_word_embeddings"sv)
             {
                 BERT_DEBUG_MSG("Building bert_embeddings_word_embeddings...");
                 word_emb.values = fc->fields[i].data;
@@ -619,7 +619,7 @@ IPluginV3* EmbLayerNormPluginDynamicCreator::createPlugin(
                 word_emb.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("bert_embeddings_token_type_embeddings") == 0)
+            if (field_name == "bert_embeddings_token_type_embeddings"sv)
             {
                 BERT_DEBUG_MSG("Building bert_embeddings_token_type_embeddings...");
                 tok_emb.values = fc->fields[i].data;
@@ -627,26 +627,26 @@ IPluginV3* EmbLayerNormPluginDynamicCreator::createPlugin(
                 tok_emb.type = fieldTypeToDataType(fc->fields[i].type);
             }
 
-            if (field_name.compare("bert_embeddings_position_embeddings") == 0)
+            if (field_name == "bert_embeddings_position_embeddings"sv)
             {
                 BERT_DEBUG_MSG("Building bert_embeddings_position_embeddings...");
                 pos_emb.values = fc->fields[i].data;
                 pos_emb.count = fc->fields[i].length;
                 pos_emb.type = fieldTypeToDataType(fc->fields[i].type);
             }
-            if (field_name.compare("output_fp16") == 0)
+            if (field_name == "output_fp16"sv)
             {
                 BERT_DEBUG_MSG("Building output_fp16...");
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 output_fp16 = static_cast<int32_t const*>(fc->fields[i].data)[0] != 0;
             }
-            if (field_name.compare("full_mask") == 0)
+            if (field_name == "full_mask"sv)
             {
                 BERT_DEBUG_MSG("Building full_mask...");
                 PLUGIN_VALIDATE(fc->fields[i].type == PluginFieldType::kINT32);
                 useFullMask = static_cast<int32_t const*>(fc->fields[i].data)[0] != 0;
             }
-            if (field_name.compare("mha_type_id") == 0)
+            if (field_name == "mha_type_id"sv)
             {
                 mhaTypeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(mhaTypeId >= 0 && mhaTypeId <= 3);

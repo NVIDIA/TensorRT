@@ -132,6 +132,8 @@ class StableDiffusion3Pipeline:
 
         self.config = {}
         self.config['clip_hidden_states'] = True
+        self.config['t5xxl_torch_fallback'] = True
+        self.config['vae_encoder_torch_fallback'] = True
         self.torch_inference = torch_inference
         if self.torch_inference:
             torch._inductor.config.conv_1x1_as_mm = True
@@ -276,7 +278,7 @@ class StableDiffusion3Pipeline:
         # Configure pipeline models to load
         model_names = self.models.keys()
         # Torch fallback
-        self.torch_fallback = dict(zip(model_names, [self.torch_inference or model_name in ('t5xxl') for model_name in model_names]))
+        self.torch_fallback = dict(zip(model_names, [self.torch_inference or self.config.get(model_name.replace('-','_')+'_torch_fallback', False) for model_name in model_names]))
 
         onnx_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir, opt=False) for model_name in model_names]))
         onnx_opt_path = dict(zip(model_names, [self.getOnnxPath(model_name, onnx_dir) for model_name in model_names]))
@@ -298,9 +300,7 @@ class StableDiffusion3Pipeline:
             if not os.path.exists(engine_path[model_name]):
                 update_output_names = obj.get_output_names() + obj.extra_output_names if obj.extra_output_names else None
                 extra_build_args = {'verbose': self.verbose}
-                fp16amp = obj.fp16
                 engine.build(onnx_opt_path[model_name],
-                    fp16=fp16amp,
                     input_profile=obj.get_input_profile(
                         opt_batch_size, opt_image_height, opt_image_width,
                         static_batch=static_batch, static_shape=static_shape
@@ -326,7 +326,7 @@ class StableDiffusion3Pipeline:
     def calculateMaxDeviceMemory(self):
         max_device_memory = 0
         for model_name, engine in self.engine.items():
-            max_device_memory = max(max_device_memory, engine.engine.device_memory_size)
+            max_device_memory = max(max_device_memory, engine.engine.device_memory_size_v2)
         return max_device_memory
 
     def activateEngines(self, shared_device_memory=None):
@@ -446,7 +446,7 @@ class StableDiffusion3Pipeline:
             sigma = torch.cat([timestep, timestep])
             c_crossattn = torch.cat([cond["c_crossattn"], uncond["c_crossattn"]])
             y = torch.cat([cond["y"], uncond["y"]])
-            if self.torch_inference:
+            if self.torch_inference or self.torch_fallback[model_name]:
                 with torch.autocast("cuda", dtype=torch.float16):
                     batched = self.torch_models[model_name](sample, sigma, c_crossattn=c_crossattn, y=y)
             else:
@@ -479,7 +479,7 @@ class StableDiffusion3Pipeline:
     def encode_image(self, model_name='vae_encoder'):
         self.input_image = self.input_image.to(self.device)
         self.profile_start(model_name, color='orange')
-        if self.torch_inference:
+        if self.torch_inference or self.torch_fallback[model_name]:
             with torch.autocast("cuda", dtype=torch.float16):
                 latent = self.torch_models[model_name](self.input_image)
         else:
@@ -491,7 +491,7 @@ class StableDiffusion3Pipeline:
 
     def decode_latent(self, latent, model_name='vae_decoder'):
         self.profile_start(model_name, color='red')
-        if self.torch_inference:
+        if self.torch_inference or self.torch_fallback[model_name]:
             with torch.autocast("cuda", dtype=torch.float16):
                 image = self.torch_models[model_name](latent)
         else:

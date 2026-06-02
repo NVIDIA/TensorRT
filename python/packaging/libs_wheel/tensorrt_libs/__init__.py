@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +18,6 @@
 import ctypes
 import glob
 import os
-import sys
 
 CURDIR = os.path.realpath(os.path.dirname(__file__))
 
@@ -35,21 +34,6 @@ def try_load_libs_from_dir(path):
         try_load(lib)
     for lib in glob.iglob(os.path.join(path, "*.dll*")):
         try_load(lib)
-
-
-DEPENDENCY_PATHS = [
-    os.path.join("nvidia", "cuda_runtime"),
-    os.path.join("nvidia", "cuda_nvrtc"),
-]
-for dep_path in DEPENDENCY_PATHS:
-    try_load_libs_from_dir(
-        os.path.join(
-            CURDIR,
-            os.path.pardir,
-            dep_path,
-            "bin" if sys.platform.startswith("win") else "lib",
-        )
-    )
 
 
 # Try loading all packaged libraries. This is a nop if there are no libraries packaged.

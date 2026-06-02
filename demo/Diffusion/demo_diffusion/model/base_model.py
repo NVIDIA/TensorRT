@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import gc
 import json
 import os
 
@@ -170,8 +171,12 @@ class BaseModel:
                 else:
                     # WAR: Enable autocast for BF16 Stable Cascade pipeline
                     do_autocast = True if self.version == "cascade" and self.bf16 else False
+                    model = self.get_model()
                     with torch.inference_mode(), torch.autocast("cuda", enabled=do_autocast):
-                        export_onnx(self.get_model())
+                        export_onnx(model)
+                    del model
+                    gc.collect()
+                    torch.cuda.empty_cache()
             else:
                 print(f"[I] Found cached ONNX model: {onnx_path}")
 
@@ -246,6 +251,12 @@ class BaseModel:
             is_fp16_io = kwargs.get("is_fp16_io", True)
             opt.modify_fp8_graph(is_fp16_io=is_fp16_io)
             opt.info(self.name + ": modify fp8 graph")
+        elif self.bf16:
+            # Cast Resize I/O for strongly-typed TRT builds: BF16 -> FP32 inputs, FP32 -> BF16 outputs.
+            # TRT does not support BF16 for the Resize operator.
+            opt.infer_shapes()
+            opt.cast_resize_io(output_dtype=onnx.TensorProto.BFLOAT16)
+            opt.info(self.name + ": cast resize I/O for bf16")
         if self.version.startswith("flux.1") and self.fp8:
             opt.flux_convert_rope_weight_type()
             opt.info(self.name + ": convert rope weight type for fp8 flux")
@@ -253,9 +264,9 @@ class BaseModel:
         opt.info(self.name + ": fold constants")
         opt.infer_shapes()
         opt.info(self.name + ": shape inference")
-        if kwargs.get("fuse_mha_qkv_int8", False):
-            opt.fuse_mha_qkv_int8_sq()
-            opt.info(self.name + ": fuse QKV nodes")
+        if kwargs.get("modify_int8_graph", False):
+            opt.modify_int8_graph()
+            opt.info(self.name + ": modify int8 graph")
         onnx_opt_graph = opt.cleanup(return_onnx=return_onnx)
         opt.info(self.name + ": finished")
         return onnx_opt_graph

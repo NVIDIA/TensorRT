@@ -1,0 +1,11 @@
+InheritParentConfig: true
+CheckOptions:
+  - { key: readability-identifier-naming.FunctionIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }
+  - { key: readability-identifier-naming.LocalVariableIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }
+  - { key: readability-identifier-naming.GlobalVariableIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }
+  - { key: readability-identifier-naming.StaticVariableIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }
+  - { key: readability-identifier-naming.ParameterIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }
+  - { key: readability-identifier-naming.GlobalConstantIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }
+  - { key: readability-identifier-naming.StaticConstantIgnoredRegexp, value: '^(?:[a-z][a-z0-9_]*|[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+)$' }
+  - { key: readability-identifier-naming.ConstexprVariableIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }
+  - { key: readability-identifier-naming.ClassConstantIgnoredRegexp, value: '^[a-z][a-z0-9_]*$' }

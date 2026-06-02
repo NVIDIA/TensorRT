@@ -1,7 +1,21 @@
 # TensorRT OSS Release Changelog
-## 10.16.1 GA - 2026-4-13
+## 11.0 GA - 2026-6-2
+- General
+  - As a new major version bump, TensorRT 11.0 brings many enhancements for its users. For full information, see the [release notes.](https://docs.nvidia.com/deeplearning/tensorrt/latest/getting-started/release-notes-11/11.0.0.html)
 
-- This is a bugfix release with no major new features. See the [release notes](https://docs.nvidia.com/deeplearning/tensorrt/latest/getting-started/release-notes-10/10.16.1.html) for more details.
+- Demos
+  - The BERT demo has been removed.
+
+- Samples
+  - Migrated `samples/python/python_plugin` and `samples/python/onnx_custom_plugin/plugin` to use V3 plugins
+
+- Plugins
+  - Added a new Faster Air Top-K plugin
+  - Removed deprecated plugins: `batchTile`, `clip`, `coordConvAC`, `cropAndResize`, `gelu`, `leakyRelu`, `normalize`, `singleStepLSTM`, `specialSlice`, `split`, `nms`, and `proposal`
+
+- Parsers
+  - Added support for `Swish` operator
+  - Added support for custom operators `TRT_Attention`, `TRT_MoE`, and `TRT_KVCacheUpdate`
 
 ## 10.16 GA - 2026-3-24
 

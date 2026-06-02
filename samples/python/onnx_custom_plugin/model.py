@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,10 +36,12 @@ def _do_graph_surgery(raw_model_path, trt_model_path):
     graph = gs.import_onnx(onnx.load(raw_model_path))
 
     # Replace unsupported Hardmax with our CustomHardmax op
+    hardmax_node = None
     for node in graph.nodes:
         if node.op == "Hardmax":
             node.op = "CustomHardmax"
             hardmax_node = node
+    assert hardmax_node is not None, "Model does not contain a Hardmax node"
 
     # The original onnx model also uses another unsupported op called "Compress".
     # "Compress" returns values from the first tensor for all indices which evaluate to

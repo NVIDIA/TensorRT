@@ -31,6 +31,7 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -41,6 +42,7 @@ using namespace nvinfer1::pluginInternal;
 
 namespace
 {
+using namespace std::string_view_literals;
 char const* const kQKV_TO_CONTEXT_PLUGIN_LEGACY_VERSION{"1"};
 char const* const kQKV_TO_CONTEXT_VAR_SEQLEN_LEGACY_PLUGIN_VERSION{"2"};
 char const* const kQKV_TO_CONTEXT_PLUGIN_NAME{"CustomQKVToContextPluginDynamic"};
@@ -123,24 +125,24 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextPluginDynamicLegacy::clone() const no
 {
     BERT_DEBUG_MSG("QKV Clone");
 
-    QKVToContextPluginDynamicLegacy* ret = nullptr;
+    std::unique_ptr<QKVToContextPluginDynamicLegacy> ret;
     // the workspacesize is 0 if we have not call setup the dispatcher yet.
     if (unfusedDispatcher.get() && unfusedDispatcher->getWorkspaceSize())
     {
-        std::vector<char> buff;
-        buff.resize(getSerializationSize());
-        serialize(buff.data());
+        auto buff = std::make_unique<std::byte[]>(getSerializationSize());
+        serialize(buff.get());
 
-        ret = new QKVToContextPluginDynamicLegacy(mLayerName, buff.data(), buff.size());
+        ret = std::make_unique<QKVToContextPluginDynamicLegacy>(mLayerName, buff.get(), getSerializationSize());
     }
     else
     {
-        ret = new QKVToContextPluginDynamicLegacy(mLayerName, mType, mHiddenSize, mNumHeads, mDqProbs, mHasImask);
+        ret = std::make_unique<QKVToContextPluginDynamicLegacy>(
+            mLayerName, mType, mHiddenSize, mNumHeads, mDqProbs, mHasImask);
     }
 
     ret->setPluginNamespace(mNamespace.c_str());
     BERT_DEBUG_MSG("QKV Clone done");
-    return ret;
+    return ret.release();
 }
 
 DimsExprs QKVToContextPluginDynamicLegacy::getOutputDimensions(
@@ -507,7 +509,7 @@ IPluginV2* QKVToContextPluginDynamicLegacyCreator::createPlugin(
         bool hasMask = false;
         int32_t typeId = -1;
 
-        float dqProbs = -1;
+        float dqProbs = -1.0F;
 
         PLUGIN_VALIDATE(fc->fields != nullptr);
         plugin::validateRequiredAttributesExist({"type_id", "hidden_size", "num_heads", "has_mask"}, fc);
@@ -516,27 +518,27 @@ IPluginV2* QKVToContextPluginDynamicLegacyCreator::createPlugin(
         {
             PLUGIN_VALIDATE(fc->fields[i].name != nullptr);
             PLUGIN_VALIDATE(fc->fields[i].data != nullptr);
-            std::string field_name(fc->fields[i].name);
+            std::string_view const field_name = fc->fields[i].name;
 
-            if (field_name.compare("type_id") == 0)
+            if (field_name == "type_id"sv)
             {
                 typeId = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(typeId >= 0 && typeId <= 2, ("QKV: Invalid TypeId " + std::to_string(typeId)).c_str());
                 BERT_DEBUG_VALUE("Building typeId: ", typeId);
             }
-            if (field_name.compare("hidden_size") == 0)
+            if (field_name == "hidden_size"sv)
             {
                 hiddenSize = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
                 BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
             }
-            if (field_name.compare("num_heads") == 0)
+            if (field_name == "num_heads"sv)
             {
                 numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
                 BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
             }
-            if (field_name.compare("has_mask") == 0)
+            if (field_name == "has_mask"sv)
             {
                 auto hasMaskValue = *static_cast<int32_t const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(hasMaskValue == 0 || hasMaskValue == 1,
@@ -545,7 +547,7 @@ IPluginV2* QKVToContextPluginDynamicLegacyCreator::createPlugin(
                 BERT_DEBUG_VALUE("Building hasMask: ", hasMask);
             }
 
-            if (field_name.compare("dq_probs") == 0)
+            if (field_name == "dq_probs"sv)
             {
                 dqProbs = *static_cast<float const*>(fc->fields[i].data);
                 PLUGIN_VALIDATE(dqProbs > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs)).c_str());
@@ -682,24 +684,23 @@ nvinfer1::IPluginV2DynamicExt* QKVToContextVarSeqlenPluginLegacy::clone() const 
 {
     BERT_DEBUG_MSG("QKV Clone");
 
-    QKVToContextVarSeqlenPluginLegacy* ret = nullptr;
+    std::unique_ptr<QKVToContextVarSeqlenPluginLegacy> ret;
     if (mDispatcher.get())
     {
-        std::vector<char> buff;
-        buff.resize(getSerializationSize());
-        serialize(buff.data());
+        auto buff = std::make_unique<std::byte[]>(getSerializationSize());
+        serialize(buff.get());
 
-        ret = new QKVToContextVarSeqlenPluginLegacy(mLayerName, buff.data(), buff.size());
+        ret = std::make_unique<QKVToContextVarSeqlenPluginLegacy>(mLayerName, buff.get(), getSerializationSize());
     }
     else
     {
-        ret = new QKVToContextVarSeqlenPluginLegacy(
+        ret = std::make_unique<QKVToContextVarSeqlenPluginLegacy>(
             mLayerName, mType, mHiddenSize, mNumHeads, mDqProbs, mHasImask, mUseVarSeqlen, mUseInt8ScaleMax);
     }
 
     ret->setPluginNamespace(mNamespace.c_str());
     BERT_DEBUG_MSG("QKV Clone done");
-    return ret;
+    return ret.release();
 }
 
 DimsExprs QKVToContextVarSeqlenPluginLegacy::getOutputDimensions(
@@ -1106,45 +1107,45 @@ IPluginV2* QKVToContextVarSeqlenPluginLegacyCreator::createPlugin(
     plugin::validateRequiredAttributesExist({"type_id", "hidden_size", "num_heads", "has_mask"}, fc);
     for (int32_t i = 0; i < fc->nbFields; i++)
     {
-        std::string field_name(fc->fields[i].name);
+        std::string_view const field_name = fc->fields[i].name;
 
-        if (field_name.compare("type_id") == 0)
+        if (field_name == "type_id"sv)
         {
             typeId = *static_cast<int32_t const*>(fc->fields[i].data);
             PLUGIN_VALIDATE(typeId >= 0 && typeId <= 2, ("QKV: Invalid TypeId " + std::to_string(typeId)).c_str());
             BERT_DEBUG_VALUE("Building typeId: ", typeId);
         }
-        if (field_name.compare("hidden_size") == 0)
+        if (field_name == "hidden_size"sv)
         {
             hiddenSize = *static_cast<int32_t const*>(fc->fields[i].data);
             PLUGIN_VALIDATE(hiddenSize > 0, ("QKV: Invalid hiddenSize " + std::to_string(hiddenSize)).c_str());
             BERT_DEBUG_VALUE("Building hiddenSize: ", hiddenSize);
         }
-        if (field_name.compare("num_heads") == 0)
+        if (field_name == "num_heads"sv)
         {
             numHeads = *static_cast<int32_t const*>(fc->fields[i].data);
             PLUGIN_VALIDATE(numHeads > 0, ("QKV: Invalid numHeads " + std::to_string(numHeads)).c_str());
             BERT_DEBUG_VALUE("Building numHeads: ", numHeads);
         }
-        if (field_name.compare("has_mask") == 0)
+        if (field_name == "has_mask"sv)
         {
             hasMask = *static_cast<bool const*>(fc->fields[i].data);
             PLUGIN_VALIDATE(hasMask == 0 || hasMask == 1, ("QKV: Invalid hasMask " + std::to_string(hasMask)).c_str());
             BERT_DEBUG_VALUE("Building hasMask: ", hasMask);
         }
 
-        if (field_name.compare("dq_probs") == 0)
+        if (field_name == "dq_probs"sv)
         {
             dqProbs = *static_cast<float const*>(fc->fields[i].data);
             PLUGIN_VALIDATE(dqProbs > 0.0F, ("QKV: Invalid dqProbs " + std::to_string(dqProbs)).c_str());
             BERT_DEBUG_VALUE("Building dqProbs: ", dqProbs);
         }
-        if (field_name.compare("var_seqlen") == 0)
+        if (field_name == "var_seqlen"sv)
         {
             varSeqlen = *static_cast<int32_t const*>(fc->fields[i].data);
             BERT_DEBUG_VALUE("Building var_seqlen: ", varSeqlen);
         }
-        if (field_name.compare("use_int8_scale_max") == 0)
+        if (field_name == "use_int8_scale_max"sv)
         {
             useInt8ScaleMax = *static_cast<int32_t const*>(fc->fields[i].data);
             PLUGIN_VALIDATE(useInt8ScaleMax == 0 || useInt8ScaleMax == 1,

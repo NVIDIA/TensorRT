@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,11 +40,17 @@ fi
 
 SONAME=$(readelf -d "${IN_LIBFILE}" | grep '(SONAME)' | cut -d [ -f 2 | cut -d ] -f 1)
 
-OS=$(lsb_release -si)-$(lsb_release -sr | cut -d '.' -f 1-2)
+# Detect OS from /etc/os-release instead of lsb_release (which may not be installed).
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS="${ID}-${VERSION_ID}"
+else
+    OS="unknown"
+fi
 
-if [ "$OS" = "Ubuntu-22.04" ] ; then
+if [ "$OS" = "ubuntu-22.04" ] ; then
     EXTRA_NM_FLAG="--without-symbol-versions"
-elif [ "$OS" = "Ubuntu-24.04" ] ; then
+elif [ "$OS" = "ubuntu-24.04" ] ; then
     EXTRA_NM_FLAG="--without-symbol-versions"
 fi
 

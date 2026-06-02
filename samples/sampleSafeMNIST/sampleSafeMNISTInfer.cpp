@@ -30,13 +30,13 @@
 #include <array>
 #include <cassert>
 #include <cmath>
-#include <cstring>
 #include <cuda_runtime_api.h>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <numeric>
 #include <random>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -51,7 +51,7 @@ namespace
 std::string locateFile(std::string const& fileName, nvinfer2::safe::ISafeRecorder& recorder)
 {
     constexpr uint32_t MAX_DEPTH{10U};
-    std::array<const std::string, 2> const dirPatterns
+    std::array<std::string const, 2> const dirPatterns
         = {std::string{"data/samples/mnist/"}, std::string{"data/mnist/"}};
     std::string foundFile{};
 
@@ -219,6 +219,9 @@ void doInferenceThread(nvinfer2::safe::ITRTGraph* graph, int8_t& ret_status, nvi
     cudaStream_t stream;
     CUDA_CALL(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), *recorder);
 
+    // Setup as many auxiliary streams as the graph requires - destroyed at scope end.
+    auto auxStreamsDeleter = samplesSafeCommon::setUpAuxStreamsOn(*graph, *recorder);
+
     // Pick a random digit to try to infer.
     int32_t digit = getRandomDigit();
 
@@ -226,7 +229,7 @@ void doInferenceThread(nvinfer2::safe::ITRTGraph* graph, int8_t& ret_status, nvi
     for (int64_t i = 0; i < nbIOs; ++i)
     {
         // Get the tensor name for the current I/O tensor
-        const char* tensorName;
+        char const* tensorName;
         SAFE_API_CALL(graph->getIOTensorName(tensorName, i), *recorder);
         // Get tensor descriptor which contains metadata like size and I/O mode
         nvinfer2::safe::TensorDescriptor desc;
@@ -303,13 +306,24 @@ void doInferenceThread(nvinfer2::safe::ITRTGraph* graph, int8_t& ret_status, nvi
 }
 
 //!
+//! \brief The SampleSafeMNISTInferArgs struct stores the additional arguments required by the sample
+//!
+struct SampleSafeMNISTInferArgs
+{
+    std::string engineFileName{"safe_mnist.engine"};
+    int32_t threads{1};
+    bool help{false};
+};
+
+//!
 //! \brief Runs the TensorRT inference engine for this sample.
 //!
 //! \details This function is the main execution function of the sample. It allocates
 //!          the buffer, sets inputs, executes the engine, and verifies the output.
 //!
-bool doInference(std::string const& engineFileName, int32_t const& nbThreads)
+bool doInference(SampleSafeMNISTInferArgs const& args)
 {
+    int32_t const nbThreads = args.threads;
     std::vector<int8_t> ret_status(nbThreads);
     std::vector<std::unique_ptr<sample::SampleSafeRecorder>> recorders(nbThreads);
     for (int32_t i = 0; i < nbThreads; ++i)
@@ -318,7 +332,7 @@ bool doInference(std::string const& engineFileName, int32_t const& nbThreads)
     }
     // Load safe engine blob
     int32_t engineFileSize = 0;
-    auto gieModelStream = loadEnginePlanFile(engineFileName, engineFileSize, *recorders[0]);
+    auto gieModelStream = loadEnginePlanFile(args.engineFileName, engineFileSize, *recorders[0]);
     SAFE_ASSERT(engineFileSize != 0);
 
     // Configure executor(s)
@@ -357,42 +371,33 @@ bool doInference(std::string const& engineFileName, int32_t const& nbThreads)
 }
 
 //!
-//! \brief The SampleSafeMNISTInferArgs struct stores the additional arguments required by the sample
-//!
-struct SampleSafeMNISTInferArgs
-{
-    std::string engineFileName{"safe_mnist.engine"};
-    int32_t threads{1};
-    bool help{false};
-};
-
-//!
 //! \brief This function parses arguments specific to the sample
 //!
 bool parseSampleSafeMNISTInferArgs(SampleSafeMNISTInferArgs& args, int32_t argc, char* argv[])
 {
     for (int32_t i = 1; i < argc; ++i)
     {
-        if (!strncmp(argv[i], "--loadEngine=", 13))
+        std::string const arg = argv[i];
+        if (auto const value = parseString(arg, "loadEngine"))
         {
-            args.engineFileName = (argv[i] + 13);
+            args.engineFileName = *value;
         }
-        else if (!strncmp(argv[i], "--threads=", 10))
+        else if (auto const value = parseString(arg, "threads"))
         {
-            args.threads = std::stoi(argv[i] + 10);
+            args.threads = std::stoi(*value);
             if (args.threads <= 0)
             {
-                SAFE_LOG << "Invalid Argument: " << argv[i] << std::endl;
+                SAFE_LOG << "Number of threads must be > 0, got: " << arg << "\n";
                 return false;
             }
         }
-        else if (!strncmp(argv[i], "--help", 6) || !strncmp(argv[i], "-h", 2))
+        else if (parseBool(arg, "help", 'h'))
         {
             args.help = true;
         }
         else
         {
-            SAFE_LOG << "Invalid Argument: " << argv[i] << std::endl;
+            SAFE_LOG << "Invalid Argument: " << arg << "\n";
             return false;
         }
     }
@@ -404,11 +409,15 @@ bool parseSampleSafeMNISTInferArgs(SampleSafeMNISTInferArgs& args, int32_t argc,
 //!
 void printHelpInfo()
 {
-    std::cout << "Usage: ./sample_mnist_safe_infer [-h or --help] [--loadEngine=<path to engine file>] "
-                 "[--threads=<number of threads to run>]\n";
-    std::cout << "--help or -h    Display help information\n";
-    std::cout << "--loadEngine    load the serialized engine from the file (default = safe_mnist.engine).\n";
-    std::cout << "--threads       Number of threads (default = 1)\n";
+    SampleSafeMNISTInferArgs const defArgs{};
+    std::cout << R"(Usage: sample_mnist_safe_infer [options]
+Options:
+  --help, -h          Print this message and exit.
+  --loadEngine=FILE   Load serialized engine from FILE (default = )"
+              << defArgs.engineFileName << R"().
+  --threads=N         Run inference in N threads concurrently (default = )"
+              << defArgs.threads << R"().
+)";
 }
 } // namespace
 
@@ -438,7 +447,7 @@ int32_t main(int32_t argc, char** argv)
         return EXIT_SUCCESS;
     }
 
-    TestResult result = doInference(args.engineFileName, args.threads) ? TestResult::kPASSED : TestResult::kFAILED;
+    TestResult result = doInference(args) ? TestResult::kPASSED : TestResult::kFAILED;
     reportTestResult("TensorRT.sample_mnist_safe_infer", result, argc, argv);
 
     return EXIT_SUCCESS;

@@ -1,0 +1,7 @@
+numpy==1.26.4
+cuda-bindings
+mpi4py==4.1.1
+nccl4py==0.1.1
+onnx_graphsurgeon
+polygraphy>=0.49.25
+torch

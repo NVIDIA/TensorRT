@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <string_view>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -29,28 +30,11 @@
 #include <cuda_fp16.h>
 
 using namespace nvinfer1;
+using namespace std::string_view_literals;
 
 static void caughtError(std::exception const& e)
 {
     std::cout << e.what() << std::endl;
-}
-
-// Write values into buffer
-template <typename T>
-void write(char*& buffer, T const& val)
-{
-    std::memcpy(buffer, &val, sizeof(T));
-    buffer += sizeof(T);
-}
-
-// Read values from buffer
-template <typename T>
-T read(char const*& buffer)
-{
-    T val{};
-    std::memcpy(&val, buffer, sizeof(T));
-    buffer += sizeof(T);
-    return val;
 }
 
 #define ASSERT(condition)                                                                                              \
@@ -113,34 +97,22 @@ __global__ void circPadKernel(
     }
 }
 
-class CircPadPlugin : public nvinfer1::IPluginV2DynamicExt
+class CircPadPlugin : public IPluginV3,
+                      public IPluginV3OneCore,
+                      public IPluginV3OneBuild,
+                      public IPluginV3OneRuntime
 {
 public:
     CircPadPlugin() = default;
 
     CircPadPlugin(std::vector<int32_t> pads)
-        : mPads(pads)
+        : mPads(std::move(pads))
     {
     }
 
     CircPadPlugin(CircPadPlugin const& p) = default;
 
-    CircPadPlugin(void const* serialData, size_t length)
-    {
-        ASSERT(serialData != nullptr);
-
-        char const* d = static_cast<char const*>(serialData);
-        char const* a = d;
-
-        int32_t padsSize = read<int32_t>(d);
-        mPads.resize(padsSize);
-        for (int i = 0; i < padsSize; ++i)
-        {
-            mPads[i] = read<int32_t>(d);
-        }
-
-        ASSERT(d == a + length);
-    }
+    ~CircPadPlugin() override = default;
 
     int32_t getNbOutputs() const noexcept override
     {
@@ -148,9 +120,9 @@ public:
     }
 
     bool supportsFormatCombination(
-        int32_t pos, PluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept
+        int32_t pos, DynamicPluginTensorDesc const* inOut, int32_t nbInputs, int32_t nbOutputs) noexcept override
     {
-        PluginTensorDesc const& desc = inOut[pos];
+        PluginTensorDesc const& desc = inOut[pos].desc;
         if (desc.format != TensorFormat::kLINEAR)
         {
             return false;
@@ -159,37 +131,20 @@ public:
         // first input should be float16 or float32
         if (pos == 0)
         {
-            return (inOut[pos].type == nvinfer1::DataType::kFLOAT || inOut[pos].type == nvinfer1::DataType::kHALF);
+            return (desc.type == DataType::kFLOAT || desc.type == DataType::kHALF);
         }
 
         // output should have the same type as the input
         if (pos == 1)
         {
-            return (inOut[pos].type == inOut[0].type);
+            return (desc.type == inOut[0].desc.type);
         }
 
         return false;
     }
 
-    void configureWithFormat(nvinfer1::Dims const*, int32_t, nvinfer1::Dims const*, int32_t, nvinfer1::DataType type,
-        nvinfer1::PluginFormat floatFormat, int32_t) noexcept override
-    {
-    }
-
-    int32_t initialize() noexcept override
-    {
-        return 0;
-    }
-
-    void terminate() noexcept override
-    {
-        mAllPadsPtr.reset();
-        mOrigDimsPtr.reset();
-        mOutDimsPtr.reset();
-    }
-
     int32_t enqueue(PluginTensorDesc const* inputDesc, PluginTensorDesc const* outputDesc, void const* const* inputs,
-        void* const* outputs, void* workspace, cudaStream_t stream) noexcept
+        void* const* outputs, void* workspace, cudaStream_t stream) noexcept override
     {
         auto inpDType = inputDesc[0].type;
 
@@ -213,25 +168,7 @@ public:
         return 0;
     }
 
-    size_t getSerializationSize() const noexcept override
-    {
-        return (mPads.size() + 1) * sizeof(int32_t);
-    }
-
-    void serialize(void* buffer) const noexcept override
-    {
-        ASSERT(buffer != nullptr);
-        char* d = static_cast<char*>(buffer);
-        char* a = d;
-        write(d, static_cast<int32_t>(mPads.size()));
-        for (int i = 0; i < mPads.size(); ++i)
-        {
-            write(d, mPads[i]);
-        }
-        ASSERT(d == a + getSerializationSize());
-    }
-
-    char const* getPluginType() const noexcept override
+    char const* getPluginName() const noexcept override
     {
         return "CircPadPlugin";
     }
@@ -241,17 +178,26 @@ public:
         return "1";
     }
 
-    nvinfer1::IPluginV2DynamicExt* clone() const noexcept override
+    IPluginV3* clone() noexcept override
     {
-        return new CircPadPlugin(*this);
+        try
+        {
+            auto plugin = std::make_unique<CircPadPlugin>(*this);
+            // Build-time clones do not need GPU memory. Clear shared_ptrs so the
+            // clone does not share GPU allocations with the source.
+            plugin->mAllPadsPtr.reset();
+            plugin->mOrigDimsPtr.reset();
+            plugin->mOutDimsPtr.reset();
+            return plugin.release();
+        }
+        catch (std::exception const& e)
+        {
+            caughtError(e);
+        }
+        return nullptr;
     }
 
-    void destroy() noexcept override
-    {
-        delete this;
-    }
-
-    void setPluginNamespace(char const* libNamespace) noexcept override
+    void setPluginNamespace(char const* libNamespace) noexcept
     {
         mNamespace = libNamespace;
     }
@@ -261,30 +207,58 @@ public:
         return mNamespace.c_str();
     }
 
-    DataType getOutputDataType(int index, nvinfer1::DataType const* inputTypes, int nbInputs) const noexcept
+    int32_t getOutputDataTypes(
+        DataType* outputTypes, int32_t nbOutputs, DataType const* inputTypes, int32_t nbInputs) const noexcept override
     {
-        return inputTypes[0];
+        outputTypes[0] = inputTypes[0];
+        return 0;
     }
 
-    DimsExprs getOutputDimensions(
-        int32_t outputIndex, DimsExprs const* inputs, int32_t nbInputs, IExprBuilder& exprBuilder) noexcept
+    int32_t getOutputShapes(DimsExprs const* inputs, int32_t nbInputs, DimsExprs const* shapeInputs,
+        int32_t nbShapeInputs, DimsExprs* outputs, int32_t nbOutputs, IExprBuilder& exprBuilder) noexcept override
     {
-        nvinfer1::DimsExprs outDims{inputs[0]};
+        outputs[0] = inputs[0];
         int32_t nbOutDims = inputs[0].nbDims;
 
-        for (int32_t i = 0; i < mPads.size() / 2; ++i)
+        for (int32_t i = 0; i < static_cast<int32_t>(mPads.size()) / 2; ++i)
         {
-            outDims.d[nbOutDims - i - 1] = exprBuilder.operation(nvinfer1::DimensionOperation::kSUM,
+            outputs[0].d[nbOutDims - i - 1] = exprBuilder.operation(DimensionOperation::kSUM,
                 *inputs[0].d[nbOutDims - i - 1], *exprBuilder.constant(mPads[i * 2] + mPads[i * 2 + 1]));
         }
 
-        return outDims;
+        return 0;
     }
 
-    void configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs, DynamicPluginTensorDesc const* out,
-        int32_t nbOutputs) noexcept
+    int32_t configurePlugin(DynamicPluginTensorDesc const* in, int32_t nbInputs,
+        DynamicPluginTensorDesc const* out, int32_t nbOutputs) noexcept override
     {
-        mN = in[0].desc.dims.nbDims;
+        return 0;
+    }
+
+    size_t getWorkspaceSize(DynamicPluginTensorDesc const* inputs, int32_t nbInputs,
+        DynamicPluginTensorDesc const* outputs, int32_t nbOutputs) const noexcept override
+    {
+        return 0;
+    }
+
+    IPluginCapability* getCapabilityInterface(PluginCapabilityType type) noexcept override
+    {
+        if (type == PluginCapabilityType::kBUILD)
+        {
+            return static_cast<IPluginV3OneBuild*>(this);
+        }
+        if (type == PluginCapabilityType::kRUNTIME)
+        {
+            return static_cast<IPluginV3OneRuntime*>(this);
+        }
+        ASSERT(type == PluginCapabilityType::kCORE);
+        return static_cast<IPluginV3OneCore*>(this);
+    }
+
+    int32_t onShapeChange(
+        PluginTensorDesc const* in, int32_t nbInputs, PluginTensorDesc const* out, int32_t nbOutputs) noexcept override
+    {
+        mN = in[0].dims.nbDims;
 
         std::vector<int32_t> allPads(mN * 2);
         std::vector<int32_t> origDims(mN);
@@ -292,11 +266,11 @@ public:
 
         for (int32_t i = 0; i < mN; ++i)
         {
-            origDims[i] = in[0].desc.dims.d[i];
-            outDims[i] = in[0].desc.dims.d[i];
+            origDims[i] = in[0].dims.d[i];
+            outDims[i] = in[0].dims.d[i];
         }
 
-        for (int32_t i = 0; i < mPads.size() / 2; ++i)
+        for (int32_t i = 0; i < static_cast<int32_t>(mPads.size()) / 2; ++i)
         {
             outDims[mN - i - 1] += mPads[i * 2] + mPads[i * 2 + 1];
             allPads[mN * 2 - 2 * i - 2] = mPads[i * 2];
@@ -313,12 +287,22 @@ public:
             mOrigDimsPtr->mPtr, &origDims.front(), origDims.size() * sizeof(int32_t), cudaMemcpyHostToDevice));
         ASSERT(
             !cudaMemcpy(mOutDimsPtr->mPtr, &outDims.front(), outDims.size() * sizeof(int32_t), cudaMemcpyHostToDevice));
+
+        return 0;
     }
 
-    size_t getWorkspaceSize(PluginTensorDesc const* inputs, int32_t nbInputs, PluginTensorDesc const* outputs,
-        int32_t nbOutputs) const noexcept
+    IPluginV3* attachToContext(IPluginResourceContext* context) noexcept override
     {
-        return 0;
+        return clone();
+    }
+
+    PluginFieldCollection const* getFieldsToSerialize() noexcept override
+    {
+        mDataToSerialize.clear();
+        mDataToSerialize.emplace_back("pads", mPads.data(), PluginFieldType::kINT32, mPads.size());
+        mFCToSerialize.nbFields = mDataToSerialize.size();
+        mFCToSerialize.fields = mDataToSerialize.data();
+        return &mFCToSerialize;
     }
 
 private:
@@ -328,9 +312,12 @@ private:
     std::shared_ptr<CudaBind<int32_t>> mOrigDimsPtr{};
     std::shared_ptr<CudaBind<int32_t>> mOutDimsPtr{};
     std::string mNamespace;
+
+    std::vector<PluginField> mDataToSerialize;
+    PluginFieldCollection mFCToSerialize;
 };
 
-class CircPadPluginCreator : public nvinfer1::IPluginCreator
+class CircPadPluginCreator : public IPluginCreatorV3One
 {
 public:
     CircPadPluginCreator()
@@ -341,22 +328,22 @@ public:
         mFC.fields = mPluginAttributes.data();
     }
 
-    char const* getPluginName() const noexcept
+    char const* getPluginName() const noexcept override
     {
         return "CircPadPlugin";
     }
 
-    char const* getPluginVersion() const noexcept
+    char const* getPluginVersion() const noexcept override
     {
         return "1";
     }
 
-    PluginFieldCollection const* getFieldNames() noexcept
+    PluginFieldCollection const* getFieldNames() noexcept override
     {
         return &mFC;
     }
 
-    IPluginV2* createPlugin(char const* name, PluginFieldCollection const* fc) noexcept
+    IPluginV3* createPlugin(char const* name, PluginFieldCollection const* fc, TensorRTPhase phase) noexcept override
     {
         try
         {
@@ -364,8 +351,7 @@ public:
 
             for (int32_t i = 0; i < fc->nbFields; i++)
             {
-                std::string field_name(fc->fields[i].name);
-                if (field_name.compare("pads") == 0)
+                if (fc->fields[i].name == "pads"sv)
                 {
                     pads.resize(fc->fields[i].length);
                     auto const* padsPtr = static_cast<int32_t const*>(fc->fields[i].data);
@@ -382,32 +368,19 @@ public:
         return nullptr;
     }
 
-    IPluginV2* deserializePlugin(char const* name, void const* serialData, size_t serialLength) noexcept
-    {
-        try
-        {
-            return new CircPadPlugin(serialData, serialLength);
-        }
-        catch (std::exception const& e)
-        {
-            caughtError(e);
-        }
-        return nullptr;
-    }
-
     void setPluginNamespace(char const* libNamespace) noexcept
     {
         mNamespace = libNamespace;
     }
 
-    char const* getPluginNamespace() const noexcept
+    char const* getPluginNamespace() const noexcept override
     {
         return mNamespace.c_str();
     }
 
 private:
-    nvinfer1::PluginFieldCollection mFC;
-    std::vector<nvinfer1::PluginField> mPluginAttributes;
+    PluginFieldCollection mFC;
+    std::vector<PluginField> mPluginAttributes;
     std::string mNamespace;
 };
 

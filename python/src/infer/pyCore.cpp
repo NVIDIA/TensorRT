@@ -322,23 +322,6 @@ static auto const refitter_get_all_weights = [](IRefitter& self) {
     return names;
 };
 
-static auto const refitter_get_dynamic_range = [](IRefitter& self, std::string const& tensorName) {
-    return py::make_tuple(self.getDynamicRangeMin(tensorName.c_str()), self.getDynamicRangeMax(tensorName.c_str()));
-};
-
-static auto const refitter_set_dynamic_range
-    = [](IRefitter& self, std::string const& tensorName, std::vector<float> const& range) -> bool {
-    PY_ASSERT_VALUE_ERROR(range.size() == 2, "Dynamic range must contain exactly 2 elements");
-    return self.setDynamicRange(tensorName.c_str(), range[0], range[1]);
-};
-
-static auto const refitter_get_tensors_with_dynamic_range = [](IRefitter& self) {
-    int32_t const size = self.getTensorsWithDynamicRange(0, nullptr);
-    std::vector<char const*> tensorNames(size);
-    self.getTensorsWithDynamicRange(size, tensorNames.data());
-    return tensorNames;
-};
-
 static auto const refitter_refit_cuda_engine_async = [](IRefitter& self, size_t streamHandle) {
     return self.refitCudaEngineAsync(reinterpret_cast<cudaStream_t>(streamHandle));
 };
@@ -695,40 +678,6 @@ public:
         {
             std::cerr << "[ERROR] Exception caught in notifyShape()" << std::endl;
         }
-    }
-};
-
-class PyStreamReader : public IStreamReader
-{
-public:
-    int64_t read(void* destination, int64_t size) noexcept override
-    {
-        try
-        {
-            py::gil_scoped_acquire gil{};
-            py::function pyFunc = utils::getOverride(static_cast<IStreamReader*>(this), "read");
-
-            if (!pyFunc)
-            {
-                return 0;
-            }
-
-            py::buffer data = pyFunc(size);
-            py::buffer_info info = data.request();
-            int64_t bytesRead = info.size * info.itemsize;
-            std::memcpy(destination, info.ptr, std::min(bytesRead, size));
-            return bytesRead;
-        }
-        catch (std::exception const& e)
-        {
-            std::cerr << "[ERROR] Exception caught in read(): " << e.what() << std::endl;
-        }
-        catch (...)
-        {
-            std::cerr << "[ERROR] Exception caught in read()" << std::endl;
-        }
-
-        return 0;
     }
 };
 
@@ -1378,7 +1327,6 @@ void bindCore(py::module& m)
             py::call_guard<py::gil_scoped_release>{})
         // End of enqueueV3 related APIs.
         .def_property_readonly("all_binding_shapes_specified", &IExecutionContext::allInputDimensionsSpecified)
-        .def_property_readonly("all_shape_inputs_specified", &IExecutionContext::allInputShapesSpecified)
         .def("set_optimization_profile_async", lambdas::context_set_optimization_profile_async, "profile_index"_a,
             "stream_handle"_a, IExecutionContextDoc::set_optimization_profile_async)
         .def_property("error_recorder", &IExecutionContext::getErrorRecorder,
@@ -1458,9 +1406,6 @@ void bindCore(py::module& m)
 
     py::class_<ICudaEngine>(m, "ICudaEngine", ICudaEngineDoc::descr, py::module_local())
         .def("__getitem__", lambdas::engine_getitem)
-        .def_property_readonly("has_implicit_batch_dimension",
-            utils::deprecateMember(
-                &ICudaEngine::hasImplicitBatchDimension, "Implicit batch dimensions support has been removed"))
         .def_property_readonly("num_layers", &ICudaEngine::getNbLayers)
         .def("serialize", &ICudaEngine::serialize, ICudaEngineDoc::serialize, py::call_guard<py::gil_scoped_release>{})
         .def("create_serialization_config", &ICudaEngine::createSerializationConfig,
@@ -1471,17 +1416,6 @@ void bindCore(py::module& m)
             py::overload_cast<ExecutionContextAllocationStrategy>(&ICudaEngine::createExecutionContext),
             ICudaEngineDoc::create_execution_context, py::arg("strategy") = ExecutionContextAllocationStrategy::kSTATIC,
             py::keep_alive<0, 1>{}, py::call_guard<py::gil_scoped_release>{})
-        .def("create_execution_context_without_device_memory",
-            utils::deprecateMember(&ICudaEngine::createExecutionContextWithoutDeviceMemory, "create_execution_context"),
-            ICudaEngineDoc::create_execution_context_without_device_memory, py::keep_alive<0, 1>{},
-            py::call_guard<py::gil_scoped_release>{})
-        .def("get_device_memory_size_for_profile",
-            utils::deprecateMember(&ICudaEngine::getDeviceMemorySizeForProfile,
-                "Deprecated in TensorRT 10.1. Superseded by get_device_memory_size_for_profile_v2"),
-            "profile_index"_a, ICudaEngineDoc::get_device_memory_size_for_profile)
-        .def_property_readonly("device_memory_size",
-            utils::deprecateMember(&ICudaEngine::getDeviceMemorySize,
-                "Deprecated in TensorRT 10.1. Superseded by get_device_memory_size_v2"))
         .def("get_device_memory_size_for_profile_v2", &ICudaEngine::getDeviceMemorySizeForProfileV2, "profile_index"_a,
             ICudaEngineDoc::get_device_memory_size_for_profile_v2)
         .def_property_readonly("device_memory_size_v2", &ICudaEngine::getDeviceMemorySizeV2)
@@ -1584,14 +1518,6 @@ void bindCore(py::module& m)
         .def_property_readonly("hardware_compatibility_level", &ICudaEngine::getHardwareCompatibilityLevel)
         .def_property_readonly("num_aux_streams", &ICudaEngine::getNbAuxStreams)
         // Weight streaming APIs
-        .def_property("weight_streaming_budget",
-            utils::deprecateMember(&ICudaEngine::getWeightStreamingBudget,
-                "Deprecated in TensorRT 10.1. Superseded by weight_streaming_budget_v2"),
-            utils::deprecateMember(&ICudaEngine::setWeightStreamingBudget,
-                "Deprecated in TensorRT 10.1. Superseded by weight_streaming_budget_v2"))
-        .def_property_readonly("minimum_weight_streaming_budget",
-            utils::deprecateMember(
-                &ICudaEngine::getMinimumWeightStreamingBudget, "Deprecated in TensorRT 10.1. Not required by V2 APIs."))
         .def_property("weight_streaming_budget_v2", &ICudaEngine::getWeightStreamingBudgetV2,
             &ICudaEngine::setWeightStreamingBudgetV2)
         .def_property_readonly("streamable_weights_size", &ICudaEngine::getStreamableWeightsSize)
@@ -1649,10 +1575,6 @@ void bindCore(py::module& m)
         .def("deallocate_async", &lambdas::deallocate_async, "memory"_a, "stream"_a,
             GpuAsyncAllocatorDoc::deallocate_async);
 
-    py::class_<IStreamReader, PyStreamReader>(m, "IStreamReader", StreamReaderDoc::descr, py::module_local())
-        .def(py::init<>())
-        .def("read", &IStreamReader::read, "destination"_a, "size"_a, StreamReaderDoc::read);
-
     py::enum_<SeekPosition>(m, "SeekPosition", py::arithmetic{}, SeekPositionDoc::descr, py::module_local())
         .value("SET", SeekPosition::kSET, SeekPositionDoc::SET)
         .value("CUR", SeekPosition::kCUR, SeekPositionDoc::CUR)
@@ -1668,9 +1590,6 @@ void bindCore(py::module& m)
         .def("write", &IStreamWriter::write, "data"_a, "size"_a, StreamWriterDoc::write);
 
     py::enum_<BuilderFlag>(m, "BuilderFlag", py::arithmetic{}, BuilderFlagDoc::descr, py::module_local())
-        .value("FP16", BuilderFlag::kFP16, BuilderFlagDoc::FP16)
-        .value("BF16", BuilderFlag::kBF16, BuilderFlagDoc::BF16)
-        .value("INT8", BuilderFlag::kINT8, BuilderFlagDoc::INT8)
         .value("DEBUG", BuilderFlag::kDEBUG, BuilderFlagDoc::DEBUG)
         .value("GPU_FALLBACK", BuilderFlag::kGPU_FALLBACK, BuilderFlagDoc::GPU_FALLBACK)
         .value("REFIT", BuilderFlag::kREFIT, BuilderFlagDoc::REFIT)
@@ -1679,29 +1598,19 @@ void bindCore(py::module& m)
         .value("TF32", BuilderFlag::kTF32, BuilderFlagDoc::TF32)
         .value("SPARSE_WEIGHTS", BuilderFlag::kSPARSE_WEIGHTS, BuilderFlagDoc::SPARSE_WEIGHTS)
         .value("SAFETY_SCOPE", BuilderFlag::kSAFETY_SCOPE, BuilderFlagDoc::SAFETY_SCOPE)
-        .value("OBEY_PRECISION_CONSTRAINTS", BuilderFlag::kOBEY_PRECISION_CONSTRAINTS,
-            BuilderFlagDoc::OBEY_PRECISION_CONSTRAINTS)
-        .value("PREFER_PRECISION_CONSTRAINTS", BuilderFlag::kPREFER_PRECISION_CONSTRAINTS,
-            BuilderFlagDoc::PREFER_PRECISION_CONSTRAINTS)
         .value("DIRECT_IO", BuilderFlag::kDIRECT_IO, BuilderFlagDoc::DIRECT_IO)
-        .value(
-            "REJECT_EMPTY_ALGORITHMS", BuilderFlag::kREJECT_EMPTY_ALGORITHMS, BuilderFlagDoc::REJECT_EMPTY_ALGORITHMS)
         .value("VERSION_COMPATIBLE", BuilderFlag::kVERSION_COMPATIBLE, BuilderFlagDoc::VERSION_COMPATIBLE)
         .value("EXCLUDE_LEAN_RUNTIME", BuilderFlag::kEXCLUDE_LEAN_RUNTIME, BuilderFlagDoc::EXCLUDE_LEAN_RUNTIME)
-        .value("FP8", BuilderFlag::kFP8, BuilderFlagDoc::FP8)
         .value("ERROR_ON_TIMING_CACHE_MISS", BuilderFlag::kERROR_ON_TIMING_CACHE_MISS,
             BuilderFlagDoc::ERROR_ON_TIMING_CACHE_MISS)
         .value("DISABLE_COMPILATION_CACHE", BuilderFlag::kDISABLE_COMPILATION_CACHE,
             BuilderFlagDoc::DISABLE_COMPILATION_CACHE)
-        .value("WEIGHTLESS", BuilderFlag::kWEIGHTLESS, BuilderFlagDoc::WEIGHTLESS)
         .value("STRIP_PLAN", BuilderFlag::kSTRIP_PLAN, BuilderFlagDoc::STRIP_PLAN)
         .value("REFIT_IDENTICAL", BuilderFlag::kREFIT_IDENTICAL, BuilderFlagDoc::REFIT_IDENTICAL)
         .value("WEIGHT_STREAMING", BuilderFlag::kWEIGHT_STREAMING, BuilderFlagDoc::WEIGHT_STREAMING)
-        .value("INT4", BuilderFlag::kINT4, BuilderFlagDoc::INT4)
         .value("REFIT_INDIVIDUAL", BuilderFlag::kREFIT_INDIVIDUAL, BuilderFlagDoc::REFIT_INDIVIDUAL)
         .value("STRICT_NANS", BuilderFlag::kSTRICT_NANS, BuilderFlagDoc::STRICT_NANS)
         .value("MONITOR_MEMORY", BuilderFlag::kMONITOR_MEMORY, BuilderFlagDoc::MONITOR_MEMORY)
-        .value("FP4", BuilderFlag::kFP4, BuilderFlagDoc::FP4)
         .value("DISTRIBUTIVE_INDEPENDENCE", BuilderFlag::kDISTRIBUTIVE_INDEPENDENCE,
             BuilderFlagDoc::DISTRIBUTIVE_INDEPENDENCE)
         ;
@@ -1714,18 +1623,11 @@ void bindCore(py::module& m)
         .value("TACTIC_DRAM", MemoryPoolType::kTACTIC_DRAM, MemoryPoolTypeDoc::TACTIC_DRAM)
         .value("TACTIC_SHARED_MEMORY", MemoryPoolType::kTACTIC_SHARED_MEMORY, MemoryPoolTypeDoc::TACTIC_SHARED_MEMORY);
 
-    py::enum_<QuantizationFlag>(m, "QuantizationFlag", py::arithmetic{}, QuantizationFlagDoc::descr, py::module_local())
-        .value("CALIBRATE_BEFORE_FUSION", QuantizationFlag::kCALIBRATE_BEFORE_FUSION,
-            QuantizationFlagDoc::CALIBRATE_BEFORE_FUSION);
-
     py::enum_<PreviewFeature>(m, "PreviewFeature", PreviewFeatureDoc::descr, py::module_local())
-        .value("PROFILE_SHARING_0806", PreviewFeature::kPROFILE_SHARING_0806, PreviewFeatureDoc::PROFILE_SHARING_0806)
         .value("ALIASED_PLUGIN_IO_10_03", PreviewFeature::kALIASED_PLUGIN_IO_10_03,
             PreviewFeatureDoc::ALIASED_PLUGIN_IO_10_03)
         .value("RUNTIME_ACTIVATION_RESIZE_10_10", PreviewFeature::kRUNTIME_ACTIVATION_RESIZE_10_10,
-            PreviewFeatureDoc::RUNTIME_ACTIVATION_RESIZE_10_10)
-        .value("MULTIDEVICE_RUNTIME_10_16", PreviewFeature::kMULTIDEVICE_RUNTIME_10_16,
-            PreviewFeatureDoc::MULTIDEVICE_RUNTIME_10_16);
+            PreviewFeatureDoc::RUNTIME_ACTIVATION_RESIZE_10_10);
 
     py::enum_<HardwareCompatibilityLevel>(
         m, "HardwareCompatibilityLevel", HardwareCompatibilityLevelDoc::descr, py::module_local())
@@ -1756,9 +1658,6 @@ void bindCore(py::module& m)
         .value("NONE", ProfilingVerbosity::kNONE, ProfilingVerbosityDoc::NONE);
 
     py::enum_<TacticSource>(m, "TacticSource", py::arithmetic{}, TacticSourceDoc::descr, py::module_local())
-        .value("CUBLAS", TacticSource::kCUBLAS, TacticSourceDoc::CUBLAS)
-        .value("CUBLAS_LT", TacticSource::kCUBLAS_LT, TacticSourceDoc::CUBLAS_LT)
-        .value("CUDNN", TacticSource::kCUDNN, TacticSourceDoc::CUDNN)
         .value("EDGE_MASK_CONVOLUTIONS", TacticSource::kEDGE_MASK_CONVOLUTIONS, TacticSourceDoc::EDGE_MASK_CONVOLUTIONS)
         .value("JIT_CONVOLUTIONS", TacticSource::kJIT_CONVOLUTIONS, TacticSourceDoc::JIT_CONVOLUTIONS);
 
@@ -1817,34 +1716,6 @@ void bindCore(py::module& m)
         .def_property("profile_stream", lambdas::netconfig_get_profile_stream, lambdas::netconfig_set_profile_stream)
         .def("add_optimization_profile", &IBuilderConfig::addOptimizationProfile, "profile"_a,
             IBuilderConfigDoc::add_optimization_profile, py::keep_alive<1, 2>{})
-        .def_property("int8_calibrator",
-            utils::deprecateMember(&IBuilderConfig::getInt8Calibrator,
-                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setInt8Calibrator,
-                                 "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-                py::keep_alive<1, 2>{}))
-        .def_property(
-            "quantization_flags", &IBuilderConfig::getQuantizationFlags, &IBuilderConfig::setQuantizationFlags)
-        .def("clear_quantization_flag", &IBuilderConfig::clearQuantizationFlag, "flag"_a,
-            IBuilderConfigDoc::clear_quantization_flag)
-        .def("set_quantization_flag", &IBuilderConfig::setQuantizationFlag, "flag"_a,
-            IBuilderConfigDoc::set_quantization_flag)
-        .def("get_quantization_flag", &IBuilderConfig::getQuantizationFlag, "flag"_a,
-            IBuilderConfigDoc::get_quantization_flag)
-        .def("set_calibration_profile",
-            utils::deprecateMember(&IBuilderConfig::setCalibrationProfile,
-                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            "profile"_a, IBuilderConfigDoc::set_calibration_profile, py::keep_alive<1, 2>{})
-        .def("get_calibration_profile",
-            utils::deprecateMember(&IBuilderConfig::getCalibrationProfile,
-                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            IBuilderConfigDoc::get_calibration_profile)
-        .def_property("algorithm_selector",
-            utils::deprecateMember(&IBuilderConfig::getAlgorithmSelector,
-                "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
-            py::cpp_function(utils::deprecateMember(&IBuilderConfig::setAlgorithmSelector,
-                                 "Deprecated in TensorRT 10.8. Please use editable mode in ITimingCache instead."),
-                py::keep_alive<1, 2>{}))
         .def_property_readonly("num_optimization_profiles", &IBuilderConfig::getNbOptimizationProfiles)
         .def("set_device_type", &IBuilderConfig::setDeviceType, "layer"_a, "device_type"_a,
             IBuilderConfigDoc::set_device_type)
@@ -1890,10 +1761,8 @@ void bindCore(py::module& m)
 
     py::enum_<NetworkDefinitionCreationFlag>(m, "NetworkDefinitionCreationFlag", py::arithmetic{},
         NetworkDefinitionCreationFlagDoc::descr, py::module_local())
-        .value("EXPLICIT_BATCH", NetworkDefinitionCreationFlag::kEXPLICIT_BATCH,
-            NetworkDefinitionCreationFlagDoc::EXPLICIT_BATCH)
         .value("STRONGLY_TYPED", NetworkDefinitionCreationFlag::kSTRONGLY_TYPED,
-            NetworkDefinitionCreationFlagDoc::STRONGLY_TYPED)
+            NetworkDefinitionCreationFlagDoc::STRONGLY_TYPED) // Deprecated: always enabled
         .value("PREFER_AOT_PYTHON_PLUGINS", NetworkDefinitionCreationFlag::kPREFER_AOT_PYTHON_PLUGINS,
             NetworkDefinitionCreationFlagDoc::PREFER_AOT_PYTHON_PLUGINS)
         .value("PREFER_JIT_PYTHON_PLUGINS", NetworkDefinitionCreationFlag::kPREFER_JIT_PYTHON_PLUGINS,
@@ -1908,9 +1777,6 @@ void bindCore(py::module& m)
             BuilderDoc::init, py::keep_alive<1, 2>{})
         .def("create_network", &IBuilder::createNetworkV2, "flags"_a = 0U, BuilderDoc::create_network,
             py::keep_alive<0, 1>{})
-        .def_property_readonly("platform_has_tf32", &IBuilder::platformHasTf32)
-        .def_property_readonly("platform_has_fast_fp16", &IBuilder::platformHasFastFp16)
-        .def_property_readonly("platform_has_fast_int8", &IBuilder::platformHasFastInt8)
         .def_property_readonly("max_DLA_batch_size", &IBuilder::getMaxDLABatchSize)
         .def_property_readonly("num_DLA_cores", &IBuilder::getNbDLACores)
         .def_property("gpu_allocator", nullptr, py::cpp_function(&IBuilder::setGpuAllocator, py::keep_alive<1, 2>{}))
@@ -1962,9 +1828,6 @@ void bindCore(py::module& m)
             RuntimeDoc::init, py::keep_alive<1, 2>{})
         .def("deserialize_cuda_engine", lambdas::runtime_deserialize_cuda_engine, "serialized_engine"_a,
             RuntimeDoc::deserialize_cuda_engine, py::keep_alive<0, 1>{})
-        .def("deserialize_cuda_engine", py::overload_cast<IStreamReader&>(&IRuntime::deserializeCudaEngine),
-            "stream_reader"_a, RuntimeDoc::deserialize_cuda_engine_reader, py::call_guard<py::gil_scoped_release>{},
-            py::keep_alive<0, 1>{})
         .def("deserialize_cuda_engine", py::overload_cast<IStreamReaderV2&>(&IRuntime::deserializeCudaEngine),
             "stream_reader_v2"_a, RuntimeDoc::deserialize_cuda_engine_reader_v2,
             py::call_guard<py::gil_scoped_release>{}, py::keep_alive<0, 1>{})
@@ -2001,19 +1864,6 @@ void bindCore(py::module& m)
         .def("get_missing_weights", lambdas::refitter_get_missing_weights, RefitterDoc::get_missing_weights)
         .def("get_all", lambdas::refitter_get_all, RefitterDoc::get_all)
         .def("get_all_weights", lambdas::refitter_get_all_weights, RefitterDoc::get_all_weights)
-        // Using a plus sign converts the lambda function into a function pointer.
-        .def("get_dynamic_range",
-            utils::deprecate(+lambdas::refitter_get_dynamic_range,
-                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            "tensor_name"_a, RefitterDoc::get_dynamic_range)
-        .def("set_dynamic_range",
-            utils::deprecate(+lambdas::refitter_set_dynamic_range,
-                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            "tensor_name"_a, "range"_a, RefitterDoc::set_dynamic_range)
-        .def("get_tensors_with_dynamic_range",
-            utils::deprecate(+lambdas::refitter_get_tensors_with_dynamic_range,
-                "Deprecated in TensorRT 10.1. Superseded by explicit quantization."),
-            RefitterDoc::get_tensors_with_dynamic_range)
         .def_property("error_recorder", &IRefitter::getErrorRecorder,
             py::cpp_function(&IRefitter::setErrorRecorder, py::keep_alive<1, 2>{}))
         .def_property_readonly("logger", &IRefitter::getLogger)

@@ -132,7 +132,7 @@ def add_arguments(parser):
         "--onnx-opset",
         type=int,
         default=19,
-        choices=range(7, 20),
+        choices=range(7, 24),
         help="Select ONNX opset version to target for exported models",
     )
     parser.add_argument("--onnx-dir", default="onnx", help="Output directory for ONNX export")

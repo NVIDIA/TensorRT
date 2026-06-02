@@ -20,14 +20,21 @@
 
 #include "NvInfer.h"
 #include "NvOnnxParser.h"
+#include "sampleEntrypoints.h"
 #include "sampleOptions.h"
 #include "sampleUtils.h"
 #include "streamReader.h"
+#include <functional>
 #include <iostream>
 #include <vector>
 
 namespace sample
 {
+
+//! \brief Callback invoked after standard builder configuration, before engine build.
+//! Custom tools can use this to apply additional builder configuration on top of trtexec's.
+using PostConfigCallback = std::function<void(
+    nvinfer1::IBuilder&, nvinfer1::IBuilderConfig&, BuildOptions const&, SystemOptions const&)>;
 
 struct Parser
 {
@@ -83,8 +90,6 @@ public:
         // Only one of these is relevant for any given trtexec call.
         // Enabled using  --asyncFileReader flag.
         mAsyncFileReader = std::make_unique<samplesCommon::AsyncStreamReader>();
-       // Enabled using --load flag.
-        mFileReader = std::make_unique<samplesCommon::FileStreamReader>();
     }
 
     //!
@@ -123,8 +128,6 @@ public:
     //!
     EngineBlob const getBlob() const
     {
-        ASSERT(!(mFileReader && mFileReader->isOpen())
-            && "Attempting to access the glob when there is an open file reader!");
         ASSERT(!(mAsyncFileReader && mAsyncFileReader->isOpen())
             && "Attempting to access the glob when there is an open async file reader!");
         if (!mEngineBlob.empty())
@@ -150,8 +153,6 @@ public:
     //!
     EngineBlob const getBlobOrEmpty() const
     {
-        ASSERT(!(mFileReader && mFileReader->isOpen())
-            && "Attempting to access the glob when there is an open file reader!");
         ASSERT(!(mAsyncFileReader && mAsyncFileReader->isOpen())
             && "Attempting to access the glob when there is an open async file reader!");
         if (!mEngineBlob.empty())
@@ -199,17 +200,6 @@ public:
     //!
     //! \brief Get the file stream reader used for deserialization
     //!
-    samplesCommon::FileStreamReader& getFileReader()
-    {
-        ASSERT(mFileReader);
-        return *mFileReader;
-    }
-
-    //!
-    //! \brief Get the file stream reader used for deserialization
-    //!
-    //! when IStreamReader is eventually deprecated.
-    //!
     samplesCommon::AsyncStreamReader& getAsyncFileReader()
     {
         ASSERT(mAsyncFileReader);
@@ -235,7 +225,6 @@ private:
     bool mVersionCompatible{false};
     int32_t mDLACore{-1};
     std::vector<uint8_t> mEngineBlob;
-    std::unique_ptr<samplesCommon::FileStreamReader> mFileReader;
     std::unique_ptr<samplesCommon::AsyncStreamReader> mAsyncFileReader;
 
 
@@ -337,7 +326,7 @@ bool saveEngine(nvinfer1::ICudaEngine const& engine, std::string const& fileName
 //! \return Pointer to the engine created or nullptr if the creation failed
 //!
 bool getEngineBuildEnv(
-    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err);
+    ModelOptions const& model, BuildOptions const& build, SystemOptions& sys, BuildEnvironment& env, std::ostream& err, PostConfigCallback const& postConfigHook = nullptr);
 
 //!
 //! \brief Create a serialized network
@@ -375,14 +364,7 @@ bool refitFromOnnx(nvinfer1::ICudaEngine& engine, std::string onnxModelFile, boo
 //!
 //! \return boolean Return true if the engine was successfully refit from the INetworkDefinition.
 //!
-bool timeRefit(const nvinfer1::INetworkDefinition& network, nvinfer1::ICudaEngine& engine, bool multiThreading);
-
-//!
-//! \brief Set tensor scales from a calibration table
-//!
-void setTensorScalesFromCalibration(nvinfer1::INetworkDefinition& network, std::vector<IOFormat> const& inputFormats,
-    std::vector<IOFormat> const& outputFormats, std::string const& calibrationFile);
-
+bool timeRefit(nvinfer1::INetworkDefinition const& network, nvinfer1::ICudaEngine& engine, bool multiThreading);
 
 //! \brief Check if safe runtime is loaded.
 [[nodiscard]] bool hasSafeRuntime();

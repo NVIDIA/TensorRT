@@ -107,7 +107,7 @@ The outputs of the graph are the same as the outputs of the [EfficientNMS_TRT](h
 TensorRT engine can be built directly with `trtexec` using the ONNX graph generated in the previous step. If it's not already in your `$PATH`, the `trtexec` binary is usually found in `/usr/bin/trtexec`, depending on your TensorRT installation method. Run:
 
 ```
-trtexec --onnx=/path/to/converted.onnx --saveEngine=/path/to/engine.trt --useCudaGraph --stronglyTyped
+trtexec --onnx=/path/to/converted.onnx --saveEngine=/path/to/engine.trt --stronglyTyped
 ```
 
 However, the script `build_engine.py` is also provided in this repository for convenience, as it has been tailored to Detectron 2 2 Mask R-CNN R50-FPN 3x engine building. Run `python3 build_engine.py --help` for details on available settings.
@@ -119,7 +119,6 @@ Optionally, you can obtain execution timing information for the built engine by 
 ```
 trtexec \
     --loadEngine=/path/to/engine.trt \
-    --useCudaGraph --noDataTransfers \
     --iterations=100 --avgRuns=100
 ```
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +31,8 @@ namespace nvinfer1
 namespace plugin
 {
 
-class EfficientNMSExplicitTFTRTPlugin : public EfficientNMSPlugin
+class TRT_DEPRECATED_BECAUSE("TF-TRT integration is obsolete. No alternatives planned.") EfficientNMSExplicitTFTRTPlugin
+    : public EfficientNMSPlugin
 {
 public:
     explicit EfficientNMSExplicitTFTRTPlugin(EfficientNMSParameters param);
@@ -43,7 +44,9 @@ public:
 };
 
 // TF-TRT CombinedNMS Op Compatibility
-class EfficientNMSExplicitTFTRTPluginCreator : public nvinfer1::pluginInternal::BaseCreator
+class TRT_DEPRECATED_BECAUSE(
+    "TF-TRT integration is obsolete. No alternatives planned.") EfficientNMSExplicitTFTRTPluginCreator
+    : public nvinfer1::pluginInternal::BaseCreator
 {
 public:
     EfficientNMSExplicitTFTRTPluginCreator();

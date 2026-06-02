@@ -115,21 +115,24 @@ using char_t = char;
 //! This type is widely used in automotive safety context.
 using AsciiChar = char_t;
 
-//! Forward declare IErrorRecorder for use in other interfaces.
+//! Forward declare IErrorRecorder and ILogger for use in other interfaces.
 namespace v_1_0
 {
 class IErrorRecorder;
+class ILogger;
 } // namespace v_1_0
 using IErrorRecorder = v_1_0::IErrorRecorder;
+using ILogger = v_1_0::ILogger;
 
 namespace impl
 {
-//! Declaration of EnumMaxImpl struct to store maximum number of elements in an enumeration type.
+//! Declaration of EnumMaxImpl struct to store the exclusive upper bound of an enumeration type.
 template <typename T>
 struct EnumMaxImpl;
 } // namespace impl
 
-//! Maximum number of elements in an enumeration type.
+//! One greater than the maximum value of enumeration type T.
+//! For example, if the highest enumerator in T has value 5, then EnumMax<T>() returns 6.
 template <typename T>
 constexpr int32_t EnumMax() noexcept
 {
@@ -196,11 +199,11 @@ enum class DataType : int32_t
 
 namespace impl
 {
-//! Maximum number of elements in DataType enum. \see DataType
+//! One greater than the maximum value of DataType enum. \see DataType
 template <>
 struct EnumMaxImpl<DataType>
 {
-    //! Declaration of kVALUE that represents the maximum number of elements in the DataType enum.
+    //! One greater than the maximum value of DataType enum.
     static constexpr int32_t kVALUE = 12;
 };
 } // namespace impl
@@ -261,11 +264,11 @@ enum class APILanguage : int32_t
 
 namespace impl
 {
-//! Maximum number of elements in APILanguage enum. \see APILanguage
+//! One greater than the maximum value of APILanguage enum. \see APILanguage
 template <>
 struct EnumMaxImpl<APILanguage>
 {
-    //! Declaration of kVALUE that represents the maximum number of elements in the APILanguage enum.
+    //! One greater than the maximum value of APILanguage enum.
     static constexpr int32_t kVALUE = 2;
 };
 } // namespace impl
@@ -401,7 +404,7 @@ enum class ErrorCode : int32_t
 
 namespace impl
 {
-//! Maximum number of elements in ErrorCode enum. \see ErrorCode
+//! One greater than the maximum value of ErrorCode enum. \see ErrorCode
 template <>
 struct EnumMaxImpl<ErrorCode>
 {
@@ -669,11 +672,11 @@ enum class TensorIOMode : int32_t
 
 namespace impl
 {
-//! Maximum number of elements in TensorIOMode enum. \see TensorIOMode
+//! One greater than the maximum value of TensorIOMode enum. \see TensorIOMode
 template <>
 struct EnumMaxImpl<TensorIOMode>
 {
-    // Declaration of kVALUE that represents maximum number of elements in TensorIOMode enum
+    // One greater than the maximum value of TensorIOMode enum
     static constexpr int32_t kVALUE = 3;
 };
 } // namespace impl

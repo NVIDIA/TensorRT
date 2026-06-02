@@ -21,29 +21,15 @@ endif()
 
 include(InstallImportedLibraries)
 
-if (${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
-    if(EXISTS "${CMAKE_SOURCE_DIR}/cmake/modules/FindNCCL.cmake" AND DEFINED NCCL_LIB_DIRS)
-        find_package(NCCL REQUIRED)
-    endif()
-else()
-    find_package(NCCL REQUIRED)
-    if(NCCL_VERSION VERSION_LESS "2.19")
-        message(FATAL_ERROR "NCCL version ${NCCL_VERSION} is too old. Minimum required: 2.19.0")
-    endif()
-    if(NCCL_VERSION VERSION_GREATER_EQUAL "3.0")
-        message(FATAL_ERROR "NCCL version ${NCCL_VERSION} is not supported. Maximum supported: 2.x")
-    endif()
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/cmake/modules/FindNCCL.cmake" OR NOT DEFINED NCCL_LIB_DIRS)
+    return()
 endif()
+
+find_package(NCCL REQUIRED)
 
 add_executable(sample_dist_collective
     sampleDistCollective.cpp
 )
-
-if (NOT ${TRT_BUILD_ENABLE_NEW_SAMPLES_FLOW})
-set_target_properties(sample_dist_collective PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${TRT_OUT_DIR}"
-)
-endif()
 
 installImportedLibraries(
     TARGETS NCCL::nccl

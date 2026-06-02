@@ -41,7 +41,9 @@ class MaxPoolPlugin : public MaxPoolPluginRuntime, public IPluginV3OneSafeBuildM
 {
 public:
     MaxPoolPlugin(PoolParameters const& params)
-        : MaxPoolPluginRuntime(params){};
+        : MaxPoolPluginRuntime(params)
+    {
+    }
 
     ~MaxPoolPlugin() override = default;
 

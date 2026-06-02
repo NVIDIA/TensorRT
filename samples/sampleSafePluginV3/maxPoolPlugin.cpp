@@ -16,9 +16,9 @@
  */
 
 #include <cstdlib>
-#include <cstring>
 #include <exception>
 #include <iostream>
+#include <string_view>
 #include <vector>
 
 #include "NvInferSafePlugin.h"
@@ -201,7 +201,8 @@ size_t MaxPoolPlugin::getWorkspaceSize(
 
 extern "C" nvinfer2::safe::consistency::IPluginChecker* getPluginChecker(char const* name)
 {
-    if (name && strcmp(name, "MaxPoolPlugin1") == 0)
+    using namespace std::string_view_literals;
+    if (name != nullptr && name == "MaxPoolPlugin1"sv)
     {
         auto checker = std::make_unique<nvinfer2::safe::consistency::MaxPoolPluginChecker>();
         return checker.release();

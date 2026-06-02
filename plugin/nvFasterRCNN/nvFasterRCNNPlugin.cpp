@@ -16,9 +16,9 @@
  */
 #include "nvFasterRCNNPlugin.h"
 #include <cstdio>
-#include <cstring>
 #include <iostream>
 #include <memory>
+#include <string_view>
 
 namespace nvinfer1::plugin
 {
@@ -321,19 +321,6 @@ DataType RPROIPlugin::getOutputDataType(
     return DataType::kFLOAT;
 }
 
-// Return true if output tensor is broadcast across a batch.
-bool RPROIPlugin::isOutputBroadcastAcrossBatch(
-    int32_t outputIndex, bool const* inputIsBroadcasted, int32_t nbInputs) const noexcept
-{
-    return false;
-}
-
-// Return true if plugin can use input that is broadcast across batch without replication.
-bool RPROIPlugin::canBroadcastInputAcrossBatch(int32_t inputIndex) const noexcept
-{
-    return false;
-}
-
 DLayout_t RPROIPlugin::convertTensorFormat(TensorFormat const& srcFormat) const noexcept
 {
     PLUGIN_ASSERT(
@@ -428,63 +415,64 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldColl
 {
     try
     {
+        using namespace std::string_view_literals;
         PluginField const* fields = fc->fields;
         int32_t nbFields = fc->nbFields;
 
         for (int32_t i = 0; i < nbFields; ++i)
         {
-            char const* attrName = fields[i].name;
-            if (!strcmp(attrName, "poolingH"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "poolingH"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.poolingH = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "poolingW"))
+            if (attrName == "poolingW"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.poolingW = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "featureStride"))
+            if (attrName == "featureStride"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.featureStride = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "preNmsTop"))
+            if (attrName == "preNmsTop"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.preNmsTop = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "nmsMaxOut"))
+            if (attrName == "nmsMaxOut"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.nmsMaxOut = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "anchorsRatioCount"))
+            if (attrName == "anchorsRatioCount"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.anchorsRatioCount = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "anchorsScaleCount"))
+            if (attrName == "anchorsScaleCount"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kINT32);
                 params.anchorsScaleCount = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "iouThreshold"))
+            if (attrName == "iouThreshold"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.iouThreshold = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
-            if (!strcmp(attrName, "minBoxSize"))
+            if (attrName == "minBoxSize"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.minBoxSize = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
-            if (!strcmp(attrName, "spatialScale"))
+            if (attrName == "spatialScale"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 params.spatialScale = static_cast<float>(*(static_cast<float const*>(fields[i].data)));
             }
-            if (!strcmp(attrName, "anchorsRatios"))
+            if (attrName == "anchorsRatios"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 anchorsRatios.reserve(params.anchorsRatioCount);
@@ -495,7 +483,7 @@ IPluginV2Ext* RPROIPluginCreator::createPlugin(char const* name, PluginFieldColl
                     ratios++;
                 }
             }
-            if (!strcmp(attrName, "anchorsScales"))
+            if (attrName == "anchorsScales"sv)
             {
                 PLUGIN_VALIDATE(fields[i].type == PluginFieldType::kFLOAT32);
                 anchorsScales.reserve(params.anchorsScaleCount);

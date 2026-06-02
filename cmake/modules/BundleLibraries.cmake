@@ -35,6 +35,11 @@ define_property(TARGET
     BRIEF_DOCS "Fallback type used when a target's TYPE is UNKNOWN_LIBRARY."
 )
 
+define_property(TARGET
+    PROPERTY BUNDLE_VISITED_INTERFACES
+    BRIEF_DOCS "Interface libraries already traversed by __bundleRecursiveDeps for this target."
+)
+
 # Internal helper to prefix all messages with "[target_bundle_libraries]: ".
 #
 # \param mode The message mode to be passed to message(...)
@@ -62,6 +67,14 @@ endfunction()
 # \param target_name The name of the target to unwrap.
 # \param result_var The variable to store the unwrapped target name in.
 function(unwrapAlias target_name result_var)
+    # Check cache first (keyed on the raw input string).
+    get_property(_cache_set GLOBAL PROPERTY _UNWRAP_ALIAS_CACHE_${target_name} SET)
+    if(_cache_set)
+        get_property(_cached GLOBAL PROPERTY _UNWRAP_ALIAS_CACHE_${target_name})
+        set(${result_var} ${_cached} PARENT_SCOPE)
+        return()
+    endif()
+
     # First, try to unwrap common generator expressions that may wrap the target name.
     string(REGEX MATCH "\\$<LINK_LIBRARY:WHOLE_ARCHIVE,([a-zA-Z0-9_.:]+)>" _ ${target_name})
     if(TARGET ${CMAKE_MATCH_1})
@@ -78,15 +91,18 @@ function(unwrapAlias target_name result_var)
         if(aliased_target)
             # Recursively unwrap in case there are multiple levels
             unwrapAlias(${aliased_target} unwrapped)
-            set(${result_var} ${unwrapped} PARENT_SCOPE)
+            set(_result ${unwrapped})
         else()
             # Not an alias, return the original name
-            set(${result_var} ${target_name} PARENT_SCOPE)
+            set(_result ${target_name})
         endif()
     else()
         # Not a target at all, return the original name
-        set(${result_var} ${target_name} PARENT_SCOPE)
+        set(_result ${target_name})
     endif()
+
+    set_property(GLOBAL PROPERTY _UNWRAP_ALIAS_CACHE_${target_name} ${_result})
+    set(${result_var} ${_result} PARENT_SCOPE)
 endfunction()
 
 # Internal function to retrieve the type of library for a given target.
@@ -191,6 +207,15 @@ function(__bundleRecursiveDeps mainLib linkVis)
                     target_bundle_libraries(${mainLib} ${linkVis} ${dep})
                 elseif(${depType} STREQUAL INTERFACE_LIBRARY)
                     # For interface libraries, we want to add all of the static libraries they may be pointing to, without the library itself (since it is not a static).
+                    # Skip if we've already traversed this interface lib's deps for mainLib to avoid re-walking shared transitive subtrees.
+                    get_target_property(_visited ${mainLib} BUNDLE_VISITED_INTERFACES)
+                    if(NOT _visited)
+                        set(_visited "")
+                    endif()
+                    if(${dep} IN_LIST _visited)
+                        continue()
+                    endif()
+                    set_property(TARGET ${mainLib} APPEND PROPERTY BUNDLE_VISITED_INTERFACES ${dep})
                     get_target_property(interfaceLibs ${dep} INTERFACE_LINK_LIBRARIES)
                     __bundleRecursiveDeps(${mainLib} ${linkVis} ${interfaceLibs})
                 elseif(${depType} STREQUAL SHARED_LIBRARY)

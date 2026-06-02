@@ -19,6 +19,7 @@
 #include "efficientNMSPlugin/efficientNMSInference.h"
 
 #include <memory>
+#include <string_view>
 
 // This plugin provides CombinedNMS op compatibility for TF-TRT in Explicit Batch
 // and Dymamic Shape modes
@@ -99,43 +100,44 @@ const PluginFieldCollection* EfficientNMSExplicitTFTRTPluginCreator::getFieldNam
 }
 
 IPluginV2DynamicExt* EfficientNMSExplicitTFTRTPluginCreator::createPlugin(
-    const char* name, const PluginFieldCollection* fc) noexcept
+    char const* name, PluginFieldCollection const* fc) noexcept
 {
+    using namespace std::string_view_literals;
     try
     {
-        const PluginField* fields = fc->fields;
+        PluginField const* fields = fc->fields;
         for (int32_t i = 0; i < fc->nbFields; ++i)
         {
-            const char* attrName = fields[i].name;
-            if (!strcmp(attrName, "max_output_size_per_class"))
+            std::string_view const attrName = fields[i].name;
+            if (attrName == "max_output_size_per_class"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.numOutputBoxesPerClass = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "max_total_size"))
+            if (attrName == "max_total_size"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.numOutputBoxes = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.numOutputBoxes = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "iou_threshold"))
+            if (attrName == "iou_threshold"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.iouThreshold = *(static_cast<const float*>(fields[i].data));
+                mParam.iouThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "score_threshold"))
+            if (attrName == "score_threshold"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kFLOAT32);
-                mParam.scoreThreshold = *(static_cast<const float*>(fields[i].data));
+                mParam.scoreThreshold = *(static_cast<float const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "pad_per_class"))
+            if (attrName == "pad_per_class"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.padOutputBoxesPerClass = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.padOutputBoxesPerClass = *(static_cast<int32_t const*>(fields[i].data));
             }
-            if (!strcmp(attrName, "clip_boxes"))
+            if (attrName == "clip_boxes"sv)
             {
                 PLUGIN_ASSERT(fields[i].type == PluginFieldType::kINT32);
-                mParam.clipBoxes = *(static_cast<const int32_t*>(fields[i].data));
+                mParam.clipBoxes = *(static_cast<int32_t const*>(fields[i].data));
             }
         }
 
