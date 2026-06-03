@@ -44,7 +44,7 @@
 
 Many samples require the TensorRT sample data package. If not already mounted under `/usr/src/tensorrt/data` (NVIDIA NGC containers), download and extract it:
 
-1. Download the current [TensorRT sample data package](https://github.com/NVIDIA/TensorRT/releases/download/v10.15/tensorrt_sample_data_20260203.zip). Sample data is updated only when needed, so the package may be hosted under an earlier TensorRT release.
+1. Download the current [TensorRT sample data package](https://github.com/NVIDIA/TensorRT/releases/download/v11.0/tensorrt_sample_data_20260602.zip). Sample data is updated only when needed, so the package may be hosted under an earlier TensorRT release.
 
 2. Extract and set up the data:
     ```bash
