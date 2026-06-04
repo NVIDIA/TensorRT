@@ -265,7 +265,7 @@ def try_register_common_json(func):
             def decode(dct):
                 data = base64.b64decode(dct["tensor"].encode(), validate=True)
                 infile = io.BytesIO(data)
-                return torch.load(infile)
+                return torch.load(infile, weights_only=True)
 
             TORCH_REGISTRATION_SUCCESS = True
 
