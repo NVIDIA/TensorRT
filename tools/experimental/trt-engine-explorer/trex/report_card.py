@@ -610,7 +610,7 @@ def report_card_draw_plan_graph_extended(plan, engine_name):
     display_region_names_widget = widgets.Checkbox(value=False, description="Regions: Render names")
     display_layer_names_widget = widgets.Checkbox(value=False, description="Layers: Render names")
     stack_layer_names_widget = widgets.Checkbox(value=True, description="Layers: Stack names")
-    display_matadata_widget = widgets.Checkbox(value=True, description="Layers: Prefer metadata over name")
+    display_metadata_widget = widgets.Checkbox(value=True, description="Layers: Prefer metadata over name")
     expand_layer_details_widget = widgets.Checkbox(value=True, description="Layers: Expand layer details")
     display_latency_widget = widgets.Checkbox(value=True, description="Layers: Render latency")
     display_constants_widget = widgets.Checkbox(value=False, description="Graph: Render constant inputs")
@@ -655,7 +655,7 @@ def report_card_draw_plan_graph_extended(plan, engine_name):
                     expand_layer_details_widget,
                     display_layer_names_widget,
                     stack_layer_names_widget,
-                    display_matadata_widget,
+                    display_metadata_widget,
                 ]),
                 widgets.VBox([
                     display_regions_widget,
@@ -693,7 +693,7 @@ def report_card_draw_plan_graph_extended(plan, engine_name):
             display_forking_regions=display_forking_regions_widget.value,
             display_edge_name=display_edge_name_widget.value,
             display_edge_details=display_edge_details_widget.value,
-            display_matadata=display_matadata_widget.value,
+            display_metadata=display_metadata_widget.value,
         )
         print("DOT graph ready.\nGenerating SVG...  ", end="")
         graphing.render_dot(graph, engine_name, 'svg')
