@@ -121,6 +121,14 @@ add_custom_command(
 )
 add_custom_target(trt_packaging_requirements_installed DEPENDS ${TRT_PACKAGING_DEPS_DIR}/.installed)
 
+# Environment variables for Python packaging commands.
+set(TRT_PACKAGING_ENV "PYTHONPATH=${TRT_PACKAGING_DEPS_DIR}")
+if(NOT CMAKE_VERBOSE_MAKEFILE)
+    # Suppress deprecation that we can't fix while python/packaging/requirements.txt
+    # specifies setuptools~=75.3.2 for python_version<3.12.
+    list(APPEND TRT_PACKAGING_ENV "PYTHONWARNINGS=ignore::setuptools.warnings.SetuptoolsDeprecationWarning")
+endif()
+
 # Computes the current wheel platform name and stores it the variable named by outVar.
 #
 # \param isStandalone Boolean indicating whether to compute the platform for a standalone wheel.

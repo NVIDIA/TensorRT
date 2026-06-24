@@ -1,4 +1,21 @@
 # TensorRT OSS Release Changelog
+## 11.1 GA - 2026-6-24
+- General
+  - Default CUDA version updated to 13.3.
+  - Added Ubuntu 26.04 container.
+  - Added support for Python 3.14.
+  - Added agent skills for various TensorRT workflows.
+
+- Samples
+  - Added new sample `cute_dsl_plugin`.
+  - Added a global performance tuner option in `trtexec`.
+
+- Plugins
+  - Added new plugin `topkLastDimPlugin`.
+
+- Parsers
+  - Updated TRT_Attention to support raggedness.
+
 ## 11.0 GA - 2026-6-2
 - General
   - As a new major version bump, TensorRT 11.0 brings many enhancements for its users. For full information, see the [release notes.](https://docs.nvidia.com/deeplearning/tensorrt/latest/getting-started/release-notes-11/11.0.0.html)

@@ -1325,6 +1325,9 @@ public:
     virtual int64_t getL2LimitForTiling() const noexcept = 0;
     virtual bool setRemoteAutoTuningConfig(char const* config) noexcept = 0;
     virtual char const* getRemoteAutoTuningConfig() const noexcept = 0;
+    virtual bool setBuildRoute(char const* buildRoute) noexcept = 0;
+    virtual char const* getBuildRoute() const noexcept = 0;
+    virtual char const* getAllBuildRoutes() const noexcept = 0;
 };
 
 class VSerializationConfig : public VRoot

@@ -30,7 +30,7 @@ else()
 endif()
 set(TRT_BUILD_PYTHON_EXTERNALS_PATH ${DEFAULT_PY_EXT_PATH} CACHE PATH "Path to the parent folder of the many versioned python headers/libs.")
 
-set(BUILD_PYTHON_PY_VERSIONS 3.8 3.9 3.10 3.11 3.12 3.13)
+set(BUILD_PYTHON_PY_VERSIONS 3.8 3.9 3.10 3.11 3.12 3.13 3.14)
 
 
 set(TRT_BUILD_PYTHON_PY_VERSIONS ${BUILD_PYTHON_PY_VERSIONS} CACHE STRING "The list of python versions to build TensorRT bindings for.")

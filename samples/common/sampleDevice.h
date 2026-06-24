@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,16 +19,24 @@
 #define TRT_SAMPLE_DEVICE_H
 
 #include <cassert>
+#include <cstdint>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <thread>
 
 #include "common.h"
+#include "globalTimerKernel.h"
 #include "sampleUtils.h"
 
 namespace sample
 {
+
+//! True when Confidential Compute is enabled on the current system. Cached on
+//! the first call. When true, TrtCudaEvent falls back to a GPU global-timer
+//! kernel because cudaEventElapsedTime() is unreliable under CC (see nvbug
+//! 5598617, mirrors TRT-LLM PR #11657).
+[[nodiscard]] bool isConfidentialComputeEnabled();
 
 class TrtCudaEvent;
 
@@ -99,11 +107,15 @@ public:
     {
         const uint32_t flags = blocking ? cudaEventBlockingSync : cudaEventDefault;
         CHECK(cudaEventCreateWithFlags(&mEvent, flags));
+        if (isConfidentialComputeEnabled())
+        {
+            CHECK(cudaMalloc(&mDeviceTimestamp, sizeof(uint64_t)));
+        }
     }
 
-    TrtCudaEvent(const TrtCudaEvent&) = delete;
+    TrtCudaEvent(TrtCudaEvent const&) = delete;
 
-    TrtCudaEvent& operator=(const TrtCudaEvent&) = delete;
+    TrtCudaEvent& operator=(TrtCudaEvent const&) = delete;
 
     TrtCudaEvent(TrtCudaEvent&&) = delete;
 
@@ -112,6 +124,10 @@ public:
     ~TrtCudaEvent()
     {
         CHECK(cudaEventDestroy(mEvent));
+        if (mDeviceTimestamp != nullptr)
+        {
+            CHECK(cudaFree(mDeviceTimestamp));
+        }
     }
 
     cudaEvent_t get() const
@@ -119,8 +135,12 @@ public:
         return mEvent;
     }
 
-    void record(const TrtCudaStream& stream)
+    void record(TrtCudaStream const& stream)
     {
+        if (mDeviceTimestamp != nullptr)
+        {
+            CHECK(launchGlobalTimerKernel(mDeviceTimestamp, stream.get()));
+        }
         CHECK(cudaEventRecord(mEvent, stream.get()));
     }
 
@@ -136,6 +156,21 @@ public:
         synchronize();
         e.synchronize();
 
+        if (mDeviceTimestamp != nullptr && e.mDeviceTimestamp != nullptr)
+        {
+            // Confidential Compute path: read %globaltimer values captured at record().
+            // cudaEventElapsedTime() is unreliable under CC (nvbug 5598617); the global
+            // timer kernel reads the same underlying register directly.
+            // Use signed int64_t so the subtraction is well-defined if the events
+            // are ever measured out of order (otherwise the unsigned->signed cast
+            // is implementation-defined in C++17).
+            int64_t endNs{0};
+            int64_t startNs{0};
+            CHECK(cudaMemcpy(&endNs, mDeviceTimestamp, sizeof(int64_t), cudaMemcpyDeviceToHost));
+            CHECK(cudaMemcpy(&startNs, e.mDeviceTimestamp, sizeof(int64_t), cudaMemcpyDeviceToHost));
+            return static_cast<float>(endNs - startNs) / 1.0e6F;
+        }
+
         float time{0};
         CHECK(cudaEventElapsedTime(&time, e.get(), get()));
         return time;
@@ -143,6 +178,7 @@ public:
 
 private:
     cudaEvent_t mEvent{};
+    uint64_t* mDeviceTimestamp{nullptr};
 };
 
 inline void TrtCudaStream::wait(TrtCudaEvent& event)
@@ -361,8 +397,10 @@ struct HostDeallocator
         cudaPointerAttributes attrs;
         CHECK(cudaPointerGetAttributes(&attrs, ptr));
 
-        // If pinned, call cudaFreeHost() to deallocate it.
-        if (attrs.type == cudaMemoryTypeHost)
+        // If pinned, call cudaFreeHost() to deallocate it. Under Confidential
+        // Compute, memory returned by cudaMallocHost() may be reported as
+        // cudaMemoryTypeManaged; it must still be released via cudaFreeHost.
+        if (attrs.type == cudaMemoryTypeHost || attrs.type == cudaMemoryTypeManaged)
         {
             CHECK(cudaFreeHost(ptr));
         }

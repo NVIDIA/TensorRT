@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,42 +20,54 @@
 #include "vc/vfcCommon.h"
 #include <cstdlib>
 #include <cuda_runtime.h>
+#include <string_view>
 
 using namespace nvinfer1::pluginInternal;
 
 namespace nvinfer1::plugin
 {
 
-// break-pointable
-void throwCublasError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
+namespace
 {
-    if (msg == nullptr)
+//! \return Static identifier string for \p status, or an empty view if unrecognized.
+[[nodiscard]] constexpr std::string_view cublasStatusName(cublasStatus_t status)
+{
+    switch (status)
     {
-        auto s_ = static_cast<cublasStatus_t>(status);
-        switch (s_)
-        {
-        case CUBLAS_STATUS_SUCCESS: msg = "CUBLAS_STATUS_SUCCESS"; break;
-        case CUBLAS_STATUS_NOT_INITIALIZED: msg = "CUBLAS_STATUS_NOT_INITIALIZED"; break;
-        case CUBLAS_STATUS_ALLOC_FAILED: msg = "CUBLAS_STATUS_ALLOC_FAILED"; break;
-        case CUBLAS_STATUS_INVALID_VALUE: msg = "CUBLAS_STATUS_INVALID_VALUE"; break;
-        case CUBLAS_STATUS_ARCH_MISMATCH: msg = "CUBLAS_STATUS_ARCH_MISMATCH"; break;
-        case CUBLAS_STATUS_MAPPING_ERROR: msg = "CUBLAS_STATUS_MAPPING_ERROR"; break;
-        case CUBLAS_STATUS_EXECUTION_FAILED: msg = "CUBLAS_STATUS_EXECUTION_FAILED"; break;
-        case CUBLAS_STATUS_INTERNAL_ERROR: msg = "CUBLAS_STATUS_INTERNAL_ERROR"; break;
-        case CUBLAS_STATUS_NOT_SUPPORTED: msg = "CUBLAS_STATUS_NOT_SUPPORTED"; break;
-        case CUBLAS_STATUS_LICENSE_ERROR: msg = "CUBLAS_STATUS_LICENSE_ERROR"; break;
-        }
+    case CUBLAS_STATUS_SUCCESS: return "CUBLAS_STATUS_SUCCESS";
+    case CUBLAS_STATUS_NOT_INITIALIZED: return "CUBLAS_STATUS_NOT_INITIALIZED";
+    case CUBLAS_STATUS_ALLOC_FAILED: return "CUBLAS_STATUS_ALLOC_FAILED";
+    case CUBLAS_STATUS_INVALID_VALUE: return "CUBLAS_STATUS_INVALID_VALUE";
+    case CUBLAS_STATUS_ARCH_MISMATCH: return "CUBLAS_STATUS_ARCH_MISMATCH";
+    case CUBLAS_STATUS_MAPPING_ERROR: return "CUBLAS_STATUS_MAPPING_ERROR";
+    case CUBLAS_STATUS_EXECUTION_FAILED: return "CUBLAS_STATUS_EXECUTION_FAILED";
+    case CUBLAS_STATUS_INTERNAL_ERROR: return "CUBLAS_STATUS_INTERNAL_ERROR";
+    case CUBLAS_STATUS_NOT_SUPPORTED: return "CUBLAS_STATUS_NOT_SUPPORTED";
+    case CUBLAS_STATUS_LICENSE_ERROR: return "CUBLAS_STATUS_LICENSE_ERROR";
     }
-    CublasError error(file, function, line, status, msg);
+    return {};
+}
+} // namespace
+
+// break-pointable
+void throwCublasError(
+    char const* file, char const* function, int32_t line, int32_t status, std::optional<std::string> msg)
+{
+    if (!msg)
+    {
+        msg.emplace(cublasStatusName(static_cast<cublasStatus_t>(status)));
+    }
+    CublasError error(file, function, line, status, std::move(msg));
     error.log(gLogError);
     // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;
 }
 
 // break-pointable
-void throwCudnnError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
+void throwCudnnError(
+    char const* file, char const* function, int32_t line, int32_t status, std::optional<std::string> msg)
 {
-    CudnnError error(file, function, line, status, msg);
+    CudnnError error(file, function, line, status, std::move(msg));
     error.log(gLogError);
     // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;

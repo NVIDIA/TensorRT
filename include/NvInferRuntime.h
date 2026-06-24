@@ -1012,15 +1012,15 @@ public:
     //! plugin will be timed \f$N = \sum_{i=0}^{i<getFormatCombinationLimit()} (T(f[i]))\f$ times. If \f$N = 1\f$, the
     //! plugin may not be timed. In pseudocode, the timing protocol appears as the following:
     //!
-    //!     counter = 0
-    //!     for each supported format combination
-    //!         ++counter
-    //!         if counter > getFormatCombinationLimit()
-    //!             goto done
-    //!         configurePlugin(...)
-    //!         for each tactic in getValidTactics(...)
-    //!             time tactic
-    //!     done:
+    //! counter = 0
+    //! for each supported format combination
+    //!     ++counter
+    //!     if counter > getFormatCombinationLimit()
+    //!         goto done
+    //!     configurePlugin(...)
+    //!     for each tactic in getValidTactics(...)
+    //!         time tactic
+    //! done:
     //!
     //!
     //! \param tactics Pre-allocated buffer to which the tactic values should be written

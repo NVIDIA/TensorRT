@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,10 +43,4 @@ set(BERT_QKV_SUPPORTED_SMS
 
 add_subdirectory(fused_multihead_attention)
 add_subdirectory(fused_multihead_attention_v2)
-
-# Promote PLUGIN_SOURCES and PLUGIN_CU_SOURCES added by `add_subdirectory` to this file's parent.
-if (NOT DEFINED ${TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW})
-    set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)
-    set(PLUGIN_CU_SOURCES ${PLUGIN_CU_SOURCES} PARENT_SCOPE)
-endif()
 

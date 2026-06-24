@@ -45,9 +45,3 @@ set(PLUGIN_COMMON_SOURCES
 add_plugin_source(${PLUGIN_COMMON_SOURCES})
 
 add_subdirectory(kernels)
-
-# Promote PLUGIN_SOURCES and PLUGIN_CU_SOURCES added by `add_subdirectory` to this file's parent.
-if (NOT DEFINED ${TRT_BUILD_ENABLE_NEW_PLUGIN_FLOW})
-    set(PLUGIN_SOURCES ${PLUGIN_SOURCES} PARENT_SCOPE)
-    set(PLUGIN_CU_SOURCES ${PLUGIN_CU_SOURCES} PARENT_SCOPE)
-endif()

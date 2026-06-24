@@ -20,7 +20,6 @@ add_custom_target(parsers DEPENDS nvonnxparser)
 
 add_definitions("-D_PROTOBUF_INSTALL_DIR=${Protobuf_INSTALL_DIR}")
 add_compile_options("-Dgoogle=google_trtrepack")
-
 set(TENSORRT_ROOT ${PROJECT_SOURCE_DIR})
 set(TENSORRT_BUILD ${TRT_OUT_DIR})
 

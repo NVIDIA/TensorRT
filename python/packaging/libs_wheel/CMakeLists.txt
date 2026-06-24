@@ -144,7 +144,7 @@ function(buildLibsWheel moduleName)
     # The custom tensorrt_build_backend handles wheel tag customization via config settings.
     add_custom_command(
         OUTPUT ${wheelOutputFile}
-        COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${TRT_PACKAGING_DEPS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E env ${TRT_PACKAGING_ENV}
             ${Python3_EXECUTABLE} -m build --wheel --no-isolation
                 --config-setting=--quiet
                 --config-setting=python-tag=py3

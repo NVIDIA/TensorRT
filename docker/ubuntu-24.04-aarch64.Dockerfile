@@ -15,12 +15,12 @@
 # limitations under the License.
 #
 
-ARG CUDA_VERSION=13.2.0
+ARG CUDA_VERSION=13.3.0
 
 # Multi-arch container support available in non-cudnn containers.
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
-ENV TRT_VERSION 11.0.0.114
+ENV TRT_VERSION 11.1.0.106
 SHELL ["/bin/bash", "-c"]
 
 # Setup user account and edit default account
@@ -85,15 +85,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install TensorRT
 RUN if [ "${CUDA_VERSION:0:2}" = "13" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/tars/TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-13.2-Release-external.tar.zst \
-    && tar -xf TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-13.2-Release-external.tar.zst \
-    && cp -a TensorRT-11.0.0.114/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-11.0.0.114/python/tensorrt-11.0.0.114-cp312-none-linux_aarch64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.1.0/tars/TensorRT-Enterprise-11.1.0.106-Linux-aarch64-cuda-13.3-Release-external.tar.zst \
+    && tar -xf TensorRT-Enterprise-11.1.0.106-Linux-aarch64-cuda-13.3-Release-external.tar.zst \
+    && cp -a TensorRT-11.1.0.106/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-11.1.0.106/python/tensorrt-11.1.0.106-cp312-none-linux_aarch64.whl ;\
     elif [ "${CUDA_VERSION:0:2}" = "12" ]; then \
-    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.0.0/tars/TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
-    && tar -xf TensorRT-Enterprise-11.0.0.114-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
-    && cp -a TensorRT-11.0.0.114/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
-    && pip install TensorRT-11.0.0.114/python/tensorrt-11.0.0.114-cp312-none-linux_aarch64.whl ;\
+    wget https://developer.nvidia.com/downloads/compute/machine-learning/tensorrt/11.1.0/tars/TensorRT-Enterprise-11.1.0.106-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
+    && tar -xf TensorRT-Enterprise-11.1.0.106-Linux-aarch64-cuda-12.9-Release-external.tar.zst \
+    && cp -a TensorRT-11.1.0.106/lib/*.so* /usr/lib/aarch64-linux-gnu/ \
+    && pip install TensorRT-11.1.0.106/python/tensorrt-11.1.0.106-cp312-none-linux_aarch64.whl ;\
     else \
     echo "Invalid CUDA_VERSION"; \
     exit 1; \

@@ -111,7 +111,7 @@ function(buildBindingsWheel moduleName pyVersion isStandalone)
     # The custom tensorrt_build_backend handles package naming and wheel tags via config settings.
     add_custom_command(
         OUTPUT ${wheelOutputFile}
-        COMMAND ${CMAKE_COMMAND} -E env "PYTHONPATH=${TRT_PACKAGING_DEPS_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E env ${TRT_PACKAGING_ENV}
             ${Python3_EXECUTABLE} -m build --wheel --no-isolation
                 --config-setting=--quiet
                 --config-setting=wheel-type=${wheelType}

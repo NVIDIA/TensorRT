@@ -1,0 +1,10 @@
+--extra-index-url https://pypi.ngc.nvidia.com
+nvidia-cutlass-dsl==4.5.0
+cupy-cuda12x==13.6.0
+torch==2.9.1
+polygraphy==0.50.1
+colored==2.3.2
+numpy==1.26.4
+pyyaml==6.0.3
+requests==2.33.0
+tqdm==4.66.4

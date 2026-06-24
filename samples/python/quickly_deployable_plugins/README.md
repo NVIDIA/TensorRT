@@ -12,7 +12,7 @@ This sample contains several mini-samples that demonstrate a few common use case
 - [Implementing in-place custom ops with I/O aliasing](#implementing-in-place-custom-ops-with-io-aliasing)
 - [An Op with data-dependent output shapes: Non-zero](#an-op-with-data-dependent-output-shapes-non-zero)
 - [Using multiple tactics and ONNX: Cirular padding](#using-multiple-tactics-and-onnx-cirular-padding)
-- [Poviding an Ahead-of-Time (AOT) implementation for Cirular padding](#poviding-an-ahead-of-time-aot-implementation-for-cirular-padding)
+- [Providing an Ahead-of-Time (AOT) implementation for Circular padding](#providing-an-ahead-of-time-aot-implementation-for-circular-padding)
 - [Additional Resources](#additional-resources)
 - [License](#license)
 - [Changelog](#changelog)
@@ -157,7 +157,7 @@ python3 qdp_runner.py non_zero [-v]
 
 This sample contains a circular padding plugin, which is useful for ops like circular convolution. It is equivalent to PyTorch's [torch.nn.CircularPad2d](https://pytorch.org/docs/stable/generated/torch.nn.CircularPad2d.html#torch.nn.CircularPad2d).
 
-Refer [this section about circular padding plugin](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/pluginGuide.html#example-circular-padding-plugin) in the python plugin guide for more info.
+Refer [this section about circular padding plugin](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/pluginGuide.html#example-circular-padding-plugin) in the python plugin guide for more info.
 
 ## ONNX model with a plugin
 
@@ -205,7 +205,7 @@ def circ_pad_plugin_autotune(inp0: trtp.TensorDesc, pads: npt.NDArray[np.int32],
 
 Note that we're using another way of constructing a `trt.plugin.AutoTuneCombination` here -- namely, through `pos(...)` to populate the type/format information and `tactics(...)` to specify the tactics. In this sample, we use an OpenAI Triton kernel and `torch.nn.functional.pad` as two methods to compute the circular padding.
 
-Refer [this section](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/pluginGuide.html#example-plugins-with-multiple-backends-using-custom-tactics) in the Python plugin guide for more info.
+Refer [this section](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/pluginGuide.html#example-plugins-with-multiple-backends-using-custom-tactics) in the Python plugin guide for more info.
 
 ## Loading and running a TRT engine containing a plugin
 
@@ -234,7 +234,7 @@ Let's extend the [above sample](#using-multiple-tactics-and-onnx-cirular-padding
 Instead of specifying the OpenAI Triton Kernel callback to TRT through `@trt.plugin.impl`, we can directly
 compile the kernel ahead of time, and provide that to TRT under `@trt.plugin.aot_impl`.
 
-Refer [this section](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/pluginGuide.html#providing-an-ahead-of-time-aot-implementation) in the Python plugin guide for more info.
+Refer [this section](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/pluginGuide.html#providing-an-ahead-of-time-aot-implementation) in the Python plugin guide for more info.
 
 ## ONNX model with an AOT plugin
 
@@ -269,9 +269,10 @@ To simulate the loading of an engine, first run this sample with the `--save_eng
 ## Running the sample
 
 ```bash
-python3 qdp_runner.py circ_pad [--save_engine] [--load_engine] --mode {onnx,inetdef} [--artifacts_dir ARTIFACTS_DIR]  [-v]
+python3 qdp_runner.py circ_pad [--multi_tactic] [--aot] [--save_engine] [--load_engine] --mode {onnx,inetdef} [--artifacts_dir ARTIFACTS_DIR]  [-v]
 
 options:
+  --multi_tactic        Enable multiple tactics. Combined with --aot, the advertised tactics are AOT-compiled.
   --save_engine         Save engine to the artifacts_dir.
   --load_engine         Load engine from the artifacts_dir. Ignores all other options.
   --artifacts_dir ARTIFACTS_DIR
@@ -280,6 +281,49 @@ options:
   --aot                 Use the AOT implementation of the plugin.
   -v, --verbose         Enable verbose log output.
 ```
+
+## Combining AOT with multiple tactics
+
+The AOT path can advertise more than one tactic. Each tactic must be a precompiled GPU kernel, so a Torch-dispatched tactic (like the `Tactic.TORCH` variant used in the JIT multi-tactic example above) cannot participate. In this sample we instead expose two variants of the same Triton kernel that differ only in `BLOCK_SIZE`. TRT times both PTX blobs at build time and bakes the winner into the engine.
+
+The autotune declaration lists both tactic IDs:
+
+```python
+class Tactic(IntEnum):
+    BLOCK_256 = 1
+    BLOCK_1024 = 2
+
+@trt.plugin.autotune("sample::circ_pad_plugin")
+def circ_pad_plugin_autotune(inp0, outputs):
+    c = trtp.AutoTuneCombination()
+    c.pos([0, 1], "FP32|FP16")
+    c.tactics([int(Tactic.BLOCK_256), int(Tactic.BLOCK_1024)])
+    return [c]
+```
+
+The AOT impl switches on the `tactic` argument, compiles the Triton kernel with the matching `BLOCK_SIZE` constexpr, and returns the corresponding PTX plus a `KernelLaunchParams` whose `grid_x` reflects that block size:
+
+```python
+@trt.plugin.aot_impl("sample::circ_pad_plugin")
+def circ_pad_plugin_aot_impl(inp0, pads, outputs, tactic):
+    block_size = {1: 256, 2: 1024}[tactic]
+    src = triton.compiler.ASTSource(fn=circ_pad_kernel, signature=..., constexprs={"BLOCK_SIZE": block_size})
+    compiled = triton.compile(src)
+    launch_params = trtp.KernelLaunchParams()
+    launch_params.grid_x = trtp.cdiv(outputs[0].shape_expr.numel(), block_size)
+    launch_params.block_x = compiled.metadata.num_warps * 32
+    launch_params.shared_mem = compiled.metadata.shared
+    extra_args = trtp.SymIntExprs.from_tuple(...)  # symbolic int32 kernel args. see source for more details.
+    return compiled.metadata.name.encode(), compiled.asm["ptx"].encode(), launch_params, extra_args
+```
+
+Run it with both flags:
+
+```bash
+python3 qdp_runner.py circ_pad --mode inetdef --multi_tactic --aot -v
+```
+
+Verbose logs show TRT timing both tactics during engine build, then a single winner is serialized into the engine.
 
 # Additional Resources
 
@@ -297,6 +341,7 @@ options:
 For terms and conditions for use, reproduction, and distribution, see the [TensorRT Software License Agreement](https://docs.nvidia.com/deeplearning/sdk/tensorrt-sla/index.html) documentation.
 
 # Changelog
+- May 2026: Added multi-tactic AOT subsection for circular padding.
 - October 2025: Migrate to strongly typed APIs.
 - August 2025: Removed support for Python versions < 3.10.
 - December 2024: Added section on AOT Plugins, added contents section

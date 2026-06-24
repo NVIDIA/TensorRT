@@ -3933,8 +3933,6 @@ enum class ResizeCoordinateTransformation : int32_t
     //! the output tensor, `length_origin` as length of the input tensor in axis x, and `length_resize` as length of the
     //! output tensor in axis x.
     //!
-    //! This transformation maps coordinates as:
-    //!
     //!     |<--------------length---------->|
     //!     |    0     |    1     |    2     |    3     |
     //!     *          *          *          *
@@ -3943,8 +3941,6 @@ enum class ResizeCoordinateTransformation : int32_t
     //!
     kALIGN_CORNERS = 0,
 
-    //! This transformation maps coordinates as:
-    //!
     //!     |<--------------length--------------------->|
     //!     |    0     |    1     |    2     |    3     |
     //!     *          *          *          *
@@ -3953,8 +3949,6 @@ enum class ResizeCoordinateTransformation : int32_t
     //!
     kASYMMETRIC = 1,
 
-    //! This transformation maps coordinates as:
-    //!
     //!     |<--------------length--------------------->|
     //!     |    0     |    1     |    2     |    3     |
     //!          *          *          *          *
@@ -5117,11 +5111,10 @@ public:
     //!
     //! \param alpha has different meanings for each operator:
     //!
-    //! | Operation       | Usage                                                    |
-    //! | --------------- | -------------------------------------------------------- |
-    //! | kLINSPACE       | the start value, defaults to 0.0;                        |
-    //! | kRANDOM_UNIFORM | the minimum value, defaults to 0.0;                      |
-    //! | kRANDOM_NORMAL  | the mean of the normal distribution, default is 0.0;     |
+    //! Operation          | Usage
+    //! kLINSPACE          | the start value, defaults to 0.0;
+    //! kRANDOM_UNIFORM    | the minimum value, defaults to 0.0;
+    //! kRANDOM_NORMAL     | the mean of the normal distribution, default is 0.0;
     //!
     //! If input 1 exists, it is reset to null by this method.
     //!
@@ -5152,11 +5145,10 @@ public:
     //!
     //! \param beta has different meanings for each operator:
     //!
-    //! | Operation       | Usage                                                                  |
-    //! | --------------- | ---------------------------------------------------------------------- |
-    //! | kLINSPACE       | the delta value, defaults to 1.0;                                      |
-    //! | kRANDOM_UNIFORM | the maximal value, defaults to 1.0;                                    |
-    //! | kRANDOM_NORMAL  | the standard deviation of the normal distribution, default is 1.0;     |
+    //! Operation          | Usage
+    //! kLINSPACE          | the delta value, defaults to 1.0;
+    //! kRANDOM_UNIFORM    | the maximal value, defaults to 1.0;
+    //! kRANDOM_NORMAL     | the standard deviation of the normal distribution, default is 1.0;
     //!
     //! If input 2 exists, it is reset to null by this method.
     //!
@@ -5229,11 +5221,10 @@ public:
     //!
     //! \param alpha has different meanings for each operator:
     //!
-    //! | Operation       | Usage                                                  |
-    //! | --------------- | ------------------------------------------------------ |
-    //! | kLINSPACE       | the start value, defaults to 0;                        |
-    //! | kRANDOM_UNIFORM | the minimum value, defaults to 0;                      |
-    //! | kRANDOM_NORMAL  | the mean of the normal distribution, default is 0;     |
+    //! Operation          | Usage
+    //! kLINSPACE          | the start value, defaults to 0;
+    //! kRANDOM_UNIFORM    | the minimum value, defaults to 0;
+    //! kRANDOM_NORMAL     | the mean of the normal distribution, default is 0;
     //!
     //! If a third input had been used to create this layer, that input is reset to null by this method.
     //!
@@ -5264,11 +5255,10 @@ public:
     //!
     //! \param beta has different meanings for each operator:
     //!
-    //! | Operation       | Usage                                                                |
-    //! | --------------- | -------------------------------------------------------------------- |
-    //! | kLINSPACE       | the delta value, defaults to 1;                                      |
-    //! | kRANDOM_UNIFORM | the maximal value, defaults to 1;                                    |
-    //! | kRANDOM_NORMAL  | the standard deviation of the normal distribution, default is 1;     |
+    //! Operation          | Usage
+    //! kLINSPACE          | the delta value, defaults to 1;
+    //! kRANDOM_UNIFORM    | the maximal value, defaults to 1;
+    //! kRANDOM_NORMAL     | the standard deviation of the normal distribution, default is 1;
     //!
     //! If a third input had been used to create this layer, that input is reset to null by this method.
     //!
@@ -5382,30 +5372,27 @@ inline IFillLayer::~IFillLayer() noexcept = default;
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
-//!
 //!     For each n in N:
 //!         For each c in C:
 //!             For each h in H:
 //!                 For each w in W:
-//!                     output[n,c,h,w] = clamp(round(input[n,c,h,w] / scale) + zeroPt)
+//!                     output[n,c,h,w] = clamp(round(\p input[n,c,h,w] / \p scale) + \p zeroPt)
 //!
 //! Per-channel quantization is supported only for weight inputs. Thus, Activations cannot be quantized per-channel.
 //! As an example of per-channel operation, imagine a 4D KCRS weights input and K (dimension 0) as the quantization
 //! axis. The scale is an array of coefficients, and must have the same size as the quantization axis.
-//!
 //!     For each k in K:
 //!         For each c in C:
 //!             For each r in R:
 //!                 For each s in S:
-//!                     output[k,c,r,s] = clamp(round(input[k,c,r,s] / scale[k]) + zeroPt[k])
+//!                     output[k,c,r,s] = clamp(round(\p input[k,c,r,s] / \p scale[k]) + \p zeroPt[k])
 //!
 //! Block quantization is supported for input types DataType::kFP4, DataType::kFP8 and DataType::kINT4.
 //! As an example of blocked operation, imagine a 2D RS input with R (dimension 0) as the blocking axis and B as the
 //! block size. The scale is a 2D array of coefficients, with dimensions (R//B, S).
-//!
 //!     For each r in R:
 //!         For each s in S:
-//!             output[r,s] = clamp(round(input[r,s] / scale[r//B, s]) + zeroPt[r//B, s])
+//!             output[r,s] = clamp(round(\p input[r,s] / \p scale[r//B, s]) + \p zeroPt[r//B, s])
 //!
 //! \note Only symmetric quantization is supported.
 //! \note Currently the only allowed build-time constant \p zeroPt subgraphs are:
@@ -5538,31 +5525,28 @@ inline IQuantizeLayer::~IQuantizeLayer() noexcept = default;
 //!
 //! As an example of the operation of this layer, imagine a 4D NCHW activation input which can be quantized using a
 //! single scale coefficient (referred to as per-tensor quantization):
-//!
 //!     For each n in N:
 //!         For each c in C:
 //!             For each h in H:
 //!                 For each w in W:
-//!                     output[n,c,h,w] = (input[n,c,h,w] - zeroPt) * scale
+//!                     output[n,c,h,w] = (\p input[n,c,h,w] - \p zeroPt) * \p scale
 //!
 //! Per-channel dequantization is supported only for input that is rooted at an IConstantLayer (i.e. weights).
 //! Activations cannot be quantized per-channel. As an example of per-channel operation, imagine a 4D KCRS weights input
 //! and K (dimension 0) as the quantization axis. The scale is an array of coefficients, which is the same size as the
 //! quantization axis.
-//!
 //!     For each k in K:
 //!         For each c in C:
 //!             For each r in R:
 //!                 For each s in S:
-//!                     output[k,c,r,s] = (input[k,c,r,s] - zeroPt[k]) * scale[k]
+//!                     output[k,c,r,s] = (\p input[k,c,r,s] - \p zeroPt[k]) * \p scale[k]
 //!
 //! Block dequantization is supported for input types DataType::kFP4, DataType::kFP8 and DataType::kINT4.
 //! As an example of blocked operation, imagine a 2D RS input with R (dimension 0) as the blocking axis and B as the
 //! block size. The scale is a 2D array of coefficients, with dimensions (R//B, S).
-//!
-//!     For each r in R:
-//!         For each s in S:
-//!             output[r,s] = (input[r,s] - zeroPt[r//B, s]) * scale[r//B, s]
+//! For each r in R:
+//!     For each s in S:
+//!         output[r,s] = (\p input[r,s] - \p zeroPt[r//B, s]) * \p scale[r//B, s]
 //!
 //! \note Only symmetric quantization is supported.
 //! \note Currently the only allowed build-time constant \p zeroPt subgraphs are:
@@ -6643,10 +6627,10 @@ struct impl::EnumMaxImpl<CumulativeOperation>
 //! For example, let the input be a vector x of length n and the output be vector y.
 //! Then y[j] = sum(x[...]) where ... denotes a sequence of indices from this table:
 //!
-//! |           | forward | reverse  |
-//! | --------- | ------- | -------- |
-//! | inclusive | 0..j    | j..n-1   |
-//! | exclusive | 0..j-1  | j+1..n-1 |
+//!           | forward   | reverse
+//! ----------|-----------| ---------
+//! inclusive | 0..j      |   j..n-1
+//! exclusive | 0..j-1    | j+1..n-1
 //!
 //! For multidimensional tensors, the reductions apply across a specified axis. For
 //! example, given a 2D input, a forward inclusive cumulative operation across axis 0 generates
@@ -6921,21 +6905,21 @@ inline IAttentionOutputLayer::~IAttentionOutputLayer() noexcept = default;
 //! efficient than if the subgraph is expressed without IAttention. Setting the IAttention to decomposable=True can
 //! allow IAttention to be decomposed to use multiple kernels if no fused kernel support found.
 //!
-//!     Query       Key       Value      Mask (optional)      NormalizationQuantizeScale (optional)
-//!       |          |          |          |                    |
-//!       |       Transpose     |          |                    |
-//!       |          |          |          |                    |
-//!       ----BMM1----          |          |                    |
-//!             |               |          |                    |
-//!             *---------------------------                    |
-//!             |               |                               |
-//!       Normalization         |                               |
-//!             |               |                               |
-//!             *------------------------------------------------
-//!             |               |
-//!             -------BMM2------
-//!                     |
-//!                   Output
+//!  Query       Key       Value      Mask (optional)      NormalizationQuantizeScale (optional)
+//!    |          |          |          |                    |
+//!    |       Transpose     |          |                    |
+//!    |          |          |          |                    |
+//!    ----BMM1----          |          |                    |
+//!          |               |          |                    |
+//!          *---------------------------                    |
+//!          |               |                               |
+//!    Normalization         |                               |
+//!          |               |                               |
+//!          *------------------------------------------------
+//!          |               |
+//!          -------BMM2------
+//!                  |
+//!                Output
 //!
 //! The attention has the following inputs, in order of input index:
 //!
@@ -11378,6 +11362,78 @@ public:
     char const* getRemoteAutoTuningConfig() const noexcept
     {
         return mImpl->getRemoteAutoTuningConfig();
+    }
+
+    //!
+    //! \brief Set the build route to be passed to the compiler.
+    //!
+    //! The build route string is a configuration string that changes the
+    //! compilation behavior to customize the engine building for different
+    //! models.
+    //!
+    //! \param buildRoute The build route string to be used during compilation.
+    //!
+    //! \return True if successful, false otherwise
+    //!
+    //! For example, the following is the format of the input:
+    //! "-conv_use_long_w=off -kgen:codegen:cuda_tile=2"
+    //!
+    //! \note Calling this method invalidates any pointer previously returned by
+    //! getBuildRoute().
+    //!
+    bool setBuildRoute(char const* buildRoute) noexcept
+    {
+        return mImpl->setBuildRoute(buildRoute);
+    }
+
+    //!
+    //! \brief Get the build route string.
+    //!
+    //! \return The current build route string, or an empty string if not set.
+    //!
+    //! The returned pointer is owned by the IBuilderConfig and remains valid
+    //! until the next call to setBuildRoute() or until the IBuilderConfig is
+    //! destroyed. The caller must not free it.
+    //!
+    char const* getBuildRoute() const noexcept
+    {
+        return mImpl->getBuildRoute();
+    }
+
+    //!
+    //! \brief Get all available build routes.
+    //!
+    //! This returns a JSON string containing all available build route options
+    //! supported by the compiler. This is initialized when the IBuilderConfig
+    //! is created.
+    //!
+    //! \return A JSON string containing all available build routes.
+    //!
+    //! For example, the below is the format of the output:
+    //! {
+    //!     "tuner_version": "2.19.15",
+    //!     "tuner_options": [
+    //!         {
+    //!             "option": "-conv_use_long_w",
+    //!             "allowed_values": "-conv_use_long_w=[on|off]",
+    //!             "default_value": "on",
+    //!             "help": "Convert Conv [N, C, X, 1] to [N, C, 1, X] in CASK params for perf."
+    //!         },
+    //!         {
+    //!             "option": "-kgen:codegen:cuda_tile",
+    //!             "allowed_values": "-kgen:codegen:cuda_tile=[0|1|2|3]",
+    //!             "default_value": "1",
+    //!             "help": "CUDA Tile codegen. 0: disable, 1: where profitable, 2: supported kdags, 3: force all."
+    //!         },
+    //!         ...
+    //! }
+    //!
+    //! The returned pointer is owned by the IBuilderConfig and remains valid
+    //! for the lifetime of the IBuilderConfig. The caller must not free it.
+    //!
+    char const* getAllBuildRoutes() const noexcept
+    {
+        return mImpl->getAllBuildRoutes();
     }
 
 protected:

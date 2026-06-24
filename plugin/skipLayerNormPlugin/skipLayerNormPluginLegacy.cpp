@@ -844,9 +844,8 @@ int32_t SkipLayerNormVarSeqlenPlugin::enqueue(PluginTensorDesc const* inputDesc,
         }
         else
         {
-            PLUGIN_VALIDATE(("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
+            PLUGIN_ERROR("Unsupported type error, expected [kINT8,kHALF,kFLOAT], but received "
                 + std::to_string(static_cast<int32_t>(iType)))
-                                .c_str());
         }
     }
     catch (std::exception const& e)

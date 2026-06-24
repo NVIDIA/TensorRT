@@ -1,0 +1,86 @@
+Third Party Notices
+===================
+
+This report includes or loads third-party open source software.
+These notices are provided for attribution and license-tracking purposes only
+and do not modify the license terms of the third-party projects.
+
+
+Netron
+------
+
+Project: Netron
+Homepage: https://github.com/lutzroeder/netron
+Version included in this report: 9.1.1
+License: MIT
+License URL: https://github.com/lutzroeder/netron/blob/main/LICENSE
+Copyright: Copyright (c) Lutz Roeder
+
+Notes:
+- The Netron files are embedded as a trimmed report-specific viewer.
+- The embedded files have been modified for use in this TensorRT performance
+  report, including report-specific loading, iframe integration, and layer
+  selection behavior.
+
+
+Dagre
+-----
+
+Project: Dagre
+Homepage: https://github.com/dagrejs/dagre
+License: MIT
+License URL: https://github.com/dagrejs/dagre/blob/master/LICENSE
+Copyright: Copyright (c) 2012-2014 Chris Pettitt
+
+Notes:
+- The bundled graph layout code is included through the report-specific Netron
+  viewer bundle.
+
+
+Graphlib
+--------
+
+Project: Graphlib
+Homepage: https://github.com/dagrejs/graphlib
+License: MIT
+Package metadata URL: https://github.com/dagrejs/graphlib/blob/master/package.json
+Author: Chris Pettitt
+
+Notes:
+- Dagre depends on Graphlib. The bundled layout code in dev/report/netron/dagre.js may
+  include or derive from Graphlib functionality.
+
+
+DOMPurify
+---------
+
+Project: DOMPurify
+Homepage: https://github.com/cure53/DOMPurify
+Version included in this report: 3.4.9
+License: MPL-2.0 OR Apache-2.0
+License option used for this notice: Apache-2.0
+License URL: https://github.com/cure53/DOMPurify/blob/3.4.9/LICENSE
+Package metadata URL: https://github.com/cure53/DOMPurify/blob/3.4.9/package.json
+Author: Dr.-Ing. Mario Heiderich, Cure53
+
+Notes:
+- DOMPurify is used at runtime to sanitize rendered Markdown content.
+
+
+Marked
+------
+
+Project: marked
+Homepage: https://github.com/markedjs/marked
+Version included in this report: 18.0.5
+License: MIT
+License URL: https://github.com/markedjs/marked/blob/v18.0.5/LICENSE.md
+Package metadata URL: https://github.com/markedjs/marked/blob/v18.0.5/package.json
+Copyright:
+- Copyright (c) 2018-2026, MarkedJS
+- Copyright (c) 2011-2018, Christopher Jeffrey
+
+Notes:
+- marked is used at runtime to render Markdown content.
+- The marked license file also includes attribution and license terms for
+  Markdown by John Gruber. See the upstream license URL above.

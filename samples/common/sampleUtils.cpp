@@ -19,7 +19,14 @@
 #include "bfloat16.h"
 #include "common.h"
 #include "half.h"
+#include <nlohmann/json.hpp>
+#include <algorithm>
+#include <climits>
+#include <cstdlib>
 #include <cuda.h>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <type_traits>
 
 #if CUDA_VERSION >= 11060
@@ -27,6 +34,7 @@
 #endif
 
 using namespace nvinfer1;
+using samplesCommon::startsWith;
 
 namespace sample
 {
@@ -849,6 +857,552 @@ std::vector<std::string> sanitizeArgv(int32_t argc, char** argv)
     }
 
     return sanitizedArgs;
+}
+
+// ============================================================================
+// Accuracy Validator Implementations
+// ============================================================================
+
+template <typename T>
+double L0AccuracyValidator<T>::calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference)
+{
+    // Uses PyTorch/NumPy allclose formula: |a - b| <= atol + rtol * |b|
+    // See: https://docs.pytorch.org/docs/stable/generated/torch.allclose.html
+    // and infer_ref_check/infer_ref_check.cpp::torchIsClose()
+    ASSERT(actual.size() == reference.size());
+    ASSERT(actual.size() != 0);
+    int64_t mismatchCount = 0;
+    for (uint64_t i = 0; i < actual.size(); ++i)
+    {
+        double const absDiff = std::abs(static_cast<double>(actual[i]) - static_cast<double>(reference[i]));
+        double const refAbs = std::abs(static_cast<double>(reference[i]));
+        double const tolerance = mAtol + mRtol * refAbs;
+        if (absDiff > tolerance)
+        {
+            mismatchCount++;
+        }
+    }
+    return static_cast<double>(mismatchCount) / actual.size();
+}
+
+template <typename T>
+double L1AccuracyValidator<T>::calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference)
+{
+    ASSERT(actual.size() == reference.size());
+    ASSERT(actual.size() != 0);
+    double sum = 0.0;
+    for (uint64_t i = 0; i < actual.size(); ++i)
+    {
+        sum += std::abs(static_cast<double>(actual[i]) - static_cast<double>(reference[i]));
+    }
+    return sum / actual.size();
+}
+
+template <typename T>
+double L2AccuracyValidator<T>::calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference)
+{
+    ASSERT(actual.size() == reference.size());
+    ASSERT(actual.size() != 0);
+    double sum = 0.0;
+    for (uint64_t i = 0; i < actual.size(); ++i)
+    {
+        double diff = static_cast<double>(actual[i]) - static_cast<double>(reference[i]);
+        sum += diff * diff;
+    }
+    return sum / actual.size();
+}
+
+template <typename T>
+double LInfAccuracyValidator<T>::calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference)
+{
+    ASSERT(actual.size() == reference.size());
+    ASSERT(actual.size() != 0);
+    double maxDiff = 0.0;
+    for (uint64_t i = 0; i < actual.size(); ++i)
+    {
+        double diff = std::abs(static_cast<double>(actual[i]) - static_cast<double>(reference[i]));
+        maxDiff = std::max(maxDiff, diff);
+    }
+    return maxDiff;
+}
+
+template <typename T>
+double CosineSimilarityValidator<T>::calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference)
+{
+    ASSERT(actual.size() == reference.size());
+    ASSERT(actual.size() != 0);
+    double dotProduct = 0.0;
+    double normActual = 0.0;
+    double normRef = 0.0;
+    for (uint64_t i = 0; i < actual.size(); ++i)
+    {
+        double a = static_cast<double>(actual[i]);
+        double r = static_cast<double>(reference[i]);
+        dotProduct += a * r;
+        normActual += a * a;
+        normRef += r * r;
+    }
+    double denominator = std::sqrt(normActual) * std::sqrt(normRef);
+    if (denominator < 1e-12)
+    {
+        return 1.0; // Handle zero vectors
+    }
+    double cosineSim = dotProduct / denominator;
+    return 1.0 - cosineSim; // Return as cost (0 = perfect match)
+}
+
+// Explicit template instantiations for supported types
+template class L0AccuracyValidator<float>;
+template class L0AccuracyValidator<int32_t>;
+template class L0AccuracyValidator<int8_t>;
+template class L0AccuracyValidator<half_float::half>;
+
+template class L1AccuracyValidator<float>;
+template class L1AccuracyValidator<int32_t>;
+template class L1AccuracyValidator<int8_t>;
+template class L1AccuracyValidator<half_float::half>;
+
+template class L2AccuracyValidator<float>;
+template class L2AccuracyValidator<int32_t>;
+template class L2AccuracyValidator<int8_t>;
+template class L2AccuracyValidator<half_float::half>;
+
+template class LInfAccuracyValidator<float>;
+template class LInfAccuracyValidator<int32_t>;
+template class LInfAccuracyValidator<int8_t>;
+template class LInfAccuracyValidator<half_float::half>;
+
+template class CosineSimilarityValidator<float>;
+template class CosineSimilarityValidator<int32_t>;
+template class CosineSimilarityValidator<int8_t>;
+template class CosineSimilarityValidator<half_float::half>;
+
+bool peekArg(int32_t argc, char** argv, char const* flag)
+{
+    auto const flagLen = std::strlen(flag);
+    for (int32_t i = 1; i < argc; ++i)
+    {
+        if (argv[i] == nullptr)
+        {
+            continue;
+        }
+        // Match either bare flag (--continue) or flag=value (--tuneBuildRoutes=...).
+        if (std::strncmp(argv[i], flag, flagLen) == 0 && (argv[i][flagLen] == '\0' || argv[i][flagLen] == '='))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string buildShellQuotedCmdLine(int32_t argc, char** argv)
+{
+    std::string cmdLine;
+    for (int32_t i = 0; i < argc; ++i)
+    {
+        if (i > 0)
+        {
+            cmdLine += " ";
+        }
+        std::string arg = argv[i];
+        bool const needsQuoting = arg.find_first_of(" \t|[]{}()&;'\"\\") != std::string::npos;
+        if (needsQuoting)
+        {
+            std::string escaped;
+            for (char c : arg)
+            {
+                if (c == '\'')
+                {
+                    escaped += "'\\''";
+                }
+                else
+                {
+                    escaped += c;
+                }
+            }
+            cmdLine += "'" + escaped + "'";
+        }
+        else
+        {
+            cmdLine += arg;
+        }
+    }
+    return cmdLine;
+}
+
+//! \brief Resolve file paths in argv to absolute for cache storage.
+//!
+//! File-path flags that get resolved: --onnx=, --saveEngine=, --loadInputs=,
+//! --loadRefOutputs=, --tuneBuildRouteFile=, --loadEngine=. All others are stored as-is.
+//! --loadInputs and --loadRefOutputs have format "name:path,name:path" so each
+//! path component is resolved separately.
+namespace
+{
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+std::vector<std::string> resolveArgvPaths(int32_t argc, char** argv)
+{
+    static std::vector<std::string> const kSIMPLE_PATH_FLAGS
+        = {"--onnx=", "--saveEngine=", "--tuneBuildRouteFile=", "--loadEngine="};
+    static std::vector<std::string> const kMAPPED_PATH_FLAGS = {"--loadInputs=", "--loadRefOutputs="};
+
+    std::vector<std::string> result;
+    for (int32_t i = 0; i < argc; ++i)
+    {
+        std::string arg(argv[i]);
+
+        // Check simple path flags (--flag=path -> --flag=<absolute path>)
+        bool resolved = false;
+        for (auto const& prefix : kSIMPLE_PATH_FLAGS)
+        {
+            if (startsWith(arg, prefix))
+            {
+                result.push_back(prefix + resolveAbsolutePath(arg.substr(prefix.size())));
+                resolved = true;
+                break;
+            }
+        }
+        if (resolved)
+        {
+            continue;
+        }
+
+        // Check mapped path flags (--flag=name:path,name:path -> resolve each path)
+        for (auto const& prefix : kMAPPED_PATH_FLAGS)
+        {
+            if (startsWith(arg, prefix))
+            {
+                std::string value = arg.substr(prefix.size());
+                // Split on ',' to get individual name:path pairs
+                auto pairs = splitToStringVec(value, ',');
+                std::string resolvedValue;
+                for (uint64_t p = 0; p < pairs.size(); ++p)
+                {
+                    if (p > 0)
+                    {
+                        resolvedValue += ",";
+                    }
+                    // Split each pair on ':' to separate name from path
+                    auto nameAndPath = splitToStringVec(pairs[p], ':', 1);
+                    if (nameAndPath.size() == 2)
+                    {
+                        resolvedValue += nameAndPath[0] + ":" + resolveAbsolutePath(nameAndPath[1]);
+                    }
+                    else
+                    {
+                        resolvedValue += pairs[p]; // Malformed pair, keep as-is
+                    }
+                }
+                result.push_back(prefix + resolvedValue);
+                resolved = true;
+                break;
+            }
+        }
+        if (resolved)
+        {
+            continue;
+        }
+
+        result.push_back(arg);
+    }
+    return result;
+}
+} // anonymous namespace
+
+void writeTuningCacheHeader(std::string const& cacheFilePath, AllOptions const& options, int32_t argc, char** argv,
+    std::string const& tunerVersion, std::string const& defaultBuildRoute)
+{
+    // Use ordered_json to preserve insertion order matching best_config.json.example:
+    // tuner_version, accuracy_algorithm, accuracy_parameter, searching_algorithm,
+    // command_line, default_build_route, tuning_expr, files, argv
+    nlohmann::ordered_json header;
+
+    header["tuner_version"] = tunerVersion;
+    header["accuracy_algorithm"] = getAlgorithmName(options.inference.accuracyValidationAlgorithm);
+
+    nlohmann::ordered_json accParam;
+    accParam["atol"] = options.inference.atol;
+    accParam["rtol"] = options.inference.rtol;
+    accParam["epsilon"] = options.inference.accuracyThresholdEndToEnd;
+    header["accuracy_parameter"] = accParam;
+
+    header["searching_algorithm"] = toString(options.tuning.tuningSearchAlgorithm);
+
+    // Reconstruct command line for reference, with shell-safe quoting for arguments
+    // that contain spaces or metacharacters (e.g. --tuneBuildRoutes values).
+    std::string cmdLine = buildShellQuotedCmdLine(argc, argv);
+    header["command_line"] = cmdLine;
+    header["default_build_route"] = defaultBuildRoute;
+
+    // Store the expanded tuning expression. This is the already-expanded string
+    // (handles --tuneBuildRouteFile case where the file may not exist at resume time).
+    header["tuning_expr"] = options.tuning.tuningExpr;
+
+    // Store absolute paths to all file-based options for human readability and
+    // as a cross-check. The authoritative source for --continue reconstruction
+    // is the "argv" field below.
+    {
+        nlohmann::ordered_json files;
+        if (!options.model.baseModel.model.empty())
+        {
+            files["onnx"] = resolveAbsolutePath(options.model.baseModel.model);
+        }
+        if (!options.build.engine.empty())
+        {
+            files["save_engine"] = resolveAbsolutePath(options.build.engine);
+        }
+        // Input files: map of tensor_name → absolute path
+        if (!options.inference.refPairs.empty())
+        {
+            nlohmann::ordered_json inputs;
+            for (auto const& [name, path] : options.inference.refPairs[0].first)
+            {
+                inputs[name] = resolveAbsolutePath(path);
+            }
+            if (!inputs.empty())
+            {
+                files["inputs"] = inputs;
+            }
+
+            nlohmann::ordered_json refOutputs;
+            for (auto const& [name, path] : options.inference.refPairs[0].second)
+            {
+                refOutputs[name] = resolveAbsolutePath(path);
+            }
+            if (!refOutputs.empty())
+            {
+                files["ref_outputs"] = refOutputs;
+            }
+        }
+        header["files"] = files;
+    }
+
+    // Store argv with file-path arguments resolved to absolute paths.
+    // This is the machine-readable source of truth for --continue reconstruction.
+    // When resuming, the stored argv is replayed to reconstruct all options
+    // (--iterations, --duration, --fp16, etc.) without enumerating each one.
+    {
+        auto resolvedArgv = resolveArgvPaths(argc, argv);
+        nlohmann::ordered_json argvArray(resolvedArgv);
+        header["argv"] = argvArray;
+    }
+
+    std::ofstream file(cacheFilePath, std::ios::trunc);
+    if (!file)
+    {
+        sample::gLogError << "Cannot open tuning cache file for writing header: " << cacheFilePath << std::endl;
+        return;
+    }
+    file << header.dump() << std::endl;
+}
+
+void writeTuningCacheIteration(std::string const& cacheFilePath, uint64_t iter, std::string const& buildRoute,
+    bool crashed, std::string const& errorMessage, std::unordered_map<std::string, double> const& accuracyLossValues,
+    double gpuTimeMs)
+{
+    // Use ordered_json to preserve insertion order matching best_config.json.example:
+    // iter, build_route, crash, error_message, accuracy_loss, gpu_time
+    nlohmann::ordered_json result;
+    result[tuningCache::kIter] = iter;
+    result[tuningCache::kBuildRoute] = buildRoute;
+    result[tuningCache::kCrash] = crashed;
+    result[tuningCache::kErrorMessage] = errorMessage;
+
+    // accuracy_loss is a per-output map: {"output_name": accuracy_value, ...}
+    // When crashed, accuracy values are unavailable so we write null.
+    if (crashed || accuracyLossValues.empty())
+    {
+        result[tuningCache::kAccuracyLoss] = nullptr;
+    }
+    else
+    {
+        nlohmann::ordered_json accMap;
+        for (auto const& [name, value] : accuracyLossValues)
+        {
+            accMap[name] = value;
+        }
+        result[tuningCache::kAccuracyLoss] = accMap;
+    }
+    result[tuningCache::kGpuTime] = crashed ? nlohmann::ordered_json(nullptr) : nlohmann::ordered_json(gpuTimeMs);
+
+    std::ofstream file(cacheFilePath, std::ios::app);
+    if (!file)
+    {
+        sample::gLogError << "Cannot open tuning cache file to append iteration " << iter << ": " << cacheFilePath
+                          << std::endl;
+        return;
+    }
+    file << result.dump() << std::endl;
+}
+
+std::vector<std::string> reconstructArgvFromCacheHeader(
+    TuningCacheHeader const& header, std::string const& currentExePath, std::string const& cacheFilePath)
+{
+    std::vector<std::string> newArgv;
+
+    // Use current executable path as argv[0], not the one stored in the cache
+    // (the binary may have been rebuilt or moved since the original run).
+    newArgv.push_back(currentExePath);
+
+    // Iterate over stored argv (skip stored argv[0]).
+    for (uint64_t i = 1; i < header.argv.size(); ++i)
+    {
+        std::string const& arg = header.argv[i];
+
+        // Replace --tuneBuildRoutes or --tuneBuildRouteFile with the stored tuning_expr.
+        // This handles the case where --tuneBuildRouteFile was used originally but the
+        // file no longer exists — the expanded expression is stored in tuning_expr.
+        if (startsWith(arg, "--tuneBuildRoutes=") || startsWith(arg, "--tuneBuildRouteFile="))
+        {
+            continue; // Will be re-added below with the stored tuning_expr.
+        }
+
+        // Remove --continue and --tuningCacheFile from the stored argv to avoid
+        // recursion (the stored run may itself have been a --continue run).
+        if (arg == "--continue" || startsWith(arg, "--tuningCacheFile="))
+        {
+            continue;
+        }
+
+        newArgv.push_back(arg);
+    }
+
+    // Add back the tuning expression and cache file path.
+    newArgv.push_back("--tuneBuildRoutes=" + header.tuningExpr);
+    newArgv.push_back("--tuningCacheFile=" + cacheFilePath);
+
+    return newArgv;
+}
+
+std::string resolveAbsolutePath(std::string const& path)
+{
+    if (path.empty())
+    {
+        return path;
+    }
+#if defined(_WIN32)
+    // On Windows, path resolution is not needed (tuning features are not supported on Windows).
+    // Return the path unchanged so the code compiles.
+    return path;
+#else
+    // POSIX realpath() resolves symlinks and relative components to an absolute path.
+    // Returns nullptr if the file does not exist or another error occurs.
+    char resolved[PATH_MAX];
+    if (realpath(path.c_str(), resolved) != nullptr)
+    {
+        return std::string(resolved);
+    }
+    return path;
+#endif
+}
+
+std::optional<TuningCacheHeader> readTuningCacheHeader(std::string const& cacheFilePath)
+{
+    std::ifstream file(cacheFilePath);
+    if (!file.is_open())
+    {
+        return std::nullopt;
+    }
+
+    // First line is the JSON header.
+    std::string headerLine;
+    if (!std::getline(file, headerLine) || headerLine.empty())
+    {
+        return std::nullopt;
+    }
+
+    try
+    {
+        auto headerJson = nlohmann::json::parse(headerLine);
+
+        TuningCacheHeader header;
+
+        // Extract argv array → vector<string>
+        if (headerJson.contains("argv") && headerJson["argv"].is_array())
+        {
+            for (auto const& elem : headerJson["argv"])
+            {
+                header.argv.push_back(elem.get<std::string>());
+            }
+        }
+        else
+        {
+            // argv field is required for --continue reconstruction.
+            sample::gLogError << "Tuning cache header missing 'argv' field" << std::endl;
+            return std::nullopt;
+        }
+
+        // Extract tuning_expr string.
+        if (headerJson.contains("tuning_expr") && headerJson["tuning_expr"].is_string())
+        {
+            header.tuningExpr = headerJson["tuning_expr"].get<std::string>();
+        }
+        else
+        {
+            sample::gLogError << "Tuning cache header missing 'tuning_expr' field" << std::endl;
+            return std::nullopt;
+        }
+
+        // Count remaining non-empty lines as completed iterations.
+        header.completedIterations = 0;
+        std::string line;
+        while (std::getline(file, line))
+        {
+            if (!line.empty())
+            {
+                ++header.completedIterations;
+            }
+        }
+
+        return header;
+    }
+    catch (nlohmann::json::exception const& e)
+    {
+        sample::gLogError << "Failed to parse tuning cache header: " << e.what() << std::endl;
+        return std::nullopt;
+    }
+}
+
+std::vector<CachedIterationResult> readCachedIterationResults(std::string const& cacheFilePath, int64_t maxIterations)
+{
+    std::vector<CachedIterationResult> results;
+    std::ifstream file(cacheFilePath);
+    if (!file.is_open())
+    {
+        return results;
+    }
+
+    std::string line;
+    // Skip header line.
+    if (!std::getline(file, line))
+    {
+        return results;
+    }
+
+    // Read iteration lines, extracting crash and gpu_time fields.
+    while (std::getline(file, line) && static_cast<int64_t>(results.size()) < maxIterations)
+    {
+        if (line.empty())
+        {
+            continue;
+        }
+        try
+        {
+            auto j = nlohmann::json::parse(line);
+            CachedIterationResult r;
+            r.crashed = j.value(tuningCache::kCrash, true);
+            r.gpuTimeMs = j.contains(tuningCache::kGpuTime) && j[tuningCache::kGpuTime].is_number()
+                ? j[tuningCache::kGpuTime].get<double>()
+                : 0.0;
+            results.push_back(r);
+        }
+        catch (nlohmann::json::exception const&)
+        {
+            // Malformed line — treat as crashed.
+            results.push_back({true, 0.0});
+        }
+    }
+
+    return results;
 }
 
 } // namespace sample

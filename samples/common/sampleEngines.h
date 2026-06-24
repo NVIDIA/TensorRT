@@ -206,7 +206,6 @@ public:
         return *mAsyncFileReader;
     }
 
-
     //!
     //! \brief Get if safe mode is enabled.
     //!
@@ -226,7 +225,6 @@ private:
     int32_t mDLACore{-1};
     std::vector<uint8_t> mEngineBlob;
     std::unique_ptr<samplesCommon::AsyncStreamReader> mAsyncFileReader;
-
 
     // Directly use the host memory of a serialized engine instead of duplicating the engine in CPU memory.
     std::unique_ptr<nvinfer1::IHostMemory> mEngineBlobHostMemory;

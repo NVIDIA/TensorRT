@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +21,10 @@
 #include "common/cudnnWrapper.h"
 #include "vc/checkMacrosPlugin.h"
 #include <mutex>
+#include <optional>
 #include <sstream>
+#include <string>
+#include <utility>
 
 #ifdef _MSC_VER
 #define FN_NAME __FUNCTION__
@@ -34,25 +37,35 @@ namespace nvinfer1
 namespace plugin
 {
 
-[[noreturn]] void throwCudnnError(
-    char const* file, char const* function, int32_t line, int32_t status, char const* msg = nullptr);
-[[noreturn]] void throwCublasError(
-    char const* file, char const* function, int32_t line, int32_t status, char const* msg = nullptr);
+//! \throw CudnnError carrying \p msg, after logging it via \c gLogError.
+//! Parameter semantics match \c nvinfer1::plugin::throwCudaError.
+[[noreturn]] void throwCudnnError(char const* file, char const* function, int32_t line, int32_t status,
+    std::optional<std::string> msg = std::nullopt);
 
+//! \throw CublasError carrying \p msg (or a default message derived from \p status if \p msg is
+//!     \c std::nullopt), after logging it via \c gLogError. An explicit empty string is preserved.
+//! Parameter semantics match \c nvinfer1::plugin::throwCudaError.
+[[noreturn]] void throwCublasError(char const* file, char const* function, int32_t line, int32_t status,
+    std::optional<std::string> msg = std::nullopt);
+
+//! \c TRTException specialization for cuDNN failures.
 class CudnnError : public TRTException
 {
 public:
-    CudnnError(char const* fl, char const* fn, int32_t ln, int32_t stat, char const* msg = nullptr)
-        : TRTException(fl, fn, ln, stat, msg, "Cudnn")
+    //! \see TRTException::TRTException. Sets the subsystem name to \c "Cudnn".
+    CudnnError(char const* fl, char const* fn, int32_t ln, int32_t stat, std::optional<std::string> msg = std::nullopt)
+        : TRTException(fl, fn, ln, stat, std::move(msg), "Cudnn")
     {
     }
 };
 
+//! \c TRTException specialization for cuBLAS failures.
 class CublasError : public TRTException
 {
 public:
-    CublasError(char const* fl, char const* fn, int32_t ln, int32_t stat, char const* msg = nullptr)
-        : TRTException(fl, fn, ln, stat, msg, "cuBLAS")
+    //! \see TRTException::TRTException. Sets the subsystem name to \c "cuBLAS".
+    CublasError(char const* fl, char const* fn, int32_t ln, int32_t stat, std::optional<std::string> msg = std::nullopt)
+        : TRTException(fl, fn, ln, stat, std::move(msg), "cuBLAS")
     {
     }
 };

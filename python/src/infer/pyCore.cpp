@@ -285,6 +285,13 @@ static auto const get_remote_auto_tuning_config
 
 static auto const set_remote_auto_tuning_config
     = [](IBuilderConfig& self, std::string const& config) { self.setRemoteAutoTuningConfig(config.c_str()); };
+
+static auto const get_build_route = [](IBuilderConfig& self) { return std::string{self.getBuildRoute()}; };
+
+static auto const set_build_route
+    = [](IBuilderConfig& self, std::string const& buildRoute) { self.setBuildRoute(buildRoute.c_str()); };
+
+static auto const get_all_build_routes = [](IBuilderConfig& self) { return std::string{self.getAllBuildRoutes()}; };
 #endif // EXPORT_ALL_BINDINGS
 
 // For IRefitter
@@ -1756,6 +1763,8 @@ void bindCore(py::module& m)
 
         .def_property(
             "remote_auto_tuning_config", lambdas::get_remote_auto_tuning_config, lambdas::set_remote_auto_tuning_config)
+        .def_property("build_route", lambdas::get_build_route, lambdas::set_build_route)
+        .def_property_readonly("all_build_routes", lambdas::get_all_build_routes)
 
         .def("__del__", &utils::doNothingDel<IBuilderConfig>);
 
@@ -1806,10 +1815,10 @@ void bindCore(py::module& m)
             },
             "network"_a, "config"_a, "kernel_text"_a, BuilderDoc::build_serialized_network,
             py::call_guard<py::gil_scoped_release>{})
-        .def("build_serialized_network_to_stream", &IBuilder::buildSerializedNetworkToStream, "network"_a, "config"_a,
-            "writer"_a, BuilderDoc::build_serialized_network_to_stream, py::call_guard<py::gil_scoped_release>{})
         .def("build_engine_with_config", &IBuilder::buildEngineWithConfig, "network"_a, "config"_a,
             BuilderDoc::build_engine_with_config, py::call_guard<py::gil_scoped_release>{})
+        .def("build_serialized_network_to_stream", &IBuilder::buildSerializedNetworkToStream, "network"_a, "config"_a,
+            "writer"_a, BuilderDoc::build_serialized_network_to_stream, py::call_guard<py::gil_scoped_release>{})
         .def("is_network_supported", &IBuilder::isNetworkSupported, "network"_a, "config"_a,
             BuilderDoc::is_network_supported, py::call_guard<py::gil_scoped_release>{})
         .def_property_readonly("logger", &IBuilder::getLogger)

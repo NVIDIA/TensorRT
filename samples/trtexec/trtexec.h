@@ -30,6 +30,14 @@ namespace sample
 //! \return Exit code (0 for success, non-zero for failure)
 [[nodiscard]] int trtexecMain(int argc, char** argv, PostConfigCallback const& postConfigHook = nullptr);
 
+//! \brief Tuning-loop driver invoked when --tuneBuildRoutes / --tuneBuildRouteFile / --continue
+//! is present in argv. Enumerates build routes per the tuning expression and search algorithm,
+//! and for each iteration fork+execs trtexec with `--setBuildRoute=<route> --tuningResultFile=<json>`
+//! injected. Each child runs trtexecMain() unmodified, so any iteration is reproducible by hand
+//! using its --setBuildRoute argument.
+//! \return Exit code (0 if at least one iteration succeeded, non-zero otherwise).
+[[nodiscard]] int32_t runTuningLoop(int32_t argc, char** argv);
+
 } // namespace sample
 
 #endif // TRTEXEC_H

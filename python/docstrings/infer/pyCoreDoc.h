@@ -1491,6 +1491,8 @@ constexpr char const* descr = R"trtdoc(
         :ivar tiling_optimization_level: The optimization level of tiling strategies. A Higher level allows TensorRT to spend more time searching for better optimization strategy.
         :ivar l2_limit_for_tiling: The target L2 cache usage for tiling optimization.
         :ivar remote_auto_tuning_config: The config string to be used during remote auto-tuning. Remote auto-tuning is only enabled for engines built with EngineCapability.SAFETY.
+        :ivar build_route: :class:`str` The build route string passed to the compiler. The build route is a whitespace-separated list of ``-name=value`` Myelin knob tokens (e.g. ``"-conv_use_long_w=off -kgen:codegen:cuda_tile=2"``) used to customize engine compilation for performance tuning. Knob names are validated against the list returned by :attr:`all_build_routes` unless the internal ``TRT_BYPASS_BUILD_ROUTE_WHITELIST`` flag is set. Setting an empty string resets the build route. Available only when the global performance tuner feature is enabled in the build (disabled by default on RTX/Windows targets).
+        :ivar all_build_routes: :class:`str` JSON description of every build-route knob the compiler supports, populated when the :class:`IBuilderConfig` is created. Read-only. Returns an empty string on platforms where the global performance tuner feature is disabled (e.g. RTX/Windows targets).
 
         Below are the descriptions about each builder optimization level:
 

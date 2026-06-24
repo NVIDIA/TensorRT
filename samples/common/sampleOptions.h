@@ -18,7 +18,6 @@
 #ifndef TRT_SAMPLE_OPTIONS_H
 #define TRT_SAMPLE_OPTIONS_H
 
-
 #include <array>
 #include <iostream>
 #include <optional>
@@ -90,6 +89,37 @@ enum class MemoryAllocationStrategy
     kPROFILE, //< Allocate device memory based on max size of the current profile.
     kRUNTIME, //< Allocate device memory based on the current input shapes.
 };
+
+enum class AccuracyValidationAlgorithm
+{
+    kL0,               //< L0 accuracy algorithm
+    kL1,               //< L1 accuracy algorithm
+    kL2,               //< L2 accuracy algorithm
+    kLInf,             //< LInf accuracy algorithm
+    kCosineSimilarity, //< Cosine similarity accuracy algorithm
+};
+
+enum class TuningSearchAlgorithm
+{
+    kFAST,       //< Fast searching algorithm: baseline + one-off variations (linear in #knobs)
+    kEXHAUSTIVE, //< Exhaustive: all combinations enumerated (product of knob value-counts)
+    kMIXED,      //< Two-phase: fast scan, then exhaustive over knobs that improved performance
+};
+
+//! \brief Convert a TuningSearchAlgorithm enum to its CLI / cache-file string.
+//!   kFAST       -> "fast"
+//!   kEXHAUSTIVE -> "full"
+//!   kMIXED      -> "mixed"
+inline std::string toString(TuningSearchAlgorithm algo)
+{
+    switch (algo)
+    {
+    case TuningSearchAlgorithm::kFAST: return "fast";
+    case TuningSearchAlgorithm::kEXHAUSTIVE: return "full";
+    case TuningSearchAlgorithm::kMIXED: return "mixed";
+    }
+    return "unknown";
+}
 
 //!
 //! \enum RuntimeMode
@@ -235,6 +265,7 @@ public:
     bool allowGPUFallback{false};
     bool skipInference{false};
     bool save{false};
+    bool saveAllEngines{false}; //!< Save per-iteration engines as <engine>.iter<N> during tuning
     bool load{false};
     bool asyncFileReader{false};
     bool refittable{false};
@@ -272,6 +303,7 @@ public:
     nvinfer1::TempfileControlFlags tempfileControls{getTempfileControlDefaults()};
     RuntimeMode useRuntime{RuntimeMode::kFULL};
     std::string leanDLLPath{};
+    std::string buildRoute{}; //!< --setBuildRoute=<route> string; passed to IBuilderConfig::setBuildRoute()
     int32_t maxAuxStreams{defaultMaxAuxStreams};
     bool getPlanVersionOnly{false};
 
@@ -318,6 +350,10 @@ public:
     float sleep{defaultSleep};
     float idle{defaultIdle};
     float persistentCacheRatio{defaultPersistentCacheRatio};
+    float atol{1e-5};                  // Element-wise accuracy threshold absolute tolerance
+    float rtol{1e-5};                  // Element-wise accuracy threshold relative tolerance
+    float accuracyThresholdEndToEnd{}; // End-to-end accuracy threshold should not have default value
+                                       // because it depends on the model and accuracy validation algorithm
     bool overlap{true};
     bool includeTransfers{false};
     bool useManaged{false};
@@ -327,7 +363,13 @@ public:
     bool timeDeserialize{false};
     bool timeRefit{false};
     bool setOptProfile{false};
-    std::unordered_map<std::string, std::string> inputs;
+    // Reference pairs for accuracy validation with multiple test cases.
+    // Each pair contains (inputMap, refOutputMap) indexed by pair number.
+    // refPairs[0] is used as the primary pair (for --loadInputs/--loadRefOutputs without --refPair).
+    using RefPair = std::pair<std::unordered_map<std::string, std::string>,
+        std::unordered_map<std::string, std::string>>; // pair of (inputMap, refOutputMap)
+    std::vector<RefPair> refPairs{1};                  // Initialize with one empty pair
+    AccuracyValidationAlgorithm accuracyValidationAlgorithm{AccuracyValidationAlgorithm::kL0};
     using ShapeProfile = std::unordered_map<std::string, std::vector<int64_t>>;
     ShapeProfile shapes;
     nvinfer1::ProfilingVerbosity nvtxVerbosity{nvinfer1::ProfilingVerbosity::kLAYER_NAMES_ONLY};
@@ -389,6 +431,34 @@ public:
     static void printHelp(std::ostream& out);
 };
 
+//! \brief Options for `--tuneBuildRoutes`-driven autotuning of build routes.
+//!
+//! The tuning loop is implemented in samples/trtexec/trtexec.cpp by forking
+//! the trtexec process for each route; each child runs `runOnceBuildAndInfer`
+//! with `--setBuildRoute=<route>` injected by the parent.
+class TuningOptions : public Options
+{
+public:
+    std::string tuningCacheFile{"best_config.json"};
+    std::string tuningExpr{};                                          //!< --tuneBuildRoutes
+    std::string tuningExprFile{};                                      //!< --tuneBuildRouteFile
+    TuningSearchAlgorithm tuningSearchAlgorithm{TuningSearchAlgorithm::kFAST};
+    int64_t timeout{-1};                                               //!< --tuningTimeOut (s); -1 = no timeout
+    bool helpBuildRoute{false};                                        //!< --helpBuildRoute (short-circuit)
+    std::string helpBuildRouteKnob{};                                  //!< --helpBuildRoute=<knob> filter
+    bool continueFromCache{false};                                     //!< --continue
+    bool dryRun{false};                                                //!< --dryRun (enumerate, don't build)
+    //! \brief Hidden parent->child IPC channel.
+    //!
+    //! When set, runOnceBuildAndInfer writes a small JSON to this path containing
+    //! gpu_time_ms, accuracy_failed, and per-tensor accuracy_loss before returning.
+    //! Injected into the child's argv by the tuning loop; never shown in --help.
+    std::string tuningResultFile{};                                    //!< --tuningResultFile=<path>
+
+    void parse(Arguments& arguments) override;
+    static void help(std::ostream& out);
+};
+
 class AllOptions : public Options
 {
 public:
@@ -397,6 +467,7 @@ public:
     SystemOptions system;
     InferenceOptions inference;
     ReportingOptions reporting;
+    TuningOptions tuning;
     bool helps{false};
 
     void parse(Arguments& arguments) override;
