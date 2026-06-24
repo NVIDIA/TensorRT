@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>TRT donut T v3</title>
+  <rect width="32" height="32" rx="6" fill="#f5f7fb"/>
+  <g transform="rotate(-90 16 16)" fill="none" stroke-width="6" stroke-linecap="butt">
+    <circle cx="16" cy="16" r="11" pathLength="100" stroke="#2563eb" stroke-dasharray="50 50" stroke-dashoffset="0"/>
+    <circle cx="16" cy="16" r="11" pathLength="100" stroke="#16a34a" stroke-dasharray="22 78" stroke-dashoffset="-50"/>
+    <circle cx="16" cy="16" r="11" pathLength="100" stroke="#d97706" stroke-dasharray="28 72" stroke-dashoffset="-72"/>
+  </g>
+  <circle cx="16" cy="16" r="6.5" fill="#f5f7fb"/>
+  <path d="M11 11h10v3h-3.5v8h-3v-8H11Z" fill="#1d2433"/>
+</svg>

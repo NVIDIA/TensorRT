@@ -2,7 +2,7 @@ cuda-python==12.9.0
 cupy-cuda12x
 torch
 --extra-index-url https://pypi.ngc.nvidia.com
-polygraphy
+polygraphy>=0.50.1
 colored
 numpy==1.26.4
 --extra-index-url https://pypi.ngc.nvidia.com

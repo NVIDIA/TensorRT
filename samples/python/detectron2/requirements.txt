@@ -1,5 +1,6 @@
 onnx==1.18.0
 onnxruntime==1.18.1
+onnxscript>=0.6.0
 Pillow==11.3.0
 git+https://github.com/facebookresearch/detectron2.git
 git+https://github.com/NVIDIA/TensorRT#subdirectory=tools/onnx-graphsurgeon

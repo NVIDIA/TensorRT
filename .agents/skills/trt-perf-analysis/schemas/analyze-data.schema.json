@@ -1,0 +1,832 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex.local/trt-perf-analysis/analyze-data.schema.json",
+  "title": "TensorRT Performance Analysis Data",
+  "description": "Structured JSON emitted by scripts/analyze_trt_perf.py and consumed by the report app.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "folder",
+    "validation",
+    "results"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "folder": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_name_confidence": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "model_name_evidence": {
+      "$ref": "#/$defs/string_array"
+    },
+    "model_components": {
+      "$ref": "#/$defs/string_array"
+    },
+    "validation": {
+      "$ref": "#/$defs/top_level_validation"
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/result"
+      }
+    }
+  },
+  "$defs": {
+    "top_level_validation": {
+      "type": "object",
+      "required": [
+        "status",
+        "backend_count",
+        "passed_count",
+        "failed_count",
+        "warnings"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "passed",
+            "partial",
+            "failed"
+          ]
+        },
+        "backend_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passed_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "layer_profile_validation": {
+      "type": "object",
+      "required": [
+        "status",
+        "analysis_mode",
+        "messages",
+        "source_paths",
+        "report_available"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "passed"
+        },
+        "analysis_mode": {
+          "const": "layer_profile"
+        },
+        "messages": {
+          "$ref": "#/$defs/validation_messages"
+        },
+        "source_paths": {
+          "$ref": "#/$defs/source_paths"
+        },
+        "report_available": {
+          "const": true
+        }
+      }
+    },
+    "layer_only_validation": {
+      "type": "object",
+      "required": [
+        "status",
+        "analysis_mode",
+        "messages",
+        "source_paths",
+        "report_available"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "passed"
+        },
+        "analysis_mode": {
+          "const": "layer_only"
+        },
+        "messages": {
+          "$ref": "#/$defs/validation_messages"
+        },
+        "source_paths": {
+          "$ref": "#/$defs/source_paths"
+        },
+        "report_available": {
+          "const": true
+        }
+      }
+    },
+    "failed_validation": {
+      "type": "object",
+      "required": [
+        "status",
+        "analysis_mode",
+        "messages",
+        "source_paths",
+        "report_available"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "const": "failed"
+        },
+        "analysis_mode": {
+          "const": "unusable"
+        },
+        "messages": {
+          "$ref": "#/$defs/validation_messages"
+        },
+        "source_paths": {
+          "$ref": "#/$defs/source_paths"
+        },
+        "report_available": {
+          "const": false
+        }
+      }
+    },
+    "source_paths": {
+      "type": "object",
+      "required": [
+        "layer",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layer": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "validation_messages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/validation_message"
+      }
+    },
+    "validation_message": {
+      "type": "object",
+      "required": [
+        "level",
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "result": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/layer_profile_result"
+        },
+        {
+          "$ref": "#/$defs/layer_only_result"
+        },
+        {
+          "$ref": "#/$defs/failure_result"
+        }
+      ]
+    },
+    "layer_profile_result": {
+      "type": "object",
+      "required": [
+        "label",
+        "validation",
+        "layers",
+        "profile",
+        "layer_count",
+        "profile_count",
+        "graph",
+        "count",
+        "count_source",
+        "timing",
+        "model",
+        "engines",
+        "records",
+        "type_breakdown",
+        "tag_breakdown",
+        "issues",
+        "positives"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "validation": {
+          "$ref": "#/$defs/layer_profile_validation"
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/layer"
+          }
+        },
+        "profile": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/profile_entry"
+          }
+        },
+        "layer_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "profile_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "graph": {
+          "$ref": "#/$defs/graph"
+        },
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "count_source": {
+          "type": "string"
+        },
+        "timing": {
+          "$ref": "#/$defs/timing"
+        },
+        "model": {
+          "$ref": "#/$defs/model"
+        },
+        "engines": {
+          "$ref": "#/$defs/engines"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          }
+        },
+        "type_breakdown": {
+          "$ref": "#/$defs/breakdown"
+        },
+        "tag_breakdown": {
+          "$ref": "#/$defs/breakdown"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/issue"
+          }
+        },
+        "positives": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "layer_only_result": {
+      "type": "object",
+      "required": [
+        "label",
+        "validation",
+        "layers",
+        "layer_count",
+        "graph",
+        "model",
+        "engines"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "validation": {
+          "$ref": "#/$defs/layer_only_validation"
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/layer"
+          }
+        },
+        "layer_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "graph": {
+          "$ref": "#/$defs/graph"
+        },
+        "model": {
+          "$ref": "#/$defs/model"
+        },
+        "engines": {
+          "$ref": "#/$defs/engines"
+        }
+      }
+    },
+    "failure_result": {
+      "type": "object",
+      "required": [
+        "label",
+        "validation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "validation": {
+          "$ref": "#/$defs/failed_validation"
+        },
+        "layer_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "profile_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "required": [
+        "Name",
+        "LayerType",
+        "Inputs",
+        "Outputs"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "LayerType": {
+          "type": "string"
+        },
+        "Inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensor"
+          }
+        },
+        "Outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensor"
+          }
+        },
+        "Constants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tensor"
+          }
+        },
+        "Metadata": {
+          "type": [
+            "string",
+            "object",
+            "array",
+            "null"
+          ]
+        },
+        "StreamId": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ]
+        },
+        "TacticName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "tensor": {
+      "type": "object",
+      "required": [
+        "Name"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "Name": {
+          "type": "string"
+        },
+        "Datatype": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "Dimensions": {
+          "$ref": "#/$defs/number_array"
+        },
+        "Format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "StrideOrder": {
+          "$ref": "#/$defs/number_array"
+        },
+        "Strides": {
+          "$ref": "#/$defs/number_array"
+        }
+      }
+    },
+    "profile_entry": {
+      "type": "object",
+      "required": [
+        "name",
+        "timeMs",
+        "averageMs",
+        "medianMs",
+        "percentage"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "timeMs": {
+          "type": "number"
+        },
+        "averageMs": {
+          "type": "number"
+        },
+        "medianMs": {
+          "type": "number"
+        },
+        "percentage": {
+          "type": "number"
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "name",
+        "layer_type",
+        "raw_layer_type",
+        "tactic",
+        "time_ms",
+        "avg_ms",
+        "median_ms",
+        "percentage",
+        "tags",
+        "layer"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "layer_type": {
+          "type": "string"
+        },
+        "raw_layer_type": {
+          "type": "string"
+        },
+        "tactic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "time_ms": {
+          "type": "number"
+        },
+        "avg_ms": {
+          "type": "number"
+        },
+        "median_ms": {
+          "type": "number"
+        },
+        "percentage": {
+          "type": "number"
+        },
+        "tags": {
+          "$ref": "#/$defs/string_array"
+        },
+        "layer": {
+          "$ref": "#/$defs/layer"
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "required": [
+        "edge_count",
+        "external_inputs",
+        "graph_outputs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "edge_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "external_inputs": {
+          "$ref": "#/$defs/string_array"
+        },
+        "graph_outputs": {
+          "$ref": "#/$defs/string_array"
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "average_inference_ms",
+        "total_time_ms",
+        "total_percentage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "average_inference_ms": {
+          "type": "number"
+        },
+        "total_time_ms": {
+          "type": "number"
+        },
+        "total_percentage": {
+          "type": "number"
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": [
+        "category",
+        "confidence",
+        "evidence",
+        "config_path",
+        "hidden_size",
+        "intermediate_size",
+        "num_layers",
+        "num_heads",
+        "max_position_embeddings",
+        "sequence_length",
+        "dynamic_dims",
+        "input_shapes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name_confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "name_evidence": {
+          "$ref": "#/$defs/string_array"
+        },
+        "components": {
+          "$ref": "#/$defs/string_array"
+        },
+        "category": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/string_array"
+        },
+        "config_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hidden_size": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "intermediate_size": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "num_layers": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "num_heads": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_position_embeddings": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sequence_length": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "dynamic_dims": {
+          "type": "boolean"
+        },
+        "input_shapes": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/number_array"
+          }
+        }
+      }
+    },
+    "engines": {
+      "type": "object",
+      "required": [
+        "engine_files",
+        "subgraphs",
+        "streams",
+        "inferred_count",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "engine_files": {
+          "$ref": "#/$defs/string_array"
+        },
+        "subgraphs": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "streams": {
+          "type": "array",
+          "items": {
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "inferred_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "breakdown": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/breakdown_item"
+      }
+    },
+    "breakdown_item": {
+      "type": "object",
+      "required": [
+        "name",
+        "count",
+        "time_ms",
+        "percentage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "time_ms": {
+          "type": "number"
+        },
+        "percentage": {
+          "type": "number"
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "required": [
+        "score",
+        "title",
+        "evidence",
+        "next_check",
+        "confidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "score": {
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        },
+        "evidence": {
+          "type": "string"
+        },
+        "next_check": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    },
+    "string_array": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "number_array": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    }
+  }
+}

@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -711,6 +712,108 @@ bool getOptimizationProfiles(
     return retValue;
 }
 
+// Helper function to output a map as "name1:file1, name2:file2, ..."
+std::string mapToString(std::unordered_map<std::string, std::string> const& m)
+{
+    std::string result;
+    char const* delim = "";
+    for (auto const& kv : m)
+    {
+        result += delim;
+        delim = ", ";
+        result += kv.first + ":" + kv.second;
+    }
+    return result;
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+bool getRefPairs(Arguments& arguments, std::vector<InferenceOptions::RefPair>& refPairs)
+{
+    bool retValue{false};
+    int32_t pos{};
+    constexpr int32_t kNUM_REF_PAIR_FOLLOW_OPTIONS
+        = 2; // Number of options that can follow --refPair: --loadInputs and --loadRefOutputs
+    size_t pairIndex{};
+
+    auto parseIntoMap = [](std::string const& value, std::unordered_map<std::string, std::string>& map) {
+        std::vector<std::string> kvList{splitToStringVec(value, ',')};
+        splitInsertKeyValue(kvList, map);
+    };
+
+    while (getAndDelOptionWithPosition(arguments, "--refPair", pairIndex, pos))
+    {
+        InferenceOptions::RefPair pair;
+
+        for (int32_t i = 0; i < kNUM_REF_PAIR_FOLLOW_OPTIONS; ++i, ++pos)
+        {
+            std::string value;
+
+            if (getAndDelOptionBehind(arguments, "--loadInputs", pos, value))
+            {
+                parseIntoMap(value, pair.first); // Parse into input map
+            }
+            else if (getAndDelOptionBehind(arguments, "--loadRefOutputs", pos, value))
+            {
+                parseIntoMap(value, pair.second); // Parse into output map
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (pairIndex >= refPairs.size())
+        {
+            refPairs.resize(pairIndex + 1);
+        }
+        if (!refPairs[pairIndex].first.empty() || !refPairs[pairIndex].second.empty())
+        {
+            throw std::invalid_argument("Reference pair index cannot be the same.");
+        }
+        refPairs[pairIndex] = pair;
+        retValue = true;
+    }
+
+    // Validate refPairs when --refPair is used
+    if (retValue)
+    {
+        // Rule: Need at least 2 pairs when using --refPair
+        if (refPairs.size() < 2)
+        {
+            throw std::invalid_argument("When using --refPair, you need at least two pairs of I/O.");
+        }
+
+        size_t idx = 0;
+        for (auto const& pair : refPairs)
+        {
+            // Rule: Each pair must have both --loadInputs and --loadRefOutputs
+            if (pair.first.empty())
+            {
+                throw std::invalid_argument(std::string("Missing --loadInputs for reference pair at index ")
+                    + std::to_string(idx)
+                    + std::string(". Each --refPair must have both --loadInputs and --loadRefOutputs."));
+            }
+            if (pair.second.empty())
+            {
+                throw std::invalid_argument(std::string("Missing --loadRefOutputs for reference pair at index ")
+                    + std::to_string(idx)
+                    + std::string(". Each --refPair must have both --loadInputs and --loadRefOutputs."));
+            }
+            ++idx;
+        }
+
+        // Output parsed refPairs for verification
+        sample::gLogVerbose << "Parsed refPairs:" << std::endl;
+        for (size_t i = 0; i < refPairs.size(); ++i)
+        {
+            sample::gLogVerbose << "  refPair[" << i << "]:" << std::endl;
+            sample::gLogVerbose << "    loadInputs: {" << mapToString(refPairs[i].first) << "}" << std::endl;
+            sample::gLogVerbose << "    loadRefOutputs: {" << mapToString(refPairs[i].second) << "}" << std::endl;
+        }
+    }
+    return retValue;
+}
+
 template <typename T>
 void printShapes(std::ostream& os, char const* phase, T const& shapes, int32_t profileIndex)
 {
@@ -987,7 +1090,6 @@ void BuildOptions::parse(Arguments& arguments)
 
     getFormats(inputFormats, "--inputIOFormats");
     getFormats(outputFormats, "--outputIOFormats");
-
     if (!getOptimizationProfiles(arguments, optProfiles, "--profile"))
     {
         ShapeProfile shapes;
@@ -1178,9 +1280,14 @@ void BuildOptions::parse(Arguments& arguments)
     {
         save = true;
     }
+    getAndDelOption(arguments, "--saveAllEngines", saveAllEngines);
     if (load && save)
     {
         throw std::invalid_argument("Incompatible load and save engine options selected");
+    }
+    if (saveAllEngines && !save)
+    {
+        throw std::invalid_argument("--saveAllEngines requires --saveEngine to be specified.");
     }
 
     std::string tacticSourceArgs;
@@ -1372,6 +1479,7 @@ void BuildOptions::parse(Arguments& arguments)
     }
 
     getAndDelOption(arguments, "--leanDLLPath", leanDLLPath);
+    getAndDelOption(arguments, "--setBuildRoute", buildRoute);
     // Don't delete the option because the inference option parser requires it
     getOption(arguments, "--allowWeightStreaming", allowWeightStreaming);
 
@@ -1433,9 +1541,127 @@ void SystemOptions::parse(Arguments& arguments)
     }
 }
 
+namespace
+{
+
+//! Parse the --tuningSearch=<spec> value into the enum.
+//! Throws std::invalid_argument on unknown non-empty strings; leaves the
+//! algorithm unchanged on empty input.
+TuningSearchAlgorithm parseTuningSearchAlgorithm(std::string const& spec, TuningSearchAlgorithm defaultValue)
+{
+    if (spec.empty())
+    {
+        return defaultValue;
+    }
+    if (spec == "fast")
+    {
+        return TuningSearchAlgorithm::kFAST;
+    }
+    if (spec == "full")
+    {
+        return TuningSearchAlgorithm::kEXHAUSTIVE;
+    }
+    if (spec == "mixed")
+    {
+        return TuningSearchAlgorithm::kMIXED;
+    }
+    throw std::invalid_argument(std::string("Unknown tuning search algorithm: ") + spec);
+}
+
+//! Validate the exclusivity rules for --continue. The flag recovers everything
+//! from the cache header, so any other tuning flag is ambiguous.
+void validateContinueExclusivity(TuningOptions const& opts)
+{
+    if (opts.tuningCacheFile.empty())
+    {
+        throw std::invalid_argument("--continue requires --tuningCacheFile to be specified.");
+    }
+    if (!opts.tuningExpr.empty() || !opts.tuningExprFile.empty())
+    {
+        throw std::invalid_argument(
+            "--continue cannot be used with --tuneBuildRoutes or --tuneBuildRouteFile. "
+            "All options are recovered from the cache file header.");
+    }
+    if (opts.dryRun)
+    {
+        throw std::invalid_argument("--continue cannot be used with --dryRun.");
+    }
+    if (opts.helpBuildRoute)
+    {
+        throw std::invalid_argument("--continue cannot be used with --helpBuildRoute.");
+    }
+}
+
+//! Read --tuneBuildRouteFile contents and append to tuningExpr. Newlines and
+//! spaces are both treated as delimiters, so the file content is equivalent
+//! to a single --tuneBuildRoutes argument.
+void appendTuningExprFromFile(std::string const& path, std::string& tuningExpr)
+{
+    std::ifstream file(path);
+    if (!file.is_open())
+    {
+        throw std::invalid_argument("Cannot open --tuneBuildRouteFile: " + path);
+    }
+    std::string line;
+    while (std::getline(file, line))
+    {
+        if (!tuningExpr.empty())
+        {
+            tuningExpr += " ";
+        }
+        tuningExpr += line;
+    }
+}
+
+} // namespace
+
+void TuningOptions::parse(Arguments& arguments)
+{
+    // --helpBuildRoute is a short-circuit; the option's value (if any) is the
+    // optional knob filter (e.g. --helpBuildRoute=conv_use_long_w).
+    if (getAndDelOption(arguments, "--helpBuildRoute", helpBuildRouteKnob))
+    {
+        helpBuildRoute = true;
+    }
+
+    getAndDelOption(arguments, "--tuneBuildRoutes", tuningExpr);
+    getAndDelOption(arguments, "--tuneBuildRouteFile", tuningExprFile);
+
+    std::string searchAlgorithmString;
+    getAndDelOption(arguments, "--tuningSearch", searchAlgorithmString);
+    tuningSearchAlgorithm = parseTuningSearchAlgorithm(searchAlgorithmString, tuningSearchAlgorithm);
+
+    getAndDelOption(arguments, "--tuningTimeOut", timeout);
+    getAndDelOption(arguments, "--tuningCacheFile", tuningCacheFile);
+    getAndDelOption(arguments, "--continue", continueFromCache);
+    getAndDelOption(arguments, "--dryRun", dryRun);
+    // Hidden parent->child IPC flag (not in TuningOptions::help()).
+    getAndDelOption(arguments, "--tuningResultFile", tuningResultFile);
+
+    // Validate
+    if (!tuningExpr.empty() && !tuningExprFile.empty())
+    {
+        throw std::invalid_argument("Cannot specify both --tuneBuildRoutes and --tuneBuildRouteFile.");
+    }
+    if (continueFromCache)
+    {
+        validateContinueExclusivity(*this);
+    }
+    if (tuningSearchAlgorithm == TuningSearchAlgorithm::kMIXED && dryRun)
+    {
+        throw std::invalid_argument("--dryRun is incompatible with --tuningSearch=mixed.");
+    }
+
+    if (!tuningExprFile.empty())
+    {
+        appendTuningExprFromFile(tuningExprFile, tuningExpr);
+    }
+}
+
 constexpr int64_t WeightStreamingBudget::kDISABLE;
 constexpr int64_t WeightStreamingBudget::kAUTOMATIC;
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void InferenceOptions::parse(Arguments& arguments)
 {
 
@@ -1503,10 +1729,83 @@ void InferenceOptions::parse(Arguments& arguments)
     getAndDelOption(arguments, "--timeRefit", timeRefit);
     getAndDelOption(arguments, "--persistentCacheRatio", persistentCacheRatio);
 
-    std::string list;
-    getAndDelOption(arguments, "--loadInputs", list);
-    std::vector<std::string> inputsList{splitToStringVec(list, ',')};
-    splitInsertKeyValue(inputsList, inputs);
+    // Parse reference pairs: either single pair (--loadInputs/--loadRefOutputs) or multiple pairs (--refPair)
+    // This is similar to how --profile works with --minShapes/--optShapes/--maxShapes
+    if (!getRefPairs(arguments, refPairs))
+    {
+        // No --refPair was used, parse single --loadInputs/--loadRefOutputs pair into refPairs[0]
+        ASSERT(refPairs.size() > 0 && "refPairs must have at least one element");
+        auto& inferenceInputs = refPairs[0].first;
+        auto& inferenceRefOutputs = refPairs[0].second;
+
+        std::string ilist;
+        getAndDelOption(arguments, "--loadInputs", ilist);
+        std::vector<std::string> inputsList{splitToStringVec(ilist, ',')};
+        splitInsertKeyValue(inputsList, inferenceInputs);
+
+        std::string olist;
+        getAndDelOption(arguments, "--loadRefOutputs", olist);
+        std::vector<std::string> refOutputsList{splitToStringVec(olist, ',')};
+        splitInsertKeyValue(refOutputsList, inferenceRefOutputs);
+
+        // Rule: --loadRefOutputs without --loadInputs should fail
+        if (!inferenceRefOutputs.empty() && inferenceInputs.empty())
+        {
+            throw std::invalid_argument("--loadRefOutputs requires --loadInputs to be specified.");
+        }
+
+        // Output parsed inputs and refOutputs for verification
+        if (!inferenceInputs.empty() || !inferenceRefOutputs.empty())
+        {
+            sample::gLogVerbose << "Parsed inputs/refOutputs (no --refPair):" << std::endl;
+            sample::gLogVerbose << "  loadInputs: {" << mapToString(inferenceInputs) << "}" << std::endl;
+            sample::gLogVerbose << "  loadRefOutputs: {" << mapToString(inferenceRefOutputs) << "}" << std::endl;
+        }
+    }
+
+    // Parse accuracy validation options
+    std::string accuracyAlgorithmString;
+    bool const algoExplicitlySet = getAndDelOption(arguments, "--accuracyAlgorithm", accuracyAlgorithmString);
+    std::unordered_map<std::string, AccuracyValidationAlgorithm> fromString{
+        {"l0", AccuracyValidationAlgorithm::kL0},
+        {"l1", AccuracyValidationAlgorithm::kL1},
+        {"l2", AccuracyValidationAlgorithm::kL2},
+        {"lInf", AccuracyValidationAlgorithm::kLInf},
+        {"cos", AccuracyValidationAlgorithm::kCosineSimilarity},
+    };
+    if (!accuracyAlgorithmString.empty() && fromString.find(accuracyAlgorithmString) == fromString.end())
+    {
+        throw std::invalid_argument(std::string("Unknown accuracyAlgorithm: ") + accuracyAlgorithmString);
+    }
+    accuracyValidationAlgorithm
+        = algoExplicitlySet ? fromString[accuracyAlgorithmString] : AccuracyValidationAlgorithm::kL0;
+
+    bool const atolSet = getAndDelOption(arguments, "--atol", atol);
+    if (atol < 0)
+    {
+        throw std::invalid_argument("--atol must be non-negative.");
+    }
+    bool const rtolSet = getAndDelOption(arguments, "--rtol", rtol);
+    if (rtol < 0)
+    {
+        throw std::invalid_argument("--rtol must be non-negative.");
+    }
+    if (accuracyValidationAlgorithm != AccuracyValidationAlgorithm::kL0)
+    {
+        if (atolSet)
+        {
+            throw std::invalid_argument("--atol is only valid for L0 accuracy algorithm.");
+        }
+        if (rtolSet)
+        {
+            throw std::invalid_argument("--rtol is only valid for L0 accuracy algorithm.");
+        }
+    }
+    getAndDelOption(arguments, "--accuracyThreshold", accuracyThresholdEndToEnd);
+    if (accuracyThresholdEndToEnd < 0)
+    {
+        throw std::invalid_argument("--accuracyThreshold must be non-negative.");
+    }
 
     getShapesInference(arguments, shapes, "--shapes");
     setOptProfile = getAndDelOption(arguments, "--useProfile", optProfileIndex);
@@ -1607,6 +1906,7 @@ void AllOptions::parse(Arguments& arguments)
     build.parse(arguments);
     system.parse(arguments);
     inference.parse(arguments);
+    tuning.parse(arguments);
 
     if (build.useRuntime != RuntimeMode::kFULL && inference.timeRefit)
     {
@@ -1646,7 +1946,9 @@ void AllOptions::parse(Arguments& arguments)
     reporting.parse(arguments);
     helps = parseHelp(arguments);
 
-    if (!helps)
+    // Skip validation if --help or --helpBuildRoute is specified (both short-circuit
+    // trtexec before doing real work, so model presence is not required).
+    if (!helps && !tuning.helpBuildRoute)
     {
         if (!build.load && model.baseModel.format == ModelFormat::kANY)
         {
@@ -1706,6 +2008,27 @@ void AllOptions::parse(Arguments& arguments)
             sample::gLogWarning << "--adjustForDLA was set, but no DLA cores are available. "
                                 << "The parser's behavior will be modified, but the network will run on GPU."
                                 << std::endl;
+        }
+        bool const hasRefOutputs = !inference.refPairs[0].second.empty() || inference.refPairs.size() > 1;
+        if (hasRefOutputs && inference.accuracyThresholdEndToEnd <= 0)
+        {
+            throw std::invalid_argument(
+                "--accuracyThreshold (with a positive value) is required when --loadRefOutputs or --refPair is set.");
+        }
+        if (hasRefOutputs && build.skipInference)
+        {
+            throw std::invalid_argument(
+                "--loadRefOutputs/--refPair cannot be used with --skipInference: accuracy "
+                "validation needs the inference phase to run. Note --skipInference is implicitly "
+                "enabled by --buildDLAStandalone and by a cross-platform --runtimePlatform.");
+        }
+        // Warn when using --onnx with accuracy validation,
+        // because engine builds are nondeterministic and may produce unreliable comparisons.
+        if (hasRefOutputs && !build.load)
+        {
+            sample::gLogWarning << "Accuracy validation (--loadRefOutputs/--refPair) with --onnx may produce "
+                                << "unreliable results because engine builds are nondeterministic. "
+                                << "Use --loadEngine for deterministic comparison." << std::endl;
         }
     }
 }
@@ -2209,10 +2532,43 @@ std::ostream& operator<<(std::ostream& os, InferenceOptions const& options)
           "Weight Streaming Budget: "   << wsBudget                                             << std::endl;
     // clang-format on
 
+    // Accuracy validation settings
+    os << "Accuracy Algorithm: ";
+    switch (options.accuracyValidationAlgorithm)
+    {
+    case AccuracyValidationAlgorithm::kL0: os << "L0"; break;
+    case AccuracyValidationAlgorithm::kL1: os << "L1"; break;
+    case AccuracyValidationAlgorithm::kL2: os << "L2"; break;
+    case AccuracyValidationAlgorithm::kLInf: os << "LInf"; break;
+    case AccuracyValidationAlgorithm::kCosineSimilarity: os << "CosineSimilarity"; break;
+    }
+    os << std::endl;
+    if (options.accuracyValidationAlgorithm == AccuracyValidationAlgorithm::kL0)
+    {
+        os << "Absolute Tolerance (atol): " << options.atol << std::endl;
+        os << "Relative Tolerance (rtol): " << options.rtol << std::endl;
+    }
+    if (options.accuracyThresholdEndToEnd > 0)
+    {
+        os << "Accuracy Threshold: " << options.accuracyThresholdEndToEnd << std::endl;
+    }
+
     os << "Inputs:" << std::endl;
-    for (auto const& input : options.inputs)
+    ASSERT(options.refPairs.size() > 0 && "refPairs must have at least one element");
+    auto const& inferenceInputs = options.refPairs[0].first;
+    for (auto const& input : inferenceInputs)
     {
         os << input.first << "<-" << input.second << std::endl;
+    }
+
+    auto const& inferenceRefOutputs = options.refPairs[0].second;
+    if (!inferenceRefOutputs.empty())
+    {
+        os << "RefOutputs:" << std::endl;
+        for (auto const& refOutput : inferenceRefOutputs)
+        {
+            os << refOutput.first << "<-" << refOutput.second << std::endl;
+        }
     }
 
     os << "Debug Tensor Save Destinations:" << std::endl;
@@ -2495,12 +2851,10 @@ void SystemOptions::help(std::ostream& os, bool const enableStaticPlugins)
     // clang-format off
     os << "=== System Options ==="                                                                         << std::endl <<
           "  --device=N                  Select cuda device N (default = "         << defaultDevice << ")" << std::endl;
-
     if (enableStaticPlugins)
     {
-        os << "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl;
+        os << "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl << std::endl;
     }
-
     os << "  --useDLACore=N              Select DLA core N for layers that support DLA (default = none)"   << std::endl <<
           "  --staticPlugins             Plugin library (.so) to load statically (can be specified multiple times)" << std::endl <<
           "  --dynamicPlugins            Plugin library (.so) to load dynamically and may be serialized with the engine if they are included in --setPluginsToSerialize (can be specified multiple times)" << std::endl <<
@@ -2532,6 +2886,12 @@ void InferenceOptions::help(std::ostream& os)
         R"(                              Input values spec ::= Ival[","spec])"                                                       << std::endl <<
         R"(                                           Ival ::= name":"file)"                                                         << std::endl <<
           "                              Consult the README for more information on generating files for custom inputs."             << std::endl <<
+          "  --loadRefOutputs=spec       Load reference output values from files for accuracy validation. Output names can be "      << std::endl <<
+          "                              wrapped with single quotes (ex: 'Output:0')."                                               << std::endl <<
+        R"(                              Output values spec ::= Oval[","spec])"                                                      << std::endl <<
+        R"(                                           Oval ::= name":"file)"                                                         << std::endl <<
+          "                              If the calculated outputs is not within the accuracy threshold, the inference result is "     << std::endl <<
+          "                              considered to be inaccurate."                                                               << std::endl <<
           "  --iterations=N              Run at least N inference iterations (default = "               << defaultIterations << ")"  << std::endl <<
           "  --warmUp=N                  Run for N milliseconds to warmup before measuring performance (default = "
                                                                                                             << defaultWarmUp << ")"  << std::endl <<
@@ -2572,6 +2932,32 @@ void InferenceOptions::help(std::ostream& os)
           "                                  static = Allocate device memory based on max size across all profiles."                 << std::endl <<
           "                                  profile = Allocate device memory based on max size of the current profile."             << std::endl <<
           "                                  runtime = Allocate device memory based on the actual input shapes."                     << std::endl <<
+          "  --accuracyAlgorithm=spec    Specify the algorithm for computing the accuracy loss between actual"               << std::endl <<
+          "                              and reference outputs. Lower accuracy loss is better; 0.0 = perfect match."              << std::endl <<
+        R"(                              Algorithm: spec ::= "l0"|"l1"|"l2"|"lInf"|"cos")"                                        << std::endl <<
+          "                                  l0   = L0 algorithm. Fraction of elements outside tolerance:"                        << std::endl <<
+          "                                             accuracy loss = Sum( Bool("                                               << std::endl <<
+          "                                                 |f(input[i]) - refOutput[i]| > atol + rtol * |refOutput[i]| ) ) / N"  << std::endl <<
+          "                                         where atol, rtol are the absolute and relative tolerances."                   << std::endl <<
+          "                                  l1   = L1 algorithm. Mean absolute error:"                                           << std::endl <<
+          "                                             accuracy loss = Sum( |f(input[i]) - refOutput[i]| ) / N"                  << std::endl <<
+          "                                  l2   = L2 algorithm. Mean squared error:"                                            << std::endl <<
+          "                                             accuracy loss = Sum( |f(input[i]) - refOutput[i]| ^2 ) / N"               << std::endl <<
+          "                                  lInf = LInf algorithm. Maximum absolute error:"                                      << std::endl <<
+          "                                             accuracy loss = Max( |f(input[i]) - refOutput[i]| )"                      << std::endl <<
+          "                                  cos  = Cosine similarity algorithm. 1 - cosine similarity:"                          << std::endl <<
+          "                                             accuracy loss = 1 - Sum( f(input[i]) * refOutput[i] ) /"                  << std::endl <<
+          "                                                 ( sqrt(Sum( f(input[i]) ^2 )) * sqrt(Sum( refOutput[i] ^2 )) )"       << std::endl <<
+          "  --atol=number               Absolute tolerance for element-wise accuracy comparison (only valid for L0"              << std::endl <<
+          "                              algorithm). (Default = 1e-5)"                                                            << std::endl <<
+          "  --rtol=number               Relative tolerance for element-wise accuracy comparison (only valid for L0"              << std::endl <<
+          "                              algorithm). (Default = 1e-5)"                                                            << std::endl <<
+          "  --accuracyThreshold=number    Threshold for accepting the inference result. If the computed accuracy loss"             << std::endl <<
+          "                              exceeds this threshold, the result is considered inaccurate."                              << std::endl <<
+          "  --refPair=N                 Specify a reference pair index for grouping --loadInputs and --loadRefOutputs."             << std::endl <<
+          "                              Can be specified multiple times to validate accuracy across different input/output pairs."  << std::endl <<
+        R"(                              Example: --refPair=0 --loadInputs="x:x1.dat" --loadRefOutputs="y:y1.dat")"                  << std::endl <<
+        R"(                                       --refPair=1 --loadInputs="x:x2.dat" --loadRefOutputs="y:y2.dat")"                  << std::endl <<
           "  --saveDebugTensors          Specify list of names of tensors to turn on the debug state"                                << std::endl <<
           "                              and filename to save raw outputs to."                                                       << std::endl <<
           "                              These tensors must be specified as debug tensors during build time."                        << std::endl <<
@@ -2592,6 +2978,30 @@ void InferenceOptions::help(std::ostream& os)
           "                                  >=0B: The exact amount of streamable weights that reside on the GPU. Supports the "     << std::endl <<
           "                                       following base-2 suffixes: " << getAvailableUnitSuffixes() << "."                  << std::endl;
 
+    // clang-format on
+}
+
+void TuningOptions::help(std::ostream& os)
+{
+    // clang-format off
+    os << "=== Tuning Options ==="                                                                                       << std::endl <<
+          "  --tuneBuildRoutes=<expr>    Run an autotuning loop over a build-route expression. The expression"           << std::endl <<
+          "                              uses '-knob=[a|b|c]' for variable knobs and '-knob=fixed' for fixed"            << std::endl <<
+          "                              values; multiple knobs are space-separated. Each iteration forks a"             << std::endl <<
+          "                              child trtexec with --setBuildRoute=<route> for full reproducibility."           << std::endl <<
+          "  --tuneBuildRouteFile=<f>    Read the same expression from a file (newline-delimited tokens)."               << std::endl <<
+          "  --tuningSearch=<spec>       Search algorithm:"                                                              << std::endl <<
+          "                                  fast  = baseline + one-off variations per knob (default)"                  << std::endl <<
+          "                                  full  = enumerate every combination (Cartesian product)"                   << std::endl <<
+          "                                  mixed = phase 1 fast scan, then exhaustive over positive knobs"            << std::endl <<
+          "  --tuningCacheFile=<f>       JSON file to which per-iteration results are appended (best-config cache)."     << std::endl <<
+          "  --tuningTimeOut=<seconds>   Stop the loop after N elapsed seconds. -1 = no timeout (default)."              << std::endl <<
+          "  --saveAllEngines            Save the engine of every iteration as <engine>.iter<N>. Requires --saveEngine." << std::endl <<
+          "  --dryRun                    Enumerate the route list and exit without building any engine."                 << std::endl <<
+          "  --continue                  Resume an interrupted tuning loop from --tuningCacheFile."                      << std::endl <<
+          "  --helpBuildRoute[=<knob>]   Print the knob database as JSON and exit. Optionally filter by knob name."      << std::endl <<
+          "  --setBuildRoute=<route>     Single-shot: build with a specific route. Equivalent to a single tuning"        << std::endl <<
+          "                              iteration; used by the parent tuning loop when forking child workers."          << std::endl;
     // clang-format on
 }
 
@@ -2654,6 +3064,8 @@ void AllOptions::help(std::ostream& os, bool const enableStaticPlugins)
     BuildOptions::help(os);
     os << std::endl;
     InferenceOptions::help(os);
+    os << std::endl;
+    TuningOptions::help(os);
     os << std::endl;
     ReportingOptions::help(os);
     os << std::endl;

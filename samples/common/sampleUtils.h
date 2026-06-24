@@ -18,6 +18,7 @@
 #ifndef TRT_SAMPLE_UTILS_H
 #define TRT_SAMPLE_UTILS_H
 
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -29,11 +30,13 @@
 
 #include <cuda.h>
 #include <cuda_fp16.h>
+#include <optional>
 
 #include "NvInfer.h"
 
 #include "common.h"
 #include "logger.h"
+#include "logging.h"
 #include "sampleOptions.h"
 
 #define SMP_RETVAL_IF_FALSE(condition, msg, retval, err)                                                               \
@@ -155,6 +158,181 @@ std::string sanitizeRemoteAutoTuningConfig(std::string const& config);
 //! @return Vector of sanitized argument strings
 std::vector<std::string> sanitizeArgv(int32_t argc, char** argv);
 
-} // namespace sample
+//! Interface for accuracy validation
+//! This interface provides a way to calculate the accuracy gap between the actual and reference outputs.
+//! Since all the return value is a "loss value", the lower the return value, the better accuracy it is.
+template <typename T>
+class IAccuracyValidator
+{
+public:
+    virtual ~IAccuracyValidator() = default;
+    virtual double calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference) = 0;
+};
 
+//! L0 accuracy validator calculates element-wise accuracy using the PyTorch/NumPy allclose formula.
+//! An element matches if: |actual[i] - ref[i]| <= atol + rtol * |ref[i]|
+//! accuracy = (number of mismatching elements) / N
+//! Returns the mismatch ratio (0.0 means perfect match, 1.0 means all elements mismatch).
+template <typename T>
+class L0AccuracyValidator : public IAccuracyValidator<T>
+{
+public:
+    L0AccuracyValidator(double atol, double rtol)
+        : mAtol(atol)
+        , mRtol(rtol)
+    {
+    }
+
+    double calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference) override;
+
+private:
+    double mAtol;
+    double mRtol;
+};
+
+//! L1 accuracy validator calculates mean absolute error.
+//! accuracy = Sum(|actual[i] - ref[i]|) / N
+//! Returns the mean absolute error (0.0 means perfect match).
+template <typename T>
+class L1AccuracyValidator : public IAccuracyValidator<T>
+{
+public:
+    double calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference) override;
+};
+
+//! L2 accuracy validator calculates mean squared error.
+//! accuracy = Sum(|actual[i] - ref[i]|^2) / N
+//! Returns the mean squared error (0.0 means perfect match).
+template <typename T>
+class L2AccuracyValidator : public IAccuracyValidator<T>
+{
+public:
+    double calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference) override;
+};
+
+//! LInf accuracy validator calculates maximum absolute error.
+//! accuracy = Max(|actual[i] - ref[i]|)
+//! Returns the max absolute error (0.0 means perfect match).
+template <typename T>
+class LInfAccuracyValidator : public IAccuracyValidator<T>
+{
+public:
+    double calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference) override;
+};
+
+//! Cosine similarity validator calculates 1 - cosine_similarity.
+//! cosine_sim = Sum(actual[i] * ref[i]) / (sqrt(Sum(actual[i]^2)) * sqrt(Sum(ref[i]^2)))
+//! accuracy loss = 1 - cosine_sim
+//! Returns 1 - cosine_similarity (0.0 means perfect match).
+template <typename T>
+class CosineSimilarityValidator : public IAccuracyValidator<T>
+{
+public:
+    double calculateAccuracy(std::vector<T> const& actual, std::vector<T> const& reference) override;
+};
+
+//! \brief Get human-readable name string for an accuracy validation algorithm.
+//! \param[in] algorithm The accuracy validation algorithm enum value.
+//! \return Name string (e.g., "L0", "L1", "Cosine").
+inline std::string getAlgorithmName(AccuracyValidationAlgorithm algorithm)
+{
+    switch (algorithm)
+    {
+    case AccuracyValidationAlgorithm::kL0: return "L0";
+    case AccuracyValidationAlgorithm::kL1: return "L1";
+    case AccuracyValidationAlgorithm::kL2: return "L2";
+    case AccuracyValidationAlgorithm::kLInf: return "LInf";
+    case AccuracyValidationAlgorithm::kCosineSimilarity: return "Cosine";
+    default: return "Unknown";
+    }
+}
+
+//! \brief Factory function to create an accuracy validator based on algorithm type.
+//! \param[in] algorithm The accuracy validation algorithm to use.
+//! \param[in] atol Absolute tolerance (only used by L0 algorithm).
+//! \param[in] rtol Relative tolerance (only used by L0 algorithm).
+//! \return Unique pointer to the appropriate IAccuracyValidator implementation.
+template <typename T>
+std::unique_ptr<IAccuracyValidator<T>> createAccuracyValidator(
+    AccuracyValidationAlgorithm algorithm, float atol = 1e-5F, float rtol = 1e-5F)
+{
+    switch (algorithm)
+    {
+    case AccuracyValidationAlgorithm::kL0: return std::make_unique<L0AccuracyValidator<T>>(atol, rtol);
+    case AccuracyValidationAlgorithm::kL1: return std::make_unique<L1AccuracyValidator<T>>();
+    case AccuracyValidationAlgorithm::kL2: return std::make_unique<L2AccuracyValidator<T>>();
+    case AccuracyValidationAlgorithm::kLInf: return std::make_unique<LInfAccuracyValidator<T>>();
+    case AccuracyValidationAlgorithm::kCosineSimilarity: return std::make_unique<CosineSimilarityValidator<T>>();
+    }
+    ASSERT(false && "Unknown Accuracy Validation Algorithm");
+    return nullptr;
+}
+
+//! \brief Cheap argv pre-scan. Returns true if some `argv[i]` exactly equals `flag`
+//! or starts with `flag` + "=". Used by main() before option parsing to dispatch
+//! between trtexec single-run mode and the tuning loop.
+[[nodiscard]] bool peekArg(int32_t argc, char** argv, char const* flag);
+
+// ============================================================================
+// Tuning cache I/O (used by --tuneBuildRoutes / --continue).
+// Header is a single JSON object on line 1; iterations are JSON Lines after.
+// ============================================================================
+
+//! \brief Reconstruct a shell-safe command line string from argc/argv.
+std::string buildShellQuotedCmdLine(int32_t argc, char** argv);
+
+//! \brief Resolve a file path to an absolute path using POSIX realpath().
+//! Empty input or realpath() failure returns the input unchanged.
+std::string resolveAbsolutePath(std::string const& path);
+
+//! \brief Write the tuning cache file header (line 1, JSON object).
+void writeTuningCacheHeader(std::string const& cacheFilePath, AllOptions const& options, int32_t argc, char** argv,
+    std::string const& tunerVersion, std::string const& defaultBuildRoute);
+
+//! \brief Append one iteration line to the cache file. Fields: iter, build_route, crash,
+//! error_message, accuracy_loss, gpu_time. Crashed iterations have null accuracy/gpu.
+void writeTuningCacheIteration(std::string const& cacheFilePath, uint64_t iter, std::string const& buildRoute,
+    bool crashed, std::string const& errorMessage, std::unordered_map<std::string, double> const& accuracyLossValues,
+    double gpuTimeMs);
+
+//! \struct TuningCacheHeader
+//! \brief Parsed contents of the cache header, returned by readTuningCacheHeader().
+struct TuningCacheHeader
+{
+    std::vector<std::string> argv;          //!< Original command line with file paths absolute.
+    std::string tuningExpr;                  //!< Expanded --tuneBuildRoutes expression.
+    int64_t completedIterations{0};          //!< Number of iteration lines after the header.
+};
+
+//! \brief Read and parse the cache file's header line + count completed iteration lines.
+std::optional<TuningCacheHeader> readTuningCacheHeader(std::string const& cacheFilePath);
+
+//! \brief Rebuild argv for a --continue resume. argv[0] is replaced with currentExePath;
+//! --tuneBuildRoutes is set to the cached expanded expression; --continue and
+//! --tuningCacheFile are stripped from the stored argv and the cache path is re-appended.
+std::vector<std::string> reconstructArgvFromCacheHeader(
+    TuningCacheHeader const& header, std::string const& currentExePath, std::string const& cacheFilePath);
+
+//! \struct CachedIterationResult
+//! \brief Minimal per-iteration fields from the cache, used to reconstruct mixed-mode positive knobs.
+struct CachedIterationResult
+{
+    bool crashed{true};
+    double gpuTimeMs{0.0};
+};
+
+//! \brief Read up to maxIterations iteration lines from the cache and extract (crashed, gpu_time).
+std::vector<CachedIterationResult> readCachedIterationResults(std::string const& cacheFilePath, int64_t maxIterations);
+
+namespace tuningCache
+{
+constexpr char const* kIter = "iter";
+constexpr char const* kBuildRoute = "build_route";
+constexpr char const* kCrash = "crash";
+constexpr char const* kErrorMessage = "error_message";
+constexpr char const* kAccuracyLoss = "accuracy_loss";
+constexpr char const* kGpuTime = "gpu_time";
+} // namespace tuningCache
+
+} // namespace sample
 #endif // TRT_SAMPLE_UTILS_H

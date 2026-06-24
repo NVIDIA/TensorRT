@@ -79,9 +79,6 @@ public:
     SafetyPluginArguments pluginLibraries;
     std::unordered_map<std::string, std::string>
         loadInputs; //!< Map of tensor names to file paths for loading custom input data
-    //!< Directory to write output tensors as <dir>/<tensorName>.bin after the final iteration.
-    //!< Empty = disabled.
-    std::string dumpOutputDir{};
 };
 
 //!
@@ -654,15 +651,6 @@ bool parseSafeExecArgs(SafeExecArgs& args, int32_t argc, char* argv[])
                 return false;
             }
         }
-        else if (auto const value = loggedParseString(arg, "dumpOutputDir"))
-        {
-            if (value->empty())
-            {
-                safeLogError(*gSafeRecorder, "--dumpOutputDir requires a non-empty directory path.");
-                return false;
-            }
-            args.dumpOutputDir = std::move(*value);
-        }
         else
         {
             safeLogError(*gSafeRecorder, "Invalid Argument: " + arg);
@@ -702,11 +690,6 @@ General optional params:
                      Input values spec ::= Ival[\",\"spec]
                                   Ival ::= name\":\"file
                      Example: --loadInputs=\"input1\":data1.bin,\"input2\":data2.bin
-  --dumpOutputDir=DIR
-                     Write each output tensor's raw bytes to DIR/<tensorName>.bin
-                     after the final inference iteration. DIR must already exist.
-                     Format is bit-exact bytes, suitable for round-tripping via
-                     --loadInputs on a subsequent run. (default = no dump)
 
 Perf measurement params:
   --device=N         Set cuda device to N (default = )"
@@ -952,120 +935,6 @@ ScopedSafeMemory setTensorBuffer(nvinfer2::safe::ITRTGraph* graph, nvinfer2::saf
     return tensorBuffer;
 }
 
-//!
-//! \brief Write each output tensor's raw bytes to <dumpDir>/<tensorName>.bin.
-//!
-//! Filters by ioMode == kOUTPUT; inputs and constants are skipped. For GPU-placed
-//! tensors, performs a synchronous D2H copy via a temporary pinned host buffer
-//! using the safety-approved stream-create / async-copy / sync / destroy pattern.
-//! CPU-placed tensors are written directly. Per-tensor failures are logged and
-//! the function continues with the remaining outputs; the return value is true
-//! iff every output wrote cleanly.
-//!
-//! \param[in] dumpDir Directory (must already exist) to write output files into
-//! \param[in] tensorNames Parallel vector of I/O tensor names
-//! \param[in] tensorDescs Parallel vector of I/O tensor descriptors
-//! \param[in] buffers Parallel vector of allocated I/O tensor buffers
-//! \param[in] recorder The safe recorder for error logging and API calls
-//!
-//! \return True if all output tensors were written successfully, false otherwise
-//!
-[[nodiscard]] bool dumpOutputTensors(std::string const& dumpDir, std::vector<std::string> const& tensorNames,
-    std::vector<nvinfer2::safe::TensorDescriptor> const& tensorDescs, std::vector<ScopedSafeMemory> const& buffers,
-    nvinfer2::safe::ISafeRecorder& recorder)
-{
-    SAFE_ASSERT(tensorNames.size() == tensorDescs.size());
-    SAFE_ASSERT(tensorNames.size() == buffers.size());
-
-    bool allOk{true};
-    int32_t nbWritten{0};
-
-    cudaStream_t stream;
-    CUDA_CALL(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), recorder);
-    for (size_t i = 0; i < tensorNames.size(); ++i)
-    {
-        auto const& desc = tensorDescs[i];
-        if (desc.ioMode != nvinfer2::safe::TensorIOMode::kOUTPUT)
-        {
-            continue;
-        }
-        std::string const& name = tensorNames[i];
-
-        uint64_t const expectedSize = std::max(
-            static_cast<uint64_t>(volume(desc.shape, desc.stride, desc.bytesPerComponent)), desc.sizeInBytes);
-        if (expectedSize == 0)
-        {
-            safeLogInfo(recorder, "Skipping dump for empty output tensor: " + name);
-            continue;
-        }
-
-        std::string const path = dumpDir + "/" + samplesSafeCommon::genFilenameSafeString(name) + ".bin";
-        bool const onGpu = desc.memPlacement == nvinfer2::safe::MemoryPlacement::kGPU
-            || desc.memPlacement == nvinfer2::safe::MemoryPlacement::kNONE;
-
-        // Stage GPU data into a pinned host buffer; CPU data is written directly.
-        // hostBuf is only used in the GPU branch but is declared here so srcPtr stays valid through the file write.
-        ScopedSafeMemory hostBuf(onGpu ? expectedSize : 0, kDEFAULT_ALIGNMENT,
-            nvinfer2::safe::MemoryPlacement::kCPU_PINNED, nvinfer2::safe::MemoryUsage::kIOTENSOR, recorder);
-        void const* srcPtr{nullptr};
-
-        if (onGpu)
-        {
-            if (!hostBuf)
-            {
-                safeLogError(recorder, "Failed to allocate host buffer for output tensor: " + name);
-                allOk = false;
-                continue;
-            }
-
-            CUDA_CALL(cudaMemcpyAsync(hostBuf.get(), buffers[i].get(), expectedSize, cudaMemcpyDeviceToHost, stream),
-                recorder);
-            CUDA_CALL(cudaStreamSynchronize(stream), recorder);
-            srcPtr = hostBuf.get();
-        }
-        else if (desc.memPlacement == nvinfer2::safe::MemoryPlacement::kCPU)
-        {
-            srcPtr = buffers[i].get();
-        }
-        else
-        {
-            safeLogError(recorder, "Invalid memory placement for output tensor: " + name);
-            allOk = false;
-            continue;
-        }
-
-        std::ofstream file(path, std::ios::out | std::ios::binary | std::ios::trunc);
-        if (!file.is_open())
-        {
-            safeLogError(recorder, "Cannot open output file: " + path);
-            allOk = false;
-            continue;
-        }
-        file.write(reinterpret_cast<char const*>(srcPtr), static_cast<std::streamsize>(expectedSize));
-        if (!file.good())
-        {
-            std::ostringstream msg;
-            msg << "Failed to write " << expectedSize << " bytes to " << path;
-            safeLogError(recorder, msg.str());
-            allOk = false;
-            file.close();
-            continue;
-        }
-        file.close();
-
-        std::ostringstream msg;
-        msg << "Dumped output tensor " << name << " (" << expectedSize << " bytes) to " << path;
-        safeLogInfo(recorder, msg.str());
-        ++nbWritten;
-    }
-
-    CUDA_CALL(cudaStreamDestroy(stream), recorder);
-    std::ostringstream summary;
-    summary << "Output dump complete: " << nbWritten << " tensor(s) written to " << dumpDir;
-    safeLogInfo(recorder, summary.str());
-    return allOk;
-}
-
 //! \brief Function to CUDA Graph capture
 bool graphCapture(cudaStream_t stream, TrtCudaGraphSafe& cudaGraph, nvinfer2::safe::ITRTGraph* graph,
     nvinfer2::safe::ISafeRecorder& recorder)
@@ -1116,38 +985,22 @@ bool graphCapture(cudaStream_t stream, TrtCudaGraphSafe& cudaGraph, nvinfer2::sa
 //! \param[in] graph Pointer to the TRT graph to execute
 //! \param[in] recorder Pointer to the safe recorder for error logging and API calls
 //! \param[in] isProfileRun Whether this is a profiling run or regular inference
-//! \param[in] threadIdx Index of this worker thread (only thread 0 dumps outputs when --dumpOutputDir is set)
 //!
 //! \return True if execution completed successfully, false otherwise
 //!
 bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::safe::ISafeRecorder* recorder,
-    bool isProfileRun, int32_t threadIdx)
+    bool isProfileRun)
 {
     int64_t nbIOs{};
     SAFE_API_CALL(graph->getNbIOTensors(nbIOs), *recorder);
     std::vector<ScopedSafeMemory> buffers;
     buffers.reserve(nbIOs);
-    std::vector<std::string> tensorNames;
-    tensorNames.reserve(nbIOs);
-    std::vector<nvinfer2::safe::TensorDescriptor> tensorDescs;
-    tensorDescs.reserve(nbIOs);
     // Set input tensor values
     for (int64_t i = 0; i < nbIOs; ++i)
     {
         char const* tensor;
         SAFE_API_CALL(graph->getIOTensorName(tensor, i), *recorder);
-        nvinfer2::safe::TensorDescriptor desc;
-        SAFE_API_CALL(graph->getIOTensorDescriptor(desc, tensor), *recorder);
-        tensorNames.emplace_back(tensor);
-        tensorDescs.emplace_back(desc);
         buffers.emplace_back(setTensorBuffer(graph, *recorder, tensor, args.loadInputs));
-    }
-
-    bool const dumpOutputs = !isProfileRun && !args.dumpOutputDir.empty() && threadIdx == 0;
-    if (!isProfileRun && !args.dumpOutputDir.empty() && args.threads > 1 && threadIdx == 0)
-    {
-        safeLogInfo(*recorder,
-            "--dumpOutputDir: dumping outputs only on thread 0 (threads=" + std::to_string(args.threads) + ").");
     }
     cudaEvent_t inputConsumedEvent;
     cudaEventCreate(&inputConsumedEvent);
@@ -1350,17 +1203,6 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
         }
     }
 
-    bool taskOk{true};
-    if (dumpOutputs)
-    {
-        CUDA_CALL(cudaStreamSynchronize(stream), *recorder);
-        if (!dumpOutputTensors(args.dumpOutputDir, tensorNames, tensorDescs, buffers, *recorder))
-        {
-            safeLogError(*recorder, "Output dump completed with errors.");
-            taskOk = false;
-        }
-    }
-
     // Destroy cuda events
     CUDA_CALL(cudaEventDestroy(startEvent), *recorder);
     CUDA_CALL(cudaEventDestroy(endEvent), *recorder);
@@ -1372,7 +1214,7 @@ bool task(SafeExecArgs const& args, nvinfer2::safe::ITRTGraph* graph, nvinfer2::
     CUDA_CALL(cudaStreamDestroy(stream), *recorder);
 
     // Buffers are automatically freed by ScopedSafeMemory destructors
-    return taskOk;
+    return true;
 }
 
 //!
@@ -1460,7 +1302,7 @@ bool doInference(SafeExecArgs const& args, std::chrono::high_resolution_clock::t
     {
         // launch thread async
         futureResults.emplace_back(
-            std::async(std::launch::async, task, args, graphs[k], recorders[k].get(), isProfileRun, k));
+            std::async(std::launch::async, task, args, graphs[k], recorders[k].get(), isProfileRun));
     }
 
     for (auto& future : futureResults)

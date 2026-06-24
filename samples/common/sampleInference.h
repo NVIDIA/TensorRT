@@ -175,9 +175,21 @@ struct InferenceEnvironmentBase
         deviceMemory; //< Device memory used for inference when the allocation strategy is not static.
     std::unique_ptr<DebugTensorWriter> listener;
     bool error{false};
+    bool accuracyFailed{false};                                 //< Set to true if any tensor accuracy exceeds threshold
+    std::unordered_map<std::string, double> accuracyLossValues; //< Per-tensor accuracy values from the last validation
 
     bool safe{false};
     std::string cmdline;
+
+#if !defined(_WIN32)
+    //! Reference outputs for accuracy validation (tuner feature, Linux enterprise/auto-only).
+    //! Map from tensor name to host buffer containing reference data.
+    //! Guarded because MSVC cannot instantiate vector<unordered_map<string, unique_ptr<T>>>,
+    //! and the tuner does not run on Windows or RTX/winjit.
+    using RefOutputMap = std::unordered_map<std::string, std::unique_ptr<TrtHostBuffer>>;
+    //! Vector of reference output maps, one for each refPair.
+    std::vector<RefOutputMap> refOutputsAll;
+#endif // !defined(_WIN32) && !TRT_WINML
 };
 
 struct InferenceEnvironmentStd : public InferenceEnvironmentBase
@@ -260,6 +272,24 @@ bool timeDeserialize(InferenceEnvironmentBase& iEnv, SystemOptions const& sys);
 bool runInference(InferenceOptions const& inference, InferenceEnvironmentBase& iEnv, int32_t device,
     std::vector<InferenceTrace>& trace, ReportingOptions const& reporting);
 
+#if !defined(_WIN32)
+//!
+//! \brief Load reference outputs from files into InferenceEnvironmentBase::refOutputsAll.
+//! \param pairIndex Index of the refPair to use (default 0 for backward compatibility).
+//!
+void loadRefOutputs(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference,
+    nvinfer1::IExecutionContext const& context, int64_t pairIndex = 0);
+
+#if ENABLE_UNIFIED_BUILDER
+//!
+//! \brief Load reference outputs from files for safe inference.
+//! \param pairIndex Index of the refPair to use (default 0 for backward compatibility).
+//!
+void loadRefOutputs(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference,
+    nvinfer2::safe::ITRTGraph const& graph, int64_t pairIndex = 0);
+#endif
+#endif // !defined(_WIN32) && !TRT_WINML
+
 //!
 //! \brief Get layer information of the engine.
 //!
@@ -335,6 +365,28 @@ public:
         return getBindings(isInput);
     }
 
+    //! Fill input bindings from a name-to-file map.
+    //!
+    //! \param inputMap A map where:
+    //!   - key: tensor name (e.g., "input", "input:0")
+    //!   - value: file path containing the tensor data to load (e.g., "input_0.dat")
+    //!
+    //! For each entry in the map, looks up the tensor name in the input bindings
+    //! and fills the binding buffer with data from the specified file.
+    //! Entries with tensor names not found in input bindings are silently skipped.
+    void fillInputsFromMap(std::unordered_map<std::string, std::string> const& inputMap)
+    {
+        auto inputBindings = getInputBindings();
+        for (auto const& item : inputMap)
+        {
+            auto it = inputBindings.find(item.first);
+            if (it != inputBindings.end())
+            {
+                fill(it->second, item.second);
+            }
+        }
+    }
+
     std::unordered_map<std::string, int> getOutputBindings() const
     {
         auto isOutput = [](Binding const& b) { return !b.isInput; };
@@ -348,6 +400,11 @@ public:
     }
 
     std::unordered_map<std::string, int> getBindings(std::function<bool(Binding const&)> predicate) const;
+
+    Binding const& getBinding(int32_t index) const
+    {
+        return mBindings.at(index);
+    }
 
 protected:
     std::unordered_map<std::string, int32_t> mNames;

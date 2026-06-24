@@ -23,7 +23,6 @@
 #include "NvInferSafeRuntime.h"
 #include "cuda_runtime.h"
 #include <algorithm>
-#include <cctype>
 #include <cerrno>
 #include <cmath>
 #include <cstdlib>
@@ -38,7 +37,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -628,34 +626,6 @@ inline bool applyCpuOnlyMode()
                     }
                 }
             }};
-}
-
-[[nodiscard]] inline std::string genFilenameSafeString(std::string_view s)
-{
-    std::string_view const kALLOWED{"._-,"};
-    constexpr size_t kMAX_FILENAME_LENGTH = 150; // Leave some margin due to Windows path length limitation
-    constexpr size_t kELLIPSIS_LENGTH = 3;       // Length of "..."
-
-    auto processChar = [&kALLOWED](char c) {
-        return std::isalnum(static_cast<unsigned char>(c)) || kALLOWED.find(c) != std::string_view::npos ? c : '_';
-    };
-
-    std::string res;
-    if (s.length() <= kMAX_FILENAME_LENGTH)
-    {
-        res.reserve(s.size());
-        std::transform(s.begin(), s.end(), std::back_inserter(res), processChar);
-        return res;
-    }
-
-    res.reserve(kMAX_FILENAME_LENGTH);
-    size_t const halfLength = (kMAX_FILENAME_LENGTH - kELLIPSIS_LENGTH) / 2;
-
-    std::transform(s.begin(), s.begin() + halfLength, std::back_inserter(res), processChar);
-    res += "...";
-    std::transform(s.end() - halfLength, s.end(), std::back_inserter(res), processChar);
-
-    return res;
 }
 
 } // namespace samplesSafeCommon

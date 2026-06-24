@@ -51,19 +51,21 @@ LogStream<ILogger::Severity::kINFO> gLogInfo;
 LogStream<ILogger::Severity::kVERBOSE> gLogVerbose;
 
 // break-pointable
-void throwCudaError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
+void throwCudaError(
+    char const* file, char const* function, int32_t line, int32_t status, std::optional<std::string> msg)
 {
-    CudaError error(file, function, line, status, msg);
+    CudaError error(file, function, line, status, std::move(msg));
     error.log(gLogError);
     // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;
 }
 
 // break-pointable
-void throwPluginError(char const* file, char const* function, int32_t line, int32_t status, char const* msg)
+void throwPluginError(
+    char const* file, char const* function, int32_t line, int32_t status, std::optional<std::string> msg)
 {
-    PluginError error(file, function, line, status, msg);
-    reportValidationFailure(msg, file, line);
+    reportValidationFailure(msg ? msg->c_str() : "", file, line);
+    PluginError error(file, function, line, status, std::move(msg));
     // NOLINTNEXTLINE(misc-throw-by-value-catch-by-reference)
     throw error;
 }
@@ -112,10 +114,10 @@ void reportAssertion(char const* msg, char const* file, int32_t line)
 
 void TRTException::log(std::ostream& logStream) const
 {
-    logStream << file << " (" << line << ") - " << name << " Error in " << function << ": " << status;
-    if (message != nullptr)
+    logStream << mFile << " (" << mLine << ") - " << mName << " Error in " << mFunction << ": " << mStatus;
+    if (!mMessage.empty())
     {
-        logStream << " (" << message << ")";
+        logStream << " (" << mMessage << ")";
     }
     logStream << std::endl;
 }

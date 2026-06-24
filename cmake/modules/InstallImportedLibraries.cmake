@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -119,7 +119,7 @@ function(installImportedLibraries)
         endif()
 
         get_target_property(target_type ${target_name} TYPE)
-        if(NOT target_type MATCHES "SHARED_LIBRARY|UNKNOWN_LIBRARY")
+        if(NOT target_type MATCHES "MODULE_LIBRARY|SHARED_LIBRARY|UNKNOWN_LIBRARY")
             message(FATAL_ERROR "Target ${target_name} is not a shared library (type: ${target_type})")
         endif()
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (c) 1993-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-FileCopyrightText: Copyright (c) 1993-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,15 +18,9 @@
 #ifndef TRT_CUB_CCCL_COMPAT_H
 #define TRT_CUB_CCCL_COMPAT_H
 
-#include <cuda.h>
-
-// Include CUB header
 #include <cub/cub.cuh>
-
-#if CUDA_VERSION >= 13000
-// Include CCCL headers for CUDA 13.0+
+#include <cuda.h>
 #include <cuda/std/functional>
-#endif
 
 namespace compat
 {
@@ -34,31 +28,19 @@ namespace compat
 // Min operation compatibility wrapper
 __host__ __device__ __forceinline__ auto getCudaMinOp()
 {
-#if CUDA_VERSION >= 13000
     return cuda::minimum();
-#else
-    return cub::Min();
-#endif
 }
 
 // Max operation compatibility wrapper
 __host__ __device__ __forceinline__ auto getCudaMaxOp()
 {
-#if CUDA_VERSION >= 13000
     return cuda::maximum();
-#else
-    return cub::Max();
-#endif
 }
 
 // Sum operation compatibility wrapper
 __host__ __device__ __forceinline__ auto getCudaSumOp()
 {
-#if CUDA_VERSION >= 13000
     return cuda::std::plus<>();
-#else
-    return cub::Sum();
-#endif
 }
 
 } // namespace compat

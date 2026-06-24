@@ -15,11 +15,17 @@
 # limitations under the License.
 #
 
+if(NOT NLOHMANN_JSON_INCLUDE_DIRS)
+    include(FetchNlohmannJson)
+endif()
+
 add_library(trt_samples_common STATIC
     argsParser.h
     BatchStream.h
     bfloat16.cpp
     bfloat16.h
+    bigInt.cpp
+    bigInt.h
     buffers.h
     common.cpp
     common.h
@@ -29,6 +35,8 @@ add_library(trt_samples_common STATIC
     getOptions.cpp
     getOptions.h
     getoptWin.h
+    globalTimerKernel.cu
+    globalTimerKernel.h
     half.h
     logger.cpp
     logger.h
@@ -46,6 +54,8 @@ add_library(trt_samples_common STATIC
     sampleOptions.h
     sampleReporting.cpp
     sampleReporting.h
+    sampleTuning.cpp
+    sampleTuning.h
     sampleUtils.cpp
     sampleUtils.h
     safeCommon.h
@@ -83,6 +93,7 @@ endif() # TRT_BUILD_TESTING
 
 target_include_directories(trt_samples_common PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}
+    ${NLOHMANN_JSON_INCLUDE_DIRS}
 )
 
 target_link_libraries(trt_samples_common PUBLIC

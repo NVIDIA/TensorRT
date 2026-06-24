@@ -11,6 +11,15 @@
     - [Example 4: Collecting and printing a timing trace](#example-4-collecting-and-printing-a-timing-trace)
     - [Example 5: Tune throughput with multi-streaming](#example-5-tune-throughput-with-multi-streaming)
     - [Example 6: Create a strongly typed plan file](#example-6-create-a-strongly-typed-plan-file)
+    - [Example 7: Global performance tuner](#example-7-global-performance-tuner)
+      - [7.1: Discovering tunable knobs](#71-discovering-tunable-knobs)
+      - [7.2: Building one specific configuration](#72-building-one-specific-configuration)
+      - [7.3: Sweeping a configuration space](#73-sweeping-a-configuration-space)
+      - [7.4: Choosing a search algorithm](#74-choosing-a-search-algorithm)
+      - [7.5: Accuracy-aware tuning](#75-accuracy-aware-tuning)
+      - [7.6: The tuning cache (and resuming)](#76-the-tuning-cache-and-resuming)
+      - [7.7: Other useful flags](#77-other-useful-flags)
+      - [7.8: Caveats of tuning](#78-caveats-of-tuning)
   - [Tool command line arguments](#tool-command-line-arguments)
   - [Additional resources](#additional-resources)
 - [License](#license)
@@ -165,6 +174,270 @@ and operator type specification.  Use of specific builder precision flags such a
 ```
 ./trtexec --onnx=model.onnx --stronglyTyped
 ```
+
+### Example 7: Global performance tuner
+
+TensorRT exposes a number of internal builder knobs — heuristics, layer
+selections, codegen toggles — that change how an engine is built. A specific
+combination of values for these knobs is called a **build route**. Different
+routes produce engines with different performance and (occasionally) different
+numerical accuracy on the same model.
+
+`trtexec` can drive a tuning loop that sweeps a set of build routes,
+benchmarks each, optionally validates accuracy against reference outputs, and
+records the best configuration. Any single iteration in a sweep is fully
+reproducible by re-running `trtexec` with `--setBuildRoute=<route>` and the
+same model — see [7.2](#72-building-one-specific-configuration).
+
+Tuning is not supported on Windows.
+
+This functionality is exposed through a small group of related flags. The
+sub-sections below cover each in turn.
+
+#### 7.1: Discovering tunable knobs
+
+`--helpBuildRoute` prints the knob database as JSON. Each entry lists the
+knob name, the allowed values, and a default. This is the source of truth
+for what you can put inside a `--setBuildRoute` or `--tuneBuildRoutes`
+expression.
+
+```
+./trtexec --helpBuildRoute
+```
+
+Filter to a single knob — the leading dash is optional:
+
+```
+./trtexec --helpBuildRoute=match_ragged_mha
+./trtexec --helpBuildRoute=-match_ragged_mha
+```
+
+If the named knob does not exist, `trtexec` exits with a non-zero status
+and a message pointing to the unfiltered listing. `--helpBuildRoute` does
+not require `--onnx` and ignores other build flags; `--help` takes
+precedence when both are passed.
+
+#### 7.2: Building one specific configuration
+
+`--setBuildRoute=<route>` builds a single engine with a chosen route. The
+route is a space-separated list of `-knob=value` tokens (note the leading
+dash on each knob):
+
+```
+./trtexec --onnx=model.onnx \
+          --setBuildRoute="-match_ragged_mha=on -copy_ppg=off" \
+          --saveEngine=model.plan
+```
+
+This is the easiest way to reproduce or debug a specific result from a
+tuning sweep: take the route reported in the sweep's log for an iteration
+of interest, plug it into `--setBuildRoute`, and run again.
+
+#### 7.3: Sweeping a configuration space
+
+`--tuneBuildRoutes=<expr>` runs an autotuning loop over an expression that
+describes a set of routes. The expression uses two forms:
+
+- `-knob=[a|b|c]` — variable knob; the loop iterates over each listed value.
+- `-knob=fixed`   — fixed value pinned across every iteration.
+
+Multiple tokens are space-separated. The expression is typically quoted to
+protect the brackets from the shell. `--saveEngine=<path>` is optional —
+without it the sweep still benchmarks every route but no engine is written
+to disk. `--saveEngine` becomes required when `--loadRefOutputs` is also
+set (see [7.5](#75-accuracy-aware-tuning)).
+
+```
+./trtexec --onnx=model.onnx \
+          --tuneBuildRoutes="-match_ragged_mha=[on|off] -copy_ppg=[on|off]" \
+          --saveEngine=best.plan
+```
+
+For long expressions, put them in a file (one token per line) and pass the
+file with `--tuneBuildRouteFile`:
+
+```
+$ cat routes.txt
+-match_ragged_mha=[on|off]
+-copy_ppg=[on|off]
+
+$ ./trtexec --onnx=model.onnx --tuneBuildRouteFile=routes.txt --saveEngine=best.plan
+```
+
+`--tuneBuildRoutes` and `--tuneBuildRouteFile` are mutually exclusive.
+
+#### 7.4: Choosing a search algorithm
+
+`--tuningSearch=<spec>` controls how the expression is expanded into the
+list of routes that the loop will try:
+
+| Value   | Behavior |
+|---------|----------|
+| `fast`  | (default) baseline run with each knob at its default, plus one-off variations that change one knob at a time. Linear in the number of variable knobs. |
+| `full`  | Cartesian product over every variable knob. Exponential — use for small expressions. |
+| `mixed` | A `fast` scan first to identify which knob values improve performance, then a full sweep over only those "positive" knobs. A pragmatic middle ground for larger spaces. |
+
+To make the difference concrete, take an expression with three binary
+knobs `-A=[on|off] -B=[on|off] -C=[on|off]` and defaults `A=on, B=on, C=on`:
+
+- **`full`** generates **8 routes** — every combination of A × B × C.
+- **`fast`** generates **4 routes** — the baseline `A=on B=on C=on`, plus
+  three one-off variations that flip exactly one knob at a time
+  (`A=off B=on C=on`, `A=on B=off C=on`, `A=on B=on C=off`).
+- **`mixed`** runs the 4 `fast` routes first; whichever knobs improved
+  performance over the baseline are then explored exhaustively in a
+  second pass (e.g. if A and C improved, phase 2 sweeps the 4 routes of
+  A × C with B pinned to its default).
+
+`--dryRun` enumerates the route list and exits without building any engine —
+useful for sanity-checking a large expression before paying for it.
+`--dryRun` cannot be combined with `--tuningSearch=mixed`.
+
+```
+./trtexec --onnx=model.onnx \
+          --tuneBuildRoutes="-match_ragged_mha=[on|off] -copy_ppg=[on|off]" \
+          --tuningSearch=full --dryRun
+```
+
+#### 7.5: Accuracy-aware tuning
+
+The tuning loop can validate each iteration's output against a reference
+(typically a CPU/FP32 capture from another framework) and discard any engine
+that drifts beyond a threshold. Combine `--loadInputs`, `--loadRefOutputs`,
+and `--accuracyThreshold` with the tuning flags. When `--loadRefOutputs` is
+present, `--accuracyThreshold` is required.
+
+```
+./trtexec --onnx=model.onnx \
+          --tuneBuildRoutes="-match_ragged_mha=[on|off]" \
+          --loadInputs=input:input.bin \
+          --loadRefOutputs=output:ref_output.bin \
+          --accuracyThreshold=0.5 \
+          --saveEngine=best.plan
+```
+
+**Multiple input/output pairs.** Tuning often needs to be validated across
+several inputs (e.g. different batch sizes or representative samples).
+Group each `(input, reference-output)` pair behind `--refPair=N` and pass
+multiple pairs; every iteration is validated against all of them.
+
+```
+./trtexec --onnx=model.onnx \
+          --tuneBuildRoutes="-match_ragged_mha=[on|off]" \
+          --refPair=0 --loadInputs=input:in0.bin --loadRefOutputs=output:ref0.bin \
+          --refPair=1 --loadInputs=input:in1.bin --loadRefOutputs=output:ref1.bin \
+          --accuracyThreshold=0.5 --saveEngine=best.plan
+```
+
+**Choosing the loss metric.** `--accuracyAlgorithm=<spec>` selects how
+the loss is computed per output tensor. All five metrics are non-negative
+(lower is better; `0.0` is a perfect match):
+
+| Spec   | Metric |
+|--------|--------|
+| `l0`   | (default) fraction of elements outside `atol + rtol · abs(ref)`; tweak with `--atol` / `--rtol`. |
+| `l1`   | mean absolute error. |
+| `l2`   | mean squared error. |
+| `lInf` | maximum absolute error. |
+| `cos`  | `1 − cosine_similarity(actual, reference)`. |
+
+```
+./trtexec --onnx=model.onnx \
+          --tuneBuildRoutes="-match_ragged_mha=[on|off]" \
+          --loadInputs=input:input.bin --loadRefOutputs=output:ref.bin \
+          --accuracyAlgorithm=l2 --accuracyThreshold=0.01 \
+          --saveEngine=best.plan
+```
+
+Iterations that fail the accuracy check are recorded in the cache but are
+excluded from "best engine" selection.
+
+#### 7.6: The tuning cache (and resuming)
+
+`--tuningCacheFile=<path>` writes a JSON record of the sweep: one line
+describing the run, followed by one line per completed iteration with the
+build route, GPU time, and per-output accuracy loss. This file is both a
+human-readable record of the sweep and the input for resume.
+
+```
+./trtexec --onnx=model.onnx \
+          --tuneBuildRoutes="-match_ragged_mha=[on|off] -copy_ppg=[on|off]" \
+          --tuningCacheFile=tune.jsonl --saveEngine=best.plan
+```
+
+If the run is interrupted (Ctrl-C, OOM, timeout), resume it with:
+
+```
+./trtexec --continue --tuningCacheFile=tune.jsonl
+```
+
+`--continue` accepts **only** `--tuningCacheFile=<path>` — passing
+`--onnx`, `--tuneBuildRoutes`, `--accuracyThreshold`, or any other flag
+alongside it is rejected. The cache file carries everything needed to
+continue the original run, and existing iteration results in it are
+kept. The sweep picks up at the next iteration after the last one
+already recorded.
+
+#### 7.7: Other useful flags
+
+- `--tuningTimeOut=<seconds>` — stop the loop after N elapsed seconds (the
+  current iteration finishes first). `-1` (default) disables the timeout.
+  Useful for capping a large `full` sweep at a deadline.
+- `--saveAllEngines` — in addition to the best engine at `--saveEngine=<p>`,
+  write every iteration's engine to `<p>.iter<N>`. Requires `--saveEngine`.
+  Disk-heavy; intended for debugging accuracy regressions across iterations.
+- `--setBuildRoute=<route>` — see [7.2](#72-building-one-specific-configuration).
+  Useful for replaying any single iteration from a sweep by hand.
+
+For the complete list with one-line descriptions, run `./trtexec --help`
+and look at the **Build Route Tuning Options** section.
+
+#### 7.8: Caveats of tuning
+
+A few things to keep in mind when relying on a tuning result in production:
+
+- **Improvement is opportunistic.** The default build route may already
+  be the fastest one for the (model, hardware) combination you're tuning
+  on. Treat any speedup as a bonus, not an expected outcome.
+
+- **An explicit knob value may be overridden during compilation.** Even
+  when you pin a knob with `--setBuildRoute=<route>`, the compiler is
+  free to change that value internally if the network requires it. The
+  engine that `--saveEngine` records is the source of truth — not the
+  route string. Ship the saved engine when exact behavior matters.
+
+- **Re-running a route doesn't reproduce engine bytes.** Engine builds
+  are not bit-deterministic; kernel timings vary, the builder breaks
+  ties accordingly, and the serialized engine reflects those picks.
+  Re-running with the same `--setBuildRoute` on the same model and the
+  same machine produces an engine with the same knob choices, but the
+  bytes may differ slightly. Again — ship the saved engine, not the
+  route string, when you need the exact engine that won the sweep.
+
+- **Tuner version matters.** Across TensorRT releases, the set of
+  tunable knobs and their default values can change. A route or cache
+  produced by one version may reference knobs that no longer exist in
+  another, and even the default route is not stable across versions.
+
+- **Pick a sensible `--accuracyThreshold`.** A threshold set too tight
+  will reject every iteration, and the sweep will report no winner. If
+  you don't have a prior calibration, start loose and ratchet down.
+
+- **Results are model-specific.** The optimal route depends on the
+  exact ONNX. A different model — or even the same model rebuilt with
+  different shapes or precision flags — invalidates a previously-saved
+  result.
+
+- **Results are hardware-specific.** The same model tuned on different
+  GPU SKUs can pick different "best" routes. Re-tune when you move to a
+  different target.
+
+- **Re-tune after TensorRT / tuner upgrades.** A previously-tuned
+  non-default build route is **not** guaranteed to keep its advantage
+  after an upgrade — and may even regress relative to the new default.
+  Re-tune whenever the tuner version or TensorRT version changes. Only
+  performance regressions on the **default** build route are tracked as
+  TensorRT performance bugs; non-default routes are best-effort.
 
 ## Tool command line arguments
 

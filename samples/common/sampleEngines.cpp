@@ -895,6 +895,16 @@ bool modelToBuildEnv(
     SMP_RETVAL_IF_FALSE(env.builder != nullptr, "Builder creation failed", false, err);
     env.builderConfig.reset(env.builder->createBuilderConfig());
     SMP_RETVAL_IF_FALSE(env.builderConfig != nullptr, "Builder config creation failed", false, err);
+    // Apply --setBuildRoute to pin the engine build to a specific knob configuration.
+    // This is the public reproducibility surface for tuning iterations.
+    // Gated by ENABLE_FEATURE_GLOBAL_PERF_TUNER because the underlying
+    // IBuilderConfig::setBuildRoute API is only declared when the feature is on.
+    if (!build.buildRoute.empty())
+    {
+        sample::gLogInfo << "Using tuning build route: " << build.buildRoute << std::endl;
+        SMP_RETVAL_IF_FALSE(env.builderConfig->setBuildRoute(build.buildRoute.c_str()),
+            "IBuilderConfig::setBuildRoute failed for: " + build.buildRoute, false, err);
+    }
     env.builder->setErrorRecorder(&gRecorder);
     auto networkFlags =
         1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kSTRONGLY_TYPED);
@@ -999,7 +1009,6 @@ bool loadAsyncStreamingEngineToBuildEnv(std::string const& filepath, BuildEnviro
     SMP_RETVAL_IF_FALSE(asyncReader.open(filepath), "", false, err << "Error opening engine file: " << filepath);
     return true;
 }
-
 
 bool loadEngineToBuildEnv(std::string const& filepath, BuildEnvironment& env, std::ostream& err,
     SystemOptions const& sys, bool const enableConsistency)

@@ -15,9 +15,19 @@
  * limitations under the License.
  */
 
+#include "sampleUtils.h" // for sample::peekArg
 #include "trtexec.h"
 
+//! Tuning vs single-run dispatch. The peek is intentionally minimal — a real
+//! parse would discard the original argv before runTuningLoop can re-use it
+//! for its child fork+execs. Each branch does its own parseArgs.
 int main(int argc, char** argv)
 {
+    if (sample::peekArg(argc, argv, "--tuneBuildRoutes")
+        || sample::peekArg(argc, argv, "--tuneBuildRouteFile")
+        || sample::peekArg(argc, argv, "--continue"))
+    {
+        return sample::runTuningLoop(argc, argv);
+    }
     return sample::trtexecMain(argc, argv);
 }

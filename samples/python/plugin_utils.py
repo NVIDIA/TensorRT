@@ -58,12 +58,17 @@ class KernelHelper:
         prog = cuda_call(
             nvrtc.nvrtcCreateProgram(str.encode(code), b"sourceCode.cu", 0, [], [])
         )
-        CUDA_HOME = os.getenv("CUDA_HOME")
-        if CUDA_HOME == None:
-            CUDA_HOME = os.getenv("CUDA_PATH")
-        if CUDA_HOME == None:
-            raise RuntimeError("Environment variable CUDA_HOME or CUDA_PATH is not set")
-        include_dirs = os.path.join(CUDA_HOME, "include")
+        cuda_root = None
+        for env_name in ("CUDA_PATH", "CUDA_HOME"):
+            cand = os.getenv(env_name)
+            if cand and os.path.isfile(os.path.join(cand, "include", "cuda_fp16.h")):
+                cuda_root = cand
+                break
+        if cuda_root is None:
+            raise RuntimeError(
+                "Neither CUDA_PATH nor CUDA_HOME points at a CUDA install containing include/cuda_fp16.h"
+            )
+        include_dirs = os.path.join(cuda_root, "include")
 
         # Initialize CUDA
         cuda_call(cudart.cudaFree(0))

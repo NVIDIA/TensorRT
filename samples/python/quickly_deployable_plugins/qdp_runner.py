@@ -1,5 +1,5 @@
 #
-# SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2024-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -179,7 +179,9 @@ def run_circ_pad(
     enable_multi_tactic=False, mode="onnx", artifacts_dir=None, save_or_load_engine=None, aot=False
 ):
 
-    if enable_multi_tactic:
+    if enable_multi_tactic and aot:
+        qdp_defs.enable_multi_tactic_aot_circ_pad()
+    elif enable_multi_tactic:
         qdp_defs.enable_multi_tactic_circ_pad()
     else:
         qdp_defs.enable_single_tactic_circ_pad()
@@ -357,10 +359,5 @@ if __name__ == "__main__":
 
         if args.save_engine is True:
             save_or_load_engine = True
-
-        if args.multi_tactic and args.aot:
-            parser.error(
-                "circ_pad: '--aot' is not supported when '--multi_tactic' is specified."
-            )
 
         run_circ_pad(args.multi_tactic, args.mode, args.artifacts_dir, save_or_load_engine, args.aot)

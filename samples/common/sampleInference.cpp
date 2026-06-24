@@ -19,6 +19,7 @@
 #include <array>
 #include <chrono>
 #include <cuda.h>
+#include <iomanip>
 #include <optional>
 #include <cuda_profiler_api.h>
 #include <functional>
@@ -39,6 +40,7 @@
 #include "bfloat16.h"
 #include "common.h"
 #include "debugTensorWriter.h"
+#include "half.h"
 #include "logger.h"
 #include "sampleDevice.h"
 #include "sampleEngines.h"
@@ -457,6 +459,8 @@ void setPersistentCacheLimit(
 
 bool setUpInference(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
+    ASSERT(!inference.refPairs.empty() && "refPairs must have at least one element");
+
 #if ENABLE_UNIFIED_BUILDER
     if (iEnv.safe)
     {
@@ -488,6 +492,9 @@ void getSafeTensorInfo(uint32_t profileIndex, nvinfer2::safe::ITRTGraph* safeGra
 
 bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
+    // Always use refPairs[0] for initial binding setup; other pairs are loaded in inferenceLoop
+    int64_t constexpr kPAIR_INDEX = 0;
+
     int32_t device{};
     CHECK(cudaGetDevice(&device));
 
@@ -534,6 +541,9 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
     int64_t endBindingIndex = 0;
     safeGraph->getNbIOTensors(endBindingIndex);
 
+    ASSERT(!inference.refPairs.empty() && "refPairs must have at least one element");
+    auto const& inferenceInputs = inference.refPairs[kPAIR_INDEX].first;
+
     for (int32_t b = 0; b < endBindingIndex; b++)
     {
         TensorInfo tensorInfo;
@@ -544,8 +554,8 @@ bool setUpSafeInference(InferenceEnvironmentSafe& iEnv, InferenceOptions const& 
         auto const* bindingInOutStr = tensorInfo.isInput ? "Input" : "Output";
         for (auto& binding : iEnv.bindings)
         {
-            auto const input = findPlausible(inference.inputs, name);
-            if (tensorInfo.isInput && input != inference.inputs.end())
+            auto const input = findPlausible(inferenceInputs, name);
+            if (tensorInfo.isInput && input != inferenceInputs.end())
             {
                 sample::gLogInfo << "Using values loaded from " << input->second << " for input " << name << std::endl;
                 binding->addBinding(tensorInfo, input->second);
@@ -616,6 +626,12 @@ IExecutionContext* setupExecutionContext(
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& inference, SystemOptions const& system)
 {
+    // Always use refPairs[0] for initial binding setup; other pairs are loaded in inferenceLoop
+    int64_t constexpr kPAIR_INDEX = 0;
+
+    ASSERT(!inference.refPairs.empty() && "refPairs must have at least one element");
+    auto const& inferenceInputs = inference.refPairs[kPAIR_INDEX].first;
+
     std::optional<cudaDeviceProp> properties{};
     int32_t device{};
     CHECK(cudaGetDevice(&device));
@@ -766,12 +782,12 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
                                             << "Automatically setting shape to: " << shapeData << std::endl;
                     }
                 }
-                else if (inference.inputs.count(shape->first) && isShapeInferenceIO)
+                else if (inferenceInputs.count(shape->first) && isShapeInferenceIO)
                 {
                     // Load shape tensor from file.
                     int64_t const size = volume(dims, 0, dims.nbDims);
                     shapeData.resize(size);
-                    auto const& filename = inference.inputs.at(shape->first);
+                    auto const& filename = inferenceInputs.at(shape->first);
                     auto dst = reinterpret_cast<char*>(shapeData.data());
                     loadFromFile(filename, dst, size * sizeof(decltype(shapeData)::value_type));
                 }
@@ -857,7 +873,7 @@ bool setUpStdInference(InferenceEnvironmentStd& iEnv, InferenceOptions const& in
 
     auto const* context = iEnv.contexts.front().get();
     bool fillBindingsSuccess = FillStdBindings(
-        engine, context, inference.inputs, iEnv.bindings, 1, endBindingIndex, inference.optProfileIndex)();
+        engine, context, inferenceInputs, iEnv.bindings, 1, endBindingIndex, inference.optProfileIndex)();
 
 
     return fillBindingsSuccess;
@@ -1422,11 +1438,189 @@ private:
 };
 #endif
 
+// Helper template function to validate accuracy - abstracts tensor info retrieval
+// Note: This function is placed here (before inferenceLoop) because inferenceLoop is a template
+// that calls validateAccuracy, and templates require definitions to be visible at instantiation.
+template <typename TensorInfoGetter>
+std::unordered_map<std::string, double> validateAccuracy(InferenceEnvironmentBase& iEnv, BindingsBase const& bindings,
+    int64_t pairIndex, TensorInfoGetter getTensorInfo, InferenceOptions const& inference)
+{
+    std::unordered_map<std::string, double> accuracyResults;
+    // Accuracy validation with reference outputs is not supported on Windows or RTX (tuner is Linux enterprise-only).
+#if defined(_WIN32)
+    // Early return if no reference outputs are available for validation.
+    return accuracyResults;
+#else
+    // The checks are ordered to ensure safe array access:
+    // 1. First check if refOutputsAll vector is empty
+    // 2. Then check if pairIndex is within bounds
+    // 3. Only after bounds are verified, check if the specific pair's map is empty
+    // This ordering prevents out-of-bounds access due to short-circuit evaluation.
+    bool const isRefOutputsEmpty = iEnv.refOutputsAll.empty();
+    bool const isPairIndexOutOfBounds = static_cast<size_t>(pairIndex) >= iEnv.refOutputsAll.size();
+    // Only access refOutputsAll[pairIndex] if pairIndex is within bounds
+    bool const isPairEmpty = !isPairIndexOutOfBounds && !isRefOutputsEmpty && iEnv.refOutputsAll[pairIndex].empty();
+
+    if (isRefOutputsEmpty || isPairIndexOutOfBounds || isPairEmpty)
+    {
+        sample::gLogVerbose << "iEnv.refOutputsAll.empty():" << isRefOutputsEmpty << std::endl;
+        sample::gLogVerbose << "static_cast<size_t>(pairIndex) >= iEnv.refOutputsAll.size():" << isPairIndexOutOfBounds
+                            << std::endl;
+        sample::gLogVerbose << "pairIndex:" << pairIndex << ", refOutputsAll.size():" << iEnv.refOutputsAll.size()
+                            << std::endl;
+        if (!isRefOutputsEmpty && !isPairIndexOutOfBounds)
+        {
+            sample::gLogVerbose << "iEnv.refOutputsAll[pairIndex].empty():" << isPairEmpty << std::endl;
+        }
+        return accuracyResults;
+    }
+
+    auto const outputBindings = bindings.getOutputBindings();
+
+    for (auto const& refOutput : iEnv.refOutputsAll[pairIndex])
+    {
+        std::string const& tensorName = refOutput.first;
+        auto const* refBuffer = refOutput.second.get();
+
+        // Find the binding for this tensor
+        auto it = outputBindings.find(tensorName);
+        if (it == outputBindings.end())
+        {
+            sample::gLogWarning << "Reference output tensor " << tensorName << " not found in output bindings"
+                                << std::endl;
+            continue;
+        }
+
+        int32_t const bindingIndex = it->second;
+        auto const& binding = bindings.getBinding(bindingIndex);
+
+        // Get actual output buffer
+        void* actualBuffer = nullptr;
+        if (binding.outputAllocator != nullptr)
+        {
+            actualBuffer = binding.outputAllocator->getBuffer()->getHostBuffer();
+        }
+        else
+        {
+            actualBuffer = binding.buffer->getHostBuffer();
+        }
+
+        // Get tensor info using the provided getter
+        nvinfer1::Dims dims;
+        nvinfer1::DataType dataType;
+        getTensorInfo(tensorName.c_str(), dims, dataType);
+
+        int64_t const volume = std::accumulate(dims.d, dims.d + dims.nbDims, 1LL, std::multiplies<int64_t>{});
+
+        // Calculate accuracy based on data type using the selected algorithm
+        double accuracy = 0.0;
+
+        switch (dataType)
+        {
+        case nvinfer1::DataType::kFLOAT:
+        {
+            std::vector<float> actual(static_cast<float*>(actualBuffer), static_cast<float*>(actualBuffer) + volume);
+            std::vector<float> reference(
+                static_cast<float const*>(refBuffer->get()), static_cast<float const*>(refBuffer->get()) + volume);
+            auto validator
+                = createAccuracyValidator<float>(inference.accuracyValidationAlgorithm, inference.atol, inference.rtol);
+            accuracy = validator->calculateAccuracy(actual, reference);
+            break;
+        }
+        case nvinfer1::DataType::kHALF:
+        {
+            // Convert half to float for comparison
+            auto const* actualHalf = static_cast<half_float::half const*>(actualBuffer);
+            auto const* refHalf = static_cast<half_float::half const*>(refBuffer->get());
+            std::vector<float> actual(volume);
+            std::vector<float> reference(volume);
+            for (int64_t i = 0; i < volume; ++i)
+            {
+                actual[i] = static_cast<float>(actualHalf[i]);
+                reference[i] = static_cast<float>(refHalf[i]);
+            }
+            auto validator
+                = createAccuracyValidator<float>(inference.accuracyValidationAlgorithm, inference.atol, inference.rtol);
+            accuracy = validator->calculateAccuracy(actual, reference);
+            break;
+        }
+        case nvinfer1::DataType::kINT32:
+        {
+            std::vector<int32_t> actual(
+                static_cast<int32_t*>(actualBuffer), static_cast<int32_t*>(actualBuffer) + volume);
+            std::vector<int32_t> reference(
+                static_cast<int32_t const*>(refBuffer->get()), static_cast<int32_t const*>(refBuffer->get()) + volume);
+            auto validator = createAccuracyValidator<int32_t>(
+                inference.accuracyValidationAlgorithm, inference.atol, inference.rtol);
+            accuracy = validator->calculateAccuracy(actual, reference);
+            break;
+        }
+        case nvinfer1::DataType::kINT8:
+        {
+            std::vector<int8_t> actual(static_cast<int8_t*>(actualBuffer), static_cast<int8_t*>(actualBuffer) + volume);
+            std::vector<int8_t> reference(
+                static_cast<int8_t const*>(refBuffer->get()), static_cast<int8_t const*>(refBuffer->get()) + volume);
+            auto validator = createAccuracyValidator<int8_t>(
+                inference.accuracyValidationAlgorithm, inference.atol, inference.rtol);
+            accuracy = validator->calculateAccuracy(actual, reference);
+            break;
+        }
+        default:
+            sample::gLogWarning << "Unsupported data type for accuracy validation: " << static_cast<int>(dataType)
+                                << std::endl;
+            continue;
+        }
+
+        accuracyResults[tensorName] = accuracy;
+        sample::gLogInfo << "Accuracy loss for tensor " << tensorName << " ("
+                         << getAlgorithmName(inference.accuracyValidationAlgorithm) << "): " << std::fixed
+                         << std::setprecision(6) << accuracy;
+
+        // Check if accuracy exceeds threshold (if threshold is set)
+        if (inference.accuracyThresholdEndToEnd > 0 && accuracy >= inference.accuracyThresholdEndToEnd)
+        {
+            sample::gLogInfo << " [FAIL: >= threshold " << inference.accuracyThresholdEndToEnd << "]";
+            iEnv.accuracyFailed = true;
+        }
+        sample::gLogInfo << std::endl;
+    }
+
+    return accuracyResults;
+#endif // !(defined(_WIN32) || TRT_WINML)
+}
+
+//!
+//! \brief Run the inference loop with optional accuracy validation.
+//! \tparam TensorInfoGetter Callable type for retrieving tensor info (dims, dataType) by name.
+//! \param iStreams Vector of iteration streams for inference execution.
+//! \param cpuStart CPU timestamp at start of inference.
+//! \param gpuStart GPU event recorded at start of inference.
+//! \param inference Inference options containing iterations, duration, warmup, etc.
+//! \param trace Output vector for inference traces.
+//! \param iEnv Inference environment containing reference outputs.
+//! \param bindings Bindings for input reloading and validation.
+//! \param getTensorInfo Callable to get tensor dims and dataType by name.
+//! \return true if inference completed successfully, false on error.
+//!
+template <typename TensorInfoGetter>
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePoint const& cpuStart,
-    TrtCudaEvent const& gpuStart, int iterations, float maxDurationMs, float warmupMs,
-    std::vector<InferenceTrace>& trace, bool includeTransfers, float idleMs)
+    TrtCudaEvent const& gpuStart, InferenceOptions const& inference, std::vector<InferenceTrace>& trace,
+    InferenceEnvironmentBase& iEnv, BindingsBase& bindings, TensorInfoGetter getTensorInfo)
 {
+    // Create local aliases for frequently used inference options
+    int const iterations = inference.iterations;
+    float const warmupMs = inference.warmup;
+    bool const includeTransfers = inference.includeTransfers;
+    float const idleMs = inference.idle;
+    // Number of reference pairs to validate (derived from inference.refPairs.size())
+    int32_t const numRefPairs = static_cast<int32_t>(inference.refPairs.size());
+    float maxDurationMs = -1.F;
+    if (inference.duration != -1.F)
+    {
+        maxDurationMs = inference.duration * 1000.F + warmupMs;
+    }
+
     float durationMs = 0;
     int32_t skip = 0;
 
@@ -1447,16 +1641,47 @@ bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePo
         }
     }
 
-    for (int32_t i = 0; i < iterations + skip || durationMs < maxDurationMs; ++i)
+    for (int32_t i = 0; i < iterations + skip + numRefPairs || durationMs < maxDurationMs; ++i)
     {
-        if (!std::all_of(iStreams.begin(), iStreams.end(), [&](auto& s) { return s->query(includeTransfers); }))
+        // For the first numRefPairs iterations, force includeTransfers to true
+        // so that input/output data transfers happen for accuracy validation.
+        bool const currentIncludeTransfers = (i < numRefPairs) || includeTransfers;
+
+        // Before each refPair iteration, load input data (including i=0 for consistency)
+        if (i < numRefPairs)
         {
-            return false;
+            bindings.fillInputsFromMap(inference.refPairs[i].first);
+        }
+
+        for (auto& s : iStreams)
+        {
+            if (!s->query(currentIncludeTransfers))
+            {
+                return false;
+            }
         }
         for (auto& s : iStreams)
         {
-            durationMs = std::max(durationMs, s->sync(cpuStart, gpuStart, trace, includeTransfers));
+            durationMs = std::max(durationMs, s->sync(cpuStart, gpuStart, trace, currentIncludeTransfers));
         }
+
+        // Validate accuracy for refPair iterations (runs for first numRefPairs iterations)
+        // This must happen BEFORE the warmup check to ensure validation is not skipped
+        if (i < numRefPairs)
+        {
+            // Force output data transfer to complete before validation
+            for (auto& s : iStreams)
+            {
+                s->fetchOutputData(true);
+            }
+            auto results = validateAccuracy(iEnv, bindings, i, getTensorInfo, inference);
+            // Merge per-tensor accuracy values into iEnv for the tuning cache
+            for (auto const& [name, value] : results)
+            {
+                iEnv.accuracyLossValues[name] = value;
+            }
+        }
+
         if (durationMs < warmupMs) // Warming up
         {
             if (durationMs) // Skip complete iterations
@@ -1465,11 +1690,13 @@ bool inferenceLoop(std::vector<std::unique_ptr<IterationBase>>& iStreams, TimePo
             }
             continue;
         }
+
         if (idleMs != 0.F)
         {
             std::this_thread::sleep_for(std::chrono::duration<float, std::milli>(idleMs));
         }
     }
+
     for (auto& s : iStreams)
     {
         s->syncAll(cpuStart, gpuStart, trace, includeTransfers);
@@ -1483,13 +1710,6 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
 {
     try
     {
-        float warmupMs = inference.warmup;
-        float durationMs = -1.F;
-        if (inference.duration != -1.F)
-        {
-            durationMs = inference.duration * 1000.F + warmupMs;
-        }
-
         CHECK(cudaSetDevice(device));
 
 #if ENABLE_UNIFIED_BUILDER
@@ -1519,8 +1739,24 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
                 s->wait(sync.gpuStart);
             }
             std::vector<InferenceTrace> localTrace;
-            if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs,
-                    localTrace, inference.includeTransfers, inference.idle))
+
+            // Get bindings and graph for accuracy validation
+            auto* iEnvSafe = static_cast<InferenceEnvironmentSafe*>(&iEnv);
+            int32_t const streamIdx = threadIdx * streamsPerThread;
+            auto& bindingsRef = *iEnvSafe->bindings[streamIdx];
+            auto& graphRef = *iEnvSafe->mClonedGraphs[streamIdx];
+
+            // Create tensor info getter that captures safety-specific context
+            auto getTensorInfo = [&graphRef](char const* name, nvinfer1::Dims& dims, nvinfer1::DataType& dataType) {
+                nvinfer2::safe::TensorDescriptor desc;
+                graphRef.getIOTensorDescriptor(desc, name);
+                std::vector<int64_t> dimsSpec{desc.shape.d, desc.shape.d + desc.shape.nbDims};
+                dims = toDims(dimsSpec);
+                dataType = desc.dataType;
+            };
+
+            if (!inferenceLoop(
+                    iStreams, sync.cpuStart, sync.gpuStart, inference, localTrace, iEnv, bindingsRef, getTensorInfo))
             {
                 std::lock_guard<std::mutex> lock{sync.mutex};
                 iEnv.error = true;
@@ -1563,8 +1799,23 @@ void inferenceExecution(InferenceOptions const& inference, InferenceEnvironmentB
         }
 
         std::vector<InferenceTrace> localTrace;
-        if (!inferenceLoop(iStreams, sync.cpuStart, sync.gpuStart, inference.iterations, durationMs, warmupMs,
-                localTrace, inference.includeTransfers, inference.idle))
+
+        // Get context and bindings for accuracy validation
+        auto* iEnvStd = static_cast<InferenceEnvironmentStd*>(&iEnv);
+        int32_t const streamIdx = threadIdx * streamsPerThread;
+        auto& bindingsRef = *iEnvStd->bindings[streamIdx];
+        auto& contextRef = *iEnvStd->contexts[streamIdx];
+        auto const* engine = &contextRef.getEngine();
+
+        // Create tensor info getter that captures standard-specific context
+        auto getTensorInfo
+            = [&contextRef, engine](char const* name, nvinfer1::Dims& dims, nvinfer1::DataType& dataType) {
+                  dims = contextRef.getTensorShape(name);
+                  dataType = engine->getTensorDataType(name);
+              };
+
+        if (!inferenceLoop(
+                iStreams, sync.cpuStart, sync.gpuStart, inference, localTrace, iEnv, bindingsRef, getTensorInfo))
         {
             std::lock_guard<std::mutex> lock{sync.mutex};
             iEnv.error = true;
@@ -2153,7 +2404,7 @@ bool BindingsStd::setTensorAddresses(nvinfer1::IExecutionContext& context) const
             {
 #if ENABLE_DLA
                 // When DLA is enabled, a tensor's address must be set to nullptr to unregister
-                // the tensor with DLA before setting it to a new address. 
+                // the tensor with DLA before setting it to a new address.
                 if (context.getTensorAddress(name) != nullptr)
                 {
                     if (!context.setTensorAddress(name, nullptr))
@@ -2279,4 +2530,80 @@ bool BindingsSafe::setTensorAddresses(ITRTGraph& graph) const
     return true;
 }
 #endif
+
+#if !defined(_WIN32)
+namespace
+{
+// Helper template function to load reference outputs - abstracts tensor info retrieval
+template <typename TensorInfoGetter>
+void loadRefOutputsImpl(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference, int64_t pairIndex,
+    TensorInfoGetter getTensorInfo)
+{
+    ASSERT(!inference.refPairs.empty() && "refPairs must have at least one element");
+    ASSERT(pairIndex >= 0 && static_cast<size_t>(pairIndex) < inference.refPairs.size() && "pairIndex out of range");
+    auto const& inferenceRefOutputs = inference.refPairs[pairIndex].second;
+
+    if (inferenceRefOutputs.empty())
+    {
+        return; // No reference outputs to load
+    }
+
+    // Ensure refOutputsAll has enough space
+    if (iEnv.refOutputsAll.size() <= static_cast<size_t>(pairIndex))
+    {
+        iEnv.refOutputsAll.resize(pairIndex + 1);
+    }
+
+    for (auto const& refOutput : inferenceRefOutputs)
+    {
+        std::string const& tensorName = refOutput.first;
+        std::string const& fileName = refOutput.second;
+
+        // Get tensor info using the provided getter
+        nvinfer1::Dims dims;
+        nvinfer1::DataType dataType;
+        getTensorInfo(tensorName.c_str(), dims, dataType);
+
+        int64_t const volume = std::accumulate(dims.d, dims.d + dims.nbDims, 1LL, std::multiplies<int64_t>{});
+        size_t const nbBytes = samplesCommon::getNbBytes(dataType, volume);
+
+        // Allocate host buffer and load data
+        auto hostBuffer = std::make_unique<TrtHostBuffer>(nbBytes);
+        loadFromFile(fileName, static_cast<char*>(hostBuffer->get()), nbBytes);
+
+        sample::gLogInfo << "Loaded reference output for tensor " << tensorName << " from " << fileName
+                         << " (volume=" << volume << ", bytes=" << nbBytes << ")" << std::endl;
+
+        iEnv.refOutputsAll[pairIndex].insert_or_assign(tensorName, std::move(hostBuffer));
+    }
+}
+} // namespace
+
+void loadRefOutputs(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference,
+    nvinfer1::IExecutionContext const& context, int64_t pairIndex)
+{
+    auto const* engine = &context.getEngine();
+    auto getTensorInfo = [&context, engine](char const* name, nvinfer1::Dims& dims, nvinfer1::DataType& dataType) {
+        dims = context.getTensorShape(name);
+        dataType = engine->getTensorDataType(name);
+    };
+    loadRefOutputsImpl(iEnv, inference, pairIndex, getTensorInfo);
+}
+
+#if ENABLE_UNIFIED_BUILDER
+void loadRefOutputs(InferenceEnvironmentBase& iEnv, InferenceOptions const& inference,
+    nvinfer2::safe::ITRTGraph const& graph, int64_t pairIndex)
+{
+    auto getTensorInfo = [&graph](char const* name, nvinfer1::Dims& dims, nvinfer1::DataType& dataType) {
+        nvinfer2::safe::TensorDescriptor desc;
+        graph.getIOTensorDescriptor(desc, name);
+        std::vector<int64_t> dimsSpec{desc.shape.d, desc.shape.d + desc.shape.nbDims};
+        dims = toDims(dimsSpec);
+        dataType = desc.dataType;
+    };
+    loadRefOutputsImpl(iEnv, inference, pairIndex, getTensorInfo);
+}
+#endif
+#endif // !defined(_WIN32) && !TRT_WINML
+
 } // namespace sample

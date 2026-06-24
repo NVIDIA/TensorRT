@@ -230,6 +230,91 @@ def enable_multi_tactic_circ_pad():
                 )
 
 
+# Shared AOT compilation body for the circ_pad plugin: build SymInt args,
+# compile the Triton kernel with the given BLOCK_SIZE, and pack launch params.
+def _compile_circ_pad_aot(
+    inp0: trtp.TensorDesc,
+    pads: npt.NDArray[np.int32],
+    outputs: Tuple[trtp.TensorDesc],
+    block_size: int,
+) -> Tuple[Union[str, bytes], Union[str, bytes], trtp.KernelLaunchParams, trtp.SymExprs]:
+
+    N = inp0.ndim
+    all_pads = np.zeros((N * 2,), dtype=np.int32)
+    inp_dims = inp0.shape_expr
+    out_dims = outputs[0].shape_expr
+
+    for i in range(np.size(pads) // 2):
+        all_pads[N * 2 - 2 * i - 2] = pads[i * 2]
+        all_pads[N * 2 - 2 * i - 1] = pads[i * 2 + 1]
+
+    all_pads = all_pads.tolist()
+
+    # Representing all int32-scalar-kernel-inputs as symbolic expressions.
+    # These inputs are either constants or derivatives of input/output shapes (that may be dynamic).
+    # The symbolic expressions are resolved after the full shape context becomes available at runtime.
+    extra_args = trtp.SymIntExprs.from_tuple(
+        [
+            trtp.SymInt32(e)
+            for e in [
+                all_pads[0],
+                all_pads[2],
+                all_pads[4],
+                all_pads[6],
+                inp_dims[0],
+                inp_dims[1],
+                inp_dims[2],
+                inp_dims[3],
+                out_dims[1],
+                out_dims[2],
+                out_dims[3],
+                inp_dims.numel(),
+                out_dims.numel(),
+            ]
+        ]
+    )
+
+    type_str = "fp32" if inp0.dtype == trt.float32 else "fp16"
+
+    from oait_kernels import circ_pad_kernel
+    import triton
+
+    src = triton.compiler.ASTSource(
+        fn=circ_pad_kernel,
+        signature={
+            "X": f"*{type_str}",
+            "all_pads_0": "i32",
+            "all_pads_2": "i32",
+            "all_pads_4": "i32",
+            "all_pads_6": "i32",
+            "orig_dims_0": "i32",
+            "orig_dims_1": "i32",
+            "orig_dims_2": "i32",
+            "orig_dims_3": "i32",
+            "Y_shape_1": "i32",
+            "Y_shape_2": "i32",
+            "Y_shape_3": "i32",
+            "X_len": "i32",
+            "Y_len": "i32",
+            "Y": f"*{type_str}",
+        },
+        constexprs={"BLOCK_SIZE": block_size},
+    )
+
+    compiled_kernel = triton.compile(src)
+    launch_params = trtp.KernelLaunchParams()
+    launch_params.grid_x = trtp.cdiv(out_dims.numel(), block_size)
+    launch_params.block_x = compiled_kernel.metadata.num_warps * 32
+    launch_params.shared_mem = compiled_kernel.metadata.shared
+
+    return (
+        compiled_kernel.metadata.name.encode(),
+        compiled_kernel.asm["ptx"].encode(),
+        launch_params,
+        extra_args,
+    )
+
+
 # Helper to define a single tactic implementation of the plugin
 def enable_single_tactic_circ_pad():
     @trtp.autotune("sample::circ_pad_plugin")
@@ -258,82 +343,44 @@ def enable_single_tactic_circ_pad():
     def circ_pad_plugin_aot_impl(
         inp0: trtp.TensorDesc, pads: npt.NDArray[np.int32], outputs: Tuple[trtp.TensorDesc], tactic: int
     ) -> Tuple[Union[str, bytes], Union[str, bytes], trtp.KernelLaunchParams, trtp.SymExprs]:
+        return _compile_circ_pad_aot(inp0, pads, outputs, block_size=256)
 
-        block_size = 256
 
-        N = inp0.ndim
-        all_pads = np.zeros((N * 2,), dtype=np.int32)
-        inp_dims = inp0.shape_expr
-        out_dims = outputs[0].shape_expr
+# Helper to define a multi-tactic AOT implementation of the plugin.
+# Each tactic precompiles the same Triton kernel with a different BLOCK_SIZE,
+# so TRT times two PTX variants at build time and bakes the winner into the engine.
+def enable_multi_tactic_aot_circ_pad():
 
-        for i in range(np.size(pads) // 2):
-            all_pads[N * 2 - 2 * i - 2] = pads[i * 2]
-            all_pads[N * 2 - 2 * i - 1] = pads[i * 2 + 1]
+    from enum import IntEnum
 
-        all_pads = all_pads.tolist()
+    class Tactic(IntEnum):
+        BLOCK_256 = 1
+        BLOCK_1024 = 2
 
-        # Representing all int32-scalar-kernel-inputs as symbolic expressions.
-        # These inputs are either constants or derivatives of input/output shapes (that may be dynamic).
-        # The symbolic expressions are resolved after the full shape context becomes available at runtime.
-        extra_args = trtp.SymIntExprs.from_tuple(
-            [
-                trtp.SymInt32(e)
-                for e in [
-                    all_pads[0],
-                    all_pads[2],
-                    all_pads[4],
-                    all_pads[6],
-                    inp_dims[0],
-                    inp_dims[1],
-                    inp_dims[2],
-                    inp_dims[3],
-                    out_dims[1],
-                    out_dims[2],
-                    out_dims[3],
-                    inp_dims.numel(),
-                    out_dims.numel(),
-                ]
-            ]
+    block_size_by_tactic = {
+        int(Tactic.BLOCK_256): 256,
+        int(Tactic.BLOCK_1024): 1024,
+    }
+
+    @trtp.autotune("sample::circ_pad_plugin")
+    def circ_pad_plugin_autotune(
+        inp0: trtp.TensorDesc,
+        outputs: Tuple[trtp.TensorDesc],
+    ) -> List[trtp.AutoTuneCombination]:
+        c = trtp.AutoTuneCombination()
+        c.pos([0, 1], "FP32|FP16")
+        c.tactics([int(Tactic.BLOCK_256), int(Tactic.BLOCK_1024)])
+        return [c]
+
+    @trtp.aot_impl("sample::circ_pad_plugin")
+    def circ_pad_plugin_aot_impl(
+        inp0: trtp.TensorDesc,
+        pads: npt.NDArray[np.int32],
+        outputs: Tuple[trtp.TensorDesc],
+        tactic: int,
+    ) -> Tuple[Union[str, bytes], Union[str, bytes], trtp.KernelLaunchParams, trtp.SymExprs]:
+        block_size = block_size_by_tactic[tactic]
+        logging.getLogger("QuicklyDeployablePlugins").debug(
+            f"aot_impl invoked: tactic={tactic} -> BLOCK_SIZE={block_size}"
         )
-
-
-        type_str = "fp32" if inp0.dtype == trt.float32 else "fp16"
-
-        from oait_kernels import circ_pad_kernel
-        import triton
-
-        src = triton.compiler.ASTSource(
-            fn=circ_pad_kernel,
-            signature={
-                "X": f"*{type_str}",
-                "all_pads_0": "i32",
-                "all_pads_2": "i32",
-                "all_pads_4": "i32",
-                "all_pads_6": "i32",
-                "orig_dims_0": "i32",
-                "orig_dims_1": "i32",
-                "orig_dims_2": "i32",
-                "orig_dims_3": "i32",
-                "Y_shape_1": "i32",
-                "Y_shape_2": "i32",
-                "Y_shape_3": "i32",
-                "X_len": "i32",
-                "Y_len": "i32",
-                "Y": f"*{type_str}",
-            },
-            constexprs={
-                "BLOCK_SIZE": block_size,
-            },
-        )
-
-        compiled_kernel = triton.compile(src)
-        launch_params = trtp.KernelLaunchParams()
-
-        # grid dims
-        launch_params.grid_x = trtp.cdiv(out_dims.numel(), block_size)
-        # block dims
-        launch_params.block_x = compiled_kernel.metadata.num_warps * 32
-        # shared memory
-        launch_params.shared_mem = compiled_kernel.metadata.shared
-
-        return compiled_kernel.metadata.name.encode(), compiled_kernel.asm["ptx"].encode(), launch_params, extra_args
+        return _compile_circ_pad_aot(inp0, pads, outputs, block_size=block_size)
