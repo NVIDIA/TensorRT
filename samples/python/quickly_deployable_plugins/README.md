@@ -66,7 +66,7 @@ def add_plugin_desc(inp0: trtp.TensorDesc, block_size: int) -> trtp.TensorDesc:
     return inp0.like()
 ```
 
-The argument "sample::elemwise_add_plugin" defines the namespace ("sample") and name ("elemwise_add_plugin") of the plugin. Input arguments to the decorated function (`plugin_desc`) annotated with `trt.plugin.TensorDesc` denote the input tensors; all others are interpreted as plugin attributes (see the [TRT API Reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/tensorrt.plugin/trt_plugin_register.html) for a full list of allowed attribute types). The output signature is a `trt.plugin.TensorDesc` describing the output. `inp0.like()` returns a tensor descriptor with identical shape and type characteristics to `inp0`.
+The argument "sample::elemwise_add_plugin" defines the namespace ("sample") and name ("elemwise_add_plugin") of the plugin. Input arguments to the decorated function (`plugin_desc`) annotated with `trt.plugin.TensorDesc` denote the input tensors; all others are interpreted as plugin attributes (see the [TRT API Reference](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/infer/tensorrt.plugin/trt_plugin_register.html) for a full list of allowed attribute types). The output signature is a `trt.plugin.TensorDesc` describing the output. `inp0.like()` returns a tensor descriptor with identical shape and type characteristics to `inp0`.
 
 The computation function, decorated with `trt.plugin.impl`, receives `trt.plugin.Tensor`s for each input and output. In contrast to `TensorDesc`s, a `Tensor` references an underlying data buffer, directly accessible through `Tensor.data_ptr`. When working with Torch and OpenAI Triton kernels, it is easier to use `torch.as_tensor()` to zero-copy construct a `torch.Tensor` corresponding to the `trt.plugin.Tensor`.
 
@@ -124,7 +124,7 @@ Non-zero is an operation where the indices of the non-zero elements of the input
 
 To handle DDS, the extent of each data-dependent output dimension must be expressed in terms of a *_size tensor_*, which is a scalar that communicates to TRT an upper-bound and an autotune value for that dimension, in terms of the input shapes. The TRT engine build may be optimized for the autotune value, but the extent of that dimension may stretch up to the upper-bound at runtime.
 
-In this sample, we consider a 2D input tensor `inp0`; the output will be an $N x 2$ tensor (a set of $N$ 2D indices), where $N$ is the number of non-zero indices. At maximum, all elements could be non-zero, and so the upper-bound could be expressed as `upper_bound = inp0.shape_expr[0] * inp0.shape_expr[1]`. Note that `trt.plugin.TensorDesc.shape_expr` returns symbolic shape expressions for that tensor. Arithmetic operations on shape expressions are supported through standard Python binary operators (see [TRT Python API reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/tensorrt.plugin/Shape/ShapeExpr.html) for full list of supported operations).
+In this sample, we consider a 2D input tensor `inp0`; the output will be an $N x 2$ tensor (a set of $N$ 2D indices), where $N$ is the number of non-zero indices. At maximum, all elements could be non-zero, and so the upper-bound could be expressed as `upper_bound = inp0.shape_expr[0] * inp0.shape_expr[1]`. Note that `trt.plugin.TensorDesc.shape_expr` returns symbolic shape expressions for that tensor. Arithmetic operations on shape expressions are supported through standard Python binary operators (see [TRT Python API reference](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/infer/tensorrt.plugin/Shape/ShapeExpr.html) for full list of supported operations).
 
 On average, we can expect half of the input to be filled with zero, so a size tensor can be constructed with that as the autotune value:
 ```python
@@ -328,10 +328,10 @@ Verbose logs show TRT timing both tactics during engine build, then a single win
 # Additional Resources
 
 **Python Plugin Guide**
-- [pluginGuide.md](../../../documentation/python/pluginGuide.md)
+- [Python Plugin Guide](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/pluginGuide.html)
 
 **`tensorrt.plugin` API reference**
-- [`tensorrt.plugin` module API reference](https://docs.nvidia.com/deeplearning/tensorrt/api/python_api/infer/tensorrt.plugin/index.html)
+- [`tensorrt.plugin` module API reference](https://docs.nvidia.com/deeplearning/tensorrt/latest/_static/python-api/infer/tensorrt.plugin/index.html)
 
 **Developer Guide**
 - [Extending TensorRT with Custom Layers](https://docs.nvidia.com/deeplearning/tensorrt/developer-guide/index.html#extending)
