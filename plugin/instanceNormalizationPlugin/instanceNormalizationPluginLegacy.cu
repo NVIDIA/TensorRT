@@ -72,7 +72,9 @@ InstanceNormalizationPlugin::InstanceNormalizationPlugin(
             for (int32_t c = 0; c < input.count; ++c)
             {
                 auto const value = static_cast<unsigned short const*>(input.values);
-                output.push_back(__internal_half2float(value[c]));
+                __half_raw raw;
+                raw.x = value[c];
+                output.push_back(__half2float(raw));
             }
         }
         else
