@@ -712,14 +712,14 @@ class TrtLoadEngineBytesArgs(BaseArgs):
 
     def load_engine_bytes(self, network=None):
         """
-        Loads a TensorRT engine according to arguments provided on the command-line.
+        Loads serialized TensorRT engine bytes according to arguments provided on the command-line.
 
         Args:
             network (Tuple[trt.Builder, trt.INetworkDefinition, Optional[parser]]):
                     A tuple containing a TensorRT builder, network and optionally parser.
 
         Returns:
-            tensorrt.ICudaEngine: The engine.
+            bytes: The serialized engine.
         """
         loader = args_util.run_script(self.add_to_script, network)
         return loader()
