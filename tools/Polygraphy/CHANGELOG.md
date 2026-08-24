@@ -2,10 +2,6 @@
 
 Dates are in YYYY-MM-DD format.
 
-## v0.49.28
-### Fixed
-- Fixed a bug where setting `POLYGRAPHY_ASK_BEFORE_INSTALL=0` would enable asking before installing dependencies instead of disabling it.
-
 ## v0.49.27
 ### Added
 - Added `polygraphy template shard-hints` to generate hints file for `polygraphy multi-device shard`.
@@ -17,6 +13,7 @@ Dates are in YYYY-MM-DD format.
 
 ### Fixed
 - Fixed issue when `polygraphy multi-device shard` would exceed python recursive depth limit on large models.
+- Fixed a bug where setting `POLYGRAPHY_ASK_BEFORE_INSTALL=0` would enable asking before installing dependencies instead of disabling it.
 
 
 ## v0.49.26 (2025-07-16)
