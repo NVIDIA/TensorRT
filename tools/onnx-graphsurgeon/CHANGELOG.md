@@ -3,6 +3,14 @@
 Dates are in YYYY-MM-DD format.
 
 
+## vNext
+
+### Fixed
+- Fixed `Graph.fold_constants()` lowering `Constant` nodes specified with `value_float` or
+  `value_floats` into float64 (`DOUBLE`) constants. ONNX defines these attributes as float32,
+  and the folded constants now match, producing models that ONNX Runtime accepts.
+
+
 ## v0.6.2 (2026-05-21)
 
 ### Added

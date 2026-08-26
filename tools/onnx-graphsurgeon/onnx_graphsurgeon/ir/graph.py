@@ -823,6 +823,9 @@ class Graph(object):
                         continue
                     elif isinstance(attr_val, Constant):
                         arr = attr_val._values  # Using ._values avoids copying
+                    elif attr_name in ("value_float", "value_floats"):
+                        # ONNX defines these attributes as float32
+                        arr = np.array(attr_val, dtype=np.float32)
                     else:
                         arr = np.array(attr_val)
                     tensor.to_constant(arr)

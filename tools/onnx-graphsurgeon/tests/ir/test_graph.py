@@ -1360,6 +1360,30 @@ class TestFoldConstants(object):
             tensor_map["c"].values == (np.ones(shape=(1, 3), dtype=np.float32) * 2)
         )
 
+    @pytest.mark.parametrize(
+        "attrs",
+        [{"value_float": 1.5}, {"value_floats": [1.5, 2.5]}],
+    )
+    def test_value_float_attrs_fold_as_float32(self, attrs):
+        # ONNX defines value_float and value_floats as float32 attributes.
+        graph = Graph(ir_version=10)
+        inp = Variable("input", shape=(2,), dtype=np.float32)
+        const_out = Variable("c")
+        graph.nodes.append(Node(op="Constant", attrs=attrs, outputs=[const_out]))
+        out = graph.add(inp, const_out, name="out")
+        graph.inputs = [inp]
+        graph.outputs = [out]
+
+        graph.fold_constants().cleanup()
+
+        assert len(graph.nodes) == 1
+        folded = graph.nodes[0].inputs[1]
+        attr_name = "value_float" if "value_float" in attrs else "value_floats"
+        expected = np.array(attrs[attr_name], dtype=np.float32)
+        assert folded.dtype == np.float32
+        assert folded.values.shape == expected.shape
+        assert np.array_equal(folded.values, expected)
+
     def test_with_invalid_nodes_no_recursive(self, foldable_with_invalid_node):
         # No folding should take place without recursive partitioning
         original = foldable_with_invalid_node.copy()
