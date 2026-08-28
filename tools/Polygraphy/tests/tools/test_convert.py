@@ -145,6 +145,19 @@ class TestConvertToTrt:
             model = onnx.load(outmodel.name)
             assert len(model.graph.output) == 2
 
+    def test_engine_to_engine(self, poly_convert):
+        # Engine inputs yield plain bytes, not an object that supports the
+        # context manager protocol.
+        engine_bytes = b"serialized-engine"
+        with util.NamedTemporaryFile(
+            "w+b", suffix=".engine"
+        ) as inmodel, util.NamedTemporaryFile(suffix=".plan") as outmodel:
+            inmodel.write(engine_bytes)
+            inmodel.flush()
+
+            poly_convert([inmodel.name, "--model-type=engine", "-o", outmodel.name])
+            assert BytesFromPath(outmodel.name)() == engine_bytes
+
 
 class TestConvertToOnnxLikeTrt:
     @pytest.mark.parametrize(

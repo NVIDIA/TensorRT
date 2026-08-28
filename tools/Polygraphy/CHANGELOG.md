@@ -13,6 +13,8 @@ Dates are in YYYY-MM-DD format.
 
 ### Fixed
 - Fixed issue when `polygraphy multi-device shard` would exceed python recursive depth limit on large models.
+- Fixed a bug where `polygraphy convert` would fail when the input model was already a
+  TensorRT engine, e.g. `polygraphy convert model.engine --convert-to trt -o out.plan`.
 - Fixed a bug where setting `POLYGRAPHY_ASK_BEFORE_INSTALL=0` would enable asking before installing dependencies instead of disabling it.
 
 

@@ -101,11 +101,11 @@ class Convert(Tool):
             model = self.arg_groups[OnnxLoadArgs].load_onnx()
             self.arg_groups[OnnxSaveArgs].save_onnx(model, args.output)
         elif convert_type.is_trt():
-            with self.arg_groups[
+            serialized_engine = self.arg_groups[
                 TrtLoadEngineBytesArgs
-            ].load_engine_bytes() as serialized_engine:
-                self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(
-                    serialized_engine, args.output
-                )
+            ].load_engine_bytes()
+            self.arg_groups[TrtSaveEngineBytesArgs].save_engine_bytes(
+                serialized_engine, args.output
+            )
         else:
             G_LOGGER.critical(f"Cannot convert to model type: {convert_type}")
