@@ -76,22 +76,27 @@ def run_script(script_func, *args):
     """
     script = Script()
 
+    # Use an explicit dict for the exec namespace instead of locals().
+    # In Python 3.13+ (PEP 667), locals() returns a snapshot rather than
+    # a live reference, so exec() can no longer modify the caller's locals.
+    local_vars = {}
+
     arg_names = []
     for index, arg in enumerate(args):
         if arg is not None:
             arg_name = safe("__arg{:}", index)
-            locals()[arg_name.unwrap()] = arg
+            local_vars[arg_name.unwrap()] = arg
             arg_names.append(inline(arg_name))
         else:
             arg_names.append(None)
 
     safe_ret_name = script_func(script, *arg_names)
-    exec(str(script), globals(), locals())
+    exec(str(script), globals(), local_vars)
 
     if safe_ret_name is not None:
         ret_name = ensure_safe(safe_ret_name).unwrap()
-        if ret_name in locals():
-            return locals()[ret_name]
+        if ret_name in local_vars:
+            return local_vars[ret_name]
     return None
 
 
