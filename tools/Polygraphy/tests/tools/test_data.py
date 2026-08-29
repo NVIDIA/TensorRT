@@ -16,7 +16,7 @@
 #
 import numpy as np
 from polygraphy import util
-from polygraphy.json import load_json
+from polygraphy.json import load_json, save_json
 from tests.models.meta import ONNX_MODELS
 
 
@@ -40,3 +40,17 @@ class TestToInput:
             assert len(merged_data) == 1
             assert list(merged_data[0].keys()) == ["x", "y"]
             assert all(isinstance(val, np.ndarray) for val in merged_data[0].values())
+
+    def test_preserves_multi_iteration_inputs(self, poly_data):
+        iter0 = {"x": np.array([0], dtype=np.float32)}
+        iter1 = {"x": np.array([1], dtype=np.float32)}
+
+        with util.NamedTemporaryFile() as inps, util.NamedTemporaryFile() as merged:
+            save_json([iter0, iter1], inps.name)
+
+            poly_data(["to-input", inps.name, "-o", merged.name])
+
+            merged_data = load_json(merged.name)
+            assert len(merged_data) == 2
+            assert np.array_equal(merged_data[0]["x"], iter0["x"])
+            assert np.array_equal(merged_data[1]["x"], iter1["x"])
