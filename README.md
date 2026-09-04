@@ -77,10 +77,31 @@ To build the TensorRT-OSS components, you will first need the following software
    ```bash
    git clone -b main https://github.com/nvidia/TensorRT TensorRT
    cd TensorRT
+   export TRT_OSSPATH="$(pwd)"
    git submodule update --init --recursive
    ```
 
-2. #### (Optional - if not using TensorRT container) Specify the TensorRT GA release build path
+2. #### (If using a build container) Specify the TensorRT library location
+
+   Build containers preinstall the TensorRT libraries. Set `TRT_LIBPATH` to the directory that
+   matches the target you build for:
+
+   ```bash
+   # Typical x86 lib path in TensorRT and other containers
+   export TRT_LIBPATH="/usr/lib/x86_64-linux-gnu"
+
+   # Typical aarch64 Linux lib path in cross-compiling containers
+   export TRT_LIBPATH="/usr/lib/aarch64-linux-gnu"
+
+   # Typical aarch64 QNX lib path in cross-compiling containers
+   export TRT_LIBPATH="/usr/lib/aarch64-unknown-nto-qnx"
+   ```
+
+   > NOTE: A container holds more than one `libnvinfer.so`. Pick the one that matches your target,
+   > because the x86 libraries do not link into an aarch64 build. To list them, run
+   > `find / -name libnvinfer.so`.
+
+3. #### (If not using TensorRT container) Specify the TensorRT GA release build path
 
    If using the TensorRT OSS build container, TensorRT libraries are preinstalled under `/usr/lib/x86_64-linux-gnu` and you may skip this step.
 
@@ -231,7 +252,7 @@ For Linux platforms, we recommend that you generate a docker container for build
   The TensorRT samples are no longer included in the DriveOS SDK under `/usr/src/tensorrt`.
   This is expected since samples have moved to GitHub when switching to CMake.
 
-  Follow the DriveOS Installation Guide to launch the DriveOS Linux NSR container, then
+  Follow the DriveOS Installation Guide to launch your desired DriveOS container, then
   follow the rest of these instructions to clone and build this repository in that container.
 
   Access the DriveOS Installation Guide for the current release at
@@ -269,6 +290,10 @@ For Linux platforms, we recommend that you generate a docker container for build
 
   **Example: Cross-Compile for DOS6.5 QNX (aarch64)**
 
+  > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
+  > For more information on installing the QNX SDP, refer to the NVIDIA DriveOS QNX Installation Guide for your DriveOS release.
+  > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
+
   ```bash
   cd $TRT_OSSPATH
   mkdir -p build && cd build
@@ -283,10 +308,11 @@ For Linux platforms, we recommend that you generate a docker container for build
   make -j$(nproc)
   ```
 
-  > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
-  > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
-
   **Example: Cross-Compile for DOS7 QNX (aarch64)**
+
+  > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
+  > For more information on installing the QNX SDP, refer to the NVIDIA DriveOS QNX Installation Guide for your DriveOS release.
+  > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
 
   ```bash
   cd $TRT_OSSPATH
@@ -301,9 +327,6 @@ For Linux platforms, we recommend that you generate a docker container for build
   cmake .. -DBUILD_SAMPLES=ON -DBUILD_PLUGINS=OFF -DBUILD_PARSERS=OFF -DBUILD_SAFE_SAMPLES=OFF -DCMAKE_CUDA_COMPILER=$CUDA_ROOT/bin/nvcc -DTRT_OUT_DIR=`pwd`/bin_dynamic_cross -DTRT_LIB_DIR=$TRT_LIBPATH -DCMAKE_TOOLCHAIN_FILE=$TRT_OSSPATH/cmake/toolchains/cmake_qnx.toolchain -DCUDA_VERSION=$CUDA_VERSION -DCMAKE_CUDA_ARCHITECTURES=110
   make -j$(nproc)
   ```
-
-  > NOTE: Set `QNX_BASE` to your QNX toolchain installation path.
-  > If your CUDA version is not the same as in the example, set `CUDA_VERSION` (for examples that use it in multiple places) or add `-DCUDA_VERSION=<version>` to the cmake command.
 
 # References
 
